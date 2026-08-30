@@ -82,6 +82,15 @@ final class EventsCoordinator {
         }
     }
 
+    /// Builds the detail wiring for one tapped list row — the events
+    /// feature's own composition root for the detail push (the shell passes
+    /// only this list coordinator, so the detail coordinator is derived here
+    /// from the same repository). A fresh coordinator per push, like
+    /// Android's per-selection observation keys.
+    func makeDetailCoordinator(eventId: String) -> EventDetailCoordinator {
+        EventDetailCoordinator(repository: repository, eventId: eventId)
+    }
+
     private func apply(_ snapshot: EventsListSnapshot) {
         switch snapshot {
         case .failed(let code):

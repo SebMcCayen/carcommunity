@@ -61,6 +61,24 @@ final class EventsCoordinatorTests: XCTestCase {
                 }
             }
         }
+
+        // MARK: unused by the list slice — inert conformance only
+
+        func event(withId eventId: String) -> AsyncStream<EventSummary?> {
+            AsyncStream { _ in }
+        }
+
+        func eventDetail(eventId: String) -> AsyncStream<EventDetail?> {
+            AsyncStream { _ in }
+        }
+
+        func myRsvp(eventId: String, uid: String) -> AsyncStream<RsvpStatus?> {
+            AsyncStream { _ in }
+        }
+
+        func submitRsvp(eventId: String, uid: String, status: RsvpStatus) async throws {}
+
+        func currentUserId() -> String? { nil }
     }
 
     // MARK: - fixtures

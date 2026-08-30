@@ -69,4 +69,47 @@ final class EventsModelTests: XCTestCase {
         // A malformed value degrades to 0, never a crash.
         XCTAssertEqual(RsvpCounts.fromMap(["going": "many"]).going, 0)
     }
+
+    // MARK: - detail + RSVP slice
+
+    func testRsvpStatusWireVocabulary() {
+        // The contract enum (eventRsvpStatus) — note the underscore spelling
+        // the rules validate (`validRsvpDocument`).
+        XCTAssertEqual(RsvpStatus.going.wire, "going")
+        XCTAssertEqual(RsvpStatus.maybe.wire, "maybe")
+        XCTAssertEqual(RsvpStatus.notGoing.wire, "not_going")
+
+        XCTAssertEqual(RsvpStatus.fromWire("going"), .going)
+        XCTAssertEqual(RsvpStatus.fromWire("maybe"), .maybe)
+        XCTAssertEqual(RsvpStatus.fromWire("not_going"), .notGoing)
+        // Never a fabricated answer for an unknown/absent value.
+        XCTAssertNil(RsvpStatus.fromWire("notGoing"))
+        XCTAssertNil(RsvpStatus.fromWire("attending"))
+        XCTAssertNil(RsvpStatus.fromWire(nil))
+    }
+
+    func testCanRsvpRequiresGateAndPublished() {
+        XCTAssertTrue(Events.canRsvp(passesMemberGate: true, status: .published))
+        XCTAssertFalse(Events.canRsvp(passesMemberGate: false, status: .published))
+        for status in [EventStatus.draft, .cancelled, .completed] {
+            XCTAssertFalse(Events.canRsvp(passesMemberGate: true, status: status))
+        }
+    }
+
+    func testCanSeeDetailsRequiresGateAndPublished() {
+        XCTAssertTrue(Events.canSeeDetails(passesMemberGate: true, status: .published))
+        XCTAssertFalse(Events.canSeeDetails(passesMemberGate: false, status: .published))
+        for status in [EventStatus.draft, .cancelled, .completed] {
+            XCTAssertFalse(Events.canSeeDetails(passesMemberGate: true, status: status))
+        }
+    }
+
+    func testMemberGatingDisabledLetsEveryoneThrough() {
+        // The launch posture — Android MemberGating.ENABLED == false. If this
+        // flips, every passesMemberGate call site needs the real entitlement
+        // threaded through (see MemberGating docs).
+        XCTAssertFalse(MemberGating.enabled)
+        XCTAssertTrue(MemberGating.allows(isActiveMember: false))
+        XCTAssertTrue(MemberGating.allows(isActiveMember: true))
+    }
 }

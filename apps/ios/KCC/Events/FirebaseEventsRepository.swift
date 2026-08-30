@@ -1,3 +1,4 @@
+import FirebaseAuth
 import FirebaseCore
 import FirebaseFirestore
 import Foundation
@@ -47,6 +48,83 @@ final class FirebaseEventsRepository: EventsRepository, @unchecked Sendable {
                 }
                 let events = (snapshot?.documents ?? []).compactMap(Self.eventSummary(from:))
                 continuation.yield(.loaded(Events.sortedForList(events)))
+            }
+            let box = ListenerBox(registration: registration)
+            continuation.onTermination = { _ in
+                box.registration.remove()
+            }
+        }
+    }
+
+    func event(withId eventId: String) -> AsyncStream<EventSummary?> {
+        documentStream(
+            firestore.collection(Self.eventsCollection).document(eventId),
+            map: Self.eventSummary(from:)
+        )
+    }
+
+    func eventDetail(eventId: String) -> AsyncStream<EventDetail?> {
+        documentStream(
+            firestore
+                .collection(Self.eventsCollection)
+                .document(eventId)
+                .collection(Self.detailsCollection)
+                .document(Self.privateDocument),
+            map: Self.eventDetail(from:)
+        )
+    }
+
+    func myRsvp(eventId: String, uid: String) -> AsyncStream<RsvpStatus?> {
+        documentStream(rsvpDocument(eventId: eventId, uid: uid)) { document in
+            RsvpStatus.fromWire(document.get(Self.statusField) as? String)
+        }
+    }
+
+    func submitRsvp(eventId: String, uid: String, status: RsvpStatus) async throws {
+        // The exact rules-validated shape (firestore.rules validRsvpDocument):
+        // `{ status, updatedAt: serverTimestamp }`, nothing else — Android's
+        // `setRsvp`. The events-onRsvpWrite trigger maintains rsvpCounts.
+        let document: [String: Any] = [
+            Self.statusField: status.wire,
+            Self.updatedAtField: FieldValue.serverTimestamp(),
+        ]
+        do {
+            try await rsvpDocument(eventId: eventId, uid: uid).setData(document)
+        } catch {
+            // Bare status name only — the same PII-safe rule as the listener
+            // failures (the SDK message embeds the document path).
+            throw RsvpWriteError(code: Self.firestoreStatusName(error))
+        }
+    }
+
+    func currentUserId() -> String? {
+        Auth.auth().currentUser?.uid
+    }
+
+    private func rsvpDocument(eventId: String, uid: String) -> DocumentReference {
+        firestore
+            .collection(Self.eventsCollection)
+            .document(eventId)
+            .collection(Self.rsvpsCollection)
+            .document(uid)
+    }
+
+    /// One document's snapshot listener as a stream of mapped values —
+    /// Android's `observeEvent` / `observeEventDetail` / `observeMyRsvp`
+    /// shape: a listener error or a missing document emits nil (a non-member
+    /// denied `details/private` must read as "no detail", not a crash), and
+    /// terminating the stream detaches the listener.
+    private func documentStream<Value: Sendable>(
+        _ document: DocumentReference,
+        map: @escaping @Sendable (DocumentSnapshot) -> Value?
+    ) -> AsyncStream<Value?> {
+        AsyncStream { continuation in
+            let registration = document.addSnapshotListener { snapshot, _ in
+                guard let snapshot else {
+                    continuation.yield(nil)
+                    return
+                }
+                continuation.yield(map(snapshot))
             }
             let box = ListenerBox(registration: registration)
             continuation.onTermination = { _ in
@@ -114,11 +192,25 @@ final class FirebaseEventsRepository: EventsRepository, @unchecked Sendable {
         )
     }
 
+    /// Member-gated detail mapping — a missing document is nil; both fields
+    /// degrade to nil independently (Android's `toEventDetail`).
+    static func eventDetail(from document: DocumentSnapshot) -> EventDetail? {
+        guard document.exists else { return nil }
+        return EventDetail(
+            description: document.get("description") as? String,
+            address: document.get("address") as? String
+        )
+    }
+
     // MARK: - Factory
 
     private static let eventsCollection = "events"
+    private static let detailsCollection = "details"
+    private static let privateDocument = "private"
+    private static let rsvpsCollection = "rsvps"
     private static let statusField = "status"
     private static let startsAtField = "startsAt"
+    private static let updatedAtField = "updatedAt"
     private static let titleField = "title"
 
     private static let cachedLock = NSLock()
