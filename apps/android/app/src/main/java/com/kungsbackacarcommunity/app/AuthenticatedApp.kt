@@ -5634,7 +5634,7 @@ fun AuthenticatedApp(
                 // them. Residual bound: still capped at 200, so beyond 200 in-range
                 // sharers the client and server fan-out can diverge.
                 val waveEligibleDiscoveryUids =
-                    remember(nearbySeeds, convoyLiveUids, uid, waveOwnPosition) {
+                    remember(nearbySeeds, convoyLiveUids, uid, waveOwnPosition?.latitude, waveOwnPosition?.longitude) {
                         val convoySet = convoyLiveUids.toSet()
                         WavePresence.waveEligibleSessionsInRange(
                             waveOwnPosition?.latitude,
@@ -5657,7 +5657,7 @@ fun AuthenticatedApp(
                 // enters/leaves range OR a wave marks the discovery set as done — the
                 // Compose-observable read that drives the control's visibility.
                 val waveEligibleMarkers =
-                    remember(nearbyLiveMarkers, waveOwnPosition) {
+                    remember(nearbyLiveMarkers, waveOwnPosition?.latitude, waveOwnPosition?.longitude) {
                         WavePresence.waveEligibleInRange(
                             waveOwnPosition?.latitude,
                             waveOwnPosition?.longitude,
