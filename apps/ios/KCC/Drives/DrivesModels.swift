@@ -179,9 +179,19 @@ enum SavedDrives {
 }
 
 /// Pure, locale-stable display formatters for drive stats — Android's
-/// `DriveFormatters`. Unit labels (km, m, h, min, km/h) are numeric-adjacent
-/// and identical in sv/en, so they live here rather than in the string
-/// catalog; the field LABELS come from the savedDrives.* keys.
+/// `DriveFormatters`. Unit labels (km, m, h, min, s, km/h) are
+/// numeric-adjacent and identical in sv/en, so they live here rather than in
+/// the string catalog — a deliberate cross-platform decision documented in
+/// Android's `DriveFormatters` (SavedDrive.kt), which both clients follow so
+/// the same drive renders the same on both. The field LABELS come from the
+/// savedDrives.* keys.
+///
+/// The catalog's only unit keys (`addressSearch.unit*`) are deliberately NOT
+/// borrowed: they belong to the navigation vocabulary, cover neither seconds
+/// nor km/h, and render Swedish hours as "tim" where the drive cards render
+/// "h" on both platforms — using them would diverge from Android's cards.
+/// Localizing these units properly would need new shared contract unit keys
+/// adopted by BOTH clients (a contracts + Android change, not an iOS one).
 enum DriveFormatters {
     /// What every readout here renders when the value is genuinely absent,
     /// as opposed to zero — so "no value" never gets confused with a real 0.
