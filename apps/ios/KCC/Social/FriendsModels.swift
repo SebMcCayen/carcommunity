@@ -314,7 +314,7 @@ enum FriendsResponseParser {
 
 /// How the established friends list is ordered on the Friends screen. Purely
 /// a client-side view preference (Android: `FriendSort`).
-enum FriendSort: Equatable, Sendable, CaseIterable {
+enum FriendSort: Hashable, Sendable, CaseIterable {
     /// Case-insensitive, locale-aware (Swedish) by display name, A→Ö.
     case name
     /// Most recently added first (`friendsSince` descending).
