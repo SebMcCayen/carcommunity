@@ -279,14 +279,21 @@ enum FriendsResponseParser {
         _ raw: Any,
         direction: FriendRequestDirection
     ) -> FriendRequestSummary? {
+        // fromUid/toUid are required, not defaulted: toUid in particular is
+        // later used verbatim as the outgoing cancel key AND the cancel
+        // target uid, so a missing/blank value would produce a broken row
+        // (busy-key collisions on "cancel:", and a cancel call with an empty
+        // uid) instead of just dropping the malformed request.
         guard let map = raw as? [String: Any],
             let requestId = map["requestId"] as? String, !requestId.isEmpty,
+            let fromUid = map["fromUid"] as? String, !fromUid.isEmpty,
+            let toUid = map["toUid"] as? String, !toUid.isEmpty,
             let other = parseUser(map["otherUser"] as Any)
         else { return nil }
         return FriendRequestSummary(
             requestId: requestId,
-            fromUid: map["fromUid"] as? String ?? "",
-            toUid: map["toUid"] as? String ?? "",
+            fromUid: fromUid,
+            toUid: toUid,
             direction: direction,
             otherUser: other,
             createdAt: map["createdAt"] as? String

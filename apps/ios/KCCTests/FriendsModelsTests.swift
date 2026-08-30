@@ -85,6 +85,32 @@ final class FriendsModelsTests: XCTestCase {
         XCTAssertEqual(FriendsResponseParser.parseList(nil), .empty)
     }
 
+    /// `toUid` is later used verbatim as both the outgoing cancel busy-key
+    /// and the cancel call's target uid; a missing/blank `fromUid`/`toUid`
+    /// must drop the row entirely rather than construct one with a blank id
+    /// (which would collide on the busy key and cancel with an empty uid).
+    func testParseListDropsRequestsMissingFromOrToUid() {
+        let data: [String: Any] = [
+            "incoming": [
+                // Missing fromUid → dropped.
+                ["requestId": "r1", "toUid": "me", "otherUser": ["uid": "a"]],
+                // Blank toUid → dropped.
+                ["requestId": "r2", "fromUid": "a", "toUid": "", "otherUser": ["uid": "a"]],
+            ],
+            "outgoing": [
+                // Missing toUid → dropped.
+                ["requestId": "r3", "fromUid": "me", "otherUser": ["uid": "b"]],
+                // Blank fromUid → dropped.
+                ["requestId": "r4", "fromUid": "", "toUid": "b", "otherUser": ["uid": "b"]],
+            ],
+        ]
+
+        let parsed = FriendsResponseParser.parseList(data)
+
+        XCTAssertTrue(parsed.incoming.isEmpty)
+        XCTAssertTrue(parsed.outgoing.isEmpty)
+    }
+
     // MARK: - success payloads
 
     func testParseSendSuccessDefaultsToRequested() {
