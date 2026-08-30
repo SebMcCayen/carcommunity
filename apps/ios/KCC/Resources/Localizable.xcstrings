@@ -30193,6 +30193,57 @@
         }
       }
     },
+    "subscription.manageAction": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hantera medlemskap"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage membership"
+          }
+        }
+      }
+    },
+    "subscription.manageBody": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öppnar din appbutik där du kan ändra eller avsluta medlemskapet."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opens your app store, where you can change or cancel your membership."
+          }
+        }
+      }
+    },
+    "subscription.manageUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kunde inte öppna din appbutik. Försök igen från enhetens butik."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not open your app store. Try again from your device's store."
+          }
+        }
+      }
+    },
     "subscription.memberMonthlyTitle": {
       "extractionState": "manual",
       "localizations": {

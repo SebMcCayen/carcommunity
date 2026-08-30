@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.subscription
 
 import android.app.Activity
+import android.widget.Toast
 import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -8,6 +9,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import com.kungsbackacarcommunity.app.R
 import kotlinx.coroutines.launch
 
 /**
@@ -31,6 +35,9 @@ fun SubscriptionRoute(
     onBack: () -> Unit,
 ) {
     val activity: Activity? = LocalActivity.current
+    val context = LocalContext.current
+    val managementUnavailableMessage =
+        stringResource(R.string.subscription_manageUnavailable)
     val coordinator = remember(billing, verifier) { SubscriptionCoordinator(billing, verifier) }
     val status by coordinator.status.collectAsState()
     val scope = rememberCoroutineScope()
@@ -52,6 +59,20 @@ fun SubscriptionRoute(
                     }
                 }
             }
+        },
+        onManageSubscription = { productId ->
+            SubscriptionManagementLink.open(
+                context = context,
+                applicationId = context.packageName,
+                productId = productId,
+                onUnavailable = {
+                    Toast.makeText(
+                        context,
+                        managementUnavailableMessage,
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                },
+            )
         },
         onBack = onBack,
     )
