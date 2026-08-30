@@ -119,8 +119,10 @@ final class FirebaseEventsRepository: EventsRepository, @unchecked Sendable {
         map: @escaping @Sendable (DocumentSnapshot) -> Value?
     ) -> AsyncStream<Value?> {
         AsyncStream { continuation in
-            let registration = document.addSnapshotListener { snapshot, _ in
-                guard let snapshot else {
+            let registration = document.addSnapshotListener { snapshot, error in
+                // Error first, like every other listener in this codebase: a
+                // failed read is "no value", never a stale snapshot.
+                guard error == nil, let snapshot else {
                     continuation.yield(nil)
                     return
                 }

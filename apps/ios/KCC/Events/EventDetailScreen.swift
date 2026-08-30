@@ -263,11 +263,12 @@ struct EventDetailScreen: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// Blank-insensitive optional text (Android's `takeIf { it.isNotBlank() }`).
+    /// Blank-insensitive optional text (Android's `takeIf { it.isNotBlank() }`,
+    /// returning the trimmed text for display).
     private func trimmed(_ value: String?) -> String? {
         guard let value else { return nil }
         let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return text.isEmpty ? nil : value
+        return text.isEmpty ? nil : text
     }
 }
 
