@@ -1,0 +1,23 @@
+{
+  "sourceLanguage" : "sv",
+  "strings" : {
+    "NSLocationWhenInUseUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Without location access the map can't show where you are, and directions and live sharing won't work."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utan platsåtkomst kan kartan inte visa var du är, och vägbeskrivningar och livedelning fungerar inte."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

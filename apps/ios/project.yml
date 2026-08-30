@@ -49,6 +49,22 @@ targets:
         # Single-source the version from the build settings below.
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # Location purpose string (when-in-use only). The base value is the
+        # SWEDISH text of the contract key `map.locationPermissionBody` —
+        # the same rationale Android shows at runtime — and it is localized
+        # (sv + en, same contract values) via the HAND-WRITTEN
+        # KCC/Resources/InfoPlist.xcstrings: the strings generator owns only
+        # Localizable.xcstrings, and .xcstrings files are JSON with no room
+        # for comments, so this note and the README's Localization section
+        # are that catalog's documentation. Keep all three in sync with the
+        # contract.
+        #
+        # Deliberately NO NSLocationAlwaysAndWhenInUseUsageDescription:
+        # Android runs live sharing on a location-typed foreground service
+        # WITHOUT ACCESS_BACKGROUND_LOCATION (see LocationSharingService),
+        # and the iOS analogue when that feature ports is the `location`
+        # UIBackgroundMode on a when-in-use grant — not an Always request.
+        NSLocationWhenInUseUsageDescription: "Utan platsåtkomst kan kartan inte visa var du är, och vägbeskrivningar och livedelning fungerar inte."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kungsbackacarcommunity.app
