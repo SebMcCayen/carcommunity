@@ -45,6 +45,8 @@ final class LiveLocationCoordinatorTests: XCTestCase {
         var nextError: Error?
         private var holdPublishes = false
         private var publishGates: [CheckedContinuation<Void, Never>] = []
+        private var holdStart = false
+        private var startGates: [CheckedContinuation<Void, Never>] = []
 
         /// Pushes a session to every LIVE subscription (a later RTDB frame).
         func emitSession(_ session: LiveSessionInfo?) {
@@ -80,6 +82,32 @@ final class LiveLocationCoordinatorTests: XCTestCase {
                 startedDurations.append(duration)
                 startedVehicleIds.append(vehicleId)
             }
+            let shouldHold: Bool = {
+                lock.lock()
+                defer { lock.unlock() }
+                return holdStart
+            }()
+            if shouldHold {
+                await withCheckedContinuation { continuation in
+                    recordSynchronized { startGates.append(continuation) }
+                }
+            }
+        }
+
+        /// Makes the next `startSession` call block until ``releaseStart()``
+        /// — used to assert `.busy` overlap semantics on `startSharing()`.
+        func setHoldStart(_ hold: Bool) {
+            recordSynchronized { holdStart = hold }
+        }
+
+        /// Resumes every parked `startSession` call and stops holding new ones.
+        func releaseStart() {
+            lock.lock()
+            let gates = startGates
+            startGates = []
+            holdStart = false
+            lock.unlock()
+            for gate in gates { gate.resume() }
         }
 
         func updatePosition(_ coordinate: LiveCoordinate) async throws {
@@ -499,6 +527,59 @@ final class LiveLocationCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(result, .failed)
         XCTAssertFalse(coordinator.wired)
+    }
+
+    /// `startSharing()` must gate on the flag BEFORE issuing
+    /// `live-startSession` — not just steer the toggle's affordance — so a
+    /// stale UI or a direct call never starts a session while the flag is
+    /// off server-side.
+    @MainActor
+    func testStartSharingRejectedWhenFlagIsOff() async {
+        let repository = FakeLiveLocationRepository()
+        let coordinator = makeCoordinator(repository: repository, provider: StubLocationProvider(), canShare: false)
+        coordinator.start()
+
+        let result = await coordinator.startSharing()
+
+        XCTAssertEqual(result, .failed)
+        XCTAssertEqual(coordinator.actionStatus, .idle)
+        XCTAssertTrue(repository.startedDurations.isEmpty)
+    }
+
+    /// A repository can exist (Firebase configured) with nobody signed in —
+    /// `wired` is false, and `startSharing()` must not reach the callable.
+    @MainActor
+    func testStartSharingRejectedWhenSignedOut() async {
+        let repository = FakeLiveLocationRepository()
+        repository.uid = nil
+        let coordinator = makeCoordinator(repository: repository, provider: StubLocationProvider())
+        coordinator.start()
+
+        let result = await coordinator.startSharing()
+
+        XCTAssertEqual(result, .failed)
+        XCTAssertFalse(coordinator.wired)
+        XCTAssertTrue(repository.startedDurations.isEmpty)
+    }
+
+    /// The flag gate must not shadow the busy check: an in-flight command
+    /// still reports `.busy`, flag or no flag.
+    @MainActor
+    func testStartSharingStillReportsBusyOverTheFlagGate() async {
+        let repository = FakeLiveLocationRepository()
+        let coordinator = makeCoordinator(repository: repository, provider: StubLocationProvider())
+        coordinator.start()
+        repository.setHoldStart(true)
+
+        async let first = coordinator.startSharing()
+        await waitUntil { coordinator.actionStatus == .working }
+        coordinator.canShare = false
+        let second = await coordinator.startSharing()
+        repository.releaseStart()
+        let firstResult = await first
+
+        XCTAssertEqual(second, .busy)
+        XCTAssertEqual(firstResult, .success)
     }
 
     // MARK: - ported toggle/manage-sheet input derivation

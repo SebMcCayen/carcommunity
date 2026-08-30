@@ -174,9 +174,18 @@ final class LiveLocationCoordinator {
     /// Starts a session for the fixed default window (6h — see
     /// ``LiveLocation/defaultSessionDuration``; no duration is chosen).
     /// Publishing begins when the session echoes back as active.
+    ///
+    /// Gated on ``canShare`` (the LIVE_LOCATION flag) and ``wired`` (Firebase
+    /// configured + signed in) BEFORE issuing `live-startSession` — unlike
+    /// ``stopSharing()``/``hideMeNow()``, which must still work with the flag
+    /// off (a session already running should always be stoppable, and
+    /// hide-me-now is the always-on privacy escape hatch). A command already
+    /// in flight still wins with `.busy`, matching ``execute(_:)``.
     @discardableResult
     func startSharing() async -> LiveCommandResult {
-        await execute { repository in
+        guard actionStatus != .working else { return .busy }
+        guard canShare, wired else { return .failed }
+        return await execute { repository in
             try await repository.startSession(duration: LiveLocation.defaultSessionDuration)
         }
     }
