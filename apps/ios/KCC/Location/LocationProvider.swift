@@ -86,9 +86,13 @@ final class StubLocationProvider: LocationProvider {
     /// exactly once, and only after the rationale.
     private(set) var whenInUseRequestCount = 0
 
-    /// How many ``fixes()`` streams are currently being consumed — the stub's
-    /// observable stand-in for "is the GPS running", so tests can assert a
-    /// feature's teardown really stopped positioning.
+    /// How many ``fixes()`` streams are currently being consumed — the
+    /// DEMAND side of positioning, observable so tests can assert a
+    /// feature's teardown really released its stream. Deliberately not "is
+    /// the GPS running": in the real provider hardware runs only while
+    /// demand exists AND the app is authorized (see
+    /// ``CoreLocationProvider``), so an unauthorized consumer shows up here
+    /// while running no hardware — exactly the case tests need to see.
     private(set) var activeFixStreamCount = 0
 
     /// What a permission request resolves to, or nil to leave the simulated

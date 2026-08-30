@@ -99,7 +99,7 @@ final class StubLocationProviderTests: XCTestCase {
     }
 
     @MainActor
-    func testTerminatingAFixStreamIsObservableAsTheGpsStop() async {
+    func testTerminatingAFixStreamReleasesTheDemandCount() async {
         let provider = StubLocationProvider(authorization: .whileInUse)
 
         var task: Task<Void, Never>?
@@ -111,7 +111,8 @@ final class StubLocationProviderTests: XCTestCase {
         }
         XCTAssertEqual(provider.activeFixStreamCount, 1)
 
-        // The consumer goes away — the "hardware" must be seen to stop.
+        // The consumer goes away — the demand count must drop, which is
+        // what stops the hardware in the real provider.
         task?.cancel()
         await waitUntil { provider.activeFixStreamCount == 0 }
     }
