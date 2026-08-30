@@ -222,18 +222,28 @@ enum LiveShareCadence {
 /// nonzero) — so the parser accepts both, and the formatter always emits
 /// fractional seconds, which every consumer parses.
 enum LiveIsoInstant {
-    static func format(_ date: Date) -> String {
+    /// Cached formatters: this path runs in the publish loop (every few
+    /// seconds while sharing), so per-call allocation is avoidable overhead.
+    /// `nonisolated(unsafe)` is sound because `ISO8601DateFormatter` is
+    /// documented thread-safe and both instances are configured once here
+    /// and never mutated again.
+    nonisolated(unsafe) private static let fractional: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.string(from: date)
+        return formatter
+    }()
+
+    nonisolated(unsafe) private static let wholeSeconds: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    static func format(_ date: Date) -> String {
+        fractional.string(from: date)
     }
 
     static func parse(_ iso: String) -> Date? {
-        let fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = fractional.date(from: iso) { return date }
-        let whole = ISO8601DateFormatter()
-        whole.formatOptions = [.withInternetDateTime]
-        return whole.date(from: iso)
+        fractional.date(from: iso) ?? wholeSeconds.date(from: iso)
     }
 }

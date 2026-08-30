@@ -102,6 +102,12 @@ final class LiveLocationCoordinator {
     nonisolated(unsafe) private var sessionSubscription: Task<Void, Never>?
     @ObservationIgnored
     nonisolated(unsafe) private var publishTask: Task<Void, Never>?
+    @ObservationIgnored
+    nonisolated(unsafe) private var expiryWatchdog: Task<Void, Never>?
+    /// One watchdog tick — sleeps ``LiveShareCadence/expiryTick`` in
+    /// production; injected so tests can tick instantly.
+    @ObservationIgnored
+    private let expiryTickWait: @Sendable () async throws -> Void
 
     /// - Parameters:
     ///   - repository: nil when Firebase is not configured in this build —
@@ -111,16 +117,22 @@ final class LiveLocationCoordinator {
     ///     while sharing; constructing the coordinator never touches GPS.
     ///   - canShare: the LIVE_LOCATION feature flag.
     ///   - now: test seam for the wall clock.
+    ///   - expiryTickWait: test seam for the expiry watchdog's tick — the
+    ///     production default sleeps ``LiveShareCadence/expiryTick``.
     init(
         repository: LiveLocationRepository?,
         provider: LocationProvider,
         canShare: Bool = true,
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        expiryTickWait: @escaping @Sendable () async throws -> Void = {
+            try await Task.sleep(nanoseconds: UInt64(LiveShareCadence.expiryTick * 1_000_000_000))
+        }
     ) {
         self.repository = repository
         self.provider = provider
         self.canShare = canShare
         self.now = now
+        self.expiryTickWait = expiryTickWait
         self.uid = repository?.currentUserId()
     }
 
@@ -137,6 +149,7 @@ final class LiveLocationCoordinator {
     deinit {
         sessionSubscription?.cancel()
         publishTask?.cancel()
+        expiryWatchdog?.cancel()
     }
 
     /// Begins observing the own session on first appearance. Idempotent: a
@@ -213,6 +226,7 @@ final class LiveLocationCoordinator {
 
     private func beginPublishingIfNeeded() {
         guard publishTask == nil, let repository else { return }
+        beginExpiryWatchdog()
         let stream = provider.fixes()
         let clock = now
         publishTask = Task { [weak self] in
@@ -253,9 +267,32 @@ final class LiveLocationCoordinator {
         }
     }
 
+    /// Re-checks the session against the clock on a fixed tick while the
+    /// publish loop runs — the iOS analog of Android's `EXPIRY_TICK_MS`
+    /// ticker in `LocationSharingService`. The per-fix guard in the publish
+    /// loop cannot be the only expiry check: if CoreLocation stops
+    /// delivering fixes (deep indoors, airplane mode), the stream would
+    /// otherwise stay subscribed — and the GPS demand alive — past expiry.
+    private func beginExpiryWatchdog() {
+        guard expiryWatchdog == nil else { return }
+        let tick = expiryTickWait
+        expiryWatchdog = Task { [weak self] in
+            while !Task.isCancelled {
+                guard (try? await tick()) != nil else { return }
+                guard let self, !Task.isCancelled else { return }
+                guard self.isSharing else {
+                    self.endPublishing()
+                    return
+                }
+            }
+        }
+    }
+
     private func endPublishing() {
         publishTask?.cancel()
         publishTask = nil
+        expiryWatchdog?.cancel()
+        expiryWatchdog = nil
     }
 
     /// One command at a time, mirroring Android's `execute`: `working` while

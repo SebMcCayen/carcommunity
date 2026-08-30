@@ -131,7 +131,10 @@ final class LiveLocationCoordinatorTests: XCTestCase {
             repository: repository,
             provider: provider,
             canShare: canShare,
-            now: { clock.now }
+            now: { clock.now },
+            // Fast expiry-watchdog tick so watchdog behavior is testable
+            // without waiting out the production 15 s interval.
+            expiryTickWait: { try await Task.sleep(nanoseconds: 5_000_000) }
         )
     }
 
@@ -300,6 +303,24 @@ final class LiveLocationCoordinatorTests: XCTestCase {
         // fix must end the loop (and the GPS) instead of publishing.
         clock.advance(by: 120)
         provider.emitFix(fix(latitude: 57.5, longitude: 12.1))
+
+        await waitUntil { provider.activeFixStreamCount == 0 }
+        XCTAssertTrue(repository.publishedCoordinates.isEmpty)
+    }
+
+    @MainActor
+    func testExpiryWatchdogTearsDownWithoutAnyFixes() async {
+        let repository = FakeLiveLocationRepository()
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = makeCoordinator(repository: repository, provider: provider)
+        coordinator.start()
+        repository.emitSession(activeSession(expiresIn: 60))
+        await waitUntil { provider.activeFixStreamCount == 1 }
+
+        // The session expires and CoreLocation delivers NOTHING (deep
+        // indoors): the expiry ticker alone must release the stream — the
+        // per-fix guard never runs (Android's EXPIRY_TICK_MS parity).
+        clock.advance(by: 120)
 
         await waitUntil { provider.activeFixStreamCount == 0 }
         XCTAssertTrue(repository.publishedCoordinates.isEmpty)
