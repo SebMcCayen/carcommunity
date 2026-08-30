@@ -322,6 +322,22 @@ final class EventDetailCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testDetailIsNotSubscribedForANonPublishedEvent() async {
+        // The rules gate details/private on the parent being published, so a
+        // completed/cancelled event must not attach a read that can only be
+        // denied.
+        for status in [EventStatus.cancelled, .completed] {
+            let repository = FakeEventsRepository()
+            repository.teaser.script([Self.event(status: status)])
+            let coordinator = makeCoordinator(repository: repository)
+
+            coordinator.start()
+            await waitFor { coordinator.state != .loading }
+            XCTAssertEqual(repository.detail.subscribeCount, 0, "no detail read for \(status)")
+        }
+    }
+
+    @MainActor
     func testDeniedDetailStaysNilWithoutFailingTheScreen() async {
         let repository = FakeEventsRepository()
         let event = Self.event()
@@ -477,6 +493,34 @@ final class EventDetailCoordinatorTests: XCTestCase {
 
         // Idle stays idle — reset is a no-op unless failed.
         coordinator.resetRsvpFailure()
+        XCTAssertEqual(coordinator.rsvpState, .idle)
+    }
+
+    @MainActor
+    func testReloadCancelsAnInFlightWriteAndUnlocksTheButtons() async {
+        let repository = FakeEventsRepository()
+        repository.teaser.script([Self.event()])
+        repository.holdRsvpWrites(true)
+        let coordinator = makeCoordinator(repository: repository)
+
+        coordinator.start()
+        await waitFor { coordinator.state != .loading }
+
+        coordinator.submitRsvp(.going)
+        XCTAssertEqual(coordinator.rsvpState, .saving)
+
+        // A reload is a fresh page — the buttons must not stay locked behind
+        // the stale write, and the stale task must not mutate state when it
+        // eventually settles.
+        coordinator.reload()
+        XCTAssertEqual(coordinator.rsvpState, .idle)
+
+        repository.failRsvp(with: RsvpWriteError(code: "UNAVAILABLE"))
+        repository.releaseHeldWrites()
+        // Give the cancelled task a chance to (incorrectly) write state.
+        for _ in 0..<20 {
+            await Task.yield()
+        }
         XCTAssertEqual(coordinator.rsvpState, .idle)
     }
 

@@ -102,7 +102,7 @@ struct EventDetailScreen: View {
                 if event.status == .cancelled {
                     Text("events.cancelledNotice")
                         .font(.system(size: KccTypeScale.bodyMd))
-                        .foregroundStyle(.red)
+                        .foregroundStyle(KccPalette.errorRed)
                 }
                 if let startsAt = event.startsAt {
                     // Android: DateFormat.FULL date + SHORT time.
@@ -211,7 +211,7 @@ struct EventDetailScreen: View {
             if case .failed = coordinator.rsvpState {
                 Text("events.rsvpSubmitError")
                     .font(.system(size: KccTypeScale.bodySm))
-                    .foregroundStyle(.red)
+                    .foregroundStyle(KccPalette.errorRed)
             }
             // How many answered each way, from the server-maintained public
             // rsvpCounts tally — deliberately NEUTRAL: three equal-weight

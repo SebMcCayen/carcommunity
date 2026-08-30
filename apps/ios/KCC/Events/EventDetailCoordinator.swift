@@ -71,6 +71,10 @@ final class EventDetailCoordinator {
     /// same `nonisolated(unsafe)` reasoning as `subscriptions`).
     @ObservationIgnored
     nonisolated(unsafe) private var submission: Task<Void, Never>?
+    /// Whether the member-gated detail listener has been attached for the
+    /// current subscription generation (see ``subscribeDetailIfNeeded(for:)``).
+    @ObservationIgnored
+    private var detailSubscribed = false
 
     init(
         repository: EventsRepository,
@@ -130,7 +134,16 @@ final class EventDetailCoordinator {
         subscriptions = []
         state = .loading
         detail = nil
+        detailSubscribed = false
         myRsvp = nil
+        // A (re)subscribe is a fresh page: cancel the in-flight RSVP write's
+        // state updates and unlock the buttons, so a retry from a failed
+        // teaser can never stay stuck on `saving` behind a stale task. The
+        // write itself may still land server-side — the rsvps/{uid} listener
+        // reports whatever it produced, exactly as for any concurrent write.
+        submission?.cancel()
+        submission = nil
+        rsvpState = .idle
 
         // The streams are created HERE, not inside the tasks, so the
         // listeners attach synchronously — reload() has re-subscribed by the
@@ -140,16 +153,10 @@ final class EventDetailCoordinator {
             // Settled nil = missing/unreadable (Android's error text);
             // a live update keeps the loaded teaser fresh.
             coordinator.state = event.map(EventDetailUiState.loaded) ?? .failed
+            if let event {
+                coordinator.subscribeDetailIfNeeded(for: event.status)
+            }
         })
-
-        // A non-member can't read the detail — never subscribe a read that
-        // only errors; the detail simply stays nil (Android: settled-empty).
-        if passesMemberGate {
-            let detailStream = repository.eventDetail(eventId: eventId)
-            subscriptions.append(consume(detailStream) { coordinator, detail in
-                coordinator.detail = detail
-            })
-        }
 
         if let uid {
             let rsvpStream = repository.myRsvp(eventId: eventId, uid: uid)
@@ -157,6 +164,26 @@ final class EventDetailCoordinator {
                 coordinator.myRsvp = answer
             })
         }
+    }
+
+    /// Attaches the member-gated `details/private` listener the first time
+    /// the teaser shows a state the rules would actually serve: member gate
+    /// passed AND published (firestore.rules gates the detail read on the
+    /// parent's `published` status, so subscribing for a completed/cancelled
+    /// event would only produce denied reads). A non-gate-passer never
+    /// subscribes at all — the detail simply stays nil (Android's
+    /// settled-empty flow). Once attached the listener is kept: if the event
+    /// later leaves `published` the denied read emits nil, which is the
+    /// correct value then.
+    private func subscribeDetailIfNeeded(for status: EventStatus) {
+        guard passesMemberGate, !detailSubscribed,
+            Events.canSeeDetails(passesMemberGate: passesMemberGate, status: status)
+        else { return }
+        detailSubscribed = true
+        let detailStream = repository.eventDetail(eventId: eventId)
+        subscriptions.append(consume(detailStream) { coordinator, detail in
+            coordinator.detail = detail
+        })
     }
 
     /// Folds one stream's emissions into coordinator state. `self` is
