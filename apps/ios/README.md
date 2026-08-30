@@ -77,6 +77,17 @@ same semantic names as `contracts/localization` (e.g. `shell.tabMap`).
 drift). Do not edit the catalog by hand, and do not hard-code user-facing text
 in views.
 
+`KCC/Resources/InfoPlist.xcstrings` is the one **hand-written** catalog: it
+localizes Info.plist values (currently the
+`NSLocationWhenInUseUsageDescription` purpose string), which the generator
+does not own — it only writes `Localizable.xcstrings`. Its values are copied
+from the contracts (the location purpose string is
+`map.locationPermissionBody`, the same runtime rationale Android shows), and
+the Swedish base value additionally lives in `project.yml` under
+`info.properties`. When the contract text changes, update all three by hand;
+`.xcstrings` files are JSON and cannot carry comments, so this section (plus
+the note in `project.yml`) is that file's documentation.
+
 ## Parity
 
 When changing shell behaviour here, port the change (and its tests) to
