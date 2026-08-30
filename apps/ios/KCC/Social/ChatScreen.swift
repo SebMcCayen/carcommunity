@@ -39,9 +39,11 @@ struct ChatScreen: View {
             .task { await coordinator?.start() }
     }
 
+    /// Trimmed-first, so a whitespace-only name never renders the thread
+    /// title blank.
     private var titleText: Text {
-        if let otherName, !otherName.isEmpty {
-            Text(verbatim: otherName)
+        if let name = otherName.trimmedNonBlank {
+            Text(verbatim: name)
         } else {
             Text("dm.unknownMember")
         }
@@ -193,7 +195,7 @@ private struct MessageBubble: View {
     /// tap-to-scroll quote component ships with the chat-hub slice).
     private func quoteHeader(_ replyTo: DmReplyTo) -> some View {
         VStack(alignment: .leading, spacing: KccSpacing.s1 / 2) {
-            if let name = replyTo.senderDisplayName, !name.isEmpty {
+            if let name = replyTo.senderDisplayName.trimmedNonBlank {
                 Text(verbatim: name)
                     .font(.system(size: KccTypeScale.caption, weight: KccTypeScale.semibold))
             }

@@ -119,9 +119,8 @@ struct FriendsScreen: View {
     /// unfriend prompt never reads "Unfriend ?" (Android's targetName
     /// fallback).
     private var removeConfirmTitle: String {
-        let name = removeTarget?.displayName.flatMap {
-            $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0
-        } ?? String(localized: "friends.unknownMember")
+        let name = (removeTarget?.displayName).trimmedNonBlank
+            ?? String(localized: "friends.unknownMember")
         return String.localizedStringWithFormat(
             NSLocalizedString(
                 "friends.removeConfirmTitle",
@@ -188,7 +187,7 @@ struct FriendsScreen: View {
                         Button {
                             Task { await coordinator.chooseCandidate(uid: candidate.uid) }
                         } label: {
-                            Text(candidate.displayName ?? String(localized: "friends.unknownMember"))
+                            memberLabel(candidate.displayName)
                         }
                     }
                     Button(role: .cancel) {
@@ -383,9 +382,11 @@ struct FriendsScreen: View {
         .clipShape(Capsule())
     }
 
+    /// The friend's name, or the unknown-member fallback — trimming first,
+    /// so a whitespace-only name never renders (or is announced) as blank.
     private func memberLabel(_ displayName: String?) -> Text {
-        if let displayName, !displayName.isEmpty {
-            Text(verbatim: displayName)
+        if let name = displayName.trimmedNonBlank {
+            Text(verbatim: name)
         } else {
             Text("friends.unknownMember")
         }

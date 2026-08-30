@@ -184,8 +184,10 @@ private struct ConversationRow: View {
         .padding(.vertical, KccSpacing.s1)
     }
 
+    /// Trimmed-first, so a whitespace-only name never renders as a blank
+    /// (effectively unlabeled) inbox row.
     private var nameText: Text {
-        if let name = conversation.otherUser.displayName, !name.isEmpty {
+        if let name = conversation.otherUser.displayName.trimmedNonBlank {
             Text(verbatim: name)
         } else {
             Text("dm.unknownMember")
@@ -258,7 +260,7 @@ struct NewDialogueSheet: View {
                             Button {
                                 onPick(friend)
                             } label: {
-                                if let name = friend.displayName, !name.isEmpty {
+                                if let name = friend.displayName.trimmedNonBlank {
                                     Text(verbatim: name)
                                 } else {
                                     Text("dm.newDialogue.unnamedFriend")

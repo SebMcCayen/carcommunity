@@ -180,8 +180,19 @@ final class FirebaseConversationsRepository: ConversationsRepository, @unchecked
         callerUid: String
     ) -> DmConversation? {
         guard document.exists else { return nil }
-        let members = (document.get(Self.members) as? [Any] ?? []).compactMap { $0 as? String }
-        guard !members.isEmpty else { return nil }
+        // Blank member ids are dropped, and a malformed document — one that
+        // doesn't list the caller plus a non-empty counterparty — yields no
+        // row at all: an inbox row with an empty counterparty uid would open
+        // a dead thread. Only dm.sendMessage writes these docs (always
+        // exactly two uids), so this is a guard against shape drift, and
+        // dropping is the safe side (mirrors the rules' dmWellFormed
+        // fail-closed reasoning).
+        let members = (document.get(Self.members) as? [Any] ?? [])
+            .compactMap { $0 as? String }
+            .filter { !$0.isEmpty }
+        guard members.contains(callerUid),
+            members.contains(where: { $0 != callerUid })
+        else { return nil }
 
         var memberProfiles: [String: DmUser] = [:]
         for (key, value) in document.get("memberProfiles") as? [String: Any] ?? [:] {

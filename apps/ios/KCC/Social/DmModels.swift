@@ -29,6 +29,18 @@ enum Dm {
     static let conversationsQueryLimit = 50
 }
 
+extension Optional where Wrapped == String {
+    /// The trimmed value when it contains any non-whitespace, else nil —
+    /// the shared "is there a usable display name" rule for every Social
+    /// surface, so a whitespace-only name can never render as a blank label,
+    /// row, or title instead of the unknown-member fallback.
+    var trimmedNonBlank: String? {
+        guard let self else { return nil }
+        let trimmed = self.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
 /// A conversation participant, as surfaced to the caller's UI.
 struct DmUser: Equatable, Sendable {
     let uid: String

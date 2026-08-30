@@ -142,21 +142,12 @@ enum NewDialogue {
         in conversations: [DmConversation]
     ) -> DmOpenTarget {
         let existing = conversations.first { $0.otherUser.uid == friend.uid }
-        let existingName = existing?.otherUser.displayName.nonBlank
+        let existingName = existing?.otherUser.displayName.trimmedNonBlank
         return DmOpenTarget(
             uid: friend.uid,
-            displayName: existingName ?? friend.displayName.nonBlank,
+            displayName: existingName ?? friend.displayName.trimmedNonBlank,
             isExisting: existing != nil
         )
-    }
-}
-
-extension Optional where Wrapped == String {
-    fileprivate var nonBlank: String? {
-        guard let self,
-            !self.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else { return nil }
-        return self
     }
 }
 
