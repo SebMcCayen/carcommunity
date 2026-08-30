@@ -30216,13 +30216,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Öppnar Google Play där du kan ändra eller avsluta medlemskapet."
+            "value": "Öppnar din appbutik där du kan ändra eller avsluta medlemskapet."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Opens Google Play, where you can change or cancel your membership."
+            "value": "Opens your app store, where you can change or cancel your membership."
           }
         }
       }
@@ -30233,13 +30233,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kunde inte öppna Google Play. Försök igen från Play Butik."
+            "value": "Kunde inte öppna din appbutik. Försök igen från enhetens butik."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Could not open Google Play. Try again from the Play Store."
+            "value": "Could not open your app store. Try again from your device's store."
           }
         }
       }

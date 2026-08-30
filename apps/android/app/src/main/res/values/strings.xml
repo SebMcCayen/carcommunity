@@ -230,8 +230,8 @@
     <string name="subscription_subscribePlusAction">Välj Plus</string>
     <string name="subscription_subscribeSupporterAction">Välj Supporter</string>
     <string name="subscription_manageAction">Hantera medlemskap</string>
-    <string name="subscription_manageBody">Öppnar Google Play där du kan ändra eller avsluta medlemskapet.</string>
-    <string name="subscription_manageUnavailable">Kunde inte öppna Google Play. Försök igen från Play Butik.</string>
+    <string name="subscription_manageBody">Öppnar din appbutik där du kan ändra eller avsluta medlemskapet.</string>
+    <string name="subscription_manageUnavailable">Kunde inte öppna din appbutik. Försök igen från enhetens butik.</string>
     <string name="subscription_statusConnecting">Ansluter till butiken…</string>
     <string name="subscription_statusReady">Redo att teckna medlemskap.</string>
     <string name="subscription_statusPurchasing">Slutför köpet…</string>
