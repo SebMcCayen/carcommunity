@@ -3,7 +3,7 @@ import SwiftUI
 /// The five-tab, map-first shell. The Map tab is the (stub-backed) map home;
 /// History / Social / Garage render as translucent panels over the map per
 /// `translucentPanelTabs`; the tab set, default tab, and the map-cover rules
-/// all come from the pure ``ShellNav`` logic so behaviour stays unit-tested
+/// all come from the pure ``ShellNavigation`` logic so behaviour stays unit-tested
 /// outside SwiftUI.
 struct ShellView: View {
     /// The signed-in session, threaded from ``RootView``. The config-less /
@@ -13,7 +13,7 @@ struct ShellView: View {
 
     @State private var selectedTab: ShellTab = .defaultTab
     /// The full-screen sub-route back-stack, held as the ONE pure value from
-    /// ``ShellNav``; every open/Back goes through its ``ShellRouteStack/opening(_:)``
+    /// ``ShellRouteStack``; every open/Back goes through its ``ShellRouteStack/opening(_:)``
     /// / ``ShellRouteStack/poppingOne()`` reducers rather than ad-hoc state.
     @State private var routes = ShellRouteStack.empty
 
