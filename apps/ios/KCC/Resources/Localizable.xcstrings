@@ -30267,13 +30267,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Öppnar Google Play där du kan hantera eller avsluta medlemskapet."
+            "value": "Öppnar din appbutik där du kan hantera eller avsluta medlemskapet."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Opens Google Play, where you can manage or cancel your membership."
+            "value": "Opens your app store, where you can manage or cancel your membership."
           }
         }
       }

@@ -259,7 +259,7 @@
     "downgradePlusAction": "Byt till Plus",
     "changePlanBody": "Uppgraderingar gäller direkt. Byte till Plus gäller från nästa förnyelse.",
     "manageAction": "Hantera eller avsluta medlemskap",
-    "manageBody": "Öppnar Google Play där du kan hantera eller avsluta medlemskapet.",
+    "manageBody": "Öppnar din appbutik där du kan hantera eller avsluta medlemskapet.",
     "manageUnavailable": "Kunde inte öppna din appbutik. Försök igen från enhetens butik.",
     "statusConnecting": "Ansluter till butiken…",
     "statusReady": "Redo att teckna medlemskap.",

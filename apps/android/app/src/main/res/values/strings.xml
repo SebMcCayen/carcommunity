@@ -234,7 +234,7 @@
     <string name="subscription_downgradePlusAction">Byt till Plus</string>
     <string name="subscription_changePlanBody">Uppgraderingar gäller direkt. Byte till Plus gäller från nästa förnyelse.</string>
     <string name="subscription_manageAction">Hantera eller avsluta medlemskap</string>
-    <string name="subscription_manageBody">Öppnar Google Play där du kan hantera eller avsluta medlemskapet.</string>
+    <string name="subscription_manageBody">Öppnar din appbutik där du kan hantera eller avsluta medlemskapet.</string>
     <string name="subscription_manageUnavailable">Kunde inte öppna din appbutik. Försök igen från enhetens butik.</string>
     <string name="subscription_statusConnecting">Ansluter till butiken…</string>
     <string name="subscription_statusReady">Redo att teckna medlemskap.</string>
