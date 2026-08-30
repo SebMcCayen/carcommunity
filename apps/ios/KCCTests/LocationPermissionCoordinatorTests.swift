@@ -107,6 +107,25 @@ final class LocationPermissionCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testRequestAccessWhileRequestingIsANoOp() async {
+        // A second feature entry while the system dialog is in flight must
+        // not regress the flow: the provider still reads .notDetermined,
+        // so without the guard requestAccess() would fall back to
+        // .rationale mid-prompt.
+        let provider = StubLocationProvider(authorization: .notDetermined)
+        let coordinator = LocationPermissionCoordinator(provider: provider)
+        coordinator.start()
+        coordinator.requestAccess()
+        coordinator.proceedFromRationale()
+        XCTAssertEqual(coordinator.state, .requesting)
+
+        coordinator.requestAccess()
+
+        await assertStateStays(.requesting, of: coordinator)
+        XCTAssertEqual(provider.whenInUseRequestCount, 1)
+    }
+
+    @MainActor
     func testProceedFromRationaleRaisesTheDialogExactlyOnce() async {
         let provider = StubLocationProvider(authorization: .notDetermined)
         let coordinator = LocationPermissionCoordinator(provider: provider)

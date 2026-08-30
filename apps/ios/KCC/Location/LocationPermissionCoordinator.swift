@@ -103,6 +103,11 @@ final class LocationPermissionCoordinator {
     /// the ask-flow — and the only place it can begin, which is what keeps
     /// "request only when the feature is used" true by construction.
     func requestAccess() {
+        // Re-entrancy guard: while the system dialog is in flight the
+        // provider still reads .notDetermined, so falling through would
+        // regress .requesting back to .rationale mid-prompt. The in-flight
+        // request resolves via apply(_:) when the user answers.
+        guard state != .requesting else { return }
         switch provider.authorization {
         case .whileInUse, .always:
             state = .granted
