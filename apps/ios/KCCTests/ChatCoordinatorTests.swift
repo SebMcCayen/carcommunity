@@ -68,24 +68,27 @@ final class ChatCoordinatorTests: XCTestCase {
             }
         }
 
+        // NSLock's bare lock()/unlock() are unavailable in async contexts;
+        // the scoped withLock is the async-safe form (nothing suspends
+        // inside the critical sections).
         func sendMessage(toUid: String, text: String, clientId: String?) async -> DmSendResult {
-            lock.lock()
-            defer { lock.unlock() }
-            sends.append((toUid, text, clientId))
-            return sendResult
+            lock.withLock {
+                sends.append((toUid, text, clientId))
+                return sendResult
+            }
         }
 
         func loadOlder(conversationId: String, before: String) async -> DmOlderResult {
-            lock.lock()
-            defer { lock.unlock() }
-            olderCalls.append((conversationId, before))
-            return olderResult
+            lock.withLock {
+                olderCalls.append((conversationId, before))
+                return olderResult
+            }
         }
 
         func markRead(conversationId: String) async {
-            lock.lock()
-            defer { lock.unlock() }
-            markReadCalls.append(conversationId)
+            lock.withLock {
+                markReadCalls.append(conversationId)
+            }
         }
     }
 

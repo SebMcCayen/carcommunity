@@ -93,7 +93,7 @@ struct FriendsScreen: View {
         }
         .listStyle(.insetGrouped)
         .confirmationDialog(
-            Text("friends.removeConfirmTitle"),
+            Text(verbatim: removeConfirmTitle),
             isPresented: Binding(
                 get: { removeTarget != nil },
                 set: { if !$0 { removeTarget = nil } }
@@ -112,6 +112,23 @@ struct FriendsScreen: View {
         } message: { _ in
             Text("friends.removeConfirmBody")
         }
+    }
+
+    /// "Ta bort %1$@ som vän?" with the friend's name — falling back to the
+    /// neutral "Member" label when the friend has no display name, so the
+    /// unfriend prompt never reads "Unfriend ?" (Android's targetName
+    /// fallback).
+    private var removeConfirmTitle: String {
+        let name = removeTarget?.displayName.flatMap {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0
+        } ?? String(localized: "friends.unknownMember")
+        return String.localizedStringWithFormat(
+            NSLocalizedString(
+                "friends.removeConfirmTitle",
+                comment: "Unfriend confirmation title with the friend's name"
+            ),
+            name
+        )
     }
 
     // MARK: - Add friend

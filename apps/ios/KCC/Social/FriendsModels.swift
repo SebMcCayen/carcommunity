@@ -134,8 +134,10 @@ enum FriendErrorCode: Equatable, Sendable {
 
 /// Pure representation of a callable failure: the code, the optional
 /// `details.reason` discriminator, and any ambiguity candidates carried in
-/// `details.candidates` (Android: `FriendCallableError`).
-struct FriendCallableError: Equatable, Sendable {
+/// `details.candidates` (Android: `FriendCallableError`). Conforms to
+/// `Error` so it can travel as a `Result` failure; it still carries only
+/// contract codes and reasons — never an SDK message.
+struct FriendCallableError: Error, Equatable, Sendable {
     let code: FriendErrorCode
     let reason: String?
     let candidates: [FriendUser]

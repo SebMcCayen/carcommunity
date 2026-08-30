@@ -12,7 +12,7 @@ enum FriendsStatus: Equatable, Sendable {
         friends: [FriendSummary],
         incoming: [FriendRequestSummary],
         outgoing: [FriendRequestSummary],
-        points: [String: Int64] = [:]
+        points: [String: Int64]
     )
     /// The snapshot failed to load. Carries the mapped error so the screen
     /// can surface the specific auth/member-gating message (via its
@@ -90,7 +90,8 @@ final class FriendsCoordinator {
             status = .loaded(
                 friends: data.friends,
                 incoming: data.incoming,
-                outgoing: data.outgoing
+                outgoing: data.outgoing,
+                points: [:]
             )
             await overlayPoints(for: data, generation: loadGeneration)
         case .failed(let error):
@@ -222,7 +223,9 @@ final class FriendsCoordinator {
     /// cancel by the recipient uid, remove by the friend uid: three DIFFERENT
     /// id spaces that must not collide in the single Set. The screen builds
     /// its lookup keys with these same helpers.
-    static func respondBusyKey(_ requestId: String) -> String { "respond:\(requestId)" }
-    static func cancelBusyKey(_ toUid: String) -> String { "cancel:\(toUid)" }
-    static func removeBusyKey(_ friendUid: String) -> String { "remove:\(friendUid)" }
+    /// Pure string builders — nonisolated so the screen (and tests) can key
+    /// rows without hopping onto the main actor.
+    nonisolated static func respondBusyKey(_ requestId: String) -> String { "respond:\(requestId)" }
+    nonisolated static func cancelBusyKey(_ toUid: String) -> String { "cancel:\(toUid)" }
+    nonisolated static func removeBusyKey(_ friendUid: String) -> String { "remove:\(friendUid)" }
 }

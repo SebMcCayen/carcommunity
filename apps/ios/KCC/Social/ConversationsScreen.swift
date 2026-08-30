@@ -192,8 +192,9 @@ private struct ConversationRow: View {
         }
     }
 
+    /// Caps the badge at "99+" (Android's `UnreadBadge`).
     private var unreadBadgeText: String {
-        "\(conversation.unreadCount)"
+        conversation.unreadCount > 99 ? "99+" : "\(conversation.unreadCount)"
     }
 
     /// "%1$lld unread" (dm.unreadCount) for accessibility.

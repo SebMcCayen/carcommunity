@@ -455,15 +455,17 @@ func millisToIso(_ millis: Int64) -> String {
 }
 
 /// Shared ISO-8601 formatters. `ISO8601DateFormatter` is documented
-/// thread-safe, so the two shared instances are safely reused.
+/// thread-safe (unlike `DateFormatter`), so sharing the two configured
+/// instances is sound — `nonisolated(unsafe)` records exactly that judgment
+/// for the Swift 6 checker, which cannot see the documentation guarantee.
 private enum DmIsoFormat {
-    static let withFractional: ISO8601DateFormatter = {
+    nonisolated(unsafe) static let withFractional: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
     }()
 
-    static let wholeSeconds: ISO8601DateFormatter = {
+    nonisolated(unsafe) static let wholeSeconds: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
         return formatter

@@ -24,7 +24,6 @@ final class FirebaseFriendPointsRepository: FriendPointsRepository, @unchecked S
         var seen = Set<String>()
         let distinct = uids.filter { !$0.isEmpty && seen.insert($0).inserted }
         guard !distinct.isEmpty else { return [:] }
-        let firestore = self.firestore
         return await withTaskGroup(of: (String, Int64)?.self) { group in
             var balances: [String: Int64] = [:]
             var next = distinct.makeIterator()
@@ -34,8 +33,11 @@ final class FirebaseFriendPointsRepository: FriendPointsRepository, @unchecked S
             func addNext() {
                 guard let uid = next.next() else { return }
                 inFlight += 1
-                group.addTask {
-                    await Self.balance(for: uid, in: firestore)
+                // `self` (not the bare Firestore handle) crosses into the
+                // child task: the repository is the @unchecked Sendable seam,
+                // and Firestore documents its API as thread-safe.
+                group.addTask { [self] in
+                    await self.balance(for: uid)
                 }
             }
             for _ in 0..<Self.maxConcurrentReads { addNext() }
@@ -51,10 +53,10 @@ final class FirebaseFriendPointsRepository: FriendPointsRepository, @unchecked S
 
     /// One best-effort read; nil on a missing wallet, absent balance, or any
     /// read failure.
-    private static func balance(for uid: String, in firestore: Firestore) async -> (String, Int64)? {
+    private func balance(for uid: String) async -> (String, Int64)? {
         do {
             let snapshot = try await firestore
-                .collection(pointsLedger)
+                .collection(Self.pointsLedger)
                 .document(uid)
                 .getDocument()
             guard let balance = snapshot.get("balance") as? NSNumber else { return nil }

@@ -28,47 +28,50 @@ final class FriendsCoordinatorTests: XCTestCase {
         private(set) var cancelled: [String] = []
         private(set) var removed: [String] = []
 
+        // NSLock's bare lock()/unlock() are unavailable in async contexts;
+        // the scoped withLock is the async-safe form (nothing suspends
+        // inside the critical sections).
         func list() async -> FriendsResult {
-            lock.lock()
-            defer { lock.unlock() }
-            listCalls += 1
-            guard !listResults.isEmpty else { return .loaded(.empty) }
-            return listResults.count == 1 ? listResults[0] : listResults.removeFirst()
+            lock.withLock {
+                listCalls += 1
+                guard !listResults.isEmpty else { return .loaded(.empty) }
+                return listResults.count == 1 ? listResults[0] : listResults.removeFirst()
+            }
         }
 
         func sendRequest(nickname: String) async -> SendRequestResult {
-            lock.lock()
-            defer { lock.unlock() }
-            sentNicknames.append(nickname)
-            return sendNicknameResult
+            lock.withLock {
+                sentNicknames.append(nickname)
+                return sendNicknameResult
+            }
         }
 
         func sendRequest(toUid: String) async -> SendRequestResult {
-            lock.lock()
-            defer { lock.unlock() }
-            sentUids.append(toUid)
-            return sendUidResult
+            lock.withLock {
+                sentUids.append(toUid)
+                return sendUidResult
+            }
         }
 
         func respond(requestId: String, accept: Bool) async -> RespondResult {
-            lock.lock()
-            defer { lock.unlock() }
-            responded.append((requestId, accept))
-            return respondResult
+            lock.withLock {
+                responded.append((requestId, accept))
+                return respondResult
+            }
         }
 
         func cancelRequest(toUid: String) async -> CancelResult {
-            lock.lock()
-            defer { lock.unlock() }
-            cancelled.append(toUid)
-            return cancelResult
+            lock.withLock {
+                cancelled.append(toUid)
+                return cancelResult
+            }
         }
 
         func remove(friendUid: String) async -> RemoveResult {
-            lock.lock()
-            defer { lock.unlock() }
-            removed.append(friendUid)
-            return removeResult
+            lock.withLock {
+                removed.append(friendUid)
+                return removeResult
+            }
         }
     }
 
@@ -78,10 +81,10 @@ final class FriendsCoordinatorTests: XCTestCase {
         private(set) var requestedUids: [[String]] = []
 
         func balances(for uids: [String]) async -> [String: Int64] {
-            lock.lock()
-            defer { lock.unlock() }
-            requestedUids.append(uids)
-            return result
+            lock.withLock {
+                requestedUids.append(uids)
+                return result
+            }
         }
     }
 
@@ -107,7 +110,7 @@ final class FriendsCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(
             coordinator.status,
-            .loaded(friends: friends, incoming: [], outgoing: [])
+            .loaded(friends: friends, incoming: [], outgoing: [], points: [:])
         )
     }
 
