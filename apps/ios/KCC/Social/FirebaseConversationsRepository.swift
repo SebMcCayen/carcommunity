@@ -325,9 +325,12 @@ final class FirebaseBlockVisibilityRepository: BlockVisibilityRepository, @unche
         guard let uid = Auth.auth().currentUser?.uid else {
             // Signed out: nothing to hide, and nothing to listen to. Emit
             // once so downstream combinations still produce a value instead
-            // of stalling on a stream that never emits.
+            // of stalling on a stream that never emits — then finish, so the
+            // consumer's task doesn't idle on a stream that can never
+            // produce another value.
             return AsyncStream { continuation in
                 continuation.yield([])
+                continuation.finish()
             }
         }
         let document = firestore.collection(Self.blockVisibility).document(uid)
@@ -399,8 +402,11 @@ final class FirebaseBlockVisibilityRepository: BlockVisibilityRepository, @unche
 /// `BlockVisibilityRepository.EMPTY`).
 final class EmptyBlockVisibilityRepository: BlockVisibilityRepository, Sendable {
     func observeHiddenUids() -> AsyncStream<Set<String>> {
+        // One-shot: yield the empty set and finish, so no task lingers on a
+        // stream that will never produce another value.
         AsyncStream { continuation in
             continuation.yield([])
+            continuation.finish()
         }
     }
 }
