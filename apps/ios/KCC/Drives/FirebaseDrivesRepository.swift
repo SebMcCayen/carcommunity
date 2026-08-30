@@ -18,7 +18,7 @@ import Foundation
 /// Route GPS data lives in member-gated Cloud Storage
 /// (`rideRoutes/{uid}/{rideId}/`) and is deliberately NOT read here — the
 /// History card renders from the ride document alone; only the denormalized
-/// `carImagePath` (a vehicle cover photo, readable like the garage's) is
+/// `carImagePath` (a vehicle cover photo under `vehicleImages/`) is
 /// resolved to a download URL.
 ///
 /// Construction is guarded (``createIfAvailable()`` returns nil without

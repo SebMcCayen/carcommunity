@@ -5,7 +5,7 @@ import Foundation
 /// The iOS port of Android's `DrivesState` minus `Loading`: a repository
 /// stream only ever emits SETTLED results (a snapshot or a failure), and the
 /// coordinator supplies the loading state before the first emission — the
-/// same split as ``EventsListSnapshot`` / `GarageSnapshot`.
+/// same split as ``EventsListSnapshot`` / ``UserProfileSnapshot``.
 enum DrivesSnapshot: Equatable, Sendable {
     /// The listener failed. `code` is the bare Firestore status name when
     /// one was available (`PERMISSION_DENIED` for an undeployed rule,
@@ -38,7 +38,7 @@ protocol DrivesRepository: AnyObject, Sendable {
     /// Resolves a Cloud Storage image path (the ride's denormalized
     /// `carImagePath` — a vehicle cover photo) to a download URL for
     /// rendering — the same lazy path→URL split as the profile avatar and
-    /// the garage cover photos. Returns nil on any failure (offline, object
+    /// the profile avatar's `avatarDownloadURL`. Returns nil on any failure (offline, object
     /// deleted, rules): the card then keeps its placeholder, because a
     /// missing picture is cosmetic, never an error state.
     func imageDownloadURL(for imagePath: String) async -> URL?

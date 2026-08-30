@@ -5,9 +5,10 @@ import XCTest
 /// Unit tests for the pure drives-history orchestration: every repository
 /// emission maps to the right ``DrivesUiState``, the config-less/no-session
 /// wirings settle on unavailable, start/reload keep the events-port
-/// semantics, and car photos resolve to URLs exactly once per path with the
-/// negative cache ``GarageCoordinatorTests`` established. No Firebase — the
-/// repository is a scripted fake.
+/// semantics, and car photos resolve to URLs exactly once per path with a
+/// negative cache for failed resolutions. No Firebase — the repository is a
+/// scripted fake (same conventions as ``EventsCoordinatorTests`` /
+/// ``ProfileCoordinatorTests``).
 final class DrivesCoordinatorTests: XCTestCase {
 
     // MARK: - fakes

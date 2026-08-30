@@ -14,8 +14,8 @@ struct DrivesPanel: View {
     @State private var coordinator: DrivesCoordinator
 
     /// Production wiring: builds the coordinator from the feature-level
-    /// factories (the same construction pattern as `GaragePanel` /
-    /// `ProfileScreen`). In a config-less build both factories return nil
+    /// factories (the same construction pattern as `ProfileScreen`'s
+    /// wiring). In a config-less build both factories return nil
     /// and the coordinator settles on ``DrivesUiState/unavailable``.
     init() {
         self.init(
@@ -60,7 +60,7 @@ struct DrivesPanel: View {
             // The config-less build. There is no dedicated "unavailable" key
             // in the savedDrives contract strings (Android has no such
             // state), so the generic load-error copy is the closest honest
-            // message — the same reuse posture as GaragePanel.
+            // message — the same reuse posture as EventsScreen's placeholder.
             Text("savedDrives.error")
                 .font(.system(size: KccTypeScale.bodyMd))
                 .foregroundStyle(.secondary)
@@ -91,7 +91,7 @@ struct DrivesPanel: View {
     /// The signed-in uid from the process-wide auth repository, nil when
     /// Firebase is unconfigured or no session exists — read here (feature
     /// level) so the shell keeps constructing this panel argument-free, the
-    /// same seam as `GaragePanel` / `ProfileScreen`.
+    /// same seam as `ProfileScreen`.
     private static func signedInUid() -> String? {
         if case .signedIn(let uid, _)? = FirebaseAuthRepository.createIfAvailable()?.authState {
             return uid
@@ -111,8 +111,9 @@ struct DriveHistoryCard: View {
     /// picture is cosmetic, never an error state).
     let carImageURL: URL?
 
-    /// Diameter of the round driven-car photo — sized like the garage
-    /// card's, which uses the same circular treatment.
+    /// Diameter of the round driven-car photo — half the 96pt profile
+    /// avatar, which uses the same circular treatment, so the photo reads
+    /// as a list adornment rather than the row's subject.
     private static let photoDiameter: CGFloat = 48
 
     var body: some View {

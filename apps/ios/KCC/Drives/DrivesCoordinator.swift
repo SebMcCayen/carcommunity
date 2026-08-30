@@ -5,7 +5,7 @@ import Observation
 /// `DrivesState`, with the empty case lifted into the state itself (Android
 /// derives it in `DrivesListScreen` from `Loaded(emptyList())`) and the
 /// config-less build modelled explicitly (``unavailable``), the same shape
-/// as `GarageUiState` / ``EventsListUiState``.
+/// as ``EventsListUiState`` / ``ProfileUiState``.
 enum DrivesUiState: Equatable, Sendable {
     /// Waiting for the first snapshot (initial entry, or after a reload).
     case loading
@@ -26,8 +26,9 @@ enum DrivesUiState: Equatable, Sendable {
 /// Orchestrates the read-only drives history: subscribes the repository's
 /// owner rides stream, folds its emissions into ``DrivesUiState``, and
 /// lazily resolves the denormalized car-photo paths to download URLs for
-/// rendering — the same once-per-path + negative-cache resolution as
-/// `GarageCoordinator`'s cover photos. Pure Swift (no Firebase/SwiftUI
+/// rendering — the same lazy path→URL split as `ProfileCoordinator`'s
+/// avatar, hardened for a LIST: each path is resolved at most once, with a
+/// negative cache for failures. Pure Swift (no Firebase/SwiftUI
 /// types) so it is unit-testable with a fake repository. Deletion (Android's
 /// `DrivesCoordinator.delete`) goes through the `drives-delete` callable and
 /// arrives with the recording slice.
@@ -40,7 +41,7 @@ final class DrivesCoordinator {
     /// cancel them — every mutation happens on the main actor, and by the
     /// time deinit runs no other reference exists, so the unguarded access
     /// cannot race (same pattern as `EventsCoordinator` /
-    /// `GarageCoordinator`).
+    /// `ProfileCoordinator`).
     @ObservationIgnored
     nonisolated(unsafe) private var subscription: Task<Void, Never>?
     @ObservationIgnored
@@ -137,7 +138,7 @@ final class DrivesCoordinator {
     /// history keep their cached URL — the maps only grow with DISTINCT
     /// photo paths ever seen, and dropping a still-listed drive's URL on the
     /// next emission would be a regression, so eviction is complexity
-    /// without a payoff (the garage made the same call).
+    /// without a payoff.
     private func resolveImagesIfNeeded(for drives: [SavedDrive]) {
         guard let repository else { return }
         for path in drives.compactMap(\.carImagePath) {
