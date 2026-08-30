@@ -33,6 +33,7 @@ fun SubscriptionScreen(
     status: PurchaseFlowStatus,
     canSubscribe: Boolean,
     canChangePlan: Boolean,
+    canManageSubscription: Boolean,
     onSubscribe: (String) -> Unit,
     onManageSubscription: (String?) -> Unit,
     onBack: () -> Unit,
@@ -82,7 +83,7 @@ fun SubscriptionScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (hasPaidMembership) {
+                    if (hasPaidMembership && canManageSubscription) {
                         OutlinedButton(
                             onClick = { onManageSubscription(currentProductId) },
                             modifier = Modifier.fillMaxWidth(),
@@ -232,6 +233,7 @@ private fun SubscriptionScreenPreview() {
             status = PurchaseFlowStatus.Idle,
             canSubscribe = true,
             canChangePlan = false,
+            canManageSubscription = false,
             onSubscribe = {},
             onManageSubscription = {},
             onBack = {},

@@ -27,6 +27,7 @@ class SubscriptionScreenTest {
         currentTier: String? = null,
         status: PurchaseFlowStatus,
         canChangePlan: Boolean = false,
+        canManageSubscription: Boolean = false,
         onSubscribe: (String) -> Unit = {},
         onManageSubscription: (String?) -> Unit = {},
     ) {
@@ -38,6 +39,7 @@ class SubscriptionScreenTest {
                     status = status,
                     canSubscribe = true,
                     canChangePlan = canChangePlan,
+                    canManageSubscription = canManageSubscription,
                     onSubscribe = onSubscribe,
                     onManageSubscription = onManageSubscription,
                     onBack = {},
@@ -53,6 +55,7 @@ class SubscriptionScreenTest {
             isActiveMember = true,
             currentTier = "plus",
             status = PurchaseFlowStatus.Success("plus"),
+            canManageSubscription = true,
             onManageSubscription = { managedProductId = it },
         )
 
@@ -71,6 +74,7 @@ class SubscriptionScreenTest {
             isActiveMember = true,
             currentTier = "supporter",
             status = PurchaseFlowStatus.Success("supporter"),
+            canManageSubscription = true,
             onManageSubscription = { managedProductId = it },
         )
 
@@ -82,11 +86,12 @@ class SubscriptionScreenTest {
     }
 
     @Test
-    fun genericMembership_withoutVerifiedPlayProduct_opensGenericManagement() {
+    fun playMembership_withoutKnownProduct_opensGenericManagement() {
         var managedProductId: String? = "not-called"
         setScreen(
             isActiveMember = true,
             status = PurchaseFlowStatus.Idle,
+            canManageSubscription = true,
             onManageSubscription = { managedProductId = it },
         )
 
@@ -96,6 +101,19 @@ class SubscriptionScreenTest {
             .performClick()
 
         assertEquals(null, managedProductId)
+    }
+
+    @Test
+    fun manualMembership_doesNotOfferGooglePlayManagement() {
+        setScreen(
+            isActiveMember = true,
+            status = PurchaseFlowStatus.Idle,
+            canManageSubscription = false,
+        )
+
+        composeTestRule
+            .onNodeWithText(str(R.string.subscription_manageAction))
+            .assertDoesNotExist()
     }
 
     @Test

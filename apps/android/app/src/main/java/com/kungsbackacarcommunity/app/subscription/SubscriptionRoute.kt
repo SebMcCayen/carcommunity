@@ -50,14 +50,21 @@ fun SubscriptionRoute(
     val scope = rememberCoroutineScope()
     val obfuscatedAccountId = remember(uid) { obfuscatedAccountIdForUid(uid) }
     val verifiedTier = (status as? PurchaseFlowStatus.Success)?.tier
-    val currentTier = verifiedTier ?: storedSubscription?.takeIf { it.grantsAccess }?.tier
+    val storedPlaySubscription =
+        storedSubscription?.takeIf { it.grantsAccess && it.platform == "google" }
+    // Android can only manage Google Play subscriptions. Manual/admin grants
+    // and future Apple entitlements remain valid membership access through the
+    // users flag, but must not be presented as Play-owned products.
+    val currentTier = verifiedTier ?: storedPlaySubscription?.tier
     val ownedProductId = productIdForOwnedPurchase(ownedPurchase)
     val currentProductId =
         when (currentTier) {
             "plus" -> PLUS_MONTHLY_PRODUCT_ID
             "supporter" -> SUPPORTER_MONTHLY_PRODUCT_ID
-            else -> storedSubscription?.googleProductId
+            else -> storedPlaySubscription?.googleProductId
         }
+    val canManageSubscription =
+        verifiedTier != null || storedPlaySubscription != null || ownedProductId != null
     // A replacement must point at the actual Play-owned current product. A
     // deferred downgrade can temporarily report a target purchase while the
     // backend correctly retains Supporter; block another change in that window.
@@ -77,6 +84,7 @@ fun SubscriptionRoute(
         status = status,
         canSubscribe = activity != null && verifier != null,
         canChangePlan = canChangePlan,
+        canManageSubscription = canManageSubscription,
         onSubscribe = { productId ->
             activity?.let { a ->
                 scope.launch {
