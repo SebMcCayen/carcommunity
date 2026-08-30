@@ -2,8 +2,10 @@ import SwiftUI
 
 /// A translucent shell panel: the bottom-anchored card the History / Social /
 /// Garage tabs render OVER the live map (``MapCover/transparent``), leaving a
-/// genuinely uncovered, tappable strip of map above it — the iOS counterpart
-/// of Android's `shell/TranslucentPanel.kt`, minimal on purpose.
+/// genuinely uncovered strip of visible map above it whose one tap gesture is
+/// the outside-tap DISMISS (the map itself stays non-interactive under the
+/// strip, exactly as on Android) — the iOS counterpart of Android's
+/// `shell/TranslucentPanel.kt`, minimal on purpose.
 ///
 /// Ported now: the height fraction (so the strip of live map above the card is
 /// real, which is what makes the ``ShellNavigation/mapCover(tab:route:navigating:navSearchOpen:)``
