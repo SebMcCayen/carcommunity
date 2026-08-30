@@ -92,6 +92,11 @@ final class FirebaseConversationsRepository: ConversationsRepository, @unchecked
             .order(by: Self.createdAt, descending: true)
             .limit(to: Dm.messagesPageSize)
         return AsyncStream { continuation in
+            // Tracks whether any state has reached the consumer yet: a
+            // transient error must hold the LAST state, but before a first
+            // emission there is no last state to hold, and returning would
+            // leave the thread stuck on loading forever.
+            let emitted = DmEmittedFlag()
             let registration = query.addSnapshotListener { snapshot, error in
                 if let error {
                     // Cached data alongside an error: prefer it over
@@ -100,6 +105,7 @@ final class FirebaseConversationsRepository: ConversationsRepository, @unchecked
                         let cached = snapshot.documents
                             .compactMap(Self.message(from:))
                             .reversed()
+                        _ = emitted.getAndSet()
                         continuation.yield(.loaded(Array(cached)))
                         return
                     }
@@ -112,18 +118,27 @@ final class FirebaseConversationsRepository: ConversationsRepository, @unchecked
                     let nsError = error as NSError
                     if nsError.domain == FirestoreErrorDomain,
                         nsError.code == FirestoreErrorCode.permissionDenied.rawValue {
+                        _ = emitted.getAndSet()
                         continuation.yield(.loaded([]))
                         return
                     }
                     // Any OTHER error (UNAVAILABLE, network, …) is transient:
                     // keep the last emitted state instead of misrendering it
                     // as "no messages" — the SDK retries and will deliver a
-                    // fresh snapshot.
+                    // fresh snapshot. But when NOTHING has been emitted yet,
+                    // holding would strand the consumer on loading with no
+                    // way out; degrade to the empty thread (the same reading
+                    // as the not-yet-created conversation), which the next
+                    // successful snapshot replaces.
+                    if !emitted.getAndSet() {
+                        continuation.yield(.loaded([]))
+                    }
                     return
                 }
                 let messages = (snapshot?.documents ?? [])
                     .compactMap(Self.message(from:))
                     .reversed()
+                _ = emitted.getAndSet()
                 continuation.yield(.loaded(Array(messages)))
             }
             let box = DmListenerBox(registration: registration)

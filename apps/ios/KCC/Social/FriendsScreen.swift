@@ -141,7 +141,7 @@ struct FriendsScreen: View {
                 }
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .onChange(of: nickname) {
+                .onChange(of: nickname) { _, _ in
                     // Clear a stale result/error as soon as the caller edits
                     // the field.
                     switch coordinator.add {
