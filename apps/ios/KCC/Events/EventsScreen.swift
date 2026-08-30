@@ -11,8 +11,9 @@ import SwiftUI
 /// crashing — the same seam every Firebase-backed surface honors
 /// (apps/ios/README.md, "Firebase configuration").
 ///
-/// Not yet reachable from ``ShellView`` — shell wiring lands in a follow-up
-/// PR to avoid conflicting with the in-flight shell work.
+/// Reached from the Social hub panel via ``ShellRoute/events`` — see
+/// ``ShellView``'s route host, which wraps this screen in a `NavigationStack`
+/// and supplies the Back affordance.
 struct EventsScreen: View {
     /// Nil in a config-less build; the screen degrades to a placeholder.
     let coordinator: EventsCoordinator?
