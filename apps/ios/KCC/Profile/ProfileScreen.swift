@@ -153,6 +153,12 @@ struct ProfileScreen: View {
         {
             return name
         }
+        // The auth fallback gets the same blank-means-absent rule, so a
+        // whitespace-only Firebase displayName never renders as an empty
+        // name line.
+        guard let displayName,
+            !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
         return displayName
     }
 
@@ -228,6 +234,9 @@ struct ProfileScreen: View {
 /// open, like a real listener. Never resolves an avatar (placeholder shows).
 private final class PreviewUserProfileRepository: UserProfileRepository, @unchecked Sendable {
     private let profile: UserProfile?
+    /// Keeps every handed-out stream's continuation alive for the preview's
+    /// lifetime — see profileUpdates.
+    private var openContinuations: [AsyncStream<UserProfileSnapshot>.Continuation] = []
 
     init(profile: UserProfile?) {
         self.profile = profile
@@ -237,6 +246,10 @@ private final class PreviewUserProfileRepository: UserProfileRepository, @unchec
         let profile = profile
         return AsyncStream { continuation in
             continuation.yield(.loaded(profile))
+            // Retain the continuation so the stream stays open like a real
+            // listener (finishing it would end the coordinator's
+            // subscription task immediately).
+            self.openContinuations.append(continuation)
         }
     }
 
