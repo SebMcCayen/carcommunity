@@ -317,8 +317,14 @@ enum DmMapper {
 /// messages and the caller's optimistic bubbles (Android: `DmThread`).
 enum DmThreadLogic {
     /// Whether a draft is within 1...``Dm/messageMaxLength`` after trimming.
+    ///
+    /// Measured in UTF-16 CODE UNITS, not extended grapheme clusters: the
+    /// backend's schema (JS `string.length`) and Android (Kotlin
+    /// `String.length`) both count UTF-16 units, so a grapheme count would
+    /// let e.g. 2000 emoji pass client validation only to be rejected by
+    /// `dm-sendMessage` as invalid-argument.
     static func isSendable(_ text: String) -> Bool {
-        let length = text.trimmingCharacters(in: .whitespacesAndNewlines).count
+        let length = text.trimmingCharacters(in: .whitespacesAndNewlines).utf16.count
         return length >= 1 && length <= Dm.messageMaxLength
     }
 

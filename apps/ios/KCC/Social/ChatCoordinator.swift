@@ -140,10 +140,19 @@ final class ChatCoordinator {
     }
 
     /// Whether the "load earlier messages" affordance should show: not at
-    /// the confirmed beginning, and only once the window is full enough that
-    /// older pages can exist (Android: `canLoadOlder`).
+    /// the confirmed beginning, and only once the SERVER-backed window is
+    /// full enough that older pages can exist (Android: `canLoadOlder`).
+    /// Counted over the server messages only — an optimistic pending bubble
+    /// must not top the window up to the threshold.
     var canLoadOlder: Bool {
-        pageStatus != .end && messages.count >= Dm.messagesPageSize
+        pageStatus != .end && serverMessages.count >= Dm.messagesPageSize
+    }
+
+    /// The server-backed thread (older pages merged with the live window),
+    /// excluding the caller's optimistic pending bubbles — the only messages
+    /// pagination may count or derive cursors from.
+    private var serverMessages: [DmMessage] {
+        DmThreadLogic.merge(older: olderMessages, live: liveMessages)
     }
 
     /// Optimistically sends `text`: the "sending" bubble is appended
@@ -226,7 +235,10 @@ final class ChatCoordinator {
     /// ``DmPageStatus/end`` — a transient error can never permanently hide
     /// the "load older" affordance.
     func loadOlder() async {
-        guard let before = DmThreadLogic.oldestCursor(messages) else { return }
+        // Cursor from the SERVER-backed messages only: an optimistic bubble
+        // has no createdAtIso, and letting one win the "oldest" pick would
+        // turn pagination into a silent no-op.
+        guard let before = DmThreadLogic.oldestCursor(serverMessages) else { return }
         guard pageStatus != .loading && pageStatus != .end else { return }
         pageStatus = .loading
         switch await repository.loadOlder(conversationId: conversationId, before: before) {

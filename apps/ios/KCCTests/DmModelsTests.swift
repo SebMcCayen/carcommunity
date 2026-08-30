@@ -228,6 +228,15 @@ final class DmModelsTests: XCTestCase {
         XCTAssertTrue(DmThreadLogic.isSendable("  " + String(repeating: "a", count: 2_000) + "  "))
     }
 
+    func testIsSendableCountsUtf16CodeUnitsLikeTheBackend() {
+        // "😀" is ONE grapheme but TWO UTF-16 code units — the unit the
+        // backend (JS string.length) and Android (Kotlin String.length)
+        // validate in. 1000 of them hit the 2000-unit cap exactly; 1001
+        // exceed it even though a grapheme count (1001) would still pass.
+        XCTAssertTrue(DmThreadLogic.isSendable(String(repeating: "😀", count: 1_000)))
+        XCTAssertFalse(DmThreadLogic.isSendable(String(repeating: "😀", count: 1_001)))
+    }
+
     // MARK: - error mapping
 
     func testMapSendCollapsesFailedPreconditionNeutrally() {

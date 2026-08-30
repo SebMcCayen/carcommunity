@@ -351,7 +351,9 @@ struct FriendsScreen: View {
                     Image(systemName: "person.crop.circle")
                 }
                 .buttonStyle(.borderless)
-                .accessibilityLabel(Text(friend.displayName ?? ""))
+                // Same fallback as the visible label, so VoiceOver never
+                // announces an unlabeled control for a nameless friend.
+                .accessibilityLabel(memberLabel(friend.displayName))
             }
         }
         .buttonStyle(.borderless)

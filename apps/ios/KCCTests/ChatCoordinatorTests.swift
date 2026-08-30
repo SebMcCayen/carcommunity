@@ -408,6 +408,37 @@ final class ChatCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testPendingBubblesCountTowardNeitherTheGateNorTheCursor() async {
+        let repository = FakeDmRepository()
+        // One short of a full server window…
+        let live = (0..<(Dm.messagesPageSize - 1)).map {
+            Self.message("live-\(String(format: "%02d", $0))", at: Int64(10_000 + $0), sender: "other")
+        }
+        repository.scriptThread([.loaded(live)])
+        // …and a send whose optimistic bubble (clock() = 5_000, EARLIER than
+        // every server message, and with no createdAtIso) would top it up
+        // and win the "oldest" pick if pagination looked at displayed rows.
+        repository.sendResult = .failed(.generic)
+        let coordinator = makeCoordinator(repository: repository)
+        await coordinator.start()
+        await waitFor { coordinator.messages.count == Dm.messagesPageSize - 1 }
+
+        await coordinator.send(text: "pending")
+        await waitFor { coordinator.messages.count == Dm.messagesPageSize }
+
+        // The affordance stays hidden: the SERVER window is not full.
+        XCTAssertFalse(coordinator.canLoadOlder)
+
+        // And a load derives its cursor from the server messages, never the
+        // ISO-less bubble (which would silently no-op pagination).
+        repository.olderResult = .loaded(
+            DmMessagesPage(messages: [], nextBefore: nil, hasMore: true)
+        )
+        await coordinator.loadOlder()
+        XCTAssertEqual(repository.olderCalls.map(\.before), [millisToIso(10_000)])
+    }
+
+    @MainActor
     func testLoadOlderNoopsWithoutACursor() async {
         let repository = FakeDmRepository()
         repository.scriptThread([.loaded([])])
