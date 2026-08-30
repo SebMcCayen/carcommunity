@@ -61,6 +61,26 @@ final class EventsCoordinatorTests: XCTestCase {
                 }
             }
         }
+
+        // MARK: unused by the list slice — inert conformance only. The
+        // streams finish immediately so an accidental consumer can never
+        // hang a test.
+
+        func event(withId eventId: String) -> AsyncStream<EventSummary?> {
+            AsyncStream { $0.finish() }
+        }
+
+        func eventDetail(eventId: String) -> AsyncStream<EventDetail?> {
+            AsyncStream { $0.finish() }
+        }
+
+        func myRsvp(eventId: String, uid: String) -> AsyncStream<RsvpStatus?> {
+            AsyncStream { $0.finish() }
+        }
+
+        func submitRsvp(eventId: String, uid: String, status: RsvpStatus) async throws {}
+
+        func currentUserId() -> String? { nil }
     }
 
     // MARK: - fixtures
