@@ -5599,19 +5599,30 @@ fun AuthenticatedApp(
                 // within WAVE_RADIUS_METERS of the sender's own liveSessions GPS, so
                 // the wave AFFORDANCE must be bounded the same way — otherwise zooming
                 // the map to a distant sharer wrongly lights the control (#1039, "wave
-                // from Norway to Sweden"). Read from the user's OWN published live
-                // marker while sharing (regardless of convoy — the wave serves
-                // standalone nearby sharing too); null when not sharing, so with no
-                // authoritative origin nobody is wave-eligible.
-                val waveOwnPositionFlow: Flow<LiveMarker?> =
-                    remember(liveLocationRepository, isSharing, uid) {
-                        if (liveLocationRepository != null && isSharing && uid.isNotBlank()) {
+                // from Norway to Sweden"). This is the user's OWN published live marker
+                // while sharing, regardless of convoy (the wave serves standalone
+                // nearby sharing too); null when not sharing, so with no authoritative
+                // origin nobody is wave-eligible.
+                //
+                // In a convoy, `ownLiveMarker` above ALREADY observes exactly this RTDB
+                // path, so we reuse it rather than open a second observeLatest(uid)
+                // listener on the same data. The dedicated stream below therefore only
+                // subscribes for STANDALONE sharing (no convoy — where ownLiveMarker is
+                // convoy-gated to null); it stays cold while a convoy is active.
+                val waveStandalonePositionFlow: Flow<LiveMarker?> =
+                    remember(liveLocationRepository, isSharing, activeConvoy?.convoyId, uid) {
+                        if (liveLocationRepository != null &&
+                            isSharing &&
+                            activeConvoy == null &&
+                            uid.isNotBlank()
+                        ) {
                             liveLocationRepository.observeLatest(uid)
                         } else {
                             flowOf(null)
                         }
                     }
-                val waveOwnPosition by waveOwnPositionFlow.collectAsState(initial = null)
+                val waveStandalonePosition by waveStandalonePositionFlow.collectAsState(initial = null)
+                val waveOwnPosition = if (activeConvoy != null) ownLiveMarker else waveStandalonePosition
                 // The GATE's range roster: the FULL nearby-discovery set (up to
                 // listNearby's 200), but bounded to members within wave range of YOUR
                 // OWN position — not the map camera. This matches the server's
