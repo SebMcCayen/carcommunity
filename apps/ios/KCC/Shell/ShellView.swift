@@ -107,7 +107,7 @@ struct ShellView: View {
                 SocialHubPanel(onOpenEvents: { routes = routes.opening(.events) })
             }
         case .garage:
-            panelTab { ComingSoonPanel(title: ShellTab.garage.title) }
+            panelTab { GaragePanel() }
         case .create:
             // Not a panel tab: an opaque page (the map-cover rule stands the
             // surface down here). The Create chooser fills in with its slice.

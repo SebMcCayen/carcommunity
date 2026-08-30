@@ -156,6 +156,7 @@ class SubscriptionCoordinatorTest {
 
         assertEquals(PurchaseFlowStatus.Success("supporter"), coordinator.status.value)
         assertEquals("supporter-token", verifier.verifiedToken)
+        assertEquals(SUPPORTER_MONTHLY_PRODUCT_ID, productIdForOwnedPurchase(coordinator.ownedPurchase.value))
     }
 
     @Test
@@ -222,6 +223,7 @@ private class FakeBilling(
         activity: android.app.Activity,
         productId: String,
         obfuscatedAccountId: String,
+        replacement: SubscriptionReplacement?,
     ): PurchaseLaunchResult = PurchaseLaunchResult.Launched
 
     override suspend fun queryOwnedPurchases(): List<OwnedPurchase> = owned

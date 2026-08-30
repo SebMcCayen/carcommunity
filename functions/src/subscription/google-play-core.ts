@@ -48,6 +48,8 @@ export interface GooglePlayEntitlementOutcome {
   startsAt: Date | null;
   expiresAt: Date | null;
   acknowledgementRequired: boolean;
+  /** SHA-256 of Play's old token for a verified upgrade/downgrade. */
+  linkedPurchaseTokenHash: string | null;
 }
 
 type UnknownRecord = Record<string, unknown>;
@@ -76,6 +78,14 @@ function parseProductId(value: unknown): GooglePlayProductId {
     'unsupported_product',
     'The Play purchase does not contain an allowed subscription product.',
   );
+}
+
+function parseLinkedPurchaseTokenHash(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value !== 'string' || value.length === 0 || value.length > 8192) {
+    malformed('linkedPurchaseToken must be a non-empty string.');
+  }
+  return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
 function tierForProduct(productId: GooglePlayProductId): SubscriptionTier {
@@ -147,6 +157,7 @@ export function parseGooglePlaySubscription(
       ? null
       : new Date(Math.max(...expiries.map((expiry) => expiry.getTime())));
   const startsAt = parseTimestamp(value.startTime, 'startTime');
+  const linkedPurchaseTokenHash = parseLinkedPurchaseTokenHash(value.linkedPurchaseToken);
 
   const acknowledgementState = value.acknowledgementState;
   if (
@@ -173,6 +184,7 @@ export function parseGooglePlaySubscription(
         startsAt,
         expiresAt,
         acknowledgementRequired,
+        linkedPurchaseTokenHash,
       };
     case 'SUBSCRIPTION_STATE_IN_GRACE_PERIOD':
       if (!futureExpiry) malformed('Grace-period Play subscription has no future expiry.');
@@ -184,6 +196,7 @@ export function parseGooglePlaySubscription(
         startsAt,
         expiresAt,
         acknowledgementRequired,
+        linkedPurchaseTokenHash,
       };
     case 'SUBSCRIPTION_STATE_CANCELED':
       if (!futureExpiry) malformed('Canceled Play subscription is already expired.');
@@ -195,6 +208,7 @@ export function parseGooglePlaySubscription(
         startsAt,
         expiresAt,
         acknowledgementRequired,
+        linkedPurchaseTokenHash,
       };
     case 'SUBSCRIPTION_STATE_EXPIRED':
       if (expiryMs === null || expiryMs > nowMs) {
@@ -208,6 +222,7 @@ export function parseGooglePlaySubscription(
         startsAt,
         expiresAt,
         acknowledgementRequired: false,
+        linkedPurchaseTokenHash,
       };
     case 'SUBSCRIPTION_STATE_PENDING':
     case 'SUBSCRIPTION_STATE_PAUSED':
@@ -221,6 +236,7 @@ export function parseGooglePlaySubscription(
         startsAt,
         expiresAt,
         acknowledgementRequired: false,
+        linkedPurchaseTokenHash,
       };
     case 'SUBSCRIPTION_STATE_UNSPECIFIED':
     default:

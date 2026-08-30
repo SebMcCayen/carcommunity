@@ -21,19 +21,29 @@ export interface CurrentEffectiveSubscription {
 }
 
 /**
- * The first Play slice intentionally supports one effective store purchase at
- * a time. A second token must not revoke, downgrade, or double-charge an
- * already-paid subscription before multi-token tier recomputation and Play's
- * upgrade/downgrade flow exist.
+ * One effective store purchase is retained at a time. A different token may
+ * replace active access only when Play's verified response links it to the
+ * currently stored token.
  */
 export function assertNoDifferentActiveToken(
   current: CurrentEffectiveSubscription | null,
   nextPurchaseTokenHash: string,
+  linkedPurchaseTokenHash: string | null,
   now: Date,
 ): void {
   if (current === null || !current.grantsAccess) return;
   if (current.expiresAt !== null && current.expiresAt.getTime() <= now.getTime()) return;
   if (current.purchaseTokenHash === nextPurchaseTokenHash) return;
+  // Play authenticates linkedPurchaseToken as the purchase being replaced.
+  // Its hash must match the currently effective token before a new token can
+  // replace active access for this UID.
+  if (
+    current.purchaseTokenHash !== null &&
+    linkedPurchaseTokenHash !== null &&
+    current.purchaseTokenHash === linkedPurchaseTokenHash
+  ) {
+    return;
+  }
   throw new PurchaseTokenOwnershipError('different_active_token');
 }
 
@@ -46,7 +56,8 @@ export interface PurchaseTokenOwnershipRecord {
 export function validateTokenOwnership(
   current: unknown,
   expected: PurchaseTokenOwnershipRecord,
-): 'create' | 'idempotent' {
+  allowVerifiedProductTransition = false,
+): 'create' | 'idempotent' | 'update_product' {
   if (current == null) return 'create';
   if (typeof current !== 'object' || Array.isArray(current)) {
     throw new PurchaseTokenOwnershipError('malformed_record');
@@ -64,6 +75,10 @@ export function validateTokenOwnership(
     throw new PurchaseTokenOwnershipError('different_user');
   }
   if (record.productId !== expected.productId) {
+    // A deferred replacement keeps the new purchase token while its effective
+    // line-item product changes at renewal. This path is used only after the
+    // Play API authenticated the token and account binding.
+    if (allowVerifiedProductTransition) return 'update_product';
     throw new PurchaseTokenOwnershipError('different_product');
   }
   return 'idempotent';

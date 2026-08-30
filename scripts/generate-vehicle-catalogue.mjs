@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Generates the Android (Kotlin) and Cloud Functions (TypeScript) mirrors of
- * the canonical vehicle catalogue
+ * Generates the Android (Kotlin), Cloud Functions (TypeScript) and iOS
+ * (Swift) mirrors of the canonical vehicle catalogue
  * (contracts/vehicles/vehicle-catalogue.json).
  *
  * WHY MIRRORS AND NOT A DIRECT IMPORT
@@ -16,17 +16,19 @@
  *    functions/src exists in production.
  *  - The Android APK has no repo checkout; a raw asset would mean shipping a
  *    JSON parser and a file read on a screen open.
+ *  - The iOS app bundle likewise has no checkout, and its selectors parse the
+ *    same packed lines lazily (apps/ios/KCC/Garage/VehicleCatalogue.swift).
  *
- * So the contract stays the single source of truth and this script emits two
+ * So the contract stays the single source of truth and this script emits three
  * mechanical mirrors of it, exactly as `generate-tokens.mjs` /
  * `generate-strings.mjs` already do for design tokens and strings. Drift is
- * caught twice: the `validate-android` workflow re-runs this script and diffs
- * the Kotlin, and functions/src/__tests__/vehicle-catalogue.test.ts asserts the
+ * caught in CI: the contracts workflow re-runs this script and diffs all three
+ * mirrors, and functions/src/__tests__/vehicle-catalogue.test.ts asserts the
  * TypeScript mirror is byte-identical to a fresh render of the contract.
  *
  * ENCODING
  * --------
- * Both mirrors hold ONE line per manufacturer:
+ * All mirrors hold ONE line per manufacturer:
  *
  *   makeId|Make name|C|modelId=Model name;modelId=Model name
  *
@@ -39,7 +41,7 @@
  *     load. String literals live in the constant pool, and both wrappers parse
  *     them LAZILY on first use (the add/edit-vehicle screen), so an app start
  *     that never opens the garage pays nothing.
- *  2. One encoding, one place to get it wrong — the Kotlin and TypeScript
+ *  2. One encoding, one place to get it wrong — the Kotlin, TypeScript and Swift
  *     parsers are checked against the same contract by their own unit tests.
  *
  * `|`, `;` and `=` are therefore reserved; the script FAILS if any id or
@@ -59,6 +61,7 @@ const CONTRACT = 'contracts/vehicles/vehicle-catalogue.json';
 const KOTLIN_OUT =
   'apps/android/app/src/main/java/com/kungsbackacarcommunity/app/garage/VehicleCatalogueData.kt';
 const TS_OUT = 'functions/src/garage/vehicle-catalogue.generated.ts';
+const SWIFT_OUT = 'apps/ios/KCC/Garage/VehicleCatalogueData.swift';
 
 const RESERVED = ['|', ';', '='];
 
@@ -69,7 +72,7 @@ function assertEncodable(what, value) {
       throw new Error(
         `${what} ${JSON.stringify(value)} contains the reserved encoding character ` +
           `"${ch}". Rename it in ${CONTRACT}, or change the encoding in this script ` +
-          'AND in both parsers (VehicleCatalogue.kt / vehicle-catalogue.ts).',
+          'AND in every parser (VehicleCatalogue.kt / vehicle-catalogue.ts / VehicleCatalogue.swift).',
       );
     }
   }
@@ -135,6 +138,11 @@ function tsLiteral(value) {
   return `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`;
 }
 
+/** Swift string literal: backslashes and quotes need escaping (`\(` would interpolate). */
+function swiftLiteral(value) {
+  return `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
+}
+
 export function renderKotlin(catalogue) {
   const encoded = encodeCatalogue(catalogue);
   return [
@@ -193,11 +201,39 @@ export function renderTypeScript(catalogue) {
   ].join('\n');
 }
 
+export function renderSwift(catalogue) {
+  const encoded = encodeCatalogue(catalogue);
+  return [
+    ...HEADER_LINES,
+    '',
+    '/// Packed vehicle catalogue data. Parsed LAZILY by ``VehicleCatalogue`` — never',
+    '/// at app start — so a launch that never opens the add/edit-vehicle form pays',
+    '/// nothing for it. See scripts/generate-vehicle-catalogue.mjs for the encoding.',
+    '///',
+    '/// The "Other / not listed" bucket is NOT in this data: it is synthesised by',
+    '/// ``VehicleCatalogue`` at both levels so an unlisted brand or model is still a',
+    '/// SELECTION rather than free text.',
+    'enum VehicleCatalogueData {',
+    `    static let version = ${swiftLiteral(catalogue.version)}`,
+    `    static let otherId = ${swiftLiteral(catalogue.otherId)}`,
+    `    static let minModelYear = ${catalogue.minModelYear}`,
+    `    static let maxModelYearOffset = ${catalogue.maxModelYearOffset}`,
+    '',
+    '    /// One line per manufacturer: `makeId|Make name|common(0/1)|modelId=Model name;…`.',
+    '    static let encoded: [String] = [',
+    ...encoded.map((line) => `        ${swiftLiteral(line)},`),
+    '    ]',
+    '}',
+    '',
+  ].join('\n');
+}
+
 function main() {
   const catalogue = readCatalogue();
   const outputs = [
     [KOTLIN_OUT, renderKotlin(catalogue)],
     [TS_OUT, renderTypeScript(catalogue)],
+    [SWIFT_OUT, renderSwift(catalogue)],
   ];
   for (const [relative, contents] of outputs) {
     writeFileSync(resolve(repoRoot, relative), contents, 'utf8');

@@ -30023,6 +30023,23 @@
         }
       }
     },
+    "subscription.changePlanBody": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uppgraderingar gäller direkt. Byte till Plus gäller från nästa förnyelse."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upgrades take effect immediately. Switching to Plus takes effect at the next renewal."
+          }
+        }
+      }
+    },
     "subscription.currentEntitlementFree": {
       "extractionState": "manual",
       "localizations": {
@@ -30091,6 +30108,23 @@
         }
       }
     },
+    "subscription.currentPlanAction": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuvarande medlemskap"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current membership"
+          }
+        }
+      }
+    },
     "subscription.currentPlanTitle": {
       "extractionState": "manual",
       "localizations": {
@@ -30104,6 +30138,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your membership"
+          }
+        }
+      }
+    },
+    "subscription.downgradePlusAction": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Byt till Plus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch to Plus"
           }
         }
       }
@@ -30199,13 +30250,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Hantera medlemskap"
+            "value": "Hantera eller avsluta medlemskap"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Manage membership"
+            "value": "Manage or cancel membership"
           }
         }
       }
@@ -30216,13 +30267,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Öppnar din appbutik där du kan ändra eller avsluta medlemskapet."
+            "value": "Öppnar din appbutik där du kan hantera eller avsluta medlemskapet."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Opens your app store, where you can change or cancel your membership."
+            "value": "Opens your app store, where you can manage or cancel your membership."
           }
         }
       }
@@ -30580,6 +30631,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Membership"
+          }
+        }
+      }
+    },
+    "subscription.upgradeSupporterAction": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uppgradera till Supporter"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upgrade to Supporter"
           }
         }
       }
