@@ -39,7 +39,7 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
         if let vehicleId, !vehicleId.isEmpty {
             payload["vehicleId"] = vehicleId
         }
-        _ = try await functions.call(Self.startSession, payload: payload)
+        _ = try await functions.call(Self.startSessionCallable, payload: payload)
     }
 
     func updatePosition(_ coordinate: LiveCoordinate) async throws {
@@ -51,15 +51,15 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
         if let accuracy = coordinate.accuracyMeters { coord["accuracyMeters"] = accuracy }
         if let heading = coordinate.headingDegrees { coord["headingDegrees"] = heading }
         if let speed = coordinate.speedMetersPerSecond { coord["speedMetersPerSecond"] = speed }
-        _ = try await functions.call(Self.updatePosition, payload: ["coordinate": coord])
+        _ = try await functions.call(Self.updatePositionCallable, payload: ["coordinate": coord])
     }
 
     func stopSession() async throws {
-        _ = try await functions.call(Self.stopSession, payload: ["reason": "user_stop"])
+        _ = try await functions.call(Self.stopSessionCallable, payload: ["reason": "user_stop"])
     }
 
     func hideMeNow() async throws {
-        _ = try await functions.call(Self.hideMeNow, payload: [:])
+        _ = try await functions.call(Self.hideMeNowCallable, payload: [:])
     }
 
     // MARK: - RTDB (own-session read)
@@ -94,10 +94,13 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
 
     // MARK: - Factory
 
-    private static let startSession = "live-startSession"
-    private static let updatePosition = "live-updatePosition"
-    private static let stopSession = "live-stopSession"
-    private static let hideMeNow = "live-hideMeNow"
+    // Grouped-export callable names — suffixed so call sites read as
+    // "invoke the named callable", not as recursion into the instance
+    // methods they back.
+    private static let startSessionCallable = "live-startSession"
+    private static let updatePositionCallable = "live-updatePosition"
+    private static let stopSessionCallable = "live-stopSession"
+    private static let hideMeNowCallable = "live-hideMeNow"
 
     private static let cachedLock = NSLock()
     nonisolated(unsafe) private static var cached: FirebaseLiveLocationRepository?

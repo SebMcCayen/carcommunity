@@ -6,9 +6,12 @@ import Foundation
 /// with fakes.
 ///
 /// The write/read split mirrors Android exactly: every WRITE flows through
-/// the member-gated `live.*` callables (functions/src/live/session.ts —
-/// grouped exports `live-startSession` / `live-updatePosition` /
-/// `live-stopSession` / `live-hideMeNow`); the RTDB nodes under
+/// the `live.*` callables (functions/src/live/session.ts — grouped exports
+/// `live-startSession` / `live-updatePosition` / `live-stopSession` /
+/// `live-hideMeNow`). Sharing your OWN position is free — the callables
+/// require an authenticated, non-suspended caller plus the liveLocation
+/// feature flag, NOT an active membership (`hideMeNow` works even while
+/// suspended; only VIEWING others is the paid surface); the RTDB nodes under
 /// `liveLocation/{uid}` are backend-written and clients only ever READ them
 /// (firebase/database.rules.json grants no client write there at all).
 ///
