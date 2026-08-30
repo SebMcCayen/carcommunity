@@ -109,8 +109,10 @@ final class EventDetailCoordinatorTests: XCTestCase {
 
         // MARK: EventsRepository
 
+        /// Unused by the detail slice — finishes immediately so an
+        /// accidental consumer can never hang a test.
         func publishedEvents() -> AsyncStream<EventsListSnapshot> {
-            AsyncStream { _ in }
+            AsyncStream { $0.finish() }
         }
 
         func event(withId eventId: String) -> AsyncStream<EventSummary?> {
