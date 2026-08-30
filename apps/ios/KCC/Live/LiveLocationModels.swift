@@ -230,28 +230,20 @@ enum LiveShareCadence {
 /// nonzero) — so the parser accepts both, and the formatter always emits
 /// fractional seconds, which every consumer parses.
 enum LiveIsoInstant {
-    /// Cached formatters: this path runs in the publish loop (every few
-    /// seconds while sharing), so per-call allocation is avoidable overhead.
-    /// `nonisolated(unsafe)` is sound because `ISO8601DateFormatter` is
-    /// documented thread-safe and both instances are configured once here
-    /// and never mutated again.
-    nonisolated(unsafe) private static let fractional: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-
-    nonisolated(unsafe) private static let wholeSeconds: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
+    /// `Date.ISO8601FormatStyle` (unlike `ISO8601DateFormatter`, a mutable
+    /// class Apple does NOT document as thread-safe) is a plain `Sendable`
+    /// value type with no shared mutable state, so these statics are safe to
+    /// format/parse from any thread with no lock — this path runs off the
+    /// main actor (Firebase callbacks, the background publish loop) every
+    /// few seconds while sharing.
+    private static let fractional = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+    private static let wholeSeconds = Date.ISO8601FormatStyle()
 
     static func format(_ date: Date) -> String {
-        fractional.string(from: date)
+        date.formatted(fractional)
     }
 
     static func parse(_ iso: String) -> Date? {
-        fractional.date(from: iso) ?? wholeSeconds.date(from: iso)
+        (try? Date(iso, strategy: fractional)) ?? (try? Date(iso, strategy: wholeSeconds))
     }
 }
