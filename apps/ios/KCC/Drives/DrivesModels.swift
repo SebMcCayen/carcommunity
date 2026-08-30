@@ -204,8 +204,12 @@ enum DriveFormatters {
         guard let distanceMeters, distanceMeters.isFinite, distanceMeters >= 0 else {
             return missingValue
         }
-        if distanceMeters < 1000 {
-            return "\(Int(distanceMeters.rounded())) m"
+        // Round FIRST, then choose the unit on the rounded metres, so a value
+        // just under 1 km (e.g. 999.6) that rounds to 1000 renders "1.0 km"
+        // rather than the contradictory "1000 m".
+        let meters = Int(distanceMeters.rounded())
+        if meters < 1000 {
+            return "\(meters) m"
         }
         return String(format: "%.1f km", locale: Locale(identifier: "en_US_POSIX"),
                       distanceMeters / 1000)
@@ -229,6 +233,11 @@ enum DriveFormatters {
         guard let metersPerSecond, metersPerSecond.isFinite, metersPerSecond >= 0 else {
             return missingValue
         }
-        return "\(Int((metersPerSecond * 3.6).rounded())) km/h"
+        // Corrupted-but-finite values (e.g. 1e300) would overflow the Int
+        // conversion and trap. A car's km/h is far below this sanity ceiling,
+        // so anything above it is corrupt data → the dash, not a crash.
+        let kmh = (metersPerSecond * 3.6).rounded()
+        guard kmh <= 100_000 else { return missingValue }
+        return "\(Int(kmh)) km/h"
     }
 }

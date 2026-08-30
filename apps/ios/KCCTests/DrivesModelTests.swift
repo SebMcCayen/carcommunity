@@ -211,6 +211,9 @@ final class DrivesModelTests: XCTestCase {
         XCTAssertEqual(DriveFormatters.formatDistance(.infinity), "—")
         XCTAssertEqual(DriveFormatters.formatDistance(820), "820 m")
         XCTAssertEqual(DriveFormatters.formatDistance(999.4), "999 m")
+        // A sub-kilometre value that rounds up to 1000 renders as km, never
+        // the contradictory "1000 m".
+        XCTAssertEqual(DriveFormatters.formatDistance(999.6), "1.0 km")
         XCTAssertEqual(DriveFormatters.formatDistance(12_345), "12.3 km")
         // Locale-stable: always the dot decimal separator, like Android's
         // Locale.ROOT format.
@@ -232,5 +235,8 @@ final class DrivesModelTests: XCTestCase {
         XCTAssertEqual(DriveFormatters.formatSpeed(.nan), "—")
         XCTAssertEqual(DriveFormatters.formatSpeed(12.5), "45 km/h")
         XCTAssertEqual(DriveFormatters.formatSpeed(0), "0 km/h")
+        // A corrupted-but-finite value must not overflow the Int conversion
+        // and trap — it falls back to the dash instead.
+        XCTAssertEqual(DriveFormatters.formatSpeed(1e300), "—")
     }
 }
