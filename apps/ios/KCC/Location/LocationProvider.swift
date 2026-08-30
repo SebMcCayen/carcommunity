@@ -31,9 +31,11 @@ import Observation
 ///   trigger is ``requestWhenInUseAuthorization()``, and callers invoke it
 ///   only from an explicit user action, AFTER explaining why — that ordering
 ///   is owned by ``LocationPermissionCoordinator``.
-/// - Fixes flow only while someone is consuming a ``fixes()`` stream;
-///   terminating the stream stops the hardware. "Stop sharing when a drive
-///   ends" is therefore structural: ending the feature tears down its stream.
+/// - Fixes flow only while a ``fixes()`` stream is LIVE (created and not yet
+///   terminated — demand counts from creation, before any iteration) and the
+///   app is authorized; terminating the stream stops the hardware. "Stop
+///   sharing when a drive ends" is therefore structural: ending the feature
+///   tears down its stream.
 @MainActor
 protocol LocationProvider: AnyObject {
     /// The app's current authorization, as last reported by the platform.
