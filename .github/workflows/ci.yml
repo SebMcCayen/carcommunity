@@ -139,10 +139,11 @@ jobs:
             -d contracts/vehicles/vehicle-catalogue.json
 
       - name: Verify the generated vehicle-catalogue mirrors are up to date
-        # The Android app and the Cloud Functions backend both validate
-        # make/model ids against GENERATED mirrors of the catalogue contract —
-        # neither can read contracts/ at run time (the APK has no checkout, and
-        # `firebase deploy` uploads only functions/). A drifted mirror would make
+        # The Android app, the iOS app, and the Cloud Functions backend all
+        # validate make/model ids against GENERATED mirrors of the catalogue
+        # contract — none can read contracts/ at run time (the APK and the app
+        # bundle have no checkout, and `firebase deploy` uploads only
+        # functions/). A drifted mirror would make
         # the app offer ids the backend rejects, and the per-manufacturer counts
         # the feature exists for would quietly rot. This job carries no `paths:`
         # filter, so the check runs on every PR whichever side was edited.
@@ -150,7 +151,8 @@ jobs:
           node scripts/generate-vehicle-catalogue.mjs
           if ! git diff --exit-code \
             apps/android/app/src/main/java/com/kungsbackacarcommunity/app/garage/VehicleCatalogueData.kt \
-            functions/src/garage/vehicle-catalogue.generated.ts; then
+            functions/src/garage/vehicle-catalogue.generated.ts \
+            apps/ios/KCC/Garage/VehicleCatalogueData.swift; then
             echo "::error::Generated vehicle-catalogue mirrors are out of date. Run: node scripts/generate-vehicle-catalogue.mjs"
             exit 1
           fi

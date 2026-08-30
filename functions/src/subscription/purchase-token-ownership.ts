@@ -79,6 +79,7 @@ export async function reservePurchaseVerification(
   purchaseTokenHash: string,
   expected: PurchaseTokenOwnershipRecord,
   now: Date,
+  linkedPurchaseTokenHash: string | null = null,
 ): Promise<string> {
   const tokenRef = db.collection(COLLECTION).doc(purchaseTokenHash);
   const verificationRef = db.collection(VERIFICATION_COLLECTION).doc(expected.uid);
@@ -94,6 +95,7 @@ export async function reservePurchaseVerification(
     const tokenDecision = validateTokenOwnership(
       tokenSnap.exists ? tokenSnap.data() : null,
       expected,
+      true,
     );
 
     if (verificationSnap.exists) {
@@ -126,6 +128,7 @@ export async function reservePurchaseVerification(
           expiresAt: storedDate(current.expiresAt),
         },
         purchaseTokenHash,
+        linkedPurchaseTokenHash,
         now,
       );
     }
@@ -139,7 +142,10 @@ export async function reservePurchaseVerification(
         updatedAt: FieldValue.serverTimestamp(),
       });
     } else {
-      transaction.update(tokenRef, { updatedAt: FieldValue.serverTimestamp() });
+      transaction.update(tokenRef, {
+        ...(tokenDecision === 'update_product' ? { productId: expected.productId } : {}),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
     }
     transaction.set(verificationRef, {
       uid: expected.uid,

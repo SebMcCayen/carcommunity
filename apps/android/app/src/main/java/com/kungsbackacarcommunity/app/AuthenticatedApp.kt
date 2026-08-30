@@ -456,6 +456,7 @@ import com.kungsbackacarcommunity.app.shell.currentIncidentClearFix
 import com.kungsbackacarcommunity.app.shell.runIncidentRemoval
 import com.kungsbackacarcommunity.app.subscription.BillingRepository
 import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
+import com.kungsbackacarcommunity.app.subscription.SubscriptionStateRepository
 import com.kungsbackacarcommunity.app.subscription.SubscriptionVerifier
 import com.kungsbackacarcommunity.app.update.AppStartupUpdateGate
 import com.kungsbackacarcommunity.app.update.AppUpdateCheck
@@ -831,6 +832,7 @@ fun AuthenticatedApp(
     feedbackCoordinator: FeedbackCoordinator?,
     billingRepository: BillingRepository?,
     subscriptionVerifier: SubscriptionVerifier?,
+    subscriptionStateRepository: SubscriptionStateRepository? = null,
     pushRegistrationCoordinator: PushRegistrationCoordinator?,
     loginRecordCoordinator: LoginRecordCoordinator?,
     flags: FeatureFlags,
@@ -6566,6 +6568,7 @@ fun AuthenticatedApp(
                         reportTicketsEnabled = flags.isEnabled(FeatureFlag.REPORT_TICKETS_BROWSER),
                         billingRepository = billingRepository,
                         subscriptionVerifier = subscriptionVerifier,
+                        subscriptionStateRepository = subscriptionStateRepository,
                         // gates for sub-routes (e.g. the Settings hub)
                         partnerStatsEnabled =
                             FeatureGate.isAvailable(
@@ -8888,6 +8891,7 @@ private fun RouteHost(
     reportTicketsEnabled: Boolean,
     billingRepository: BillingRepository?,
     subscriptionVerifier: SubscriptionVerifier?,
+    subscriptionStateRepository: SubscriptionStateRepository?,
     partnerStatsEnabled: Boolean,
     savedPlacesStore: SavedPlacesStore,
     onOpenAddressSearch: () -> Unit,
@@ -9700,6 +9704,7 @@ private fun RouteHost(
                 SubscriptionRoute(
                     billing = billingRepository,
                     verifier = subscriptionVerifier,
+                    stateRepository = subscriptionStateRepository,
                     uid = uid,
                     isActiveMember = profileActiveMember,
                     onBack = onClose,

@@ -41,7 +41,7 @@ struct SocialHubPanel: View {
 }
 
 /// Placeholder panel content for the tabs whose hubs are not ported yet
-/// (History, Garage): the localized tab title plus the shared
+/// (History): the localized tab title plus the shared
 /// `shell.comingSoon` notice. Exists so those tabs can already render as
 /// translucent panels — making the `translucentPanelTabs` map-cover rule real
 /// — without inventing hub entries their features cannot back.
