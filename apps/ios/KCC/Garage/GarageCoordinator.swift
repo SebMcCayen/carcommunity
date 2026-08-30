@@ -51,13 +51,20 @@ final class GarageCoordinator {
     nonisolated(unsafe) private var subscription: Task<Void, Never>?
     @ObservationIgnored
     nonisolated(unsafe) private var imageResolutions: [String: Task<Void, Never>] = [:]
+    /// Every path a resolution was ATTEMPTED for — the negative cache. A
+    /// failed resolution stays attempted (its card keeps the placeholder), so
+    /// later snapshots never re-pay the Storage round-trip for a path that
+    /// already failed; ``reload()`` clears the failures so the explicit
+    /// user action retries them.
+    @ObservationIgnored
+    private var attemptedImagePaths: Set<String> = []
 
     private(set) var state: GarageUiState
     private(set) var saveStatus: VehicleSaveStatus = .idle
     /// Resolved cover-photo URLs by Storage path. A path that failed to
     /// resolve is absent — its card keeps the placeholder (cosmetic, never an
-    /// error state). Resolved at most once per path, so every later snapshot
-    /// of an unchanged garage re-pays nothing.
+    /// error state). Resolved at most once per path (success or failure), so
+    /// every later snapshot of an unchanged garage re-pays nothing.
     private(set) var imageURLs: [String: URL] = [:]
 
     /// - Parameters:
@@ -132,6 +139,9 @@ final class GarageCoordinator {
     private func subscribe() {
         subscription?.cancel()
         state = .loading
+        // Retry FAILED photo resolutions on the explicit re-subscribe (the
+        // retry affordance); successful URLs stay cached.
+        attemptedImagePaths = Set(imageURLs.keys)
         // The stream is created HERE, not inside the task, so the listener is
         // attached synchronously — reload() has re-subscribed by the time it
         // returns (see EventsCoordinator.subscribe).
@@ -160,13 +170,16 @@ final class GarageCoordinator {
     }
 
     /// Kicks off a one-time URL resolution for each cover path not yet
-    /// resolved or in flight. Paths that leave the garage keep their cached
-    /// URL — the map is bounded by the 10-vehicle cap, so eviction would be
-    /// complexity without a payoff.
+    /// attempted. A path is attempted at most ONCE — success or failure —
+    /// until ``reload()``, so a missing/unreachable photo never turns every
+    /// listener emission into a Storage round-trip. Paths that leave the
+    /// garage keep their cached URL — the maps are bounded by the 10-vehicle
+    /// cap, so eviction would be complexity without a payoff.
     private func resolveImagesIfNeeded(for vehicles: [Vehicle]) {
         guard let repository else { return }
         for path in vehicles.compactMap(\.imagePath) {
-            guard imageURLs[path] == nil, imageResolutions[path] == nil else { continue }
+            guard !attemptedImagePaths.contains(path) else { continue }
+            attemptedImagePaths.insert(path)
             imageResolutions[path] = Task { [weak self] in
                 let url = await repository.imageDownloadURL(for: path)
                 guard !Task.isCancelled, let self else { return }

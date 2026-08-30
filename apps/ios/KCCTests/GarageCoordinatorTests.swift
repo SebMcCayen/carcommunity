@@ -407,7 +407,7 @@ final class GarageCoordinatorTests: XCTestCase {
     }
 
     @MainActor
-    func testFailedPhotoResolutionKeepsThePlaceholder() async {
+    func testFailedPhotoResolutionKeepsThePlaceholderAndIsNotRetriedPerSnapshot() async {
         let repository = FakeVehiclesRepository()
         let path = "vehicleImages/uid-1/vehicle-a/cover.jpg"
         // No scripted URL: resolution returns nil (the real repository's
@@ -420,5 +420,34 @@ final class GarageCoordinatorTests: XCTestCase {
         await wait { repository.imageResolveCount >= 1 }
         await wait { coordinator.state == .loaded(vehicles) }
         XCTAssertNil(coordinator.imageURLs[path])
+
+        // The negative cache: a later snapshot must NOT re-attempt the
+        // failed path — otherwise every listener emission would turn into a
+        // Storage round-trip.
+        repository.emit(.loaded(vehicles))
+        await wait { coordinator.state == .loaded(vehicles) }
+        await Task.yield()
+        XCTAssertEqual(repository.imageResolveCount, 1)
+    }
+
+    @MainActor
+    func testReloadRetriesAFailedPhotoResolution() async {
+        let repository = FakeVehiclesRepository()
+        let path = "vehicleImages/uid-1/vehicle-a/cover.jpg"
+        let vehicles = [Self.vehicle("a", imagePath: path)]
+        repository.script([.loaded(vehicles)])
+        let coordinator = GarageCoordinator(repository: repository, uid: Self.uid)
+
+        coordinator.start()
+        await wait { repository.imageResolveCount >= 1 }
+        XCTAssertNil(coordinator.imageURLs[path])
+
+        // The photo becomes reachable; the explicit retry affordance clears
+        // the negative cache and resolves it.
+        let url = URL(string: "https://example.test/cover.jpg")!
+        repository.scriptImageURL(url, for: path)
+        coordinator.reload()
+        await wait { coordinator.imageURLs[path] == url }
+        XCTAssertEqual(repository.imageResolveCount, 2)
     }
 }
