@@ -39,6 +39,11 @@ targets:
       # europe-west1.
       - package: Firebase
         product: FirebaseFunctions
+      # Avatar rendering: stored Storage PATHS resolve to download URLs at
+      # render time (FirebaseUserProfileRepository.avatarDownloadURL),
+      # mirroring Android's media/StorageImageUrl.
+      - package: Firebase
+        product: FirebaseStorage
     info:
       path: KCC/Info.plist
       properties:
