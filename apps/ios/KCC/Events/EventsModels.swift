@@ -1,8 +1,8 @@
 import Foundation
 
 /// Events domain model + pure logic — the iOS port of Android's
-/// `events/Event.kt` (Phase 12 slice 9), restricted to what the read-only
-/// list slice needs.
+/// `events/Event.kt` (Phase 12 slice 9), restricted to what the list and
+/// detail + RSVP slices need.
 ///
 /// Mirrors the backend events-core contract: the event status vocabulary and
 /// the teaser/detail split (`events/{id}` teaser vs `events/{id}/details/private`
@@ -23,6 +23,55 @@ enum EventStatus: String, Equatable, Sendable, CaseIterable {
     static func fromWire(_ value: String?) -> EventStatus? {
         guard let value else { return nil }
         return EventStatus(rawValue: value)
+    }
+}
+
+/// RSVP answer (events/{id}/rsvps/{uid}.status) — the contract enum
+/// (contracts/schemas/events.schema.json `eventRsvpStatus`), Android's
+/// `RsvpStatus`. The Firestore wire value differs from the Swift case name
+/// for ``notGoing``, so the raw value IS the wire spelling.
+enum RsvpStatus: String, Equatable, Sendable, CaseIterable {
+    case going
+    case maybe
+    case notGoing = "not_going"
+
+    /// The Firestore wire value (kept as an explicit accessor so call sites
+    /// read like Android's `status.wire`).
+    var wire: String { rawValue }
+
+    static func fromWire(_ value: String?) -> RsvpStatus? {
+        guard let value else { return nil }
+        return RsvpStatus(rawValue: value)
+    }
+}
+
+/// Member-gated detail (events/{id}/details/private) — the long description
+/// and the precise street address only. The map location lives on the public
+/// teaser (``EventSummary``); it is no longer here. Android's `EventDetail`.
+struct EventDetail: Equatable, Sendable {
+    let description: String?
+    let address: String?
+}
+
+/// The single switch for every member-gated UI affordance — the iOS mirror of
+/// Android's `config/MemberGating.kt`. `false` = show and enable member
+/// features for any signed-in user (the current launch posture; the backend
+/// `functions/src/shared/memberGating.ts` and the firestore.rules
+/// `isActiveMember()` switch are flipped together with this).
+///
+/// Threaded as `passesMemberGate`, never as `isActiveMember`: while disabled,
+/// any signed-in, non-suspended user passes. Suspension/deletion are NOT
+/// handled here — the backend owns those regardless of this switch.
+enum MemberGating {
+    /// Mirrors Android `MemberGating.ENABLED` (currently `false`).
+    static let enabled = false
+
+    /// Resolves a member-gated decision. While ``enabled`` is false this
+    /// returns true regardless of entitlement; flipping it back restores the
+    /// exact previous behaviour (`isActiveMember` passthrough) at every call
+    /// site.
+    static func allows(isActiveMember: Bool) -> Bool {
+        !enabled || isActiveMember
     }
 }
 
@@ -85,6 +134,23 @@ enum Events {
     /// bounded as the `events` collection grows without bound; events
     /// starting furthest in the future simply fall off the list.
     static let publishedEventsQueryLimit = 200
+
+    /// RSVP is allowed only for a caller who PASSES THE MEMBER GATE, on a
+    /// published event — mirrors the Firestore rule on events/{id}/rsvps/{uid}
+    /// (owner + isActiveMember() + published) and Android's `Events.canRsvp`.
+    /// "Passes the gate" rather than "is an active member" because both
+    /// layers are switchable (``MemberGating``). Cancelled/completed/draft
+    /// events are not RSVP-able either way.
+    static func canRsvp(passesMemberGate: Bool, status: EventStatus) -> Bool {
+        passesMemberGate && status == .published
+    }
+
+    /// Whether the exact-location / description detail may be requested —
+    /// mirrors the firestore.rules `details/private` read (member gate +
+    /// published event) and Android's `Events.canSeeDetails`.
+    static func canSeeDetails(passesMemberGate: Bool, status: EventStatus) -> Bool {
+        passesMemberGate && status == .published
+    }
 
     /// Published events sorted by soonest start first — nil start times last,
     /// original order preserved among ties (Android's `sortedForList`, which

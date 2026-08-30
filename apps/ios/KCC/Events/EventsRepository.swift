@@ -20,15 +20,30 @@ enum EventsListSnapshot: Equatable, Sendable {
     case loaded([EventSummary])
 }
 
-/// Events read operations — the iOS port of Android's `EventsRepository.kt`,
-/// restricted to the read-only list slice. Firebase-free protocol so the
-/// coordinator and screens are unit-testable with fakes.
+/// An RSVP write failure carrying ONLY the bare Firestore status name
+/// (`PERMISSION_DENIED`, `UNAVAILABLE`, …) when one was available — the same
+/// PII-safe diagnosis rule as ``EventsListSnapshot/failed(code:)``: a status
+/// name is the whole diagnosis; exception text (which can embed the failing
+/// document path and the project id) is never carried. Pure Swift so the
+/// coordinator branches on the CODE with no Firebase dependency.
+struct RsvpWriteError: Error, Equatable, Sendable {
+    /// The bare Firestore status name, or nil when the failure carried none.
+    let code: String?
+}
+
+/// Events read + RSVP operations — the iOS port of Android's
+/// `EventsRepository.kt`, restricted to the list and detail + RSVP slices.
+/// Firebase-free protocol so the coordinators and screens are unit-testable
+/// with fakes.
 ///
 /// Reads are direct Firestore snapshot listeners, mirroring Android:
 /// published teasers are readable by any authenticated user
-/// (firebase/firestore.rules events/{id}); member-gated details stay behind
-/// the Security Rules and are not read here. RSVP/create/check-in writes are
-/// deliberately absent — they arrive with later slices, through the
+/// (firebase/firestore.rules events/{id}); the member-gated
+/// `details/private` document is enforced by the Security Rules. Writing an
+/// RSVP is a direct owner write of exactly `{ status, updatedAt }`
+/// (rules-validated, `validRsvpDocument()`); the backend `events-onRsvpWrite`
+/// trigger maintains the public `rsvpCounts` tally. Create/check-in writes
+/// are deliberately absent — they arrive with later slices, through the
 /// ``KccFunctionsClient`` seam.
 protocol EventsRepository: AnyObject, Sendable {
     /// Published events, soonest first, bounded to
@@ -36,4 +51,28 @@ protocol EventsRepository: AnyObject, Sendable {
     /// backed by its own listener; terminating the stream (dropping the
     /// iteration) detaches the listener.
     func publishedEvents() -> AsyncStream<EventsListSnapshot>
+
+    /// A single event's teaser doc; nil when missing/unreadable (Android's
+    /// `observeEvent`). The stream emits SETTLED reads only — the caller
+    /// supplies the loading state before the first emission.
+    func event(withId eventId: String) -> AsyncStream<EventSummary?>
+
+    /// Member-gated detail; emits nil when denied (non-member) or missing
+    /// (Android's `observeEventDetail`).
+    func eventDetail(eventId: String) -> AsyncStream<EventDetail?>
+
+    /// The caller's own RSVP answer; nil when they have not responded
+    /// (Android's `observeMyRsvp`).
+    func myRsvp(eventId: String, uid: String) -> AsyncStream<RsvpStatus?>
+
+    /// Writes/updates the caller's RSVP answer — a direct owner write of
+    /// exactly `{ status, updatedAt: serverTimestamp }` (Android's `setRsvp`).
+    /// - Throws: ``RsvpWriteError`` with the PII-safe status name.
+    func submitRsvp(eventId: String, uid: String, status: RsvpStatus) async throws
+
+    /// The signed-in user's uid, or nil with no session. Android threads the
+    /// uid from the auth state into `EventsRoute`; the iOS events feature is
+    /// self-contained (the shell passes no identity), so the repository —
+    /// which already owns the Firebase seam — answers it instead.
+    func currentUserId() -> String?
 }

@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// The read-only upcoming-events list — the first vertical slice of
-/// Android's `EventsListScreen` (upcoming tab only; past/detail/RSVP/create
-/// arrive with later slices).
+/// The upcoming-events list — the iOS slice of Android's `EventsListScreen`
+/// (upcoming tab only; past/create arrive with later slices). Tapping a row
+/// pushes ``EventDetailScreen`` on this feature's own NavigationStack.
 ///
 /// A dumb switch over ``EventsListUiState``: all decisions live in the pure
 /// ``EventsCoordinator``. The `coordinator` is nil in a config-less build
@@ -22,6 +22,14 @@ struct EventsScreen: View {
         content
             .navigationTitle(Text("events.title"))
             .task { coordinator?.start() }
+            // The list→detail push lives INSIDE the events feature: rows are
+            // `NavigationLink(value:)`s and this destination resolves them on
+            // the same NavigationStack that hosts the list — no shell wiring.
+            .navigationDestination(for: EventDetailRoute.self) { route in
+                EventDetailScreen(makeCoordinator: { [weak coordinator] in
+                    coordinator?.makeDetailCoordinator(eventId: route.eventId)
+                })
+            }
     }
 
     @ViewBuilder
@@ -88,7 +96,9 @@ struct EventsScreen: View {
         List {
             Section {
                 ForEach(events) { event in
-                    EventRow(event: event)
+                    NavigationLink(value: EventDetailRoute(eventId: event.id)) {
+                        EventRow(event: event)
+                    }
                 }
             } header: {
                 Text("events.screenSubtitle")
@@ -96,6 +106,15 @@ struct EventsScreen: View {
         }
         .listStyle(.insetGrouped)
     }
+}
+
+/// The value a tapped list row pushes — resolved by ``EventsScreen``'s
+/// `navigationDestination` into an ``EventDetailScreen``. Only the id
+/// travels: the detail screen re-observes the teaser itself (live updates,
+/// same as Android's `observeEvent(selected)`), rather than freezing the
+/// row's snapshot.
+struct EventDetailRoute: Hashable, Sendable {
+    let eventId: String
 }
 
 /// One teaser row: title, start time, place, official badge, going tally —
