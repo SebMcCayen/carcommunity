@@ -1,11 +1,86 @@
 package com.kungsbackacarcommunity.app.live
 
+import com.kungsbackacarcommunity.app.map.ConvoyEdgeGeometry
+
+/**
+ * The wave-eligibility radius, in metres — the client's VISIBILITY bound on who the
+ * wave control may target, kept in lock-step with the SERVER's WAVE_RADIUS_METERS
+ * (functions/src/live/wave-core.ts). The server is the source of truth for wave
+ * DELIVERY: `live-sendWave` fans a wave out only to live sharers within this radius
+ * of the SENDER'S OWN authoritative position (from `liveSessions`). This client
+ * constant mirrors that delivery bound so the wave affordance is offered only for
+ * members the wave could actually reach.
+ *
+ * Deliberately SEPARATE from [DEFAULT_NEARBY_RADIUS_METERS]
+ * (live/LiveLocationRepository.kt), which is the radius of the camera-centred nearby
+ * DISCOVERY poll — a different concept (how far around the MAP CAMERA to look for
+ * sharers to draw). Both are 15 km today but answer different questions; do not fold
+ * them together (see #1039 — zooming the camera to a distant sharer must NOT make
+ * them wave-eligible).
+ */
+const val WAVE_RADIUS_METERS: Double = 15_000.0
+
 /**
  * PURE decisions for the wave-to-nearby-live-users control — no Compose, no
  * Firebase — so the visibility gate and the client cooldown mirror are
  * unit-testable off the UI ([WavePresenceTest]).
  */
 object WavePresence {
+    /**
+     * The subset of [nearby] live markers within [radiusMeters] of the user's OWN
+     * position ([ownLat]/[ownLng]) — those the wave could actually reach, matching the
+     * server's delivery bound. Returns EMPTY when the own position is unknown
+     * ([ownLat] or [ownLng] null): without an authoritative origin we cannot tell who
+     * is in range, and the server would have nothing to broadcast from either.
+     *
+     * This is what bounds the wave AFFORDANCE to your own range. The map still draws
+     * every nearby sharer wherever you pan (the camera-centred roster); only the wave
+     * control's visibility is filtered through here — fixing the "wave from Norway to
+     * Sweden" bug (#1039) where zooming to a distant member wrongly lit the control.
+     */
+    fun waveEligibleInRange(
+        ownLat: Double?,
+        ownLng: Double?,
+        nearby: List<LiveMarker>,
+        radiusMeters: Double = WAVE_RADIUS_METERS,
+    ): List<LiveMarker> =
+        filterWithinRange(ownLat, ownLng, nearby, radiusMeters, { it.latitude }, { it.longitude })
+
+    /**
+     * As [waveEligibleInRange], but over the fuller nearby-DISCOVERY roster
+     * ([NearbyLiveSession], up to listNearby's 200) that drives the wave range gate —
+     * so the gate's "already waved this visit" bookkeeping and the visible control
+     * agree on the SAME own-position eligibility bound.
+     */
+    fun waveEligibleSessionsInRange(
+        ownLat: Double?,
+        ownLng: Double?,
+        nearby: List<NearbyLiveSession>,
+        radiusMeters: Double = WAVE_RADIUS_METERS,
+    ): List<NearbyLiveSession> =
+        filterWithinRange(ownLat, ownLng, nearby, radiusMeters, { it.latitude }, { it.longitude })
+
+    /**
+     * Shared core: keeps items whose extracted coordinate is within [radiusMeters] of
+     * the own position, or none at all when the own position is unknown. Distance is
+     * the NaN-clamped great-circle helper [ConvoyEdgeGeometry.distanceMeters] rather
+     * than a second haversine, so wave range and the map's convoy geometry can never
+     * drift apart.
+     */
+    private fun <T> filterWithinRange(
+        ownLat: Double?,
+        ownLng: Double?,
+        items: List<T>,
+        radiusMeters: Double,
+        lat: (T) -> Double,
+        lng: (T) -> Double,
+    ): List<T> {
+        if (ownLat == null || ownLng == null) return emptyList()
+        return items.filter {
+            ConvoyEdgeGeometry.distanceMeters(ownLat, ownLng, lat(it), lng(it)) <= radiusMeters
+        }
+    }
+
     /**
      * Whether the wave control should be shown. It appears ONLY when you are
      * yourself sharing a live session AND at least one in-range live user is still

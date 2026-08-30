@@ -5594,25 +5594,77 @@ fun AuthenticatedApp(
                 // to Compose whenever it mutates so the visibility below recomposes.
                 val waveRangeGate = remember { WaveRangeGate() }
                 var waveGateVersion by remember { mutableIntStateOf(0) }
-                // The GATE's range roster is the FULL nearby-discovery uid set
-                // (nearbyDiscoveryUids), NOT the 50-capped drawn markers: it matches
-                // the server's potential wave-recipient set (both bounded at 200) far
-                // more closely, so "already waved this visit" covers everyone the wave
-                // could actually reach — not just the tracked 50. Reconcile on every
-                // change so a driver leaving the discovery roster (truly out of range)
-                // clears their mark. Residual bound: this set is itself capped at
-                // listNearby's 200, the same limit as the server fan-out, so beyond
-                // 200 in-range sharers the two can still diverge.
-                LaunchedEffect(nearbyDiscoveryUids) {
-                    waveRangeGate.onRangeSet(nearbyDiscoveryUids)
+                // The client mirror of the SENDER'S authoritative position the server
+                // uses for wave DELIVERY. `live-sendWave` fans out only to sharers
+                // within WAVE_RADIUS_METERS of the sender's own liveSessions GPS, so
+                // the wave AFFORDANCE must be bounded the same way — otherwise zooming
+                // the map to a distant sharer wrongly lights the control (#1039, "wave
+                // from Norway to Sweden"). This is the user's OWN published live marker
+                // while sharing, regardless of convoy (the wave serves standalone
+                // nearby sharing too); null when not sharing, so with no authoritative
+                // origin nobody is wave-eligible.
+                //
+                // In a convoy, `ownLiveMarker` above ALREADY observes exactly this RTDB
+                // path, so we reuse it rather than open a second observeLatest(uid)
+                // listener on the same data. The dedicated stream below therefore only
+                // subscribes for STANDALONE sharing (no convoy — where ownLiveMarker is
+                // convoy-gated to null); it stays cold while a convoy is active.
+                val waveStandalonePositionFlow: Flow<LiveMarker?> =
+                    remember(liveLocationRepository, isSharing, activeConvoy?.convoyId, uid) {
+                        if (liveLocationRepository != null &&
+                            isSharing &&
+                            activeConvoy == null &&
+                            uid.isNotBlank()
+                        ) {
+                            liveLocationRepository.observeLatest(uid)
+                        } else {
+                            flowOf(null)
+                        }
+                    }
+                val waveStandalonePosition by waveStandalonePositionFlow.collectAsState(initial = null)
+                val waveOwnPosition = if (activeConvoy != null) ownLiveMarker else waveStandalonePosition
+                // The GATE's range roster: the FULL nearby-discovery set (up to
+                // listNearby's 200), but bounded to members within wave range of YOUR
+                // OWN position — not the map camera. This matches the server's
+                // potential wave-recipient set far more closely than the 50-capped
+                // drawn markers, so "already waved this visit" covers everyone the wave
+                // could actually reach; and filtering by own position (not the camera)
+                // keeps the gate in agreement with the visible control below. Convoy
+                // members and self are excluded exactly as the chip roster excludes
+                // them. Residual bound: still capped at 200, so beyond 200 in-range
+                // sharers the client and server fan-out can diverge.
+                val waveEligibleDiscoveryUids =
+                    remember(nearbySeeds, convoyLiveUids, uid, waveOwnPosition?.latitude, waveOwnPosition?.longitude) {
+                        val convoySet = convoyLiveUids.toSet()
+                        WavePresence.waveEligibleSessionsInRange(
+                            waveOwnPosition?.latitude,
+                            waveOwnPosition?.longitude,
+                            nearbySeeds,
+                        )
+                            .map { it.uid }
+                            .filter { it.isNotBlank() && it != uid && it !in convoySet }
+                            .distinct()
+                    }
+                LaunchedEffect(waveEligibleDiscoveryUids) {
+                    waveRangeGate.onRangeSet(waveEligibleDiscoveryUids)
                     waveGateVersion++
                 }
-                // Visibility still keys on the DRAWN markers (what actually shows
-                // chips): the count of drawn drivers still waveable this visit. Keyed
-                // on both that roster AND the gate version so it recomputes when a
-                // marker enters/leaves OR a wave marks the discovery set as done — the
+                // Visibility keys on the DRAWN markers (what actually shows chips),
+                // themselves filtered to those within wave range of your OWN position:
+                // the chips keep drawing every nearby sharer wherever you pan, but the
+                // wave control only counts drivers you could actually reach. Keyed on
+                // both that roster AND the gate version so it recomputes when a marker
+                // enters/leaves range OR a wave marks the discovery set as done — the
                 // Compose-observable read that drives the control's visibility.
-                val drawnMarkerUids = remember(nearbyLiveMarkers) { nearbyLiveMarkers.map { it.uid } }
+                val waveEligibleMarkers =
+                    remember(nearbyLiveMarkers, waveOwnPosition?.latitude, waveOwnPosition?.longitude) {
+                        WavePresence.waveEligibleInRange(
+                            waveOwnPosition?.latitude,
+                            waveOwnPosition?.longitude,
+                            nearbyLiveMarkers,
+                        )
+                    }
+                val drawnMarkerUids = remember(waveEligibleMarkers) { waveEligibleMarkers.map { it.uid } }
                 val waveableInRangeCount =
                     remember(drawnMarkerUids, waveGateVersion) {
                         waveRangeGate.waveableCount(drawnMarkerUids)
@@ -5651,19 +5703,19 @@ fun AuthenticatedApp(
                     onWaveTap@{
                         val repo = waveRepository ?: return@onWaveTap
                         val clientId = UUID.randomUUID().toString().replace("-", "")
-                        // A TAP-TIME client-side snapshot of the in-range discovery
-                        // roster — a best-effort LOCAL approximation of who the wave
-                        // will reach, used only to decide what to mark waved. The
-                        // SERVER computes the real recipients from its OWN geo-query at
-                        // execution time and may deliver to a different set, so this is
-                        // not a guarantee of who was actually waved. The range gate is
-                        // committed only if the server ACCEPTS the wave (Sent, below); a
-                        // RateLimited/Failed/NotSharing reply never marks anyone, so a
-                        // rejected send never wrongly hides the control for people who
-                        // were not really waved. If a driver leaves range before the
-                        // async result, onRangeSet reconciles the gate on the next
-                        // roster change.
-                        val wavedSnapshot = nearbyDiscoveryUids
+                        // A TAP-TIME client-side snapshot of the discovery roster
+                        // within wave range of your OWN position — a best-effort LOCAL
+                        // approximation of who the wave will reach, used only to decide
+                        // what to mark waved. The SERVER computes the real recipients
+                        // from its OWN geo-query at execution time and may deliver to a
+                        // different set, so this is not a guarantee of who was actually
+                        // waved. The range gate is committed only if the server ACCEPTS
+                        // the wave (Sent, below); a RateLimited/Failed/NotSharing reply
+                        // never marks anyone, so a rejected send never wrongly hides the
+                        // control for people who were not really waved. If a driver
+                        // leaves range before the async result, onRangeSet reconciles
+                        // the gate on the next roster change.
+                        val wavedSnapshot = waveEligibleDiscoveryUids
                         waveCooldownUntilMs = WavePresence.cooldownUntil(System.currentTimeMillis())
                         waveOverlayEvent =
                             ReactionOverlayEvent(
