@@ -25,12 +25,17 @@ struct TranslucentShellPanel<Content: View>: View {
     var body: some View {
         GeometryReader { proxy in
             VStack(spacing: 0) {
+                // The outside-tap dismiss target. Hidden from the
+                // accessibility tree — an invisible control would only
+                // confuse VoiceOver focus order; assistive tech dismisses via
+                // the standard escape action on the card below instead
+                // (mirroring Android's semantics-based dismiss).
                 Button(action: onDismiss) {
                     Color.clear
                         .contentShape(Rectangle())
                 }
                 .frame(height: proxy.size.height * (1 - Self.cardHeightFraction))
-                .accessibilityLabel(Text("shell.panelDismiss"))
+                .accessibilityHidden(true)
 
                 content()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -41,6 +46,9 @@ struct TranslucentShellPanel<Content: View>: View {
                             topTrailingRadius: KccRadius.lg
                         )
                     )
+                    // The standard VoiceOver dismiss (two-finger scrub) —
+                    // the accessible counterpart of the outside tap.
+                    .accessibilityAction(.escape, onDismiss)
             }
         }
     }
