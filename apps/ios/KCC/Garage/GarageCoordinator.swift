@@ -131,8 +131,12 @@ final class GarageCoordinator {
     }
 
     /// Returns ``saveStatus`` to idle — called when the add form opens or
-    /// dismisses its error notice (Android's `reset()`).
+    /// dismisses its error notice (Android's `reset()`). A SAVING status is
+    /// deliberately not resettable: re-opening the form while a save is
+    /// still in flight (the sheet can be swipe-dismissed mid-save) must not
+    /// defeat the re-entrancy guard and let a second add start concurrently.
     func resetSaveStatus() {
+        guard saveStatus != .saving else { return }
         saveStatus = .idle
     }
 

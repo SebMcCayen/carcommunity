@@ -465,8 +465,11 @@ struct CataloguePickerSheet: View {
         NavigationStack {
             List {
                 let filtered = VehicleCatalogue.filter(options, query: query)
-                // Only the pinned Other row surviving means nothing matched.
-                if filtered.allSatisfy(\.isOther) {
+                // Only the pinned Other row surviving a NON-EMPTY query means
+                // nothing matched. With no query the hint would be wrong for
+                // a picker whose only legitimate row IS the Other bucket
+                // (the model picker under an "Other" manufacturer).
+                if !query.isEmpty, filtered.allSatisfy(\.isOther) {
                     Text("garage.pickerNoMatches")
                         .font(.system(size: KccTypeScale.bodySm))
                         .foregroundStyle(.secondary)

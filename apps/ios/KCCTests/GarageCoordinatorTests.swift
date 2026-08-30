@@ -431,6 +431,31 @@ final class GarageCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.saveStatus, .idle)
     }
 
+    /// Re-opening the form mid-save (the sheet can be swipe-dismissed while
+    /// a save is in flight) resets the status — but never OUT of saving,
+    /// which would defeat the re-entrancy guard and let a second add start
+    /// concurrently.
+    @MainActor
+    func testResetSaveStatusNeverInterruptsAnInFlightSave() async {
+        let repository = FakeVehiclesRepository()
+        repository.holdNextAdd()
+        let coordinator = GarageCoordinator(repository: repository, uid: Self.uid)
+
+        let inFlight = Task { await coordinator.addVehicle(Self.input) }
+        await wait { coordinator.saveStatus == .saving }
+
+        coordinator.resetSaveStatus()
+        XCTAssertEqual(coordinator.saveStatus, .saving)
+
+        let second = await coordinator.addVehicle(Self.input)
+        XCTAssertNil(second)
+        XCTAssertEqual(repository.addCount, 1)
+
+        repository.releaseAddGate()
+        _ = await inFlight.value
+        XCTAssertEqual(coordinator.saveStatus, .saved)
+    }
+
     // MARK: - cover photo resolution
 
     @MainActor
