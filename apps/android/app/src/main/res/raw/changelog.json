@@ -2,6 +2,17 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 49,
+      "versionName": "0.8.38",
+      "releaseDate": "2026-08-30",
+      "highlights": [
+        "Hantera ditt medlemskap direkt från appen"
+      ],
+      "changes": [
+        "Medlemskap: öppna appbutiken från medlemssidan för att ändra eller avsluta ditt aktiva Plus- eller Supporter-medlemskap"
+      ]
+    },
+    {
       "versionCode": 48,
       "versionName": "0.8.37",
       "releaseDate": "2026-08-29",
