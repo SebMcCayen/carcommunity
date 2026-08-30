@@ -136,6 +136,23 @@ final class LiveLocationModelsTests: XCTestCase {
         )
     }
 
+    func testFixFasterThanMinUpdateIntervalIsThrottledEvenWithMovement() {
+        // ~110 m of movement, but only 1 s after the last submit — under the
+        // 2 s min-update floor. CoreLocation can deliver above 1 Hz, so the
+        // floor is enforced in the throttle (Android caps it in the fused
+        // request instead).
+        XCTAssertFalse(
+            LiveShareCadence.shouldPublish(
+                lastSubmittedAt: now.addingTimeInterval(-1),
+                lastSubmittedLatitude: 57.5,
+                lastSubmittedLongitude: 12.1,
+                latitude: 57.501,
+                longitude: 12.1,
+                now: now
+            )
+        )
+    }
+
     func testStationaryHeartbeatPublishes() {
         // No movement at all, but the 3 min heartbeat has elapsed.
         XCTAssertTrue(

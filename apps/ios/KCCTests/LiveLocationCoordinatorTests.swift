@@ -358,6 +358,9 @@ final class LiveLocationCoordinatorTests: XCTestCase {
             await Task.yield()
         }
 
+        // Enough wall-clock passes for the min-update floor before the
+        // network unblocks.
+        clock.advance(by: 5)
         repository.releasePublishes()
 
         await waitUntil { repository.publishedCoordinates.count == 2 }

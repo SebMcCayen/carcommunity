@@ -176,7 +176,14 @@ enum LiveShareCadence {
     /// Whether a freshly received fix is worth publishing, given the last one
     /// we SUBMITTED (recorded at dispatch, not on backend confirmation — see
     /// Android's `shouldPublish` for why). Movement OR the stationary
-    /// heartbeat qualifies; the first fix of a session always does.
+    /// heartbeat qualifies; the first fix of a session always does; and
+    /// nothing publishes faster than ``minUpdateInterval``.
+    ///
+    /// The min-interval floor is enforced HERE on iOS, unlike Android's
+    /// `shouldPublish`: the fused request there caps delivery itself
+    /// (`setMinUpdateIntervalMillis`), while CoreLocation offers no such
+    /// knob and can deliver well above 1 Hz — without this gate a moving
+    /// device would publish at whatever rate fixes arrive.
     static func shouldPublish(
         lastSubmittedAt: Date?,
         lastSubmittedLatitude: Double?,
@@ -190,6 +197,7 @@ enum LiveShareCadence {
             let lastSubmittedLatitude,
             let lastSubmittedLongitude
         else { return true }
+        if now.timeIntervalSince(lastSubmittedAt) < minUpdateInterval { return false }
         if now.timeIntervalSince(lastSubmittedAt) >= stationaryHeartbeat { return true }
         let moved = distanceMeters(
             lat1: lastSubmittedLatitude,
