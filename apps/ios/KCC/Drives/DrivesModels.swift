@@ -204,12 +204,16 @@ enum DriveFormatters {
         guard let distanceMeters, distanceMeters.isFinite, distanceMeters >= 0 else {
             return missingValue
         }
-        // Round FIRST, then choose the unit on the rounded metres, so a value
-        // just under 1 km (e.g. 999.6) that rounds to 1000 renders "1.0 km"
-        // rather than the contradictory "1000 m".
-        let meters = Int(distanceMeters.rounded())
-        if meters < 1000 {
-            return "\(meters) m"
+        // The Int conversion is gated behind < 1 km, so a corrupted-but-finite
+        // large value (e.g. 1e300) skips it entirely and takes the km path
+        // (Double %.1f, no Int) instead of trapping on overflow. Within range,
+        // round to metres and re-check: a value just under 1 km (999.6) that
+        // rounds to 1000 falls through to "1.0 km" rather than "1000 m".
+        if distanceMeters < 1000 {
+            let meters = Int(distanceMeters.rounded())
+            if meters < 1000 {
+                return "\(meters) m"
+            }
         }
         return String(format: "%.1f km", locale: Locale(identifier: "en_US_POSIX"),
                       distanceMeters / 1000)

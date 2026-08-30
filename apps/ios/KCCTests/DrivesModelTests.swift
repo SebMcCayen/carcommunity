@@ -218,6 +218,9 @@ final class DrivesModelTests: XCTestCase {
         // Locale-stable: always the dot decimal separator, like Android's
         // Locale.ROOT format.
         XCTAssertEqual(DriveFormatters.formatDistance(1_000), "1.0 km")
+        // A corrupted-but-finite value must not trap on the Int conversion —
+        // it takes the km path (Double), never the metres Int conversion.
+        XCTAssertTrue(DriveFormatters.formatDistance(1e300).hasSuffix(" km"))
     }
 
     func testFormatDuration() {
