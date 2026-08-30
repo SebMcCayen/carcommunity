@@ -25,6 +25,9 @@ final class GarageCoordinatorTests: XCTestCase {
         /// True when release raced ahead of the gated call parking itself —
         /// the next park then resumes immediately instead of hanging.
         private var addGateReleased = false
+        private var imageGate: CheckedContinuation<Void, Never>?
+        private var imageGateArmed = false
+        private var imageGateReleased = false
         private(set) var subscribeCount = 0
         private(set) var observedUids: [String] = []
         private(set) var addCount = 0
@@ -138,14 +141,58 @@ final class GarageCoordinatorTests: XCTestCase {
         }
 
         func imageDownloadURL(for imagePath: String) async -> URL? {
-            resolveSynchronized(imagePath)
+            let gated = beginImageResolve()
+            if gated {
+                await withCheckedContinuation { continuation in
+                    parkOrResumeImage(continuation)
+                }
+            }
+            return lookupImageURL(imagePath)
         }
 
-        private func resolveSynchronized(_ imagePath: String) -> URL? {
+        /// Counts the attempt and consumes the gate arming, synchronously.
+        private func beginImageResolve() -> Bool {
             lock.lock()
             defer { lock.unlock() }
             imageResolveCount += 1
+            let gated = imageGateArmed
+            imageGateArmed = false
+            return gated
+        }
+
+        private func lookupImageURL(_ imagePath: String) -> URL? {
+            lock.lock()
+            defer { lock.unlock() }
             return imageURLs[imagePath]
+        }
+
+        private func parkOrResumeImage(_ continuation: CheckedContinuation<Void, Never>) {
+            lock.lock()
+            if imageGateReleased {
+                imageGateReleased = false
+                lock.unlock()
+                continuation.resume()
+            } else {
+                imageGate = continuation
+                lock.unlock()
+            }
+        }
+
+        /// Arms the gate: the NEXT imageDownloadURL call suspends until
+        /// ``releaseImageGate()`` — for pinning in-flight-resolution edges.
+        func holdNextImageResolve() {
+            lock.lock()
+            imageGateArmed = true
+            lock.unlock()
+        }
+
+        func releaseImageGate() {
+            lock.lock()
+            let gate = imageGate
+            imageGate = nil
+            if gate == nil { imageGateReleased = true }
+            lock.unlock()
+            gate?.resume()
         }
     }
 
@@ -427,6 +474,33 @@ final class GarageCoordinatorTests: XCTestCase {
         repository.emit(.loaded(vehicles))
         await wait { coordinator.state == .loaded(vehicles) }
         await Task.yield()
+        XCTAssertEqual(repository.imageResolveCount, 1)
+    }
+
+    @MainActor
+    func testReloadWhileAResolutionIsInFlightDoesNotDuplicateIt() async {
+        let repository = FakeVehiclesRepository()
+        let path = "vehicleImages/uid-1/vehicle-a/cover.jpg"
+        let url = URL(string: "https://example.test/cover.jpg")!
+        repository.scriptImageURL(url, for: path)
+        repository.holdNextImageResolve()
+        let vehicles = [Self.vehicle("a", imagePath: path)]
+        repository.script([.loaded(vehicles)])
+        let coordinator = GarageCoordinator(repository: repository, uid: Self.uid)
+
+        coordinator.start()
+        await wait { repository.imageResolveCount == 1 }
+
+        // Reload while the first resolution is still parked: the in-flight
+        // path must stay in the attempted set, so the re-subscribed snapshot
+        // must NOT start a second downloadURL() for the same path.
+        coordinator.reload()
+        await wait { coordinator.state == .loaded(vehicles) }
+        await Task.yield()
+        XCTAssertEqual(repository.imageResolveCount, 1)
+
+        repository.releaseImageGate()
+        await wait { coordinator.imageURLs[path] == url }
         XCTAssertEqual(repository.imageResolveCount, 1)
     }
 

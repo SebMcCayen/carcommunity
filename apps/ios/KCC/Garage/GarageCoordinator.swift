@@ -140,8 +140,10 @@ final class GarageCoordinator {
         subscription?.cancel()
         state = .loading
         // Retry FAILED photo resolutions on the explicit re-subscribe (the
-        // retry affordance); successful URLs stay cached.
-        attemptedImagePaths = Set(imageURLs.keys)
+        // retry affordance); successful URLs stay cached, and paths still IN
+        // FLIGHT stay attempted so a quick reload never starts a duplicate
+        // downloadURL() for the same path.
+        attemptedImagePaths = Set(imageURLs.keys).union(imageResolutions.keys)
         // The stream is created HERE, not inside the task, so the listener is
         // attached synchronously — reload() has re-subscribed by the time it
         // returns (see EventsCoordinator.subscribe).
