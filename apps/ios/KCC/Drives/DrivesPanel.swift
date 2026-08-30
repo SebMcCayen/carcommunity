@@ -222,7 +222,13 @@ struct DriveHistoryCard: View {
         }
         .frame(width: Self.photoDiameter, height: Self.photoDiameter)
         .clipShape(Circle())
-        .accessibilityLabel(Text("savedDrives.carPhotoDescription"))
+        // Decorative: the card's text already carries every fact about the
+        // drive, so a per-card VoiceOver stop on the photo would only add a
+        // repetitive extra swipe (the same posture as the shell's hidden
+        // dismiss layer). The savedDrives.carPhotoDescription label returns
+        // when the photo becomes an interactive affordance (the detail
+        // slice).
+        .accessibilityHidden(true)
     }
 
     private var carPhotoPlaceholder: some View {
