@@ -43,6 +43,8 @@ final class LiveLocationCoordinatorTests: XCTestCase {
         var uid: String? = "uid-1"
         /// When set, the next command throws it (then clears).
         var nextError: Error?
+        private var holdPublishes = false
+        private var publishGates: [CheckedContinuation<Void, Never>] = []
 
         /// Pushes a session to every LIVE subscription (a later RTDB frame).
         func emitSession(_ session: LiveSessionInfo?) {
@@ -83,6 +85,33 @@ final class LiveLocationCoordinatorTests: XCTestCase {
         func updatePosition(_ coordinate: LiveCoordinate) async throws {
             if let error = takeErrorSynchronized() { throw error }
             recordSynchronized { publishedCoordinates.append(coordinate) }
+            // Simulated slow network: park the publish until released, so
+            // tests can pile fixes up behind an in-flight call.
+            let shouldHold: Bool = {
+                lock.lock()
+                defer { lock.unlock() }
+                return holdPublishes
+            }()
+            if shouldHold {
+                await withCheckedContinuation { continuation in
+                    recordSynchronized { publishGates.append(continuation) }
+                }
+            }
+        }
+
+        /// Makes every future publish block until ``releasePublishes()``.
+        func setHoldPublishes(_ hold: Bool) {
+            recordSynchronized { holdPublishes = hold }
+        }
+
+        /// Resumes every parked publish and stops holding new ones.
+        func releasePublishes() {
+            lock.lock()
+            let gates = publishGates
+            publishGates = []
+            holdPublishes = false
+            lock.unlock()
+            for gate in gates { gate.resume() }
         }
 
         func stopSession() async throws {
@@ -306,6 +335,37 @@ final class LiveLocationCoordinatorTests: XCTestCase {
 
         await waitUntil { provider.activeFixStreamCount == 0 }
         XCTAssertTrue(repository.publishedCoordinates.isEmpty)
+    }
+
+    @MainActor
+    func testSlowPublishKeepsOnlyTheNewestPendingFix() async {
+        let repository = FakeLiveLocationRepository()
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = makeCoordinator(repository: repository, provider: provider)
+        coordinator.start()
+        repository.emitSession(activeSession())
+        await waitUntil { provider.activeFixStreamCount == 1 }
+
+        // First fix publishes and then hangs on the (simulated) network.
+        repository.setHoldPublishes(true)
+        provider.emitFix(fix(latitude: 57.5, longitude: 12.1))
+        await waitUntil { repository.publishedCoordinates.count == 1 }
+
+        // A burst of qualifying fixes lands while the call is in flight:
+        // the bounded relay must keep only the NEWEST, not a backlog.
+        for step in 1...4 {
+            provider.emitFix(fix(latitude: 57.5 + Double(step) * 0.001, longitude: 12.1))
+            await Task.yield()
+        }
+
+        repository.releasePublishes()
+
+        await waitUntil { repository.publishedCoordinates.count == 2 }
+        XCTAssertEqual(repository.publishedCoordinates.last?.latitude ?? 0, 57.504, accuracy: 1e-9)
+        // The dropped intermediates never publish.
+        await Task.yield()
+        await Task.yield()
+        XCTAssertEqual(repository.publishedCoordinates.count, 2)
     }
 
     @MainActor

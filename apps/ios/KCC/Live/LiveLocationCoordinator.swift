@@ -103,6 +103,8 @@ final class LiveLocationCoordinator {
     @ObservationIgnored
     nonisolated(unsafe) private var publishTask: Task<Void, Never>?
     @ObservationIgnored
+    nonisolated(unsafe) private var fixDrainTask: Task<Void, Never>?
+    @ObservationIgnored
     nonisolated(unsafe) private var expiryWatchdog: Task<Void, Never>?
     /// One watchdog tick — sleeps ``LiveShareCadence/expiryTick`` in
     /// production; injected so tests can tick instantly.
@@ -149,6 +151,7 @@ final class LiveLocationCoordinator {
     deinit {
         sessionSubscription?.cancel()
         publishTask?.cancel()
+        fixDrainTask?.cancel()
         expiryWatchdog?.cancel()
     }
 
@@ -227,7 +230,27 @@ final class LiveLocationCoordinator {
     private func beginPublishingIfNeeded() {
         guard publishTask == nil, let repository else { return }
         beginExpiryWatchdog()
-        let stream = provider.fixes()
+        // Bounded relay between the provider stream and the publish loop.
+        // `updatePosition` awaits the network, and the provider's stream
+        // buffers without bound — so while a slow call is in flight, fixes
+        // would otherwise pile up in memory for as long as the network
+        // stays slow. Only the NEWEST pending fix is worth publishing (an
+        // old queued position is exactly what the staleness contract
+        // rejects), so the relay keeps one and drops the rest. The drain
+        // task never awaits anything but the stream itself, so provider
+        // teardown on stop/expiry stays prompt even mid-publish.
+        let (relay, relayContinuation) = AsyncStream<LocationFix>.makeStream(
+            bufferingPolicy: .bufferingNewest(1)
+        )
+        let providerStream = provider.fixes()
+        fixDrainTask = Task {
+            for await fix in providerStream {
+                if Task.isCancelled { break }
+                relayContinuation.yield(fix)
+            }
+            relayContinuation.finish()
+        }
+        let stream = relay
         let clock = now
         publishTask = Task { [weak self] in
             // Last SUBMITTED sample — recorded at dispatch, not on backend
@@ -289,6 +312,11 @@ final class LiveLocationCoordinator {
     }
 
     private func endPublishing() {
+        // The drain task's cancellation is what terminates the provider
+        // stream (and with it the GPS demand) — immediately, even while the
+        // publish loop is awaiting a slow network call.
+        fixDrainTask?.cancel()
+        fixDrainTask = nil
         publishTask?.cancel()
         publishTask = nil
         expiryWatchdog?.cancel()
