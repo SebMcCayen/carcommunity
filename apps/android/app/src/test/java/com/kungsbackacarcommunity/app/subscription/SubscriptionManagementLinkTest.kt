@@ -23,4 +23,12 @@ class SubscriptionManagementLinkTest {
             SubscriptionManagementLink.webUri(applicationId, SUPPORTER_MONTHLY_PRODUCT_ID),
         )
     }
+
+    @Test
+    fun `unknown product opens the generic subscriptions center`() {
+        assertEquals(
+            "https://play.google.com/store/account/subscriptions",
+            SubscriptionManagementLink.webUri(applicationId, null),
+        )
+    }
 }

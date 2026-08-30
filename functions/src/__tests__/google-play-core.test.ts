@@ -88,6 +88,7 @@ describe('Google Play subscription verification core', () => {
       startsAt: new Date('2026-08-01T12:00:00Z'),
       expiresAt: new Date('2026-09-29T12:00:00Z'),
       acknowledgementRequired: true,
+      linkedPurchaseTokenHash: null,
     });
   });
 
@@ -106,6 +107,17 @@ describe('Google Play subscription verification core', () => {
       entitlement: 'member_monthly',
       acknowledgementRequired: false,
     });
+  });
+
+  it('hashes Play linkedPurchaseToken for an authenticated plan replacement', () => {
+    const parsed = parseGooglePlaySubscription(
+      response({ linkedPurchaseToken: 'old-purchase-token' }),
+      ACCOUNT_ID,
+      NOW,
+    );
+    expect(parsed.linkedPurchaseTokenHash).toBe(
+      'b2ce3e8f065eb7f07d885380b7ab4b7b8b1fd9726fdb552a13947696d2695b54',
+    );
   });
 
   it.each([
@@ -256,6 +268,12 @@ describe('Google Play purchase token ownership', () => {
     ).toThrow(PurchaseTokenOwnershipError);
   });
 
+  it('permits a Play-verified deferred product transition for the same UID and token', () => {
+    expect(
+      validateTokenOwnership({ ...expected, productId: 'supporter_monthly' }, expected, true),
+    ).toBe('update_product');
+  });
+
   it.each([
     {},
     { uid: 123, productId: 'plus_monthly' },
@@ -282,6 +300,7 @@ describe('Google Play purchase token ownership', () => {
           expiresAt: new Date('2026-09-01T00:00:00Z'),
         },
         'a'.repeat(64),
+        null,
         NOW,
       ),
     ).not.toThrow();
@@ -296,6 +315,7 @@ describe('Google Play purchase token ownership', () => {
           expiresAt: new Date('2026-09-01T00:00:00Z'),
         },
         'b'.repeat(64),
+        null,
         NOW,
       );
       throw new Error('Expected a different-active-token conflict.');
@@ -303,6 +323,36 @@ describe('Google Play purchase token ownership', () => {
       expect(error).toBeInstanceOf(PurchaseTokenOwnershipError);
       expect((error as PurchaseTokenOwnershipError).reason).toBe('different_active_token');
     }
+  });
+
+  it('permits a new token only when Play links it to the current active token', () => {
+    expect(() =>
+      assertNoDifferentActiveToken(
+        {
+          grantsAccess: true,
+          purchaseTokenHash: 'a'.repeat(64),
+          expiresAt: new Date('2026-09-01T00:00:00Z'),
+        },
+        'b'.repeat(64),
+        'a'.repeat(64),
+        NOW,
+      ),
+    ).not.toThrow();
+  });
+
+  it('does not treat missing manual and linked token hashes as a replacement match', () => {
+    expect(() =>
+      assertNoDifferentActiveToken(
+        {
+          grantsAccess: true,
+          purchaseTokenHash: null,
+          expiresAt: new Date('2026-09-01T00:00:00Z'),
+        },
+        'b'.repeat(64),
+        null,
+        NOW,
+      ),
+    ).toThrow(PurchaseTokenOwnershipError);
   });
 
   it('permits a replacement after the current token no longer grants paid access', () => {
@@ -318,7 +368,7 @@ describe('Google Play purchase token ownership', () => {
         expiresAt: new Date('2026-08-29T11:59:59Z'),
       },
     ]) {
-      expect(() => assertNoDifferentActiveToken(current, 'b'.repeat(64), NOW)).not.toThrow();
+      expect(() => assertNoDifferentActiveToken(current, 'b'.repeat(64), null, NOW)).not.toThrow();
     }
   });
 });

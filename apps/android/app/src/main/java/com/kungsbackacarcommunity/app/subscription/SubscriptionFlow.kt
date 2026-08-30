@@ -81,6 +81,15 @@ fun preferredPurchaseForReconciliation(purchases: List<OwnedPurchase>): OwnedPur
             .thenBy { PLUS_MONTHLY_PRODUCT_ID in it.productIds },
     )
 
+/** Resolves the one supported tier product from a Play purchase. */
+fun productIdForOwnedPurchase(purchase: OwnedPurchase?): String? =
+    when {
+        purchase == null -> null
+        SUPPORTER_MONTHLY_PRODUCT_ID in purchase.productIds -> SUPPORTER_MONTHLY_PRODUCT_ID
+        PLUS_MONTHLY_PRODUCT_ID in purchase.productIds -> PLUS_MONTHLY_PRODUCT_ID
+        else -> null
+    }
+
 /** Why a purchase flow failed, so the UI can pick the right localized copy. */
 enum class PurchaseFailureReason {
     /** The billing client could not connect to the store. */

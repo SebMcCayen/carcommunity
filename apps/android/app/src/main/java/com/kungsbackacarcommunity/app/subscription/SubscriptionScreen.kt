@@ -29,33 +29,33 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
 @Composable
 fun SubscriptionScreen(
     isActiveMember: Boolean,
+    currentTier: String?,
     status: PurchaseFlowStatus,
     canSubscribe: Boolean,
+    canChangePlan: Boolean,
     onSubscribe: (String) -> Unit,
-    onManageSubscription: (String) -> Unit,
+    onManageSubscription: (String?) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val verifiedTier = (status as? PurchaseFlowStatus.Success)?.tier
-    val hasVerifiedPaidTier = status is PurchaseFlowStatus.Success
-    val verifiedProductId =
-        when (verifiedTier) {
+    val paidTier = currentTier?.takeIf { it == "plus" || it == "supporter" }
+    val hasPaidMembership = isActiveMember || paidTier != null
+    val currentProductId =
+        when (paidTier) {
             "plus" -> PLUS_MONTHLY_PRODUCT_ID
             "supporter" -> SUPPORTER_MONTHLY_PRODUCT_ID
             else -> null
         }
 
-    // This first Play slice supports one effective product at a time. Plan
-    // changes stay disabled until Play SubscriptionUpdateParams and backend
-    // multi-token effective-tier recomputation land together.
     val canStartNewPurchase =
-        canSubscribe && !isActiveMember && !hasVerifiedPaidTier && !PurchaseFlow.isInFlight(status)
+        canSubscribe &&
+            !PurchaseFlow.isInFlight(status) &&
+            (!hasPaidMembership || canChangePlan)
 
     val currentEntitlement =
         when {
-            verifiedTier == "supporter" -> R.string.subscription_currentEntitlementSupporter
-            verifiedTier == "plus" -> R.string.subscription_currentEntitlementPlus
-            hasVerifiedPaidTier -> R.string.subscription_currentEntitlementMember
+            paidTier == "supporter" -> R.string.subscription_currentEntitlementSupporter
+            paidTier == "plus" -> R.string.subscription_currentEntitlementPlus
             isActiveMember -> R.string.subscription_currentEntitlementMember
             else -> R.string.subscription_currentEntitlementFree
         }
@@ -82,9 +82,9 @@ fun SubscriptionScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (verifiedProductId != null) {
+                    if (hasPaidMembership) {
                         OutlinedButton(
-                            onClick = { onManageSubscription(verifiedProductId) },
+                            onClick = { onManageSubscription(currentProductId) },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text(text = stringResource(R.string.subscription_manageAction))
@@ -95,22 +95,43 @@ fun SubscriptionScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    if (canChangePlan) {
+                        Text(
+                            text = stringResource(R.string.subscription_changePlanBody),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
 
             SubscriptionPlanCard(
                 title = stringResource(R.string.subscription_plusTitle),
                 body = stringResource(R.string.subscription_plusBody),
-                action = stringResource(R.string.subscription_subscribePlusAction),
-                enabled = canStartNewPurchase,
+                action =
+                    stringResource(
+                        when (paidTier) {
+                            "plus" -> R.string.subscription_currentPlanAction
+                            "supporter" -> R.string.subscription_downgradePlusAction
+                            else -> R.string.subscription_subscribePlusAction
+                        },
+                    ),
+                enabled = canStartNewPurchase && paidTier != "plus",
                 onClick = { onSubscribe(PLUS_MONTHLY_PRODUCT_ID) },
             )
 
             SubscriptionPlanCard(
                 title = stringResource(R.string.subscription_supporterTitle),
                 body = stringResource(R.string.subscription_supporterBody),
-                action = stringResource(R.string.subscription_subscribeSupporterAction),
-                enabled = canStartNewPurchase,
+                action =
+                    stringResource(
+                        when (paidTier) {
+                            "supporter" -> R.string.subscription_currentPlanAction
+                            "plus" -> R.string.subscription_upgradeSupporterAction
+                            else -> R.string.subscription_subscribeSupporterAction
+                        },
+                    ),
+                enabled = canStartNewPurchase && paidTier != "supporter",
                 onClick = { onSubscribe(SUPPORTER_MONTHLY_PRODUCT_ID) },
             )
 
@@ -207,8 +228,10 @@ private fun SubscriptionScreenPreview() {
     KccTheme {
         SubscriptionScreen(
             isActiveMember = false,
+            currentTier = null,
             status = PurchaseFlowStatus.Idle,
             canSubscribe = true,
+            canChangePlan = false,
             onSubscribe = {},
             onManageSubscription = {},
             onBack = {},

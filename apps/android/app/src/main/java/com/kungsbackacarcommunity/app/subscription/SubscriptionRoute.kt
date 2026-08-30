@@ -30,6 +30,7 @@ import kotlinx.coroutines.launch
 fun SubscriptionRoute(
     billing: BillingRepository,
     verifier: SubscriptionVerifier?,
+    stateRepository: SubscriptionStateRepository?,
     uid: String,
     isActiveMember: Boolean,
     onBack: () -> Unit,
@@ -40,8 +41,31 @@ fun SubscriptionRoute(
         stringResource(R.string.subscription_manageUnavailable)
     val coordinator = remember(billing, verifier) { SubscriptionCoordinator(billing, verifier) }
     val status by coordinator.status.collectAsState()
+    val ownedPurchase by coordinator.ownedPurchase.collectAsState()
+    val subscriptionFlow =
+        remember(stateRepository, uid) {
+            stateRepository?.observeSubscription(uid) ?: kotlinx.coroutines.flow.flowOf(null)
+        }
+    val storedSubscription by subscriptionFlow.collectAsState(initial = null)
     val scope = rememberCoroutineScope()
     val obfuscatedAccountId = remember(uid) { obfuscatedAccountIdForUid(uid) }
+    val verifiedTier = (status as? PurchaseFlowStatus.Success)?.tier
+    val currentTier = verifiedTier ?: storedSubscription?.takeIf { it.grantsAccess }?.tier
+    val ownedProductId = productIdForOwnedPurchase(ownedPurchase)
+    val currentProductId =
+        when (currentTier) {
+            "plus" -> PLUS_MONTHLY_PRODUCT_ID
+            "supporter" -> SUPPORTER_MONTHLY_PRODUCT_ID
+            else -> storedSubscription?.googleProductId
+        }
+    // A replacement must point at the actual Play-owned current product. A
+    // deferred downgrade can temporarily report a target purchase while the
+    // backend correctly retains Supporter; block another change in that window.
+    val canChangePlan =
+        status is PurchaseFlowStatus.Success &&
+        ownedPurchase?.state == OwnedPurchaseState.Purchased &&
+            ownedProductId != null &&
+            ownedProductId == currentProductId
 
     // Restore/reconcile on every route entry. Play owns the purchase history;
     // no raw token is persisted locally, and reinstall/renewal needs no checkout.
@@ -49,13 +73,34 @@ fun SubscriptionRoute(
 
     SubscriptionScreen(
         isActiveMember = isActiveMember,
+        currentTier = currentTier,
         status = status,
         canSubscribe = activity != null && verifier != null,
+        canChangePlan = canChangePlan,
         onSubscribe = { productId ->
             activity?.let { a ->
                 scope.launch {
+                    val replacement =
+                        ownedPurchase
+                            ?.takeIf {
+                                it.state == OwnedPurchaseState.Purchased &&
+                                    ownedProductId != null &&
+                                    ownedProductId != productId &&
+                                    ownedProductId == currentProductId
+                            }
+                            ?.let {
+                                SubscriptionReplacement(
+                                    oldPurchaseToken = it.purchaseToken,
+                                    oldProductId = requireNotNull(ownedProductId),
+                                )
+                            }
                     coordinator.subscribe(productId) {
-                        billing.launchPurchase(a, productId, obfuscatedAccountId)
+                        billing.launchPurchase(
+                            a,
+                            productId,
+                            obfuscatedAccountId,
+                            replacement,
+                        )
                     }
                 }
             }
