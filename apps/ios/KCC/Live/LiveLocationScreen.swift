@@ -53,9 +53,15 @@ struct LiveLocationScreen: View {
                     .font(.system(size: KccTypeScale.headingLg, weight: .semibold))
                     .padding(.top, KccSpacing.s2)
 
-                // Current sharing status.
-                Text(sharing ? "liveLocation.statusSharing" : "liveLocation.statusNotSharing")
-                    .font(.system(size: KccTypeScale.titleMd, weight: .medium))
+                // Current sharing status. The ternary picks the KEY (typed
+                // explicitly): a bare string ternary would infer String and
+                // bypass localization.
+                Text(
+                    sharing
+                        ? LocalizedStringKey("liveLocation.statusSharing")
+                        : LocalizedStringKey("liveLocation.statusNotSharing")
+                )
+                .font(.system(size: KccTypeScale.titleMd, weight: .medium))
                 if sharing {
                     Text("liveLocation.sessionAutoExpires")
                         .font(.system(size: KccTypeScale.bodySm))

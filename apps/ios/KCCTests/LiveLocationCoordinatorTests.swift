@@ -54,41 +54,45 @@ final class LiveLocationCoordinatorTests: XCTestCase {
             }
         }
 
-        private func takeError() throws {
+        // NSLock is unavailable directly in async contexts; every async
+        // entry point hops through a synchronous helper so the critical
+        // section never suspends (the ProfileCoordinatorTests pattern).
+
+        private func takeErrorSynchronized() -> Error? {
             lock.lock()
+            defer { lock.unlock() }
             let error = nextError
             nextError = nil
+            return error
+        }
+
+        private func recordSynchronized(_ mutate: () -> Void) {
+            lock.lock()
+            mutate()
             lock.unlock()
-            if let error { throw error }
         }
 
         func startSession(duration: LiveSessionDuration, vehicleId: String?) async throws {
-            try takeError()
-            lock.lock()
-            startedDurations.append(duration)
-            startedVehicleIds.append(vehicleId)
-            lock.unlock()
+            if let error = takeErrorSynchronized() { throw error }
+            recordSynchronized {
+                startedDurations.append(duration)
+                startedVehicleIds.append(vehicleId)
+            }
         }
 
         func updatePosition(_ coordinate: LiveCoordinate) async throws {
-            try takeError()
-            lock.lock()
-            publishedCoordinates.append(coordinate)
-            lock.unlock()
+            if let error = takeErrorSynchronized() { throw error }
+            recordSynchronized { publishedCoordinates.append(coordinate) }
         }
 
         func stopSession() async throws {
-            try takeError()
-            lock.lock()
-            stopCount += 1
-            lock.unlock()
+            if let error = takeErrorSynchronized() { throw error }
+            recordSynchronized { stopCount += 1 }
         }
 
         func hideMeNow() async throws {
-            try takeError()
-            lock.lock()
-            hideCount += 1
-            lock.unlock()
+            if let error = takeErrorSynchronized() { throw error }
+            recordSynchronized { hideCount += 1 }
         }
 
         func ownSessionUpdates(uid: String) -> AsyncStream<LiveSessionInfo?> {
