@@ -167,6 +167,13 @@ final class CoreLocationProvider: NSObject, LocationProvider {
     }
 
     private func deliver(_ fixes: [LocationFix]) {
+        // A revocation and an in-flight didUpdateLocations callback can
+        // race: stopUpdatingLocation() is issued on the authorization change,
+        // but a callback already queued behind the hop still lands here.
+        // The protocol promises an unauthorized stream yields NOTHING, so
+        // the gate is re-checked at delivery — same rule the stub enforces
+        // in emitFix.
+        guard authorization.isAuthorized else { return }
         for fix in fixes {
             for sink in fixContinuations.values {
                 sink.yield(fix)
