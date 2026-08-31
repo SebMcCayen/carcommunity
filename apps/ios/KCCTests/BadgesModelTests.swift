@@ -136,6 +136,22 @@ final class BadgesModelTests: XCTestCase {
         XCTAssertNil(counters.bestDayStreak)
     }
 
+    func testProgressParserRejectsOutOfRangeFiniteDoubleWithoutTrapping() {
+        // A finite Double outside Int64's range TRAPS on a bare `Int64(_:)`
+        // conversion; the parser must degrade to nil instead of crashing on a
+        // malformed/unexpected payload.
+        let counters = BadgeProgressResponseParser.parse([
+            "crownsCollected": 1.0e30,
+            "lifetimeDistanceMeters": -1.0e30,
+            "verifiedEventsAttended": Double(Int64.max),
+        ])
+        XCTAssertNil(counters.crownsCollected)
+        XCTAssertNil(counters.lifetimeDistanceMeters)
+        // Double(Int64.max) rounds UP to 2^63 (not exactly representable),
+        // which is one past Int64's range — must also read as nil, not trap.
+        XCTAssertNil(counters.verifiedEventsAttended)
+    }
+
     func testObservedValueMapsEachLadderToItsCounter() {
         let counters = BadgeCounters(
             crownsCollected: 1,

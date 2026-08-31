@@ -82,7 +82,15 @@ enum BadgeProgressResponseParser {
         if CFGetTypeID(number) == CFBooleanGetTypeID() { return nil }
         let asDouble = number.doubleValue
         guard asDouble.isFinite else { return nil }
-        let floored = Int64(asDouble.rounded(.down))
-        return floored >= 0 ? floored : nil
+        let floored = asDouble.rounded(.down)
+        // `Int64(Double)` TRAPS for a value outside Int64's range — an
+        // unexpected/malformed payload must degrade to "no counter", never
+        // crash the app. Double.exactBitPattern precision means the true
+        // Int64.max is not exactly representable as a Double, so the upper
+        // bound is written as the nearest representable Double at/above it
+        // (2^63) rather than `Double(Int64.max)`, which would itself round up
+        // to that same value and admit a floored double one past the max.
+        guard floored >= 0, floored < 9_223_372_036_854_775_808.0 else { return nil }
+        return Int64(floored)
     }
 }
