@@ -41,7 +41,7 @@ struct PerkShopScreen: View {
                 CrownHuntMessageState(
                     title: "crownHunt.tabShop",
                     message: "crownHunt.shopError",
-                    retry: { coordinator.start() }
+                    retry: { coordinator.reload() }
                 )
             }
         } else {

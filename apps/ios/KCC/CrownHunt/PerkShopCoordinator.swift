@@ -94,11 +94,40 @@ final class PerkShopCoordinator {
         perksEnabled && repository != nil && uid != nil && passesMemberGate
     }
 
-    /// Begins the reads on first appearance. Idempotent.
+    /// Begins the reads on first appearance. Idempotent: a second call while
+    /// already started is a no-op. `started` is set only once the gate passes
+    /// — a call while the shop is off/ungated leaves the coordinator able to
+    /// start for real on a later call (e.g. once the flags/uid it was built
+    /// with turn out to allow it), and never latches into "started" without
+    /// having subscribed anything.
     func start() {
         guard !started else { return }
+        guard isShopEnabled else {
+            state = .unavailable
+            return
+        }
         started = true
-        guard isShopEnabled, let repository, let uid else {
+        subscribe()
+    }
+
+    /// Tears down any current subscriptions and re-subscribes from scratch —
+    /// the shop's "try again" affordance, mirroring the other coordinators'
+    /// `reload()`. Unlike ``start()`` this always re-checks the gate, so a
+    /// retry tap after a failed read is never a no-op.
+    func reload() {
+        guard isShopEnabled else {
+            state = .unavailable
+            return
+        }
+        started = true
+        subscribe()
+    }
+
+    private func subscribe() {
+        catalogTask?.cancel()
+        inventoryTask?.cancel()
+        balanceTask?.cancel()
+        guard let repository, let uid else {
             state = .unavailable
             return
         }

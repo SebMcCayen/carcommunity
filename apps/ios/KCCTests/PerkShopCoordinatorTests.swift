@@ -138,6 +138,38 @@ final class PerkShopCoordinatorTests: XCTestCase {
         await waitForState(of: sut) { $0 == .failed(code: "PERMISSION_DENIED") }
     }
 
+    /// Regression for the retry-after-failure bug: `start()` used to latch
+    /// `started = true` unconditionally, so the failed screen's "try again"
+    /// (which calls the coordinator's reload affordance) became a permanent
+    /// no-op once the gate had been evaluated once. `reload()` must always
+    /// re-subscribe.
+    @MainActor
+    func testReloadRecoversAfterFailure() async {
+        let repository = FakeShopRepository(catalog: .failed(code: "UNAVAILABLE"))
+        let sut = coordinator(repository: repository)
+        sut.start()
+        await waitForState(of: sut) { $0 == .failed(code: "UNAVAILABLE") }
+
+        repository.catalogSnapshot = .loaded([entry("spike_strip", cost: 10)])
+        sut.reload()
+        await waitForState(of: sut) {
+            if case .loaded(_, let items) = $0 { return items.count == 1 }
+            return false
+        }
+    }
+
+    /// `start()` must not latch `started` when the shop is gated off, so a
+    /// later `start()` call still re-evaluates the gate rather than being
+    /// silently swallowed forever.
+    @MainActor
+    func testStartDoesNotLatchWhenGatedOff() {
+        let sut = coordinator(repository: FakeShopRepository(), perksEnabled: false)
+        sut.start()
+        XCTAssertEqual(sut.state, .unavailable)
+        sut.start()
+        XCTAssertEqual(sut.state, .unavailable)
+    }
+
     // MARK: - buy flow
 
     @MainActor

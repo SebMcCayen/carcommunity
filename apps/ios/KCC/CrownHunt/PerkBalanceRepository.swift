@@ -2,8 +2,10 @@ import Foundation
 
 /// The member's own Crown-Point balance, for the shop's affordability hint —
 /// the iOS port of the balance half of Android's `PointsRepository`
-/// (`observeBalance`). A single owner-scoped read of `pointsLedger/{uid}.balance`
-/// (readable by id — firestore.rules `allow get: if isAuthenticated()`).
+/// (`observeBalance`). A single read of `pointsLedger/{uid}.balance` by
+/// document id — NOT owner-only: firestore.rules grants `get` on this
+/// document to any authenticated user (only the append-only `/entries`
+/// subcollection underneath it is owner-scoped).
 ///
 /// Firebase-free protocol so the shop coordinator is testable with a fake. The
 /// balance is a DISPLAY hint only: the server re-checks it on every buy and

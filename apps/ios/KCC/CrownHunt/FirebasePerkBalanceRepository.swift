@@ -2,14 +2,15 @@ import FirebaseCore
 import FirebaseFirestore
 import Foundation
 
-/// ``PerkBalanceRepository`` backed by an owner-scoped listener on
-/// `pointsLedger/{uid}.balance` — the iOS port of the balance half of Android's
+/// ``PerkBalanceRepository`` backed by a listener on `pointsLedger/{uid}.balance`
+/// — the iOS port of the balance half of Android's
 /// `FirebasePointsRepository.observeBalance`.
 ///
-/// A single-document read by id (firestore.rules `allow get: if
-/// isAuthenticated()` on `pointsLedger/{uid}`; the append-only entries stay
-/// owner-only). Keeps the last-known balance on a transient error rather than
-/// emitting nil (which would misrender as 0 CP). Construction is guarded
+/// A single-document read by id — NOT owner-scoped: firestore.rules grants
+/// `get` on `pointsLedger/{uid}` to any authenticated user (only the
+/// append-only `/entries` subcollection underneath it stays owner-only).
+/// Keeps the last-known balance on a transient error rather than emitting nil
+/// (which would misrender as 0 CP). Construction is guarded
 /// (``createIfAvailable()`` returns nil without Firebase).
 final class FirebasePerkBalanceRepository: PerkBalanceRepository, @unchecked Sendable {
     private let firestore: Firestore
