@@ -120,6 +120,10 @@ final class NotificationsInboxCoordinator {
     /// unavailable.
     func reload() {
         guard repository != nil, uid != nil else { return }
+        // The explicit "try again" affordance must also retry the seen-marker:
+        // reset the dedupe key so the next loaded snapshot re-stamps even when
+        // the newest id is unchanged and the prior markSeen failed.
+        lastSeenMarkerNotificationId = nil
         subscribe()
     }
 

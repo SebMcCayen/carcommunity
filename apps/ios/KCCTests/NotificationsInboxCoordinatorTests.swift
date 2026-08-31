@@ -219,6 +219,23 @@ final class NotificationsInboxCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testReloadReStampsTheSeenMarker() async {
+        // reload() is the explicit "try again" — it must reset the dedupe key
+        // so the seen-marker re-fires even when the newest id is unchanged
+        // (retrying a prior failed markSeen).
+        let repository = FakeNotificationsRepository()
+        repository.script([.loaded([Self.item("a")])])
+        let coordinator = NotificationsInboxCoordinator(repository: repository, uid: "me-uid")
+
+        coordinator.start()
+        await waitFor(coordinator) { _ in repository.markSeenCount == 1 }
+
+        repository.script([.loaded([Self.item("a")])])
+        coordinator.reload()
+        await waitFor(coordinator) { _ in repository.markSeenCount == 2 }
+    }
+
+    @MainActor
     func testSeenMarkerDoesNotFireForAnEmptyInbox() async {
         let repository = FakeNotificationsRepository()
         repository.script([.loaded([])])
