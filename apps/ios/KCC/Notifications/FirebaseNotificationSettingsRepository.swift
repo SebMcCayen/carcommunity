@@ -82,9 +82,15 @@ final class FirebaseNotificationSettingsRepository: NotificationSettingsReposito
         defer { cachedLock.unlock() }
         if let cached { return cached }
         let firestore = Firestore.firestore()
+        // The host check makes a second application of the SAME emulator
+        // settings a no-op instead of mutating settings after Firestore has
+        // already started (`Firestore.firestore()` is a shared singleton, and
+        // other repositories' `createIfAvailable()` factories apply the same
+        // settings) — the same guard `FirebaseVehiclesRepository` /
+        // `FirebaseUserProfileRepository` use.
         if let emulator = FirebaseEmulatorHost.parse(
             ProcessInfo.processInfo.environment["FIREBASE_FIRESTORE_EMULATOR_HOST"]
-        ) {
+        ), firestore.settings.host != "\(emulator.host):\(emulator.port)" {
             firestore.useEmulator(withHost: emulator.host, port: emulator.port)
         }
         let repository = FirebaseNotificationSettingsRepository(firestore: firestore)

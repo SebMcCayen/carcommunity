@@ -184,9 +184,15 @@ final class FirebaseNotificationsRepository: NotificationsRepository, @unchecked
         defer { cachedLock.unlock() }
         if let cached { return cached }
         let firestore = Firestore.firestore()
+        // The host check makes a second application of the SAME emulator
+        // settings a no-op instead of mutating settings after Firestore has
+        // already started (`Firestore.firestore()` is a shared singleton, and
+        // other repositories' `createIfAvailable()` factories apply the same
+        // settings) — the same guard `FirebaseVehiclesRepository` /
+        // `FirebaseUserProfileRepository` use.
         if let emulator = FirebaseEmulatorHost.parse(
             ProcessInfo.processInfo.environment["FIREBASE_FIRESTORE_EMULATOR_HOST"]
-        ) {
+        ), firestore.settings.host != "\(emulator.host):\(emulator.port)" {
             firestore.useEmulator(withHost: emulator.host, port: emulator.port)
         }
         let repository = FirebaseNotificationsRepository(firestore: firestore, functions: functions)
@@ -204,19 +210,43 @@ private struct ListenerBox: @unchecked Sendable {
 }
 
 /// Holds the two ``FirebaseNotificationsRepository/unread(uid:)`` listeners'
-/// last values and registrations. Firestore delivers listener callbacks
-/// serially on the main queue, so the unguarded mutation is single-threaded;
-/// `@unchecked Sendable` only crosses the registrations into the Sendable
-/// `onTermination` closure, whose sole job is removing them (thread-safe).
+/// last values and registrations.
+///
+/// Firestore does not GUARANTEE both listeners deliver on the same queue, so
+/// `newest`/`lastSeen` are lock-protected rather than assumed
+/// single-threaded — each is its own critical section, which is sufficient
+/// here: a caller reads BOTH via ``FirebaseNotificationsRepository/unread(uid:)``'s
+/// `emit()`, and a torn read (one field one callback behind the other)
+/// self-heals on the very next emission from whichever listener fired.
 private final class UnreadListenerBox: @unchecked Sendable {
-    var newest: Date?
-    var lastSeen: Date?
-    var registrations: [ListenerRegistration] = []
+    private let lock = NSLock()
+    private var storedNewest: Date?
+    private var storedLastSeen: Date?
+    private var storedRegistrations: [ListenerRegistration] = []
+
+    var newest: Date? {
+        get { lock.withLock { storedNewest } }
+        set { lock.withLock { storedNewest = newValue } }
+    }
+
+    var lastSeen: Date? {
+        get { lock.withLock { storedLastSeen } }
+        set { lock.withLock { storedLastSeen = newValue } }
+    }
+
+    var registrations: [ListenerRegistration] {
+        get { lock.withLock { storedRegistrations } }
+        set { lock.withLock { storedRegistrations = newValue } }
+    }
 
     func removeAll() {
+        let registrations = lock.withLock { () -> [ListenerRegistration] in
+            let current = storedRegistrations
+            storedRegistrations = []
+            return current
+        }
         for registration in registrations {
             registration.remove()
         }
-        registrations = []
     }
 }
