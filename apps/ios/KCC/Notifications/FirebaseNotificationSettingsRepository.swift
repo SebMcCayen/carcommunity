@@ -24,13 +24,20 @@ final class FirebaseNotificationSettingsRepository: NotificationSettingsReposito
         let document = firestore.collection(Self.userPrivateCollection).document(uid)
         return AsyncStream { continuation in
             let registration = document.addSnapshotListener { snapshot, error in
-                if error != nil {
-                    // Absent doc / transient error → render defaults (all
-                    // enabled), Android's `observePreferences` fallback.
+                // A listener error can arrive WITH a usable cached snapshot; in
+                // that case decode the snapshot rather than flip the UI back to
+                // "all enabled", so a transient error never makes a user's
+                // saved opt-outs appear cleared. Fall back to defaults (all
+                // enabled — Android's `observePreferences` fallback) only when
+                // there is no snapshot at all.
+                // NOTE: Android's observePreferences resets to defaults on any
+                // error; this is the more robust behavior and Android should
+                // follow (cross-platform follow-up).
+                guard let snapshot else {
                     continuation.yield(.loaded(.allEnabled))
                     return
                 }
-                let raw = snapshot?.get(Self.preferencesField) as? [String: Any]
+                let raw = snapshot.get(Self.preferencesField) as? [String: Any]
                 continuation.yield(.loaded(NotificationPreferences.fromFirestore(raw)))
             }
             let box = ListenerBox(registration: registration)
