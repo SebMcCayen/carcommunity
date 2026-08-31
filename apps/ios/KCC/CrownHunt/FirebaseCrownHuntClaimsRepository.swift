@@ -54,12 +54,17 @@ final class FirebaseCrownHuntClaimsRepository: CrownHuntClaimsRepository, @unche
         let claimedAt =
             (document.get(claimedAtField) as? Timestamp)?.dateValue()
             ?? (document.get(createdAtField) as? Timestamp)?.dateValue()
+        // Only an `.awarded` row ever carries points — enforced here, not just
+        // documented, so a stray/legacy field on a non-awarded doc can never
+        // surface as points earned for a failed attempt.
+        let pointsAwarded =
+            result == .awarded ? (document.get(pointsAwardedField) as? NSNumber)?.intValue : nil
         return CrownHuntClaim(
             id: document.documentID,
             pointId: document.get(pointIdField) as? String ?? "",
             result: result,
             claimedAt: claimedAt,
-            pointsAwarded: (document.get(pointsAwardedField) as? NSNumber)?.intValue
+            pointsAwarded: pointsAwarded
         )
     }
 
