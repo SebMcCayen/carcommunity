@@ -147,8 +147,10 @@ final class NotificationsInboxCoordinator {
     /// until the next open (Android's `markSeen` on the inbox route).
     private func markSeen() {
         guard let repository else { return }
-        Task { [weak self] in
-            _ = self
+        // No `self` capture needed: `repository` is already unwrapped into a
+        // local, so the task cannot extend the coordinator's lifetime either
+        // way.
+        Task {
             try? await repository.markSeen()
         }
     }
