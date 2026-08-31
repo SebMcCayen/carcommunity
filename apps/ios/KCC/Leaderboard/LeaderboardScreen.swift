@@ -12,7 +12,7 @@ import SwiftUI
 /// PICKER and shows one at a time (the coordinator owns the selection), so the
 /// small phone screen shows a full podium rather than a cramped stack. The
 /// `streak` category exists only on the all-time board — ``availableCategories``
-/// enforces that, so the monthly picker simply carries four options, not five.
+/// enforces that, so the monthly picker simply carries five options, not six.
 ///
 /// A dumb switch over ``LeaderboardUiState``: all decisions live in the pure
 /// ``LeaderboardCoordinator``. The `coordinator` is nil in a config-less build
@@ -116,7 +116,7 @@ private struct ScopeToggle: View {
     }
 }
 
-/// The category picker — a menu of the scope's categories (four or five), so a
+/// The category picker — a menu of the scope's categories (five or six), so a
 /// short list of long Swedish labels ("Ledda konvojer") stays legible where a
 /// segmented control would truncate.
 private struct CategoryPicker: View {
