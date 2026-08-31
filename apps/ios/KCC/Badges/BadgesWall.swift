@@ -292,7 +292,7 @@ private struct BadgeMedallionTile: View {
     private var accessibilityLabel: String {
         let key = earned ? "badgeShowcase.medallionEarned" : "badgeShowcase.medallionLocked"
         let spoken = tier == nil ? label : "\(ladderName) \(label)"
-        let base = String(format: String(localized: String.LocalizationValue(key)), spoken)
+        let base = String.localizedStringWithFormat(String(localized: String.LocalizationValue(key)), spoken)
         guard earned, let awardedAt else { return base }
         // `badgeShowcase.medallionEarned` already reads "…, unlocked"; append
         // just the formatted date, not `BadgeText.awardedOn`'s own "Unlocked
@@ -352,29 +352,29 @@ enum BadgeText {
         // The catalog string is `%1$lld of %2$lld unlocked` (a 64-bit format
         // specifier); pass Int64 explicitly rather than relying on Int's
         // CVarArg encoding to happen to match on every current ABI.
-        String(format: template("badgeShowcase.subtitle"), Int64(earned), Int64(total))
+        String.localizedStringWithFormat(template("badgeShowcase.subtitle"), Int64(earned), Int64(total))
     }
 
     /// `Next: %1$@`.
     static func nextTier(tierName: String) -> String {
-        String(format: template("badgeShowcase.nextTier"), tierName)
+        String.localizedStringWithFormat(template("badgeShowcase.nextTier"), tierName)
     }
 
     /// `%1$@ / %2$@`.
     static func progressCount(current: String, target: String) -> String {
-        String(format: template("badgeShowcase.progressCount"), current, target)
+        String.localizedStringWithFormat(template("badgeShowcase.progressCount"), current, target)
     }
 
     /// The ladder's requirement sentence with its single threshold.
     static func ladderRequirement(_ id: BadgeLadderId, threshold: String) -> String {
-        String(format: template(BadgeStrings.ladderRequirementKey(id)), threshold)
+        String.localizedStringWithFormat(template(BadgeStrings.ladderRequirementKey(id)), threshold)
     }
 
     /// `Unlocked <date>` — the award's date, medium style, in the current
     /// locale.
     static func awardedOn(date: Date) -> String {
         let formatted = date.formatted(date: .abbreviated, time: .omitted)
-        return String(format: template("badgeShowcase.awardedOn"), formatted)
+        return String.localizedStringWithFormat(template("badgeShowcase.awardedOn"), formatted)
     }
 
     private static func template(_ key: String) -> String {
