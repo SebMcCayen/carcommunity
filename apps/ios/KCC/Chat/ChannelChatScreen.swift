@@ -156,13 +156,17 @@ struct ChannelChatScreen: View {
                 .background(KccPalette.softSand.opacity(0.4))
                 .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
             Button {
-                coordinator.send(draft)
-                draft = ""
+                // Only clear the draft when something was actually sent — a
+                // signed-out caller (no currentUserId) has send(_:) ignored and
+                // must not silently lose their draft.
+                if coordinator.send(draft) != nil {
+                    draft = ""
+                }
             } label: {
                 Text("chat.sendButton")
                     .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
             }
-            .disabled(!ChannelThread.isSendable(draft))
+            .disabled(!ChannelThread.isSendable(draft) || coordinator.currentUserId == nil)
         }
         .padding(KccSpacing.s3)
     }

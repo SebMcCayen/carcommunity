@@ -18,8 +18,9 @@ protocol ChannelChatSource: Sendable {
 }
 
 /// Adapts a ``CommunityChatRepository`` to ``ChannelChatSource``. The @-mention
-/// picker is a later slice, so posts carry an empty accepted set for now
-/// (mentions still decode/highlight from delivered messages).
+/// picker is a later slice, so posts carry an empty accepted set for now (a
+/// delivered message's ``ChannelMessage/mentionedUids`` still decodes; there is
+/// no UI highlighting of it yet).
 struct CommunityChatSource: ChannelChatSource {
     let repository: CommunityChatRepository
 
@@ -177,18 +178,20 @@ final class ChannelChatCoordinator {
     /// delivers the real document (whose id equals the bubble's clientId) and the
     /// bubble is reconciled away; on failure the bubble flips to
     /// ``ChannelDeliveryState/failed`` carrying the reason. A draft outside
-    /// 1...``channelMessageMaxLength`` is ignored. Returns the clientId used, or
-    /// nil when nothing was sent (for tests/callers that want to await it).
+    /// 1...``channelMessageMaxLength`` is ignored, and so is a signed-out caller
+    /// (posting would fail server-side anyway, and there is no uid to author an
+    /// optimistic bubble with). Returns the clientId used, or nil when nothing
+    /// was sent (for tests/callers that want to await it).
     @discardableResult
     func send(_ text: String) -> String? {
-        guard ChannelThread.isSendable(text) else { return nil }
+        guard ChannelThread.isSendable(text), let currentUserId else { return nil }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let clientId = UUID().uuidString
         let replyId = chatRepliesEnabled ? replyTarget?.id : nil
         let replySnapshot = chatRepliesEnabled ? replyTarget.map(Self.optimisticReply(to:)) : nil
         let bubble = ChannelMessage(
             id: clientId,
-            senderUid: currentUserId ?? "",
+            senderUid: currentUserId,
             text: trimmed,
             createdAt: Date(),
             createdAtIso: nil,

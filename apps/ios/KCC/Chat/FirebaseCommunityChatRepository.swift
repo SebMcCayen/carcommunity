@@ -59,11 +59,14 @@ final class FirebaseCommunityChatRepository: CommunityChatRepository, @unchecked
         replyToMessageId: String?
     ) async -> ChannelSendResult {
         // `mentionedUids` is optional in the contract, so omit it entirely when
-        // empty; dedup + cap here as well as in any composer so no client state
-        // reaches the server's one hard reject (> MAX_MESSAGE_MENTIONS).
+        // empty; drop blanks, dedup, and cap here as well as in any composer so
+        // no client state reaches the server's rejects (an empty uid, or more
+        // than MAX_MESSAGE_MENTIONS).
         var payload: [String: Any] = ["text": text.trimmingCharacters(in: .whitespacesAndNewlines)]
         var seen = Set<String>()
-        let uids = mentionedUids.filter { seen.insert($0).inserted }.prefix(channelMaxMessageMentions)
+        let uids = mentionedUids
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+            .prefix(channelMaxMessageMentions)
         if !uids.isEmpty { payload["mentionedUids"] = Array(uids) }
         if let clientId { payload["clientId"] = clientId }
         if let replyToMessageId { payload["replyToMessageId"] = replyToMessageId }

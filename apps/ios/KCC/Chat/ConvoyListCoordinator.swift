@@ -14,9 +14,10 @@ enum ConvoyListUiState: Equatable, Sendable {
 
 /// Loads and groups the caller's chat-eligible convoys for the Convoys tab —
 /// the iOS counterpart of Android's `ConvoyListRoute` wiring. A one-shot load
-/// (not a listener): `convoy-list` is a callable, so this refreshes on appear
-/// and on explicit retry rather than streaming. Pure Swift so it is testable
-/// with a fake ``ConvoyChatRepository``.
+/// (not a listener): `convoy-list` is a callable, so this loads on first
+/// appearance (``start()`` is idempotent — a later re-appearance does not
+/// re-fetch) and on explicit ``reload()`` rather than streaming. Pure Swift so
+/// it is testable with a fake ``ConvoyChatRepository``.
 @MainActor
 @Observable
 final class ConvoyListCoordinator {

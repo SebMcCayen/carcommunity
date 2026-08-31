@@ -150,6 +150,19 @@ final class ChannelChatCoordinatorTests: XCTestCase {
         XCTAssertTrue(coordinator.messages.isEmpty)
     }
 
+    /// A signed-out caller (no uid) must not produce an optimistic bubble —
+    /// there is no uid to author it with, and the post would fail server-side
+    /// anyway. Regression for a review finding: send(_:) used to fall back to
+    /// an empty senderUid instead of refusing to send.
+    @MainActor
+    func testSendIgnoredWhenSignedOut() {
+        let source = FakeChatSource(uid: nil)
+        let coordinator = ChannelChatCoordinator(source: source)
+        XCTAssertNil(coordinator.send("hello"))
+        XCTAssertTrue(coordinator.messages.isEmpty)
+        XCTAssertTrue(source.postedTexts.isEmpty)
+    }
+
     @MainActor
     func testSentBubbleReconciledAwayByDeliveredDocument() async {
         let source = FakeChatSource()
