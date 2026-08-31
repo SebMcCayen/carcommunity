@@ -84,9 +84,10 @@ enum ChatFirestore {
 /// `combine(observeRawMessages(), blockVisibility.observeHiddenUids())`.
 ///
 /// Listener error handling mirrors Android exactly:
-/// - `PERMISSION_DENIED`: hard-clear to `.loaded([])` even over a cached
-///   snapshot (denied history is never shown; a first-load deny leaves loading
-///   for empty).
+/// - `PERMISSION_DENIED`: hard-clear to `.loaded([])` and emit it immediately,
+///   even over a cached snapshot or on a first load with none yet — denied
+///   history is never shown, and the coordinator's initial loading ends with
+///   an empty (not a stuck) state.
 /// - transient error WITH a cached snapshot: emit the cached messages.
 /// - transient error with NO cached data: emit nothing (stay in the
 ///   coordinator's initial loading) so offline never misrenders as "no
