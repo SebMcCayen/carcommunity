@@ -39,6 +39,7 @@ struct ChatHubScreen: View {
                 } label: {
                     VStack(spacing: KccSpacing.s1) {
                         Image(systemName: Self.icon(for: tab))
+                            .accessibilityHidden(true)  // decorative — the label text below already names the tab
                         Text(Self.label(for: tab))
                             .font(.system(size: KccTypeScale.caption))
                     }
