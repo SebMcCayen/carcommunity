@@ -1,5 +1,109 @@
 import Foundation
 
+/// The subscription tier that may grant product capabilities RIGHT NOW.
+///
+/// This is deliberately derived from the owner-readable
+/// `subscriptions/{uid}` document rather than from StoreKit state or a local
+/// purchase cache. The backend remains authoritative; this projection only
+/// keeps the iOS Garage affordance honest with the limit enforced by
+/// `garage-addVehicle`.
+enum EffectiveSubscriptionTier: String, Equatable, Sendable {
+    case community
+    case plus
+    case supporter
+
+    var garageVehicleLimit: Int {
+        switch self {
+        case .community: 2
+        case .plus: 5
+        case .supporter: 10
+        }
+    }
+}
+
+/// Safe, token-free projection of the authoritative subscription document.
+/// Raw purchase data never crosses this boundary.
+struct StoredSubscription: Equatable, Sendable {
+    let tier: String?
+    let status: String
+    let entitlement: String
+    let userId: String?
+
+    /// Missing legacy tiers on an otherwise active paid record are Plus.
+    /// Inactive lifecycle states and retained historical paid tiers never
+    /// grant a paid capability.
+    var effectiveTier: EffectiveSubscriptionTier {
+        guard entitlement == "member_monthly",
+            Self.accessGrantingStatuses.contains(status)
+        else { return .community }
+
+        switch tier {
+        case nil, "plus": return .plus
+        case "supporter": return .supporter
+        default: return .community
+        }
+    }
+
+    /// Defensive Firestore projection matching the backend resolver. A
+    /// malformed or cross-user record is rejected instead of inventing paid
+    /// access; callers then fall back to Community.
+    static func fromMap(_ map: [String: Any], expectedUserId: String) -> StoredSubscription? {
+        guard let status = map["status"] as? String,
+            knownStatuses.contains(status),
+            let entitlement = map["entitlement"] as? String,
+            knownEntitlements.contains(entitlement)
+        else { return nil }
+
+        let userId: String?
+        if let rawUserId = map["userId"], !(rawUserId is NSNull) {
+            guard let value = rawUserId as? String, value == expectedUserId else { return nil }
+            userId = value
+        } else {
+            // Legacy records predate the explicit userId field. The document
+            // path and owner-only rules still bind the read to this account.
+            userId = nil
+        }
+
+        let tier: String?
+        if let rawTier = map["tier"], !(rawTier is NSNull) {
+            guard let value = rawTier as? String, knownTiers.contains(value) else { return nil }
+            tier = value
+        } else {
+            tier = nil
+        }
+
+        // `member_monthly` can only represent a paid tier. A historical
+        // revoked document may retain Plus/Supporter with entitlement none,
+        // which effectiveTier correctly projects back to Community.
+        if entitlement == "member_monthly", tier == "community" { return nil }
+
+        return StoredSubscription(
+            tier: tier,
+            status: status,
+            entitlement: entitlement,
+            userId: userId
+        )
+    }
+
+    private static let knownTiers: Set<String> = ["community", "plus", "supporter"]
+    private static let knownStatuses: Set<String> = [
+        "inactive", "active", "grace_period", "expired", "revoked", "cancelled",
+    ]
+    private static let accessGrantingStatuses: Set<String> = [
+        "active", "grace_period", "cancelled",
+    ]
+    private static let knownEntitlements: Set<String> = ["none", "member_monthly"]
+}
+
+/// Pure presentation/business mirror of the backend add allowance. It gates
+/// ONLY creation: existing vehicles remain visible and manageable after a
+/// downgrade, even when `vehicleCount` is already above the new limit.
+enum GarageAllowance {
+    static func canAddVehicle(vehicleCount: Int, tier: EffectiveSubscriptionTier) -> Bool {
+        vehicleCount < tier.garageVehicleLimit
+    }
+}
+
 /// Garage / vehicles domain + validation — the iOS port of Android's
 /// `garage/Vehicle.kt`, restricted to the list + add slice.
 ///

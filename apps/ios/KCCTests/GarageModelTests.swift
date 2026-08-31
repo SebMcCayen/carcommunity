@@ -8,6 +8,113 @@ import XCTest
 /// list sort. Pure Swift — no Firebase.
 final class GarageModelTests: XCTestCase {
 
+    // MARK: - subscription-tier garage allowance
+
+    private func subscriptionMap(
+        userId: Any? = "uid-1",
+        tier: Any? = "plus",
+        status: Any = "active",
+        entitlement: Any = "member_monthly"
+    ) -> [String: Any] {
+        var map: [String: Any] = [
+            "status": status,
+            "entitlement": entitlement,
+        ]
+        if let userId { map["userId"] = userId }
+        if let tier { map["tier"] = tier }
+        return map
+    }
+
+    func testGarageLimitsMatchCommunityPlusAndSupporterContract() {
+        XCTAssertEqual(EffectiveSubscriptionTier.community.garageVehicleLimit, 2)
+        XCTAssertEqual(EffectiveSubscriptionTier.plus.garageVehicleLimit, 5)
+        XCTAssertEqual(EffectiveSubscriptionTier.supporter.garageVehicleLimit, 10)
+    }
+
+    func testActivePaidTiersAndLegacyMissingTierResolveAuthoritatively() {
+        let plus = StoredSubscription.fromMap(
+            subscriptionMap(tier: "plus"), expectedUserId: "uid-1"
+        )
+        let supporter = StoredSubscription.fromMap(
+            subscriptionMap(tier: "supporter"), expectedUserId: "uid-1"
+        )
+        let legacy = StoredSubscription.fromMap(
+            subscriptionMap(tier: nil), expectedUserId: "uid-1"
+        )
+
+        XCTAssertEqual(plus?.effectiveTier, .plus)
+        XCTAssertEqual(supporter?.effectiveTier, .supporter)
+        XCTAssertEqual(legacy?.effectiveTier, .plus)
+    }
+
+    func testInactiveExpiredRevokedAndMissingSubscriptionResolveToCommunity() {
+        for status in ["inactive", "expired", "revoked"] {
+            let stored = StoredSubscription.fromMap(
+                subscriptionMap(tier: "supporter", status: status),
+                expectedUserId: "uid-1"
+            )
+            XCTAssertEqual(stored?.effectiveTier, .community)
+        }
+
+        let missing: StoredSubscription? = nil
+        XCTAssertEqual(missing?.effectiveTier ?? .community, .community)
+    }
+
+    func testGraceAndCancelledPaidPeriodsStillGrantTheirTier() {
+        for status in ["grace_period", "cancelled"] {
+            let stored = StoredSubscription.fromMap(
+                subscriptionMap(tier: "supporter", status: status),
+                expectedUserId: "uid-1"
+            )
+            XCTAssertEqual(stored?.effectiveTier, .supporter)
+        }
+    }
+
+    func testRetainedPaidTierWithNoEntitlementResolvesToCommunity() {
+        let stored = StoredSubscription.fromMap(
+            subscriptionMap(tier: "supporter", status: "revoked", entitlement: "none"),
+            expectedUserId: "uid-1"
+        )
+        XCTAssertEqual(stored?.effectiveTier, .community)
+    }
+
+    func testMalformedOrCrossUserSubscriptionFailsClosed() {
+        XCTAssertNil(
+            StoredSubscription.fromMap(
+                subscriptionMap(userId: "somebody-else"), expectedUserId: "uid-1"
+            )
+        )
+        XCTAssertNil(
+            StoredSubscription.fromMap(
+                subscriptionMap(tier: "vip"), expectedUserId: "uid-1"
+            )
+        )
+        XCTAssertNil(
+            StoredSubscription.fromMap(
+                subscriptionMap(status: 7), expectedUserId: "uid-1"
+            )
+        )
+        XCTAssertNil(
+            StoredSubscription.fromMap(
+                subscriptionMap(tier: "community"), expectedUserId: "uid-1"
+            )
+        )
+    }
+
+    func testDowngradeOnlyBlocksNewAddsAndNeverFiltersExistingCount() {
+        XCTAssertTrue(
+            GarageAllowance.canAddVehicle(vehicleCount: 4, tier: .plus)
+        )
+        XCTAssertFalse(
+            GarageAllowance.canAddVehicle(vehicleCount: 5, tier: .plus)
+        )
+        // Six existing cars after a Supporter -> Plus downgrade remain six;
+        // the presentation rule only removes the Add affordance.
+        XCTAssertFalse(
+            GarageAllowance.canAddVehicle(vehicleCount: 6, tier: .plus)
+        )
+    }
+
     // MARK: - decoding
 
     private func fullDocument() -> [String: Any] {

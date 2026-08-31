@@ -42,13 +42,16 @@ enum VehicleSaveStatus: Equatable, Sendable {
 @Observable
 final class GarageCoordinator {
     private let repository: VehiclesRepository?
+    private let subscriptionRepository: SubscriptionStateRepository?
     private let uid: String?
     /// Live tasks. `nonisolated(unsafe)` so the nonisolated deinit can cancel
     /// them — every mutation happens on the main actor, and by the time
     /// deinit runs no other reference exists, so the unguarded access cannot
     /// race (same pattern as ``EventsCoordinator`` / ``ProfileCoordinator``).
     @ObservationIgnored
-    nonisolated(unsafe) private var subscription: Task<Void, Never>?
+    nonisolated(unsafe) private var vehicleSubscription: Task<Void, Never>?
+    @ObservationIgnored
+    nonisolated(unsafe) private var tierSubscription: Task<Void, Never>?
     @ObservationIgnored
     nonisolated(unsafe) private var imageResolutions: [String: Task<Void, Never>] = [:]
     /// Every path a resolution was ATTEMPTED for — the negative cache. A
@@ -61,6 +64,13 @@ final class GarageCoordinator {
 
     private(set) var state: GarageUiState
     private(set) var saveStatus: VehicleSaveStatus = .idle
+    /// Nil is intentionally Community: it covers first load, missing record,
+    /// listener failure, malformed data, and config-less builds.
+    private(set) var storedSubscription: StoredSubscription?
+    var effectiveSubscriptionTier: EffectiveSubscriptionTier {
+        storedSubscription?.effectiveTier ?? .community
+    }
+    var vehicleLimit: Int { effectiveSubscriptionTier.garageVehicleLimit }
     /// Resolved cover-photo URLs by Storage path. A path that failed to
     /// resolve is absent — its card keeps the placeholder (cosmetic, never an
     /// error state). Resolved at most once per path (success or failure), so
@@ -71,14 +81,21 @@ final class GarageCoordinator {
     ///   - repository: nil when Firebase is not configured in this build.
     ///   - uid: the signed-in member's uid; nil when there is no session
     ///     (the panel should not be reachable then, but never crash).
-    init(repository: VehiclesRepository?, uid: String?) {
+    init(
+        repository: VehiclesRepository?,
+        subscriptionRepository: SubscriptionStateRepository? = nil,
+        uid: String?
+    ) {
         self.repository = repository
+        self.subscriptionRepository = subscriptionRepository
         self.uid = uid
         self.state = (repository == nil || uid == nil) ? .unavailable : .loading
+        self.storedSubscription = nil
     }
 
     deinit {
-        subscription?.cancel()
+        vehicleSubscription?.cancel()
+        tierSubscription?.cancel()
         for task in imageResolutions.values {
             task.cancel()
         }
@@ -89,8 +106,8 @@ final class GarageCoordinator {
     /// subscription and its current state instead of flashing back to
     /// loading. No-op when unavailable.
     func start() {
-        guard subscription == nil, repository != nil, uid != nil else { return }
-        subscribe()
+        subscribeToVehiclesIfNeeded()
+        subscribeToTierIfNeeded()
     }
 
     /// The "try again" affordance — tears the current listener down, returns
@@ -98,7 +115,7 @@ final class GarageCoordinator {
     /// semantics as ``EventsCoordinator/reload()``). No-op when unavailable.
     func reload() {
         guard repository != nil, uid != nil else { return }
-        subscribe()
+        subscribeToVehicles()
     }
 
     /// Adds a vehicle through the repository, tracking ``saveStatus`` so the
@@ -140,8 +157,13 @@ final class GarageCoordinator {
         saveStatus = .idle
     }
 
-    private func subscribe() {
-        subscription?.cancel()
+    private func subscribeToVehiclesIfNeeded() {
+        guard vehicleSubscription == nil, repository != nil, uid != nil else { return }
+        subscribeToVehicles()
+    }
+
+    private func subscribeToVehicles() {
+        vehicleSubscription?.cancel()
         state = .loading
         // Retry FAILED photo resolutions on the explicit re-subscribe (the
         // retry affordance); successful URLs stay cached, and paths still IN
@@ -155,10 +177,24 @@ final class GarageCoordinator {
         let stream = repository.vehicles(uid: uid)
         // `self` is captured weakly so the long-lived stream task never
         // retains the coordinator (see EventsCoordinator.subscribe).
-        subscription = Task { [weak self] in
+        vehicleSubscription = Task { [weak self] in
             for await snapshot in stream {
                 guard !Task.isCancelled, let self else { return }
                 self.apply(snapshot)
+            }
+        }
+    }
+
+    private func subscribeToTierIfNeeded() {
+        guard tierSubscription == nil, let subscriptionRepository, let uid else { return }
+        let stream = subscriptionRepository.subscription(uid: uid)
+        tierSubscription = Task { [weak self] in
+            for await snapshot in stream {
+                guard !Task.isCancelled, let self else { return }
+                // The repository has already rejected malformed and
+                // cross-account data. Nil remains the fail-closed Community
+                // state and immediately removes any paid-only affordance.
+                self.storedSubscription = snapshot
             }
         }
     }
