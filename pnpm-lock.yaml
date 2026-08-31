@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  uuid@<11.1.1: ^11.1.1
+  '@opentelemetry/core@<2.8.0': ^2.8.0
+  fast-xml-parser@<5.10.1: ^5.10.1
+
 importers:
 
   .:
@@ -16,13 +21,13 @@ importers:
     dependencies:
       firebase-admin:
         specifier: ^13.0.0
-        version: 13.10.0(supports-color@7.2.0)
+        version: 13.10.0
       firebase-functions:
         specifier: ^7.3.2
-        version: 7.3.2(firebase-admin@13.10.0(supports-color@7.2.0))(supports-color@7.2.0)
+        version: 7.3.2(firebase-admin@13.10.0)
       google-auth-library:
         specifier: ^10.9.1
-        version: 10.9.1(supports-color@7.2.0)
+        version: 10.9.1
       h3-js:
         specifier: ^4.2.1
         version: 4.5.0
@@ -38,19 +43,19 @@ importers:
         version: 24.13.3
       eslint:
         specifier: ^10.8.1
-        version: 10.8.1(supports-color@7.2.0)
+        version: 10.8.1
       firebase:
         specifier: ^12.18.0
         version: 12.18.0
       firebase-tools:
         specifier: ^15.28.2
-        version: 15.28.2(@types/node@24.13.3)(supports-color@7.2.0)
+        version: 15.28.2(@types/node@24.13.3)
       typescript:
         specifier: ~6.0.3
         version: 6.0.3
       typescript-eslint:
         specifier: ^8.68.0
-        version: 8.68.0(eslint@10.8.1(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3)
+        version: 8.68.0(eslint@10.8.1)(typescript@6.0.3)
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(yaml@2.9.0))
@@ -798,7 +803,6 @@ packages:
     engines: {node: ^22.20 || ^24.12 || >=25}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@nodable/entities@3.0.0':
     resolution: {integrity: sha512-8L9xFeTYKhm49xfIypoe2W5wV1m/3Z58kT+7kR9A8OyFxcPduI4VmxaUMQyKYrRjUoLLSXv6EKKID5Tvj9cUVw==}
@@ -807,15 +811,11 @@ packages:
     resolution: {integrity: sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q==}
     engines: {node: '>=8.0.0'}
 
-  '@opentelemetry/core@1.30.1':
-    resolution: {integrity: sha512-OOCM2C/QIURhJMuKaekP3TRBxBKxG/TWWA0TL2J6nXUtDnuCtccy49LUJF8xPFXMX+0LMcxFpCo8M9cGY1W6rQ==}
-    engines: {node: '>=14'}
+  '@opentelemetry/core@2.10.0':
+    resolution: {integrity: sha512-/wNZ8twnEQQA4HoHu22+vcsdru6pWPWxW+7w+FlxT6Id7PE/WIbZmVKkte+PF72e0F2dnImFeHD2syyE1Mw6MQ==}
+    engines: {node: ^18.19.0 || >=20.6.0}
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
-
-  '@opentelemetry/semantic-conventions@1.28.0':
-    resolution: {integrity: sha512-lp4qAiMTD4sNWW4DbKLBkfiMZ4jbAboJIGOQr5DvciMRI494OapieI9qiODpOt0XBr1LjIDy1xAGAnVs5supTA==}
-    engines: {node: '>=14'}
 
   '@opentelemetry/semantic-conventions@1.39.0':
     resolution: {integrity: sha512-R5R9tb2AXs2IRLNKLBJDynhkfmx7mX0vi8NkhZb3gUkPWHn6HXk5J8iQ/dql0U3ApfWym4kXXmBDRGO+oeOfjg==}
@@ -898,79 +898,66 @@ packages:
     resolution: {integrity: sha512-r9fGh3eFs3e/udWh5ZjXQtxiYK/xoFxQaYR/cELxac/Udkl5Th+IsFm0CX3Kl9hmUH/we7EoMpjJgeQNnE0+IA==}
     cpu: [arm]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-linux-arm-musleabihf@4.62.5':
     resolution: {integrity: sha512-xdvFdp7OM6KLJviJT2g/YuRSUjnZgGHk4RNgwIbN7X6cPugOucV60DdHXWzsBVCUdrGb6qSXnJQrrAKMmQuj3Q==}
     cpu: [arm]
     os: [linux]
-    libc: [musl]
 
   '@rollup/rollup-linux-arm64-gnu@4.62.5':
     resolution: {integrity: sha512-rRqILAndyzHzP7T9NFQrq+4HFWNhqkqkKur7eiBpfLmz01PO0JKx5Vchu3YllE4YXI/Ftgq/szrDWg5GJ0mI8g==}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-linux-arm64-musl@4.62.5':
     resolution: {integrity: sha512-Gf4X3qVMucayUvux6aXXPgXovocSFUC0rrffDuPI/S2nHhNMhjcZxsrAFYCOF350PRreW1XwzFj3CT/3bKsWCw==}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   '@rollup/rollup-linux-loong64-gnu@4.62.5':
     resolution: {integrity: sha512-+s5qA0TNM0qm8PK/a5gt/1Hpx+NV08uSuCncvhziIlQzT6AEV2fnUQo7eBtFTFO0nA9scauvoR2HusfXmQnO4w==}
     cpu: [loong64]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-linux-loong64-musl@4.62.5':
     resolution: {integrity: sha512-ybb6QvWwWJCbBWqERpc8K3pYVGIrXlG8MEQ8IIuJY6Y9KdHQxoFoNyfkAOtKn1VHu3KuLidXvwrvGR1mEjeWCw==}
     cpu: [loong64]
     os: [linux]
-    libc: [musl]
 
   '@rollup/rollup-linux-ppc64-gnu@4.62.5':
     resolution: {integrity: sha512-nZb1DtnOyhCmYvsC8A2CwOkopVg+IS1+fPUa7rMOAXtNw5+lLCLLPqd6XAiNrGtoQKsbvIBOwsHnBH/3wnb4HQ==}
     cpu: [ppc64]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-linux-ppc64-musl@4.62.5':
     resolution: {integrity: sha512-yMbj63Sp89ryrXLWyz+sy+fYD2HpOnMCLGbe4Oa1smclFSUukdtD/BgdiHaAetJNb74URD8U4hM+qG5KVzMEkg==}
     cpu: [ppc64]
     os: [linux]
-    libc: [musl]
 
   '@rollup/rollup-linux-riscv64-gnu@4.62.5':
     resolution: {integrity: sha512-mhoan3OJw2kYV/e1jtIdmvUZgyBFeA6zGWsOswmR0Tg19TQbowZuR+JMLID6spbbBN7Zee2ejrgmy3+FxGrIdA==}
     cpu: [riscv64]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-linux-riscv64-musl@4.62.5':
     resolution: {integrity: sha512-5ZTLmjWbb1VZdjuyhe83K/8QO0/h11midQCBP+X5OYn32ra7eOBoM0ZqtaY4nkgNsYgmdVhMYPoyVPTjUpHf3w==}
     cpu: [riscv64]
     os: [linux]
-    libc: [musl]
 
   '@rollup/rollup-linux-s390x-gnu@4.62.5':
     resolution: {integrity: sha512-m53kG+br6PGxOTmgBEM2DHSDs9RVjsyEbUwjJPJGTFm1grWOG8EKJggDCTb60unD4Tjby8fi7/m9XfkEWasVWg==}
     cpu: [s390x]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-linux-x64-gnu@4.62.5':
     resolution: {integrity: sha512-6RHPJR1g/uvdYU8uXBnfq3nlqyZCP82Fr6NHgfGoaIeSh0YEqnX/x6uA9MmJJbnSH7swqX4F+CkGdUF+6doiQA==}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@rollup/rollup-linux-x64-musl@4.62.5':
     resolution: {integrity: sha512-xs+OXQtEXgpXT0DmA5+U3qnRZHdCST/5HRQxS8wSPZTUZN/EMWeHuSIod32LQklTBZBV9DyfncKBQ8n5V3eFdw==}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   '@rollup/rollup-openbsd-x64@4.62.5':
     resolution: {integrity: sha512-e7hD+sl3s+mcLQDZ8pbudBVsdG6r5yN4w3LqG2TJ8sQHDpblWj5lrJs/3m01Cvlxbt4x13zu5thLjgypgtkYzw==}
@@ -1321,16 +1308,16 @@ packages:
     resolution: {integrity: sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==}
     engines: {node: 18 || 20 || >=22}
 
-  bare-events@2.9.2:
-    resolution: {integrity: sha512-AIPKioV7/Y/8KfZ3AAhjPJxLLbY49S64Ym5DakZlUg75qQiTgUq9hEJoEwa4eUezPUlXRy/i5NpsKvo9jgKmoA==}
+  bare-events@2.9.1:
+    resolution: {integrity: sha512-Z0oHEHAFDZkffN8Qc39zNZjQlMDkPJRyyyZieU1VH7u8c5S+qHZ2S8ixdKIAxEjfHO7FJxXmJWgteOghVanIsg==}
     peerDependencies:
       bare-abort-controller: '*'
     peerDependenciesMeta:
       bare-abort-controller:
         optional: true
 
-  bare-fs@4.8.1:
-    resolution: {integrity: sha512-N1nnXdHZAOSstz0XiHikGS4HGMH4CnSwhqWdGQQMqqdvp4Jybm9sE3R1WVnpWVd4SFkc8ryPDBLViNLwiEqECg==}
+  bare-fs@4.8.0:
+    resolution: {integrity: sha512-fM+MhCvdQhZ7NV6S95a07gPSqjIYKn6mFaXfx266wN3ajZGl/+1AzH+ubkXQ0fFZvOe2nk9VHkzdYkQE5zMV3Q==}
     engines: {bare: '>=1.28.0'}
     peerDependencies:
       bare-buffer: '*'
@@ -1341,8 +1328,8 @@ packages:
   bare-path@3.1.1:
     resolution: {integrity: sha512-JprUlveX3QjApC1cTpsUOiscADftCGVWkzitbHsRqv84hzYwYHw2mbluddsq5TvI8mH/8Ov1f4BiMAdcB0oYnQ==}
 
-  bare-stream@2.13.4:
-    resolution: {integrity: sha512-PcrQ8lVLbiJscNm1Kez+Yp4Gy4AHGcN1lzwjvf5NybWen7VvEgUfyfnXYJ2zNqWnzOfCb1Abq6lH8ti0syQszA==}
+  bare-stream@2.13.3:
+    resolution: {integrity: sha512-Kc+brLqvEqGkjyfiwJmImAOqLZL7OsoLKuavx+hJjgVV3nLTOjloJyPMFxjUPerGGHrNH0fLU06jjykMLWrERQ==}
     peerDependencies:
       bare-abort-controller: '*'
       bare-buffer: '*'
@@ -1891,8 +1878,8 @@ packages:
   exponential-backoff@3.1.3:
     resolution: {integrity: sha512-ZgEeZXj30q+I0EN+CbSSpIyPaJ5HVQD18Z1m+u1FXbAeT94mr1zw50q4q6jiiC447Nl/YTcIYSAftiGqetwXCA==}
 
-  express-rate-limit@8.7.0:
-    resolution: {integrity: sha512-hOwV7WOxXfjRpAM1DSJWZDXx3GhplwD8IfwuwvogD8i1Qnkgosw/H45s4ZnFAUHDAhPjlY9hLBvJhKmGMyY26g==}
+  express-rate-limit@8.6.2:
+    resolution: {integrity: sha512-YH4ru+eOJxQABscKFfRCy9R7x9QFGdezclVMwwgFFndzS2Xnm0uo6B0ABZsLhcpeptGv2qvuJVWlQr9gQZoC3A==}
     engines: {node: '>= 16'}
     peerDependencies:
       express: '>= 4.11'
@@ -1924,8 +1911,8 @@ packages:
   fast-levenshtein@2.0.6:
     resolution: {integrity: sha512-DCXu6Ifhqcks7TZKY3Hxp3y6qphY5SJZmrWMDrKcERSOXWQdMhU9Ig/PYrzyw/ul9jOIyh0N4M0tbC5hodg8dw==}
 
-  fast-uri@3.1.6:
-    resolution: {integrity: sha512-7Ical1vFEMr0onbVzEDIreM22I4khW+fzyQPwvAFWBp1iwdshSZRsL4jjRvPG9JP1uiqMHRto+YU6R2/CzDz5Q==}
+  fast-uri@3.1.5:
+    resolution: {integrity: sha512-gHwA1O9LDIcKunMKhObS/HimwtehO1nPUECKAu5TpKgaO19fcWEl4bliWe1jWxVFvIXztJjjQ4L8XQ1EU9f7Jw==}
 
   fast-xml-builder@1.2.0:
     resolution: {integrity: sha512-00aAWieqff+ZJhsXA4g1g7M8k+7AYoMUUHF+/zFb5U6Uv/P0Vl4QZo84/IcufzYalLuEj9928bXN9PbbFzMF0Q==}
@@ -2212,8 +2199,8 @@ packages:
   highlight.js@10.7.3:
     resolution: {integrity: sha512-tzcUFauisWKNHaRkN4Wjl/ZA07gENAjFl3J/c480dprkGTg5EQstgaNFqBfUqCq54kZRIEcreTsAgF/m2quD7A==}
 
-  hono@4.13.5:
-    resolution: {integrity: sha512-O6+/eCYRkzzzy0rPWwKLiGBR1nFuUPZynnwjxN1MBA62NNqbT0wQEzQyK2gSO5yDIDB336sXQleAhOHrzlYyKw==}
+  hono@4.13.3:
+    resolution: {integrity: sha512-r8AO2mYHoLxSHkgafNeC/BXyb2vWRxD3jem4Ts+ptav8oTG5FIRifAjuJEmZI4bSvvc2ns0GxmIYiZnHqN3mMw==}
     engines: {node: '>=16.9.0'}
 
   html-entities@2.6.0:
@@ -2287,8 +2274,8 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  ip-address@10.7.0:
-    resolution: {integrity: sha512-BGFsyJd5mpXp3rK6jIdADLNgpJUK1jnjzvYF8lK+VyDab9JAmqN0YOKDdP17HlgKb2+ehPgDc8EtnRLbGCAMhA==}
+  ip-address@10.5.0:
+    resolution: {integrity: sha512-R5SnVLJmgYYvf2F2ZgwSBnelz5G4q5AxIC277GDfUaNbrZKNANcBC7RHqYYePlszf4kBolVkJauG0ZjHHFh55g==}
     engines: {node: '>= 12'}
 
   ip-regex@2.1.0:
@@ -2405,11 +2392,11 @@ packages:
   jose@4.15.9:
     resolution: {integrity: sha512-1vUQX+IdDMVPj4k8kOxgUqlcK518yluMuGZwqlr44FS1ppZB/5GWh4rZG89erpOBOJjU/OBsnCVFfapsRz6nEA==}
 
-  jose@6.2.10:
-    resolution: {integrity: sha512-iiW7J9qRFlGxvCOIBDBDxFePQSn7ZMAnrYGhrrOo6siO/MIqwfyilLR27pkfDgUk+raLuzADS8A3S/KLBisc0g==}
+  jose@6.2.9:
+    resolution: {integrity: sha512-XrchZOFZUl/T3vTwRe8XK+cJrGtMF4th1ARnDfwbBXFKThGhlsxEE4Zu03AD/bjJSt/9jT/mxrOCkJWOg77aPA==}
 
-  js-yaml@4.3.2:
-    resolution: {integrity: sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA==}
+  js-yaml@4.3.1:
+    resolution: {integrity: sha512-CY6crGq313MX8GkwvB7tzgp99vjQxY1++5y10/BKN/GUfHqWaOGQMNZkBvqSzsZKWk/ijwHlWzzkLulsGHhjWQ==}
     hasBin: true
 
   json-bigint@1.0.0:
@@ -2658,8 +2645,8 @@ packages:
   moo@0.5.3:
     resolution: {integrity: sha512-m2fmM2dDm7GZQsY7KK2cme8agi+AAljILjQnof7p1ZMDe6dQ4bdnSMx0cPppudoeNv5hEFQirN6u+O4fDE0IWA==}
 
-  morgan@1.12.0:
-    resolution: {integrity: sha512-OHpTRQwn2ezasILW8iKe+Yww1XsfWsZIpUOLF7RDb2g5GwO3trPaRwi7+8BDiJ7HFx2Kg2mfUdCBcVhwYlOz2g==}
+  morgan@1.11.0:
+    resolution: {integrity: sha512-zSkVu3t18r39pw4ixfBKvfZi3y2UOqr7d4WYwcj3m8nXpEQK4rPO6GLzs/CExoRgmX3y9EjmmcXqv6jq0SK46g==}
     engines: {node: '>= 0.8.0'}
 
   ms@2.0.0:
@@ -2731,8 +2718,8 @@ packages:
     resolution: {integrity: sha512-dRB78srN/l6gqWulah9SrxeYnxeddIG30+GOqK/9OlLVyLg3HPnr6SqOWTWOXKRwC2eGYCkZ59NNuSgvSrpgOA==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
-  node-gyp@13.0.2:
-    resolution: {integrity: sha512-SXTvw3PxznpowYhJSOD9mVQBgDaCTWXffX+wQZsQ7PbcTV86TsXCUcSZhHnskFQvrvn/OdSzJPMsptT2pIj9ww==}
+  node-gyp@13.0.1:
+    resolution: {integrity: sha512-piOr0S10qy5THB+q5BdqkoOx65XL/tjTMUAit3vciPNp+snTOBnGunWH1Rz7XZUxf2T9uFrfT/Ty4+aC3yPeyg==}
     engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
     hasBin: true
 
@@ -2984,10 +2971,6 @@ packages:
     resolution: {integrity: sha512-/FPD0nUc9jH6rfFjji9IBqOz4pcSE3CsT1m7Ep6Mdb0LxSUMj8hgl6GomOvZzpNpAqqGaXA0P3VSrZLFzIhQrw==}
     engines: {node: '>=12.0.0'}
 
-  protobufjs@7.6.6:
-    resolution: {integrity: sha512-dYDWdjSl5RNb7SgPxGQcRU+GtvP7s2fpkrY0r432PcOIaZ0/rBcxEZnQN67iJhFuQiVw754JDoPruPCNdGsbjg==}
-    engines: {node: '>=12.0.0'}
-
   proxy-addr@2.0.7:
     resolution: {integrity: sha512-llQsMLSUDUPT44jdrU/O37qlnifitDP+ZwrmmZcoSKyLKvtZxpyV0n2/bD/N4tBAAZ/gJEdZU7KMraoK1+XYAg==}
     engines: {node: '>= 0.10'}
@@ -3009,10 +2992,6 @@ packages:
 
   qs@6.15.3:
     resolution: {integrity: sha512-O9gl3zCl5h5blw1KGUzQKhA5oUXSl8rwUIM5o0S3nCXMliSvy5Dzx7/DJcI+SwgICv+IneSZwhBh1oSyEHA71A==}
-    engines: {node: '>=0.6'}
-
-  qs@6.16.0:
-    resolution: {integrity: sha512-h6fhOIaRrID2CbEY2fqs+7t+UXZo+MLAnU5gRIq85uFtdiUPCdsApMlHhXogKVM4HM2DVbIjGNTTYH2OcmP1vA==}
     engines: {node: '>=0.6'}
 
   railroad-diagrams@1.0.0:
@@ -3257,8 +3236,8 @@ packages:
   stream-shift@1.0.3:
     resolution: {integrity: sha512-76ORR0DO1o1hlKwTbi/DM3EXWGf3ZJYO8cXX5RJwnul2DEg2oyoZyjLNoQM8WsvZiFKCRfC1O0J7iCvie3RZmQ==}
 
-  streamx@2.28.1:
-    resolution: {integrity: sha512-zEzXb0s5Cds7tqMH6rhZ05lcJydCWiQPEwiNngVqzsxCc962vLY4Uw+mW7od8kDH258k2Uz/JrOkdIAAhSh9VA==}
+  streamx@2.28.0:
+    resolution: {integrity: sha512-1Yowhzjf0ivGMrTIkY9hav5TxobO9qIVqUE41fiCGMGgc3CLlf4MY+9AHmZqBWgDTue0fY9zWjYFVyf6Diuobw==}
 
   string-width@4.2.3:
     resolution: {integrity: sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g==}
@@ -3305,8 +3284,8 @@ packages:
     resolution: {integrity: sha512-zFObLMyZeEwzAoKCyu1B91U79K2t7ApXuQfo8OuxwXLDgcKxuwM+YvcbIhm6QWqz7mHUH1TVytR1PwVVjEuMig==}
     engines: {node: '>=14.18'}
 
-  tar-stream@3.2.1:
-    resolution: {integrity: sha512-nqsEO8zLZJvrOMdEwkA0QdCLFbetHMn95Zqu4fKwX+hkaTWJPZZOrxx/PwtxoK0MMGQmBQNRW3CPs8IFYQz4cQ==}
+  tar-stream@3.2.0:
+    resolution: {integrity: sha512-ojzvCvVaNp6aOTFmG7jaRD0meowIAuPc3cMMhSgKiVWws1GyHbGd/xvnyuRKcKlMpt3qvxx6r0hreCNITP9hIg==}
 
   tar@7.5.22:
     resolution: {integrity: sha512-MFO/QzvtAOmJbkhOaCTvbGcFN9L9b+JunIsDwaKljSOdcLMea3NJ1k9Usz/rjdfSXTq4dfzfeS7W4p4YOAAHeA==}
@@ -3471,13 +3450,12 @@ packages:
     resolution: {integrity: sha512-pMZTvIkT1d+TFGvDOqodOclx0QWkkgi6Tdoa8gC8ffGAAqz9pzPTZWAybbsHHoED/ztMtkv/VoYTYyShUn81hA==}
     engines: {node: '>= 0.4.0'}
 
-  uuid@14.0.2:
-    resolution: {integrity: sha512-xZe/16rV4aa+HGSOCiY2YeLT1OybRLrrkL/Rqaq7p7GMVXjFh+6wN4oMYgjFmnSnhY8t6Xpdl2l9qmnHYuMHwQ==}
+  uuid@11.1.1:
+    resolution: {integrity: sha512-vIYxrBCC/N/K+Js3qSN88go7kIfNPssr/hHCesKCQNAjmgvYS2oqr69kIufEG+O4+PfezOH4EbIeHCfFov8ZgQ==}
     hasBin: true
 
-  uuid@9.0.1:
-    resolution: {integrity: sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA==}
-    deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
+  uuid@14.0.2:
+    resolution: {integrity: sha512-xZe/16rV4aa+HGSOCiY2YeLT1OybRLrrkL/Rqaq7p7GMVXjFh+6wN4oMYgjFmnSnhY8t6Xpdl2l9qmnHYuMHwQ==}
     hasBin: true
 
   valid-url@1.0.9:
@@ -3724,9 +3702,6 @@ packages:
   zod@4.4.3:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
-  zod@4.5.4:
-    resolution: {integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==}
-
 snapshots:
 
   '@apidevtools/json-schema-ref-parser@9.1.2':
@@ -3734,7 +3709,7 @@ snapshots:
       '@jsdevtools/ono': 7.1.3
       '@types/json-schema': 7.0.15
       call-me-maybe: 1.0.2
-      js-yaml: 4.3.2
+      js-yaml: 4.3.1
 
   '@apphosting/common@0.0.8': {}
 
@@ -3835,17 +3810,17 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@eslint-community/eslint-utils@4.10.1(eslint@10.8.1(supports-color@7.2.0))':
+  '@eslint-community/eslint-utils@4.10.1(eslint@10.8.1)':
     dependencies:
-      eslint: 10.8.1(supports-color@7.2.0)
+      eslint: 10.8.1
       eslint-visitor-keys: 3.4.3
 
   '@eslint-community/regexpp@4.12.2': {}
 
-  '@eslint/config-array@0.23.5(supports-color@7.2.0)':
+  '@eslint/config-array@0.23.5':
     dependencies:
       '@eslint/object-schema': 3.0.5
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       minimatch: 10.2.6
     transitivePeerDependencies:
       - supports-color
@@ -4234,21 +4209,21 @@ snapshots:
 
   '@firebase/webchannel-wrapper@1.0.7': {}
 
-  '@google-cloud/cloud-sql-connector@1.11.3(supports-color@7.2.0)':
+  '@google-cloud/cloud-sql-connector@1.11.3':
     dependencies:
-      '@googleapis/sqladmin': 37.0.0(supports-color@7.2.0)
-      gaxios: 7.3.1(supports-color@7.2.0)
-      google-auth-library: 10.9.1(supports-color@7.2.0)
+      '@googleapis/sqladmin': 37.0.0
+      gaxios: 7.3.1
+      google-auth-library: 10.9.1
       p-throttle: 8.1.0
     transitivePeerDependencies:
       - supports-color
 
-  '@google-cloud/firestore@7.11.6(supports-color@7.2.0)':
+  '@google-cloud/firestore@7.11.6':
     dependencies:
       '@opentelemetry/api': 1.9.1
       fast-deep-equal: 3.1.3
       functional-red-black-tree: 1.0.1
-      google-gax: 4.6.1(supports-color@7.2.0)
+      google-gax: 4.6.1
       protobufjs: 7.6.5
     transitivePeerDependencies:
       - encoding
@@ -4277,19 +4252,19 @@ snapshots:
 
   '@google-cloud/promisify@5.1.0': {}
 
-  '@google-cloud/pubsub@5.3.1(supports-color@7.2.0)':
+  '@google-cloud/pubsub@5.3.1':
     dependencies:
       '@google-cloud/paginator': 6.1.0
       '@google-cloud/precise-date': 5.2.0
       '@google-cloud/projectify': 5.2.0
       '@google-cloud/promisify': 5.1.0
       '@opentelemetry/api': 1.9.1
-      '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.1)
+      '@opentelemetry/core': 2.10.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.39.0
       arrify: 2.0.1
       extend: 3.0.2
-      google-auth-library: 10.9.1(supports-color@7.2.0)
-      google-gax: 5.0.8(supports-color@7.2.0)
+      google-auth-library: 10.9.1
+      google-gax: 5.0.8
       google-logging-utils: 1.2.0
       heap-js: 2.7.1
       is-stream-ended: 0.1.4
@@ -4299,7 +4274,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google-cloud/storage@7.21.0(supports-color@7.2.0)':
+  '@google-cloud/storage@7.21.0':
     dependencies:
       '@google-cloud/paginator': 5.0.2
       '@google-cloud/projectify': 4.0.0
@@ -4308,21 +4283,21 @@ snapshots:
       async-retry: 1.3.3
       duplexify: 4.1.3
       fast-xml-parser: 5.10.1
-      gaxios: 6.7.1(supports-color@7.2.0)
-      google-auth-library: 9.15.1(supports-color@7.2.0)
+      gaxios: 6.7.1
+      google-auth-library: 9.15.1
       html-entities: 2.6.0
       mime: 3.0.0
       p-limit: 3.1.0
-      retry-request: 7.0.2(supports-color@7.2.0)
-      teeny-request: 9.0.0(supports-color@7.2.0)
+      retry-request: 7.0.2
+      teeny-request: 9.0.0
     transitivePeerDependencies:
       - encoding
       - supports-color
     optional: true
 
-  '@googleapis/sqladmin@37.0.0(supports-color@7.2.0)':
+  '@googleapis/sqladmin@37.0.0':
     dependencies:
-      googleapis-common: 8.0.3(supports-color@7.2.0)
+      googleapis-common: 8.0.3
     transitivePeerDependencies:
       - supports-color
 
@@ -4347,12 +4322,12 @@ snapshots:
     dependencies:
       lodash.camelcase: 4.3.0
       long: 5.3.2
-      protobufjs: 7.6.6
+      protobufjs: 7.6.5
       yargs: 17.7.3
 
-  '@hono/node-server@2.1.1(hono@4.13.5)':
+  '@hono/node-server@2.1.1(hono@4.13.3)':
     dependencies:
-      hono: 4.13.5
+      hono: 4.13.3
 
   '@humanfs/core@0.19.2':
     dependencies:
@@ -4514,9 +4489,9 @@ snapshots:
 
   '@jsdevtools/ono@7.1.3': {}
 
-  '@modelcontextprotocol/sdk@1.30.0(supports-color@7.2.0)(zod@4.5.4)':
+  '@modelcontextprotocol/sdk@1.30.0(zod@4.4.3)':
     dependencies:
-      '@hono/node-server': 2.1.1(hono@4.13.5)
+      '@hono/node-server': 2.1.1(hono@4.13.3)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
@@ -4524,15 +4499,15 @@ snapshots:
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.1.1
-      express: 5.2.1(supports-color@7.2.0)
-      express-rate-limit: 8.7.0(express@5.2.1(supports-color@7.2.0))(supports-color@7.2.0)
-      hono: 4.13.5
-      jose: 6.2.10
+      express: 5.2.1
+      express-rate-limit: 8.6.2(express@5.2.1)
+      hono: 4.13.3
+      jose: 6.2.9
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
-      zod: 4.5.4
-      zod-to-json-schema: 3.25.2(zod@4.5.4)
+      zod: 4.4.3
+      zod-to-json-schema: 3.25.2(zod@4.4.3)
     transitivePeerDependencies:
       - supports-color
 
@@ -4544,12 +4519,10 @@ snapshots:
 
   '@opentelemetry/api@1.9.1': {}
 
-  '@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.1)':
+  '@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
-      '@opentelemetry/semantic-conventions': 1.28.0
-
-  '@opentelemetry/semantic-conventions@1.28.0': {}
+      '@opentelemetry/semantic-conventions': 1.39.0
 
   '@opentelemetry/semantic-conventions@1.39.0': {}
 
@@ -4761,15 +4734,15 @@ snapshots:
 
   '@types/triple-beam@1.3.5': {}
 
-  '@typescript-eslint/eslint-plugin@8.68.0(@typescript-eslint/parser@8.68.0(eslint@10.8.1(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3))(eslint@10.8.1(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3)':
+  '@typescript-eslint/eslint-plugin@8.68.0(@typescript-eslint/parser@8.68.0(eslint@10.8.1)(typescript@6.0.3))(eslint@10.8.1)(typescript@6.0.3)':
     dependencies:
       '@eslint-community/regexpp': 4.12.2
-      '@typescript-eslint/parser': 8.68.0(eslint@10.8.1(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3)
+      '@typescript-eslint/parser': 8.68.0(eslint@10.8.1)(typescript@6.0.3)
       '@typescript-eslint/scope-manager': 8.68.0
-      '@typescript-eslint/type-utils': 8.68.0(eslint@10.8.1(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3)
-      '@typescript-eslint/utils': 8.68.0(eslint@10.8.1(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3)
+      '@typescript-eslint/type-utils': 8.68.0(eslint@10.8.1)(typescript@6.0.3)
+      '@typescript-eslint/utils': 8.68.0(eslint@10.8.1)(typescript@6.0.3)
       '@typescript-eslint/visitor-keys': 8.68.0
-      eslint: 10.8.1(supports-color@7.2.0)
+      eslint: 10.8.1
       ignore: 7.0.6
       natural-compare: 1.4.0
       ts-api-utils: 2.5.0(typescript@6.0.3)
@@ -4777,23 +4750,23 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/parser@8.68.0(eslint@10.8.1(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3)':
+  '@typescript-eslint/parser@8.68.0(eslint@10.8.1)(typescript@6.0.3)':
     dependencies:
       '@typescript-eslint/scope-manager': 8.68.0
       '@typescript-eslint/types': 8.68.0
-      '@typescript-eslint/typescript-estree': 8.68.0(supports-color@7.2.0)(typescript@6.0.3)
+      '@typescript-eslint/typescript-estree': 8.68.0(typescript@6.0.3)
       '@typescript-eslint/visitor-keys': 8.68.0
-      debug: 4.4.3(supports-color@7.2.0)
-      eslint: 10.8.1(supports-color@7.2.0)
+      debug: 4.4.3
+      eslint: 10.8.1
       typescript: 6.0.3
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/project-service@8.68.0(supports-color@7.2.0)(typescript@6.0.3)':
+  '@typescript-eslint/project-service@8.68.0(typescript@6.0.3)':
     dependencies:
       '@typescript-eslint/tsconfig-utils': 8.68.0(typescript@6.0.3)
       '@typescript-eslint/types': 8.68.0
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       typescript: 6.0.3
     transitivePeerDependencies:
       - supports-color
@@ -4807,13 +4780,13 @@ snapshots:
     dependencies:
       typescript: 6.0.3
 
-  '@typescript-eslint/type-utils@8.68.0(eslint@10.8.1(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3)':
+  '@typescript-eslint/type-utils@8.68.0(eslint@10.8.1)(typescript@6.0.3)':
     dependencies:
       '@typescript-eslint/types': 8.68.0
-      '@typescript-eslint/typescript-estree': 8.68.0(supports-color@7.2.0)(typescript@6.0.3)
-      '@typescript-eslint/utils': 8.68.0(eslint@10.8.1(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3)
-      debug: 4.4.3(supports-color@7.2.0)
-      eslint: 10.8.1(supports-color@7.2.0)
+      '@typescript-eslint/typescript-estree': 8.68.0(typescript@6.0.3)
+      '@typescript-eslint/utils': 8.68.0(eslint@10.8.1)(typescript@6.0.3)
+      debug: 4.4.3
+      eslint: 10.8.1
       ts-api-utils: 2.5.0(typescript@6.0.3)
       typescript: 6.0.3
     transitivePeerDependencies:
@@ -4821,13 +4794,13 @@ snapshots:
 
   '@typescript-eslint/types@8.68.0': {}
 
-  '@typescript-eslint/typescript-estree@8.68.0(supports-color@7.2.0)(typescript@6.0.3)':
+  '@typescript-eslint/typescript-estree@8.68.0(typescript@6.0.3)':
     dependencies:
-      '@typescript-eslint/project-service': 8.68.0(supports-color@7.2.0)(typescript@6.0.3)
+      '@typescript-eslint/project-service': 8.68.0(typescript@6.0.3)
       '@typescript-eslint/tsconfig-utils': 8.68.0(typescript@6.0.3)
       '@typescript-eslint/types': 8.68.0
       '@typescript-eslint/visitor-keys': 8.68.0
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       minimatch: 10.2.6
       semver: 7.8.5
       tinyglobby: 0.2.17
@@ -4836,13 +4809,13 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/utils@8.68.0(eslint@10.8.1(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3)':
+  '@typescript-eslint/utils@8.68.0(eslint@10.8.1)(typescript@6.0.3)':
     dependencies:
-      '@eslint-community/eslint-utils': 4.10.1(eslint@10.8.1(supports-color@7.2.0))
+      '@eslint-community/eslint-utils': 4.10.1(eslint@10.8.1)
       '@typescript-eslint/scope-manager': 8.68.0
       '@typescript-eslint/types': 8.68.0
-      '@typescript-eslint/typescript-estree': 8.68.0(supports-color@7.2.0)(typescript@6.0.3)
-      eslint: 10.8.1(supports-color@7.2.0)
+      '@typescript-eslint/typescript-estree': 8.68.0(typescript@6.0.3)
+      eslint: 10.8.1
       typescript: 6.0.3
     transitivePeerDependencies:
       - supports-color
@@ -4916,9 +4889,9 @@ snapshots:
 
   acorn@8.18.0: {}
 
-  agent-base@6.0.2(supports-color@7.2.0):
+  agent-base@6.0.2:
     dependencies:
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
     optional: true
@@ -4943,7 +4916,7 @@ snapshots:
   ajv@8.20.0:
     dependencies:
       fast-deep-equal: 3.1.3
-      fast-uri: 3.1.6
+      fast-uri: 3.1.5
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
@@ -4992,7 +4965,7 @@ snapshots:
       buffer-crc32: 1.0.0
       readable-stream: 4.7.0
       readdir-glob: 1.1.3
-      tar-stream: 3.2.1
+      tar-stream: 3.2.0
       zip-stream: 6.0.1
     transitivePeerDependencies:
       - bare-abort-controller
@@ -5030,13 +5003,13 @@ snapshots:
 
   balanced-match@4.0.4: {}
 
-  bare-events@2.9.2: {}
+  bare-events@2.9.1: {}
 
-  bare-fs@4.8.1:
+  bare-fs@4.8.0:
     dependencies:
-      bare-events: 2.9.2
+      bare-events: 2.9.1
       bare-path: 3.1.1
-      bare-stream: 2.13.4(bare-events@2.9.2)
+      bare-stream: 2.13.3(bare-events@2.9.1)
       bare-url: 2.5.2
       fast-fifo: 1.3.2
     transitivePeerDependencies:
@@ -5045,13 +5018,13 @@ snapshots:
 
   bare-path@3.1.1: {}
 
-  bare-stream@2.13.4(bare-events@2.9.2):
+  bare-stream@2.13.3(bare-events@2.9.1):
     dependencies:
       b4a: 1.8.1
-      streamx: 2.28.1
+      streamx: 2.28.0
       teex: 1.0.1
     optionalDependencies:
-      bare-events: 2.9.2
+      bare-events: 2.9.1
     transitivePeerDependencies:
       - react-native-b4a
 
@@ -5081,11 +5054,11 @@ snapshots:
       inherits: 2.0.4
       readable-stream: 3.6.2
 
-  body-parser@1.20.6(supports-color@7.2.0):
+  body-parser@1.20.6:
     dependencies:
       bytes: 3.1.2
       content-type: 1.0.5
-      debug: 2.6.9(supports-color@7.2.0)
+      debug: 2.6.9
       depd: 2.0.0
       destroy: 1.2.0
       http-errors: 2.0.1
@@ -5098,11 +5071,11 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  body-parser@2.3.0(supports-color@7.2.0):
+  body-parser@2.3.0:
     dependencies:
       bytes: 3.1.2
       content-type: 2.1.0
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       http-errors: 2.0.1
       iconv-lite: 0.7.3
       on-finished: 2.4.1
@@ -5287,11 +5260,11 @@ snapshots:
     dependencies:
       mime-db: 1.54.0
 
-  compression@1.8.1(supports-color@7.2.0):
+  compression@1.8.1:
     dependencies:
       bytes: 3.1.2
       compressible: 2.0.18
-      debug: 2.6.9(supports-color@7.2.0)
+      debug: 2.6.9
       negotiator: 0.6.4
       on-headers: 1.1.0
       safe-buffer: 5.2.1
@@ -5315,10 +5288,10 @@ snapshots:
       write-file-atomic: 3.0.3
       xdg-basedir: 4.0.0
 
-  connect@3.7.0(supports-color@7.2.0):
+  connect@3.7.0:
     dependencies:
-      debug: 2.6.9(supports-color@7.2.0)
-      finalhandler: 1.1.2(supports-color@7.2.0)
+      debug: 2.6.9
+      finalhandler: 1.1.2
       parseurl: 1.3.3
       utils-merge: 1.0.1
     transitivePeerDependencies:
@@ -5374,23 +5347,17 @@ snapshots:
 
   data-uri-to-buffer@6.0.2: {}
 
-  debug@2.6.9(supports-color@7.2.0):
+  debug@2.6.9:
     dependencies:
       ms: 2.0.0
-    optionalDependencies:
-      supports-color: 7.2.0
 
-  debug@4.3.1(supports-color@7.2.0):
+  debug@4.3.1:
     dependencies:
       ms: 2.1.2
-    optionalDependencies:
-      supports-color: 7.2.0
 
-  debug@4.4.3(supports-color@7.2.0):
+  debug@4.4.3:
     dependencies:
       ms: 2.1.3
-    optionalDependencies:
-      supports-color: 7.2.0
 
   deep-extend@0.6.0: {}
 
@@ -5535,11 +5502,11 @@ snapshots:
 
   eslint-visitor-keys@5.0.1: {}
 
-  eslint@10.8.1(supports-color@7.2.0):
+  eslint@10.8.1:
     dependencies:
-      '@eslint-community/eslint-utils': 4.10.1(eslint@10.8.1(supports-color@7.2.0))
+      '@eslint-community/eslint-utils': 4.10.1(eslint@10.8.1)
       '@eslint-community/regexpp': 4.12.2
-      '@eslint/config-array': 0.23.5(supports-color@7.2.0)
+      '@eslint/config-array': 0.23.5
       '@eslint/config-helpers': 0.7.0
       '@eslint/core': 1.2.1
       '@eslint/plugin-kit': 0.7.2
@@ -5549,7 +5516,7 @@ snapshots:
       '@types/estree': 1.0.9
       ajv: 6.15.0
       cross-spawn: 7.0.6
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       escape-string-regexp: 4.0.0
       eslint-scope: 9.1.2
       eslint-visitor-keys: 5.0.1
@@ -5602,7 +5569,7 @@ snapshots:
 
   events-universal@1.0.1:
     dependencies:
-      bare-events: 2.9.2
+      bare-events: 2.9.1
     transitivePeerDependencies:
       - bare-abort-controller
 
@@ -5614,18 +5581,18 @@ snapshots:
     dependencies:
       eventsource-parser: 3.1.1
 
-  exegesis-express@4.0.0(supports-color@7.2.0):
+  exegesis-express@4.0.0:
     dependencies:
-      exegesis: 4.3.0(supports-color@7.2.0)
+      exegesis: 4.3.0
     transitivePeerDependencies:
       - supports-color
 
-  exegesis@4.3.0(supports-color@7.2.0):
+  exegesis@4.3.0:
     dependencies:
       '@apidevtools/json-schema-ref-parser': 9.1.2
       ajv: 8.20.0
       ajv-formats: 2.1.1(ajv@8.20.0)
-      body-parser: 1.20.6(supports-color@7.2.0)
+      body-parser: 1.20.6
       content-type: 1.0.5
       deep-freeze: 0.0.1
       events-listener: 1.1.0
@@ -5635,7 +5602,7 @@ snapshots:
       lodash: 4.18.1
       openapi3-ts: 3.2.0
       promise-breaker: 6.0.0
-      qs: 6.16.0
+      qs: 6.15.3
       raw-body: 2.5.3
       semver: 7.8.5
     transitivePeerDependencies:
@@ -5646,29 +5613,29 @@ snapshots:
   exponential-backoff@3.1.3:
     optional: true
 
-  express-rate-limit@8.7.0(express@5.2.1(supports-color@7.2.0))(supports-color@7.2.0):
+  express-rate-limit@8.6.2(express@5.2.1):
     dependencies:
-      debug: 4.4.3(supports-color@7.2.0)
-      express: 5.2.1(supports-color@7.2.0)
-      ip-address: 10.7.0
+      debug: 4.4.3
+      express: 5.2.1
+      ip-address: 10.5.0
     transitivePeerDependencies:
       - supports-color
 
-  express@4.22.2(supports-color@7.2.0):
+  express@4.22.2:
     dependencies:
       accepts: 1.3.8
       array-flatten: 1.1.1
-      body-parser: 1.20.6(supports-color@7.2.0)
+      body-parser: 1.20.6
       content-disposition: 0.5.4
       content-type: 1.0.5
       cookie: 0.7.2
       cookie-signature: 1.0.7
-      debug: 2.6.9(supports-color@7.2.0)
+      debug: 2.6.9
       depd: 2.0.0
       encodeurl: 2.0.0
       escape-html: 1.0.3
       etag: 1.8.1
-      finalhandler: 1.3.2(supports-color@7.2.0)
+      finalhandler: 1.3.2
       fresh: 0.5.2
       http-errors: 2.0.1
       merge-descriptors: 1.0.3
@@ -5680,8 +5647,8 @@ snapshots:
       qs: 6.15.3
       range-parser: 1.2.1
       safe-buffer: 5.2.1
-      send: 0.19.2(supports-color@7.2.0)
-      serve-static: 1.16.3(supports-color@7.2.0)
+      send: 0.19.2
+      serve-static: 1.16.3
       setprototypeof: 1.2.0
       statuses: 2.0.2
       type-is: 1.6.18
@@ -5690,20 +5657,20 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  express@5.2.1(supports-color@7.2.0):
+  express@5.2.1:
     dependencies:
       accepts: 2.0.0
-      body-parser: 2.3.0(supports-color@7.2.0)
+      body-parser: 2.3.0
       content-disposition: 1.1.0
       content-type: 1.0.5
       cookie: 0.7.2
       cookie-signature: 1.2.2
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       depd: 2.0.0
       encodeurl: 2.0.0
       escape-html: 1.0.3
       etag: 1.8.1
-      finalhandler: 2.1.1(supports-color@7.2.0)
+      finalhandler: 2.1.1
       fresh: 2.0.0
       http-errors: 2.0.1
       merge-descriptors: 2.0.0
@@ -5714,9 +5681,9 @@ snapshots:
       proxy-addr: 2.0.7
       qs: 6.15.3
       range-parser: 1.3.0
-      router: 2.2.0(supports-color@7.2.0)
-      send: 1.2.1(supports-color@7.2.0)
-      serve-static: 2.2.1(supports-color@7.2.0)
+      router: 2.2.0
+      send: 1.2.1
+      serve-static: 2.2.1
       statuses: 2.0.2
       type-is: 2.1.0
       vary: 1.1.2
@@ -5735,7 +5702,7 @@ snapshots:
 
   fast-levenshtein@2.0.6: {}
 
-  fast-uri@3.1.6: {}
+  fast-uri@3.1.5: {}
 
   fast-xml-builder@1.2.0:
     dependencies:
@@ -5776,9 +5743,9 @@ snapshots:
     dependencies:
       to-regex-range: 5.0.1
 
-  finalhandler@1.1.2(supports-color@7.2.0):
+  finalhandler@1.1.2:
     dependencies:
-      debug: 2.6.9(supports-color@7.2.0)
+      debug: 2.6.9
       encodeurl: 1.0.2
       escape-html: 1.0.3
       on-finished: 2.3.0
@@ -5788,9 +5755,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  finalhandler@1.3.2(supports-color@7.2.0):
+  finalhandler@1.3.2:
     dependencies:
-      debug: 2.6.9(supports-color@7.2.0)
+      debug: 2.6.9
       encodeurl: 2.0.0
       escape-html: 1.0.3
       on-finished: 2.4.1
@@ -5800,9 +5767,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  finalhandler@2.1.1(supports-color@7.2.0):
+  finalhandler@2.1.1:
     dependencies:
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       encodeurl: 2.0.0
       escape-html: 1.0.3
       on-finished: 2.4.1
@@ -5816,49 +5783,49 @@ snapshots:
       locate-path: 6.0.0
       path-exists: 4.0.0
 
-  firebase-admin@13.10.0(supports-color@7.2.0):
+  firebase-admin@13.10.0:
     dependencies:
       '@fastify/busboy': 3.2.0
       '@firebase/database-compat': 2.1.4
       '@firebase/database-types': 1.0.20
       farmhash-modern: 1.1.0
       fast-deep-equal: 3.1.3
-      google-auth-library: 10.9.1(supports-color@7.2.0)
+      google-auth-library: 10.9.1
       jsonwebtoken: 9.0.3
-      jwks-rsa: 3.2.2(supports-color@7.2.0)
+      jwks-rsa: 3.2.2
     optionalDependencies:
-      '@google-cloud/firestore': 7.11.6(supports-color@7.2.0)
-      '@google-cloud/storage': 7.21.0(supports-color@7.2.0)
+      '@google-cloud/firestore': 7.11.6
+      '@google-cloud/storage': 7.21.0
     transitivePeerDependencies:
       - encoding
       - supports-color
 
-  firebase-functions@7.3.2(firebase-admin@13.10.0(supports-color@7.2.0))(supports-color@7.2.0):
+  firebase-functions@7.3.2(firebase-admin@13.10.0):
     dependencies:
       '@types/cors': 2.8.19
       '@types/express': 5.0.6
       cors: 2.8.6
-      express: 5.2.1(supports-color@7.2.0)
-      firebase-admin: 13.10.0(supports-color@7.2.0)
+      express: 5.2.1
+      firebase-admin: 13.10.0
       protobufjs: 7.6.5
     transitivePeerDependencies:
       - supports-color
 
-  firebase-tools@15.28.2(@types/node@24.13.3)(supports-color@7.2.0):
+  firebase-tools@15.28.2(@types/node@24.13.3):
     dependencies:
       '@apphosting/common': 0.0.8
       '@electric-sql/pglite': 0.3.16
       '@electric-sql/pglite-tools': 0.2.21(@electric-sql/pglite@0.3.16)
-      '@google-cloud/cloud-sql-connector': 1.11.3(supports-color@7.2.0)
-      '@google-cloud/pubsub': 5.3.1(supports-color@7.2.0)
+      '@google-cloud/cloud-sql-connector': 1.11.3
+      '@google-cloud/pubsub': 5.3.1
       '@inquirer/prompts': 7.10.1(@types/node@24.13.3)
-      '@modelcontextprotocol/sdk': 1.30.0(supports-color@7.2.0)(zod@4.5.4)
+      '@modelcontextprotocol/sdk': 1.30.0(zod@4.4.3)
       abort-controller: 3.0.0
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       archiver: 7.0.1
       async-lock: 1.4.1
-      body-parser: 1.20.6(supports-color@7.2.0)
+      body-parser: 1.20.6
       chokidar: 3.6.0
       cjson: 0.3.3
       cli-table3: 0.6.5
@@ -5869,17 +5836,17 @@ snapshots:
       cross-env: 7.0.3
       cross-spawn: 7.0.6
       csv-parse: 5.6.0
-      exegesis: 4.3.0(supports-color@7.2.0)
-      exegesis-express: 4.0.0(supports-color@7.2.0)
-      express: 4.22.2(supports-color@7.2.0)
+      exegesis: 4.3.0
+      exegesis-express: 4.0.0
+      express: 4.22.2
       form-data: 4.0.6
       fs-extra: 10.1.0
       fuzzy: 0.1.3
-      gaxios: 6.7.1(supports-color@7.2.0)
+      gaxios: 6.7.1
       glob: 10.5.0
-      google-auth-library: 9.15.1(supports-color@7.2.0)
+      google-auth-library: 9.15.1
       ignore: 7.0.6
-      js-yaml: 4.3.2
+      js-yaml: 4.3.1
       jsonwebtoken: 9.0.3
       libsodium-wrappers: 0.7.16
       lodash: 4.18.1
@@ -5888,34 +5855,34 @@ snapshots:
       marked-terminal: 7.3.0(marked@13.0.3)
       mime: 2.6.0
       minimatch: 3.1.5
-      morgan: 1.12.0(supports-color@7.2.0)
+      morgan: 1.11.0
       node-fetch: 2.7.0
       open: 6.4.0
       ora: 5.4.1
       pg: 8.23.0
       pg-gateway: 0.3.0-beta.4
       pglite-2: '@electric-sql/pglite@0.2.17'
-      portfinder: 1.0.38(supports-color@7.2.0)
+      portfinder: 1.0.38
       progress: 2.0.3
-      proxy-agent: 6.5.0(supports-color@7.2.0)
+      proxy-agent: 6.5.0
       retry: 0.13.1
       semver: 7.8.5
       sql-formatter: 15.8.2
       stream-chain: 2.2.5
       stream-json: 1.9.1
-      superstatic: 10.0.0(supports-color@7.2.0)
+      superstatic: 10.0.0
       tar: 7.5.22
-      tcp-port-used: 1.0.3(supports-color@7.2.0)
+      tcp-port-used: 1.0.3
       tmp: 0.2.7
       triple-beam: 1.4.1
       undici: 6.28.0
-      universal-analytics: 0.5.4(supports-color@7.2.0)
+      universal-analytics: 0.5.4
       update-notifier-cjs: 5.1.7
       winston: 3.19.0
       winston-transport: 4.9.0
       ws: 8.21.3
       yaml: 2.9.0
-      zod: 4.5.4
+      zod: 4.4.3
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - '@types/node'
@@ -6019,54 +5986,54 @@ snapshots:
 
   fuzzy@0.1.3: {}
 
-  gaxios@6.7.1(supports-color@7.2.0):
+  gaxios@6.7.1:
     dependencies:
       extend: 3.0.2
-      https-proxy-agent: 7.0.6(supports-color@7.2.0)
+      https-proxy-agent: 7.0.6
       is-stream: 2.0.1
       node-fetch: 2.7.0
-      uuid: 9.0.1
+      uuid: 11.1.1
     transitivePeerDependencies:
       - encoding
       - supports-color
 
-  gaxios@7.1.3(supports-color@7.2.0):
+  gaxios@7.1.3:
     dependencies:
       extend: 3.0.2
-      https-proxy-agent: 7.0.6(supports-color@7.2.0)
+      https-proxy-agent: 7.0.6
       node-fetch: 3.3.2
       rimraf: 5.0.10
     transitivePeerDependencies:
       - supports-color
 
-  gaxios@7.3.1(supports-color@7.2.0):
+  gaxios@7.3.1:
     dependencies:
       extend: 3.0.2
-      https-proxy-agent: 7.0.6(supports-color@7.2.0)
+      https-proxy-agent: 7.0.6
       node-fetch: 3.3.2
     transitivePeerDependencies:
       - supports-color
 
-  gcp-metadata@6.1.1(supports-color@7.2.0):
+  gcp-metadata@6.1.1:
     dependencies:
-      gaxios: 6.7.1(supports-color@7.2.0)
+      gaxios: 6.7.1
       google-logging-utils: 0.0.2
       json-bigint: 1.0.0
     transitivePeerDependencies:
       - encoding
       - supports-color
 
-  gcp-metadata@8.1.2(supports-color@7.2.0):
+  gcp-metadata@8.1.2:
     dependencies:
-      gaxios: 7.3.1(supports-color@7.2.0)
+      gaxios: 7.3.1
       google-logging-utils: 1.2.0
       json-bigint: 1.0.0
     transitivePeerDependencies:
       - supports-color
 
-  gcp-metadata@8.1.4(supports-color@7.2.0):
+  gcp-metadata@8.1.4:
     dependencies:
-      gaxios: 7.1.3(supports-color@7.2.0)
+      gaxios: 7.1.3
       google-logging-utils: 1.1.3
       json-bigint: 1.0.0
     transitivePeerDependencies:
@@ -6092,11 +6059,11 @@ snapshots:
       dunder-proto: 1.0.1
       es-object-atoms: 1.1.2
 
-  get-uri@6.0.5(supports-color@7.2.0):
+  get-uri@6.0.5:
     dependencies:
       basic-ftp: 5.3.1
       data-uri-to-buffer: 6.0.2
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
 
@@ -6129,72 +6096,72 @@ snapshots:
     dependencies:
       ini: 2.0.0
 
-  google-auth-library@10.5.0(supports-color@7.2.0):
+  google-auth-library@10.5.0:
     dependencies:
       base64-js: 1.5.1
       ecdsa-sig-formatter: 1.0.11
-      gaxios: 7.3.1(supports-color@7.2.0)
-      gcp-metadata: 8.1.4(supports-color@7.2.0)
+      gaxios: 7.3.1
+      gcp-metadata: 8.1.4
       google-logging-utils: 1.2.0
-      gtoken: 8.0.0(supports-color@7.2.0)
+      gtoken: 8.0.0
       jws: 4.0.1
     transitivePeerDependencies:
       - supports-color
 
-  google-auth-library@10.9.1(supports-color@7.2.0):
+  google-auth-library@10.9.1:
     dependencies:
       base64-js: 1.5.1
       ecdsa-sig-formatter: 1.0.11
-      gaxios: 7.3.1(supports-color@7.2.0)
-      gcp-metadata: 8.1.2(supports-color@7.2.0)
+      gaxios: 7.3.1
+      gcp-metadata: 8.1.2
       google-logging-utils: 1.1.3
       jws: 4.0.1
     transitivePeerDependencies:
       - supports-color
 
-  google-auth-library@9.15.1(supports-color@7.2.0):
+  google-auth-library@9.15.1:
     dependencies:
       base64-js: 1.5.1
       ecdsa-sig-formatter: 1.0.11
-      gaxios: 6.7.1(supports-color@7.2.0)
-      gcp-metadata: 6.1.1(supports-color@7.2.0)
-      gtoken: 7.1.0(supports-color@7.2.0)
+      gaxios: 6.7.1
+      gcp-metadata: 6.1.1
+      gtoken: 7.1.0
       jws: 4.0.1
     transitivePeerDependencies:
       - encoding
       - supports-color
 
-  google-gax@4.6.1(supports-color@7.2.0):
+  google-gax@4.6.1:
     dependencies:
       '@grpc/grpc-js': 1.14.4
       '@grpc/proto-loader': 0.7.15
       '@types/long': 4.0.2
       abort-controller: 3.0.0
       duplexify: 4.1.3
-      google-auth-library: 9.15.1(supports-color@7.2.0)
+      google-auth-library: 9.15.1
       node-fetch: 2.7.0
       object-hash: 3.0.0
       proto3-json-serializer: 2.0.2
       protobufjs: 7.6.5
-      retry-request: 7.0.2(supports-color@7.2.0)
-      uuid: 9.0.1
+      retry-request: 7.0.2
+      uuid: 11.1.1
     transitivePeerDependencies:
       - encoding
       - supports-color
     optional: true
 
-  google-gax@5.0.8(supports-color@7.2.0):
+  google-gax@5.0.8:
     dependencies:
       '@grpc/grpc-js': 1.14.4
       '@grpc/proto-loader': 0.8.1
       duplexify: 4.1.3
-      google-auth-library: 10.5.0(supports-color@7.2.0)
+      google-auth-library: 10.5.0
       google-logging-utils: 1.1.3
       node-fetch: 3.3.2
       object-hash: 3.0.0
       proto3-json-serializer: 3.0.4
-      protobufjs: 7.6.6
-      retry-request: 8.0.4(supports-color@7.2.0)
+      protobufjs: 7.6.5
+      retry-request: 8.0.4
       rimraf: 5.0.10
     transitivePeerDependencies:
       - supports-color
@@ -6205,13 +6172,13 @@ snapshots:
 
   google-logging-utils@1.2.0: {}
 
-  googleapis-common@8.0.3(supports-color@7.2.0):
+  googleapis-common@8.0.3:
     dependencies:
       extend: 3.0.2
-      gaxios: 7.1.3(supports-color@7.2.0)
-      google-auth-library: 10.5.0(supports-color@7.2.0)
+      gaxios: 7.1.3
+      google-auth-library: 10.5.0
       google-logging-utils: 1.1.3
-      qs: 6.16.0
+      qs: 6.15.3
       url-template: 2.0.8
     transitivePeerDependencies:
       - supports-color
@@ -6222,17 +6189,17 @@ snapshots:
 
   graceful-fs@4.2.11: {}
 
-  gtoken@7.1.0(supports-color@7.2.0):
+  gtoken@7.1.0:
     dependencies:
-      gaxios: 6.7.1(supports-color@7.2.0)
+      gaxios: 6.7.1
       jws: 4.0.1
     transitivePeerDependencies:
       - encoding
       - supports-color
 
-  gtoken@8.0.0(supports-color@7.2.0):
+  gtoken@8.0.0:
     dependencies:
-      gaxios: 7.3.1(supports-color@7.2.0)
+      gaxios: 7.3.1
       jws: 4.0.1
     transitivePeerDependencies:
       - supports-color
@@ -6257,7 +6224,7 @@ snapshots:
 
   highlight.js@10.7.3: {}
 
-  hono@4.13.5: {}
+  hono@4.13.3: {}
 
   html-entities@2.6.0:
     optional: true
@@ -6272,34 +6239,34 @@ snapshots:
 
   http-parser-js@0.5.10: {}
 
-  http-proxy-agent@5.0.0(supports-color@7.2.0):
+  http-proxy-agent@5.0.0:
     dependencies:
       '@tootallnate/once': 2.0.1
-      agent-base: 6.0.2(supports-color@7.2.0)
-      debug: 4.4.3(supports-color@7.2.0)
+      agent-base: 6.0.2
+      debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
     optional: true
 
-  http-proxy-agent@7.0.2(supports-color@7.2.0):
+  http-proxy-agent@7.0.2:
     dependencies:
       agent-base: 7.1.4
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
 
-  https-proxy-agent@5.0.1(supports-color@7.2.0):
+  https-proxy-agent@5.0.1:
     dependencies:
-      agent-base: 6.0.2(supports-color@7.2.0)
-      debug: 4.4.3(supports-color@7.2.0)
+      agent-base: 6.0.2
+      debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
     optional: true
 
-  https-proxy-agent@7.0.6(supports-color@7.2.0):
+  https-proxy-agent@7.0.6:
     dependencies:
       agent-base: 7.1.4
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
 
@@ -6332,7 +6299,7 @@ snapshots:
   install-artifact-from-github@1.8.0:
     optional: true
 
-  ip-address@10.7.0: {}
+  ip-address@10.5.0: {}
 
   ip-regex@2.1.0: {}
 
@@ -6426,9 +6393,9 @@ snapshots:
 
   jose@4.15.9: {}
 
-  jose@6.2.10: {}
+  jose@6.2.9: {}
 
-  js-yaml@4.3.2:
+  js-yaml@4.3.1:
     dependencies:
       argparse: 2.0.1
 
@@ -6477,10 +6444,10 @@ snapshots:
       ecdsa-sig-formatter: 1.0.11
       safe-buffer: 5.2.1
 
-  jwks-rsa@3.2.2(supports-color@7.2.0):
+  jwks-rsa@3.2.2:
     dependencies:
       '@types/jsonwebtoken': 9.0.10
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       jose: 4.15.9
       limiter: 1.1.5
       lru-memoizer: 2.3.0
@@ -6662,10 +6629,10 @@ snapshots:
 
   moo@0.5.3: {}
 
-  morgan@1.12.0(supports-color@7.2.0):
+  morgan@1.11.0:
     dependencies:
       basic-auth: 2.0.1
-      debug: 2.6.9(supports-color@7.2.0)
+      debug: 2.6.9
       depd: 2.0.0
       on-finished: 2.4.1
       on-headers: 1.1.0
@@ -6727,7 +6694,7 @@ snapshots:
       fetch-blob: 3.2.0
       formdata-polyfill: 4.0.10
 
-  node-gyp@13.0.2:
+  node-gyp@13.0.1:
     dependencies:
       env-paths: 2.2.1
       exponential-backoff: 3.1.3
@@ -6819,16 +6786,16 @@ snapshots:
 
   p-throttle@8.1.0: {}
 
-  pac-proxy-agent@7.2.0(supports-color@7.2.0):
+  pac-proxy-agent@7.2.0:
     dependencies:
       '@tootallnate/quickjs-emscripten': 0.23.0
       agent-base: 7.1.4
-      debug: 4.4.3(supports-color@7.2.0)
-      get-uri: 6.0.5(supports-color@7.2.0)
-      http-proxy-agent: 7.0.2(supports-color@7.2.0)
-      https-proxy-agent: 7.0.6(supports-color@7.2.0)
+      debug: 4.4.3
+      get-uri: 6.0.5
+      http-proxy-agent: 7.0.2
+      https-proxy-agent: 7.0.6
       pac-resolver: 7.0.1
-      socks-proxy-agent: 8.0.5(supports-color@7.2.0)
+      socks-proxy-agent: 8.0.5
     transitivePeerDependencies:
       - supports-color
 
@@ -6916,10 +6883,10 @@ snapshots:
 
   pkce-challenge@5.0.1: {}
 
-  portfinder@1.0.38(supports-color@7.2.0):
+  portfinder@1.0.38:
     dependencies:
       async: 3.2.6
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
 
@@ -6963,23 +6930,9 @@ snapshots:
 
   proto3-json-serializer@3.0.4:
     dependencies:
-      protobufjs: 7.6.6
+      protobufjs: 7.6.5
 
   protobufjs@7.6.5:
-    dependencies:
-      '@protobufjs/aspromise': 1.1.2
-      '@protobufjs/base64': 1.1.2
-      '@protobufjs/codegen': 2.0.5
-      '@protobufjs/eventemitter': 1.1.1
-      '@protobufjs/fetch': 1.1.1
-      '@protobufjs/float': 1.0.2
-      '@protobufjs/path': 1.1.2
-      '@protobufjs/pool': 1.1.0
-      '@protobufjs/utf8': 1.1.2
-      '@types/node': 24.13.3
-      long: 5.3.2
-
-  protobufjs@7.6.6:
     dependencies:
       '@protobufjs/aspromise': 1.1.2
       '@protobufjs/base64': 1.1.2
@@ -6998,16 +6951,16 @@ snapshots:
       forwarded: 0.2.0
       ipaddr.js: 1.9.1
 
-  proxy-agent@6.5.0(supports-color@7.2.0):
+  proxy-agent@6.5.0:
     dependencies:
       agent-base: 7.1.4
-      debug: 4.4.3(supports-color@7.2.0)
-      http-proxy-agent: 7.0.2(supports-color@7.2.0)
-      https-proxy-agent: 7.0.6(supports-color@7.2.0)
+      debug: 4.4.3
+      http-proxy-agent: 7.0.2
+      https-proxy-agent: 7.0.6
       lru-cache: 7.18.3
-      pac-proxy-agent: 7.2.0(supports-color@7.2.0)
+      pac-proxy-agent: 7.2.0
       proxy-from-env: 1.1.0
-      socks-proxy-agent: 8.0.5(supports-color@7.2.0)
+      socks-proxy-agent: 8.0.5
     transitivePeerDependencies:
       - supports-color
 
@@ -7020,11 +6973,6 @@ snapshots:
       escape-goat: 2.1.1
 
   qs@6.15.3:
-    dependencies:
-      es-define-property: 1.0.1
-      side-channel: 1.1.1
-
-  qs@6.16.0:
     dependencies:
       es-define-property: 1.0.1
       side-channel: 1.1.1
@@ -7065,7 +7013,7 @@ snapshots:
     dependencies:
       install-artifact-from-github: 1.8.0
       nan: 2.28.0
-      node-gyp: 13.0.2
+      node-gyp: 13.0.1
     optional: true
 
   re2js@2.8.6: {}
@@ -7121,20 +7069,20 @@ snapshots:
 
   ret@0.1.15: {}
 
-  retry-request@7.0.2(supports-color@7.2.0):
+  retry-request@7.0.2:
     dependencies:
       '@types/request': 2.48.13
       extend: 3.0.2
-      teeny-request: 9.0.0(supports-color@7.2.0)
+      teeny-request: 9.0.0
     transitivePeerDependencies:
       - encoding
       - supports-color
     optional: true
 
-  retry-request@8.0.4(supports-color@7.2.0):
+  retry-request@8.0.4:
     dependencies:
       extend: 3.0.2
-      teeny-request: 10.1.4(supports-color@7.2.0)
+      teeny-request: 10.1.4
     transitivePeerDependencies:
       - supports-color
 
@@ -7176,9 +7124,9 @@ snapshots:
       '@rollup/rollup-win32-x64-msvc': 4.62.5
       fsevents: 2.3.3
 
-  router@2.2.0(supports-color@7.2.0):
+  router@2.2.0:
     dependencies:
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       depd: 2.0.0
       is-promise: 4.0.0
       parseurl: 1.3.3
@@ -7202,9 +7150,9 @@ snapshots:
 
   semver@7.8.5: {}
 
-  send@0.19.2(supports-color@7.2.0):
+  send@0.19.2:
     dependencies:
-      debug: 2.6.9(supports-color@7.2.0)
+      debug: 2.6.9
       depd: 2.0.0
       destroy: 1.2.0
       encodeurl: 2.0.0
@@ -7220,9 +7168,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  send@1.2.1(supports-color@7.2.0):
+  send@1.2.1:
     dependencies:
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       encodeurl: 2.0.0
       escape-html: 1.0.3
       etag: 1.8.1
@@ -7236,21 +7184,21 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  serve-static@1.16.3(supports-color@7.2.0):
+  serve-static@1.16.3:
     dependencies:
       encodeurl: 2.0.0
       escape-html: 1.0.3
       parseurl: 1.3.3
-      send: 0.19.2(supports-color@7.2.0)
+      send: 0.19.2
     transitivePeerDependencies:
       - supports-color
 
-  serve-static@2.2.1(supports-color@7.2.0):
+  serve-static@2.2.1:
     dependencies:
       encodeurl: 2.0.0
       escape-html: 1.0.3
       parseurl: 1.3.3
-      send: 1.2.1(supports-color@7.2.0)
+      send: 1.2.1
     transitivePeerDependencies:
       - supports-color
 
@@ -7302,17 +7250,17 @@ snapshots:
 
   smart-buffer@4.2.0: {}
 
-  socks-proxy-agent@8.0.5(supports-color@7.2.0):
+  socks-proxy-agent@8.0.5:
     dependencies:
       agent-base: 7.1.4
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       socks: 2.8.9
     transitivePeerDependencies:
       - supports-color
 
   socks@2.8.9:
     dependencies:
-      ip-address: 10.7.0
+      ip-address: 10.5.0
       smart-buffer: 4.2.0
 
   source-map-js@1.2.1: {}
@@ -7349,7 +7297,7 @@ snapshots:
 
   stream-shift@1.0.3: {}
 
-  streamx@2.28.1:
+  streamx@2.28.0:
     dependencies:
       events-universal: 1.0.1
       fast-fifo: 1.3.2
@@ -7395,12 +7343,12 @@ snapshots:
 
   stubs@3.0.0: {}
 
-  superstatic@10.0.0(supports-color@7.2.0):
+  superstatic@10.0.0:
     dependencies:
       basic-auth-connect: 1.1.0
       commander: 10.0.1
-      compression: 1.8.1(supports-color@7.2.0)
-      connect: 3.7.0(supports-color@7.2.0)
+      compression: 1.8.1
+      connect: 3.7.0
       destroy: 1.2.0
       glob-slasher: 1.0.1
       is-url: 1.2.4
@@ -7408,11 +7356,11 @@ snapshots:
       lodash: 4.18.1
       mime-types: 2.1.35
       minimatch: 6.2.3
-      morgan: 1.12.0(supports-color@7.2.0)
+      morgan: 1.11.0
       on-finished: 2.4.1
       on-headers: 1.1.0
       path-to-regexp: 1.9.0
-      router: 2.2.0(supports-color@7.2.0)
+      router: 2.2.0
       update-notifier-cjs: 5.1.7
     optionalDependencies:
       re2: 1.26.1
@@ -7429,12 +7377,12 @@ snapshots:
       has-flag: 4.0.0
       supports-color: 7.2.0
 
-  tar-stream@3.2.1:
+  tar-stream@3.2.0:
     dependencies:
       b4a: 1.8.1
-      bare-fs: 4.8.1
+      bare-fs: 4.8.0
       fast-fifo: 1.3.2
-      streamx: 2.28.1
+      streamx: 2.28.0
     transitivePeerDependencies:
       - bare-abort-controller
       - bare-buffer
@@ -7448,29 +7396,29 @@ snapshots:
       minizlib: 3.1.0
       yallist: 5.0.0
 
-  tcp-port-used@1.0.3(supports-color@7.2.0):
+  tcp-port-used@1.0.3:
     dependencies:
-      debug: 4.3.1(supports-color@7.2.0)
+      debug: 4.3.1
       is2: 2.0.1
     transitivePeerDependencies:
       - supports-color
 
-  teeny-request@10.1.4(supports-color@7.2.0):
+  teeny-request@10.1.4:
     dependencies:
-      http-proxy-agent: 7.0.2(supports-color@7.2.0)
-      https-proxy-agent: 7.0.6(supports-color@7.2.0)
+      http-proxy-agent: 7.0.2
+      https-proxy-agent: 7.0.6
       node-fetch: 3.3.2
       stream-events: 1.0.5
     transitivePeerDependencies:
       - supports-color
 
-  teeny-request@9.0.0(supports-color@7.2.0):
+  teeny-request@9.0.0:
     dependencies:
-      http-proxy-agent: 5.0.0(supports-color@7.2.0)
-      https-proxy-agent: 5.0.1(supports-color@7.2.0)
+      http-proxy-agent: 5.0.0
+      https-proxy-agent: 5.0.1
       node-fetch: 2.7.0
       stream-events: 1.0.5
-      uuid: 9.0.1
+      uuid: 11.1.1
     transitivePeerDependencies:
       - encoding
       - supports-color
@@ -7478,7 +7426,7 @@ snapshots:
 
   teex@1.0.1:
     dependencies:
-      streamx: 2.28.1
+      streamx: 2.28.0
     transitivePeerDependencies:
       - bare-abort-controller
       - react-native-b4a
@@ -7555,13 +7503,13 @@ snapshots:
     dependencies:
       is-typedarray: 1.0.0
 
-  typescript-eslint@8.68.0(eslint@10.8.1(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3):
+  typescript-eslint@8.68.0(eslint@10.8.1)(typescript@6.0.3):
     dependencies:
-      '@typescript-eslint/eslint-plugin': 8.68.0(@typescript-eslint/parser@8.68.0(eslint@10.8.1(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3))(eslint@10.8.1(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3)
-      '@typescript-eslint/parser': 8.68.0(eslint@10.8.1(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3)
-      '@typescript-eslint/typescript-estree': 8.68.0(supports-color@7.2.0)(typescript@6.0.3)
-      '@typescript-eslint/utils': 8.68.0(eslint@10.8.1(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3)
-      eslint: 10.8.1(supports-color@7.2.0)
+      '@typescript-eslint/eslint-plugin': 8.68.0(@typescript-eslint/parser@8.68.0(eslint@10.8.1)(typescript@6.0.3))(eslint@10.8.1)(typescript@6.0.3)
+      '@typescript-eslint/parser': 8.68.0(eslint@10.8.1)(typescript@6.0.3)
+      '@typescript-eslint/typescript-estree': 8.68.0(typescript@6.0.3)
+      '@typescript-eslint/utils': 8.68.0(eslint@10.8.1)(typescript@6.0.3)
+      eslint: 10.8.1
       typescript: 6.0.3
     transitivePeerDependencies:
       - supports-color
@@ -7581,9 +7529,9 @@ snapshots:
     dependencies:
       crypto-random-string: 2.0.0
 
-  universal-analytics@0.5.4(supports-color@7.2.0):
+  universal-analytics@0.5.4:
     dependencies:
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       uuid: 14.0.2
     transitivePeerDependencies:
       - supports-color
@@ -7625,9 +7573,9 @@ snapshots:
 
   utils-merge@1.0.1: {}
 
-  uuid@14.0.2: {}
+  uuid@11.1.1: {}
 
-  uuid@9.0.1: {}
+  uuid@14.0.2: {}
 
   valid-url@1.0.9: {}
 
@@ -7820,10 +7768,8 @@ snapshots:
       compress-commons: 6.0.2
       readable-stream: 4.7.0
 
-  zod-to-json-schema@3.25.2(zod@4.5.4):
+  zod-to-json-schema@3.25.2(zod@4.4.3):
     dependencies:
-      zod: 4.5.4
+      zod: 4.4.3
 
   zod@4.4.3: {}
-
-  zod@4.5.4: {}
