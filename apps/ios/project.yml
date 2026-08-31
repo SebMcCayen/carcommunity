@@ -44,6 +44,12 @@ targets:
       # mirroring Android's media/StorageImageUrl.
       - package: Firebase
         product: FirebaseStorage
+      # Live location: the caller's own session node is READ from Realtime
+      # Database (liveLocation/{uid}/session — FirebaseLiveLocationRepository),
+      # mirroring Android's FirebaseLiveLocationRepository; all live writes go
+      # through callables.
+      - package: Firebase
+        product: FirebaseDatabase
     info:
       path: KCC/Info.plist
       properties:
