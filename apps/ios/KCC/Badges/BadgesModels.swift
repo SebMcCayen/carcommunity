@@ -4,13 +4,14 @@ import Foundation
 /// Android's `badges/Badge.kt`, `badges/BadgeLadders.kt` and
 /// `badges/BadgeShowcase.kt`, restricted to the OWN badge-wall slice.
 ///
-/// Read-only: awards live at `users/{uid}/badges/{badgeKey}` (owner read,
-/// backend-only writes — firebase/firestore.rules), and the authoritative
-/// per-ladder counters live at the backend-only `badgeProgress/{uid}`
-/// document that `firebase/firestore.rules` denies to EVERY client, owner
-/// included. The wall therefore folds two inputs — the award documents and
-/// the counters handed to the OWN client by the owner-only
-/// `badges-getMyProgress` callable — into the full catalog.
+/// Read-only: awards live at `users/{uid}/badges/{badgeKey}` — PUBLIC read for
+/// any authenticated user, backend-only writes (firebase/firestore.rules), so
+/// an award is a trophy any member may see on another's wall — while the
+/// authoritative per-ladder counters live at the backend-only
+/// `badgeProgress/{uid}` document that `firebase/firestore.rules` denies to
+/// EVERY client, owner included. The wall therefore folds two inputs — the
+/// award documents and the counters handed to the OWN client by the
+/// owner-only `badges-getMyProgress` callable — into the full catalog.
 ///
 /// Pure Swift (no Firebase, no SwiftUI) so it is fully unit-testable and
 /// shared by the repository, coordinator, and screen.

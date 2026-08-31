@@ -107,11 +107,13 @@ final class FirebaseBadgesRepository: BadgesRepository, @unchecked Sendable {
     /// validation builds — see apps/ios/README.md).
     ///
     /// The Firestore emulator seam (`FIREBASE_FIRESTORE_EMULATOR_HOST`) is
-    /// applied by ``FirebaseEventsRepository`` when it constructs the shared
-    /// `Firestore.firestore()`; the functions emulator seam
-    /// (`FIREBASE_FUNCTIONS_EMULATOR_HOST`) is applied by
-    /// ``KccFunctionsClient``. This repository reuses both, so no host parsing
-    /// is duplicated here.
+    /// applied here too — Firestore is a process-wide singleton, so
+    /// ``FirebaseEventsRepository`` (or whichever repository factory runs
+    /// first) may already have pointed it at the emulator; the host check
+    /// below makes this application a no-op rather than mutating settings
+    /// twice. The functions emulator seam (`FIREBASE_FUNCTIONS_EMULATOR_HOST`)
+    /// is applied exactly once, by ``KccFunctionsClient`` itself, so it is not
+    /// duplicated here.
     static func createIfAvailable() -> BadgesRepository? {
         guard FirebaseApp.app() != nil, let functions = KccFunctionsClient.createIfAvailable() else {
             return nil
