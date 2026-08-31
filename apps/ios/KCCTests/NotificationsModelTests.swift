@@ -60,7 +60,13 @@ final class NotificationsModelTests: XCTestCase {
             id: "n1",
             fields: ["title": "Hi", "actionType": "open_teleporter"]
         )
-        XCTAssertEqual(item?.actionType, .none)
+        // Written out explicitly (not bare `.none`): `item?.actionType` is
+        // `NotificationActionType?`, and `NotificationActionType` itself
+        // declares a case literally named `none`, so a bare `.none` here is
+        // AMBIGUOUS — Swift resolves it to `Optional.none` (nil), which is
+        // never true (item is non-nil), silently making the assertion always
+        // fail. This is exactly what broke CI (see PR #1055 review history).
+        XCTAssertEqual(item?.actionType, NotificationActionType.none)
     }
 
     func testDecodeDefaultsReadFlagAndOptionalsWhenAbsent() {
@@ -71,7 +77,9 @@ final class NotificationsModelTests: XCTestCase {
         XCTAssertNil(item?.body)
         XCTAssertNil(item?.relatedEntityId)
         XCTAssertEqual(item?.category, .systemNotice)
-        XCTAssertEqual(item?.actionType, .none)
+        // See the comment in testDecodeUnknownActionTypeDegradesToNone: bare
+        // `.none` against an Optional<NotificationActionType> is ambiguous.
+        XCTAssertEqual(item?.actionType, NotificationActionType.none)
     }
 
     // MARK: - unread + sort
