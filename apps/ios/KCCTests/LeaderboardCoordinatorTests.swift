@@ -201,7 +201,7 @@ final class LeaderboardCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.selectedCategoryBoard?.entries.count, 1)
 
         repository.emit(Self.loadedAllTime(crownPointUids: ["a", "b", "c"]))
-        await waitForState(of: coordinator) { coordinator.selectedCategoryBoard?.entries.count == 3 }
+        await waitForState(of: coordinator) { _ in coordinator.selectedCategoryBoard?.entries.count == 3 }
         XCTAssertEqual(repository.subscribeCount, 1)
     }
 
