@@ -1,0 +1,18 @@
+import Foundation
+
+/// The member's own Crown-Point balance, for the shop's affordability hint —
+/// the iOS port of the balance half of Android's `PointsRepository`
+/// (`observeBalance`). A single owner-scoped read of `pointsLedger/{uid}.balance`
+/// (readable by id — firestore.rules `allow get: if isAuthenticated()`).
+///
+/// Firebase-free protocol so the shop coordinator is testable with a fake. The
+/// balance is a DISPLAY hint only: the server re-checks it on every buy and
+/// remains the sole authority on whether a debit lands, so a nil balance (no
+/// read yet, or no ledger source wired) simply renders as 0 CP and every perk
+/// as not-yet-affordable rather than blocking the list.
+protocol PerkBalanceRepository: AnyObject, Sendable {
+    /// The member's live balance in Crown Points; emits nil on
+    /// absence/transient error so the shop still renders. Each call returns a
+    /// fresh stream backed by its own listener.
+    func balance(uid: String) -> AsyncStream<Int?>
+}
