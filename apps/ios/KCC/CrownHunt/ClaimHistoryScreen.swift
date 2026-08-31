@@ -21,7 +21,11 @@ struct ClaimHistoryScreen: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: KccSpacing.s3) {
+            // A LazyVStack, not a VStack: the list is bounded to
+            // ``CrownHuntClaims/queryLimit`` (100) rows, and a plain VStack
+            // would eagerly lay every row out even when the member has never
+            // scrolled past the first few.
+            LazyVStack(spacing: KccSpacing.s3) {
                 content
             }
             .padding(KccSpacing.s4)
@@ -32,8 +36,10 @@ struct ClaimHistoryScreen: View {
 
     /// Screen title — the flagged `crownHunt.claimHistoryTitle` key with a
     /// default until it lands in the contract (the string-literal `defaultValue`
-    /// initializer both localizes and provides the interim fallback).
-    private static var title: String {
+    /// initializer both localizes and provides the interim fallback). Internal
+    /// so ``CrownHuntHubView`` can reuse it as the toolbar entry point's
+    /// accessibility label without duplicating the fallback string.
+    static var title: String {
         String(localized: "crownHunt.claimHistoryTitle", defaultValue: "Claim history")
     }
 

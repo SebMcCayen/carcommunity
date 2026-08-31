@@ -51,9 +51,10 @@ private struct LeaderboardRowView: View {
 
 /// The season standings as its own screen — a scrollable full board fed by a
 /// ``CrownHuntStatsCoordinator`` (the same one-shot read the hub uses; the board
-/// travels with the personal stats). Reached from the hub as a distinct
-/// destination in a later wiring PR (the shell has a `ShellRoute.crownHunt`
-/// case; this surface is exported ready for it).
+/// travels with the personal stats). Reached by tapping the inline
+/// ``SeasonStandingsView`` card on ``CrownHuntHomeScreen``. Also exported ready
+/// for the shell to link to directly once it wires `ShellRoute.crownHunt`,
+/// which this slice deliberately does not touch.
 struct SeasonStandingsScreen: View {
     let coordinator: CrownHuntStatsCoordinator?
 

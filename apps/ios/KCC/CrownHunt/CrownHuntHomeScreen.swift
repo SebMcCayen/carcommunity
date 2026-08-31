@@ -31,14 +31,24 @@ struct CrownHuntHomeScreen: View {
                 CrownHuntMessageState(title: "crownHunt.screenTitle", message: "crownHunt.loading")
             case .empty(let seasonId):
                 NoStatsYetCard()
-                SeasonStandingsView(board: .empty(seasonId: seasonId))
+                NavigationLink {
+                    SeasonStandingsScreen(coordinator: coordinator)
+                } label: {
+                    SeasonStandingsView(board: .empty(seasonId: seasonId))
+                }
+                .buttonStyle(.plain)
             case .loaded(let data):
                 if let personal = data.personal {
                     PersonalStatsCard(stats: personal)
                 } else {
                     NoStatsYetCard()
                 }
-                SeasonStandingsView(board: data.board)
+                NavigationLink {
+                    SeasonStandingsScreen(coordinator: coordinator)
+                } label: {
+                    SeasonStandingsView(board: data.board)
+                }
+                .buttonStyle(.plain)
             case .unavailable:
                 CrownHuntMessageState(
                     title: "crownHunt.screenTitle", message: "crownHunt.resultFeatureDisabled"

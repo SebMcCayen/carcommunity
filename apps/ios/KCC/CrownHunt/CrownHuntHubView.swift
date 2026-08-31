@@ -27,6 +27,7 @@ struct CrownHuntHubView: View {
                                 ClaimHistoryScreen(coordinator: claimsCoordinator)
                             } label: {
                                 Image(systemName: "clock.arrow.circlepath")
+                                    .accessibilityLabel(ClaimHistoryScreen.title)
                             }
                         }
                     }

@@ -73,7 +73,7 @@ final class FirebaseCrownHuntStatsRepository: CrownHuntStatsRepository, @uncheck
         // Resolve names for the ranked page and the viewer, best-effort.
         var uids = Set(counters.map { $0.uid })
         uids.insert(uid)
-        let names = try await resolveNames(uids)
+        let names = await resolveNames(uids)
 
         let board = CrownHuntBoard.board(
             counters: counters, viewerUid: uid, names: names, seasonId: seasonId
@@ -90,10 +90,18 @@ final class FirebaseCrownHuntStatsRepository: CrownHuntStatsRepository, @uncheck
     /// Best-effort display-name resolution: reads each public `users/{uid}`
     /// profile by id, dropping any that error or lack a name. Bounded to the
     /// ranked page (<= LEADERBOARD_TOP_N) plus the viewer.
-    private func resolveNames(_ uids: Set<String>) async throws -> [String: String] {
+    ///
+    /// Genuinely best-effort: a single profile read failing (deleted account,
+    /// a transient permission hiccup) is swallowed here rather than thrown, so
+    /// it degrades that one row to the uid stub instead of failing the whole
+    /// stats read.
+    private func resolveNames(_ uids: Set<String>) async -> [String: String] {
         var names: [String: String] = [:]
         for uid in uids {
-            let document = try await firestore.collection(Self.users).document(uid).getDocument()
+            guard
+                let document = try? await firestore.collection(Self.users).document(uid)
+                    .getDocument()
+            else { continue }
             if let name = document.get(Self.displayNameField) as? String {
                 names[uid] = name
             }
