@@ -15,9 +15,14 @@ enum CrownHuntFirebase {
     /// `FIREBASE_FIRESTORE_EMULATOR_HOST` is set.
     static func firestore() -> Firestore {
         let firestore = Firestore.firestore()
+        // Guarded like every other repository's emulator seam (e.g.
+        // `FirebaseUserProfileRepository`, `FirebaseVehiclesRepository`): once
+        // `Firestore.firestore()` has been used, reapplying `useEmulator` on
+        // the same singleton is unsafe, so only call it when the host isn't
+        // already pointed there.
         if let emulator = FirebaseEmulatorHost.parse(
             ProcessInfo.processInfo.environment["FIREBASE_FIRESTORE_EMULATOR_HOST"]
-        ) {
+        ), firestore.settings.host != "\(emulator.host):\(emulator.port)" {
             firestore.useEmulator(withHost: emulator.host, port: emulator.port)
         }
         return firestore
