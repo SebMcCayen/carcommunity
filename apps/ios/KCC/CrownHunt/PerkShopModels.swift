@@ -125,11 +125,16 @@ struct PerkPurchaseError: Error, Equatable, Sendable {
 enum PerkPurchaseReason {
     static let insufficientFunds = "insufficient_funds"
     static let holdCap = "hold_cap_reached"
+    /// The backend's catch-all discriminator for every other failed-precondition
+    /// reason (shop disabled, catalog entry missing, …). Named explicitly —
+    /// rather than left as a bare string in the `default` branch below — so it
+    /// stays visible as a constant this mirrors from the server.
+    static let shopUnavailable = "shop_unavailable"
 
     /// Maps a `failed-precondition` reason discriminator to its failure family.
     /// `insufficient_funds` → ``PerkBuyFailureReason/insufficientFunds``;
     /// `hold_cap_reached` → ``PerkBuyFailureReason/holdCap``; any other reason
-    /// (including none) → ``PerkBuyFailureReason/unavailable``.
+    /// (including `shop_unavailable`, or none) → ``PerkBuyFailureReason/unavailable``.
     static func failure(for reason: String?) -> PerkBuyFailureReason {
         switch reason {
         case insufficientFunds: return .insufficientFunds
