@@ -60,6 +60,16 @@ final class BadgesModelTests: XCTestCase {
         XCTAssertNil(trogen?.rung(for: .platina))
     }
 
+    func testTierPointsMatchAndroidsCatalog() {
+        // Parity with Android's BADGE_TIER_POINTS — not yet read by BadgesWall
+        // (no tap-to-detail sheet there yet), but the catalog mirror must stay
+        // correct for whichever detail UI reads it next.
+        XCTAssertEqual(badgeTierPoints[.brons], 25)
+        XCTAssertEqual(badgeTierPoints[.silver], 75)
+        XCTAssertEqual(badgeTierPoints[.guld], 200)
+        XCTAssertEqual(badgeTierPoints[.platina], 500)
+    }
+
     func testEveryRungKeyResolvesToItsLadder() {
         for ladder in badgeLadders {
             for rung in ladder.rungs {

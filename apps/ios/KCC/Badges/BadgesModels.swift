@@ -255,7 +255,13 @@ let badgeMilestoneKeys: [String] = [
 ]
 
 /// Kronpoäng credited once, the first time a rung is reached — Android's
-/// `BADGE_TIER_POINTS` (TIER_POINTS_REWARD).
+/// `BADGE_TIER_POINTS` (TIER_POINTS_REWARD). The award itself is granted
+/// server-side (functions/src/badges); this catalog mirror exists so a
+/// client-side detail view can show the reward without a round trip. Not yet
+/// read by ``BadgesWall``, which — unlike Android's `ProfileBadgesSection`
+/// (`rememberRungDetail`) — has no tap-to-detail sheet yet; kept here for
+/// catalog parity with Android and ready for whichever detail UI lands next,
+/// per this feature's EXPORTED-BUT-NOT-WIRED shape (see ``BadgesWall``).
 let badgeTierPoints: [BadgeTier: Int] = [
     .brons: 25,
     .silver: 75,
