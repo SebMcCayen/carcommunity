@@ -54,17 +54,19 @@ final class NotificationsInboxCoordinatorTests: XCTestCase {
         }
 
         func markRead(notificationId: String) async throws {
-            lock.lock(); markReadIds.append(notificationId); lock.unlock()
+            // NSLock.lock()/unlock() are unavailable from async contexts (Swift
+            // 6); withLock is the async-safe scoped form.
+            lock.withLock { markReadIds.append(notificationId) }
             if let markError { throw markError }
         }
 
         func markAllRead() async throws {
-            lock.lock(); markAllReadCount += 1; lock.unlock()
+            lock.withLock { markAllReadCount += 1 }
             if let markError { throw markError }
         }
 
         func markSeen() async throws {
-            lock.lock(); markSeenCount += 1; lock.unlock()
+            lock.withLock { markSeenCount += 1 }
         }
 
         func currentUserId() -> String? { "me-uid" }

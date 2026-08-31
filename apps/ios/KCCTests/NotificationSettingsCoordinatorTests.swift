@@ -44,7 +44,9 @@ final class NotificationSettingsCoordinatorTests: XCTestCase {
         }
 
         func savePreferences(uid: String, preferences: NotificationPreferences) async throws {
-            lock.lock(); saved.append(preferences); lock.unlock()
+            // NSLock.lock()/unlock() are unavailable from async contexts (Swift
+            // 6); withLock is the async-safe scoped form.
+            lock.withLock { saved.append(preferences) }
             if let saveError { throw saveError }
         }
     }
