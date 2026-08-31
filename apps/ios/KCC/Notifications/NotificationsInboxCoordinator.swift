@@ -110,7 +110,7 @@ final class NotificationsInboxCoordinator {
         }
     }
 
-    /// Marks every unread notification read (`notifications.markAllRead`),
+    /// Marks every unread notification read (`notifications-markAllRead`),
     /// tracking ``markReadStatus``.
     func markAllRead() async {
         await execute { repository in

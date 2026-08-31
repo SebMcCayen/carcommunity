@@ -98,7 +98,10 @@ struct ShellView: View {
                     }
                 }
         case .history:
-            panelTab { ComingSoonPanel(title: ShellTab.history.title) }
+            // The read-only drives history (Android's DrivesListScreen). The
+            // panel wires itself (repository + uid) at the feature level, so
+            // the shell stays argument-free here.
+            panelTab { DrivesPanel() }
         case .social:
             panelTab {
                 SocialHubPanel(onOpenEvents: { routes = routes.opening(.events) })

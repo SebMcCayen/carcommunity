@@ -147,7 +147,8 @@ private struct NotificationRow: View {
             }
             Text(item.title)
                 .font(.system(size: KccTypeScale.bodyMd, weight: item.isRead ? .regular : KccTypeScale.semibold))
-            if let detail = item.previewText ?? item.body, !detail.isEmpty {
+            if let detail = item.previewText ?? item.body,
+                !detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text(detail)
                     .font(.system(size: KccTypeScale.bodySm))
                     .foregroundStyle(.secondary)

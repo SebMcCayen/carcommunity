@@ -23,8 +23,11 @@ enum NotificationsSnapshot: Equatable, Sendable {
 ///
 /// The inbox is an owner-only Firestore read (notifications/{uid}/items —
 /// firebase/firestore.rules); ALL item writes are backend-only, so read-state
-/// changes go through the `notifications.markRead` / `markAllRead` callables
-/// and the seen-marker through `notifications.markSeen`.
+/// changes go through the `notifications-markRead` / `notifications-markAllRead`
+/// callables and the seen-marker through `notifications-markSeen` (the actual
+/// hyphenated callable identifiers ``FirebaseNotificationsRepository`` calls;
+/// `notifications.markRead` etc. is the contract's dotted documentation
+/// grouping, not the wire name).
 ///
 /// The Notifications red DOT is separate from per-item read state: it is a
 /// last-SEEN marker (``unread(uid:)`` / ``markSeen()``) that mirrors community
@@ -48,16 +51,16 @@ protocol NotificationsRepository: AnyObject, Sendable {
     /// future shell wiring; not consumed by the inbox screen itself.
     func unread(uid: String) -> AsyncStream<Bool>
 
-    /// Marks one notification read (`notifications.markRead`). Idempotent.
+    /// Marks one notification read (`notifications-markRead`). Idempotent.
     /// - Throws: ``KccFunctionsError`` with the contract error code.
     func markRead(notificationId: String) async throws
 
-    /// Marks every unread notification read (`notifications.markAllRead`).
+    /// Marks every unread notification read (`notifications-markAllRead`).
     /// - Throws: ``KccFunctionsError`` with the contract error code.
     func markAllRead() async throws
 
     /// Stamps the caller's last-seen marker so the red dot clears
-    /// (`notifications.markSeen`). Idempotent, best-effort — DELIBERATELY not
+    /// (`notifications-markSeen`). Idempotent, best-effort — DELIBERATELY not
     /// the same as ``markAllRead()``: this clears the dot without flipping any
     /// item's read flag, so per-row unread styling survives opening the inbox.
     /// - Throws: ``KccFunctionsError`` with the contract error code.
