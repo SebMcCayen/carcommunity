@@ -46,6 +46,10 @@ final class ChatModelTests: XCTestCase {
         ])
         XCTAssertEqual(message?.text, "")
         XCTAssertNil(message?.createdAt)  // unparseable → nil instant, message kept
+        // Regression: the raw invalid string must NOT be kept as createdAtIso —
+        // it would otherwise be usable as a pagination cursor and cause an
+        // avoidable loadOlder(before:) backend reject.
+        XCTAssertNil(message?.createdAtIso)
         XCTAssertNil(message?.senderDisplayName)
         XCTAssertEqual(message?.mentionedUids, [])
     }

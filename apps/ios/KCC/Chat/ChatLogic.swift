@@ -260,20 +260,24 @@ enum ChannelResponseParser {
     /// Parses one message row from a callable payload (ISO createdAt). A missing
     /// OR blank `id`/`senderUid` drops the whole row; `text` degrades to `""`;
     /// optional profile fields stay nil; an unparseable `createdAt` keeps the
-    /// message but with a nil instant. Android: `parseMessage`.
+    /// message but with a nil instant AND a nil ``ChannelMessage/createdAtIso``
+    /// — the raw string is dropped rather than kept as a pagination cursor,
+    /// since an invalid cursor sent to `loadOlder(before:)` would just be an
+    /// avoidable backend reject. Android: `parseMessage`.
     static func parseMessage(_ raw: Any?) -> ChannelMessage? {
         guard let map = raw as? [String: Any] else { return nil }
         guard let id = (map["id"] as? String), !id.isEmpty else { return nil }
         guard let senderUid = (map["senderUid"] as? String), !senderUid.isEmpty else { return nil }
         let iso = map["createdAt"] as? String
+        let createdAt = ChannelTime.parseIso(iso)
         return ChannelMessage(
             id: id,
             senderUid: senderUid,
             text: map["text"] as? String ?? "",
             senderDisplayName: map["senderDisplayName"] as? String,
             senderAvatarPath: map["senderAvatarPath"] as? String,
-            createdAt: ChannelTime.parseIso(iso),
-            createdAtIso: iso,
+            createdAt: createdAt,
+            createdAtIso: createdAt != nil ? iso : nil,
             mentionedUids: parseMentionedUids(map["mentionedUids"]),
             clientId: (map["clientId"] as? String).flatMap { $0.isEmpty ? nil : $0 },
             replyTo: parseReplyTo(map["replyTo"])
