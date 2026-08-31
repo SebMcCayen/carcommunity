@@ -54,22 +54,23 @@ struct ChatHubScreen: View {
 
     // MARK: - Tab content
 
+    // Tab content is PLAIN views — the hub relies on the SINGLE navigation
+    // container its host provides (the shell's route host, or the preview's
+    // NavigationStack), rather than nesting a NavigationStack per tab. Nesting
+    // stacks under the out-of-stack tab strip mis-renders the nav bar and would
+    // double up once the hub is presented inside the shell's own stack. The
+    // hub's own `chatHub.title` therefore governs the bar; tab content sets no
+    // navigation title of its own.
     @ViewBuilder
     private func tabContent(_ coordinator: ChatHubCoordinator) -> some View {
         switch coordinator.selectedTab {
         case .community:
-            NavigationStack {
-                CommunityChatScreen(coordinator: coordinator.communityChat)
-            }
+            CommunityChatScreen(coordinator: coordinator.communityChat)
         case .convoys:
-            NavigationStack {
-                ConvoyListScreen(
-                    coordinator: coordinator.convoyList,
-                    chatRepliesEnabled: coordinator.chatRepliesEnabled
-                )
-                .navigationTitle(Text("chatHub.tabConvoys"))
-                .navigationBarTitleDisplayMode(.inline)
-            }
+            ConvoyListScreen(
+                coordinator: coordinator.convoyList,
+                chatRepliesEnabled: coordinator.chatRepliesEnabled
+            )
         case .friends, .notifications:
             // Separate features (DMs / in-app inbox); they wire up when those
             // land. Scaffold shows the neutral unavailable notice for now.
