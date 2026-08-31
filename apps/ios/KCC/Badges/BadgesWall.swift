@@ -1,9 +1,14 @@
 import SwiftUI
 
-/// The member's own BADGE WALL — every rung of every ladder plus the
-/// standalone milestones, earned lit and unearned greyed, with unlock dates
-/// and the climb to the next rung. The iOS port of Android's own-profile badge
-/// wall (`badges/BadgeWall.kt` + `profile/ProfileBadgesSection.kt`).
+/// The member's own BADGE WALL — every rung of every ladder, earned lit and
+/// unearned greyed, with unlock dates and the climb to the next rung, plus the
+/// standalone milestones the member holds. The iOS port of Android's
+/// own-profile badge wall (`badges/BadgeWall.kt` +
+/// `profile/ProfileBadgesSection.kt`), including its milestones behaviour:
+/// unlike a ladder rung, an unheld milestone is never rendered as a locked
+/// goal — several (`early_tester`, the per-season podium badges) are granted
+/// by an admin or by a one-off event rather than earned by climbing, so there
+/// is nothing actionable to show as "locked".
 ///
 /// EXPORTED, NOT WIRED. Android hosts its wall INSIDE the profile
 /// (`ProfileBadgesSection`); on iOS this slice ships the wall as a reusable,
@@ -251,30 +256,45 @@ private struct BadgeMedallionTile: View {
                 .font(.system(size: KccTypeScale.caption, weight: KccTypeScale.medium))
                 .foregroundStyle(earned ? Color.primary : Color.secondary)
                 .multilineTextAlignment(.center)
-            Text(caption)
-                .font(.system(size: KccTypeScale.caption))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            if let caption {
+                Text(caption)
+                    .font(.system(size: KccTypeScale.caption))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .top)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(accessibilityLabel))
     }
 
-    private var caption: String {
+    /// The second caption line — the unlock date (earned, dated), the "no
+    /// tier yet" hint (locked), or nil when earned but undated (an
+    /// admin-granted award whose document carries no `awardedAt`). Nil omits
+    /// the line entirely rather than reserving blank vertical space for it —
+    /// Android's `BadgeMedallionTile` likewise renders no caption `Text` at
+    /// all when its `caption` parameter is null.
+    private var caption: String? {
         if earned, let awardedAt {
             return BadgeText.awardedOn(date: awardedAt)
         }
         if earned {
-            return ""
+            return nil
         }
         return String(localized: "badgeShowcase.noTierYet")
     }
 
+    /// The spoken label. For an earned, dated badge this appends the unlock
+    /// date so VoiceOver carries the same information the caption line shows
+    /// visually — the tile collapses its children into this one label
+    /// (`accessibilityElement(children: .ignore)`), so without this the date
+    /// would be silently dropped rather than merely unspoken.
     private var accessibilityLabel: String {
         let key = earned ? "badgeShowcase.medallionEarned" : "badgeShowcase.medallionLocked"
         let spoken = tier == nil ? label : "\(ladderName) \(label)"
-        return String(format: String(localized: String.LocalizationValue(key)), spoken)
+        let base = String(format: String(localized: String.LocalizationValue(key)), spoken)
+        guard earned, let awardedAt else { return base }
+        return "\(base), \(BadgeText.awardedOn(date: awardedAt))"
     }
 }
 
