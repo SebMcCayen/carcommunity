@@ -94,12 +94,17 @@ final class PerkShopCoordinator {
         perksEnabled && repository != nil && uid != nil && passesMemberGate
     }
 
-    /// Begins the reads on first appearance. Idempotent: a second call while
-    /// already started is a no-op. `started` is set only once the gate passes
-    /// — a call while the shop is off/ungated leaves the coordinator able to
-    /// start for real on a later call (e.g. once the flags/uid it was built
-    /// with turn out to allow it), and never latches into "started" without
-    /// having subscribed anything.
+    /// Begins the reads on first appearance. Idempotent once started: a
+    /// second call while already started is a no-op. `started` is set only
+    /// once the gate passes, so a call while the shop is off/ungated does
+    /// NOT latch `started` — every subsequent call re-checks
+    /// ``isShopEnabled`` instead of permanently no-op'ing. This does NOT mean
+    /// eligibility can change for a live instance: `uid`, `perksEnabled`, and
+    /// `passesMemberGate` are all `let`s fixed at construction, so
+    /// ``isShopEnabled`` never flips for the same coordinator. The re-check
+    /// only matters across re-construction (e.g. SwiftUI building a fresh
+    /// coordinator once a session/flag becomes known) — never a change of
+    /// mind on this instance.
     func start() {
         guard !started else { return }
         guard isShopEnabled else {
