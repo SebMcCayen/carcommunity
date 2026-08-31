@@ -481,7 +481,9 @@ struct BadgeShowcase: Equatable, Sendable {
     /// Robust to anything Firestore can hand back: unknown/retired badge keys
     /// are ignored, duplicates collapse, and a ladder holding a HIGH rung but
     /// missing a lower one (which the monotonic backend never produces) still
-    /// reports the highest held rung and the next unheld one above it.
+    /// reports the highest held rung, with the lowest UNHELD rung re-offered
+    /// as next — which can sit below that highest held rung when a lower one
+    /// was missed, rather than skipped.
     static func from(badges: [Badge], counters: BadgeCounters = .none) -> BadgeShowcase {
         let heldKeys = Set(badges.map(\.key))
 
