@@ -152,6 +152,24 @@ final class ChatModelTests: XCTestCase {
         XCTAssertEqual(cursor, msg("a", secs: 100).createdAtIso)
     }
 
+    /// Regression: a same-instant tie must resolve deterministically (by id,
+    /// the same total order the merge sorts by) rather than `min` being free
+    /// to return either candidate depending on element order.
+    func testOldestCursorTieBreaksById() {
+        let earliest = msg("a", secs: 100)
+        let tied1 = msg("z", secs: 200)
+        let tied2 = msg("m", secs: 200)
+        XCTAssertEqual(
+            ChannelThread.oldestCursor([tied1, tied2, earliest]),
+            earliest.createdAtIso)
+        // Among two messages at the SAME instant, "a" beats "b" is well
+        // defined by the shared total order, not by array position.
+        let a = msg("a", secs: 100)
+        let b = msg("b", secs: 100)
+        XCTAssertEqual(ChannelThread.oldestCursor([b, a]), a.createdAtIso)
+        XCTAssertEqual(ChannelThread.oldestCursor([a, b]), a.createdAtIso)
+    }
+
     func testHasUnread() {
         let mine = msg("m", secs: 100, sender: "me")
         let theirs = msg("t", secs: 100, sender: "you")

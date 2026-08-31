@@ -11,26 +11,23 @@ import Foundation
 // MARK: - ISO parsing
 
 /// Shared ISO-8601 formatter for callable message rows. Fractional seconds are
-/// optional in the backend payload, so both variants are tried. Static so the
-/// (relatively expensive) formatter is built once.
+/// optional in the backend payload, so both variants are tried.
 enum ChannelTime {
-    nonisolated(unsafe) private static let withFractional: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
-    nonisolated(unsafe) private static let withoutFractional: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        return f
-    }()
+    /// `Date.ISO8601FormatStyle` (unlike `ISO8601DateFormatter`, a mutable
+    /// class Apple does NOT document as thread-safe) is a plain `Sendable`
+    /// value type with no shared mutable state, so these statics are safe to
+    /// format/parse from any thread with no lock — this path runs off the
+    /// main actor (Firebase snapshot listeners fire on their own queue) as
+    /// messages arrive. Mirrors ``LiveIsoInstant``.
+    private static let fractional = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+    private static let wholeSeconds = Date.ISO8601FormatStyle()
 
     /// Best-effort ISO-8601 → `Date` for callable message rows (used only for
     /// chronological ordering; a parse failure just sorts the message last).
     /// Android: `channelIsoToMillisOrNull`.
     static func parseIso(_ iso: String?) -> Date? {
         guard let iso, !iso.isEmpty else { return nil }
-        return withFractional.date(from: iso) ?? withoutFractional.date(from: iso)
+        return (try? Date(iso, strategy: fractional)) ?? (try? Date(iso, strategy: wholeSeconds))
     }
 
     /// The ISO-8601 spelling of a `Date` (used to derive an older-page cursor
@@ -38,7 +35,7 @@ enum ChannelTime {
     /// than an ISO string). Always emits fractional seconds so the cursor is
     /// exact.
     static func isoString(_ date: Date) -> String {
-        withFractional.string(from: date)
+        date.formatted(fractional)
     }
 }
 
@@ -83,13 +80,12 @@ enum ChannelThread {
     }
 
     /// The pagination cursor for the next older page: the earliest message's ISO
-    /// createdAt. Android: `ChannelThread.oldestCursor`.
+    /// createdAt. Reuses ``isOrderedBefore`` (rather than comparing `createdAt`
+    /// alone) so a tie among same-instant messages resolves deterministically
+    /// by id — the same total order the merge sorts by — instead of `min`
+    /// being free to return either one. Android: `ChannelThread.oldestCursor`.
     static func oldestCursor(_ messages: [ChannelMessage]) -> String? {
-        messages
-            .min { lhs, rhs in
-                (lhs.createdAt ?? .distantFuture) < (rhs.createdAt ?? .distantFuture)
-            }?
-            .createdAtIso
+        messages.min(by: isOrderedBefore)?.createdAtIso
     }
 
     /// Merges the server-sourced messages (``merge(older:live:)``) with the
