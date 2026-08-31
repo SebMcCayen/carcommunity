@@ -32,6 +32,8 @@ import com.kungsbackacarcommunity.app.media.NormalizedCropRect
 import com.kungsbackacarcommunity.app.media.PickedImage
 import com.kungsbackacarcommunity.app.media.rememberImagePickLauncher
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
+import com.kungsbackacarcommunity.app.subscription.StoredSubscription
+import com.kungsbackacarcommunity.app.subscription.garageVehicleLimit
 import java.time.Year
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.flowOf
@@ -63,12 +65,14 @@ fun GarageRoute(
     uid: String,
     garageState: GarageState,
     onRetry: () -> Unit,
+    storedSubscription: StoredSubscription?,
     mediaUploader: MediaUploader? = null,
     currentYear: Int = Year.now().value,
     onFormOpenChange: (Boolean) -> Unit = {},
     dismissRequestTick: Int = 0,
 ) {
     val scope = rememberCoroutineScope()
+    val vehicleLimit = storedSubscription.garageVehicleLimit
     var showForm by rememberSaveable { mutableStateOf(false) }
     var editingVehicleId by rememberSaveable { mutableStateOf<String?>(null) }
     // The car whose full detail page is open (tapped from the list), or null on
@@ -747,6 +751,7 @@ fun GarageRoute(
     } else {
         GarageScreen(
             state = garageState,
+            vehicleLimit = vehicleLimit,
             onRetry = onRetry,
             onOpen = { vehicle -> detailVehicleId = vehicle.id },
             onAdd = {

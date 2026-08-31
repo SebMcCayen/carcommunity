@@ -89,6 +89,39 @@ export function isSubscriptionActiveStatus(status: SubscriptionStatus): boolean 
   return status === 'active' || status === 'grace_period' || status === 'cancelled';
 }
 
+/**
+ * Resolves an untrusted Firestore subscriptions/{uid} snapshot to the tier that
+ * may grant product capabilities right now. Missing and malformed records fail
+ * closed to Community. Legacy paid records without an explicit tier map to
+ * Plus, matching the original member_monthly product.
+ */
+export function effectiveSubscriptionTierFromStoredRecord(
+  record: unknown,
+  expectedUserId?: string,
+): SubscriptionTier {
+  if (record == null || typeof record !== 'object' || Array.isArray(record)) {
+    return 'community';
+  }
+  const candidate = record as Record<string, unknown>;
+  if (
+    expectedUserId !== undefined &&
+    candidate.userId != null &&
+    candidate.userId !== expectedUserId
+  ) {
+    return 'community';
+  }
+  if (candidate.entitlement !== 'member_monthly') return 'community';
+  if (
+    typeof candidate.status !== 'string' ||
+    !SUBSCRIPTION_STATUSES.includes(candidate.status as SubscriptionStatus) ||
+    !isSubscriptionActiveStatus(candidate.status as SubscriptionStatus)
+  ) {
+    return 'community';
+  }
+  if (candidate.tier == null) return 'plus';
+  return candidate.tier === 'plus' || candidate.tier === 'supporter' ? candidate.tier : 'community';
+}
+
 /** SHA-256 hex of a raw purchase token — the only stored representation. */
 export function hashPurchaseToken(token: string): string {
   return createHash('sha256').update(token, 'utf8').digest('hex');

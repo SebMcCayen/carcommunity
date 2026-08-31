@@ -16389,6 +16389,40 @@
         }
       }
     },
+    "garage.vehicleAllowance": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld av %2$lld fordon används"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld of %2$lld vehicles used"
+          }
+        }
+      }
+    },
+    "garage.vehicleLimitReached": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du har nått gränsen på %1$lld fordon för din medlemsnivå. Du kan fortfarande redigera eller ta bort dina befintliga fordon."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You have reached the %1$lld-vehicle limit for your membership tier. You can still edit or remove your existing vehicles."
+          }
+        }
+      }
+    },
     "groupDrive.countArrived": {
       "extractionState": "manual",
       "localizations": {

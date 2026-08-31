@@ -48,6 +48,7 @@ class VehicleDetailScreenTest {
             KccTheme {
                 GarageScreen(
                     state = GarageState.Loaded(listOf(vehicle())),
+                    vehicleLimit = 2,
                     onAdd = {},
                     onEdit = {},
                     onDelete = {},

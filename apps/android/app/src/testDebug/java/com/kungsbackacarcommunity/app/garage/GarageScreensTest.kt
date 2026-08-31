@@ -49,6 +49,7 @@ class GarageScreensTest {
             KccTheme {
                 GarageScreen(
                     state = GarageState.Loaded(emptyList()),
+                    vehicleLimit = 2,
                     onAdd = { added++ },
                     onEdit = {},
                     onDelete = {},
@@ -67,6 +68,7 @@ class GarageScreensTest {
             KccTheme {
                 GarageScreen(
                     state = GarageState.Loaded(listOf(vehicle())),
+                    vehicleLimit = 2,
                     onAdd = {},
                     onEdit = { edited = it },
                     onDelete = {},
@@ -76,6 +78,34 @@ class GarageScreensTest {
         composeTestRule.onNodeWithText("Volvo 240 (1988)").assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.garage_editVehicle)).performScrollTo().performClick()
         assertEquals("v1", edited?.id)
+    }
+
+    @Test
+    fun fullGarage_showsTierLimitAndHidesAdd() {
+        composeTestRule.setContent {
+            KccTheme {
+                GarageScreen(
+                    state =
+                        GarageState.Loaded(
+                            listOf(vehicle(), vehicle().copy(id = "v2", model = "740")),
+                        ),
+                    vehicleLimit = 2,
+                    onAdd = {},
+                    onEdit = {},
+                    onDelete = {},
+                )
+            }
+        }
+        composeTestRule
+            .onNodeWithText(
+                InstrumentationRegistry.getInstrumentation().targetContext.getString(
+                    R.string.garage_vehicleLimitReached,
+                    2,
+                ),
+            )
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.garage_addVehicle)).assertDoesNotExist()
     }
 
     @Test

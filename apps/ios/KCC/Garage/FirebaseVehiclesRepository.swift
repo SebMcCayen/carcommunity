@@ -165,3 +165,59 @@ extension VehicleInput {
 private struct ListenerBox: @unchecked Sendable {
     let registration: ListenerRegistration
 }
+
+/// Firestore-backed owner subscription observer. It is intentionally separate
+/// from StoreKit: `subscriptions/{uid}` is the backend-authoritative
+/// entitlement record, and rules permit only the owner to read it.
+final class FirebaseSubscriptionStateRepository: SubscriptionStateRepository,
+    @unchecked Sendable
+{
+    private let firestore: Firestore
+
+    private init(firestore: Firestore) {
+        self.firestore = firestore
+    }
+
+    func subscription(uid: String) -> AsyncStream<StoredSubscription?> {
+        let document = firestore.collection(Self.subscriptionsCollection).document(uid)
+        return AsyncStream { continuation in
+            let registration = document.addSnapshotListener { snapshot, error in
+                guard error == nil, let snapshot, snapshot.exists else {
+                    continuation.yield(nil)
+                    return
+                }
+                continuation.yield(
+                    StoredSubscription.fromMap(snapshot.data() ?? [:], expectedUserId: uid)
+                )
+            }
+            let box = ListenerBox(registration: registration)
+            continuation.onTermination = { _ in
+                box.registration.remove()
+            }
+        }
+    }
+
+    private static let subscriptionsCollection = "subscriptions"
+    private static let cachedLock = NSLock()
+    nonisolated(unsafe) private static var cached: FirebaseSubscriptionStateRepository?
+
+    /// Returns one process-wide observer when Firebase is configured, or nil
+    /// in config-less builds. The emulator guard matches the other Firestore
+    /// repositories so whichever factory runs first owns the one settings
+    /// transition and later factories remain no-ops.
+    static func createIfAvailable() -> SubscriptionStateRepository? {
+        guard FirebaseApp.app() != nil else { return nil }
+        cachedLock.lock()
+        defer { cachedLock.unlock() }
+        if let cached { return cached }
+        let firestore = Firestore.firestore()
+        if let emulator = FirebaseEmulatorHost.parse(
+            ProcessInfo.processInfo.environment["FIREBASE_FIRESTORE_EMULATOR_HOST"]
+        ), firestore.settings.host != "\(emulator.host):\(emulator.port)" {
+            firestore.useEmulator(withHost: emulator.host, port: emulator.port)
+        }
+        let repository = FirebaseSubscriptionStateRepository(firestore: firestore)
+        cached = repository
+        return repository
+    }
+}

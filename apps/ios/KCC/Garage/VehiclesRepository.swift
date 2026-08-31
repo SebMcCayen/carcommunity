@@ -34,3 +34,11 @@ protocol VehiclesRepository: AnyObject, Sendable {
     /// never an error state.
     func imageDownloadURL(for imagePath: String) async -> URL?
 }
+
+/// Owner-readable subscription state used by Garage presentation. Firebase-
+/// free so the coordinator and tier projection stay unit-testable.
+protocol SubscriptionStateRepository: AnyObject, Sendable {
+    /// Emits nil for a missing, unreadable, or malformed document. Nil is the
+    /// fail-closed Community state, never an implicit paid entitlement.
+    func subscription(uid: String) -> AsyncStream<StoredSubscription?>
+}

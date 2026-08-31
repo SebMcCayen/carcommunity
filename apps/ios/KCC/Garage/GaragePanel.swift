@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 /// Panel CONTENT for the Garage tab — what the tab shows is the user's own
@@ -17,10 +18,12 @@ struct GaragePanel: View {
     /// config-less build both factories return nil and the coordinator
     /// settles on ``GarageUiState/unavailable``.
     init() {
+        let uid = Self.signedInUid()
         self.init(
             coordinator: GarageCoordinator(
                 repository: FirebaseVehiclesRepository.createIfAvailable(),
-                uid: Self.signedInUid()
+                subscriptionRepository: FirebaseSubscriptionStateRepository.createIfAvailable(),
+                uid: uid
             )
         )
     }
@@ -74,23 +77,56 @@ struct GaragePanel: View {
             }
             .buttonStyle(.bordered)
         case .empty:
+            garageContent(vehicles: [])
+        case .loaded(let vehicles):
+            garageContent(vehicles: vehicles)
+        }
+    }
+
+    /// Renders every existing car regardless of the current allowance. The
+    /// tier gate controls ONLY the Add affordance, so a downgrade never hides
+    /// or locks cars the member already owns (and does not interfere with
+    /// edit/delete actions as those management slices arrive on iOS).
+    @ViewBuilder
+    private func garageContent(vehicles: [Vehicle]) -> some View {
+        if vehicles.isEmpty {
             Text("garage.empty")
                 .font(.system(size: KccTypeScale.bodyMd))
                 .foregroundStyle(.secondary)
-            addButton
-        case .loaded(let vehicles):
+        } else {
             ForEach(vehicles) { vehicle in
                 GarageVehicleCard(
                     vehicle: vehicle,
                     imageURL: vehicle.imagePath.flatMap { coordinator.imageURLs[$0] }
                 )
             }
-            // Mirrors MAX_VEHICLES_PER_USER in functions/src/garage/
-            // garage-core.ts (the backend enforces the cap inside the
-            // addVehicle transaction); this copy only hides the button.
-            if vehicles.count < VehicleValidation.maxVehiclesPerUser {
-                addButton
-            }
+        }
+
+        let limit = coordinator.vehicleLimit
+        Text(
+            String.localizedStringWithFormat(
+                String(localized: "garage.vehicleAllowance"),
+                Int64(vehicles.count),
+                Int64(limit)
+            )
+        )
+        .font(.system(size: KccTypeScale.bodySm))
+        .foregroundStyle(.secondary)
+
+        if GarageAllowance.canAddVehicle(
+            vehicleCount: vehicles.count,
+            tier: coordinator.effectiveSubscriptionTier
+        ) {
+            addButton
+        } else {
+            Text(
+                String.localizedStringWithFormat(
+                    String(localized: "garage.vehicleLimitReached"),
+                    Int64(limit)
+                )
+            )
+            .font(.system(size: KccTypeScale.bodyMd))
+            .foregroundStyle(.secondary)
         }
     }
 

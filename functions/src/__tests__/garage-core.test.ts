@@ -5,6 +5,8 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  GARAGE_VEHICLE_LIMITS,
+  garageVehicleLimitForTier,
   LEGACY_VEHICLE_POWERTRAINS,
   MAX_VEHICLE_PHOTOS,
   SELECTABLE_VEHICLE_POWERTRAINS,
@@ -39,6 +41,15 @@ const validAdd = {
   modelYear: 2025,
   powertrain: 'petrol',
 };
+
+describe('garage-core subscription limits', () => {
+  it('maps Community, Plus, and Supporter to 2, 5, and 10 vehicles', () => {
+    expect(GARAGE_VEHICLE_LIMITS).toEqual({ community: 2, plus: 5, supporter: 10 });
+    expect(garageVehicleLimitForTier('community')).toBe(2);
+    expect(garageVehicleLimitForTier('plus')).toBe(5);
+    expect(garageVehicleLimitForTier('supporter')).toBe(10);
+  });
+});
 
 describe('garage-core powertrain vocabulary', () => {
   it('offers exactly Petrol, Diesel, Hybrid, Electric — in that order', () => {
@@ -130,12 +141,10 @@ describe('garage-core input parsing', () => {
 
   it('accepts registrationPlate (deliberately public field) but keeps VIN unrepresentable', () => {
     // Plate is a Seb-approved PUBLIC field now — accepted on add and update.
-    expect(
-      parseAddVehicleInput({ ...validAdd, registrationPlate: 'ABC123' }, NOW).ok,
-    ).toBe(true);
-    expect(
-      parseUpdateVehicleInput({ vehicleId: 'v1', registrationPlate: 'ABC123' }, NOW).ok,
-    ).toBe(true);
+    expect(parseAddVehicleInput({ ...validAdd, registrationPlate: 'ABC123' }, NOW).ok).toBe(true);
+    expect(parseUpdateVehicleInput({ vehicleId: 'v1', registrationPlate: 'ABC123' }, NOW).ok).toBe(
+      true,
+    );
     // VIN was never meant to be public and stays unrepresentable (strict schema).
     expect(parseAddVehicleInput({ ...validAdd, vin: 'YV1abc' }, NOW).ok).toBe(false);
   });
@@ -214,9 +223,9 @@ describe('garage-core registration plate normalisation', () => {
       false,
     );
     // Padding/whitespace does NOT count — it collapses away before the length check.
-    expect(
-      parseAddVehicleInput({ ...validAdd, registrationPlate: '   ABC 123   ' }, NOW).ok,
-    ).toBe(true);
+    expect(parseAddVehicleInput({ ...validAdd, registrationPlate: '   ABC 123   ' }, NOW).ok).toBe(
+      true,
+    );
   });
 });
 
@@ -229,9 +238,7 @@ describe('garage-core image path validation', () => {
     expect(isValidVehicleImagePath('vehicleImages/u1/v1/   ', 'u1', 'v1')).toBe(false);
     // Exactly one segment below the prefix — storage rules cannot serve
     // nested paths (vehicleImages/{userId}/{vehicleId}/{imageId}).
-    expect(isValidVehicleImagePath('vehicleImages/u1/v1/subdir/photo.jpg', 'u1', 'v1')).toBe(
-      false,
-    );
+    expect(isValidVehicleImagePath('vehicleImages/u1/v1/subdir/photo.jpg', 'u1', 'v1')).toBe(false);
     expect(isValidVehicleImagePath('vehicleImages/u2/v1/photo.jpg', 'u1', 'v1')).toBe(false);
     expect(isValidVehicleImagePath('vehicleImages/u1/v2/photo.jpg', 'u1', 'v1')).toBe(false);
     expect(isValidVehicleImagePath('profileImages/u1/photo.jpg', 'u1', 'v1')).toBe(false);
@@ -297,9 +304,9 @@ describe('garage-core multi-photo input parsing', () => {
     expect(parseAddVehiclePhotoInput({ vehicleId: 'v1', photoPath: p('a.jpg'), x: 1 }).ok).toBe(
       false,
     );
-    expect(parseAddVehiclePhotoInput({ vehicleId: 'vehicles/other', photoPath: p('a.jpg') }).ok).toBe(
-      false,
-    );
+    expect(
+      parseAddVehiclePhotoInput({ vehicleId: 'vehicles/other', photoPath: p('a.jpg') }).ok,
+    ).toBe(false);
     // Prefix validity is NOT enforced here (needs uid+vehicleId at the callable):
     // a well-formed but foreign-looking string still parses.
     expect(parseAddVehiclePhotoInput({ vehicleId: 'v1', photoPath: 'anything' }).ok).toBe(true);
@@ -307,7 +314,8 @@ describe('garage-core multi-photo input parsing', () => {
 
   it('parses reorderVehiclePhotos and bounds the array', () => {
     expect(
-      parseReorderVehiclePhotosInput({ vehicleId: 'v1', orderedPaths: [p('a.jpg'), p('b.jpg')] }).ok,
+      parseReorderVehiclePhotosInput({ vehicleId: 'v1', orderedPaths: [p('a.jpg'), p('b.jpg')] })
+        .ok,
     ).toBe(true);
     // Empty array, over-cap array, and non-string entries are rejected.
     expect(parseReorderVehiclePhotosInput({ vehicleId: 'v1', orderedPaths: [] }).ok).toBe(false);

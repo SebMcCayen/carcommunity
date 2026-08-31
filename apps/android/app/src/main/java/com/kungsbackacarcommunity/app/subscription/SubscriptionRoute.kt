@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
 fun SubscriptionRoute(
     billing: BillingRepository,
     verifier: SubscriptionVerifier?,
-    stateRepository: SubscriptionStateRepository?,
+    storedSubscription: StoredSubscription?,
     uid: String,
     isActiveMember: Boolean,
     onBack: () -> Unit,
@@ -42,11 +42,6 @@ fun SubscriptionRoute(
     val coordinator = remember(billing, verifier) { SubscriptionCoordinator(billing, verifier) }
     val status by coordinator.status.collectAsState()
     val ownedPurchase by coordinator.ownedPurchase.collectAsState()
-    val subscriptionFlow =
-        remember(stateRepository, uid) {
-            stateRepository?.observeSubscription(uid) ?: kotlinx.coroutines.flow.flowOf(null)
-        }
-    val storedSubscription by subscriptionFlow.collectAsState(initial = null)
     val scope = rememberCoroutineScope()
     val obfuscatedAccountId = remember(uid) { obfuscatedAccountIdForUid(uid) }
     val verifiedTier = (status as? PurchaseFlowStatus.Success)?.tier

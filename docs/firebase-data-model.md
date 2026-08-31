@@ -163,6 +163,13 @@ Document ID: auto-generated.
 | `createdAt`         | `Timestamp` | Server timestamp                                                                                                                                                                                                     |
 | `updatedAt`         | `Timestamp` | Server timestamp                                                                                                                                                                                                     |
 
+Vehicle reads and owner management remain available to every active account.
+Only creation is tier-limited: Community may keep 2 vehicles, Plus 5, and
+Supporter 10. `garage.addVehicle` resolves `subscriptions/{uid}` and counts the
+owner's vehicles in one transaction. A downgrade never deletes, hides, or
+locks existing vehicles; it blocks another add while the count is at or above
+the current allowance.
+
 Security (Phase 9e): any authenticated user can read; all writes go through the `garage.addVehicle` / `garage.updateVehicle` / `garage.deleteVehicle` callables (per-user cap of 10, strict schemas, storage cleanup on delete). Those callables use `requireActiveActor`, i.e. signed-in + not suspended + not deleted — managing your own garage is deliberately NOT member-gated, and member gating is in any case currently DISABLED repo-wide (`MEMBER_GATING_ENABLED = false` in `functions/src/shared/memberGating.ts`), so do not read "member" anywhere on this record as a subscription requirement. `powertrain`, `engineDescription`, and `description` complete the field list above; `imagePath` follows `vehicleImages/{uid}/{vehicleId}/{imageId}`.
 
 > **Note — registration plate is PUBLIC by design:** `registrationPlate` is a deliberately public, user-entered field stored **on** this `vehicles` document (Seb product decision 2026-07): the owner opts in by filling the field, and it is then readable by any authenticated user on purpose. Note that is wider than "members" — the read rule is `isAuthenticated()`, so it is gated on neither an active membership nor a suspension check; narrowing the audience later means changing that read rule, not just the UI. It is normalised (trim/collapse-whitespace/uppercase) but never format-rejected, so imports and personalised plates pass through. This is the one exception — **VIN, insurance data, and vehicle location must NOT be stored on `vehicles`**, as those were never intended to be public. If such genuinely-private vehicle data is ever needed, it must live under the owner's `userPrivate` document (owner-only access), never on this publicly readable record.
@@ -768,7 +775,7 @@ expires after two minutes if the function crashes.
 | ------------------- | ----------- | --------------------------------------------------- |
 | `uid`               | `string`    | Same Firebase UID as the document ID                |
 | `productId`         | `string`    | Product currently being verified                    |
-| `purchaseTokenHash` | `string`    | SHA-256 token hash; never the raw purchase token     |
+| `purchaseTokenHash` | `string`    | SHA-256 token hash; never the raw purchase token    |
 | `reservationId`     | `string`    | Unique invocation holder used for safe release      |
 | `leaseExpiresAt`    | `Timestamp` | Crash-safe upper bound for this verification holder |
 | `updatedAt`         | `Timestamp` | Last reservation write                              |

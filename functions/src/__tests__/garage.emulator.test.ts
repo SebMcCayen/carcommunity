@@ -77,6 +77,27 @@ async function callableErrorCode(promise: Promise<unknown>): Promise<string> {
   }
 }
 
+async function callableError(
+  promise: Promise<unknown>,
+): Promise<{ code: string; details: Record<string, unknown> | null }> {
+  try {
+    await promise;
+    return { code: 'no-error', details: null };
+  } catch (error) {
+    if (error instanceof FirebaseError) {
+      const details = (error as unknown as { details?: unknown }).details;
+      return {
+        code: error.code,
+        details:
+          details != null && typeof details === 'object' && !Array.isArray(details)
+            ? (details as Record<string, unknown>)
+            : null,
+      };
+    }
+    throw error;
+  }
+}
+
 async function createProvisionedUser(prefix: string): Promise<TestUser> {
   const email = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
   const password = 'password-123';
@@ -123,6 +144,12 @@ beforeAll(async () => {
   freeUser = await createProvisionedUser('garage-free');
   for (const u of [member, otherMember]) {
     await adminDb.collection('users').doc(u.uid).set({ activeMember: true }, { merge: true });
+    await adminDb.collection('subscriptions').doc(u.uid).set({
+      entitlement: 'member_monthly',
+      status: 'active',
+      tier: 'supporter',
+      platform: 'manual',
+    });
   }
 }, 120_000);
 
@@ -211,7 +238,9 @@ describe('garage-addVehicle', () => {
       ),
     ).toBe('functions/invalid-argument');
     expect(
-      await callableErrorCode(call('garage-addVehicle', { ...base, makeId: 'mazda', modelId: 'mgb' })),
+      await callableErrorCode(
+        call('garage-addVehicle', { ...base, makeId: 'mazda', modelId: 'mgb' }),
+      ),
     ).toBe('functions/invalid-argument');
     expect(
       await callableErrorCode(
@@ -257,7 +286,11 @@ describe('garage-addVehicle', () => {
   it('stores the intentionally-public registration plate, normalised', async () => {
     await signInAs(member);
     const { vehicleId } = (
-      await call('garage-addVehicle', { ...validAdd, model: 'Plated', registrationPlate: '  abc 123 ' })
+      await call('garage-addVehicle', {
+        ...validAdd,
+        model: 'Plated',
+        registrationPlate: '  abc 123 ',
+      })
     ).data as { vehicleId: string };
     let docData = (await adminDb.collection('vehicles').doc(vehicleId).get()).data()!;
     // trim + collapse whitespace + uppercase.
@@ -310,20 +343,106 @@ describe('garage-addVehicle', () => {
     }
   });
 
-  it('enforces the per-user cap of 10 vehicles', async () => {
-    // A DEDICATED fresh member: this test fills a garage to the cap, and the
-    // emulator suite shares one Firestore with no per-file isolation, so reusing
-    // a shared user here would leave them maxed out and make any later add for
-    // that user hit the cap (a flaky failure in an unrelated test).
-    const capOwner = await createProvisionedUser('garage-cap');
-    await adminDb.collection('users').doc(capOwner.uid).set({ activeMember: true }, { merge: true });
-    await signInAs(capOwner);
-    for (let i = 0; i < 10; i += 1) {
-      await call('garage-addVehicle', { ...validAdd, model: `Model ${i}` });
+  it('enforces Community, Plus, and Supporter caps without deleting existing vehicles', async () => {
+    for (const { tier, limit } of [
+      { tier: 'community', limit: 2 },
+      { tier: 'plus', limit: 5 },
+      { tier: 'supporter', limit: 10 },
+    ] as const) {
+      // Dedicated users keep the shared emulator database from leaking a full
+      // garage into unrelated tests.
+      const capOwner = await createProvisionedUser(`garage-cap-${tier}`);
+      if (tier !== 'community') {
+        await adminDb.collection('subscriptions').doc(capOwner.uid).set({
+          entitlement: 'member_monthly',
+          status: 'active',
+          tier,
+          platform: 'manual',
+        });
+      }
+      await signInAs(capOwner);
+      for (let i = 0; i < limit; i += 1) {
+        await call('garage-addVehicle', { ...validAdd, model: `${tier} ${i}` });
+      }
+      const rejection = await callableError(call('garage-addVehicle', validAdd));
+      expect(rejection.code).toBe('functions/failed-precondition');
+      expect(rejection.details).toMatchObject({
+        reason: 'garage_vehicle_limit_reached',
+        tier,
+        limit,
+        currentCount: limit,
+        upgradeTier: tier === 'community' ? 'plus' : tier === 'plus' ? 'supporter' : null,
+      });
+      expect(
+        (await adminDb.collection('vehicles').where('userId', '==', capOwner.uid).get()).size,
+      ).toBe(limit);
     }
-    // The 11th add is rejected by the transactional cap.
+  });
+
+  it('maps a legacy paid record without tier to the Plus five-car allowance', async () => {
+    const owner = await createProvisionedUser('garage-cap-legacy-plus');
+    await adminDb.collection('subscriptions').doc(owner.uid).set({
+      userId: owner.uid,
+      entitlement: 'member_monthly',
+      status: 'active',
+      platform: 'google',
+    });
+    await signInAs(owner);
+    for (let i = 0; i < 5; i += 1) {
+      await call('garage-addVehicle', { ...validAdd, model: `Legacy Plus ${i}` });
+    }
+    const rejection = await callableError(call('garage-addVehicle', validAdd));
+    expect(rejection.code).toBe('functions/failed-precondition');
+    expect(rejection.details).toMatchObject({ tier: 'plus', limit: 5 });
+  });
+
+  it('keeps an over-limit downgraded garage manageable and only blocks another add', async () => {
+    const owner = await createProvisionedUser('garage-downgrade');
+    const subscriptionRef = adminDb.collection('subscriptions').doc(owner.uid);
+    await subscriptionRef.set({
+      userId: owner.uid,
+      entitlement: 'member_monthly',
+      status: 'active',
+      tier: 'supporter',
+      platform: 'manual',
+    });
+    await signInAs(owner);
+    const ids: string[] = [];
+    for (let i = 0; i < 6; i += 1) {
+      const result = await call('garage-addVehicle', { ...validAdd, model: `Downgrade ${i}` });
+      ids.push((result.data as { vehicleId: string }).vehicleId);
+    }
+
+    await subscriptionRef.update({ tier: 'plus' });
+    await call('garage-updateVehicle', { vehicleId: ids[0], description: 'Still editable' });
     expect(await callableErrorCode(call('garage-addVehicle', validAdd))).toBe(
       'functions/failed-precondition',
+    );
+    expect((await adminDb.collection('vehicles').where('userId', '==', owner.uid).get()).size).toBe(
+      6,
+    );
+
+    await call('garage-deleteVehicle', { vehicleId: ids[0] });
+    await call('garage-deleteVehicle', { vehicleId: ids[1] });
+    await call('garage-addVehicle', { ...validAdd, model: 'Back to Plus cap' });
+    expect((await adminDb.collection('vehicles').where('userId', '==', owner.uid).get()).size).toBe(
+      5,
+    );
+  });
+
+  it('serializes concurrent additions when one Community slot remains', async () => {
+    const owner = await createProvisionedUser('garage-concurrent-cap');
+    await signInAs(owner);
+    await call('garage-addVehicle', { ...validAdd, model: 'Existing' });
+
+    const results = await Promise.allSettled([
+      call('garage-addVehicle', { ...validAdd, model: 'Concurrent A' }),
+      call('garage-addVehicle', { ...validAdd, model: 'Concurrent B' }),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    expect((await adminDb.collection('vehicles').where('userId', '==', owner.uid).get()).size).toBe(
+      2,
     );
   });
 });
@@ -447,12 +566,10 @@ describe('garage-updateVehicle / garage-deleteVehicle', () => {
     // Idempotent no-ops: re-affirming an existing state must not rewrite the
     // doc (updatedAt stays put) — both setting an already-main vehicle and
     // clearing one that was never main.
-    const firstUpdatedAt = (
-      await adminDb.collection('vehicles').doc(first).get()
-    ).data()!.updatedAt;
-    const secondUpdatedAt = (
-      await adminDb.collection('vehicles').doc(second).get()
-    ).data()!.updatedAt;
+    const firstUpdatedAt = (await adminDb.collection('vehicles').doc(first).get()).data()!
+      .updatedAt;
+    const secondUpdatedAt = (await adminDb.collection('vehicles').doc(second).get()).data()!
+      .updatedAt;
     await call('garage-setMainVehicle', { vehicleId: first, isMain: true });
     await call('garage-setMainVehicle', { vehicleId: second, isMain: false });
     expect((await adminDb.collection('vehicles').doc(first).get()).data()!.updatedAt).toEqual(
@@ -504,9 +621,11 @@ describe('garage multi-photo (add / remove / reorder)', () => {
     owner = await createProvisionedUser('garage-photos');
     await adminDb.collection('users').doc(owner.uid).set({ activeMember: true }, { merge: true });
     await signInAs(owner);
-    vehicleId = ((await call('garage-addVehicle', { ...validAdd, model: 'Gallery' })).data as {
-      vehicleId: string;
-    }).vehicleId;
+    vehicleId = (
+      (await call('garage-addVehicle', { ...validAdd, model: 'Gallery' })).data as {
+        vehicleId: string;
+      }
+    ).vehicleId;
   });
 
   it('appends photos and mirrors the first as the cover (imagePath)', async () => {
@@ -535,7 +654,9 @@ describe('garage multi-photo (add / remove / reorder)', () => {
       ),
     ).toBe('functions/invalid-argument');
     expect(
-      await callableErrorCode(call('garage-addVehiclePhoto', { vehicleId, photoPath: path('a.jpg') })),
+      await callableErrorCode(
+        call('garage-addVehiclePhoto', { vehicleId, photoPath: path('a.jpg') }),
+      ),
     ).toBe('functions/already-exists');
 
     // A foreign caller must supply a path under THEIR OWN prefix so the
@@ -589,17 +710,24 @@ describe('garage multi-photo (add / remove / reorder)', () => {
 
     // Removing a path not on the vehicle is not-found.
     expect(
-      await callableErrorCode(call('garage-removeVehiclePhoto', { vehicleId, photoPath: path('z.jpg') })),
+      await callableErrorCode(
+        call('garage-removeVehiclePhoto', { vehicleId, photoPath: path('z.jpg') }),
+      ),
     ).toBe('functions/not-found');
   });
 
   it('enforces the 10-photo cap', async () => {
     const capOwner = await createProvisionedUser('garage-photo-cap');
-    await adminDb.collection('users').doc(capOwner.uid).set({ activeMember: true }, { merge: true });
+    await adminDb
+      .collection('users')
+      .doc(capOwner.uid)
+      .set({ activeMember: true }, { merge: true });
     await signInAs(capOwner);
-    const capVehicleId = ((await call('garage-addVehicle', { ...validAdd, model: 'Cap' })).data as {
-      vehicleId: string;
-    }).vehicleId;
+    const capVehicleId = (
+      (await call('garage-addVehicle', { ...validAdd, model: 'Cap' })).data as {
+        vehicleId: string;
+      }
+    ).vehicleId;
     for (let i = 0; i < 10; i += 1) {
       await call('garage-addVehiclePhoto', {
         vehicleId: capVehicleId,
@@ -618,11 +746,16 @@ describe('garage multi-photo (add / remove / reorder)', () => {
 
   it('reconciles photoPaths when the cover is changed via updateVehicle imagePath', async () => {
     const editOwner = await createProvisionedUser('garage-photo-edit');
-    await adminDb.collection('users').doc(editOwner.uid).set({ activeMember: true }, { merge: true });
+    await adminDb
+      .collection('users')
+      .doc(editOwner.uid)
+      .set({ activeMember: true }, { merge: true });
     await signInAs(editOwner);
-    const editId = ((await call('garage-addVehicle', { ...validAdd, model: 'Edit' })).data as {
-      vehicleId: string;
-    }).vehicleId;
+    const editId = (
+      (await call('garage-addVehicle', { ...validAdd, model: 'Edit' })).data as {
+        vehicleId: string;
+      }
+    ).vehicleId;
     const ep = (id: string) => `vehicleImages/${editOwner.uid}/${editId}/${id}`;
 
     await call('garage-addVehiclePhoto', { vehicleId: editId, photoPath: ep('a.jpg') });

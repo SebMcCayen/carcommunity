@@ -1027,6 +1027,8 @@
     "formTitleCreate": "Lägg till fordon",
     "formTitleEdit": "Redigera fordon",
     "addVehicle": "Lägg till fordon",
+    "vehicleAllowance": "%1$d av %2$d fordon används",
+    "vehicleLimitReached": "Du har nått gränsen på %1$d fordon för din medlemsnivå. Du kan fortfarande redigera eller ta bort dina befintliga fordon.",
     "saveVehicle": "Spara fordon",
     "editVehicle": "Redigera fordon",
     "deleteVehicle": "Radera fordon",

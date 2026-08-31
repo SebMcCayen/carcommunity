@@ -22,17 +22,10 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
- * Maximum vehicles a user may keep in their garage. Mirrors
- * MAX_VEHICLES_PER_USER in functions/src/garage/garage-core.ts, which is the
- * source of truth and enforces the cap inside the addVehicle transaction; this
- * client copy only decides whether to show the "Add vehicle" button.
- */
-private const val MAX_VEHICLES_PER_USER = 10
-
-/**
  * Garage list (Phase 12 slice 13). Stateless apart from the delete-confirm
  * dialog. Any signed-in user may add/manage their own cars (no longer
- * member-gated); adding is limited only by the max-vehicle cap (backend-enforced).
+ * member-gated); adding follows the current Community/Plus/Supporter allowance
+ * (backend-enforced).
  *
  * This is what the Garage TAB shows: the user's cars and the "Add vehicle"
  * button are visible on landing, with no hub screen in between. Back is handled
@@ -41,6 +34,7 @@ private const val MAX_VEHICLES_PER_USER = 10
 @Composable
 fun GarageScreen(
     state: GarageState,
+    vehicleLimit: Int,
     onAdd: () -> Unit,
     onEdit: (Vehicle) -> Unit,
     onDelete: (String) -> Unit,
@@ -97,12 +91,28 @@ fun GarageScreen(
                             )
                         }
                     }
-                    // Mirrors MAX_VEHICLES_PER_USER in functions/src/garage/garage-core.ts
-                    // (backend enforces the cap inside the addVehicle transaction).
-                    if (state.vehicles.size < MAX_VEHICLES_PER_USER) {
+                    Text(
+                        text =
+                            stringResource(
+                                R.string.garage_vehicleAllowance,
+                                state.vehicles.size,
+                                vehicleLimit,
+                            ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    // The backend independently resolves the current tier and
+                    // enforces this allowance inside the add transaction.
+                    if (state.vehicles.size < vehicleLimit) {
                         Button(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
                             Text(text = stringResource(R.string.garage_addVehicle))
                         }
+                    } else {
+                        Text(
+                            text = stringResource(R.string.garage_vehicleLimitReached, vehicleLimit),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }

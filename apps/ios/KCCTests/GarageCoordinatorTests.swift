@@ -196,6 +196,51 @@ final class GarageCoordinatorTests: XCTestCase {
         }
     }
 
+    private final class FakeSubscriptionStateRepository: SubscriptionStateRepository,
+        @unchecked Sendable
+    {
+        private let lock = NSLock()
+        private var initial: StoredSubscription?
+        private var continuations: [UUID: AsyncStream<StoredSubscription?>.Continuation] = [:]
+        private(set) var subscribeCount = 0
+        private(set) var observedUids: [String] = []
+
+        init(initial: StoredSubscription? = nil) {
+            self.initial = initial
+        }
+
+        func subscription(uid: String) -> AsyncStream<StoredSubscription?> {
+            lock.lock()
+            subscribeCount += 1
+            observedUids.append(uid)
+            let first = initial
+            lock.unlock()
+            return AsyncStream { continuation in
+                continuation.yield(first)
+                let id = UUID()
+                self.lock.lock()
+                self.continuations[id] = continuation
+                self.lock.unlock()
+                continuation.onTermination = { [weak self] _ in
+                    guard let self else { return }
+                    self.lock.lock()
+                    self.continuations[id] = nil
+                    self.lock.unlock()
+                }
+            }
+        }
+
+        func emit(_ snapshot: StoredSubscription?) {
+            lock.lock()
+            initial = snapshot
+            let live = Array(continuations.values)
+            lock.unlock()
+            for continuation in live {
+                continuation.yield(snapshot)
+            }
+        }
+    }
+
     // MARK: - fixtures
 
     private static let uid = "uid-1"
@@ -232,6 +277,19 @@ final class GarageCoordinatorTests: XCTestCase {
         modifications: nil,
         registrationPlate: nil
     )
+
+    private static func storedSubscription(
+        tier: String? = "plus",
+        status: String = "active",
+        entitlement: String = "member_monthly"
+    ) -> StoredSubscription {
+        StoredSubscription(
+            tier: tier,
+            status: status,
+            entitlement: entitlement,
+            userId: uid
+        )
+    }
 
     /// Polls until `predicate` holds, yielding to let the coordinator's
     /// tasks drain. Fails the test on timeout.
@@ -277,6 +335,78 @@ final class GarageCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.state, .unavailable)
         coordinator.start()
         XCTAssertEqual(repository.subscribeCount, 0)
+    }
+
+    @MainActor
+    func testMissingSubscriptionDefaultsToCommunityAndSubscribesOnce() async {
+        let vehicles = FakeVehiclesRepository()
+        vehicles.script([.loaded([])])
+        let subscriptions = FakeSubscriptionStateRepository(initial: nil)
+        let coordinator = GarageCoordinator(
+            repository: vehicles,
+            subscriptionRepository: subscriptions,
+            uid: Self.uid
+        )
+
+        coordinator.start()
+        coordinator.start()
+        await wait { subscriptions.subscribeCount == 1 }
+
+        XCTAssertEqual(coordinator.effectiveSubscriptionTier, .community)
+        XCTAssertEqual(coordinator.vehicleLimit, 2)
+        XCTAssertEqual(subscriptions.observedUids, [Self.uid])
+    }
+
+    @MainActor
+    func testLiveSubscriptionChangesUpdateGarageLimitWithoutFilteringCars() async {
+        let existing = (1...6).map { Self.vehicle("v-\($0)") }
+        let vehicles = FakeVehiclesRepository()
+        vehicles.script([.loaded(existing)])
+        let subscriptions = FakeSubscriptionStateRepository(
+            initial: Self.storedSubscription(tier: "supporter")
+        )
+        let coordinator = GarageCoordinator(
+            repository: vehicles,
+            subscriptionRepository: subscriptions,
+            uid: Self.uid
+        )
+
+        coordinator.start()
+        await wait {
+            coordinator.state == .loaded(existing) && coordinator.vehicleLimit == 10
+        }
+
+        subscriptions.emit(Self.storedSubscription(tier: "plus"))
+        await wait { coordinator.vehicleLimit == 5 }
+
+        XCTAssertEqual(coordinator.state, .loaded(existing))
+        XCTAssertFalse(
+            GarageAllowance.canAddVehicle(
+                vehicleCount: existing.count,
+                tier: coordinator.effectiveSubscriptionTier
+            )
+        )
+    }
+
+    @MainActor
+    func testInactiveSubscriptionImmediatelyFallsBackToCommunity() async {
+        let vehicles = FakeVehiclesRepository()
+        vehicles.script([.loaded([])])
+        let subscriptions = FakeSubscriptionStateRepository(
+            initial: Self.storedSubscription(tier: "supporter")
+        )
+        let coordinator = GarageCoordinator(
+            repository: vehicles,
+            subscriptionRepository: subscriptions,
+            uid: Self.uid
+        )
+
+        coordinator.start()
+        await wait { coordinator.vehicleLimit == 10 }
+        subscriptions.emit(Self.storedSubscription(tier: "supporter", status: "expired"))
+        await wait { coordinator.vehicleLimit == 2 }
+
+        XCTAssertEqual(coordinator.effectiveSubscriptionTier, .community)
     }
 
     @MainActor
