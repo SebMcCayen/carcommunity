@@ -114,6 +114,39 @@ final class ChannelChatCoordinatorTests: XCTestCase {
         await waitUntil { source.markReadCount >= 1 }
     }
 
+    /// Regression for a review finding: a live emission whose newest message is
+    /// authored by the caller (our own post reconciling, or a snapshot change
+    /// that leaves the newest message unchanged) must NOT re-stamp the marker —
+    /// mirrors Android's `if (newest != null && newest.senderUid != uid)` gate
+    /// in CommunityChannelRoute/ConvoyChannelRoute.
+    @MainActor
+    func testSelfAuthoredNewestEmissionDoesNotReStampMarkRead() async {
+        let source = FakeChatSource()
+        let coordinator = ChannelChatCoordinator(source: source)
+        coordinator.start()
+        // start() unconditionally stamps once.
+        await waitUntil { source.markReadCount >= 1 }
+        let baseline = source.markReadCount
+        source.emit(.loaded([serverMessage("mine", sender: "me")]))
+        await waitUntil { coordinator.messages.map(\.id) == ["mine"] }
+        // Give an (incorrect) async markRead a moment to land before asserting it didn't.
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(source.markReadCount, baseline)
+    }
+
+    /// Companion to the above: a new INCOMING newest message DOES re-stamp.
+    @MainActor
+    func testIncomingNewestEmissionReStampsMarkRead() async {
+        let source = FakeChatSource()
+        let coordinator = ChannelChatCoordinator(source: source)
+        coordinator.start()
+        await waitUntil { source.markReadCount >= 1 }
+        let baseline = source.markReadCount
+        source.emit(.loaded([serverMessage("theirs", sender: "you")]))
+        await waitUntil { coordinator.messages.map(\.id) == ["theirs"] }
+        await waitUntil { source.markReadCount > baseline }
+    }
+
     @MainActor
     func testStartIsIdempotent() async {
         let source = FakeChatSource()

@@ -161,8 +161,16 @@ final class ChannelChatCoordinator {
             isInitialLoading = false
             live = messages
             recompute()
-            // A fresh window means possibly-new messages — refresh the marker.
-            Task { [source] in await source.markRead() }
+            // Re-stamp the marker only for a new INCOMING message, mirroring
+            // Android's CommunityChannelRoute/ConvoyChannelRoute
+            // (`if (newest != null && newest.senderUid != uid) coordinator.markRead()`).
+            // Without this every live emission — including one whose newest
+            // message is our own post reconciling, or a snapshot change that
+            // doesn't touch the newest message at all — re-stamped the marker,
+            // which is needless backend write traffic.
+            if let newest = messages.last, let currentUserId, newest.senderUid != currentUserId {
+                Task { [source] in await source.markRead() }
+            }
         }
     }
 
