@@ -228,8 +228,9 @@ final class ChannelChatCoordinatorTests: XCTestCase {
             coordinator.messages.first { $0.id == clientId }?.deliveryState == .failed
         }
         coordinator.retry(coordinator.messages.first { $0.id == clientId }!)
-        // No second post — a not-member failure is terminal.
-        try? await Task.sleep(nanoseconds: 20_000_000)
+        // No second post — a not-member failure is terminal. retry(_:) returns
+        // synchronously (its guard fails before ever spawning a Task) for a
+        // non-retryable failure, so no sleep is needed before asserting.
         XCTAssertEqual(source.postedTexts.count, 1)
     }
 
