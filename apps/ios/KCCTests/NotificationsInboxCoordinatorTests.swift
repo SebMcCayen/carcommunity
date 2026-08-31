@@ -203,6 +203,22 @@ final class NotificationsInboxCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testStartAgainWhileLoadedReStampsTheSeenMarker() async {
+        // A tab-switch re-runs .task -> start() again. Even with the SAME
+        // newest id, the seen-marker must re-fire so a previously-failed stamp
+        // gets another attempt on reopen (Android's retry-on-next-open).
+        let repository = FakeNotificationsRepository()
+        repository.script([.loaded([Self.item("a")])])
+        let coordinator = NotificationsInboxCoordinator(repository: repository, uid: "me-uid")
+
+        coordinator.start()
+        await waitFor(coordinator) { _ in repository.markSeenCount == 1 }
+
+        coordinator.start()
+        await waitFor(coordinator) { _ in repository.markSeenCount == 2 }
+    }
+
+    @MainActor
     func testSeenMarkerDoesNotFireForAnEmptyInbox() async {
         let repository = FakeNotificationsRepository()
         repository.script([.loaded([])])

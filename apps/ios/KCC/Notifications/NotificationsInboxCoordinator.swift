@@ -99,7 +99,18 @@ final class NotificationsInboxCoordinator {
     /// driven off the loaded snapshot (see ``apply(_:)``) so it also re-fires
     /// on later arrivals, not just on this initial call.
     func start() {
-        guard subscription == nil, repository != nil, uid != nil else { return }
+        // Re-entry (SwiftUI re-runs the .task after a tab switch): keep the live
+        // subscription, but re-stamp the seen-marker so a previously-FAILED
+        // stamp gets another attempt on reopen — matching Android's
+        // retry-on-next-open — even when the newest item has not changed.
+        if subscription != nil {
+            if case .loaded(let items) = state {
+                lastSeenMarkerNotificationId = nil
+                stampSeenMarkerIfNewer(items.first?.id)
+            }
+            return
+        }
+        guard repository != nil, uid != nil else { return }
         subscribe()
     }
 

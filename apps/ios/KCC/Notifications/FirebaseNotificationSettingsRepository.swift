@@ -23,7 +23,7 @@ final class FirebaseNotificationSettingsRepository: NotificationSettingsReposito
     func preferences(uid: String) -> AsyncStream<NotificationSettingsSnapshot> {
         let document = firestore.collection(Self.userPrivateCollection).document(uid)
         return AsyncStream { continuation in
-            let registration = document.addSnapshotListener { snapshot, error in
+            let registration = document.addSnapshotListener { snapshot, _ in
                 // A listener error can arrive WITH a usable cached snapshot; in
                 // that case decode the snapshot rather than flip the UI back to
                 // "all enabled", so a transient error never makes a user's
