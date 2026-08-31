@@ -89,24 +89,32 @@ final class FirebaseCrownHuntStatsRepository: CrownHuntStatsRepository, @uncheck
 
     /// Best-effort display-name resolution: reads each public `users/{uid}`
     /// profile by id, dropping any that error or lack a name. Bounded to the
-    /// ranked page (<= LEADERBOARD_TOP_N) plus the viewer.
+    /// ranked page (<= LEADERBOARD_TOP_N) plus the viewer, and fetched
+    /// concurrently (a `withTaskGroup` fan-out, not a sequential loop) so the
+    /// stats read's latency is one round trip, not the sum of up to
+    /// LEADERBOARD_TOP_N + 1 of them.
     ///
     /// Genuinely best-effort: a single profile read failing (deleted account,
     /// a transient permission hiccup) is swallowed here rather than thrown, so
     /// it degrades that one row to the uid stub instead of failing the whole
     /// stats read.
     private func resolveNames(_ uids: Set<String>) async -> [String: String] {
-        var names: [String: String] = [:]
-        for uid in uids {
-            guard
-                let document = try? await firestore.collection(Self.users).document(uid)
-                    .getDocument()
-            else { continue }
-            if let name = document.get(Self.displayNameField) as? String {
-                names[uid] = name
+        await withTaskGroup(of: (uid: String, name: String?).self) { group in
+            for uid in uids {
+                group.addTask {
+                    guard
+                        let document = try? await self.firestore.collection(Self.users)
+                            .document(uid).getDocument()
+                    else { return (uid, nil) }
+                    return (uid, document.get(Self.displayNameField) as? String)
+                }
             }
+            var names: [String: String] = [:]
+            for await (uid, name) in group {
+                if let name { names[uid] = name }
+            }
+            return names
         }
-        return names
     }
 
     // MARK: - Mapping
