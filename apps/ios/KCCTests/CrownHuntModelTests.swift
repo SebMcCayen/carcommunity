@@ -77,4 +77,17 @@ final class CrownHuntModelTests: XCTestCase {
     func testAllTimeScopeConstant() {
         XCTAssertEqual(CrownSeasonClock.allTimeScope, "alltime")
     }
+
+    // MARK: - Perk display durations
+
+    /// Pins ``CrownHuntPerkNames/durationHours(_:)`` against the server
+    /// constants it documents mirroring (functions `crownHunt/perks-core.ts`:
+    /// trap 6h, shield 3h, boost 1h) so a future server-side change — or an
+    /// accidental edit here — doesn't silently desync the shop's "how long it
+    /// lasts" label from the values the backend actually enforces.
+    func testPerkDurationHoursMirrorsServerConstants() {
+        XCTAssertEqual(CrownHuntPerkNames.durationHours(.trap), 6)
+        XCTAssertEqual(CrownHuntPerkNames.durationHours(.shield), 3)
+        XCTAssertEqual(CrownHuntPerkNames.durationHours(.boost), 1)
+    }
 }
