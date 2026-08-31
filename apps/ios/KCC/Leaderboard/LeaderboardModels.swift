@@ -287,9 +287,6 @@ enum LeaderboardBoard {
 /// empty board, never award a point. Pure over an injected date + time zone,
 /// so the month-boundary behaviour is unit tested off-device.
 enum LeaderboardSeasonClock {
-    /// The reserved scope id for the never-resetting all-time board.
-    static let allTimeScopeId = "alltime"
-
     private static let stockholm = TimeZone(identifier: "Europe/Stockholm")
 
     /// The `YYYY-MM` season id `date` falls in, in `zone` (default Stockholm,

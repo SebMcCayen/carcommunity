@@ -323,6 +323,11 @@ private struct LeaderboardAvatar: View {
             let resolved = await coordinator.avatarURL(for: avatarPath)
             if !Task.isCancelled { url = resolved }
         }
+        // Decorative: the row's rank, name and value are already rendered as
+        // text, so a per-row VoiceOver stop on the avatar (or its "person.fill"
+        // placeholder) would only add a repetitive extra swipe — the same
+        // posture as DrivesPanel's car photo.
+        .accessibilityHidden(true)
     }
 
     private var placeholderIcon: some View {
