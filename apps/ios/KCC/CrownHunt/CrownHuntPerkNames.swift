@@ -61,8 +61,14 @@ enum CrownHuntPerkNames {
         }
     }
 
+    /// True when the app is actually presenting English — the bundle's
+    /// resolved preferred localization, NOT `Locale.current` (the device's
+    /// region/locale setting, which can disagree with the app's chosen
+    /// language, e.g. a US-region device with the app language set to
+    /// Swedish). Matches what `String(localized:)` itself resolves against,
+    /// so this fallback never disagrees with the localized-key path above.
     private static var isEnglish: Bool {
-        Locale.current.language.languageCode?.identifier == "en"
+        Bundle.main.preferredLocalizations.first == "en"
     }
 
     private static func nameKey(_ perkId: String) -> String.LocalizationValue? {

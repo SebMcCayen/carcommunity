@@ -16,30 +16,42 @@ struct CrownHuntHubView: View {
     let statsCoordinator: CrownHuntStatsCoordinator
     let claimsCoordinator: CrownHuntClaimsCoordinator
     let shopCoordinator: PerkShopCoordinator
+    /// The top-level `crownHunt` flag (``CrownHuntFlags/crownHuntEnabled``) —
+    /// "Off hides Kronjakt entirely" per contracts/features/feature-flags.json.
+    /// While false the hub renders only the disabled placeholder, so an
+    /// operator switching the whole feature off actually hides it rather than
+    /// leaving the tabs reachable.
+    let crownHuntEnabled: Bool
 
     var body: some View {
-        TabView {
-            NavigationStack {
-                CrownHuntHomeScreen(coordinator: statsCoordinator)
-                    .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            NavigationLink {
-                                ClaimHistoryScreen(coordinator: claimsCoordinator)
-                            } label: {
-                                Image(systemName: "clock.arrow.circlepath")
-                                    .accessibilityLabel(ClaimHistoryScreen.title)
+        if crownHuntEnabled {
+            TabView {
+                NavigationStack {
+                    CrownHuntHomeScreen(coordinator: statsCoordinator)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                NavigationLink {
+                                    ClaimHistoryScreen(coordinator: claimsCoordinator)
+                                } label: {
+                                    Image(systemName: "clock.arrow.circlepath")
+                                        .accessibilityLabel(ClaimHistoryScreen.title)
+                                }
                             }
                         }
-                    }
-            }
-            .tabItem { Label("crownHunt.tabHome", systemImage: "crown") }
-
-            if shopCoordinator.isShopEnabled {
-                NavigationStack {
-                    PerkShopScreen(coordinator: shopCoordinator)
                 }
-                .tabItem { Label("crownHunt.tabShop", systemImage: "bag") }
+                .tabItem { Label("crownHunt.tabHome", systemImage: "crown") }
+
+                if shopCoordinator.isShopEnabled {
+                    NavigationStack {
+                        PerkShopScreen(coordinator: shopCoordinator)
+                    }
+                    .tabItem { Label("crownHunt.tabShop", systemImage: "bag") }
+                }
             }
+        } else {
+            CrownHuntMessageState(
+                title: "crownHunt.screenTitle", message: "crownHunt.resultFeatureDisabled"
+            )
         }
     }
 }

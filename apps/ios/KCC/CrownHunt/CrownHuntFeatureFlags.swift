@@ -38,6 +38,12 @@ enum CrownHuntFeatureFlag: String, CaseIterable, Sendable {
 /// contract default. Pure value type so gating decisions (does the shop tab
 /// render? is the live-share section shown?) are testable without Firebase.
 struct CrownHuntFlags: Equatable, Sendable {
+    /// Kronjakt as a whole. Contract default ON; "Off hides Kronjakt entirely"
+    /// per contracts/features/feature-flags.json — the gate a host must check
+    /// before offering the hub at all (the shell-wiring PR that actually
+    /// presents ``CrownHuntHubView`` reads this; this slice does not touch the
+    /// shell itself).
+    let crownHuntEnabled: Bool
     /// The perk shop is available end-to-end. Mirrors Android's `perksEnabled`
     /// gate on `CrownHuntRoute`.
     let perksEnabled: Bool
@@ -47,6 +53,7 @@ struct CrownHuntFlags: Equatable, Sendable {
 
     /// Every flag at its contract default — the config-less / pre-read posture.
     static let contractDefaults = CrownHuntFlags(
+        crownHuntEnabled: CrownHuntFeatureFlag.crownHunt.contractDefault,
         perksEnabled: CrownHuntFeatureFlag.crownHuntPerks.contractDefault,
         liveShareScoringEnabled: CrownHuntFeatureFlag.crownHuntLiveShareScoring.contractDefault
     )
@@ -60,6 +67,7 @@ struct CrownHuntFlags: Equatable, Sendable {
             (document?[flag.rawValue] as? Bool) ?? flag.contractDefault
         }
         return CrownHuntFlags(
+            crownHuntEnabled: value(.crownHunt),
             perksEnabled: value(.crownHuntPerks),
             liveShareScoringEnabled: value(.crownHuntLiveShareScoring)
         )
