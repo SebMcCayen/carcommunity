@@ -128,7 +128,12 @@ final class FirebaseCommunityChatRepository: CommunityChatRepository, @unchecked
     /// when GoogleService-Info.plist is absent (CI / config-less builds). Points
     /// the SDKs at the emulator when `FIREBASE_FIRESTORE_EMULATOR_HOST` /
     /// `FIREBASE_FUNCTIONS_EMULATOR_HOST` are set — the same seams
-    /// ``FirebaseEventsRepository`` / ``KccFunctionsClient`` use.
+    /// ``FirebaseEventsRepository`` / ``KccFunctionsClient`` use. Firestore is a
+    /// process-wide singleton shared with every other Firestore-backed
+    /// repository (including ``FirebaseConvoyChatRepository``, whose factory
+    /// applies the same emulator settings); the host check below makes a
+    /// second application a no-op instead of mutating settings after the
+    /// instance may already be in use, mirroring ``FirebaseUserProfileRepository``.
     static func createIfAvailable() -> CommunityChatRepository? {
         guard FirebaseApp.app() != nil else { return nil }
         cachedLock.lock()
@@ -137,7 +142,7 @@ final class FirebaseCommunityChatRepository: CommunityChatRepository, @unchecked
         let firestore = Firestore.firestore()
         if let emulator = FirebaseEmulatorHost.parse(
             ProcessInfo.processInfo.environment["FIREBASE_FIRESTORE_EMULATOR_HOST"]
-        ) {
+        ), firestore.settings.host != "\(emulator.host):\(emulator.port)" {
             firestore.useEmulator(withHost: emulator.host, port: emulator.port)
         }
         let functions = Functions.functions(region: ChatFirestore.functionsRegion)
