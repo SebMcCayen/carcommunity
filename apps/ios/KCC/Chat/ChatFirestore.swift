@@ -164,6 +164,6 @@ final class ChannelMessagesListener: @unchecked Sendable {
     private func emitLocked() {
         guard let rawNewestFirst else { return }
         let filtered = BlockVisibility.filterHiddenAuthors(rawNewestFirst, hidden: hidden)
-        continuation.yield(.loaded(filtered.reversed()))
+        continuation.yield(.loaded(Array(filtered.reversed())))
     }
 }
