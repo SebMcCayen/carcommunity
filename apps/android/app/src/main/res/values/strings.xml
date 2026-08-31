@@ -950,6 +950,8 @@
     <string name="garage_formTitleCreate">Lägg till fordon</string>
     <string name="garage_formTitleEdit">Redigera fordon</string>
     <string name="garage_addVehicle">Lägg till fordon</string>
+    <string name="garage_vehicleAllowance">%1$d av %2$d fordon används</string>
+    <string name="garage_vehicleLimitReached">Du har nått gränsen på %1$d fordon för din medlemsnivå. Du kan fortfarande redigera eller ta bort dina befintliga fordon.</string>
     <string name="garage_saveVehicle">Spara fordon</string>
     <string name="garage_editVehicle">Redigera fordon</string>
     <string name="garage_deleteVehicle">Radera fordon</string>

@@ -8,7 +8,8 @@
  * - Garage features are NOT member-gated (the legacy canAccessGarage gate is
  *   retired): adding, editing, and deleting vehicles only require
  *   requireActiveActor — any authenticated, non-suspended, non-deleted user.
- * - Each user is limited to MAX_VEHICLES_PER_USER vehicles.
+ * - New additions follow the effective subscription tier: Community 2, Plus 5,
+ *   Supporter 10. MAX_VEHICLES_PER_USER remains the absolute system ceiling.
  * - The vehicles document is authenticated-readable by design
  *   (docs/firebase-data-model.md). `registrationPlate` is a DELIBERATELY
  *   PUBLIC, user-entered field (Seb product decision 2026-07): the owner opts in
@@ -57,6 +58,7 @@
  */
 
 import { z } from 'zod';
+import type { SubscriptionTier } from '../subscription/subscription-core';
 import {
   CATALOGUE_RELEASE,
   isKnownMakeId,
@@ -74,6 +76,17 @@ import {
  * transaction and the Android client mirrors it (GarageScreen.kt).
  */
 export const MAX_VEHICLES_PER_USER = 10;
+
+/** Tier allowances. The 10-car constant above remains the absolute system cap. */
+export const GARAGE_VEHICLE_LIMITS = {
+  community: 2,
+  plus: 5,
+  supporter: MAX_VEHICLES_PER_USER,
+} as const satisfies Record<SubscriptionTier, number>;
+
+export function garageVehicleLimitForTier(tier: SubscriptionTier): number {
+  return GARAGE_VEHICLE_LIMITS[tier];
+}
 /**
  * Cap on photos per vehicle. Ten is generous for a car profile (exterior +
  * interior + engine + detail shots) while bounding worst-case storage at
@@ -172,12 +185,7 @@ export function resolveCatalogueDisplayNames(
  * Declaration order is the order the form renders them in, so this array is
  * also the UI contract, not just a vocabulary.
  */
-export const SELECTABLE_VEHICLE_POWERTRAINS = [
-  'petrol',
-  'diesel',
-  'hybrid',
-  'electric',
-] as const;
+export const SELECTABLE_VEHICLE_POWERTRAINS = ['petrol', 'diesel', 'hybrid', 'electric'] as const;
 export type SelectableVehiclePowertrain = (typeof SELECTABLE_VEHICLE_POWERTRAINS)[number];
 
 /**
@@ -232,9 +240,7 @@ export type VehiclePowertrain = (typeof VEHICLE_POWERTRAINS)[number];
  * FUTURE seam: a garage.lookupVehicleByPlate callable would call this to
  * canonicalise the plate before an automatic vehicle-info lookup. Not built yet.
  */
-export function normaliseRegistrationPlate(
-  value: string | null | undefined,
-): string | null {
+export function normaliseRegistrationPlate(value: string | null | undefined): string | null {
   if (value == null) return null;
   const collapsed = value.trim().replace(/\s+/g, ' ').toUpperCase();
   return collapsed.length === 0 ? null : collapsed;
@@ -535,10 +541,7 @@ export function parseAddVehicleInput(data: unknown, now: Date): ParseResult<AddV
   return { ok: true, input: { ...raw, ...identity } };
 }
 
-export function parseUpdateVehicleInput(
-  data: unknown,
-  now: Date,
-): ParseResult<UpdateVehicleInput> {
+export function parseUpdateVehicleInput(data: unknown, now: Date): ParseResult<UpdateVehicleInput> {
   const fields = vehicleFieldSchemas(now);
   const schema = z
     .object({
@@ -569,11 +572,7 @@ export function parseUpdateVehicleInput(
 }
 
 export function parseDeleteVehicleInput(data: unknown): ParseResult<DeleteVehicleInput> {
-  return parse(
-    z.object({ vehicleId: vehicleIdSchema }).strict(),
-    data,
-    'Expected { vehicleId }.',
-  );
+  return parse(z.object({ vehicleId: vehicleIdSchema }).strict(), data, 'Expected { vehicleId }.');
 }
 
 export function parseSetMainVehicleInput(data: unknown): ParseResult<SetMainVehicleInput> {
@@ -837,13 +836,11 @@ export function buildVehicleUpdate(
   }
   if (input.modelYear !== undefined) assign('modelYear', input.modelYear);
   if (input.powertrain !== undefined) assign('powertrain', input.powertrain);
-  if (input.engineDescription !== undefined)
-    assign('engineDescription', input.engineDescription);
+  if (input.engineDescription !== undefined) assign('engineDescription', input.engineDescription);
   if (input.description !== undefined) assign('description', input.description);
   if (input.color !== undefined) assign('color', input.color);
   // registrationPlate arrives already normalised (null clears it).
-  if (input.registrationPlate !== undefined)
-    assign('registrationPlate', input.registrationPlate);
+  if (input.registrationPlate !== undefined) assign('registrationPlate', input.registrationPlate);
   if (input.imagePath !== undefined) assign('imagePath', input.imagePath);
 
   if (changedFields.length > 0) {

@@ -20,6 +20,7 @@ class SubscriptionStateRepositoryTest {
         requireNotNull(record)
         assertTrue(record.grantsAccess)
         assertEquals(PLUS_MONTHLY_PRODUCT_ID, record.googleProductId)
+        assertEquals(5, record.garageVehicleLimit)
     }
 
     @Test
@@ -35,6 +36,23 @@ class SubscriptionStateRepositoryTest {
         requireNotNull(record)
         assertTrue(record.grantsAccess)
         assertEquals(SUPPORTER_MONTHLY_PRODUCT_ID, record.googleProductId)
+        assertEquals(10, record.garageVehicleLimit)
+    }
+
+    @Test
+    fun `legacy paid record without tier resolves to Plus`() {
+        val record =
+            parseStoredSubscription(
+                tier = null,
+                status = "active",
+                entitlement = "member_monthly",
+                platform = "google",
+            )
+
+        requireNotNull(record)
+        assertEquals("plus", record.tier)
+        assertEquals(EffectiveSubscriptionTier.PLUS, record.effectiveTier)
+        assertEquals(5, record.garageVehicleLimit)
     }
 
     @Test
@@ -49,6 +67,8 @@ class SubscriptionStateRepositoryTest {
 
         requireNotNull(record)
         assertFalse(record.grantsAccess)
+        assertEquals(EffectiveSubscriptionTier.COMMUNITY, record.effectiveTier)
+        assertEquals(2, record.garageVehicleLimit)
     }
 
     @Test
@@ -61,5 +81,6 @@ class SubscriptionStateRepositoryTest {
                 platform = "google",
             ),
         )
+        assertEquals(2, null.garageVehicleLimit)
     }
 }

@@ -22,8 +22,8 @@
  * own vehicles and manage their photos (add/remove/reorder) (Seb-approved
  * ungate). Vehicles documents are
  * authenticated-readable by design (docs/firebase-data-model.md), so all
- * writes still go through these callables: the per-user vehicle cap is
- * enforced race-safely, and deletion cleans the vehicleImages storage
+ * writes still go through these callables: the Community/Plus/Supporter add
+ * allowance (2/5/10) is enforced race-safely, and deletion cleans the vehicleImages storage
  * prefix. `registrationPlate` is a DELIBERATELY PUBLIC, user-entered field
  * (Seb product decision) stored on this authenticated-readable doc so the owner
  * can publish their plate — it is normalised (trim/collapse/uppercase),
@@ -45,7 +45,6 @@ import { adminStorage, db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
 import { tryAutomaticAward } from '../badges/awards';
 import {
-  MAX_VEHICLES_PER_USER,
   MAX_VEHICLE_PHOTOS,
   appendPhotoPath,
   buildVehicleDocument,
@@ -63,9 +62,11 @@ import {
   readExistingPhotoPaths,
   reconcileCoverPhotoPaths,
   removePhotoPath,
+  garageVehicleLimitForTier,
   vehicleImagePrefix,
 } from './garage-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
+import { effectiveSubscriptionTierFromStoredRecord } from '../subscription/subscription-core';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -90,17 +91,32 @@ export const addVehicle = onCall(CALLABLE_OPTS, async (request): Promise<Vehicle
 
   const vehiclesRef = db.collection('vehicles');
   const vehicleRef = vehiclesRef.doc();
+  const subscriptionRef = db.collection('subscriptions').doc(actor.uid);
 
-  // Cap enforced inside the transaction: concurrent adds serialize, so the
-  // count can never race past MAX_VEHICLES_PER_USER.
+  // Tier cap enforced inside the transaction: concurrent adds serialize, so
+  // the count can never race past the caller's Community/Plus/Supporter limit.
+  // A downgrade never removes existing vehicles; it only blocks another add
+  // while the garage is at or above the current allowance.
   await db.runTransaction(async (tx) => {
-    const countSnap = await tx.get(
-      vehiclesRef.where('userId', '==', actor.uid).count(),
+    const subscriptionSnap = await tx.get(subscriptionRef);
+    const countSnap = await tx.get(vehiclesRef.where('userId', '==', actor.uid).count());
+    const tier = effectiveSubscriptionTierFromStoredRecord(
+      subscriptionSnap.exists ? subscriptionSnap.data() : null,
+      actor.uid,
     );
-    if (countSnap.data().count >= MAX_VEHICLES_PER_USER) {
+    const vehicleLimit = garageVehicleLimitForTier(tier);
+    const currentCount = countSnap.data().count;
+    if (currentCount >= vehicleLimit) {
       throw new HttpsError(
         'failed-precondition',
-        `Garage is full — at most ${MAX_VEHICLES_PER_USER} vehicles per user.`,
+        `Garage is full — the ${tier} tier allows at most ${vehicleLimit} vehicles.`,
+        {
+          reason: 'garage_vehicle_limit_reached',
+          tier,
+          limit: vehicleLimit,
+          currentCount,
+          upgradeTier: tier === 'community' ? 'plus' : tier === 'plus' ? 'supporter' : null,
+        },
       );
     }
     tx.set(
@@ -249,50 +265,53 @@ export const deleteVehicle = onCall(CALLABLE_OPTS, async (request): Promise<Vehi
  * per-vehicle cap and the own-prefix validation exactly like updateVehicle's
  * imagePath. When it is the first photo, it also becomes the cover (imagePath).
  */
-export const addVehiclePhoto = onCall(CALLABLE_OPTS, async (request): Promise<VehicleIdResponse> => {
-  const actor = await requireActiveActor(request);
+export const addVehiclePhoto = onCall(
+  CALLABLE_OPTS,
+  async (request): Promise<VehicleIdResponse> => {
+    const actor = await requireActiveActor(request);
 
-  const parsed = parseAddVehiclePhotoInput(request.data);
-  if (!parsed.ok) {
-    throw new HttpsError('invalid-argument', parsed.message);
-  }
-  const { vehicleId, photoPath } = parsed.input;
-
-  if (!isValidVehicleImagePath(photoPath, actor.uid, vehicleId)) {
-    throw new HttpsError(
-      'invalid-argument',
-      'photoPath must lie under your own vehicleImages prefix for this vehicle.',
-    );
-  }
-
-  const vehicleRef = db.collection('vehicles').doc(vehicleId);
-  await db.runTransaction(async (tx) => {
-    const snap = await tx.get(vehicleRef);
-    if (!snap.exists || snap.data()?.userId !== actor.uid) {
-      throw new HttpsError('not-found', 'Vehicle not found.');
+    const parsed = parseAddVehiclePhotoInput(request.data);
+    if (!parsed.ok) {
+      throw new HttpsError('invalid-argument', parsed.message);
     }
-    const existing = readExistingPhotoPaths(snap.data() ?? {});
-    const result = appendPhotoPath(existing, photoPath);
-    if (!result.ok) {
-      if (result.error === 'cap') {
-        throw new HttpsError(
-          'failed-precondition',
-          `A vehicle can have at most ${MAX_VEHICLE_PHOTOS} photos.`,
-        );
+    const { vehicleId, photoPath } = parsed.input;
+
+    if (!isValidVehicleImagePath(photoPath, actor.uid, vehicleId)) {
+      throw new HttpsError(
+        'invalid-argument',
+        'photoPath must lie under your own vehicleImages prefix for this vehicle.',
+      );
+    }
+
+    const vehicleRef = db.collection('vehicles').doc(vehicleId);
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(vehicleRef);
+      if (!snap.exists || snap.data()?.userId !== actor.uid) {
+        throw new HttpsError('not-found', 'Vehicle not found.');
       }
-      throw new HttpsError('already-exists', 'That photo is already on this vehicle.');
-    }
-    // imagePath mirrors the cover (photoPaths[0]); appending never changes the
-    // existing cover, and sets it when this is the first photo.
-    tx.update(vehicleRef, {
-      photoPaths: result.paths,
-      imagePath: coverPhotoPath(result.paths),
-      updatedAt: FieldValue.serverTimestamp(),
+      const existing = readExistingPhotoPaths(snap.data() ?? {});
+      const result = appendPhotoPath(existing, photoPath);
+      if (!result.ok) {
+        if (result.error === 'cap') {
+          throw new HttpsError(
+            'failed-precondition',
+            `A vehicle can have at most ${MAX_VEHICLE_PHOTOS} photos.`,
+          );
+        }
+        throw new HttpsError('already-exists', 'That photo is already on this vehicle.');
+      }
+      // imagePath mirrors the cover (photoPaths[0]); appending never changes the
+      // existing cover, and sets it when this is the first photo.
+      tx.update(vehicleRef, {
+        photoPaths: result.paths,
+        imagePath: coverPhotoPath(result.paths),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
     });
-  });
 
-  return { vehicleId };
-});
+    return { vehicleId };
+  },
+);
 
 /**
  * garage.removeVehiclePhoto — removes one photo path from an owned vehicle's
@@ -396,7 +415,7 @@ export const reorderVehiclePhotos = onCall(
       if (!isPhotoPermutation(existing, orderedPaths)) {
         throw new HttpsError(
           'invalid-argument',
-          'orderedPaths must be a reordering of the vehicle\'s existing photos.',
+          "orderedPaths must be a reordering of the vehicle's existing photos.",
         );
       }
       tx.update(vehicleRef, {

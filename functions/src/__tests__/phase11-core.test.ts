@@ -8,6 +8,7 @@ import {
   PLUS_MONTHLY_PRODUCT_ID,
   SUPPORTER_MONTHLY_PRODUCT_ID,
   buildSubscriptionDocument,
+  effectiveSubscriptionTierFromStoredRecord,
   grantsLegacyActiveMember,
   hashPurchaseToken,
   isSubscriptionActiveStatus,
@@ -63,6 +64,65 @@ describe('subscription-core', () => {
     expect(
       grantsLegacyActiveMember({ entitlement: 'none', status: 'active', tier: 'supporter' }),
     ).toBe(false);
+  });
+
+  it('resolves stored subscription records fail-closed and keeps legacy paid records on Plus', () => {
+    expect(effectiveSubscriptionTierFromStoredRecord(null)).toBe('community');
+    expect(effectiveSubscriptionTierFromStoredRecord({})).toBe('community');
+    expect(
+      effectiveSubscriptionTierFromStoredRecord({
+        entitlement: 'member_monthly',
+        status: 'active',
+      }),
+    ).toBe('plus');
+    expect(
+      effectiveSubscriptionTierFromStoredRecord({
+        entitlement: 'member_monthly',
+        status: 'grace_period',
+        tier: 'supporter',
+      }),
+    ).toBe('supporter');
+    expect(
+      effectiveSubscriptionTierFromStoredRecord({
+        entitlement: 'member_monthly',
+        status: 'expired',
+        tier: 'supporter',
+      }),
+    ).toBe('community');
+    expect(
+      effectiveSubscriptionTierFromStoredRecord(
+        {
+          userId: 'somebody-else',
+          entitlement: 'member_monthly',
+          status: 'active',
+          tier: 'supporter',
+        },
+        'expected-user',
+      ),
+    ).toBe('community');
+    for (const status of ['inactive', 'expired', 'revoked'] as const) {
+      expect(
+        effectiveSubscriptionTierFromStoredRecord({
+          entitlement: 'member_monthly',
+          status,
+          tier: 'supporter',
+        }),
+      ).toBe('community');
+    }
+    expect(
+      effectiveSubscriptionTierFromStoredRecord({
+        entitlement: 'none',
+        status: 'active',
+        tier: 'supporter',
+      }),
+    ).toBe('community');
+    expect(
+      effectiveSubscriptionTierFromStoredRecord({
+        entitlement: 'member_monthly',
+        status: 'active',
+        tier: 'unexpected',
+      }),
+    ).toBe('community');
   });
 
   it('hashes purchase tokens and never stores the raw token', () => {

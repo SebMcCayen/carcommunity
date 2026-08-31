@@ -33,6 +33,37 @@ data class StoredSubscription(
             }
 }
 
+const val COMMUNITY_GARAGE_VEHICLE_LIMIT = 2
+const val PLUS_GARAGE_VEHICLE_LIMIT = 5
+const val SUPPORTER_GARAGE_VEHICLE_LIMIT = 10
+
+enum class EffectiveSubscriptionTier {
+    COMMUNITY,
+    PLUS,
+    SUPPORTER,
+}
+
+val StoredSubscription?.effectiveTier: EffectiveSubscriptionTier
+    get() =
+        when {
+            this?.grantsAccess != true -> EffectiveSubscriptionTier.COMMUNITY
+            tier == "supporter" -> EffectiveSubscriptionTier.SUPPORTER
+            else -> EffectiveSubscriptionTier.PLUS
+        }
+
+/**
+ * Client-side mirror of the authoritative callable limits. Missing, malformed,
+ * inactive, expired, or revoked records are Community. The backend remains the
+ * enforcement boundary; this value only keeps the Garage UI honest.
+ */
+val StoredSubscription?.garageVehicleLimit: Int
+    get() =
+        when (effectiveTier) {
+            EffectiveSubscriptionTier.COMMUNITY -> COMMUNITY_GARAGE_VEHICLE_LIMIT
+            EffectiveSubscriptionTier.PLUS -> PLUS_GARAGE_VEHICLE_LIMIT
+            EffectiveSubscriptionTier.SUPPORTER -> SUPPORTER_GARAGE_VEHICLE_LIMIT
+        }
+
 /** Owner-readable subscription state. Raw purchase tokens never cross this boundary. */
 interface SubscriptionStateRepository {
     fun observeSubscription(uid: String): Flow<StoredSubscription?>
@@ -77,10 +108,12 @@ fun parseStoredSubscription(
     entitlement: String?,
     platform: String?,
 ): StoredSubscription? {
-    val safeTier = tier ?: return null
     val safeStatus = status ?: return null
     val safeEntitlement = entitlement ?: return null
     val safePlatform = platform ?: return null
+    // The original member_monthly record predates explicit tiers and is Plus.
+    val safeTier =
+        tier ?: if (safeEntitlement == "member_monthly") "plus" else "community"
     if (safeTier !in setOf("community", "plus", "supporter")) return null
     if (safeStatus !in setOf("inactive", "active", "grace_period", "expired", "revoked", "cancelled")) {
         return null

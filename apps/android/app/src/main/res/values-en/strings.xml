@@ -950,6 +950,8 @@
     <string name="garage_formTitleCreate">Add vehicle</string>
     <string name="garage_formTitleEdit">Edit vehicle</string>
     <string name="garage_addVehicle">Add vehicle</string>
+    <string name="garage_vehicleAllowance">%1$d of %2$d vehicles used</string>
+    <string name="garage_vehicleLimitReached">You have reached the %1$d-vehicle limit for your membership tier. You can still edit or remove your existing vehicles.</string>
     <string name="garage_saveVehicle">Save vehicle</string>
     <string name="garage_editVehicle">Edit vehicle</string>
     <string name="garage_deleteVehicle">Delete vehicle</string>

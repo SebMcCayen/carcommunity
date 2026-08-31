@@ -1027,6 +1027,8 @@
     "formTitleCreate": "Add vehicle",
     "formTitleEdit": "Edit vehicle",
     "addVehicle": "Add vehicle",
+    "vehicleAllowance": "%1$d of %2$d vehicles used",
+    "vehicleLimitReached": "You have reached the %1$d-vehicle limit for your membership tier. You can still edit or remove your existing vehicles.",
     "saveVehicle": "Save vehicle",
     "editVehicle": "Edit vehicle",
     "deleteVehicle": "Delete vehicle",

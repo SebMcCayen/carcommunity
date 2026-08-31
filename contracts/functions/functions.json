@@ -408,7 +408,7 @@
     {
       "name": "garage.addVehicle",
       "domain": "garage",
-      "description": "Adds a vehicle to the caller's garage (max 10 per user, enforced transactionally). Schema: make/model/modelYear/powertrain/engineDescription/description/color plus registrationPlate — a DELIBERATELY PUBLIC, user-entered plate (Seb product decision) normalised server-side (trim/collapse-whitespace/uppercase, ≤12 chars, format-agnostic). VIN, insurance, and location remain unrepresentable because vehicles/{vehicleId} is authenticated-readable and those were never meant to be public. Deployed via grouped export as garage-addVehicle (functions/src/garage/manageVehicle.ts).",
+      "description": "Adds a vehicle to the caller's garage. The authoritative subscription record sets a transactionally enforced add allowance: Community 2, Plus 5, Supporter 10. Downgrades never delete or lock existing vehicles; another add is blocked while the current count is at or above the effective tier limit. Schema: make/model/modelYear/powertrain/engineDescription/description/color plus registrationPlate — a DELIBERATELY PUBLIC, user-entered plate (Seb product decision) normalised server-side (trim/collapse-whitespace/uppercase, ≤12 chars, format-agnostic). VIN, insurance, and location remain unrepresentable because vehicles/{vehicleId} is authenticated-readable and those were never meant to be public. Deployed via grouped export as garage-addVehicle (functions/src/garage/manageVehicle.ts).",
       "access": "authenticated",
       "appCheck": true,
       "status": "implemented",

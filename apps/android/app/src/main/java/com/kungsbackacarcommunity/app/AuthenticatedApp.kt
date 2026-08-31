@@ -455,6 +455,7 @@ import com.kungsbackacarcommunity.app.shell.rememberMapSurface
 import com.kungsbackacarcommunity.app.shell.currentIncidentClearFix
 import com.kungsbackacarcommunity.app.shell.runIncidentRemoval
 import com.kungsbackacarcommunity.app.subscription.BillingRepository
+import com.kungsbackacarcommunity.app.subscription.StoredSubscription
 import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
 import com.kungsbackacarcommunity.app.subscription.SubscriptionStateRepository
 import com.kungsbackacarcommunity.app.subscription.SubscriptionVerifier
@@ -969,6 +970,14 @@ fun AuthenticatedApp(
                 }
             } else {
             val profile = (profileState as? ProfileState.Loaded)?.profile
+            // One owner-readable subscription listener for the whole signed-in
+            // shell. Garage limits and Membership consume the same snapshot.
+            val subscriptionFlow =
+                remember(subscriptionStateRepository, uid) {
+                    subscriptionStateRepository?.observeSubscription(uid)
+                        ?: flowOf<StoredSubscription?>(null)
+                }
+            val storedSubscription by subscriptionFlow.collectAsState(initial = null)
 
             // Selected bottom-nav tab (Map is the default home) and the
             // currently-open full-screen sub-route (null = show the tab).
@@ -6568,7 +6577,7 @@ fun AuthenticatedApp(
                         reportTicketsEnabled = flags.isEnabled(FeatureFlag.REPORT_TICKETS_BROWSER),
                         billingRepository = billingRepository,
                         subscriptionVerifier = subscriptionVerifier,
-                        subscriptionStateRepository = subscriptionStateRepository,
+                        storedSubscription = storedSubscription,
                         // gates for sub-routes (e.g. the Settings hub)
                         partnerStatsEnabled =
                             FeatureGate.isAvailable(
@@ -7719,6 +7728,7 @@ fun AuthenticatedApp(
                                                     uid = uid,
                                                     garageState = garageState,
                                                     onRetry = { garageReloadKey++ },
+                                                    storedSubscription = storedSubscription,
                                                     mediaUploader = mediaUploader,
                                                     onFormOpenChange = { garageFormOpen = it },
                                                     dismissRequestTick = garageDismissTick,
@@ -8891,7 +8901,7 @@ private fun RouteHost(
     reportTicketsEnabled: Boolean,
     billingRepository: BillingRepository?,
     subscriptionVerifier: SubscriptionVerifier?,
-    subscriptionStateRepository: SubscriptionStateRepository?,
+    storedSubscription: StoredSubscription?,
     partnerStatsEnabled: Boolean,
     savedPlacesStore: SavedPlacesStore,
     onOpenAddressSearch: () -> Unit,
@@ -9704,7 +9714,7 @@ private fun RouteHost(
                 SubscriptionRoute(
                     billing = billingRepository,
                     verifier = subscriptionVerifier,
-                    stateRepository = subscriptionStateRepository,
+                    storedSubscription = storedSubscription,
                     uid = uid,
                     isActiveMember = profileActiveMember,
                     onBack = onClose,
