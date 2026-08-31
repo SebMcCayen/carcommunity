@@ -16,6 +16,10 @@ final class ChannelChatCoordinatorTests: XCTestCase {
         private var continuations: [UUID: AsyncStream<ChannelMessagesState>.Continuation] = [:]
         private var postResults: [ChannelSendResult] = []
         private var olderResults: [ChannelOlderResult] = []
+        // Lets a test hold loadOlder(before:) suspended until it explicitly
+        // releases it, to exercise the reload-while-in-flight race.
+        private var olderGated = false
+        private var olderGateContinuation: CheckedContinuation<Void, Never>?
 
         let uid: String?
         private(set) var subscribeCount = 0
@@ -38,6 +42,17 @@ final class ChannelChatCoordinatorTests: XCTestCase {
         func scriptOlder(_ results: [ChannelOlderResult]) {
             lock.lock(); olderResults = results; lock.unlock()
         }
+        func gateOlder() {
+            lock.lock(); olderGated = true; lock.unlock()
+        }
+        func releaseOlder() {
+            let continuation = lock.withLock { () -> CheckedContinuation<Void, Never>? in
+                let c = olderGateContinuation
+                olderGateContinuation = nil
+                return c
+            }
+            continuation?.resume()
+        }
 
         func observeMessages() -> AsyncStream<ChannelMessagesState> {
             lock.lock(); subscribeCount += 1; let snapshots = pending; lock.unlock()
@@ -52,7 +67,13 @@ final class ChannelChatCoordinatorTests: XCTestCase {
             }
         }
         func loadOlder(before: String) async -> ChannelOlderResult {
-            lock.withLock {
+            let gated = lock.withLock { olderGated }
+            if gated {
+                await withCheckedContinuation { continuation in
+                    lock.withLock { olderGateContinuation = continuation }
+                }
+            }
+            return lock.withLock {
                 olderResults.isEmpty ? ChannelOlderResult.failed : olderResults.removeFirst()
             }
         }
@@ -145,6 +166,21 @@ final class ChannelChatCoordinatorTests: XCTestCase {
         source.emit(.loaded([serverMessage("theirs", sender: "you")]))
         await waitUntil { coordinator.messages.map(\.id) == ["theirs"] }
         await waitUntil { source.markReadCount > baseline }
+    }
+
+    /// Regression for a review finding: start() used to call markRead()
+    /// unconditionally, which would fail server-side with `unauthenticated`
+    /// for a signed-out caller. Subscribing still proceeds (so the UI can
+    /// render its empty/denied state) — only the marker call is skipped.
+    @MainActor
+    func testStartDoesNotMarkReadWhenSignedOut() async {
+        let source = FakeChatSource(uid: nil)
+        source.script([.loaded([serverMessage("a")])])
+        let coordinator = ChannelChatCoordinator(source: source)
+        coordinator.start()
+        await waitUntil { !coordinator.messages.isEmpty }
+        XCTAssertEqual(source.subscribeCount, 1)
+        XCTAssertEqual(source.markReadCount, 0)
     }
 
     @MainActor
@@ -342,6 +378,36 @@ final class ChannelChatCoordinatorTests: XCTestCase {
         coordinator.loadOlder()
         await waitUntil { coordinator.olderPaging == .failed }
         XCTAssertNotEqual(coordinator.olderPaging, .exhausted)
+    }
+
+    /// Regression for a review finding: loadOlder() spawns an untracked Task
+    /// and used to apply whatever it returned unconditionally. If reload()
+    /// happens while that `*-list` call is still in flight, the stale page
+    /// must be dropped — not repopulate `older` (and flip olderPaging) after
+    /// the reset. Pinned via a generation counter bumped on every subscribe().
+    @MainActor
+    func testStaleLoadOlderResultIsDroppedAfterReload() async {
+        let source = FakeChatSource()
+        source.script([.loaded([serverMessage("live", secs: 500)])])
+        source.scriptOlder([
+            .loaded(ChannelMessagesPage(messages: [serverMessage("old", secs: 100)], nextBefore: nil, hasMore: false))
+        ])
+        source.gateOlder()  // holds loadOlder(before:) suspended until released
+        let coordinator = ChannelChatCoordinator(source: source)
+        coordinator.start()
+        await waitUntil { coordinator.messages.map(\.id) == ["live"] }
+        coordinator.loadOlder()
+        await waitUntil { coordinator.olderPaging == .loading }
+        // Reload while the *-list call above is still gated/in-flight.
+        coordinator.reload()
+        await waitUntil { coordinator.messages.map(\.id) == ["live"] }
+        XCTAssertEqual(coordinator.olderPaging, .idle)  // reset by reload()
+        // Now let the stale call resolve.
+        source.releaseOlder()
+        // Give the (incorrect) stale apply a moment to land before asserting it didn't.
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(coordinator.messages.map(\.id), ["live"])  // "old" NOT applied
+        XCTAssertEqual(coordinator.olderPaging, .idle)  // NOT flipped to .exhausted
     }
 
     // MARK: - Block filtering (source already filters; coordinator renders as-is)

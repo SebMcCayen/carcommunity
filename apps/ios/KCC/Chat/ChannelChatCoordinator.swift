@@ -105,6 +105,13 @@ final class ChannelChatCoordinator {
     /// ``chatRepliesEnabled``.
     private(set) var replyTarget: ChannelMessage?
 
+    /// Bumped every ``subscribe()`` — i.e. on ``start()``'s first call and on
+    /// every ``reload()``. An in-flight ``loadOlder()`` task captures this at
+    /// call time and re-checks it before applying its result, so a page that
+    /// resolves after an intervening reload is dropped instead of wrongly
+    /// repopulating `older` post-reset.
+    private var loadGeneration = 0
+
     init(source: ChannelChatSource, chatRepliesEnabled: Bool = ChatFeatureFlags.chatRepliesDefault) {
         self.source = source
         self.currentUserId = source.currentUserId()
@@ -117,10 +124,14 @@ final class ChannelChatCoordinator {
 
     /// Begins observing on first appearance. Idempotent — a second call keeps the
     /// live subscription and current state instead of flashing back to loading
-    /// (matches ``EventsCoordinator/start()``). Also stamps the read marker.
+    /// (matches ``EventsCoordinator/start()``). Also stamps the read marker for a
+    /// signed-in caller — subscribing still proceeds when signed out (so the UI
+    /// can render its empty/denied state), but the marker call is skipped since
+    /// it would only fail server-side with `unauthenticated`.
     func start() {
         guard subscription == nil else { return }
         subscribe()
+        guard currentUserId != nil else { return }
         Task { [source] in await source.markRead() }
     }
 
@@ -138,6 +149,7 @@ final class ChannelChatCoordinator {
 
     private func subscribe() {
         subscription?.cancel()
+        loadGeneration += 1
         isInitialLoading = true
         live = []
         recompute()
@@ -264,9 +276,14 @@ final class ChannelChatCoordinator {
         let real = ChannelThread.merge(older: older, live: live)
         guard let cursor = ChannelThread.oldestCursor(real) else { return }
         olderPaging = .loading
+        // Captured so a reload()/re-subscribe while this call is in flight can
+        // be detected below — the generation will have moved on by the time
+        // this resolves, and the (now stale) page is dropped instead of
+        // repopulating `older` after the reset.
+        let generation = loadGeneration
         Task { [weak self, source] in
             let result = await source.loadOlder(before: cursor)
-            guard let self else { return }
+            guard let self, self.loadGeneration == generation else { return }
             self.applyOlder(result)
         }
     }
