@@ -42,11 +42,16 @@ struct NotificationSettingsScreen: View {
         }
     }
 
+    /// Config-less build / no session: the shared cross-feature unavailable
+    /// copy, not "notifications.permissionOptional" ("Notifications are
+    /// optional.") — that string describes a CHOICE the member has, which
+    /// misdescribes a build that cannot observe preferences at all (Copilot
+    /// review on PR #1055).
     private var placeholder: some View {
         VStack(spacing: KccSpacing.s2) {
             Text("notifications.settingsTitle")
                 .font(.system(size: KccTypeScale.titleMd, weight: KccTypeScale.semibold))
-            Text("notifications.permissionOptional")
+            Text("shell.unavailable")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }

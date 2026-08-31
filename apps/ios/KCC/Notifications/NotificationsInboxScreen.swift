@@ -51,8 +51,11 @@ struct NotificationsInboxScreen: View {
             case .loading:
                 loadingState
             case .unavailable:
-                // Config-less build: notifications are not wired in this build.
-                messageState(title: "notifications.title", body: "notifications.empty")
+                // Config-less build / no session: notifications are not
+                // wired in this build — the shared cross-feature unavailable
+                // copy, not the "empty inbox" string (Copilot review on
+                // PR #1055: those read very differently to a member).
+                messageState(title: "notifications.title", body: "shell.unavailable")
             case .empty:
                 messageState(title: "notifications.title", body: "notifications.empty")
             case .failed:
@@ -61,7 +64,9 @@ struct NotificationsInboxScreen: View {
                 list(items, coordinator: coordinator)
             }
         } else {
-            messageState(title: "notifications.title", body: "notifications.empty")
+            // No coordinator constructed at all — same unavailable case as
+            // above, not an empty inbox.
+            messageState(title: "notifications.title", body: "shell.unavailable")
         }
     }
 
