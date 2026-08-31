@@ -12,14 +12,21 @@
 		08ED336A66B293E73A27E257 /* Tokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD356449B915D60437161C4F /* Tokens.swift */; };
 		093198E4D1B35E3F65B94567 /* GarageModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4284EB2858F9EA0C02DCFA53 /* GarageModelTests.swift */; };
 		0BA7CA6995034B58D16086B6 /* GarageModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5E5982CDF3C8B920C96E217 /* GarageModels.swift */; };
+		0BBA06618E16454B0877E106 /* ChatScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 765D3804D2135FCCADBA942F /* ChatScreen.swift */; };
 		0C467685036A28194159E76A /* LocationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2CF6C21145444B6D343AE94 /* LocationProvider.swift */; };
+		0F9E439AEA59CF2A6B48B362 /* FirebaseFriendsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E98CE0FDE43E94273813C318 /* FirebaseFriendsRepository.swift */; };
 		13D59B678BA7758DD88C0863 /* MapSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF81B13C98719E049F390996 /* MapSurface.swift */; };
 		15F365792E4CEB78754C9312 /* LiveLocationScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36B73725FF334E4EAEA7D54B /* LiveLocationScreen.swift */; };
 		1AD29F8359E23574E4DCE81E /* FirebaseLeaderboardRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C8A37E9DA0F827C47850C81 /* FirebaseLeaderboardRepository.swift */; };
 		1C2DA365BA8BE6F3314C2A25 /* EventsCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF4AECA45E7B6366153A08BB /* EventsCoordinatorTests.swift */; };
+		1D1075E6BDB3E1B45E90F89F /* ChatCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 774E7D6FC1CC0748E23ACF61 /* ChatCoordinator.swift */; };
 		1E50D3893A5C34E20441F632 /* ShellMapHostTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99BCF885BCAC95E5A84E495A /* ShellMapHostTests.swift */; };
+		201903E2A7F0ECD5B05CBB55 /* ConversationsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15892EE69827A386C169C05 /* ConversationsRepository.swift */; };
 		292854460109584A07D618C1 /* AuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 343B6E8AA56D06395AD48108 /* AuthSession.swift */; };
+		299A925690D1B4FF0759B17D /* FirebaseConversationsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E8F58FC4AC949B4CF76BF2D /* FirebaseConversationsRepository.swift */; };
+		29AEAC84B2A5D0D49A2F40C5 /* FriendsCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08AEF6E96BF2AB0EDF375B5F /* FriendsCoordinatorTests.swift */; };
 		2A9A0CC92D72BFD43FC5AA31 /* SignInCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57135BB547425D479FB343C2 /* SignInCoordinatorTests.swift */; };
+		2D7FCA2CE821940AE06067BE /* DmModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5BBD1E508F841E0873D4137 /* DmModelsTests.swift */; };
 		2DC0460E003F97750680CC4D /* LocationPermissionCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D564C07DEB7807D86E0DBE40 /* LocationPermissionCoordinatorTests.swift */; };
 		2E2CE7745CDC1502CD28A236 /* EventDetailCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44A7962A316651E6D91C1FA7 /* EventDetailCoordinatorTests.swift */; };
 		2EC5800FD4E02C0186D0E3E2 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = FD0E994263AEF5E23FE59538 /* FirebaseFunctions */; };
@@ -30,6 +37,7 @@
 		3CB0CA2E730F5886F6D77260 /* LocationModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DA8EE9123DC7661B941CC80 /* LocationModelsTests.swift */; };
 		3DE57E2DD0146830170434B7 /* LeaderboardCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED029E7CD662CC6E83F3DED5 /* LeaderboardCoordinatorTests.swift */; };
 		4205D21D03B3C87AC978B782 /* EventsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F17DE72EC857215D18C55F5F /* EventsRepository.swift */; };
+		426194ED964C645421C20298 /* ConversationsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A99E785B8FC0348C59CBAFCD /* ConversationsScreen.swift */; };
 		4391030EECBA8E85F2878E07 /* LeaderboardRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83CFDF0D003D8EA51873396F /* LeaderboardRepository.swift */; };
 		48182221EE13B82E02D8C4EA /* KccFunctionsErrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4DEFB37DAA0C85D0F08626E /* KccFunctionsErrorTests.swift */; };
 		4F82F6BABE4A9D41DC3E3DED /* VehicleCatalogueData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BD79AAE2207B0BB1BCA984F /* VehicleCatalogueData.swift */; };
@@ -48,6 +56,8 @@
 		796D4208F306EAFA0B940C3E /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = C10372A5B1FF04CFD7520C67 /* FirebaseAuth */; };
 		7994A2A8FBAD98AB73D621A2 /* KCCApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A240814194538E5F33BD391 /* KCCApp.swift */; };
 		79A2CCF8750E7B7375D1D1CB /* DrivesCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96FC67A9B203113B6524E2CD /* DrivesCoordinator.swift */; };
+		7A15F2F2E88A001D66B16D0D /* ChatCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 645A830B73A53DEC56989D5F /* ChatCoordinatorTests.swift */; };
+		7C075531229A4BD7BD562D47 /* FirebaseFriendPointsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D80EC6284F36AEC5945A60EE /* FirebaseFriendPointsRepository.swift */; };
 		7C14EF2819D1D418929F4C63 /* AppleSignInProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB5267678CF1ACF6AB93E03 /* AppleSignInProvider.swift */; };
 		84EC8BDE80EB7F4CD8A5387E /* GarageCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15EB05BCF9B02B63F8E0A744 /* GarageCoordinatorTests.swift */; };
 		860E4B5F3723504A01168D9E /* LocationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A63D281B16F9581698DE721B /* LocationModels.swift */; };
@@ -55,6 +65,7 @@
 		878A768EA4269808A5DE4AD2 /* SignInScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D524D57EA2B43023BC49CE4 /* SignInScreen.swift */; };
 		8A1CC2875C7C6BEF0B395170 /* LiveLocationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9FA025EB2C5F3449909E116 /* LiveLocationModels.swift */; };
 		8B3D0292A205E690A9358586 /* CoreLocationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E4C03FA8C06EBF9AD50A5D8 /* CoreLocationProvider.swift */; };
+		8B75BDB3A7C902502757F3E3 /* FriendsCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56D26AF9194CCB2CAD756735 /* FriendsCoordinator.swift */; };
 		8D0B56DF9BD0EB28E457338C /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = B688C912C571A1CC3752D0B8 /* FirebaseFirestore */; };
 		94B224E99B1DDE286A4FDF06 /* KccFunctionsError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51CD341A4027796948864A5C /* KccFunctionsError.swift */; };
 		94B41B1A5E246C64CAC9C0A2 /* UserProfileModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 572CCA23CC0DA96FF2C71ACA /* UserProfileModels.swift */; };
@@ -62,16 +73,19 @@
 		A5219FCCDAEE57D0C931719D /* GarageCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5B9C0DCCDA464441F249D46 /* GarageCoordinator.swift */; };
 		A7C2042AD7CCB16A796E71EA /* LiveLocationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BDF86D32CA8120C5012EDD1 /* LiveLocationRepository.swift */; };
 		A8DF9C1186FD8E20EE6F290E /* VehiclesRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B7C0CD35CB1F73D575829AE /* VehiclesRepository.swift */; };
+		AA22DC3DAB81A8F3F18803E4 /* FriendsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F7188138F4EE7E96F48A73E /* FriendsModels.swift */; };
 		AFAB9CCD75BABA90B7C61130 /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = F9CC24020F8667EB5E289AB3 /* FirebaseDatabase */; };
 		B0559DC40D219348A5611670 /* FirebaseEventsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D713D56081039952EA2D3DF0 /* FirebaseEventsRepository.swift */; };
 		B64A5453986FA2AFB5C0A305 /* DrivesCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF18AC13F907A6E509CBFF8A /* DrivesCoordinatorTests.swift */; };
 		B65D3D7C670D81D62344F694 /* EventDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E9C5C7C20739CCEDF496488 /* EventDetailScreen.swift */; };
 		B65E5027BA2EFEBBC7DD3220 /* ProfileCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C4A684F2E228EDA44F3221F /* ProfileCoordinator.swift */; };
+		BB16A9EF8E20DBD778875272 /* ConversationsCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FB9651252AE732EC9A88402 /* ConversationsCoordinatorTests.swift */; };
 		BBE3B067A08523482793CF5F /* FirebaseDrivesRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2816BDC59C3366B867A0A5FD /* FirebaseDrivesRepository.swift */; };
 		BF3D130F03E3B77E710907E7 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 35ECF01C5EE3E57259D5C48F /* FirebaseStorage */; };
 		C22BB49BC4B6B00C38968ADE /* LiveLocationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC89EA11EF153690B64A279F /* LiveLocationCoordinator.swift */; };
 		C4D34AC64D5147D54D7BAF36 /* LeaderboardCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C7BDF59797C7637C8C82520 /* LeaderboardCoordinator.swift */; };
 		C9EB9AFEE9024C2136112616 /* FirebaseBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3137C1DDC1B111033698002 /* FirebaseBootstrap.swift */; };
+		CABC469A613C07601353436C /* FriendsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7CCF327ACF69B27099363BD /* FriendsScreen.swift */; };
 		CEFFD52D7D1EDBECC77BB66D /* LiveLocationCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B7C7EEAB4A601B3797DD71B /* LiveLocationCoordinatorTests.swift */; };
 		D1E66A16F2B15F088788BAFF /* StubLocationProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C310CC90173A772AE9997E6D /* StubLocationProviderTests.swift */; };
 		D316EE007B410D96AA4F0DC3 /* FirebaseUserProfileRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC183FCE8F1C3FAFC61A5784 /* FirebaseUserProfileRepository.swift */; };
@@ -84,6 +98,7 @@
 		E131FC550A1A702035CD3433 /* LiveLocationModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C723CECAC346226F99FA9C76 /* LiveLocationModelsTests.swift */; };
 		E1BE1D553DBF1E8884816D4B /* LeaderboardScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 823B72DF567DBE7BF840589A /* LeaderboardScreen.swift */; };
 		E4D61FAACAFFB1746CE8FB47 /* AuthState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C80A81EA9949BF434E7C246D /* AuthState.swift */; };
+		E515A09C71A239BEA3846F35 /* FriendsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83D164C4115AE0F4E61F35D9 /* FriendsRepository.swift */; };
 		E7D0FD9A2D31A4568504745E /* TranslucentPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D310DD7A144B4F601CF0B1B7 /* TranslucentPanelView.swift */; };
 		E86EEC71824816B74E6381FB /* FirebaseVehiclesRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8A45B9A270F9A89DDB0DB26 /* FirebaseVehiclesRepository.swift */; };
 		E89DC7EC35F16BB97D6E2B60 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = AB4411241111CAD26506FD14 /* Localizable.xcstrings */; };
@@ -91,8 +106,11 @@
 		EBAED2446DD015CA190171AC /* UserProfileModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3251B8E9A0D98C310036E4E0 /* UserProfileModelsTests.swift */; };
 		EEE4B45033521B214E892FBF /* FirebaseAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 165AC07D59EE53D2EDC1688F /* FirebaseAuthRepository.swift */; };
 		F0D7B365DD492778C8168813 /* SignInCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93D6E6AE3AC9E44FCB519C47 /* SignInCoordinator.swift */; };
+		F7EED2B134B04AFBD7C8C6DD /* ConversationsCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55731E1A0C7B72A1CC54DC01 /* ConversationsCoordinator.swift */; };
+		F8310B78656CB3614461BAEF /* DmModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DD4B19D4E806B96B6A62AD4 /* DmModels.swift */; };
 		F8A62804AA5A01BE636510FB /* ShellMapHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 694D26C4A5F68ACDAEEACD46 /* ShellMapHost.swift */; };
 		F9A3DAFA5B59B49C00839395 /* KccFunctionsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC12A1C8EAC2098EF88A0598 /* KccFunctionsClient.swift */; };
+		FACE9EE74F3056EA7A628813 /* FriendsModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37C658B56DC49747902E120A /* FriendsModelsTests.swift */; };
 		FE582215755EF34BD19A7EE7 /* MapSurfaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C0408D9A1BEFD4479399D14 /* MapSurfaceTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -108,7 +126,10 @@
 
 /* Begin PBXFileReference section */
 		00786BDC5D7D80DF3558096D /* ShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellView.swift; sourceTree = "<group>"; };
+		08AEF6E96BF2AB0EDF375B5F /* FriendsCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsCoordinatorTests.swift; sourceTree = "<group>"; };
 		0C7BDF59797C7637C8C82520 /* LeaderboardCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardCoordinator.swift; sourceTree = "<group>"; };
+		0DD4B19D4E806B96B6A62AD4 /* DmModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DmModels.swift; sourceTree = "<group>"; };
+		0FB9651252AE732EC9A88402 /* ConversationsCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationsCoordinatorTests.swift; sourceTree = "<group>"; };
 		15EB05BCF9B02B63F8E0A744 /* GarageCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GarageCoordinatorTests.swift; sourceTree = "<group>"; };
 		165AC07D59EE53D2EDC1688F /* FirebaseAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseAuthRepository.swift; sourceTree = "<group>"; };
 		1A240814194538E5F33BD391 /* KCCApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KCCApp.swift; sourceTree = "<group>"; };
@@ -120,16 +141,20 @@
 		3251B8E9A0D98C310036E4E0 /* UserProfileModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileModelsTests.swift; sourceTree = "<group>"; };
 		343B6E8AA56D06395AD48108 /* AuthSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSession.swift; sourceTree = "<group>"; };
 		36B73725FF334E4EAEA7D54B /* LiveLocationScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveLocationScreen.swift; sourceTree = "<group>"; };
+		37C658B56DC49747902E120A /* FriendsModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsModelsTests.swift; sourceTree = "<group>"; };
 		4284EB2858F9EA0C02DCFA53 /* GarageModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GarageModelTests.swift; sourceTree = "<group>"; };
 		44A7962A316651E6D91C1FA7 /* EventDetailCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailCoordinatorTests.swift; sourceTree = "<group>"; };
 		4B7C7EEAB4A601B3797DD71B /* LiveLocationCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveLocationCoordinatorTests.swift; sourceTree = "<group>"; };
 		4C0408D9A1BEFD4479399D14 /* MapSurfaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapSurfaceTests.swift; sourceTree = "<group>"; };
 		5067A6E44861FDA5AB19A8EC /* LocationPermissionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPermissionCoordinator.swift; sourceTree = "<group>"; };
 		51CD341A4027796948864A5C /* KccFunctionsError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KccFunctionsError.swift; sourceTree = "<group>"; };
+		55731E1A0C7B72A1CC54DC01 /* ConversationsCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationsCoordinator.swift; sourceTree = "<group>"; };
+		56D26AF9194CCB2CAD756735 /* FriendsCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsCoordinator.swift; sourceTree = "<group>"; };
 		57135BB547425D479FB343C2 /* SignInCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInCoordinatorTests.swift; sourceTree = "<group>"; };
 		572CCA23CC0DA96FF2C71ACA /* UserProfileModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileModels.swift; sourceTree = "<group>"; };
 		5A1F61264065E19240C32A0D /* KCCTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = KCCTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5D524D57EA2B43023BC49CE4 /* SignInScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInScreen.swift; sourceTree = "<group>"; };
+		645A830B73A53DEC56989D5F /* ChatCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatCoordinatorTests.swift; sourceTree = "<group>"; };
 		646362817945B8F03EEAE0F7 /* DrivesPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrivesPanel.swift; sourceTree = "<group>"; };
 		690A7983868C88E10091C89A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		693946E5862A24E475BE6ED3 /* EventsModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsModelTests.swift; sourceTree = "<group>"; };
@@ -140,11 +165,16 @@
 		6E4C03FA8C06EBF9AD50A5D8 /* CoreLocationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreLocationProvider.swift; sourceTree = "<group>"; };
 		70940A5568FF91A6A171D3CF /* UserProfileRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileRepository.swift; sourceTree = "<group>"; };
 		7659E12C9C9C1F2E57CF8117 /* DrivesModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrivesModelTests.swift; sourceTree = "<group>"; };
+		765D3804D2135FCCADBA942F /* ChatScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatScreen.swift; sourceTree = "<group>"; };
+		774E7D6FC1CC0748E23ACF61 /* ChatCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatCoordinator.swift; sourceTree = "<group>"; };
 		7B7C0CD35CB1F73D575829AE /* VehiclesRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VehiclesRepository.swift; sourceTree = "<group>"; };
 		7DA50C019E713C28BED57AD0 /* FirebaseLiveLocationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseLiveLocationRepository.swift; sourceTree = "<group>"; };
+		7E8F58FC4AC949B4CF76BF2D /* FirebaseConversationsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseConversationsRepository.swift; sourceTree = "<group>"; };
+		7F7188138F4EE7E96F48A73E /* FriendsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsModels.swift; sourceTree = "<group>"; };
 		823B72DF567DBE7BF840589A /* LeaderboardScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardScreen.swift; sourceTree = "<group>"; };
 		838365AF9A026F751D6E80C2 /* MapHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapHomeView.swift; sourceTree = "<group>"; };
 		83CFDF0D003D8EA51873396F /* LeaderboardRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardRepository.swift; sourceTree = "<group>"; };
+		83D164C4115AE0F4E61F35D9 /* FriendsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsRepository.swift; sourceTree = "<group>"; };
 		86B8BFD68C018AC836A606A7 /* ShellHubs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellHubs.swift; sourceTree = "<group>"; };
 		8A864229C6F2E7D7DD30211C /* LeaderboardModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardModels.swift; sourceTree = "<group>"; };
 		8B1E7BBD0B5E2B7BA4D84048 /* AuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthRepository.swift; sourceTree = "<group>"; };
@@ -159,6 +189,7 @@
 		9BD79AAE2207B0BB1BCA984F /* VehicleCatalogueData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VehicleCatalogueData.swift; sourceTree = "<group>"; };
 		9BDF86D32CA8120C5012EDD1 /* LiveLocationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveLocationRepository.swift; sourceTree = "<group>"; };
 		A63D281B16F9581698DE721B /* LocationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationModels.swift; sourceTree = "<group>"; };
+		A99E785B8FC0348C59CBAFCD /* ConversationsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationsScreen.swift; sourceTree = "<group>"; };
 		AA90BF06DC8379144DAF9301 /* DrivesRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrivesRepository.swift; sourceTree = "<group>"; };
 		AB4411241111CAD26506FD14 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		AC12A1C8EAC2098EF88A0598 /* KccFunctionsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KccFunctionsClient.swift; sourceTree = "<group>"; };
@@ -181,15 +212,20 @@
 		D5B9C0DCCDA464441F249D46 /* GarageCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GarageCoordinator.swift; sourceTree = "<group>"; };
 		D5E5982CDF3C8B920C96E217 /* GarageModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GarageModels.swift; sourceTree = "<group>"; };
 		D713D56081039952EA2D3DF0 /* FirebaseEventsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseEventsRepository.swift; sourceTree = "<group>"; };
+		D80EC6284F36AEC5945A60EE /* FirebaseFriendPointsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseFriendPointsRepository.swift; sourceTree = "<group>"; };
 		DC183FCE8F1C3FAFC61A5784 /* FirebaseUserProfileRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseUserProfileRepository.swift; sourceTree = "<group>"; };
 		DD356449B915D60437161C4F /* Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tokens.swift; sourceTree = "<group>"; };
 		DF81B13C98719E049F390996 /* MapSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapSurface.swift; sourceTree = "<group>"; };
+		E15892EE69827A386C169C05 /* ConversationsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationsRepository.swift; sourceTree = "<group>"; };
 		E4C13E96CF6F7A3D81269B6D /* ProfileCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileCoordinatorTests.swift; sourceTree = "<group>"; };
+		E7CCF327ACF69B27099363BD /* FriendsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsScreen.swift; sourceTree = "<group>"; };
+		E98CE0FDE43E94273813C318 /* FirebaseFriendsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseFriendsRepository.swift; sourceTree = "<group>"; };
 		E9FA025EB2C5F3449909E116 /* LiveLocationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveLocationModels.swift; sourceTree = "<group>"; };
 		EC89EA11EF153690B64A279F /* LiveLocationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveLocationCoordinator.swift; sourceTree = "<group>"; };
 		ED029E7CD662CC6E83F3DED5 /* LeaderboardCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardCoordinatorTests.swift; sourceTree = "<group>"; };
 		F17DE72EC857215D18C55F5F /* EventsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsRepository.swift; sourceTree = "<group>"; };
 		F30DAC5CEBAD558BADEB5F13 /* ShellNav.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellNav.swift; sourceTree = "<group>"; };
+		F5BBD1E508F841E0873D4137 /* DmModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DmModelsTests.swift; sourceTree = "<group>"; };
 		F8A45B9A270F9A89DDB0DB26 /* FirebaseVehiclesRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseVehiclesRepository.swift; sourceTree = "<group>"; };
 		FF7A1C3128BDBD3E00E2A30D /* ShellNavTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellNavTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -228,6 +264,26 @@
 				D2CF6C21145444B6D343AE94 /* LocationProvider.swift */,
 			);
 			path = Location;
+			sourceTree = "<group>";
+		};
+		2F8FCAE0BF889E3229931984 /* Social */ = {
+			isa = PBXGroup;
+			children = (
+				774E7D6FC1CC0748E23ACF61 /* ChatCoordinator.swift */,
+				765D3804D2135FCCADBA942F /* ChatScreen.swift */,
+				55731E1A0C7B72A1CC54DC01 /* ConversationsCoordinator.swift */,
+				E15892EE69827A386C169C05 /* ConversationsRepository.swift */,
+				A99E785B8FC0348C59CBAFCD /* ConversationsScreen.swift */,
+				0DD4B19D4E806B96B6A62AD4 /* DmModels.swift */,
+				7E8F58FC4AC949B4CF76BF2D /* FirebaseConversationsRepository.swift */,
+				D80EC6284F36AEC5945A60EE /* FirebaseFriendPointsRepository.swift */,
+				E98CE0FDE43E94273813C318 /* FirebaseFriendsRepository.swift */,
+				56D26AF9194CCB2CAD756735 /* FriendsCoordinator.swift */,
+				7F7188138F4EE7E96F48A73E /* FriendsModels.swift */,
+				83D164C4115AE0F4E61F35D9 /* FriendsRepository.swift */,
+				E7CCF327ACF69B27099363BD /* FriendsScreen.swift */,
+			);
+			path = Social;
 			sourceTree = "<group>";
 		};
 		391EB88A0C2D696FA7072B86 /* Drives */ = {
@@ -280,6 +336,7 @@
 				A65CB7303F6D8424A87E5D3B /* Profile */,
 				3C9357116487CACE984AFAEC /* Resources */,
 				99C0A5D5154EEC666ADC0211 /* Shell */,
+				2F8FCAE0BF889E3229931984 /* Social */,
 			);
 			path = KCC;
 			sourceTree = "<group>";
@@ -403,11 +460,16 @@
 		F609A800CAF387D91FC4893D /* KCCTests */ = {
 			isa = PBXGroup;
 			children = (
+				645A830B73A53DEC56989D5F /* ChatCoordinatorTests.swift */,
+				0FB9651252AE732EC9A88402 /* ConversationsCoordinatorTests.swift */,
+				F5BBD1E508F841E0873D4137 /* DmModelsTests.swift */,
 				BF18AC13F907A6E509CBFF8A /* DrivesCoordinatorTests.swift */,
 				7659E12C9C9C1F2E57CF8117 /* DrivesModelTests.swift */,
 				44A7962A316651E6D91C1FA7 /* EventDetailCoordinatorTests.swift */,
 				AF4AECA45E7B6366153A08BB /* EventsCoordinatorTests.swift */,
 				693946E5862A24E475BE6ED3 /* EventsModelTests.swift */,
+				08AEF6E96BF2AB0EDF375B5F /* FriendsCoordinatorTests.swift */,
+				37C658B56DC49747902E120A /* FriendsModelsTests.swift */,
 				15EB05BCF9B02B63F8E0A744 /* GarageCoordinatorTests.swift */,
 				4284EB2858F9EA0C02DCFA53 /* GarageModelTests.swift */,
 				D4DEFB37DAA0C85D0F08626E /* KccFunctionsErrorTests.swift */,
@@ -555,7 +617,13 @@
 				6C25F552799AC5E993EA18E2 /* AuthRepository.swift in Sources */,
 				292854460109584A07D618C1 /* AuthSession.swift in Sources */,
 				E4D61FAACAFFB1746CE8FB47 /* AuthState.swift in Sources */,
+				1D1075E6BDB3E1B45E90F89F /* ChatCoordinator.swift in Sources */,
+				0BBA06618E16454B0877E106 /* ChatScreen.swift in Sources */,
+				F7EED2B134B04AFBD7C8C6DD /* ConversationsCoordinator.swift in Sources */,
+				201903E2A7F0ECD5B05CBB55 /* ConversationsRepository.swift in Sources */,
+				426194ED964C645421C20298 /* ConversationsScreen.swift in Sources */,
 				8B3D0292A205E690A9358586 /* CoreLocationProvider.swift in Sources */,
+				F8310B78656CB3614461BAEF /* DmModels.swift in Sources */,
 				79A2CCF8750E7B7375D1D1CB /* DrivesCoordinator.swift in Sources */,
 				71B6AC1FF6557F0CBC56648B /* DrivesModels.swift in Sources */,
 				6B8718A69B1E94DB1CD75A4A /* DrivesPanel.swift in Sources */,
@@ -568,12 +636,19 @@
 				39D345B7A1C416A1B6469E28 /* EventsScreen.swift in Sources */,
 				EEE4B45033521B214E892FBF /* FirebaseAuthRepository.swift in Sources */,
 				C9EB9AFEE9024C2136112616 /* FirebaseBootstrap.swift in Sources */,
+				299A925690D1B4FF0759B17D /* FirebaseConversationsRepository.swift in Sources */,
 				BBE3B067A08523482793CF5F /* FirebaseDrivesRepository.swift in Sources */,
 				B0559DC40D219348A5611670 /* FirebaseEventsRepository.swift in Sources */,
+				7C075531229A4BD7BD562D47 /* FirebaseFriendPointsRepository.swift in Sources */,
+				0F9E439AEA59CF2A6B48B362 /* FirebaseFriendsRepository.swift in Sources */,
 				1AD29F8359E23574E4DCE81E /* FirebaseLeaderboardRepository.swift in Sources */,
 				EA427C74C8BCD41F4D2B76E3 /* FirebaseLiveLocationRepository.swift in Sources */,
 				D316EE007B410D96AA4F0DC3 /* FirebaseUserProfileRepository.swift in Sources */,
 				E86EEC71824816B74E6381FB /* FirebaseVehiclesRepository.swift in Sources */,
+				8B75BDB3A7C902502757F3E3 /* FriendsCoordinator.swift in Sources */,
+				AA22DC3DAB81A8F3F18803E4 /* FriendsModels.swift in Sources */,
+				E515A09C71A239BEA3846F35 /* FriendsRepository.swift in Sources */,
+				CABC469A613C07601353436C /* FriendsScreen.swift in Sources */,
 				A5219FCCDAEE57D0C931719D /* GarageCoordinator.swift in Sources */,
 				0BA7CA6995034B58D16086B6 /* GarageModels.swift in Sources */,
 				9E312B2955EFE04118BB8B73 /* GaragePanel.swift in Sources */,
@@ -616,11 +691,16 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7A15F2F2E88A001D66B16D0D /* ChatCoordinatorTests.swift in Sources */,
+				BB16A9EF8E20DBD778875272 /* ConversationsCoordinatorTests.swift in Sources */,
+				2D7FCA2CE821940AE06067BE /* DmModelsTests.swift in Sources */,
 				B64A5453986FA2AFB5C0A305 /* DrivesCoordinatorTests.swift in Sources */,
 				DAE444AF31930E1E93E2E9CB /* DrivesModelTests.swift in Sources */,
 				2E2CE7745CDC1502CD28A236 /* EventDetailCoordinatorTests.swift in Sources */,
 				1C2DA365BA8BE6F3314C2A25 /* EventsCoordinatorTests.swift in Sources */,
 				E0EFA24043EC79042A5890CE /* EventsModelTests.swift in Sources */,
+				29AEAC84B2A5D0D49A2F40C5 /* FriendsCoordinatorTests.swift in Sources */,
+				FACE9EE74F3056EA7A628813 /* FriendsModelsTests.swift in Sources */,
 				84EC8BDE80EB7F4CD8A5387E /* GarageCoordinatorTests.swift in Sources */,
 				093198E4D1B35E3F65B94567 /* GarageModelTests.swift in Sources */,
 				48182221EE13B82E02D8C4EA /* KccFunctionsErrorTests.swift in Sources */,
