@@ -127,6 +127,14 @@ final class PerkShopCoordinator {
         catalogTask?.cancel()
         inventoryTask?.cancel()
         balanceTask?.cancel()
+        // Clear every cached emission along with the tasks that produced
+        // them: a bare cancel() left them in place, so a reload() could
+        // recompose against the PREVIOUS subscription's catalog/inventory/
+        // balance the instant a new stream emitted before the others — a
+        // "re-subscribes from scratch" that was not actually from scratch.
+        latestCatalog = nil
+        latestInventory = [:]
+        latestBalance = nil
         guard let repository, let uid else {
             state = .unavailable
             return
