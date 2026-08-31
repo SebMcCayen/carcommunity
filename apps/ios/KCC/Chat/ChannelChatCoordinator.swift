@@ -125,11 +125,14 @@ final class ChannelChatCoordinator {
     }
 
     /// Tears the listener down and re-subscribes from scratch (the retry
-    /// affordance) — ``EventsCoordinator/reload()`` semantics.
+    /// affordance) — ``EventsCoordinator/reload()`` semantics. Also clears any
+    /// active reply target: without this a stale reply banner could survive a
+    /// reload and quote it onto the next send.
     func reload() {
         older = []
         pending = []
         olderPaging = .idle
+        clearReply()
         subscribe()
     }
 

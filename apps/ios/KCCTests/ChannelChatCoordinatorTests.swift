@@ -257,6 +257,18 @@ final class ChannelChatCoordinatorTests: XCTestCase {
         await waitUntil { source.postedReplyIds.contains(where: { $0 == "parent" }) }
     }
 
+    /// Regression: reload() must clear a stale reply target — otherwise the
+    /// reply banner could survive a reload and quote it onto the next send.
+    @MainActor
+    func testReloadClearsReplyTarget() {
+        let source = FakeChatSource()
+        let coordinator = ChannelChatCoordinator(source: source, chatRepliesEnabled: true)
+        coordinator.setReplyTarget(serverMessage("parent"))
+        XCTAssertNotNil(coordinator.replyTarget)
+        coordinator.reload()
+        XCTAssertNil(coordinator.replyTarget)
+    }
+
     @MainActor
     func testSendOmitsReplyIdWhenFlagOff() async {
         let source = FakeChatSource()
