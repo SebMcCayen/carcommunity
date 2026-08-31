@@ -50,7 +50,7 @@ final class PerkShopModelTests: XCTestCase {
     func testBuyFailureReasonDiscriminator() {
         XCTAssertEqual(PerkPurchaseReason.failure(for: "insufficient_funds"), .insufficientFunds)
         XCTAssertEqual(PerkPurchaseReason.failure(for: "hold_cap_reached"), .holdCap)
-        XCTAssertEqual(PerkPurchaseReason.failure(for: "shop_unavailable"), .unavailable)
+        XCTAssertEqual(PerkPurchaseReason.failure(for: PerkPurchaseReason.shopUnavailable), .unavailable)
         XCTAssertEqual(PerkPurchaseReason.failure(for: nil), .unavailable)
     }
 }
