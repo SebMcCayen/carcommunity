@@ -52,8 +52,11 @@ final class FirebaseLeaderboardRepository: LeaderboardRepository, @unchecked Sen
             let registration = document.addSnapshotListener { snapshot, error in
                 if let error {
                     // Bare status name only — see LeaderboardSnapshot.failed
-                    // and Android's firestoreCode().
-                    continuation.yield(.failed(code: Self.firestoreStatusName(error)))
+                    // and Android's firestoreCode(). Delegates to the shared
+                    // mapping (FirebaseEventsRepository.firestoreStatusName)
+                    // used by every other repository so the Firestore
+                    // error-code → status-name table can't drift between them.
+                    continuation.yield(.failed(code: FirebaseEventsRepository.firestoreStatusName(error)))
                     return
                 }
                 // A missing document is a valid EMPTY board (not an error):
@@ -136,37 +139,6 @@ final class FirebaseLeaderboardRepository: LeaderboardRepository, @unchecked Sen
             avatarPath: avatarPath,
             value: (row["value"] as? NSNumber)?.doubleValue ?? 0
         )
-    }
-
-    /// The bare Firestore status name (`PERMISSION_DENIED`, `UNAVAILABLE`, …)
-    /// for a listener error, or nil when the failure carries no Firestore code
-    /// — the same PII-safe mapping as ``FirebaseEventsRepository``. A status
-    /// name is the whole diagnosis and leaks nothing.
-    static func firestoreStatusName(_ error: Error) -> String? {
-        let nsError = error as NSError
-        guard nsError.domain == FirestoreErrorDomain,
-            let code = FirestoreErrorCode.Code(rawValue: nsError.code)
-        else { return nil }
-        switch code {
-        case .OK: return "OK"
-        case .cancelled: return "CANCELLED"
-        case .unknown: return "UNKNOWN"
-        case .invalidArgument: return "INVALID_ARGUMENT"
-        case .deadlineExceeded: return "DEADLINE_EXCEEDED"
-        case .notFound: return "NOT_FOUND"
-        case .alreadyExists: return "ALREADY_EXISTS"
-        case .permissionDenied: return "PERMISSION_DENIED"
-        case .resourceExhausted: return "RESOURCE_EXHAUSTED"
-        case .failedPrecondition: return "FAILED_PRECONDITION"
-        case .aborted: return "ABORTED"
-        case .outOfRange: return "OUT_OF_RANGE"
-        case .unimplemented: return "UNIMPLEMENTED"
-        case .internal: return "INTERNAL"
-        case .unavailable: return "UNAVAILABLE"
-        case .dataLoss: return "DATA_LOSS"
-        case .unauthenticated: return "UNAUTHENTICATED"
-        @unknown default: return nil
-        }
     }
 
     // MARK: - Factory

@@ -20,6 +20,15 @@ final class LeaderboardCoordinatorTests: XCTestCase {
         private(set) var lastScope: LeaderboardScope?
         private(set) var lastViewerUid: String?
         var uid: String?
+        private var avatarURLs: [String: URL] = [:]
+        private(set) var avatarResolveCount = 0
+        /// When set, the NEXT avatarDownloadURL call suspends until
+        /// ``releaseAvatarGate()`` — for pinning in-flight-resolution edges.
+        private var avatarGate: CheckedContinuation<Void, Never>?
+        private var avatarGateArmed = false
+        /// True when release raced ahead of the gated call parking itself —
+        /// the next park then resumes immediately instead of hanging.
+        private var avatarGateReleased = false
 
         init(uid: String? = nil) { self.uid = uid }
 
@@ -62,7 +71,69 @@ final class LeaderboardCoordinatorTests: XCTestCase {
             }
         }
 
-        func avatarDownloadURL(for avatarPath: String) async -> URL? { nil }
+        /// Registers the URL a given avatar path resolves to; an
+        /// unregistered path resolves to nil (the real repository's failure
+        /// posture).
+        func scriptAvatarURL(_ url: URL, for path: String) {
+            lock.lock()
+            avatarURLs[path] = url
+            lock.unlock()
+        }
+
+        func avatarDownloadURL(for avatarPath: String) async -> URL? {
+            let gated = beginAvatarResolve()
+            if gated {
+                await withCheckedContinuation { continuation in
+                    parkOrResumeAvatar(continuation)
+                }
+            }
+            return lookupAvatarURL(avatarPath)
+        }
+
+        /// Counts the attempt and consumes the gate arming, synchronously.
+        private func beginAvatarResolve() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            avatarResolveCount += 1
+            let gated = avatarGateArmed
+            avatarGateArmed = false
+            return gated
+        }
+
+        private func lookupAvatarURL(_ avatarPath: String) -> URL? {
+            lock.lock()
+            defer { lock.unlock() }
+            return avatarURLs[avatarPath]
+        }
+
+        private func parkOrResumeAvatar(_ continuation: CheckedContinuation<Void, Never>) {
+            lock.lock()
+            if avatarGateReleased {
+                avatarGateReleased = false
+                lock.unlock()
+                continuation.resume()
+            } else {
+                avatarGate = continuation
+                lock.unlock()
+            }
+        }
+
+        /// Arms the gate: the NEXT avatarDownloadURL call suspends until
+        /// ``releaseAvatarGate()``.
+        func holdNextAvatarResolve() {
+            lock.lock()
+            avatarGateArmed = true
+            lock.unlock()
+        }
+
+        func releaseAvatarGate() {
+            lock.lock()
+            let gate = avatarGate
+            avatarGate = nil
+            if gate == nil { avatarGateReleased = true }
+            lock.unlock()
+            gate?.resume()
+        }
 
         func currentUserId() -> String? { uid }
     }
@@ -123,6 +194,25 @@ final class LeaderboardCoordinatorTests: XCTestCase {
             try? await Task.sleep(nanoseconds: 1_000_000)
         }
         XCTFail("Timed out waiting for state; last: \(coordinator.state)", file: file, line: line)
+    }
+
+    /// Polls until `predicate` holds, yielding to let in-flight resolutions
+    /// drain. Fails the test on timeout — same shape as
+    /// `GarageCoordinatorTests.wait`.
+    @MainActor
+    private func wait(
+        timeout: TimeInterval = 2,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        until predicate: () -> Bool
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if predicate() { return }
+            await Task.yield()
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        XCTFail("Timed out waiting for condition", file: file, line: line)
     }
 
     // MARK: - construction / unavailable
@@ -360,5 +450,119 @@ final class LeaderboardCoordinatorTests: XCTestCase {
         coordinator.select(scope: .thisMonth)
         XCTAssertFalse(coordinator.availableCategories.contains(.streak))
         XCTAssertEqual(coordinator.availableCategories.count, 5)
+    }
+
+    // MARK: - avatar URL resolution
+
+    @MainActor
+    func testAvatarURLResolvesOncePerPath() async {
+        let repository = FakeLeaderboardRepository()
+        let path = "userAvatars/uid-a/avatar.jpg"
+        let url = URL(string: "https://example.test/avatar.jpg")!
+        repository.scriptAvatarURL(url, for: path)
+        let coordinator = LeaderboardCoordinator(repository: repository)
+
+        let first = await coordinator.avatarURL(for: path)
+        XCTAssertEqual(first, url)
+
+        // A later call for the SAME path (a row's `.task` re-running across
+        // view re-creations) must not re-pay the round-trip: the cache hit
+        // returns immediately.
+        let second = await coordinator.avatarURL(for: path)
+        XCTAssertEqual(second, url)
+        XCTAssertEqual(repository.avatarResolveCount, 1)
+    }
+
+    @MainActor
+    func testFailedAvatarResolutionKeepsThePlaceholderAndIsNotRetried() async {
+        let repository = FakeLeaderboardRepository()
+        let path = "userAvatars/uid-a/avatar.jpg"
+        // No scripted URL: resolution returns nil (the real repository's
+        // failure posture).
+        let coordinator = LeaderboardCoordinator(repository: repository)
+
+        let first = await coordinator.avatarURL(for: path)
+        XCTAssertNil(first)
+
+        // The negative cache: a later call for the same path must NOT
+        // re-attempt it — otherwise every row re-render would turn into a
+        // Storage round-trip.
+        let second = await coordinator.avatarURL(for: path)
+        XCTAssertNil(second)
+        XCTAssertEqual(repository.avatarResolveCount, 1)
+    }
+
+    @MainActor
+    func testConcurrentCallsForTheSamePathDoNotDuplicateTheResolution() async {
+        let repository = FakeLeaderboardRepository()
+        let path = "userAvatars/uid-a/avatar.jpg"
+        let url = URL(string: "https://example.test/avatar.jpg")!
+        repository.scriptAvatarURL(url, for: path)
+        repository.holdNextAvatarResolve()
+        let coordinator = LeaderboardCoordinator(repository: repository)
+
+        // The podium and the list row both resolve the SAME top member's
+        // avatar concurrently — the second call must await the first's
+        // in-flight resolution rather than starting its own.
+        let first = Task { await coordinator.avatarURL(for: path) }
+        await wait { repository.avatarResolveCount == 1 }
+        let second = Task { await coordinator.avatarURL(for: path) }
+        // Give the second call a chance to (wrongly) start its own
+        // resolution before the gate is released.
+        await Task.yield()
+        XCTAssertEqual(repository.avatarResolveCount, 1)
+
+        repository.releaseAvatarGate()
+        let firstResult = await first.value
+        let secondResult = await second.value
+        XCTAssertEqual(firstResult, url)
+        XCTAssertEqual(secondResult, url)
+        XCTAssertEqual(repository.avatarResolveCount, 1)
+    }
+
+    @MainActor
+    func testReloadRetriesAFailedAvatarResolution() async {
+        let repository = FakeLeaderboardRepository()
+        repository.script([Self.loadedAllTime()])
+        let path = "userAvatars/uid-a/avatar.jpg"
+        let coordinator = LeaderboardCoordinator(repository: repository)
+        coordinator.start()
+        await waitForState(of: coordinator) { $0 != .loading }
+
+        let first = await coordinator.avatarURL(for: path)
+        XCTAssertNil(first)
+        XCTAssertEqual(repository.avatarResolveCount, 1)
+
+        // The photo becomes reachable; the explicit reload affordance clears
+        // the negative cache and resolves it on the next call.
+        let url = URL(string: "https://example.test/avatar.jpg")!
+        repository.scriptAvatarURL(url, for: path)
+        coordinator.reload()
+        let second = await coordinator.avatarURL(for: path)
+        XCTAssertEqual(second, url)
+        XCTAssertEqual(repository.avatarResolveCount, 2)
+    }
+
+    @MainActor
+    func testScopeSwitchRetriesAFailedAvatarResolution() async {
+        let repository = FakeLeaderboardRepository()
+        repository.script([Self.loadedAllTime()])
+        let path = "userAvatars/uid-a/avatar.jpg"
+        let coordinator = LeaderboardCoordinator(repository: repository)
+        coordinator.start()
+        await waitForState(of: coordinator) { $0 != .loading }
+
+        let first = await coordinator.avatarURL(for: path)
+        XCTAssertNil(first)
+        XCTAssertEqual(repository.avatarResolveCount, 1)
+
+        // A scope switch re-subscribes exactly like reload(); it must clear
+        // the same negative cache.
+        let url = URL(string: "https://example.test/avatar.jpg")!
+        repository.scriptAvatarURL(url, for: path)
+        coordinator.select(scope: .thisMonth)
+        let second = await coordinator.avatarURL(for: path)
+        XCTAssertEqual(second, url)
+        XCTAssertEqual(repository.avatarResolveCount, 2)
     }
 }
