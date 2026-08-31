@@ -290,7 +290,8 @@ enum LeaderboardSeasonClock {
     private static let stockholm = TimeZone(identifier: "Europe/Stockholm")
 
     /// The `YYYY-MM` season id `date` falls in, in `zone` (default Stockholm,
-    /// falling back to UTC only if that identifier is somehow unavailable).
+    /// falling back to UTC — the non-optional `.gmt` — when `zone` is nil, so a
+    /// nil zone never silently becomes the device time zone.
     ///
     /// The formatter pins `en_US_POSIX` so the digits are always ASCII: the
     /// backend's doc ids are a plain `YYYY-MM`, and a device whose locale uses
@@ -299,7 +300,7 @@ enum LeaderboardSeasonClock {
     static func seasonId(for date: Date = Date(), zone: TimeZone? = stockholm) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = zone ?? TimeZone(identifier: "UTC")
+        formatter.timeZone = zone ?? .gmt
         formatter.dateFormat = "yyyy-MM"
         return formatter.string(from: date)
     }

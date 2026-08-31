@@ -172,8 +172,9 @@ private struct CategorySection: View {
     }
 }
 
-/// The top-three podium — rank order (1, 2, 3) with distinct medal colours; the
-/// first-place tile takes a larger avatar. Fewer than three entries yield a
+/// The top-three podium — in the server's array order (expected rank-sorted
+/// 1, 2, 3; the model preserves server order verbatim) with distinct medal
+/// colours; the first-place tile takes a larger avatar. Fewer than three entries yield a
 /// shorter row (padded so a lone winner does not stretch full-width).
 private struct Podium: View {
     let top: [LeaderboardEntry]

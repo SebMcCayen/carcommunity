@@ -250,4 +250,11 @@ final class LeaderboardModelTests: XCTestCase {
         let lateAugustUtc = Date(timeIntervalSince1970: 1_788_219_000)
         XCTAssertEqual(LeaderboardSeasonClock.seasonId(for: lateAugustUtc, zone: stockholm), "2026-09")
     }
+
+    func testSeasonIdWithNilZoneUsesUTCNotTheDeviceTimeZone() {
+        // A nil zone must resolve to UTC (.gmt), never silently to the device
+        // time zone. 2026-08-31T23:30:00Z is still August in UTC.
+        let lateAugustUtc = Date(timeIntervalSince1970: 1_788_219_000)
+        XCTAssertEqual(LeaderboardSeasonClock.seasonId(for: lateAugustUtc, zone: nil), "2026-08")
+    }
 }
