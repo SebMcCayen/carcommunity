@@ -222,16 +222,16 @@ final class ChatModelTests: XCTestCase {
 
     func testFilterHiddenAuthorsDropsBlockedBothDirections() {
         let messages = [msg("a", secs: 1, sender: "friend"), msg("b", secs: 2, sender: "blocked")]
-        let filtered = BlockVisibility.filterHiddenAuthors(messages, hidden: ["blocked"])
+        let filtered = ChatBlockVisibility.filterHiddenAuthors(messages, hidden: ["blocked"])
         XCTAssertEqual(filtered.map(\.id), ["a"])
-        XCTAssertEqual(BlockVisibility.filterHiddenAuthors(messages, hidden: []).count, 2)
+        XCTAssertEqual(ChatBlockVisibility.filterHiddenAuthors(messages, hidden: []).count, 2)
     }
 
     func testNewestVisibleSkipsHiddenAuthors() {
         // newest-first window
         let window = [msg("b", secs: 2, sender: "blocked"), msg("a", secs: 1, sender: "friend")]
-        XCTAssertEqual(BlockVisibility.newestVisible(window, hidden: ["blocked"])?.id, "a")
-        XCTAssertNil(BlockVisibility.newestVisible(window, hidden: ["blocked", "friend"]))
+        XCTAssertEqual(ChatBlockVisibility.newestVisible(window, hidden: ["blocked"])?.id, "a")
+        XCTAssertNil(ChatBlockVisibility.newestVisible(window, hidden: ["blocked", "friend"]))
     }
 
     // MARK: - ChannelErrorMapper

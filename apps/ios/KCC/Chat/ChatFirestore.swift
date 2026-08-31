@@ -164,7 +164,7 @@ final class ChannelMessagesListener: @unchecked Sendable {
     /// Emits the filtered, oldest-first window. Caller holds `lock`.
     private func emitLocked() {
         guard let rawNewestFirst else { return }
-        let filtered = BlockVisibility.filterHiddenAuthors(rawNewestFirst, hidden: hidden)
+        let filtered = ChatBlockVisibility.filterHiddenAuthors(rawNewestFirst, hidden: hidden)
         continuation.yield(.loaded(Array(filtered.reversed())))
     }
 }

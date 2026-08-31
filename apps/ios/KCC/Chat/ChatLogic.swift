@@ -4,7 +4,7 @@ import Foundation
 /// derivation, callable-payload parsing, block filtering, and the reply flag —
 /// the iOS port of the pure objects in Android's `ChatChannels.kt`
 /// (`ChannelThread`, `ChannelResponseParser`, `channelIsoToMillisOrNull`) plus
-/// `blocking/BlockVisibility.kt` and the `chatReplies` gate in
+/// `blocking/ChatBlockVisibility.kt` and the `chatReplies` gate in
 /// `config/FeatureFlags.kt`. No Firebase / SwiftUI types, so every rule is
 /// unit-testable off-device.
 
@@ -165,12 +165,12 @@ enum ChannelThread {
 /// session from the owner-only mirror `blockVisibility/{uid}.hiddenUids`
 /// (maintained by the `blocking-onBlockWrite` trigger). Older pages are
 /// filtered SERVER-side by the `*-list` callables. Android:
-/// `blocking/BlockVisibility.kt`.
-enum BlockVisibility {
+/// `blocking/ChatBlockVisibility.kt`.
+enum ChatBlockVisibility {
     /// Drops messages authored by a hidden uid. A message with an EMPTY author
     /// cannot occur (the parsers drop such docs), but were one to, it would be
     /// kept — a malformed doc is not a block-evasion route. Android:
-    /// `BlockVisibility.filterHiddenAuthors`.
+    /// `ChatBlockVisibility.filterHiddenAuthors`.
     static func filterHiddenAuthors(
         _ messages: [ChannelMessage],
         hidden: Set<String>
@@ -181,7 +181,7 @@ enum BlockVisibility {
 
     /// The newest message whose author is NOT hidden, from a newest-first
     /// window — so the unread dot never lights for a message the user will
-    /// never be shown. Android: `BlockVisibility.newestVisible`.
+    /// never be shown. Android: `ChatBlockVisibility.newestVisible`.
     static func newestVisible(
         _ newestFirstWindow: [ChannelMessage],
         hidden: Set<String>

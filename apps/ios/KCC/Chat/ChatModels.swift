@@ -24,7 +24,7 @@ import Foundation
 /// message. Their moderation is entirely server-side — an admin HARD-DELETES a
 /// message (`chatchannels-adminDeleteMessage`) so it simply disappears from both
 /// the live listener and the pages — so there is nothing to decode or filter
-/// client-side. The only client-side gating is BLOCKING (``BlockVisibility``)
+/// client-side. The only client-side gating is BLOCKING (``ChatBlockVisibility``)
 /// and the reporting affordance (``ChatReportReason``). Mirrors Android's
 /// `ChannelMessage`, which likewise decodes no moderation field.
 

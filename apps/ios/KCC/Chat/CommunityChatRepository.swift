@@ -8,7 +8,7 @@ import Foundation
 /// `communityChat/global/messages` (member-readable per
 /// firebase/firestore.rules), bounded to ``channelMessagesPageSize`` newest-first
 /// and filtered CLIENT-side against the caller's mutual-hidden set
-/// (``BlockVisibility``) — a Firestore rule cannot filter a list query
+/// (``ChatBlockVisibility``) — a Firestore rule cannot filter a list query
 /// per-document. Sending, older-page pagination, mark-read, and reporting go
 /// through the member-gated `communityChat-*` / `chatchannels-*` callables
 /// (europe-west1); the client never writes the message tree.
