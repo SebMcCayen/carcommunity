@@ -7,13 +7,18 @@ import Foundation
 /// iOS port of Android's `FirebaseBadgesRepository` (earned listener) and
 /// `FirebaseBadgeProgressRepository` (progress callable).
 ///
-/// EARNED badges are read with an owner-only snapshot listener on
-/// `users/{uid}/badges`; a listener failure surfaces as
+/// EARNED badges are read with a snapshot listener on `users/{uid}/badges` —
+/// PUBLIC read for any authenticated user, not owner-only
+/// (`firebase/firestore.rules`), since an award is a trophy meant to be shown
+/// off; this repository just happens to always be pointed at the signed-in
+/// member's own uid for the own-profile wall. A listener failure surfaces as
 /// ``BadgesSnapshot/failed(code:)`` carrying only the bare Firestore status
-/// name, never a silently empty list. PROGRESS counters come from the
-/// owner-only `badges-getMyProgress` callable via ``KccFunctionsClient``
-/// (europe-west1); any callable failure degrades to nil counters, which the
-/// wall renders as goals without bars.
+/// name, never a silently empty list. PROGRESS counters, by contrast, come
+/// from the genuinely owner-only `badges-getMyProgress` callable via
+/// ``KccFunctionsClient`` (europe-west1) — the backend-only
+/// `badgeProgress/{uid}` document is denied to every client, owner included;
+/// any callable failure degrades to nil counters, which the wall renders as
+/// goals without bars.
 ///
 /// Construction is guarded (``createIfAvailable()`` returns nil without
 /// Firebase config), mirroring ``FirebaseEventsRepository`` /

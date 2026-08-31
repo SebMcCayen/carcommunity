@@ -345,7 +345,10 @@ private struct BadgeMedallion: View {
 enum BadgeText {
     /// `%1$lld of %2$lld unlocked`.
     static func subtitle(earned: Int, total: Int) -> String {
-        String(format: template("badgeShowcase.subtitle"), earned, total)
+        // The catalog string is `%1$lld of %2$lld unlocked` (a 64-bit format
+        // specifier); pass Int64 explicitly rather than relying on Int's
+        // CVarArg encoding to happen to match on every current ABI.
+        String(format: template("badgeShowcase.subtitle"), Int64(earned), Int64(total))
     }
 
     /// `Next: %1$@`.

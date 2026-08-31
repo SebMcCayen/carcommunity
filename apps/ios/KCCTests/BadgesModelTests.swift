@@ -265,6 +265,19 @@ final class BadgesModelTests: XCTestCase {
         XCTAssertEqual(showcase.earnedCount, 1)
     }
 
+    func testMilestoneFoldingPicksTheNewestDuplicateDoc() {
+        // Two docs for the same milestone key — the OLDER one appears FIRST in
+        // the array, so a naive `first(where:)` pick (the pre-fix behaviour)
+        // would surface its stale name/date. The milestone must agree with
+        // `awardedAtByKey`, which already keeps the newest per key.
+        let older = Badge(key: "first_event", fallbackName: "Stale name", awardedAt: Date(timeIntervalSince1970: 1_000))
+        let newer = Badge(key: "first_event", fallbackName: "Fresh name", awardedAt: Date(timeIntervalSince1970: 5_000))
+        let showcase = BadgeShowcase.from(badges: [older, newer])
+        let milestone = showcase.milestones.first { $0.key == "first_event" }
+        XCTAssertEqual(milestone?.fallbackName, "Fresh name")
+        XCTAssertEqual(milestone?.awardedAt, Date(timeIntervalSince1970: 5_000))
+    }
+
     func testLaddersInProgressOrdersMostCompleteFirst() {
         let badges = [
             Badge(key: "kronjagare_brons", fallbackName: nil, awardedAt: nil),

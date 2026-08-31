@@ -478,18 +478,28 @@ struct BadgeShowcase: Equatable, Sendable {
     static func from(badges: [Badge], counters: BadgeCounters = .none) -> BadgeShowcase {
         let heldKeys = Set(badges.map(\.key))
 
-        // Newest timestamp per key: were the same key ever to arrive on more
-        // than one doc, the newest award wins — matching how the recency strip
-        // collapses duplicates below.
-        var awardedAt: [String: Date] = [:]
+        // The newest doc per key: were the same key ever to arrive on more than
+        // one doc — e.g. a stray write whose denormalized `badgeKey` disagrees
+        // with its document id — the newest-dated one wins for EVERY per-key
+        // read below (a milestone's name/date AND `awardedAtByKey`), matching
+        // how the recency strip collapses duplicates further down. Picking
+        // dates only (as a prior version did) left milestone folding free to
+        // pick an arbitrary doc via `first(where:)`, which could surface an
+        // older name/date than the one `awardedAtByKey` reports for the same
+        // key; deriving both from one map keeps them in agreement.
+        var bestBadgeByKey: [String: Badge] = [:]
         for badge in badges {
-            guard let date = badge.awardedAt else { continue }
-            if let existing = awardedAt[badge.key] {
-                awardedAt[badge.key] = max(existing, date)
-            } else {
-                awardedAt[badge.key] = date
+            guard let existing = bestBadgeByKey[badge.key] else {
+                bestBadgeByKey[badge.key] = badge
+                continue
+            }
+            let existingDate = existing.awardedAt ?? Date.distantPast
+            let candidateDate = badge.awardedAt ?? Date.distantPast
+            if candidateDate > existingDate {
+                bestBadgeByKey[badge.key] = badge
             }
         }
+        let awardedAt: [String: Date] = bestBadgeByKey.compactMapValues(\.awardedAt)
 
         let ladders = badgeLadders.map { ladder -> LadderProgress in
             let earned = ladder.rungs.filter { heldKeys.contains($0.badgeKey) }
@@ -505,7 +515,7 @@ struct BadgeShowcase: Equatable, Sendable {
         }
 
         let milestones = badgeMilestoneKeys.compactMap { key -> MilestoneBadge? in
-            guard let badge = badges.first(where: { $0.key == key }) else { return nil }
+            guard let badge = bestBadgeByKey[key] else { return nil }
             return MilestoneBadge(key: key, fallbackName: badge.fallbackName, awardedAt: badge.awardedAt)
         }
 
