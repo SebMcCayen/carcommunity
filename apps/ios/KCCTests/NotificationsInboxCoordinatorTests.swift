@@ -170,6 +170,50 @@ final class NotificationsInboxCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testSeenMarkerRefiresWhenANewerNotificationArrivesWhileOpen() async {
+        // Android keys its markSeen LaunchedEffect on the newest item's id, so
+        // it fires again on every later arrival, not just once per screen
+        // visit — the dot must clear for something that arrived AFTER the
+        // initial open too.
+        let repository = FakeNotificationsRepository()
+        repository.script([.loaded([Self.item("a")])])
+        let coordinator = NotificationsInboxCoordinator(repository: repository, uid: "me-uid")
+
+        coordinator.start()
+        await waitFor(coordinator) { _ in repository.markSeenCount == 1 }
+
+        repository.emit(.loaded([Self.item("b"), Self.item("a")]))
+        await waitFor(coordinator) { _ in repository.markSeenCount == 2 }
+    }
+
+    @MainActor
+    func testSeenMarkerDoesNotRefireForTheSameNewestNotification() async {
+        let repository = FakeNotificationsRepository()
+        repository.script([.loaded([Self.item("a")])])
+        let coordinator = NotificationsInboxCoordinator(repository: repository, uid: "me-uid")
+
+        coordinator.start()
+        await waitFor(coordinator) { _ in repository.markSeenCount == 1 }
+
+        // A re-emission with the SAME newest id (e.g. a metadata-only update)
+        // must not re-invoke the callable.
+        repository.emit(.loaded([Self.item("a")]))
+        await waitFor(coordinator) { $0.state == .loaded([Self.item("a")]) }
+        XCTAssertEqual(repository.markSeenCount, 1)
+    }
+
+    @MainActor
+    func testSeenMarkerDoesNotFireForAnEmptyInbox() async {
+        let repository = FakeNotificationsRepository()
+        repository.script([.loaded([])])
+        let coordinator = NotificationsInboxCoordinator(repository: repository, uid: "me-uid")
+
+        coordinator.start()
+        await waitFor(coordinator) { $0.state == .empty }
+        XCTAssertEqual(repository.markSeenCount, 0)
+    }
+
+    @MainActor
     func testStartIsIdempotent() async {
         let repository = FakeNotificationsRepository()
         let items = [Self.item("a")]

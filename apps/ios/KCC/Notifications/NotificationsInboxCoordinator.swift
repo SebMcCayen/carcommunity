@@ -40,10 +40,15 @@ enum MarkReadStatus: Equatable, Sendable {
 /// unit-testable with a fake repository — the iOS counterpart of Android's
 /// `NotificationsCoordinator` + the inbox wiring in `NotificationsRoute`.
 ///
-/// Opening the inbox best-effort stamps the last-seen marker (``markSeen()``)
-/// so the red dot clears WITHOUT marking any row read — the notifications
-/// mirror of the community channel's markRead-on-open. Per-row read state
-/// stays a per-item tap / the explicit "mark all read".
+/// Opening the inbox best-effort stamps the last-seen marker
+/// (``stampSeenMarkerIfNewer(_:)``) so the red dot clears WITHOUT marking any
+/// row read — the notifications mirror of the community channel's
+/// markRead-on-open. Per-row read state stays a per-item tap / the explicit
+/// "mark all read". The stamp is keyed on the NEWEST loaded item's id (Android's
+/// `NotificationsRoute` keys its `LaunchedEffect` the same way) so it fires on
+/// the loading→loaded transition AND again on every later arrival while the
+/// inbox stays open — not just once per coordinator lifetime, which would
+/// leave the dot lit for anything that arrived after the initial open.
 @MainActor
 @Observable
 final class NotificationsInboxCoordinator {
@@ -58,6 +63,13 @@ final class NotificationsInboxCoordinator {
 
     private(set) var state: NotificationsInboxUiState
     private(set) var markReadStatus: MarkReadStatus = .idle
+
+    /// The id of the newest item ``stampSeenMarkerIfNewer(_:)`` last stamped
+    /// for — dedupes repeat deliveries of the SAME newest item (e.g. a
+    /// metadata-only re-emission) so the callable is not re-invoked on every
+    /// snapshot, only when the newest item actually changes.
+    @ObservationIgnored
+    private var lastSeenMarkerNotificationId: String?
 
     /// The number of unread notifications currently loaded — Android's
     /// `Notifications.unreadCount`, gating the "mark all read" affordance.
@@ -83,11 +95,12 @@ final class NotificationsInboxCoordinator {
     /// Begins observing on first appearance. Idempotent: a second call (e.g.
     /// SwiftUI re-running `.task` after a tab switch) keeps the live
     /// subscription and its current state instead of flashing back to loading.
-    /// No-op when unavailable. Also best-effort stamps the seen marker.
+    /// No-op when unavailable. The seen-marker stamp is NOT done here — it is
+    /// driven off the loaded snapshot (see ``apply(_:)``) so it also re-fires
+    /// on later arrivals, not just on this initial call.
     func start() {
         guard subscription == nil, repository != nil, uid != nil else { return }
         subscribe()
-        markSeen()
     }
 
     /// The "try again" affordance — tears the current listener down, returns to
@@ -142,11 +155,17 @@ final class NotificationsInboxCoordinator {
         }
     }
 
-    /// Best-effort seen-marker stamp on open — clears the red dot without
-    /// marking rows read. Failures are swallowed: the dot simply persists
-    /// until the next open (Android's `markSeen` on the inbox route).
-    private func markSeen() {
-        guard let repository else { return }
+    /// Best-effort seen-marker stamp, fired when the newest loaded item's id
+    /// differs from the last id stamped for — clears the red dot without
+    /// marking rows read. Firing again on every DIFFERENT newest item (not
+    /// just once per coordinator lifetime) is what lets the dot clear for
+    /// notifications that arrive while the inbox is already open, matching
+    /// Android's `LaunchedEffect(repository, uid, newestNotificationId)`.
+    /// Failures are swallowed: the dot simply persists until the next
+    /// newest-item change (Android's `markSeen` on the inbox route).
+    private func stampSeenMarkerIfNewer(_ newestId: String?) {
+        guard let newestId, newestId != lastSeenMarkerNotificationId, let repository else { return }
+        lastSeenMarkerNotificationId = newestId
         // No `self` capture needed: `repository` is already unwrapped into a
         // local, so the task cannot extend the coordinator's lifetime either
         // way.
@@ -179,6 +198,9 @@ final class NotificationsInboxCoordinator {
             state = .failed(code: code)
         case .loaded(let items):
             state = items.isEmpty ? .empty : .loaded(items)
+            // `items` is already newest-first (Notifications.sortedForInbox),
+            // so `.first` is the newest — Android's `items.firstOrNull()?.id`.
+            stampSeenMarkerIfNewer(items.first?.id)
         }
     }
 }
