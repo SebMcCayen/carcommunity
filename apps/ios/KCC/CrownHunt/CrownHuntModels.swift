@@ -209,19 +209,23 @@ enum CrownSeasonClock {
     static let allTimeScope = "alltime"
 
     private static let stockholm = TimeZone(identifier: "Europe/Stockholm")!
+    private static let posixLocale = Locale(identifier: "en_US_POSIX")
 
     /// The `YYYY-MM` season id `date` falls in, in `zone` (default Stockholm).
     ///
-    /// Uses a POSIX (`en_US_POSIX`) calendar/formatter so the digits are always
-    /// ASCII: the backend's doc ids are a plain `YYYY-MM`, and a device whose
-    /// locale uses a non-Latin numbering system would otherwise format a season
-    /// id that does not exist and read an empty board.
+    /// Extracts the year/month via `Calendar` rather than allocating a
+    /// `DateFormatter` on every call — this runs on every repository read —
+    /// and formats the id with an `en_US_POSIX` locale so the digits are
+    /// always ASCII: the backend's doc ids are a plain `YYYY-MM`, and a device
+    /// whose locale uses a non-Latin numbering system would otherwise format
+    /// a season id that does not exist and read an empty board.
     static func seasonId(for date: Date, zone: TimeZone = stockholm) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = zone
-        formatter.dateFormat = "yyyy-MM"
-        return formatter.string(from: date)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        let components = calendar.dateComponents([.year, .month], from: date)
+        return String(
+            format: "%04d-%02d", locale: posixLocale, components.year ?? 0, components.month ?? 0
+        )
     }
 
     /// The current `YYYY-MM` season id.

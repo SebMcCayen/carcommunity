@@ -60,15 +60,19 @@ final class FirebaseCrownHuntStatsRepository: CrownHuntStatsRepository, @uncheck
             .getDocuments()
         let counters = boardSnap.documents.compactMap(Self.counter(from:))
 
-        // The viewer's own counters (may be absent) and rich stats.
-        let seasonEntry = try await firestore
+        // The viewer's own counters (may be absent) and rich stats — three
+        // independent reads, fetched concurrently rather than sequentially.
+        async let seasonEntryTask = firestore
             .collection(Self.leaderboard).document(Self.entryId(seasonId, uid)).getDocument()
-        let allTimeEntry = try await firestore
+        async let allTimeEntryTask = firestore
             .collection(Self.leaderboard)
             .document(Self.entryId(CrownSeasonClock.allTimeScope, uid))
             .getDocument()
-        let statsDoc = try await firestore
+        async let statsDocTask = firestore
             .collection(Self.userStats).document(uid).getDocument()
+        let (seasonEntry, allTimeEntry, statsDoc) = try await (
+            seasonEntryTask, allTimeEntryTask, statsDocTask
+        )
 
         // Resolve names for the ranked page and the viewer, best-effort.
         var uids = Set(counters.map { $0.uid })

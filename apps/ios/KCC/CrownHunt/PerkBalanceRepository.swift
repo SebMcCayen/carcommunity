@@ -13,8 +13,10 @@ import Foundation
 /// read yet, or no ledger source wired) simply renders as 0 CP and every perk
 /// as not-yet-affordable rather than blocking the list.
 protocol PerkBalanceRepository: AnyObject, Sendable {
-    /// The member's live balance in Crown Points; emits nil on
-    /// absence/transient error so the shop still renders. Each call returns a
-    /// fresh stream backed by its own listener.
+    /// The member's live balance in Crown Points; emits nil when the balance
+    /// is absent (no ledger doc, or a missing `balance` field) so the shop
+    /// still renders as 0 CP. A transient listener error keeps the last-known
+    /// balance instead of emitting nil. Each call returns a fresh stream
+    /// backed by its own listener.
     func balance(uid: String) -> AsyncStream<Int?>
 }
