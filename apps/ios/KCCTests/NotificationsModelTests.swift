@@ -139,8 +139,10 @@ final class NotificationsModelTests: XCTestCase {
     }
 
     func testDeepLinkDirectMessageMalformedPairIdFallsBackToTheList() {
-        // Not a two-part pairId → no counterpart → the DM list, never an
-        // arbitrary segment handed to the navigator.
+        // Not a two-part pairId THAT INCLUDES THE RECIPIENT ("someone__other"
+        // is two-part but neither half is `recipient`) → no resolvable
+        // counterpart → the DM list, never an arbitrary segment handed to the
+        // navigator.
         for pairId in ["single", "a__b__c", "someone__other", ""] {
             let link = Notifications.deepLink(
                 category: .directMessage, relatedEntityId: pairId, recipientUid: recipient
