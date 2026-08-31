@@ -294,7 +294,11 @@ private struct BadgeMedallionTile: View {
         let spoken = tier == nil ? label : "\(ladderName) \(label)"
         let base = String(format: String(localized: String.LocalizationValue(key)), spoken)
         guard earned, let awardedAt else { return base }
-        return "\(base), \(BadgeText.awardedOn(date: awardedAt))"
+        // `badgeShowcase.medallionEarned` already reads "…, unlocked"; append
+        // just the formatted date, not `BadgeText.awardedOn`'s own "Unlocked
+        // <date>" template, or VoiceOver doubles up as "…, unlocked, Unlocked
+        // <date>".
+        return "\(base), \(awardedAt.formatted(date: .abbreviated, time: .omitted))"
     }
 }
 
