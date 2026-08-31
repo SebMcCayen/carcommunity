@@ -168,6 +168,31 @@ final class ChannelChatCoordinatorTests: XCTestCase {
         await waitUntil { source.markReadCount > baseline }
     }
 
+    /// Regression for a follow-up review finding: the incoming-only gate above
+    /// still re-fired on every emission whose newest was incoming, even one
+    /// that re-emits the SAME newest message (e.g. a metadata-only Firestore
+    /// update, or a blockVisibility change re-emitting the same window). Only
+    /// a newest id CHANGE should re-stamp — mirrors
+    /// Social/ChatCoordinator.apply(_:) tracking the previous newest id.
+    @MainActor
+    func testUnchangedIncomingNewestEmissionDoesNotReStampMarkRead() async {
+        let source = FakeChatSource()
+        let coordinator = ChannelChatCoordinator(source: source)
+        coordinator.start()
+        await waitUntil { source.markReadCount >= 1 }
+        let theirs = serverMessage("theirs", sender: "you")
+        source.emit(.loaded([theirs]))
+        // Let the genuinely-new incoming message re-stamp once.
+        await waitUntil { coordinator.messages.map(\.id) == ["theirs"] }
+        await waitUntil { source.markReadCount >= 2 }
+        let baseline = source.markReadCount
+        // Re-emit the SAME window — the newest id is unchanged.
+        source.emit(.loaded([theirs]))
+        // Give an (incorrect) async markRead a moment to land before asserting it didn't.
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(source.markReadCount, baseline)
+    }
+
     /// Regression for a review finding: start() used to call markRead()
     /// unconditionally, which would fail server-side with `unauthenticated`
     /// for a signed-out caller. Subscribing still proceeds (so the UI can

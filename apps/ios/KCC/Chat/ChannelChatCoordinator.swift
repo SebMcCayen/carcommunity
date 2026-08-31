@@ -171,16 +171,19 @@ final class ChannelChatCoordinator {
             break
         case .loaded(let messages):
             isInitialLoading = false
+            let previousNewestId = live.last?.id
             live = messages
             recompute()
-            // Re-stamp the marker only for a new INCOMING message, mirroring
-            // Android's CommunityChannelRoute/ConvoyChannelRoute
-            // (`if (newest != null && newest.senderUid != uid) coordinator.markRead()`).
-            // Without this every live emission — including one whose newest
-            // message is our own post reconciling, or a snapshot change that
-            // doesn't touch the newest message at all — re-stamped the marker,
-            // which is needless backend write traffic.
-            if let newest = messages.last, let currentUserId, newest.senderUid != currentUserId {
+            // Re-stamp the marker only for a NEW incoming message — the newest
+            // id must have actually changed, not just be incoming — mirroring
+            // Social/ChatCoordinator.apply(_:) and Android's
+            // `markReadIfIncoming`. Without the id-change check, a metadata-only
+            // Firestore update or an unrelated re-emission of the same window
+            // (e.g. a blockVisibility change) would re-fire markRead for a
+            // message already marked read; without the incoming check, our own
+            // post reconciling would too. Both are needless backend traffic.
+            if let newest = messages.last, newest.id != previousNewestId,
+                let currentUserId, newest.senderUid != currentUserId {
                 Task { [source] in await source.markRead() }
             }
         }
