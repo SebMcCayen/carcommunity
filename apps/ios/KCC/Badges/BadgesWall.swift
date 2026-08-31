@@ -207,11 +207,12 @@ private struct AllAwardsGrid: View {
                         .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
                     LazyVGrid(columns: columns, alignment: .leading, spacing: KccSpacing.s3) {
                         ForEach(showcase.milestones) { milestone in
+                            let name = milestoneName(milestone)
                             BadgeMedallionTile(
                                 tier: nil,
                                 earned: true,
-                                label: milestoneName(milestone),
-                                ladderName: milestoneName(milestone),
+                                label: name,
+                                ladderName: name,
                                 awardedAt: milestone.awardedAt
                             )
                         }
