@@ -16,8 +16,9 @@ class DrivePeriodBoundariesTest {
 
     @Test
     fun `the current-month range straddles now and spans a single calendar month`() {
-        val start = DrivePeriodBoundaries.startOfCurrentMonthMillis()
-        val end = DrivePeriodBoundaries.startOfNextMonthMillis()
+        // Uses the single-clock-read pair the stats call actually sends, so the two
+        // bounds can never straddle a month rollover into a multi-month range.
+        val (start, end) = DrivePeriodBoundaries.currentMonthRangeMillis()
         val now = System.currentTimeMillis()
 
         // Straddles server time (start < now < end) — the server rejects otherwise.

@@ -111,10 +111,10 @@ fun DrivesRoute(
     val statsState by statsCoordinator.state.collectAsState()
     LaunchedEffect(showStats, subscriptionTier, statsReloadKey) {
         if (showStats) {
-            statsCoordinator.load(
-                monthStartMillis = DrivePeriodBoundaries.startOfCurrentMonthMillis(),
-                monthEndMillis = DrivePeriodBoundaries.startOfNextMonthMillis(),
-            )
+            // Both bounds from ONE clock read so they can never straddle a month
+            // rollover into an always-rejected multi-month range.
+            val (monthStart, monthEnd) = DrivePeriodBoundaries.currentMonthRangeMillis()
+            statsCoordinator.load(monthStartMillis = monthStart, monthEndMillis = monthEnd)
         }
     }
 
