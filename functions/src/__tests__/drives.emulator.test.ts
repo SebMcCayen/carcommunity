@@ -614,6 +614,113 @@ describe('drives-listHistory subscription visibility', () => {
   });
 });
 
+describe('drives-routeUrl signed route access', () => {
+  async function callErrorMessage(promise: Promise<unknown>): Promise<string> {
+    try {
+      await promise;
+      return 'no-error';
+    } catch (error) {
+      if (error instanceof FirebaseError) return error.message;
+      throw error;
+    }
+  }
+
+  it('rejects an unauthenticated caller', async () => {
+    await auth.signOut();
+    expect(await callableErrorCode(call('drives-routeUrl', { rideId: 'anything' }))).toBe(
+      'functions/unauthenticated',
+    );
+  });
+
+  it("returns not-found for a missing ride and for another owner's ride (no existence leak)", async () => {
+    const owner = await createProvisionedUser('routeurl-owner');
+    const [ownedRideId] = await seedDriveHistory(owner, [0]);
+    const viewer = await createProvisionedUser('routeurl-viewer');
+    await setPaidTier(viewer, 'supporter');
+    await signInAs(viewer);
+
+    // Another member's real ride and a rideId that does not exist are the SAME
+    // response, so a caller cannot probe which ids belong to whom.
+    expect(await callableErrorCode(call('drives-routeUrl', { rideId: ownedRideId }))).toBe(
+      'functions/not-found',
+    );
+    expect(
+      await callableErrorCode(call('drives-routeUrl', { rideId: 'routeurl-missing-ride' })),
+    ).toBe('functions/not-found');
+  });
+
+  it('denies a Community drive hidden beyond the newest five (downgrade-replay guard)', async () => {
+    const user = await createProvisionedUser('routeurl-community');
+    // Ages 0..5 (six drives): indexes 0-4 are the visible newest five, index 5
+    // is retained-but-hidden for Community.
+    const rideIds = await seedDriveHistory(user, [0, 1, 2, 3, 4, 5]);
+    await signInAs(user);
+
+    // The 6th-newest is owned and still exists, but is outside the tier window.
+    expect(await callableErrorCode(call('drives-routeUrl', { rideId: rideIds[5]! }))).toBe(
+      'functions/permission-denied',
+    );
+  });
+
+  it('denies a Plus drive older than the rolling 90-day window', async () => {
+    const user = await createProvisionedUser('routeurl-plus');
+    await setPaidTier(user, 'plus');
+    const rideIds = await seedDriveHistory(user, [1, 91]);
+    await signInAs(user);
+
+    // The 91-day-old drive is owned but outside the Plus window.
+    expect(await callableErrorCode(call('drives-routeUrl', { rideId: rideIds[1]! }))).toBe(
+      'functions/permission-denied',
+    );
+  });
+
+  it('returns failed-precondition when a visible drive has no stored route file', async () => {
+    // Community's newest drive is visible, but seedDriveHistory uploads no
+    // route.bin, so the file-existence check fails before any signing.
+    const user = await createProvisionedUser('routeurl-noroute');
+    const [rideId] = await seedDriveHistory(user, [0]);
+    await signInAs(user);
+
+    const message = await callErrorMessage(call('drives-routeUrl', { rideId: rideId! }));
+    expect(message).toContain('no stored route');
+  });
+
+  it('signs a URL for a visible drive with an uploaded route, or fails closed when signing is unavailable', async () => {
+    // Happy path for the AUTHORIZATION + storage-existence chain. Real V4
+    // signing calls IAM signBlob as the runtime SA; the Storage emulator runs
+    // without those credentials, so signing typically fails here and the
+    // callable returns the documented fail-safe (failed-precondition,
+    // 'temporarily unavailable') rather than a URL. Both outcomes are asserted
+    // so the authorization path is exercised in-emulator; whether real signing
+    // ran is reported by the suite, and the signing happy/failure branches are
+    // unit-tested deterministically in routeUrl-core.test.ts (signRouteUrl).
+    const user = await createProvisionedUser('routeurl-signed');
+    await setPaidTier(user, 'supporter');
+    const [rideId] = await seedDriveHistory(user, [0]);
+    // Simulate the client's post-save route upload at the canonical path.
+    await adminBucket
+      .file(`rideRoutes/${user.uid}/${rideId}/route.bin`)
+      .save(Buffer.from([0x1f, 0x8b, 0x08]), { contentType: 'application/gzip' });
+    await signInAs(user);
+
+    try {
+      const data = (await call('drives-routeUrl', { rideId: rideId! })).data as {
+        url: string;
+        expiresAtMillis: number;
+      };
+      expect(typeof data.url).toBe('string');
+      expect(data.url.length).toBeGreaterThan(0);
+      expect(typeof data.expiresAtMillis).toBe('number');
+      expect(data.expiresAtMillis).toBeGreaterThan(Date.now());
+    } catch (error) {
+      // Emulator cannot sign: the callable must fail CLOSED, never crash/leak.
+      expect(error).toBeInstanceOf(FirebaseError);
+      expect((error as FirebaseError).code).toBe('functions/failed-precondition');
+      expect((error as FirebaseError).message).toContain('temporarily unavailable');
+    }
+  });
+});
+
 describe('drives-stats tier-scoped aggregation', () => {
   // Identical drive set for three users on different tiers. Ages in days:
   // [0,1,2,3,4,5,100,200]; distanceMeters=(i+1)*1000; duration=60;
