@@ -47,16 +47,14 @@ export const driveLifetimeStats = onCall(
     const actor = await requireActiveActor(request);
     const serverNowMillis = Date.now();
 
-    // Owner query with NO tier window — every ride the caller owns. count()
-    // gives the true ride-document total in a single aggregation read; the
-    // projected scan below supplies the sums/maxima.
-    const ownerQuery = db.collection('rides').where('userId', '==', actor.uid);
-    const countSnap = await ownerQuery.count().get();
-    const totalDrives = countSnap.data().count;
-
-    // ONE projected scan of the owner's rides is the source for every sum and
-    // maximum. Project only the scalar stat fields the reducer reads — never the
-    // heavy routeThumbnail/convoyMembers — so even a large account stays cheap.
+    // ONE projected scan of the owner's rides (NO tier window — every ride the
+    // caller owns) is the SOLE source for every figure: totalDrives, the sums
+    // and the maxima all come from this same snapshot, so they can never be
+    // internally inconsistent (an earlier separate count() aggregation was both
+    // a redundant billed read and an add/remove-between-reads consistency risk —
+    // mirrors drives.stats, which derives totalDrives from the same scan too).
+    // Project only the scalar stat fields the reducer reads — never the heavy
+    // routeThumbnail/convoyMembers — so even a large account stays cheap.
     // createdAt is deliberately NOT read: this aggregate has no month window and
     // no tier ordering, so legacy drives lacking createdAt still count.
     //
@@ -65,7 +63,9 @@ export const driveLifetimeStats = onCall(
     // account but unbounded for a very large one. A future optimization would
     // maintain a periodic rollup document (or running counters) instead of
     // scanning here; deliberately not now, to keep this slice additive.
-    const docsSnap = await ownerQuery
+    const docsSnap = await db
+      .collection('rides')
+      .where('userId', '==', actor.uid)
       .select(
         'distanceMeters',
         'durationSeconds',
@@ -74,10 +74,10 @@ export const driveLifetimeStats = onCall(
       )
       .get();
 
-    // Field validation, then drop any malformed drive from the SUMS so it can
-    // never corrupt the aggregate (mirrors driveStats-core). Note totalDrives is
-    // the count() above, so a dropped drive still counts as a ride — see the
-    // response type's doc comment.
+    // Field validation, then drop any malformed drive so it can never corrupt
+    // the aggregate (mirrors driveStats-core). totalDrives is therefore the
+    // count of VALID drives in this one snapshot — the same definition
+    // drives.stats uses.
     const samples: LifetimeDriveSample[] = docsSnap.docs
       .map((doc) => {
         const data = doc.data();
@@ -89,6 +89,7 @@ export const driveLifetimeStats = onCall(
         });
       })
       .filter((sample): sample is LifetimeDriveSample => sample != null);
+    const totalDrives = samples.length;
     const scanned = scanLifetimeStats(samples);
 
     return {

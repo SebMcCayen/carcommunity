@@ -118,11 +118,11 @@ export function scanLifetimeStats(
  * (DriveStatsCalculator) minus the "this month" tallies, so the later Android
  * migration can consume this in place of its direct owner-drives read.
  *
- * `totalDrives` is a Firestore count() over the owner's rides — the true ride-
- * document count, which the profile shows and the badge ladders read. It can
- * exceed the number of drives contributing to the sums when a drive carries a
- * malformed durationSeconds (that drive is dropped from the sums to keep them
- * non-negative and clean, but still counts as a ride); this is intentional.
+ * Every figure — totalDrives, the sums and the maxima — is derived from a
+ * SINGLE in-memory scan of the owner's rides (no count()/sum() aggregation), so
+ * they are always one consistent snapshot (mirrors drives.stats). totalDrives
+ * is the count of VALID drives in that snapshot: a drive with a malformed
+ * durationSeconds is dropped so it can never corrupt a total.
  * `averageDriveMeters` is totalDistanceMeters / totalDrives (0 when no drives),
  * so summary-only saves with a null distance still count toward the denominator.
  * A maximum figure (longest/fastest/highestMax) is 0 when no drive carries that

@@ -915,7 +915,7 @@ describe('drives-lifetimeStats true-lifetime aggregation (un-paywalled)', () => 
     expect(lifetime.totalDistanceMeters).toBe(tierScoped.totalDistanceMeters);
   });
 
-  it('excludes a malformed-duration drive from the SUMS but still counts it in totalDrives', async () => {
+  it('drops a malformed-duration drive entirely (excluded from totalDrives and the sums)', async () => {
     const user = await createProvisionedUser('lifetime-malformed');
     await seedStatsDrives(user, [
       { ageDays: 0, distanceMeters: 3_000, durationSeconds: 60, averageSpeedMetersPerSecond: 5, maxSpeedMetersPerSecond: 10 },
@@ -942,10 +942,10 @@ describe('drives-lifetimeStats true-lifetime aggregation (un-paywalled)', () => 
       });
     await signInAs(user);
     const data = (await call('drives-lifetimeStats', {})).data as Record<string, number>;
-    // count() sees both ride documents…
-    expect(data.totalDrives).toBe(2);
-    // …but the corrupt drive is dropped from the sums, so the negative duration
-    // and its 99km distance never leak in.
+    // The corrupt drive is dropped from the single snapshot entirely, so it
+    // counts toward neither totalDrives nor the sums — the negative duration and
+    // its 99km distance never leak in (every figure is one consistent snapshot).
+    expect(data.totalDrives).toBe(1);
     expect(data.totalDistanceMeters).toBe(3_000);
     expect(data.totalDurationSeconds).toBe(60);
     expect(data.longestDriveMeters).toBe(3_000);
