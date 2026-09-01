@@ -163,12 +163,19 @@ export const listAttendees = onCall(
     // gate short-circuits BEFORE the roster reads so a denied caller costs one
     // subscription read, not the whole fan-out.
     if (await readFeatureFlag(EVENT_DETAILS_REQUIRE_PAID_FLAG_KEY)) {
-      const subscriptionSnap = await db.collection('subscriptions').doc(actor.uid).get();
-      const tier = effectiveSubscriptionTierFromStoredRecord(
-        subscriptionSnap.exists ? subscriptionSnap.data() : null,
-        actor.uid,
-      );
-      if (!canViewAttendeeRoster(actor.isAdmin, tier)) {
+      // Admins bypass the paid gate and never need a subscription lookup, so the
+      // tier is resolved ONLY for a non-admin caller — an admin never triggers
+      // the subscriptions/{uid} read.
+      let allowed = actor.isAdmin;
+      if (!allowed) {
+        const subscriptionSnap = await db.collection('subscriptions').doc(actor.uid).get();
+        const tier = effectiveSubscriptionTierFromStoredRecord(
+          subscriptionSnap.exists ? subscriptionSnap.data() : null,
+          actor.uid,
+        );
+        allowed = canViewAttendeeRoster(actor.isAdmin, tier);
+      }
+      if (!allowed) {
         return { attendees: [], requiresPaid: true };
       }
     }

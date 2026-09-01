@@ -246,7 +246,7 @@ class EventsScreensTest {
      * since RSVP is free and the tally is public.
      */
     @Test
-    fun detail_freeSubscriber_seesUpgradePrompt_basicView_noRosterReveal() {
+    fun detail_freeTier_seesUpgradePrompt_basicView_noRosterReveal() {
         composeTestRule.setContent {
             KccTheme {
                 EventDetailScreen(
@@ -281,7 +281,7 @@ class EventsScreensTest {
      * the upgrade prompt.
      */
     @Test
-    fun detail_paidSubscriber_seesFullDetail_andRosterReveal() {
+    fun detail_paidTier_seesFullDetail_andRosterReveal() {
         composeTestRule.setContent {
             KccTheme {
                 EventDetailScreen(
