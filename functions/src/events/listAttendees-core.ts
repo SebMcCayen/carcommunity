@@ -28,8 +28,27 @@
 import { z } from 'zod';
 import { RSVP_STATUSES, type RsvpStatus } from './events-core';
 import type { ProfileProjection } from '../convoy/convoy-core';
+import { isPaidSubscriptionTier, type SubscriptionTier } from '../subscription/subscription-core';
 
 export type ParseResult<T> = { ok: true; input: T } | { ok: false; message: string };
+
+/**
+ * Whether a caller may see the full attendee ROSTER (who answered + how).
+ *
+ * The roster is a PAID benefit (Slice D, subscription gate): only a paid tier
+ * (Plus or Supporter) sees the names. Admins always may — they moderate through
+ * the app and never hold a subscription. A free (Community) member sees the
+ * public rsvpCounts tally on the event doc, but not who is behind it, and the
+ * callable returns an empty roster with `requiresPaid: true` so the client can
+ * render an upgrade prompt rather than a fabricated "nobody answered".
+ *
+ * Pure predicate so the gate is unit-testable without the emulator; the callable
+ * resolves `isAdmin` from the backend role and `tier` from the caller's
+ * subscriptions/{uid} record via effectiveSubscriptionTierFromStoredRecord.
+ */
+export function canViewAttendeeRoster(isAdmin: boolean, tier: SubscriptionTier): boolean {
+  return isAdmin || isPaidSubscriptionTier(tier);
+}
 
 const listAttendeesSchema = z
   .object({

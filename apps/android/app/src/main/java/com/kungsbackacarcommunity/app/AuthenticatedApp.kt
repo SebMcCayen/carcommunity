@@ -462,6 +462,7 @@ import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
 import com.kungsbackacarcommunity.app.subscription.SubscriptionStateRepository
 import com.kungsbackacarcommunity.app.subscription.SubscriptionVerifier
 import com.kungsbackacarcommunity.app.subscription.effectiveTier
+import com.kungsbackacarcommunity.app.subscription.isPaidSubscriber
 import com.kungsbackacarcommunity.app.update.AppStartupUpdateGate
 import com.kungsbackacarcommunity.app.update.AppUpdateCheck
 import com.kungsbackacarcommunity.app.update.AppUpdateSource
@@ -6579,6 +6580,8 @@ fun AuthenticatedApp(
                         leaderboardVisibilityCoordinator = leaderboardVisibilityCoordinator,
                         feedbackCoordinator = feedbackCoordinator,
                         reportTicketsEnabled = flags.isEnabled(FeatureFlag.REPORT_TICKETS_BROWSER),
+                        eventDetailsRequirePaidEnabled =
+                            flags.isEnabled(FeatureFlag.EVENT_DETAILS_REQUIRE_PAID),
                         billingRepository = billingRepository,
                         subscriptionVerifier = subscriptionVerifier,
                         storedSubscription = storedSubscription,
@@ -8914,6 +8917,12 @@ private fun RouteHost(
     // call site. Gates the "View open tickets" entry on the report screen and the
     // OpenTickets sub-route; while false the browser ships dark.
     reportTicketsEnabled: Boolean,
+    // The `eventDetailsRequirePaid` flag (contract default FALSE), resolved from
+    // the live flag store at the call site. While FALSE the event detail shows
+    // full details + the attendee list to everyone (billing not live); while TRUE
+    // the FULL detail and the attendee list are a paid benefit — a free viewer
+    // gets the basic view + an upgrade prompt.
+    eventDetailsRequirePaidEnabled: Boolean,
     billingRepository: BillingRepository?,
     subscriptionVerifier: SubscriptionVerifier?,
     storedSubscription: StoredSubscription?,
@@ -9287,6 +9296,15 @@ private fun RouteHost(
                     rsvpCoordinator = rsvpCoordinator,
                     uid = uid,
                     passesMemberGate = MemberGating.allows(profileActiveMember),
+                    // Slice-D subscription gate, DARK by default. While the
+                    // `eventDetailsRequirePaid` flag is OFF (billing not live) every
+                    // viewer is treated as paid, so the full detail + attendee list
+                    // render for everyone exactly as before. While ON, the real
+                    // stored tier decides: a free (Community) viewer gets the basic
+                    // view + upgrade prompt, a paid tier the full view.
+                    isPaidSubscriber =
+                        !eventDetailsRequirePaidEnabled || storedSubscription.isPaidSubscriber,
+                    onUpgrade = { onOpenRoute(ShellRoute.Subscription) },
                     chatRepository = chatRepository,
                     chatCoordinator = chatCoordinator,
                     chatEnabled = chatEnabled,
