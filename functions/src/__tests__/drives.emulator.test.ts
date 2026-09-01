@@ -125,6 +125,51 @@ async function seedDriveHistory(user: TestUser, agesInDays: number[]): Promise<s
   return ids;
 }
 
+interface StatsDriveSpec {
+  ageDays: number;
+  distanceMeters: number | null;
+  durationSeconds: number;
+  averageSpeedMetersPerSecond: number | null;
+  maxSpeedMetersPerSecond: number | null;
+}
+
+/**
+ * Seeds rides with explicit per-drive stats and ages (in days before now) so a
+ * test can assert exactly which drives fall inside a given tier window and/or
+ * month range. Returns the created rideIds in the order supplied.
+ */
+async function seedStatsDrives(user: TestUser, specs: StatsDriveSpec[]): Promise<string[]> {
+  const now = Date.now();
+  const ids: string[] = [];
+  for (const [index, spec] of specs.entries()) {
+    const rideId = `${user.uid}-stat-${index}`;
+    ids.push(rideId);
+    const createdAt = Timestamp.fromMillis(now - spec.ageDays * 24 * 60 * 60 * 1000);
+    await adminDb
+      .collection('rides')
+      .doc(rideId)
+      .set({
+        userId: user.uid,
+        title: `Stat drive ${index}`,
+        distanceMeters: spec.distanceMeters,
+        durationSeconds: spec.durationSeconds,
+        averageSpeedMetersPerSecond: spec.averageSpeedMetersPerSecond,
+        maxSpeedMetersPerSecond: spec.maxSpeedMetersPerSecond,
+        startedAt: createdAt,
+        endedAt: createdAt,
+        createdAt,
+        routePath: `rideRoutes/${user.uid}/${rideId}/route.bin`,
+        previewImagePath: `rideRoutes/${user.uid}/${rideId}/preview.png`,
+        sourceSessionId: `stat-${index}`,
+        routeThumbnail: 'encoded-thumbnail',
+        convoyMembers: [],
+      });
+  }
+  return ids;
+}
+
+const DAY = 24 * 60 * 60 * 1000;
+
 async function setPaidTier(user: TestUser, tier: 'plus' | 'supporter'): Promise<void> {
   await adminDb.collection('subscriptions').doc(user.uid).set({
     userId: user.uid,
@@ -566,5 +611,254 @@ describe('drives-listHistory subscription visibility', () => {
         call('drives-listHistory', { cursorRideId: foreignRideId, pageSize: 10 }),
       ),
     ).toBe('functions/not-found');
+  });
+});
+
+describe('drives-stats tier-scoped aggregation', () => {
+  // Identical drive set for three users on different tiers. Ages in days:
+  // [0,1,2,3,4,5,100,200]; distanceMeters=(i+1)*1000; duration=60;
+  // avg=(i+1); max=(i+1)*2. Tier windows select different subsets:
+  //   Community = newest 5 (i 0..4), Plus = last 90 days (i 0..5),
+  //   Supporter = all 8. So every aggregate differs by tier.
+  const SPECS: StatsDriveSpec[] = [0, 1, 2, 3, 4, 5, 100, 200].map((ageDays, i) => ({
+    ageDays,
+    distanceMeters: (i + 1) * 1_000,
+    durationSeconds: 60,
+    averageSpeedMetersPerSecond: i + 1,
+    maxSpeedMetersPerSecond: (i + 1) * 2,
+  }));
+
+  it('Community aggregates only its newest five drives', async () => {
+    const user = await createProvisionedUser('stats-community');
+    await seedStatsDrives(user, SPECS);
+    await signInAs(user);
+    const data = (await call('drives-stats', {})).data as Record<string, number | string>;
+    expect(data.tier).toBe('community');
+    expect(data.totalDrives).toBe(5);
+    expect(data.totalDistanceMeters).toBe(15_000); // 1000+2000+3000+4000+5000
+    expect(data.totalDurationSeconds).toBe(300); // 5 * 60
+    expect(data.longestDriveMeters).toBe(5_000);
+    expect(data.fastestAverageSpeedMps).toBe(5);
+    expect(data.highestMaxSpeedMps).toBe(10);
+    expect(data.averageDriveMeters).toBe(3_000); // 15000 / 5
+    // No month range supplied → thisMonth fields are zeroed.
+    expect(data.thisMonthDrives).toBe(0);
+    expect(data.thisMonthDistanceMeters).toBe(0);
+    expect(typeof data.serverNowMillis).toBe('number');
+  });
+
+  it('Plus aggregates the rolling 90-day window', async () => {
+    const user = await createProvisionedUser('stats-plus');
+    await setPaidTier(user, 'plus');
+    await seedStatsDrives(user, SPECS);
+    await signInAs(user);
+    const data = (await call('drives-stats', {})).data as Record<string, number | string>;
+    expect(data.tier).toBe('plus');
+    expect(data.totalDrives).toBe(6); // ages 0..5 within 90 days
+    expect(data.totalDistanceMeters).toBe(21_000); // 15000 + 6000
+    expect(data.longestDriveMeters).toBe(6_000);
+    expect(data.fastestAverageSpeedMps).toBe(6);
+    expect(data.highestMaxSpeedMps).toBe(12);
+  });
+
+  it('Supporter aggregates the complete history', async () => {
+    const user = await createProvisionedUser('stats-supporter');
+    await setPaidTier(user, 'supporter');
+    await seedStatsDrives(user, SPECS);
+    await signInAs(user);
+    const data = (await call('drives-stats', {})).data as Record<string, number | string>;
+    expect(data.tier).toBe('supporter');
+    expect(data.totalDrives).toBe(8);
+    expect(data.totalDistanceMeters).toBe(36_000); // 1000+..+8000
+    expect(data.totalDurationSeconds).toBe(480); // 8 * 60
+    expect(data.longestDriveMeters).toBe(8_000);
+    expect(data.fastestAverageSpeedMps).toBe(8);
+    expect(data.highestMaxSpeedMps).toBe(16);
+  });
+
+  it('never lets the month range widen access past the tier window (Community intersection)', async () => {
+    // Seven drives all created within the last week — so ALL of them fall
+    // inside the supplied month window — but Community may only see its newest
+    // five. thisMonthDrives must therefore be 5, not 7: the month range is
+    // intersected with the tier-visible set, never applied to hidden history.
+    const user = await createProvisionedUser('stats-intersect');
+    await seedStatsDrives(
+      user,
+      [0, 1, 2, 3, 4, 5, 6].map((ageDays, i) => ({
+        ageDays,
+        distanceMeters: (i + 1) * 1_000,
+        durationSeconds: 60,
+        averageSpeedMetersPerSecond: i + 1,
+        maxSpeedMetersPerSecond: (i + 1) * 2,
+      })),
+    );
+    await signInAs(user);
+    const now = Date.now();
+    const data = (
+      await call('drives-stats', {
+        monthStartMillis: now - 10 * DAY,
+        monthEndMillis: now + 20 * DAY,
+      })
+    ).data as Record<string, number | string>;
+    expect(data.tier).toBe('community');
+    expect(data.totalDrives).toBe(5);
+    // The two hidden drives (i 5,6) are inside the month window but NOT visible,
+    // so they are excluded from the month tally.
+    expect(data.thisMonthDrives).toBe(5);
+    expect(data.thisMonthDistanceMeters).toBe(15_000);
+  });
+
+  it('applies the month range as a real filter for a paid tier', async () => {
+    // One drive inside the window (age 0), one outside it (age 40 > 10-day
+    // window lower bound). Supporter sees both; only the in-window one counts
+    // toward thisMonth.
+    const user = await createProvisionedUser('stats-month-filter');
+    await setPaidTier(user, 'supporter');
+    await seedStatsDrives(user, [
+      { ageDays: 0, distanceMeters: 4_000, durationSeconds: 60, averageSpeedMetersPerSecond: 5, maxSpeedMetersPerSecond: 10 },
+      { ageDays: 40, distanceMeters: 9_000, durationSeconds: 60, averageSpeedMetersPerSecond: 9, maxSpeedMetersPerSecond: 18 },
+    ]);
+    await signInAs(user);
+    const now = Date.now();
+    const data = (
+      await call('drives-stats', {
+        monthStartMillis: now - 10 * DAY,
+        monthEndMillis: now + 20 * DAY,
+      })
+    ).data as Record<string, number | string>;
+    expect(data.totalDrives).toBe(2); // both visible to Supporter
+    expect(data.longestDriveMeters).toBe(9_000); // max spans the whole visible set
+    expect(data.thisMonthDrives).toBe(1); // only the age-0 drive is in-window
+    expect(data.thisMonthDistanceMeters).toBe(4_000);
+  });
+
+  it('rejects malformed, future and oversized month ranges', async () => {
+    const user = await createProvisionedUser('stats-monthvalidation');
+    await signInAs(user);
+    const now = Date.now();
+    // Half-supplied range.
+    expect(
+      await callableErrorCode(call('drives-stats', { monthStartMillis: now - DAY })),
+    ).toBe('functions/invalid-argument');
+    // Entirely in the future (does not straddle now).
+    expect(
+      await callableErrorCode(
+        call('drives-stats', { monthStartMillis: now + DAY, monthEndMillis: now + 31 * DAY }),
+      ),
+    ).toBe('functions/invalid-argument');
+    // Oversized span (40 days).
+    expect(
+      await callableErrorCode(
+        call('drives-stats', { monthStartMillis: now - 20 * DAY, monthEndMillis: now + 20 * DAY }),
+      ),
+    ).toBe('functions/invalid-argument');
+    // Non-integer bound.
+    expect(
+      await callableErrorCode(
+        call('drives-stats', { monthStartMillis: now - 10 * DAY + 0.5, monthEndMillis: now + 20 * DAY }),
+      ),
+    ).toBe('functions/invalid-argument');
+  });
+
+  it('rejects an unauthenticated caller', async () => {
+    await auth.signOut();
+    expect(await callableErrorCode(call('drives-stats', {}))).toBe('functions/unauthenticated');
+  });
+});
+
+describe('drives-listDeletable owner inventory', () => {
+  it('returns ALL owned drives (including tier-hidden ones) with MINIMAL fields', async () => {
+    const user = await createProvisionedUser('deletable-community');
+    // Community would hide everything past the newest five in listHistory.
+    const rideIds = await seedDriveHistory(user, [0, 1, 2, 3, 4, 5, 6]);
+    await signInAs(user);
+
+    // History is tier-limited to five…
+    const history = (await call('drives-listHistory', { pageSize: 25 })).data as {
+      drives: Array<{ rideId: string }>;
+    };
+    expect(history.drives).toHaveLength(5);
+
+    // …but the deletion inventory returns all seven so they stay deletable.
+    const data = (await call('drives-listDeletable', {})).data as {
+      drives: Array<Record<string, unknown>>;
+      hasMore: boolean;
+      nextCursorRideId: string | null;
+    };
+    expect(data.drives.map((d) => d.rideId)).toEqual(rideIds);
+    expect(data.hasMore).toBe(false);
+    expect(data.nextCursorRideId).toBeNull();
+
+    const row = data.drives[0]!;
+    expect(Object.keys(row).sort()).toEqual(
+      ['createdAtMillis', 'rideId', 'startedAtMillis', 'title'].sort(),
+    );
+    // No stats, route, image or session data leaks through this endpoint.
+    for (const forbidden of [
+      'distanceMeters',
+      'durationSeconds',
+      'averageSpeedMetersPerSecond',
+      'maxSpeedMetersPerSecond',
+      'routePath',
+      'previewImagePath',
+      'routeThumbnail',
+      'carImagePath',
+      'sourceSessionId',
+      'convoyMembers',
+      'userId',
+    ]) {
+      expect(row).not.toHaveProperty(forbidden);
+    }
+  });
+
+  it('paginates newest-first with a look-ahead cursor', async () => {
+    const user = await createProvisionedUser('deletable-paginate');
+    const rideIds = await seedDriveHistory(user, [0, 1, 2, 3, 4]);
+    await signInAs(user);
+
+    const first = (await call('drives-listDeletable', { pageSize: 2 })).data as {
+      drives: Array<{ rideId: string }>;
+      hasMore: boolean;
+      nextCursorRideId: string | null;
+    };
+    expect(first.drives.map((d) => d.rideId)).toEqual(rideIds.slice(0, 2));
+    expect(first.hasMore).toBe(true);
+    expect(first.nextCursorRideId).toBe(rideIds[1]);
+
+    const second = (
+      await call('drives-listDeletable', { pageSize: 2, cursorRideId: first.nextCursorRideId })
+    ).data as { drives: Array<{ rideId: string }>; hasMore: boolean; nextCursorRideId: string | null };
+    expect(second.drives.map((d) => d.rideId)).toEqual(rideIds.slice(2, 4));
+    expect(second.hasMore).toBe(true);
+
+    const third = (
+      await call('drives-listDeletable', { pageSize: 2, cursorRideId: second.nextCursorRideId })
+    ).data as { drives: Array<{ rideId: string }>; hasMore: boolean; nextCursorRideId: string | null };
+    expect(third.drives.map((d) => d.rideId)).toEqual(rideIds.slice(4, 5));
+    expect(third.hasMore).toBe(false);
+    expect(third.nextCursorRideId).toBeNull();
+  });
+
+  it('scopes to the caller and does not let a cursor probe another owner', async () => {
+    const owner = await createProvisionedUser('deletable-owner');
+    const [foreignRideId] = await seedDriveHistory(owner, [0]);
+    const other = await createProvisionedUser('deletable-other');
+    await signInAs(other);
+
+    // A user with no drives gets an empty inventory (never anyone else's).
+    const mine = (await call('drives-listDeletable', {})).data as { drives: unknown[] };
+    expect(mine.drives).toEqual([]);
+
+    // A cursor naming another owner's drive is not-found, never a data leak.
+    expect(
+      await callableErrorCode(call('drives-listDeletable', { cursorRideId: foreignRideId })),
+    ).toBe('functions/not-found');
+  });
+
+  it('rejects an unauthenticated caller', async () => {
+    await auth.signOut();
+    expect(await callableErrorCode(call('drives-listDeletable', {}))).toBe(
+      'functions/unauthenticated',
+    );
   });
 });

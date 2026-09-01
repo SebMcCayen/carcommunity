@@ -40,6 +40,8 @@ import { onEventCancelled } from './events/onEventCancelled';
 import { checkIn } from './events/checkIn';
 import { setPublicSite, onPublicSiteWrite, syncHomepage } from './events/publicSite';
 import { deleteDrive } from './drives/deleteDrive';
+import { driveStats } from './drives/driveStats';
+import { listDeletableDrives } from './drives/listDeletableDrives';
 import { listDriveHistory } from './drives/listDriveHistory';
 import { block as blockUser, unblock as unblockUser } from './blocking/manageBlocks';
 import { onBlockWrite } from './blocking/onBlockWrite';
@@ -406,17 +408,24 @@ export const events = {
 
 /**
  * Drives domain (grouped export → deployed as `drives-save`,
- * `drives-listHistory`, and `drives-delete`).
+ * `drives-listHistory`, `drives-stats`, `drives-listDeletable`, and
+ * `drives-delete`).
  *
  * Saved drives (contracts/functions/functions.json: drives.save,
- * drives.listHistory, drives.delete). Stats are computed server-side; route GPS
- * data lives in Cloud Storage under rideRoutes/{uid}/{rideId}/ (member-gated),
- * never in Firestore. The callable is the new tier-aware read path; temporary
- * direct owner reads remain only for already-released client compatibility.
+ * drives.listHistory, drives.stats, drives.listDeletable, drives.delete). Stats
+ * are computed server-side; route GPS data lives in Cloud Storage under
+ * rideRoutes/{uid}/{rideId}/ (member-gated), never in Firestore. listHistory
+ * and stats are tier-scoped (Community/Plus/Supporter); listDeletable is
+ * owner-only and tier-agnostic so a downgraded user can still delete drives the
+ * tier window now hides. The callables are the new tier-aware read path;
+ * temporary direct owner reads remain only for already-released client
+ * compatibility.
  */
 export const drives = {
   save: saveDrive,
   listHistory: listDriveHistory,
+  stats: driveStats,
+  listDeletable: listDeletableDrives,
   delete: deleteDrive,
 };
 
