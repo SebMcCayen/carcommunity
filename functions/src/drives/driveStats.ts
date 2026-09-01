@@ -94,7 +94,18 @@ export const driveStats = onCall(
     // Totals cannot use a Firestore sum() aggregation anyway: Firestore cannot
     // index a two-field sum() next to the tier ordering, and per-field sums
     // would each need a hand-deployed composite index (out of scope here).
-    const docsSnap = await visibleQuery.get();
+    // Project only the scalar fields the scan reads (stats + createdAt for the
+    // ordering/month filter) — never the heavy routeThumbnail/convoyMembers — so
+    // even a large Supporter scan stays cheap. rideId is not needed here.
+    const docsSnap = await visibleQuery
+      .select(
+        'distanceMeters',
+        'durationSeconds',
+        'averageSpeedMetersPerSecond',
+        'maxSpeedMetersPerSecond',
+        'createdAt',
+      )
+      .get();
 
     // Field validation + Timestamp extraction, then drop any malformed drive so
     // it can never corrupt the aggregate (mirrors drives.listHistory's

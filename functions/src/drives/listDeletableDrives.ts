@@ -92,8 +92,14 @@ export const listDeletableDrives = onCall(
     }
 
     const pageSize = deletableDrivesPageSize(parsed.input.pageSize);
-    // One look-ahead document decides hasMore without a second query.
-    const snapshot = await query.limit(pageSize + 1).get();
+    // One look-ahead document decides hasMore without a second query. Project
+    // only the fields toDeletableDriveItem reads (plus the ordering field
+    // createdAt) so this never fetches the heavy route/stats fields — the
+    // rideId comes from doc.id, which a projection always exposes.
+    const snapshot = await query
+      .select('createdAt', 'title', 'startedAt')
+      .limit(pageSize + 1)
+      .get();
     const hasMore = snapshot.size > pageSize;
     const visibleDocs = snapshot.docs.slice(0, pageSize);
     const drives = visibleDocs
