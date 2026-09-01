@@ -40,6 +40,7 @@ import { onEventCancelled } from './events/onEventCancelled';
 import { checkIn } from './events/checkIn';
 import { setPublicSite, onPublicSiteWrite, syncHomepage } from './events/publicSite';
 import { deleteDrive } from './drives/deleteDrive';
+import { driveLifetimeStats } from './drives/driveLifetimeStats';
 import { driveStats } from './drives/driveStats';
 import { listDeletableDrives } from './drives/listDeletableDrives';
 import { listDriveHistory } from './drives/listDriveHistory';
@@ -409,8 +410,8 @@ export const events = {
 
 /**
  * Drives domain (grouped export → deployed as `drives-save`,
- * `drives-listHistory`, `drives-stats`, `drives-listDeletable`, `drives-delete`,
- * and `drives-routeUrl`).
+ * `drives-listHistory`, `drives-stats`, `drives-lifetimeStats`,
+ * `drives-listDeletable`, `drives-delete`, and `drives-routeUrl`).
  *
  * Saved drives (contracts/functions/functions.json: drives.save,
  * drives.listHistory, drives.stats, drives.listDeletable, drives.delete,
@@ -435,6 +436,13 @@ export const drives = {
   save: saveDrive,
   listHistory: listDriveHistory,
   stats: driveStats,
+  // `drives-lifetimeStats`: TRUE-LIFETIME aggregate over ALL the caller's drives
+  // with NO tier window and NO month range — the deliberately UN-PAYWALLED
+  // counterpart to the tier-scoped `stats`, for the profile "my stats" fold and
+  // lifetime badges (e.g. Vägfarare) that must not shrink on a downgrade. Actor
+  // gate only (requireActiveActor, no tier/membership). The Android migration to
+  // consume it and the direct-read lockdown are separate later slices.
+  lifetimeStats: driveLifetimeStats,
   listDeletable: listDeletableDrives,
   delete: deleteDrive,
   routeUrl: drivesRouteUrl,

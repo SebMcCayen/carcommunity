@@ -873,6 +873,118 @@ describe('drives-stats tier-scoped aggregation', () => {
   });
 });
 
+describe('drives-lifetimeStats true-lifetime aggregation (un-paywalled)', () => {
+  // Ages in days [0,1,2,3,4,5,100,200]; distanceMeters=(i+1)*1000;
+  // duration=60; avg=(i+1); max=(i+1)*2. Unlike drives-stats there is NO tier
+  // window, so a Community user still gets the true totals over ALL 8 drives.
+  const SPECS: StatsDriveSpec[] = [0, 1, 2, 3, 4, 5, 100, 200].map((ageDays, i) => ({
+    ageDays,
+    distanceMeters: (i + 1) * 1_000,
+    durationSeconds: 60,
+    averageSpeedMetersPerSecond: i + 1,
+    maxSpeedMetersPerSecond: (i + 1) * 2,
+  }));
+
+  it('a Community user with >5 drives still gets true-lifetime totals (no tier window)', async () => {
+    const user = await createProvisionedUser('lifetime-community');
+    await seedStatsDrives(user, SPECS); // no subscription doc → Community tier
+    await signInAs(user);
+    const data = (await call('drives-lifetimeStats', {})).data as Record<string, number>;
+    // drives-stats would cap Community at its newest 5; lifetimeStats does not.
+    expect(data.totalDrives).toBe(8);
+    expect(data.totalDistanceMeters).toBe(36_000); // 1000+..+8000
+    expect(data.totalDurationSeconds).toBe(480); // 8 * 60
+    expect(data.longestDriveMeters).toBe(8_000);
+    expect(data.fastestAverageSpeedMps).toBe(8);
+    expect(data.highestMaxSpeedMps).toBe(16);
+    expect(data.averageDriveMeters).toBe(4_500); // 36000 / 8
+    expect(typeof data.serverNowMillis).toBe('number');
+    // No tier / thisMonth* fields on the lifetime response.
+    expect(data.tier).toBeUndefined();
+    expect(data.thisMonthDrives).toBeUndefined();
+  });
+
+  it('matches the tier-scoped total only for a Supporter (whose window is everything)', async () => {
+    const user = await createProvisionedUser('lifetime-supporter');
+    await setPaidTier(user, 'supporter');
+    await seedStatsDrives(user, SPECS);
+    await signInAs(user);
+    const lifetime = (await call('drives-lifetimeStats', {})).data as Record<string, number>;
+    const tierScoped = (await call('drives-stats', {})).data as Record<string, number>;
+    expect(lifetime.totalDrives).toBe(tierScoped.totalDrives);
+    expect(lifetime.totalDistanceMeters).toBe(tierScoped.totalDistanceMeters);
+  });
+
+  it('excludes a malformed-duration drive from the SUMS but still counts it in totalDrives', async () => {
+    const user = await createProvisionedUser('lifetime-malformed');
+    await seedStatsDrives(user, [
+      { ageDays: 0, distanceMeters: 3_000, durationSeconds: 60, averageSpeedMetersPerSecond: 5, maxSpeedMetersPerSecond: 10 },
+    ]);
+    // A second ride with a corrupt (negative) durationSeconds, written directly.
+    await adminDb
+      .collection('rides')
+      .doc(`${user.uid}-corrupt`)
+      .set({
+        userId: user.uid,
+        title: 'Corrupt drive',
+        distanceMeters: 99_000,
+        durationSeconds: -5,
+        averageSpeedMetersPerSecond: 3,
+        maxSpeedMetersPerSecond: 6,
+        startedAt: Timestamp.now(),
+        endedAt: Timestamp.now(),
+        createdAt: Timestamp.now(),
+        routePath: `rideRoutes/${user.uid}/corrupt/route.bin`,
+        previewImagePath: `rideRoutes/${user.uid}/corrupt/preview.png`,
+        sourceSessionId: 'corrupt',
+        routeThumbnail: 'encoded-thumbnail',
+        convoyMembers: [],
+      });
+    await signInAs(user);
+    const data = (await call('drives-lifetimeStats', {})).data as Record<string, number>;
+    // count() sees both ride documents…
+    expect(data.totalDrives).toBe(2);
+    // …but the corrupt drive is dropped from the sums, so the negative duration
+    // and its 99km distance never leak in.
+    expect(data.totalDistanceMeters).toBe(3_000);
+    expect(data.totalDurationSeconds).toBe(60);
+    expect(data.longestDriveMeters).toBe(3_000);
+  });
+
+  it('returns all zeroes for an owner with no drives', async () => {
+    const user = await createProvisionedUser('lifetime-empty');
+    await signInAs(user);
+    const data = (await call('drives-lifetimeStats', {})).data as Record<string, number>;
+    expect(data.totalDrives).toBe(0);
+    expect(data.totalDistanceMeters).toBe(0);
+    expect(data.totalDurationSeconds).toBe(0);
+    expect(data.longestDriveMeters).toBe(0);
+    expect(data.averageDriveMeters).toBe(0);
+  });
+
+  it('only ever aggregates the CALLER\'s own drives', async () => {
+    const owner = await createProvisionedUser('lifetime-owner');
+    const other = await createProvisionedUser('lifetime-other');
+    await seedStatsDrives(owner, [
+      { ageDays: 0, distanceMeters: 1_000, durationSeconds: 60, averageSpeedMetersPerSecond: 5, maxSpeedMetersPerSecond: 10 },
+    ]);
+    await seedStatsDrives(other, [
+      { ageDays: 0, distanceMeters: 8_000, durationSeconds: 60, averageSpeedMetersPerSecond: 9, maxSpeedMetersPerSecond: 18 },
+    ]);
+    await signInAs(owner);
+    const data = (await call('drives-lifetimeStats', {})).data as Record<string, number>;
+    expect(data.totalDrives).toBe(1);
+    expect(data.totalDistanceMeters).toBe(1_000); // never sees `other`'s 8km drive
+  });
+
+  it('rejects an unauthenticated caller', async () => {
+    await auth.signOut();
+    expect(await callableErrorCode(call('drives-lifetimeStats', {}))).toBe(
+      'functions/unauthenticated',
+    );
+  });
+});
+
 describe('drives-listDeletable owner inventory', () => {
   it('returns ALL owned drives (including tier-hidden ones) with MINIMAL fields', async () => {
     const user = await createProvisionedUser('deletable-community');
