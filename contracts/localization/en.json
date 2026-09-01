@@ -985,6 +985,8 @@
     "statsEntryAction": "Your driving stats",
     "statsTitle": "Your driving",
     "statsEmpty": "No drives to summarise yet.",
+    "statsLoading": "Loading statistics...",
+    "statsError": "Couldn't load statistics. Try again.",
     "statsAllTime": "All time",
     "statsThisMonth": "This month",
     "statsTotalDrives": "Drives",
@@ -1011,7 +1013,11 @@
     "sortFastest": "Fastest",
     "filterClear": "Clear filters",
     "filterNoMatches": "No drives match your filters.",
-    "filterNoMatchesAction": "Clear filters"
+    "filterNoMatchesAction": "Clear filters",
+    "tierRestrictedBanner": "%1$d older drives are hidden on your plan. Upgrade to see them.",
+    "loadMore": "Show more",
+    "loadingMore": "Loading more...",
+    "loadMoreError": "Couldn't load more drives. Try again."
   },
   "imageEditor": {
     "title": "Edit photo",

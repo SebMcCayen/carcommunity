@@ -912,6 +912,8 @@
     <string name="savedDrives_statsEntryAction">Din körstatistik</string>
     <string name="savedDrives_statsTitle">Din körning</string>
     <string name="savedDrives_statsEmpty">Inga körningar att summera ännu.</string>
+    <string name="savedDrives_statsLoading">Laddar statistik...</string>
+    <string name="savedDrives_statsError">Kunde inte hämta statistiken. Försök igen.</string>
     <string name="savedDrives_statsAllTime">Totalt</string>
     <string name="savedDrives_statsThisMonth">Denna månad</string>
     <string name="savedDrives_statsTotalDrives">Körningar</string>
@@ -939,6 +941,10 @@
     <string name="savedDrives_filterClear">Rensa filter</string>
     <string name="savedDrives_filterNoMatches">Inga körningar matchar dina filter.</string>
     <string name="savedDrives_filterNoMatchesAction">Rensa filter</string>
+    <string name="savedDrives_tierRestrictedBanner">%1$d äldre körningar är dolda på ditt abonnemang. Uppgradera för att se dem.</string>
+    <string name="savedDrives_loadMore">Visa fler</string>
+    <string name="savedDrives_loadingMore">Laddar fler...</string>
+    <string name="savedDrives_loadMoreError">Kunde inte ladda fler körningar. Försök igen.</string>
     <string name="imageEditor_title">Redigera bild</string>
     <string name="imageEditor_hint">Dra för att flytta, nyp för att zooma och vrid med två fingrar för att rotera. Det som syns i rutan är det andra ser.</string>
     <string name="imageEditor_frameDescription">Dra i hörnen för att ändra beskärningens form.</string>

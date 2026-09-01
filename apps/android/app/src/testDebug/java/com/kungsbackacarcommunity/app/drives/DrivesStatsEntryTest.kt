@@ -35,13 +35,21 @@ class DrivesStatsEntryTest {
             createdAtMillis = 600_000L,
         )
 
+    private fun loadedState(drives: List<SavedDrive>) =
+        DriveHistoryListState.Loaded(
+            drives = drives,
+            tier = DriveSubscriptionTier.COMMUNITY,
+            hiddenDriveCount = 0,
+            hasMore = false,
+        )
+
     @Test
     fun statsActionOpensTheStatsPage() {
         var opened = false
         composeTestRule.setContent {
             KccTheme {
                 DrivesListScreen(
-                    state = DrivesState.Loaded(listOf(drive("a"))),
+                    state = loadedState(listOf(drive("a"))),
                     onSelect = {},
                     onDelete = {},
                     deleteStatus = DriveDeleteStatus.Idle,
@@ -60,7 +68,7 @@ class DrivesStatsEntryTest {
         composeTestRule.setContent {
             KccTheme {
                 DrivesListScreen(
-                    state = DrivesState.Loaded(emptyList()),
+                    state = loadedState(emptyList()),
                     onSelect = {},
                     onDelete = {},
                     deleteStatus = DriveDeleteStatus.Idle,

@@ -121,6 +121,7 @@ import com.kungsbackacarcommunity.app.drives.ConvoyDriveMember
 import com.kungsbackacarcommunity.app.drives.ConvoyEndChoice
 import com.kungsbackacarcommunity.app.drives.ConvoyEndResolution
 import com.kungsbackacarcommunity.app.drives.ConvoyEndSessionChoice
+import com.kungsbackacarcommunity.app.drives.DriveHistoryRepository
 import com.kungsbackacarcommunity.app.drives.DrivesRepository
 import com.kungsbackacarcommunity.app.drives.DrivesRoute
 import com.kungsbackacarcommunity.app.drives.DrivesState
@@ -459,6 +460,7 @@ import com.kungsbackacarcommunity.app.subscription.StoredSubscription
 import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
 import com.kungsbackacarcommunity.app.subscription.SubscriptionStateRepository
 import com.kungsbackacarcommunity.app.subscription.SubscriptionVerifier
+import com.kungsbackacarcommunity.app.subscription.effectiveTier
 import com.kungsbackacarcommunity.app.update.AppStartupUpdateGate
 import com.kungsbackacarcommunity.app.update.AppUpdateCheck
 import com.kungsbackacarcommunity.app.update.AppUpdateSource
@@ -822,6 +824,7 @@ fun AuthenticatedApp(
     communityChatRepository: CommunityChatRepository?,
     convoyChatRepository: ConvoyChatRepository?,
     drivesRepository: DrivesRepository?,
+    driveHistoryRepository: DriveHistoryRepository?,
     pointsRepository: PointsRepository?,
     partnerApplicationCoordinator: PartnerApplicationCoordinator?,
     billboardsRepository: BillboardsRepository?,
@@ -7544,10 +7547,15 @@ fun AuthenticatedApp(
                                             onDismiss = { selectedTab = ShellTab.Map },
                                             testTag = HISTORY_PANEL_TEST_TAG,
                                         ) {
-                                            if (drivesRepository != null) {
+                                            if (drivesRepository != null && driveHistoryRepository != null) {
                                                 DrivesRoute(
                                                     repository = drivesRepository,
+                                                    historyRepository = driveHistoryRepository,
                                                     uid = uid,
+                                                    // Tier change reloads history + stats:
+                                                    // a downgrade drops now-hidden drives,
+                                                    // an upgrade reveals more.
+                                                    subscriptionTier = storedSubscription.effectiveTier,
                                                     // Opened straight to a drive by the
                                                     // "Drive saved" dialog's History action
                                                     // (#856); consumed back to null.

@@ -116,20 +116,29 @@ private const val FILTER_TRANSITION_MILLIS = 200
 /** Material's minimum touch-target edge; the filter header row is shorter without it. */
 private val MIN_TOUCH_TARGET = 48.dp
 
-/** Saved-drives list (Phase 12 slice 12). Tap a drive for detail; share or delete inline. */
+/**
+ * Saved-drives list (slice B1: server-authoritative, tier-gated). Tap a drive for
+ * detail; share or delete inline. The list is a bounded page from
+ * `drives-listHistory` (Community = newest 5 with no paging, Plus = rolling
+ * 90-day window, Supporter = paged full history), so a tier-restriction banner and
+ * a load-more control replace the old unbounded owner query.
+ */
 @Composable
 fun DrivesListScreen(
-    state: DrivesState,
+    state: DriveHistoryListState,
     onSelect: (String) -> Unit,
     onDelete: (String) -> Unit,
     deleteStatus: DriveDeleteStatus,
     modifier: Modifier = Modifier,
-    // Re-invokes the drives load; when null the error state shows no retry.
+    // Re-invokes the (first-page) history load; when null the error state shows no retry.
     onRetry: (() -> Unit)? = null,
     // Opens the personal "your driving" stats page. The entry is rendered only
     // when at least one drive is loaded — a zero-drive member sees the empty card
     // instead, so the stats entry never leads to a page of zeroes.
     onShowStats: (() -> Unit)? = null,
+    // Appends the next page (paid tiers only). When null, or when the tier cannot
+    // page / has no more pages, no load-more control is shown.
+    onLoadMore: (() -> Unit)? = null,
     // Scroll state for the history LazyColumn. Hoisted so it can be OWNED by
     // DrivesRoute and survive the detail/stats drill-in round-trip (#996): those
     // levels swap this whole screen out of the composition, so a state created
@@ -175,11 +184,14 @@ fun DrivesListScreen(
     val weekStartMillis = DrivePeriodBoundaries.startOfCurrentWeekMillis()
     val monthStartMillis = DrivePeriodBoundaries.startOfCurrentMonthMillis()
 
-    // Filter over the FULL loaded list (an owner query with no limit — see
-    // [DriveFilters]), so results are complete, never a partial page. Computed
-    // unconditionally (empty in for a non-Loaded state) so the remember slot is
-    // stable across the Loading -> Loaded transition.
-    val allDrives = (state as? DrivesState.Loaded)?.drives ?: emptyList()
+    // Filter over the drives loaded SO FAR. Unlike the old unbounded owner query,
+    // this is a tier-visible page set (all of Community's visible drives, or the
+    // pages the user has loaded for a paid tier), so the load-more control below
+    // lets the user pull more before filtering. Computed unconditionally (empty
+    // for a non-Loaded state) so the remember slot is stable across the
+    // Loading -> Loaded transition.
+    val loaded = state as? DriveHistoryListState.Loaded
+    val allDrives = loaded?.drives ?: emptyList()
     val filteredDrives =
         remember(allDrives, criteria, weekStartMillis, monthStartMillis) {
             DriveFilters.filterDrives(allDrives, criteria, weekStartMillis, monthStartMillis)
@@ -202,10 +214,17 @@ fun DrivesListScreen(
                 // is loaded, so it never opens a page of zeroes — the same "shown
                 // only when a drive exists" rule the old card carried.
                 val statsEntry =
-                    onShowStats?.takeIf {
-                        (state as? DrivesState.Loaded)?.drives?.isNotEmpty() == true
-                    }
+                    onShowStats?.takeIf { loaded?.drives?.isNotEmpty() == true }
                 DrivesHeader(onShowStats = statsEntry)
+            }
+
+            // Tier-restriction banner: the callable retains every drive but hides
+            // the ones outside this tier's window. Shown whenever the FIRST page
+            // reported hidden drives, so a Community/Plus member always sees WHY
+            // their list is short and that upgrading reveals more. Placed above the
+            // filters so it is visible regardless of the active filter/empty state.
+            if (loaded != null && loaded.hiddenDriveCount > 0) {
+                item { TierRestrictedBanner(hiddenDriveCount = loaded.hiddenDriveCount) }
             }
 
             // A delete launched from a row is reconciled by the Firestore
@@ -223,7 +242,7 @@ fun DrivesListScreen(
             }
 
             when (state) {
-                DrivesState.Loading ->
+                DriveHistoryListState.Loading ->
                     item {
                         Text(
                             text = stringResource(R.string.savedDrives_loading),
@@ -232,7 +251,7 @@ fun DrivesListScreen(
                         )
                     }
 
-                is DrivesState.Error ->
+                is DriveHistoryListState.Error ->
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             Text(
@@ -248,7 +267,7 @@ fun DrivesListScreen(
                         }
                     }
 
-                is DrivesState.Loaded ->
+                is DriveHistoryListState.Loaded ->
                     if (state.drives.isEmpty()) {
                         item { EmptyDrives() }
                     } else {
@@ -275,6 +294,18 @@ fun DrivesListScreen(
                                     onSelect = onSelect,
                                     onDelete = onDelete,
                                     deleteInFlight = deleteStatus == DriveDeleteStatus.Deleting,
+                                )
+                            }
+                        }
+                        // Load-more control for a paid tier with another page. The
+                        // callable never lets Community page (hasMore is false), so
+                        // this is only ever offered to Plus/Supporter.
+                        if (state.hasMore && onLoadMore != null) {
+                            item {
+                                LoadMoreControl(
+                                    loadingMore = state.loadingMore,
+                                    failed = state.loadMoreFailed,
+                                    onLoadMore = onLoadMore,
                                 )
                             }
                         }
@@ -346,6 +377,62 @@ private fun NoMatchingDrives(onClear: () -> Unit) {
             )
             TextButton(onClick = onClear) {
                 Text(text = stringResource(R.string.savedDrives_filterNoMatchesAction))
+            }
+        }
+    }
+}
+
+/**
+ * Upgrade prompt shown when the tier window hides retained drives (Community past
+ * the newest 5, Plus older than 90 days). The drives are never deleted — they
+ * reappear on upgrade — so this states the count and points at the plan rather
+ * than implying data loss.
+ */
+@Composable
+private fun TierRestrictedBanner(hiddenDriveCount: Int) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = stringResource(R.string.savedDrives_tierRestrictedBanner, hiddenDriveCount),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+        )
+    }
+}
+
+/**
+ * The paged-history load-more control: a "show more" button that becomes a muted
+ * progress line while a page loads, and surfaces a retry after a failed append
+ * without blanking the drives already shown.
+ */
+@Composable
+private fun LoadMoreControl(loadingMore: Boolean, failed: Boolean, onLoadMore: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+    ) {
+        if (loadingMore) {
+            Text(
+                text = stringResource(R.string.savedDrives_loadingMore),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth().padding(KccSpacing.s2),
+            )
+        } else {
+            if (failed) {
+                Text(
+                    text = stringResource(R.string.savedDrives_loadMoreError),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            OutlinedButton(onClick = onLoadMore, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text =
+                        stringResource(
+                            if (failed) R.string.savedDrives_retry else R.string.savedDrives_loadMore,
+                        ),
+                )
             }
         }
     }

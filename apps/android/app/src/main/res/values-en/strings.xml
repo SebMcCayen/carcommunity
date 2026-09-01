@@ -912,6 +912,8 @@
     <string name="savedDrives_statsEntryAction">Your driving stats</string>
     <string name="savedDrives_statsTitle">Your driving</string>
     <string name="savedDrives_statsEmpty">No drives to summarise yet.</string>
+    <string name="savedDrives_statsLoading">Loading statistics...</string>
+    <string name="savedDrives_statsError">Couldn\'t load statistics. Try again.</string>
     <string name="savedDrives_statsAllTime">All time</string>
     <string name="savedDrives_statsThisMonth">This month</string>
     <string name="savedDrives_statsTotalDrives">Drives</string>
@@ -939,6 +941,10 @@
     <string name="savedDrives_filterClear">Clear filters</string>
     <string name="savedDrives_filterNoMatches">No drives match your filters.</string>
     <string name="savedDrives_filterNoMatchesAction">Clear filters</string>
+    <string name="savedDrives_tierRestrictedBanner">%1$d older drives are hidden on your plan. Upgrade to see them.</string>
+    <string name="savedDrives_loadMore">Show more</string>
+    <string name="savedDrives_loadingMore">Loading more...</string>
+    <string name="savedDrives_loadMoreError">Couldn\'t load more drives. Try again.</string>
     <string name="imageEditor_title">Edit photo</string>
     <string name="imageEditor_hint">Drag to move, pinch to zoom, and twist with two fingers to rotate. The area inside the frame is what others will see.</string>
     <string name="imageEditor_frameDescription">Drag the corners to reshape the crop area.</string>

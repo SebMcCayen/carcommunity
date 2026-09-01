@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.kungsbackacarcommunity.app.diagnostics.ClientErrorReporter
 import com.kungsbackacarcommunity.app.diagnostics.rememberClientErrorReporter
 import com.kungsbackacarcommunity.app.shell.LocalAeroBackAvailable
+import com.kungsbackacarcommunity.app.subscription.EffectiveSubscriptionTier
 import kotlinx.coroutines.launch
 
 /**
@@ -30,16 +31,26 @@ private fun rememberRouteReplayRepository(): RouteReplayRepository? {
 }
 
 /**
- * Saved-drives integration route (Phase 12 slice 12): observe the owner's
- * drives, drill into a selected drive's detail, and delete via the coordinator.
- * A successful delete returns to the list. Drives are recorded and saved at the
- * end of a live-sharing session, so this read-only history has no manual record
- * affordance.
+ * Saved-drives integration route (slice B1: server-authoritative reads). The
+ * History list and the personal Statistics page now come from the tier-gated
+ * `drives-listHistory` / `drives-stats` callables (via [historyRepository]); the
+ * per-drive delete still goes through the `drives-delete` callable on
+ * [repository]. Drives are recorded and saved at the end of a live-sharing
+ * session, so this read-only history has no manual record affordance.
+ *
+ * Route replay (the detail map) intentionally keeps its current direct-Storage
+ * path — its migration is slice B2 — and is untouched here.
+ *
+ * @param subscriptionTier the viewer's effective tier; a change reloads both the
+ *   history list and the stats aggregate, so a downgrade drops now-hidden drives
+ *   and an upgrade reveals more.
  */
 @Composable
 fun DrivesRoute(
     repository: DrivesRepository,
+    historyRepository: DriveHistoryRepository,
     uid: String,
+    subscriptionTier: EffectiveSubscriptionTier = EffectiveSubscriptionTier.COMMUNITY,
     errorReporter: ClientErrorReporter? = rememberClientErrorReporter(),
     // Reader for the driven-route replay map. Defaulted from Firebase (null in a
     // config-less / CI build) so callers and tests need not supply it.
@@ -51,25 +62,32 @@ fun DrivesRoute(
     initialRideId: String? = null,
     onInitialRideConsumed: () -> Unit = {},
 ) {
-    // Bumped by the "try again" affordance to re-subscribe the observe flow.
+    val historyCoordinator = remember(historyRepository) { DriveHistoryCoordinator(historyRepository) }
+    val statsCoordinator = remember(historyRepository) { DriveStatsCoordinator(historyRepository) }
+    val state by historyCoordinator.state.collectAsState()
+
+    // Bumped by the "try again" affordance to re-run the first-page load.
     var reloadKey by rememberSaveable { mutableStateOf(0) }
-    val state by
-        remember(repository, uid, reloadKey) { repository.observeDrives(uid) }
-            .collectAsState(initial = DrivesState.Loading)
+    // First load + retry + tier-change invalidation all route through reload():
+    // a downgrade drops now-hidden drives, an upgrade reveals more.
+    LaunchedEffect(subscriptionTier, reloadKey) {
+        historyCoordinator.reload()
+    }
 
     // Auto-file a GENUINE load failure (never the empty list). Keyed so it fires
     // once per entry into the Error state and once per retry, not per
     // recomposition; the backend dedups across users on top of that.
-    val loadError = state as? DrivesState.Error
-    LaunchedEffect(loadError != null, reloadKey) {
+    val loadError = state as? DriveHistoryListState.Error
+    LaunchedEffect(loadError != null, reloadKey, subscriptionTier) {
         if (loadError != null) {
             errorReporter?.report(
                 feature = FEATURE_DRIVES_LIST,
-                message = "Saved-drives owner query failed to load",
+                message = "Saved-drives history callable failed to load",
                 code = loadError.code,
             )
         }
     }
+
     val coordinator = remember(repository) { DrivesCoordinator(repository) }
     val deleteStatus by coordinator.deleteStatus.collectAsState()
     val scope = rememberCoroutineScope()
@@ -86,44 +104,43 @@ fun DrivesRoute(
         }
     }
     // The "your driving" stats page is an internal level of this route (peer of
-    // the detail view), folded over the already-loaded drive list — no refetch.
+    // the detail view). It is server-authoritative now — its own callable, not a
+    // fold over the list — so it is loaded on open and reloaded on tier change.
     var showStats by remember { mutableStateOf(false) }
+    var statsReloadKey by remember { mutableStateOf(0) }
+    val statsState by statsCoordinator.state.collectAsState()
+    LaunchedEffect(showStats, subscriptionTier, statsReloadKey) {
+        if (showStats) {
+            statsCoordinator.load(
+                monthStartMillis = DrivePeriodBoundaries.startOfCurrentMonthMillis(),
+                monthEndMillis = DrivePeriodBoundaries.startOfNextMonthMillis(),
+            )
+        }
+    }
 
     // Scroll position of the History list, hoisted here so it OUTLIVES the drill-in
-    // levels. Detail and Statistics are rendered by swapping which composable the
-    // `when (level)` below emits (not a nav route), so DrivesListScreen leaves the
-    // composition entirely while a drill-in is open — a list state owned inside it
-    // would be disposed, and Back would land at the top of the list (#996). Owned
-    // at this route scope it survives the round-trip, and rememberLazyListState is
-    // itself rememberSaveable-backed (LazyListState.Saver), so it also restores
-    // across a configuration change.
+    // levels (detail/stats swap DrivesListScreen out of the composition — see #996).
     val historyListState = rememberLazyListState()
 
-    val loaded = state as? DrivesState.Loaded
+    val loaded = state as? DriveHistoryListState.Loaded
 
     LaunchedEffect(deleteStatus) {
         if (deleteStatus == DriveDeleteStatus.Deleted) {
             selectedRideId = null
             coordinator.reset()
+            // Reload the history: deleting a visible drive can promote a
+            // previously-hidden one into the tier window (e.g. Community's 6th
+            // drive becomes visible once one of the newest 5 is removed), and the
+            // hidden-count banner must re-derive. This replaces the old snapshot
+            // listener that reconciled the removal automatically.
+            historyCoordinator.reload()
         }
-    }
-
-    // The stats level is folded over the loaded list, so it is only valid while
-    // the drives are Loaded. If they leave Loaded WHILE stats is open (a
-    // transient Firestore listener error, a retry/resubscribe), permanently exit
-    // the level back to the list — the list renders the real loading/error state,
-    // whereas an empty-drives fold would read as a misleading "no drives" page.
-    LaunchedEffect(showStats, loaded == null) {
-        if (showStats && loaded == null) showStats = false
     }
 
     val selected = loaded?.drives?.firstOrNull { it.rideId == selectedRideId }
 
     // System/gesture Back unwinds one internal level (detail/stats -> list); at
     // the list root it is disabled so the shell's BackHandler returns to Home.
-    // Enabling on `selectedRideId != null` alone (not also `selected != null`)
-    // ensures a transient null `selected` during a list refresh still unwinds to
-    // the list instead of falling through to the shell handler (Home).
     BackHandler(enabled = selectedRideId != null || showStats) {
         selectedRideId = null
         showStats = false
@@ -134,15 +151,12 @@ fun DrivesRoute(
         drivesLevel(
             hasSelectedDrive = selectedRideId != null && selected != null,
             showStats = showStats,
-            isLoaded = loaded != null,
         )
     when (level) {
         DrivesLevel.DETAIL ->
             // Drill-in level: provide the pinned in-app Back arrow (#807) around
-            // the AeroPage this screen renders, so gesture-nav users (no visible
-            // system Back button) can return to the History list. The arrow fires
-            // the back dispatcher -> this route's BackHandler above -> unwind one
-            // level to the list. The List root deliberately stays arrow-free.
+            // the AeroPage this screen renders, so gesture-nav users can return to
+            // the History list.
             CompositionLocalProvider(LocalAeroBackAvailable provides true) {
                 // `selected` is non-null on this branch (see [drivesLevel]); the
                 // null-check re-establishes the smart cast for the compiler.
@@ -162,14 +176,13 @@ fun DrivesRoute(
             }
 
         DrivesLevel.STATS ->
-            // Drill-in level: provide the pinned in-app Back arrow (#807) so the
-            // Statistics page has a visible way back to the History list (#844).
-            // The arrow fires the back dispatcher -> this route's BackHandler ->
-            // clears `showStats` -> unwind to the list.
+            // Drill-in level: provide the pinned in-app Back arrow (#807, #844) so
+            // the Statistics page has a visible way back to the History list.
             CompositionLocalProvider(LocalAeroBackAvailable provides true) {
-                // `loaded` is non-null on this branch (see [drivesLevel]); never
-                // fed an empty fold when the drives have left the Loaded state.
-                loaded?.let { DriveStatsScreen(drives = it.drives) }
+                DriveStatsScreen(
+                    state = statsState,
+                    onRetry = { statsReloadKey++ },
+                )
             }
 
         DrivesLevel.LIST ->
@@ -180,6 +193,7 @@ fun DrivesRoute(
                 deleteStatus = deleteStatus,
                 onRetry = { reloadKey++ },
                 onShowStats = { showStats = true },
+                onLoadMore = { scope.launch { historyCoordinator.loadMore() } },
                 listState = historyListState,
             )
     }
@@ -189,18 +203,17 @@ fun DrivesRoute(
 internal enum class DrivesLevel { DETAIL, STATS, LIST }
 
 /**
- * Pure routing decision for [DrivesRoute]. Both drill-in levels are only valid
- * while their backing data is present: detail needs the selected drive to still
- * resolve ([hasSelectedDrive]), and stats needs the drive list to still be
- * Loaded ([isLoaded]). When either backing datum drops out (a transient listener
- * error, a retry/resubscribe), this falls back to [DrivesLevel.LIST] so the list
- * screen can render the real loading/error state instead of a stale or empty
- * drill-in view.
+ * Pure routing decision for [DrivesRoute]. Detail needs the selected drive to
+ * still resolve ([hasSelectedDrive]) — during a list reload/resubscribe a
+ * transient null selection falls back to [DrivesLevel.LIST] so the list can render
+ * the real loading/error state. Statistics is now server-authoritative (its own
+ * callable, not a fold over the list), so it no longer depends on the list being
+ * loaded and stays open across a history reload.
  */
-internal fun drivesLevel(hasSelectedDrive: Boolean, showStats: Boolean, isLoaded: Boolean): DrivesLevel =
+internal fun drivesLevel(hasSelectedDrive: Boolean, showStats: Boolean): DrivesLevel =
     when {
         hasSelectedDrive -> DrivesLevel.DETAIL
-        showStats && isLoaded -> DrivesLevel.STATS
+        showStats -> DrivesLevel.STATS
         else -> DrivesLevel.LIST
     }
 
