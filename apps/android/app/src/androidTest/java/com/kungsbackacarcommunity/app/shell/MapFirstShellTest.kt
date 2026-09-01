@@ -140,6 +140,7 @@ class MapFirstShellTest {
                     communityChatRepository = null,
                     convoyChatRepository = null,
                     drivesRepository = null,
+                    driveHistoryRepository = null,
                     pointsRepository = null,
                     partnerApplicationCoordinator = null,
                     billboardsRepository = null,

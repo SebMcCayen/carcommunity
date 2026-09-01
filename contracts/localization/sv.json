@@ -985,6 +985,8 @@
     "statsEntryAction": "Din körstatistik",
     "statsTitle": "Din körning",
     "statsEmpty": "Inga körningar att summera ännu.",
+    "statsLoading": "Laddar statistik...",
+    "statsError": "Kunde inte hämta statistiken. Försök igen.",
     "statsAllTime": "Totalt",
     "statsThisMonth": "Denna månad",
     "statsTotalDrives": "Körningar",
@@ -1011,7 +1013,11 @@
     "sortFastest": "Snabbast",
     "filterClear": "Rensa filter",
     "filterNoMatches": "Inga körningar matchar dina filter.",
-    "filterNoMatchesAction": "Rensa filter"
+    "filterNoMatchesAction": "Rensa filter",
+    "tierRestrictedBanner": "%1$d äldre körningar är dolda på ditt abonnemang. Uppgradera för att se dem.",
+    "loadMore": "Visa fler",
+    "loadingMore": "Laddar fler...",
+    "loadMoreError": "Kunde inte ladda fler körningar. Försök igen."
   },
   "imageEditor": {
     "title": "Redigera bild",

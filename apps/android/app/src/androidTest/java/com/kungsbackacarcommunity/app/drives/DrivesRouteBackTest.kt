@@ -15,7 +15,6 @@ import com.kungsbackacarcommunity.app.shell.AeroBackButtonTag
 import com.kungsbackacarcommunity.app.testutil.RetryRunner
 import java.util.Locale
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -39,15 +38,49 @@ class DrivesRouteBackTest {
     private fun str(id: Int) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
 
-    /** A single-drive repository so the list, its stats entry, and detail all render. */
-    private class FakeDrivesRepository(private val drives: List<SavedDrive>) : DrivesRepository {
+    /** Delete-only repository (the list + stats now come from the history repo). */
+    private class FakeDrivesRepository : DrivesRepository {
         override fun observeDrives(uid: String): Flow<DrivesState> =
-            flowOf(DrivesState.Loaded(drives))
+            throw UnsupportedOperationException("not used in this test")
 
         override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult =
             throw UnsupportedOperationException("not used in this test")
 
         override suspend fun deleteDrive(rideId: String) = Unit
+    }
+
+    /**
+     * Serves the given drives as a single tier-visible page (and a matching stats
+     * aggregate) so the list, its stats entry, and per-drive detail all render.
+     */
+    private class FakeDriveHistoryRepository(private val drives: List<SavedDrive>) :
+        DriveHistoryRepository {
+        override suspend fun listHistory(cursorRideId: String?, pageSize: Int?): DriveHistoryPage =
+            DriveHistoryPage(
+                tier = DriveSubscriptionTier.COMMUNITY,
+                drives = drives,
+                hasMore = false,
+                nextCursorRideId = null,
+                hiddenDriveCount = 0,
+                hasTierRestrictedHistory = false,
+            )
+
+        override suspend fun fetchStats(
+            monthStartMillis: Long?,
+            monthEndMillis: Long?,
+        ): DriveStatsSnapshot =
+            DriveStatsSnapshot(
+                tier = DriveSubscriptionTier.COMMUNITY,
+                totalDrives = drives.size,
+                totalDistanceMeters = 0.0,
+                totalDurationSeconds = 0L,
+                longestDriveMeters = 0.0,
+                averageDriveMeters = 0.0,
+                fastestAverageSpeedMps = null,
+                highestMaxSpeedMps = null,
+                thisMonthDrives = 0,
+                thisMonthDistanceMeters = 0.0,
+            )
     }
 
     private val drive =
@@ -66,7 +99,8 @@ class DrivesRouteBackTest {
         composeTestRule.setContent {
             KccTheme {
                 DrivesRoute(
-                    repository = FakeDrivesRepository(listOf(drive)),
+                    repository = FakeDrivesRepository(),
+                    historyRepository = FakeDriveHistoryRepository(listOf(drive)),
                     uid = "uid-1",
                     errorReporter = null,
                     routeRepository = null,
@@ -122,7 +156,8 @@ class DrivesRouteBackTest {
         composeTestRule.setContent {
             KccTheme {
                 DrivesRoute(
-                    repository = FakeDrivesRepository(manyDrives(50)),
+                    repository = FakeDrivesRepository(),
+                    historyRepository = FakeDriveHistoryRepository(manyDrives(50)),
                     uid = "uid-1",
                     errorReporter = null,
                     routeRepository = null,

@@ -25654,6 +25654,40 @@
         }
       }
     },
+    "savedDrives.loadMore": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa fler"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show more"
+          }
+        }
+      }
+    },
+    "savedDrives.loadMoreError": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kunde inte ladda fler körningar. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't load more drives. Try again."
+          }
+        }
+      }
+    },
     "savedDrives.loading": {
       "extractionState": "manual",
       "localizations": {
@@ -25667,6 +25701,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Loading drives..."
+          }
+        }
+      }
+    },
+    "savedDrives.loadingMore": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laddar fler..."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading more..."
           }
         }
       }
@@ -26674,6 +26725,23 @@
         }
       }
     },
+    "savedDrives.statsError": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kunde inte hämta statistiken. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't load statistics. Try again."
+          }
+        }
+      }
+    },
     "savedDrives.statsFastest": {
       "extractionState": "manual",
       "localizations": {
@@ -26687,6 +26755,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fastest average speed"
+          }
+        }
+      }
+    },
+    "savedDrives.statsLoading": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laddar statistik..."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading statistics..."
           }
         }
       }
@@ -26789,6 +26874,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Total time"
+          }
+        }
+      }
+    },
+    "savedDrives.tierRestrictedBanner": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld äldre körningar är dolda på ditt abonnemang. Uppgradera för att se dem."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld older drives are hidden on your plan. Upgrade to see them."
           }
         }
       }

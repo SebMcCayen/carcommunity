@@ -10,26 +10,18 @@ class DrivesRouteTest {
     fun `a resolved selected drive always wins`() {
         assertEquals(
             DrivesLevel.DETAIL,
-            drivesLevel(hasSelectedDrive = true, showStats = true, isLoaded = true),
+            drivesLevel(hasSelectedDrive = true, showStats = true),
         )
     }
 
     @Test
-    fun `stats renders when open and the list is loaded`() {
+    fun `stats renders when open`() {
+        // Statistics is now server-authoritative (its own callable, not a fold over
+        // the list), so it no longer depends on the history list being loaded and
+        // stays open across a history reload.
         assertEquals(
             DrivesLevel.STATS,
-            drivesLevel(hasSelectedDrive = false, showStats = true, isLoaded = true),
-        )
-    }
-
-    @Test
-    fun `stats open but list not loaded falls back to the list, not an empty stats page`() {
-        // Reproduces the transient-state bug: the drives left Loaded (a listener
-        // error / resubscribe) while stats was open. The route must show the list
-        // (which renders the real loading/error state), never an empty fold.
-        assertEquals(
-            DrivesLevel.LIST,
-            drivesLevel(hasSelectedDrive = false, showStats = true, isLoaded = false),
+            drivesLevel(hasSelectedDrive = false, showStats = true),
         )
     }
 
@@ -37,7 +29,7 @@ class DrivesRouteTest {
     fun `nothing open resolves to the list`() {
         assertEquals(
             DrivesLevel.LIST,
-            drivesLevel(hasSelectedDrive = false, showStats = false, isLoaded = true),
+            drivesLevel(hasSelectedDrive = false, showStats = false),
         )
     }
 }

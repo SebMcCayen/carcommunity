@@ -50,6 +50,7 @@ import com.kungsbackacarcommunity.app.badges.FirebaseBadgesRepository
 import com.kungsbackacarcommunity.app.blocking.FirebaseBlockingRepository
 import com.kungsbackacarcommunity.app.friends.FirebaseFriendsRepository
 import com.kungsbackacarcommunity.app.memberprofile.FirebaseMemberProfileRepository
+import com.kungsbackacarcommunity.app.drives.FirebaseDriveHistoryRepository
 import com.kungsbackacarcommunity.app.drives.FirebaseDrivesRepository
 import com.kungsbackacarcommunity.app.drives.SingleSessionRecording
 import com.kungsbackacarcommunity.app.billboards.FirebaseBillboardsRepository
@@ -252,6 +253,8 @@ class MainActivity : ComponentActivity() {
         val convoyChatRepository =
             FirebaseConvoyChatRepository.createIfAvailable(applicationContext)
         val drivesRepository = FirebaseDrivesRepository.createIfAvailable(applicationContext)
+        val driveHistoryRepository =
+            FirebaseDriveHistoryRepository.createIfAvailable(applicationContext)
         val pointsRepository = FirebasePointsRepository.createIfAvailable(applicationContext)
         val partnerApplicationCoordinator =
             FirebasePartnerApplicationRepository.createIfAvailable(applicationContext)
@@ -513,6 +516,7 @@ class MainActivity : ComponentActivity() {
                         communityChatRepository = communityChatRepository,
                         convoyChatRepository = convoyChatRepository,
                         drivesRepository = drivesRepository,
+                        driveHistoryRepository = driveHistoryRepository,
                         pointsRepository = pointsRepository,
                         partnerApplicationCoordinator = partnerApplicationCoordinator,
                         billboardsRepository = billboardsRepository,
