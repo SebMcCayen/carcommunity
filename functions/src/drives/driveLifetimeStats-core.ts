@@ -113,8 +113,8 @@ export function scanLifetimeStats(
 
 /**
  * True-lifetime statistics response. Every figure is derived from ALL of the
- * caller's drives, regardless of subscription tier — the un-paywalled counter-
- * part to drives.stats. Fields mirror the Android profile fold
+ * caller's drives, regardless of subscription tier — the un-paywalled
+ * counterpart to drives.stats. Fields mirror the Android profile fold
  * (DriveStatsCalculator) minus the "this month" tallies, so the later Android
  * migration can consume this in place of its direct owner-drives read.
  *
