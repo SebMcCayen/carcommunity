@@ -40,6 +40,8 @@ import { onEventCancelled } from './events/onEventCancelled';
 import { checkIn } from './events/checkIn';
 import { setPublicSite, onPublicSiteWrite, syncHomepage } from './events/publicSite';
 import { deleteDrive } from './drives/deleteDrive';
+import { driveStats } from './drives/driveStats';
+import { listDeletableDrives } from './drives/listDeletableDrives';
 import { listDriveHistory } from './drives/listDriveHistory';
 import { routeUrl as drivesRouteUrl } from './drives/routeUrl';
 import { block as blockUser, unblock as unblockUser } from './blocking/manageBlocks';
@@ -407,14 +409,18 @@ export const events = {
 
 /**
  * Drives domain (grouped export → deployed as `drives-save`,
- * `drives-listHistory`, `drives-delete`, and `drives-routeUrl`).
+ * `drives-listHistory`, `drives-stats`, `drives-listDeletable`, `drives-delete`,
+ * and `drives-routeUrl`).
  *
  * Saved drives (contracts/functions/functions.json: drives.save,
- * drives.listHistory, drives.delete, drives.routeUrl). Stats are computed
- * server-side; route GPS data lives in Cloud Storage under
- * rideRoutes/{uid}/{rideId}/ (member-gated), never in Firestore. listHistory is
- * the new tier-aware read path; temporary direct owner reads remain only for
- * already-released client compatibility.
+ * drives.listHistory, drives.stats, drives.listDeletable, drives.delete,
+ * drives.routeUrl). Stats are computed server-side; route GPS data lives in
+ * Cloud Storage under rideRoutes/{uid}/{rideId}/ (member-gated), never in
+ * Firestore. listHistory and stats are tier-scoped (Community/Plus/Supporter);
+ * listDeletable is owner-only and tier-agnostic so a downgraded user can still
+ * delete drives the tier window now hides. The callables are the new tier-aware
+ * read path; temporary direct owner reads remain only for already-released
+ * client compatibility.
  *
  * `drives-routeUrl` issues a short-lived (5 min) V4 signed URL for an owned,
  * tier-visible drive's route.bin, so the app can download the full track without
@@ -428,6 +434,8 @@ export const events = {
 export const drives = {
   save: saveDrive,
   listHistory: listDriveHistory,
+  stats: driveStats,
+  listDeletable: listDeletableDrives,
   delete: deleteDrive,
   routeUrl: drivesRouteUrl,
 };

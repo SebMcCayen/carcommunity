@@ -193,6 +193,90 @@
       ],
       "additionalProperties": false
     },
+    "driveStatsRequest": {
+      "type": "object",
+      "description": "Optional local-calendar-month window for the 'this month' fields of drives.stats. monthStartMillis and monthEndMillis are Unix-epoch millisecond integers and must be supplied together (or both omitted). The backend validates them against server time: the range must straddle server now, span a single calendar month (27-32 days), and be bounded near the present; device time is never trusted.",
+      "properties": {
+        "monthStartMillis": { "type": "integer" },
+        "monthEndMillis": { "type": "integer" }
+      },
+      "dependentRequired": {
+        "monthStartMillis": ["monthEndMillis"],
+        "monthEndMillis": ["monthStartMillis"]
+      },
+      "additionalProperties": false
+    },
+    "driveStatsResponse": {
+      "type": "object",
+      "description": "Server-authoritative statistics aggregate from drives.stats, computed over ONLY the caller's tier-visible drives (the same subscription policy as drives.listHistory: Community = newest 5, Plus = rolling 90 days, Supporter = everything), so deeper stats are a paid benefit and the aggregate never widens access to hidden history. All distances are metres and speeds metres/second. A maximum figure (longest/fastest/highestMax) is 0 when no visible drive carries that stat, never a false negative. thisMonthDrives/thisMonthDistanceMeters are 0 when no month range was supplied. tier and serverNowMillis let the client label the scope without trusting device time.",
+      "properties": {
+        "tier": { "enum": ["community", "plus", "supporter"] },
+        "serverNowMillis": { "type": "integer", "minimum": 0 },
+        "totalDrives": { "type": "integer", "minimum": 0 },
+        "totalDistanceMeters": { "type": "number", "minimum": 0 },
+        "totalDurationSeconds": { "type": "number", "minimum": 0 },
+        "longestDriveMeters": { "type": "number", "minimum": 0 },
+        "averageDriveMeters": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Mean distance per tier-visible drive (totalDistanceMeters / totalDrives); summary-only saves with a null distance still count toward the denominator. 0 when there are no visible drives."
+        },
+        "fastestAverageSpeedMps": { "type": "number", "minimum": 0 },
+        "highestMaxSpeedMps": { "type": "number", "minimum": 0 },
+        "thisMonthDrives": { "type": "integer", "minimum": 0 },
+        "thisMonthDistanceMeters": { "type": "number", "minimum": 0 }
+      },
+      "required": [
+        "tier",
+        "serverNowMillis",
+        "totalDrives",
+        "totalDistanceMeters",
+        "totalDurationSeconds",
+        "longestDriveMeters",
+        "averageDriveMeters",
+        "fastestAverageSpeedMps",
+        "highestMaxSpeedMps",
+        "thisMonthDrives",
+        "thisMonthDistanceMeters"
+      ],
+      "additionalProperties": false
+    },
+    "deletableDriveItem": {
+      "type": "object",
+      "description": "One row of the owner-only deletion inventory returned by drives.listDeletable. Deliberately carries ONLY what a 'delete this drive' list needs — id, when it happened, and its label. No distance, speed, duration, route path/thumbnail, image or source-session field is included.",
+      "properties": {
+        "rideId": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "createdAtMillis": { "type": "integer", "minimum": 0 },
+        "title": { "type": ["string", "null"], "maxLength": 200 },
+        "startedAtMillis": { "type": ["integer", "null"], "minimum": 0 }
+      },
+      "required": ["rideId", "createdAtMillis", "title", "startedAtMillis"],
+      "additionalProperties": false
+    },
+    "listDeletableDrivesRequest": {
+      "type": "object",
+      "description": "Optional cursor and bounded page size for drives.listDeletable.",
+      "properties": {
+        "cursorRideId": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "pageSize": { "type": "integer", "minimum": 1, "maximum": 50 }
+      },
+      "additionalProperties": false
+    },
+    "listDeletableDrivesResponse": {
+      "type": "object",
+      "description": "Owner-only deletion inventory page. Returns ALL the caller's owned drives regardless of tier window (unlike drives.listHistory), so a downgraded user can still delete drives the tier window now hides.",
+      "properties": {
+        "drives": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/deletableDriveItem" },
+          "maxItems": 50
+        },
+        "hasMore": { "type": "boolean" },
+        "nextCursorRideId": { "type": ["string", "null"], "maxLength": 300 }
+      },
+      "required": ["drives", "hasMore", "nextCursorRideId"],
+      "additionalProperties": false
+    },
     "routePoint": {
       "type": "object",
       "description": "A single recorded GPS point submitted to drives.save. Points must be ordered by timestampMs.",

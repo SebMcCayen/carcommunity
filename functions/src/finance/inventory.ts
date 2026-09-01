@@ -504,6 +504,12 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   // Subscription read + bounded ride page; first page also performs one
   // (Community) or two (Plus) count aggregations for the hidden-history UX.
   'drives.listHistory': 'variable-member',
+  // Subscription read + a single projected scan of the tier-visible ride set
+  // (no count()/sum() aggregation); all totals/maxima/month tallies are computed
+  // in memory from that one snapshot.
+  'drives.stats': 'variable-member',
+  // Owner-only paginated deletion inventory (one look-ahead read per page).
+  'drives.listDeletable': 'variable-member',
   'drives.delete': 'variable-member',
   // Owner reads one ride + one subscription doc (+ a bounded newest-5 query for
   // Community) then generates a short-lived signed Storage URL; member-driven.

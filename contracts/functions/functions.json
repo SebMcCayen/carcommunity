@@ -118,6 +118,24 @@
       "source": "docs/product-decisions.md (Subscription model)"
     },
     {
+      "name": "drives.stats",
+      "domain": "drives",
+      "description": "Returns a server-authoritative statistics aggregate over ONLY the caller's tier-visible drives, using the exact same subscription policy as drives.listHistory (Community = their newest 5, Plus = the rolling 90-day window, Supporter = everything) — deeper statistics are a paid benefit and the aggregate can never widen access to drives the read policy hides. Returns totalDrives, totalDistanceMeters, totalDurationSeconds, longestDriveMeters, averageDriveMeters, fastestAverageSpeedMps, highestMaxSpeedMps, plus tier and serverNowMillis. Optional monthStartMillis/monthEndMillis define the viewer's LOCAL calendar month for thisMonthDrives/thisMonthDistanceMeters; they are validated strictly against server time (both-or-neither, integers, must straddle server now, span 27-32 days, bounded near the present) and intersected with the tier-visible set, so a crafted month range neither widens access nor is trusted from the device clock (thisMonth* are 0 when no range is supplied). Every figure (totalDrives, the distance/duration sums, averages, longest/fastest/highestMax and the month tallies) is computed in-memory from a SINGLE document scan of the tier-visible docs — no count() or sum() aggregation is used, so all figures come from one consistent snapshot (Firestore cannot index a two-field sum() aggregation next to the tier ordering anyway, and per-field sums would each need a hand-deployed composite index out of scope for this additive slice). A drive with a malformed durationSeconds or missing createdAt is dropped so it cannot corrupt the aggregate (mirrors drives.listHistory). Same actor gate as listHistory (requireActiveActor: signed in, not suspended; membership gating disabled so Community can call it). Deployed via grouped export as drives-stats (functions/src/drives/driveStats.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/product-decisions.md (Subscription model)"
+    },
+    {
+      "name": "drives.listDeletable",
+      "domain": "drives",
+      "description": "Owner-only deletion inventory: returns the ids of ALL the caller's owned drives regardless of tier window, with MINIMAL fields only (rideId, createdAtMillis, title, startedAtMillis) — no distances, speeds, durations, route paths/thumbnails, images or session ids. After a downgrade, drives beyond the tier window (Community past the newest 5, Plus older than 90 days) are omitted by drives.listHistory, so the user has no rideId to delete them; this returns those ids so drives.delete stays reachable. Paginated ({ cursorRideId?: string<=300, pageSize?: integer 1-50 }, orderBy createdAt desc then documentId desc) returning { drives[], hasMore, nextCursorRideId }. No tier or membership gate (parity with drives.delete); same actor gate as listHistory (requireActiveActor). It is a deletion index, deliberately NOT a stats or history bypass. Deployed via grouped export as drives-listDeletable (functions/src/drives/listDeletableDrives.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/product-decisions.md (Subscription model)"
+    },
+    {
       "name": "drives.delete",
       "domain": "drives",
       "description": "Deletes an owned drive: removes the rideRoutes/{uid}/{rideId}/ Cloud Storage files first, then the rides/{rideId} document. Available to any active owner — membership not required (legacy parity: free users can delete drives saved during a previous membership). Deployed via grouped export as drives-delete (functions/src/drives/deleteDrive.ts).",
