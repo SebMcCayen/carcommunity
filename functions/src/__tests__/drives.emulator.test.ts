@@ -482,8 +482,9 @@ describe('drives-listHistory subscription visibility', () => {
 
     // Hidden by the read policy does not mean locked or deleted: the owner can
     // still remove an older retained drive by id after a downgrade.
-    await call('drives-delete', { rideId: rideIds[6] });
-    expect((await adminDb.collection('rides').doc(rideIds[6]).get()).exists).toBe(false);
+    const hiddenRideId = rideIds[6]!;
+    await call('drives-delete', { rideId: hiddenRideId });
+    expect((await adminDb.collection('rides').doc(hiddenRideId).get()).exists).toBe(false);
   });
 
   it('returns only the rolling 90-day window for Plus', async () => {
