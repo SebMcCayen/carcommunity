@@ -2,29 +2,52 @@ package com.kungsbackacarcommunity.app.drives
 
 import android.content.Context
 import com.google.firebase.FirebaseApp
-import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.functions.FirebaseFunctions
+import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.resume
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 
 /**
- * [RouteReplayRepository] backed by Cloud Storage: downloads
- * `rideRoutes/{uid}/{rideId}/route.bin` with `getBytes` (the same owner +
- * member-gated prefix the storage rules protect — the authenticated Firebase
- * user IS the owner, so the read is authorised exactly like every other
- * member-gated read), then decodes it with [RouteCodec]. Guarded construction
- * ([createIfAvailable] returns null with no Firebase), so the config-less / CI
- * build carries no reader and the detail screen degrades to a placeholder.
+ * [RouteReplayRepository] that fetches a saved drive's route via the deployed
+ * `drives-routeUrl` callable (europe-west1, App Check) instead of reading Cloud
+ * Storage directly.
+ *
+ * The callable — given only `{ rideId }` — derives the owner from auth and
+ * re-checks subscription-tier visibility SERVER-side, then returns a SHORT-LIVED
+ * (≈5 min) V4 signed download URL `{ url, expiresAtMillis }`. This repository
+ * then HTTP-GETs the bytes from that URL (no OkHttp in the app — a plain
+ * [HttpURLConnection] on an IO dispatcher, capped at [MAX_ROUTE_BYTES]) and
+ * decodes them with [RouteCodec]. Migrating the fetch here is what lets a later
+ * PR lock down the direct-read `storage.rules` grant; that lockdown is NOT part
+ * of this change.
+ *
+ * Guarded construction ([createIfAvailable] returns null with no Firebase), so
+ * the config-less / CI build carries no reader and the detail screen degrades to
+ * a placeholder.
+ *
+ * ## Every failure collapses to [RouteReplayState.Unavailable]
+ * A callable error (`not-found` = missing/not-owned, `permission-denied` =
+ * tier-hidden, `failed-precondition` = no file / signing unavailable), a network
+ * fault, an HTTP non-200, an oversize download, or a decode failure ALL surface
+ * as [RouteReplayState.Unavailable] — the reader never crashes to the UI. The
+ * `uid`/`rideId` cache key and the public [RouteReplayRepository] contract are
+ * unchanged, so the drive-detail screen and its tests are unaffected.
  *
  * ## Caching
  * A successful decode is cached IN MEMORY, keyed by uid+rideId, so re-opening a
- * drive during the session redraws instantly without a second download. Per the
- * task this is deliberately memory-only — no disk cache (Coil is for images;
- * this is binary). Failures are NOT cached, so a transient network/permission
- * error retries on the next open rather than sticking.
+ * drive during the session redraws instantly without a second callable +
+ * download. Memory-only by design (no disk cache); failures are NOT cached, so a
+ * transient error — or an expired signed URL — retries on the next open.
  */
 class FirebaseRouteReplayRepository private constructor(
-    private val storage: FirebaseStorage,
+    private val fetchSignedUrl: suspend (rideId: String) -> String,
+    private val downloadBytes: suspend (url: String) -> ByteArray,
 ) : RouteReplayRepository {
 
     private val cache = ConcurrentHashMap<String, List<RoutePoint>>()
@@ -33,47 +56,141 @@ class FirebaseRouteReplayRepository private constructor(
         val key = "$uid/$rideId"
         cache[key]?.let { return RouteReplayState.Ready(it) }
 
-        val path = routeBinPath(uid, rideId)
-        val bytes =
-            runCatching { downloadBytes(path) }.getOrNull()
-                ?: return RouteReplayState.Unavailable
+        // One pipeline, one failure state: fetch the signed URL, download the
+        // bytes, decode. Any throw (callable error, network, HTTP non-200,
+        // oversize) OR a null decode collapses to Unavailable, mirroring the old
+        // `runCatching{}.getOrNull() ?: Unavailable`.
+        val points =
+            runCatching {
+                val url = fetchSignedUrl(rideId)
+                val bytes = downloadBytes(url)
+                RouteCodec.decode(bytes)
+            }.getOrNull() ?: return RouteReplayState.Unavailable
 
-        val points = RouteCodec.decode(bytes) ?: return RouteReplayState.Unavailable
         cache[key] = points
         return RouteReplayState.Ready(points)
     }
 
-    private suspend fun downloadBytes(path: String): ByteArray =
-        suspendCancellableCoroutine { continuation ->
-            // getBytes returns a plain Task<ByteArray> (not a cancelable
-            // StorageTask), so there is nothing to cancel on the download itself;
-            // the isActive guards keep a resume after cancellation harmless.
-            storage.reference.child(path).getBytes(MAX_ROUTE_BYTES)
-                .addOnSuccessListener { bytes ->
-                    if (continuation.isActive) continuation.resume(bytes)
-                }
-                .addOnFailureListener { error ->
-                    // A missing file, a denied read, or a network fault all land
-                    // here; the caller maps the resulting failure to Unavailable.
-                    if (continuation.isActive) continuation.resumeWith(Result.failure(error))
-                }
-        }
-
     companion object {
-        /** Canonical member-gated route file path (mirrors rideRoutePath in functions/). */
-        private fun routeBinPath(uid: String, rideId: String): String =
-            "rideRoutes/$uid/$rideId/route.bin"
+        private const val REGION = "europe-west1"
+
+        /** The deployed callable (functions/src/drives/routeUrl.ts). */
+        private const val ROUTE_URL_CALLABLE = "drives-routeUrl"
+        private const val RIDE_ID = "rideId"
+        private const val URL_KEY = "url"
+
+        private const val CONNECT_TIMEOUT_MS = 15_000
+        private const val READ_TIMEOUT_MS = 30_000
+        private const val DOWNLOAD_CHUNK_BYTES = 8 * 1024
 
         /**
          * Hard cap on the downloaded route file. Well above a real route (20 000
          * points ≈ 140 KB raw, less gzipped) yet bounded, so a corrupt/oversized
-         * object fails the download instead of allocating unbounded memory.
+         * object fails the download instead of allocating unbounded memory. Kept
+         * identical to the pre-migration `getBytes` cap.
          */
-        private const val MAX_ROUTE_BYTES: Long = 16L * 1024 * 1024
+        internal const val MAX_ROUTE_BYTES: Long = 16L * 1024 * 1024
 
         fun createIfAvailable(context: Context): RouteReplayRepository? {
             if (FirebaseApp.getApps(context).isEmpty()) return null
-            return FirebaseRouteReplayRepository(FirebaseStorage.getInstance())
+            val functions = FirebaseFunctions.getInstance(REGION)
+            return FirebaseRouteReplayRepository(
+                fetchSignedUrl = { rideId -> callRouteUrl(functions, rideId) },
+                downloadBytes = { url -> httpDownload(url) },
+            )
+        }
+
+        /**
+         * Test seam: inject a fake signed-URL provider and downloader so the
+         * fetch→download→decode pipeline is exercised on the JVM without Firebase
+         * or a live network. Package-internal — used only by the unit test.
+         */
+        internal fun createForTest(
+            fetchSignedUrl: suspend (rideId: String) -> String,
+            downloadBytes: suspend (url: String) -> ByteArray,
+        ): FirebaseRouteReplayRepository =
+            FirebaseRouteReplayRepository(fetchSignedUrl, downloadBytes)
+
+        /**
+         * Calls `drives-routeUrl` with `{ rideId }` and returns the signed `url`.
+         * Mirrors the callable-invocation convention of the other Firebase repos
+         * (FirebaseFunctions region instance + `getHttpsCallable`): a failed task
+         * — any `FirebaseFunctionsException` code, App Check, or transport — throws
+         * and is caught by [loadRoute] as Unavailable. A success with no usable url
+         * is treated as a failure too (never returns a blank URL to download).
+         */
+        private suspend fun callRouteUrl(functions: FirebaseFunctions, rideId: String): String =
+            suspendCancellableCoroutine { continuation ->
+                functions
+                    .getHttpsCallable(ROUTE_URL_CALLABLE)
+                    .call(mapOf(RIDE_ID to rideId))
+                    .addOnCompleteListener { task ->
+                        if (!continuation.isActive) return@addOnCompleteListener
+                        if (task.isSuccessful) {
+                            val data = task.result?.data as? Map<*, *>
+                            val url = data?.get(URL_KEY) as? String
+                            if (url.isNullOrEmpty()) {
+                                continuation.resumeWith(
+                                    Result.failure(IOException("routeUrl returned no url")),
+                                )
+                            } else {
+                                continuation.resume(url)
+                            }
+                        } else {
+                            continuation.resumeWith(
+                                Result.failure(
+                                    task.exception ?: IOException("routeUrl call failed"),
+                                ),
+                            )
+                        }
+                    }
+            }
+
+        /**
+         * Default downloader: a plain [HttpURLConnection] GET on the IO dispatcher
+         * (no OkHttp in the app), bounded by [MAX_ROUTE_BYTES]. Throws on a non-200
+         * response, an oversize body, or any transport fault; [loadRoute] maps the
+         * throw to Unavailable. Package-internal so the unit test can drive the
+         * real HttpURLConnection path against a loopback server.
+         */
+        internal suspend fun httpDownload(url: String): ByteArray =
+            withContext(Dispatchers.IO) {
+                val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = CONNECT_TIMEOUT_MS
+                    readTimeout = READ_TIMEOUT_MS
+                }
+                try {
+                    connection.connect()
+                    val status = connection.responseCode
+                    if (status != HttpURLConnection.HTTP_OK) {
+                        throw IOException("route download HTTP $status")
+                    }
+                    connection.inputStream.use { input -> readBounded(input) }
+                } finally {
+                    connection.disconnect()
+                }
+            }
+
+        /**
+         * Reads the stream into a bounded buffer, aborting the moment the total
+         * would exceed [MAX_ROUTE_BYTES] so a hostile/corrupt body can never
+         * allocate unbounded memory.
+         */
+        private fun readBounded(input: java.io.InputStream): ByteArray {
+            val out = ByteArrayOutputStream()
+            val chunk = ByteArray(DOWNLOAD_CHUNK_BYTES)
+            var total = 0L
+            while (true) {
+                val read = input.read(chunk)
+                if (read == -1) break
+                total += read
+                if (total > MAX_ROUTE_BYTES) {
+                    throw IOException("route exceeds $MAX_ROUTE_BYTES bytes")
+                }
+                out.write(chunk, 0, read)
+            }
+            return out.toByteArray()
         }
     }
 }
