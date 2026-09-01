@@ -126,6 +126,7 @@ export type RtdnOutcome =
   | 'duplicate'
   | 'applied'
   | 'revoked'
+  | 'superseded_token'
   | 'verification_rejected';
 
 /**
@@ -166,6 +167,25 @@ function buildRevokeInput(
     startsAt: stored?.startsAt ?? null,
     expiresAt: stored?.expiresAt ?? null,
   };
+}
+
+/**
+ * True only when the account's CURRENTLY-STORED subscription was purchased
+ * with this exact token.
+ *
+ * The token-ownership registry never deletes superseded token docs, so an OLD
+ * token still resolves to the owning uid. A refund/chargeback or a 404 on that
+ * old token must NOT revoke a member who has since re-subscribed or upgraded
+ * to a different, currently-effective token — that would force-log-out a
+ * paying member. We downgrade only when the void/invalidation is for the token
+ * the record actually holds; a null record (nothing to revoke) also fails
+ * closed to "not current".
+ */
+function isCurrentlyEffectiveToken(
+  stored: StoredSubscriptionFields | null,
+  purchaseTokenHash: string,
+): boolean {
+  return stored !== null && stored.purchaseTokenHash === purchaseTokenHash;
 }
 
 /**
@@ -217,8 +237,18 @@ export async function runRtdnNotification(
   if (decoded.kind === 'voided') {
     // A refund/chargeback is authoritative on its own — the money was
     // returned — so we revoke without trusting (or needing) the current Play
-    // subscription state.
+    // subscription state. BUT only if this void is for the account's
+    // currently-effective token: a superseded old token still resolves to the
+    // uid via the registry, and revoking on it would force-log-out a member
+    // who has since re-subscribed/upgraded to a different token.
     const stored = await deps.readStoredSubscription(owner.uid);
+    if (!isCurrentlyEffectiveToken(stored, purchaseTokenHash)) {
+      logger.info('RTDN voided purchase for a superseded token; no-op', {
+        uid: owner.uid,
+        kind: decoded.kind,
+      });
+      return 'superseded_token';
+    }
     await deps.applyEntitlement(
       buildRevokeInput(owner.uid, owner.productId, purchaseTokenHash, stored),
     );
@@ -251,8 +281,18 @@ export async function runRtdnNotification(
     }
     if (error instanceof GooglePlayApiError && error.reason === 'invalid_purchase') {
       // Play definitively no longer recognises the token (400/404/410) — the
-      // purchase is gone. Authoritative "no entitlement": revoke.
+      // purchase is gone. Authoritative "no entitlement": revoke — but only if
+      // this dead token is the account's currently-effective one. A 404 on a
+      // superseded old token (which still resolves to the uid via the
+      // registry) must not revoke a member who re-subscribed/upgraded.
       const stored = await deps.readStoredSubscription(owner.uid);
+      if (!isCurrentlyEffectiveToken(stored, purchaseTokenHash)) {
+        logger.info('RTDN invalid token is superseded; no-op', {
+          uid: owner.uid,
+          kind: decoded.kind,
+        });
+        return 'superseded_token';
+      }
       await deps.applyEntitlement(
         buildRevokeInput(owner.uid, owner.productId, purchaseTokenHash, stored),
       );

@@ -150,8 +150,9 @@ describe('decodeRtdnMessageData', () => {
     ).toBeNull();
   });
 
-  it('returns null for a non-integer / negative / unsafe eventTimeMillis', () => {
-    // The watermark must be a non-negative safe integer — fail closed otherwise.
+  it('returns null for a non-integer / negative / unsafe / astronomical eventTimeMillis', () => {
+    // The watermark must be a non-negative safe integer within a sane ceiling —
+    // fail closed otherwise, so a poisoned value cannot freeze the watermark.
     const rejected: unknown[] = [
       '123.4',
       123.4,
@@ -160,6 +161,10 @@ describe('decodeRtdnMessageData', () => {
       Number.MAX_SAFE_INTEGER + 1,
       'NaN',
       Infinity,
+      // Astronomical but still a safe integer (year ~33658) — beyond the cap.
+      1_000_000_000_000_000,
+      Number.MAX_SAFE_INTEGER,
+      String(Number.MAX_SAFE_INTEGER),
     ];
     for (const bad of rejected) {
       expect(
@@ -167,6 +172,13 @@ describe('decodeRtdnMessageData', () => {
         `eventTimeMillis ${String(bad)} should be rejected`,
       ).toBeNull();
     }
+  });
+
+  it('accepts a realistic present-day eventTimeMillis (below the ceiling)', () => {
+    const decoded = decodeRtdnMessageData(
+      encode({ ...SUBSCRIPTION_ENVELOPE, eventTimeMillis: Date.UTC(2026, 0, 1) }),
+    );
+    expect(decoded?.eventTimeMillis).toBe(Date.UTC(2026, 0, 1));
   });
 
   it('returns null for a non-integer notificationType', () => {

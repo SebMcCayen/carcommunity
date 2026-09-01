@@ -80,7 +80,15 @@ function makeDeps(overrides: Partial<RtdnDeps> = {}): RtdnDeps {
     applyEntitlement: vi.fn(async (input: EntitlementRecordInput) => {
       applied.push(input);
     }),
-    readStoredSubscription: vi.fn(async () => null),
+    // By default the stored subscription was bought with THIS token (the
+    // current/effective one), so a revoke path acts. Superseded-token tests
+    // override this to a different hash.
+    readStoredSubscription: vi.fn(async () => ({
+      tier: 'plus',
+      startsAt: null,
+      expiresAt: null,
+      purchaseTokenHash: TOKEN_HASH,
+    })),
     lastProcessedEventTime: vi.fn(async () => null),
     markProcessed: vi.fn(async (hash: string, eventTimeMillis: number) => {
       marked.push({ hash, eventTimeMillis });
@@ -227,6 +235,62 @@ describe('runRtdnNotification — authoritative transitions', () => {
       startsAt: new Date('2026-07-01T00:00:00Z'),
       expiresAt: new Date('2026-08-01T00:00:00Z'),
     });
+  });
+});
+
+describe('runRtdnNotification — superseded-token guard (billing-critical)', () => {
+  const OTHER_HASH = 'a-different-current-token-hash';
+
+  it('does NOT revoke a voided OLD token when the stored sub holds a different current token', async () => {
+    const deps = makeDeps({
+      readStoredSubscription: vi.fn(async () => ({
+        tier: 'plus',
+        startsAt: null,
+        expiresAt: null,
+        purchaseTokenHash: OTHER_HASH,
+      })),
+    });
+    const outcome = await mod.runRtdnNotification(voidedEnvelope(), deps);
+    expect(outcome).toBe('superseded_token');
+    expect(applied).toEqual([]);
+    expect(marked).toEqual([]);
+  });
+
+  it('DOES revoke a voided token that IS the stored current token', async () => {
+    const deps = makeDeps(); // default stored hash === TOKEN_HASH
+    const outcome = await mod.runRtdnNotification(voidedEnvelope(), deps);
+    expect(outcome).toBe('revoked');
+    expect(applied[0]).toMatchObject({ status: 'revoked', entitlement: 'none' });
+  });
+
+  it('does NOT revoke on invalid_purchase for a superseded OLD token', async () => {
+    const deps = makeDeps({
+      verify: vi.fn(async () => {
+        throw new GooglePlayApiError('get', 'invalid_purchase');
+      }),
+      readStoredSubscription: vi.fn(async () => ({
+        tier: 'plus',
+        startsAt: null,
+        expiresAt: null,
+        purchaseTokenHash: OTHER_HASH,
+      })),
+    });
+    const outcome = await mod.runRtdnNotification(subscriptionEnvelope(), deps);
+    expect(outcome).toBe('superseded_token');
+    expect(applied).toEqual([]);
+    expect(marked).toEqual([]);
+  });
+
+  it('DOES revoke on invalid_purchase when the dead token IS the stored current token', async () => {
+    const deps = makeDeps({
+      verify: vi.fn(async () => {
+        throw new GooglePlayApiError('get', 'invalid_purchase');
+      }),
+    }); // default stored hash === TOKEN_HASH
+    const outcome = await mod.runRtdnNotification(subscriptionEnvelope(), deps);
+    expect(outcome).toBe('revoked');
+    expect(applied[0]).toMatchObject({ status: 'revoked', entitlement: 'none' });
+    expect(marked).toHaveLength(1);
   });
 });
 

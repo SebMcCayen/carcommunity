@@ -50,6 +50,18 @@ export const SUBSCRIPTION_NOTIFICATION_TYPES: Readonly<Record<number, string>> =
 /** Upper bound on a purchase token, mirroring the verify callable's schema. */
 const MAX_PURCHASE_TOKEN_LENGTH = 8192;
 
+/**
+ * Upper bound on eventTimeMillis: 2100-01-01T00:00:00Z (Date.UTC(2100,0,1)).
+ * The watermark is monotonic, so a single absurd far-future value would freeze
+ * a token's watermark and cause every later legitimate event to be skipped as
+ * "stale". Real Play epoch-millis are ~1.7e12 (mid-2020s); this ceiling leaves
+ * ~74 years of headroom yet sits far below Number.MAX_SAFE_INTEGER, so any
+ * astronomical value fails closed to null (poison ack). A static cap avoids
+ * threading a clock into this pure decoder; it is deliberately generous rather
+ * than "now + skew" because rejecting only impossible values needs no precision.
+ */
+const MAX_EVENT_TIME_MILLIS = Date.UTC(2100, 0, 1);
+
 export interface RtdnSubscriptionNotification {
   notificationType: number;
   purchaseToken: string;
@@ -105,6 +117,9 @@ function parseEventTimeMillis(value: unknown): number | null {
     return null;
   }
   if (!Number.isSafeInteger(candidate) || candidate < 0) return null;
+  // Sane upper bound: an absurd far-future value would poison the monotonic
+  // watermark and skip every later legitimate event.
+  if (candidate > MAX_EVENT_TIME_MILLIS) return null;
   return candidate;
 }
 
