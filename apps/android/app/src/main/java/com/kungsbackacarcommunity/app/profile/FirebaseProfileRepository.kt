@@ -44,6 +44,9 @@ class FirebaseProfileRepository private constructor(
                             avatarPath = snapshot.getString("avatarPath"),
                             onboardingComplete = snapshot.get("onboardingCompletedAt") != null,
                             activeMember = snapshot.getBoolean("activeMember") ?: false,
+                            // Backend-managed role; admin/owner are staff accounts.
+                            // Mirrors the backend's canAccessAdminFeatures role set.
+                            isAdmin = snapshot.getString("role").let { it == "admin" || it == "owner" },
                             createdAtMillis = snapshot.getTimestamp("createdAt")?.toDate()?.time,
                             social =
                                 SocialHandles(
