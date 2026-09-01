@@ -93,14 +93,24 @@ class DriveHistoryCoordinator(
         val current = _state.value as? DriveHistoryListState.Loaded ?: return
         if (!current.hasMore || current.loadingMore) return
         val cursor = nextCursorRideId ?: return
-        _state.value = current.copy(loadingMore = true, loadMoreFailed = false)
+        // The exact state instance this loadMore owns. A concurrent reload()
+        // (tier-change or post-delete) replaces `_state` with a fresh instance, so
+        // an identity check on `started` after the suspending page request tells us
+        // whether a reload intervened while we were awaiting.
+        val started = current.copy(loadingMore = true, loadMoreFailed = false)
+        _state.value = started
         try {
             val page = repository.listHistory(cursorRideId = cursor, pageSize = pageSize)
+            // DROP the page if a reload replaced the state mid-request: applying the
+            // captured `current`'s merge would resurrect the stale list, and writing
+            // nextCursorRideId would clobber the cursor the reload just set. (A second
+            // loadMore can't intervene — the loadingMore guard above rejects it — so
+            // the only thing reaching here having changed `_state` is a reload.)
+            if (_state.value !== started) return
             nextCursorRideId = page.nextCursorRideId
-            val merged = (current.drives + page.drives).distinctBy { it.rideId }
             _state.value =
-                current.copy(
-                    drives = merged,
+                started.copy(
+                    drives = (started.drives + page.drives).distinctBy { it.rideId },
                     hasMore = page.hasMore,
                     loadingMore = false,
                     loadMoreFailed = false,
@@ -108,10 +118,10 @@ class DriveHistoryCoordinator(
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (failure: Exception) {
-            // Re-read the current state: a reload may have raced ahead of this
-            // append. Only annotate a still-Loaded state; never resurrect a stale one.
-            (_state.value as? DriveHistoryListState.Loaded)?.let {
-                _state.value = it.copy(loadingMore = false, loadMoreFailed = true)
+            // Same guard on the failure path: only annotate the state THIS loadMore
+            // installed, never one a concurrent reload replaced it with.
+            if (_state.value === started) {
+                _state.value = started.copy(loadingMore = false, loadMoreFailed = true)
             }
         }
     }
