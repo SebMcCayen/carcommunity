@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DAY_MS } from '../drives/driveHistory-core';
 import {
+  buildDriveStatSample,
   parseDriveStatsInput,
   resolveMonthRange,
   scanDriveStats,
@@ -68,6 +69,64 @@ describe('drive-stats month-range validation', () => {
     expect(resolveMonthRange({ monthStartMillis: AUG_END, monthEndMillis: AUG_START }, NOW).ok).toBe(
       false,
     );
+  });
+});
+
+describe('drive-stats sample validation (buildDriveStatSample)', () => {
+  const base = {
+    distanceMeters: 1_000,
+    durationSeconds: 600,
+    averageSpeedMps: 5,
+    maxSpeedMps: 10,
+    createdAtMillis: NOW,
+  };
+
+  it('builds a sample from valid fields', () => {
+    expect(buildDriveStatSample(base)).toEqual({
+      distanceMeters: 1_000,
+      durationSeconds: 600,
+      averageSpeedMps: 5,
+      maxSpeedMps: 10,
+      createdAtMillis: NOW,
+    });
+  });
+
+  it('DROPS a drive whose durationSeconds is negative or non-integer (no negative total leaks in)', () => {
+    expect(buildDriveStatSample({ ...base, durationSeconds: -600 })).toBeNull();
+    expect(buildDriveStatSample({ ...base, durationSeconds: 600.5 })).toBeNull();
+    expect(buildDriveStatSample({ ...base, durationSeconds: Number.NaN })).toBeNull();
+    expect(buildDriveStatSample({ ...base, durationSeconds: 'x' })).toBeNull();
+
+    // End to end: a negative-duration doc is dropped before the scan, so the
+    // total stays 0 rather than going negative — the regression Copilot flagged.
+    const samples = [
+      buildDriveStatSample({ ...base, durationSeconds: -600 }),
+      buildDriveStatSample({ ...base, durationSeconds: 600 }),
+    ].filter((s): s is DriveStatSample => s != null);
+    expect(samples).toHaveLength(1);
+    const scanned = scanDriveStats(samples, null);
+    expect(scanned.totalDurationSeconds).toBe(600);
+    expect(scanned.totalDurationSeconds).toBeGreaterThanOrEqual(0);
+  });
+
+  it('DROPS a drive with a missing/invalid createdAt', () => {
+    expect(buildDriveStatSample({ ...base, createdAtMillis: null })).toBeNull();
+    expect(buildDriveStatSample({ ...base, createdAtMillis: Number.NaN })).toBeNull();
+  });
+
+  it('degrades malformed distance/speed fields to null without dropping the drive', () => {
+    const sample = buildDriveStatSample({
+      ...base,
+      distanceMeters: -50,
+      averageSpeedMps: 'nope',
+      maxSpeedMps: Number.POSITIVE_INFINITY,
+    });
+    expect(sample).not.toBeNull();
+    expect(sample!.distanceMeters).toBeNull();
+    expect(sample!.averageSpeedMps).toBeNull();
+    expect(sample!.maxSpeedMps).toBeNull();
+    // The valid duration is preserved, so the drive still counts.
+    expect(sample!.durationSeconds).toBe(600);
   });
 });
 

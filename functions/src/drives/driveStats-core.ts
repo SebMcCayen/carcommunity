@@ -21,7 +21,7 @@ import type { SubscriptionTier } from '../subscription/subscription-core';
 
 /** A valid "this month" range must span at least this long (short February guard). */
 export const MONTH_MIN_SPAN_MS = 27 * DAY_MS;
-/** …and at most this long (31-day month plus a DST hour of slack). */
+/** …and at most 32 days — a 31-day month plus a full day of slack for timezone/DST. */
 export const MONTH_MAX_SPAN_MS = 32 * DAY_MS;
 /**
  * The month may start at most ~13 months before server time. The straddle and
@@ -108,6 +108,47 @@ export interface DriveStatSample {
   averageSpeedMps: number | null;
   maxSpeedMps: number | null;
   createdAtMillis: number;
+}
+
+function nonNegativeFiniteOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+/**
+ * Validates one ride's raw stored fields into a scan sample, or returns null to
+ * DROP the drive from the aggregate entirely. Mirrors drives.listHistory's
+ * toDriveHistoryItem: a durationSeconds that is not a non-negative safe integer,
+ * or a missing createdAt, skips the whole drive so a corrupt value can never
+ * produce a negative or nonsensical total (the response schema is minimum 0).
+ * distanceMeters / averageSpeedMps / maxSpeedMps degrade to null when malformed
+ * and are then simply excluded from their sums and maxima — never coerced to a
+ * negative or a false 0. The caller extracts createdAtMillis from the Firestore
+ * Timestamp (null when absent) so this stays a pure, Admin-SDK-free function.
+ */
+export function buildDriveStatSample(input: {
+  distanceMeters: unknown;
+  durationSeconds: unknown;
+  averageSpeedMps: unknown;
+  maxSpeedMps: unknown;
+  createdAtMillis: number | null;
+}): DriveStatSample | null {
+  if (
+    typeof input.durationSeconds !== 'number' ||
+    !Number.isSafeInteger(input.durationSeconds) ||
+    input.durationSeconds < 0
+  ) {
+    return null;
+  }
+  if (input.createdAtMillis == null || !Number.isFinite(input.createdAtMillis)) {
+    return null;
+  }
+  return {
+    distanceMeters: nonNegativeFiniteOrNull(input.distanceMeters),
+    durationSeconds: input.durationSeconds,
+    averageSpeedMps: nonNegativeFiniteOrNull(input.averageSpeedMps),
+    maxSpeedMps: nonNegativeFiniteOrNull(input.maxSpeedMps),
+    createdAtMillis: input.createdAtMillis,
+  };
 }
 
 /**

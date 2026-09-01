@@ -32,6 +32,7 @@ import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 import { effectiveSubscriptionTierFromStoredRecord } from '../subscription/subscription-core';
 import { driveHistoryPolicyForTier } from './driveHistory-core';
 import {
+  buildDriveStatSample,
   parseDriveStatsInput,
   resolveMonthRange,
   scanDriveStats,
@@ -48,10 +49,6 @@ const CALLABLE_OPTS = {
   timeoutSeconds: 60,
   enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',
 };
-
-function nullableNonnegativeNumber(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
-}
 
 export const driveStats = onCall(
   CALLABLE_OPTS,
@@ -73,8 +70,8 @@ export const driveStats = onCall(
 
     // The tier-visible query — identical shape to drives.listHistory so it is
     // backed by the same composite index. Community's limit(5) lives INSIDE this
-    // query, so every read below (the count and the scan) is confined to the
-    // tier-visible set and can never widen access to hidden history.
+    // query, so the single read below is confined to the tier-visible set and
+    // can never widen access to hidden history.
     const ownerQuery = db.collection('rides').where('userId', '==', actor.uid);
     let visibleQuery: Query<DocumentData> = ownerQuery
       .orderBy('createdAt', 'desc')
@@ -86,44 +83,38 @@ export const driveStats = onCall(
       visibleQuery = visibleQuery.limit(policy.limit);
     }
 
-    const [countSnap, docsSnap] = await Promise.all([
-      // totalDrives via Firestore count() aggregation — cheap and index-backed by
-      // the same index listHistory's count already uses. The distance/duration
-      // SUMS are NOT aggregated: Firestore cannot index a two-field sum() next to
-      // the tier ordering, and per-field sums would each need a hand-deployed
-      // composite index (out of scope for this additive slice). They are computed
-      // in the scan below instead — at no extra read cost, since it already reads
-      // every tier-visible doc.
-      visibleQuery.count().get(),
-      // longest/fastest/highestMax, the distance/duration totals, and the month
-      // intersection are all derived from this one scan. It is O(all visible
-      // drives): cheap for Community (≤5) and Plus (90-day window), but for a
-      // large Supporter account it reads every ride on every call. A later
-      // optimization would maintain running maxima or a periodic rollup document
-      // instead of scanning here — deliberately NOT done now.
-      visibleQuery.get(),
-    ]);
+    // ONE document scan is the sole source for every figure — totalDrives, the
+    // sums, averages, maxima and the month tallies all come from this same
+    // snapshot, so they can never be internally inconsistent (an earlier
+    // separate count() aggregation was both a redundant read and a consistency
+    // risk). It is O(all visible drives): cheap for Community (≤5) and Plus
+    // (90-day window), but for a large Supporter account it reads every ride on
+    // every call — a later optimization would maintain running maxima or a
+    // periodic rollup document instead of scanning here (deliberately not now).
+    // Totals cannot use a Firestore sum() aggregation anyway: Firestore cannot
+    // index a two-field sum() next to the tier ordering, and per-field sums
+    // would each need a hand-deployed composite index (out of scope here).
+    const docsSnap = await visibleQuery.get();
 
-    const totalDrives = countSnap.data().count;
-
-    const samples: DriveStatSample[] = docsSnap.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        distanceMeters: nullableNonnegativeNumber(data.distanceMeters),
-        // Same guard drives.listHistory applies: a corrupt negative or
-        // non-integer durationSeconds must not flow into totalDurationSeconds
-        // (schema minimum 0) — treat anything invalid as 0.
-        durationSeconds:
-          typeof data.durationSeconds === 'number' &&
-          Number.isSafeInteger(data.durationSeconds) &&
-          data.durationSeconds >= 0
-            ? data.durationSeconds
-            : 0,
-        averageSpeedMps: nullableNonnegativeNumber(data.averageSpeedMetersPerSecond),
-        maxSpeedMps: nullableNonnegativeNumber(data.maxSpeedMetersPerSecond),
-        createdAtMillis: data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : 0,
-      };
-    });
+    // Field validation + Timestamp extraction, then drop any malformed drive so
+    // it can never corrupt the aggregate (mirrors drives.listHistory's
+    // toDriveHistoryItem: a bad durationSeconds or missing createdAt skips the
+    // whole drive; distance/speed degrade to null and are simply excluded from
+    // their sums/maxima). totalDrives is therefore the count of VALID drives in
+    // this one snapshot.
+    const samples: DriveStatSample[] = docsSnap.docs
+      .map((doc) => {
+        const data = doc.data();
+        return buildDriveStatSample({
+          distanceMeters: data.distanceMeters,
+          durationSeconds: data.durationSeconds,
+          averageSpeedMps: data.averageSpeedMetersPerSecond,
+          maxSpeedMps: data.maxSpeedMetersPerSecond,
+          createdAtMillis: data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : null,
+        });
+      })
+      .filter((sample): sample is DriveStatSample => sample != null);
+    const totalDrives = samples.length;
     const scanned = scanDriveStats(samples, monthRange.range);
 
     return {
