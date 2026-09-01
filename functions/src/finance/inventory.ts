@@ -501,6 +501,9 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   'live.listNearby': 'variable-member',
   'live.sendWave': 'variable-member',
   'drives.save': 'variable-member',
+  // Subscription read + bounded ride page; first page also performs one
+  // (Community) or two (Plus) count aggregations for the hidden-history UX.
+  'drives.listHistory': 'variable-member',
   'drives.delete': 'variable-member',
   'blocking.block': 'variable-member',
   'blocking.unblock': 'variable-member',

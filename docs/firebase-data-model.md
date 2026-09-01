@@ -210,6 +210,17 @@ absent — with the two documented exceptions in the last column.
 
 Security (Phase 9d): owner-only read — membership NOT required, so drives saved during a previous membership stay listable. All writes go through callables: `drives.save` computes the stats server-side (client writes could forge distance/duration) and `drives.delete` removes the Cloud Storage files together with the document. The table above is the complete document; the canonical machine-readable shape is `contracts/schemas/saved-drives.schema.json` (`$defs.ride`), and the builder that must agree with both is `buildRideDocument`.
 
+Subscription history visibility is exposed through the bounded
+`drives.listHistory` callable: Community receives its five newest drives, Plus
+receives drives whose `createdAt` is within a rolling 90-day window, and
+Supporter can page through the complete history. The callable returns an
+explicit display-field allowlist and never returns `routePath`,
+`previewImagePath`, `sourceSessionId`, or GPS points. This is a staged migration:
+the direct owner read rule remains temporarily for already-released clients and
+must be closed only after the callable-backed Android client has reached
+testers. A downgrade never deletes a drive; `drives.delete` remains available
+by id even when that drive is outside the visible history window.
+
 `maxSpeedMetersPerSecond` **reverses** the earlier "no top-speed field is ever stored" rule, by an explicit product decision (2026-07). It is derived at save time with the same >200 km/h GPS-glitch filter distance uses, and is displayed as a neutral fact beside distance and duration — never a record, ranking, personal best or comparison (docs/gamification-system.md). Drives saved before the decision have neither `maxSpeedMetersPerSecond` nor `routeThumbnail`; there is **no backfill**, and clients render a missing-value placeholder for both.
 
 Composite index: `userId ASC, createdAt DESC` (user's ride history, paginated).

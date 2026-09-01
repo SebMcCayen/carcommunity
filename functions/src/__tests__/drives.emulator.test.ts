@@ -29,7 +29,7 @@ import {
   type Functions,
 } from 'firebase/functions';
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
-import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
+import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getStorage as getAdminStorage } from 'firebase-admin/storage';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -94,6 +94,49 @@ async function signInAs(user: TestUser): Promise<void> {
 }
 
 const call = (name: string, data: unknown) => httpsCallable(functions, name)(data);
+
+async function seedDriveHistory(user: TestUser, agesInDays: number[]): Promise<string[]> {
+  const now = Date.now();
+  const ids: string[] = [];
+  for (const [index, ageInDays] of agesInDays.entries()) {
+    const rideId = `${user.uid}-history-${index}`;
+    ids.push(rideId);
+    const createdAt = Timestamp.fromMillis(now - ageInDays * 24 * 60 * 60 * 1000);
+    await adminDb
+      .collection('rides')
+      .doc(rideId)
+      .set({
+        userId: user.uid,
+        title: `Drive ${index}`,
+        distanceMeters: 1_000 + index,
+        durationSeconds: 600 + index,
+        averageSpeedMetersPerSecond: 2,
+        maxSpeedMetersPerSecond: 10,
+        startedAt: createdAt,
+        endedAt: createdAt,
+        createdAt,
+        routePath: `rideRoutes/${user.uid}/${rideId}/route.bin`,
+        previewImagePath: `rideRoutes/${user.uid}/${rideId}/preview.png`,
+        sourceSessionId: `history-${index}`,
+        routeThumbnail: 'encoded-thumbnail',
+        convoyMembers: [],
+      });
+  }
+  return ids;
+}
+
+async function setPaidTier(user: TestUser, tier: 'plus' | 'supporter'): Promise<void> {
+  await adminDb.collection('subscriptions').doc(user.uid).set({
+    userId: user.uid,
+    platform: 'manual',
+    status: 'active',
+    entitlement: 'member_monthly',
+    tier,
+    startsAt: Timestamp.now(),
+    expiresAt: null,
+    purchaseTokenHash: null,
+  });
+}
 
 let member: TestUser;
 let freeUser: TestUser;
@@ -217,10 +260,7 @@ describe('drives-save', () => {
     expect(data.alreadySaved).toBe(false);
     expect(data.durationSeconds).toBe(3600);
     expect(data.distanceMeters).toBeGreaterThan(1_500);
-    expect(data.averageSpeedMetersPerSecond).toBeCloseTo(
-      (data.distanceMeters as number) / 3600,
-      6,
-    );
+    expect(data.averageSpeedMetersPerSecond).toBeCloseTo((data.distanceMeters as number) / 3600, 6);
     expect(data.routePath).toBe(`rideRoutes/${member.uid}/${data.rideId}/route.bin`);
     expect(data.previewImagePath).toBe(`rideRoutes/${member.uid}/${data.rideId}/preview.png`);
 
@@ -410,5 +450,107 @@ describe('drives-delete', () => {
     expect(await callableErrorCode(call('drives-delete', { rideId: 'missing-ride' }))).toBe(
       'functions/not-found',
     );
+  });
+});
+
+describe('drives-listHistory subscription visibility', () => {
+  it('returns only the newest five drives for Community and signals retained history', async () => {
+    const user = await createProvisionedUser('history-community');
+    const rideIds = await seedDriveHistory(user, [0, 1, 2, 3, 4, 5, 6]);
+    await signInAs(user);
+
+    const data = (await call('drives-listHistory', { pageSize: 25 })).data as {
+      tier: string;
+      policy: { kind: string; limit: number };
+      drives: Array<Record<string, unknown>>;
+      hasMore: boolean;
+      nextCursorRideId: string | null;
+      hasTierRestrictedHistory: boolean;
+      hiddenDriveCount: number;
+    };
+
+    expect(data.tier).toBe('community');
+    expect(data.policy).toEqual({ kind: 'latest_count', limit: 5 });
+    expect(data.drives.map((drive) => drive.rideId)).toEqual(rideIds.slice(0, 5));
+    expect(data.hasMore).toBe(false);
+    expect(data.nextCursorRideId).toBeNull();
+    expect(data.hasTierRestrictedHistory).toBe(true);
+    expect(data.hiddenDriveCount).toBe(2);
+    expect(data.drives[0]).not.toHaveProperty('routePath');
+    expect(data.drives[0]).not.toHaveProperty('previewImagePath');
+    expect(data.drives[0]).not.toHaveProperty('sourceSessionId');
+
+    // Hidden by the read policy does not mean locked or deleted: the owner can
+    // still remove an older retained drive by id after a downgrade.
+    await call('drives-delete', { rideId: rideIds[6] });
+    expect((await adminDb.collection('rides').doc(rideIds[6]).get()).exists).toBe(false);
+  });
+
+  it('returns only the rolling 90-day window for Plus', async () => {
+    const user = await createProvisionedUser('history-plus');
+    await setPaidTier(user, 'plus');
+    const rideIds = await seedDriveHistory(user, [1, 89, 91]);
+    await signInAs(user);
+
+    const data = (await call('drives-listHistory', {})).data as {
+      tier: string;
+      policy: { kind: string; days: number };
+      drives: Array<{ rideId: string }>;
+      hiddenDriveCount: number;
+      windowStartsAtMillis: number;
+    };
+    expect(data.tier).toBe('plus');
+    expect(data.policy).toEqual({ kind: 'rolling_days', days: 90 });
+    expect(data.drives.map((drive) => drive.rideId)).toEqual(rideIds.slice(0, 2));
+    expect(data.hiddenDriveCount).toBe(1);
+    expect(typeof data.windowStartsAtMillis).toBe('number');
+  });
+
+  it('paginates the complete history for Supporter', async () => {
+    const user = await createProvisionedUser('history-supporter');
+    await setPaidTier(user, 'supporter');
+    const rideIds = await seedDriveHistory(user, [0, 1, 2, 3, 365]);
+    await signInAs(user);
+
+    const first = (await call('drives-listHistory', { pageSize: 2 })).data as {
+      tier: string;
+      drives: Array<{ rideId: string }>;
+      hasMore: boolean;
+      nextCursorRideId: string | null;
+      hiddenDriveCount: number;
+    };
+    expect(first.tier).toBe('supporter');
+    expect(first.drives.map((drive) => drive.rideId)).toEqual(rideIds.slice(0, 2));
+    expect(first.hasMore).toBe(true);
+    expect(first.nextCursorRideId).toBe(rideIds[1]);
+    expect(first.hiddenDriveCount).toBe(0);
+
+    const second = (
+      await call('drives-listHistory', {
+        pageSize: 2,
+        cursorRideId: first.nextCursorRideId,
+      })
+    ).data as {
+      drives: Array<{ rideId: string }>;
+      hasMore: boolean;
+      nextCursorRideId: string | null;
+    };
+    expect(second.drives.map((drive) => drive.rideId)).toEqual(rideIds.slice(2, 4));
+    expect(second.hasMore).toBe(true);
+    expect(second.nextCursorRideId).toBe(rideIds[3]);
+  });
+
+  it("does not allow a cursor to probe another owner's drive", async () => {
+    const owner = await createProvisionedUser('history-owner');
+    const viewer = await createProvisionedUser('history-viewer');
+    await setPaidTier(viewer, 'supporter');
+    const [foreignRideId] = await seedDriveHistory(owner, [0]);
+    await signInAs(viewer);
+
+    expect(
+      await callableErrorCode(
+        call('drives-listHistory', { cursorRideId: foreignRideId, pageSize: 10 }),
+      ),
+    ).toBe('functions/not-found');
   });
 });
