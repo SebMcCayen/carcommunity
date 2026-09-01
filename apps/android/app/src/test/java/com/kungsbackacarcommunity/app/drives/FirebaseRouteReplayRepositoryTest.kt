@@ -73,11 +73,11 @@ class FirebaseRouteReplayRepositoryTest {
         assertUnavailableWhenCallableThrows(IOException("offline"))
     }
 
-    private suspend fun assertUnavailableWhenCallableThrows(error: Throwable) {
+    private suspend fun assertUnavailableWhenCallableThrows(thrown: Throwable) {
         val repo =
             FirebaseRouteReplayRepository.createForTest(
-                fetchSignedUrl = { throw error },
-                downloadBytes = { error("downloader must not run when the callable fails") },
+                fetchSignedUrl = { throw thrown },
+                downloadBytes = { throw AssertionError("downloader must not run when the callable fails") },
             )
 
         assertEquals(RouteReplayState.Unavailable, repo.loadRoute("uid-1", "ride-1"))
