@@ -75,15 +75,26 @@ service cloud.firestore {
     // a Plus/Supporter tier. A legacy record without an explicit tier is Plus
     // (paid), matching the original member_monthly product.
     function isPaidSubscriptionRecord(sub) {
+      // Mirrors functions/src/subscription/subscription-core
+      // effectiveSubscriptionTierFromStoredRecord + isPaidSubscriptionTier
+      // EXACTLY, so the rules decision agrees with the callable gate. All
+      // reads use map.get(key, default) so a present-but-null field is treated
+      // the same as an ABSENT one (the backend uses JS `== null`), and a
+      // partial/missing doc cannot raise an error:
+      //   - userId: mismatch guard fires only when userId is non-null AND
+      //     differs from the reader (null/absent is tolerated);
+      //   - entitlement must be the legacy `member_monthly`;
+      //   - status must be an access-granting status;
+      //   - tier null/absent ⇒ legacy paid (Plus); otherwise Plus/Supporter
+      //     only (any other value is Community, i.e. not paid).
       return sub != null
-        // Mirror effectiveSubscriptionTierFromStoredRecord's expectedUserId
-        // guard: a record whose stored userId disagrees with the reader is
-        // malformed and must NOT count as paid (present-but-mismatched only;
-        // an absent userId is tolerated, exactly as the backend does).
-        && (!('userId' in sub.data) || sub.data.userId == request.auth.uid)
-        && sub.data.entitlement == 'member_monthly'
-        && sub.data.status in ['active', 'grace_period', 'cancelled']
-        && (!('tier' in sub.data) || sub.data.tier == 'plus' || sub.data.tier == 'supporter');
+        && (sub.data.get('userId', null) == null
+          || sub.data.get('userId', null) == request.auth.uid)
+        && sub.data.get('entitlement', '') == 'member_monthly'
+        && sub.data.get('status', '') in ['active', 'grace_period', 'cancelled']
+        && (sub.data.get('tier', null) == null
+          || sub.data.get('tier', null) == 'plus'
+          || sub.data.get('tier', null) == 'supporter');
     }
 
     // Active PAID subscriber (Plus or Supporter). Reads the authoritative
@@ -109,7 +120,7 @@ service cloud.firestore {
       // SINGLE get() via a let-binding; a missing doc is null ⇒ false (the
       // contract default OFF), so no companion exists() read is needed.
       let flags = get(/databases/$(database)/documents/config/featureFlags);
-      return flags != null && flags.data.partnerMemberOffersRequirePaid == true;
+      return flags != null && flags.data.get('partnerMemberOffersRequirePaid', false) == true;
     }
 
     // True when [uid] is an ACCEPTED member of convoy [convoyId]. Fetches the
