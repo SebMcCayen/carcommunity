@@ -222,11 +222,20 @@ export interface ShowOfferCodeResponse {
 export const showOfferCode = onCall(
   CALLABLE_OPTS,
   async (request): Promise<ShowOfferCodeResponse> => {
-    // Cheap auth guard FIRST: reject unauthenticated callers before any
-    // Firestore read, so an anonymous caller cannot force the flag lookup below.
+    // Cheap guards FIRST — no Firestore reads until the request is known good:
+    //   1. reject unauthenticated callers, and
+    //   2. validate the payload,
+    // so neither an anonymous caller nor an authenticated caller with an
+    // invalid payload can force the flag/subscription reads below.
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Sign in to continue.');
     }
+    const parsed = parseShowOfferCodeInput(request.data);
+    if (!parsed.ok) {
+      throw new HttpsError('invalid-argument', parsed.message);
+    }
+    const { offerId } = parsed.input;
+
     // Member offers become a PAID product only while the dark
     // `partnerMemberOffersRequirePaid` flag is ON: an active Plus/Supporter
     // subscriber (or an admin) may reveal the discount code, a free (Community)
@@ -239,11 +248,6 @@ export const showOfferCode = onCall(
       ? await requirePaidOrAdminActor(request)
       : await requireMemberActor(request);
 
-    const parsed = parseShowOfferCodeInput(request.data);
-    if (!parsed.ok) {
-      throw new HttpsError('invalid-argument', parsed.message);
-    }
-    const { offerId } = parsed.input;
     const offerRef = db.collection('offers').doc(offerId);
 
     const [offerSnap, secretSnap, memberSnap] = await Promise.all([

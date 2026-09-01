@@ -106,8 +106,10 @@ service cloud.firestore {
     // contract default OFF. While OFF the member-offer read gate stays on the
     // relaxed isActiveMember(), so this deploys inert until billing go-live.
     function partnerMemberOffersRequirePaid() {
-      return exists(/databases/$(database)/documents/config/featureFlags)
-        && get(/databases/$(database)/documents/config/featureFlags).data.partnerMemberOffersRequirePaid == true;
+      // SINGLE get() via a let-binding; a missing doc is null ⇒ false (the
+      // contract default OFF), so no companion exists() read is needed.
+      let flags = get(/databases/$(database)/documents/config/featureFlags);
+      return flags != null && flags.data.partnerMemberOffersRequirePaid == true;
     }
 
     // True when [uid] is an ACCEPTED member of convoy [convoyId]. Fetches the
