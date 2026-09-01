@@ -1491,6 +1491,8 @@
     "noOffers": "Inga aktuella erbjudanden.",
     "memberRequired": "KCC Medlem krävs för att visa erbjudandet.",
     "memberRequiredHint": "Bli KCC-medlem för att ta del av exklusiva erbjudanden och förmåner från våra partners.",
+    "upgradeForMemberOffers": "Uppgradera för medlemserbjudanden",
+    "upgradeForMemberOffersHint": "Uppgradera till Plus eller Supporter för att låsa upp medlemserbjudanden och rabattkoder från våra partners.",
     "showCode": "Visa kod",
     "saveOffer": "Spara erbjudande",
     "unsaveOffer": "Ta bort från sparade",

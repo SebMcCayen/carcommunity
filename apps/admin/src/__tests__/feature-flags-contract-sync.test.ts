@@ -153,6 +153,7 @@ describe('feature flags — defaults are not drifting', () => {
       reportTicketsBrowser: false,
       chatReplies: false,
       eventDetailsRequirePaid: false,
+      partnerMemberOffersRequirePaid: false,
     });
   });
 });

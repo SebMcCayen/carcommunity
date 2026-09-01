@@ -1390,6 +1390,8 @@
     <string name="partnerOffers_noOffers">No current offers.</string>
     <string name="partnerOffers_memberRequired">KCC Membership required to view this offer.</string>
     <string name="partnerOffers_memberRequiredHint">Become a KCC member to access exclusive offers and benefits from our partners.</string>
+    <string name="partnerOffers_upgradeForMemberOffers">Upgrade for member offers</string>
+    <string name="partnerOffers_upgradeForMemberOffersHint">Upgrade to Plus or Supporter to unlock member offers and discount codes from our partners.</string>
     <string name="partnerOffers_showCode">Show code</string>
     <string name="partnerOffers_saveOffer">Save offer</string>
     <string name="partnerOffers_unsaveOffer">Remove from saved</string>

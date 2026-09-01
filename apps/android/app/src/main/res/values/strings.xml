@@ -1390,6 +1390,8 @@
     <string name="partnerOffers_noOffers">Inga aktuella erbjudanden.</string>
     <string name="partnerOffers_memberRequired">KCC Medlem krävs för att visa erbjudandet.</string>
     <string name="partnerOffers_memberRequiredHint">Bli KCC-medlem för att ta del av exklusiva erbjudanden och förmåner från våra partners.</string>
+    <string name="partnerOffers_upgradeForMemberOffers">Uppgradera för medlemserbjudanden</string>
+    <string name="partnerOffers_upgradeForMemberOffersHint">Uppgradera till Plus eller Supporter för att låsa upp medlemserbjudanden och rabattkoder från våra partners.</string>
     <string name="partnerOffers_showCode">Visa kod</string>
     <string name="partnerOffers_saveOffer">Spara erbjudande</string>
     <string name="partnerOffers_unsaveOffer">Ta bort från sparade</string>

@@ -112,6 +112,21 @@ enum class FeatureFlag(val key: String, val default: Boolean) {
      * until Play billing goes live, then be turned on deliberately.
      */
     EVENT_DETAILS_REQUIRE_PAID("eventDetailsRequirePaid", false),
+
+    /**
+     * Makes MEMBER partner offers a PAID product (Plus/Supporter). Default OFF.
+     * On, a free (Community) member sees only the public offer teaser plus an
+     * "upgrade for member offers" prompt; the member detail and discount code
+     * require a paid tier (enforced server-side in firestore.rules and
+     * partners.showOfferCode). While OFF the app renders member offers exactly
+     * as today (the relaxed member gate), matching the inert backend enforcement.
+     *
+     * Consumed by the Android UI (PartnersRoute), read via the LIVE feature-flag
+     * listener so a flip takes effect without a relaunch. Default OFF and DARK
+     * until billing go-live — flipping it on before users can buy a paid tier
+     * would hide member offers from everyone with no way to upgrade.
+     */
+    PARTNER_MEMBER_OFFERS_REQUIRE_PAID("partnerMemberOffersRequirePaid", false),
 }
 
 /**

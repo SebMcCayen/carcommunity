@@ -22424,6 +22424,40 @@
         }
       }
     },
+    "partnerOffers.upgradeForMemberOffers": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uppgradera för medlemserbjudanden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upgrade for member offers"
+          }
+        }
+      }
+    },
+    "partnerOffers.upgradeForMemberOffersHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uppgradera till Plus eller Supporter för att låsa upp medlemserbjudanden och rabattkoder från våra partners."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upgrade to Plus or Supporter to unlock member offers and discount codes from our partners."
+          }
+        }
+      }
+    },
     "partnerOffers.validFrom": {
       "extractionState": "manual",
       "localizations": {

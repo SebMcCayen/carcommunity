@@ -40,6 +40,7 @@ import { onEventCancelled } from './events/onEventCancelled';
 import { checkIn } from './events/checkIn';
 import { setPublicSite, onPublicSiteWrite, syncHomepage } from './events/publicSite';
 import { deleteDrive } from './drives/deleteDrive';
+import { driveLifetimeStats } from './drives/driveLifetimeStats';
 import { driveStats } from './drives/driveStats';
 import { listDeletableDrives } from './drives/listDeletableDrives';
 import { listDriveHistory } from './drives/listDriveHistory';
@@ -150,6 +151,8 @@ import { sendWave as sendWaveLive } from './live/sendWave';
 import { cleanupExpired as cleanupExpiredLive } from './live/scheduled';
 import { grantEntitlement, verify as verifySubscription } from './subscription/verify';
 import { expireLapsed as expireLapsedSubscriptions } from './subscription/scheduled';
+import { handleRtdn as handleSubscriptionRtdn } from './subscription/rtdn';
+import { reconcileEntitlements as reconcileSubscriptionEntitlements } from './subscription/reconcile';
 import {
   join as joinGroupDrive,
   leave as leaveGroupDrive,
@@ -409,18 +412,20 @@ export const events = {
 
 /**
  * Drives domain (grouped export → deployed as `drives-save`,
- * `drives-listHistory`, `drives-stats`, `drives-listDeletable`, `drives-delete`,
- * and `drives-routeUrl`).
+ * `drives-listHistory`, `drives-stats`, `drives-lifetimeStats`,
+ * `drives-listDeletable`, `drives-delete`, and `drives-routeUrl`).
  *
  * Saved drives (contracts/functions/functions.json: drives.save,
- * drives.listHistory, drives.stats, drives.listDeletable, drives.delete,
- * drives.routeUrl). Stats are computed server-side; route GPS data lives in
- * Cloud Storage under rideRoutes/{uid}/{rideId}/ (member-gated), never in
- * Firestore. listHistory and stats are tier-scoped (Community/Plus/Supporter);
- * listDeletable is owner-only and tier-agnostic so a downgraded user can still
- * delete drives the tier window now hides. The callables are the new tier-aware
- * read path; temporary direct owner reads remain only for already-released
- * client compatibility.
+ * drives.listHistory, drives.stats, drives.lifetimeStats, drives.listDeletable,
+ * drives.delete, drives.routeUrl). Stats are computed server-side; route GPS
+ * data lives in Cloud Storage under rideRoutes/{uid}/{rideId}/ (member-gated),
+ * never in Firestore. listHistory and stats are tier-scoped
+ * (Community/Plus/Supporter); lifetimeStats and listDeletable are owner-only and
+ * tier-agnostic — lifetimeStats so a downgraded user keeps their true-lifetime
+ * totals (badges must not be paywalled), listDeletable so they can still delete
+ * drives the tier window now hides. The callables are the new tier-aware read
+ * path; temporary direct owner reads remain only for already-released client
+ * compatibility.
  *
  * `drives-routeUrl` issues a short-lived (5 min) V4 signed URL for an owned,
  * tier-visible drive's route.bin, so the app can download the full track without
@@ -435,6 +440,13 @@ export const drives = {
   save: saveDrive,
   listHistory: listDriveHistory,
   stats: driveStats,
+  // `drives-lifetimeStats`: TRUE-LIFETIME aggregate over ALL the caller's drives
+  // with NO tier window and NO month range — the deliberately UN-PAYWALLED
+  // counterpart to the tier-scoped `stats`, for the profile "my stats" fold and
+  // lifetime badges (e.g. Vägfarare) that must not shrink on a downgrade. Actor
+  // gate only (requireActiveActor, no tier/membership). The Android migration to
+  // consume it and the direct-read lockdown are separate later slices.
+  lifetimeStats: driveLifetimeStats,
   listDeletable: listDeletableDrives,
   delete: deleteDrive,
   routeUrl: drivesRouteUrl,
@@ -1143,6 +1155,26 @@ export const subscription = {
   // under subscription_status, and never revokes on the ABSENCE of a
   // record — a perpetual manual grant is untouched.
   expireLapsed: expireLapsedSubscriptions,
+  // Google Play Real-time Developer Notifications handler (Pub/Sub trigger,
+  // deployed as subscription-handleRtdn). Turns each Play notification into
+  // the correct entitlement transition by re-fetching the AUTHORITATIVE state
+  // from subscriptionsv2.get (never trusting the notification body) and
+  // applying it via applyEntitlement. Provider-gated (no-op while the Google
+  // provider is disabled), idempotent on the monotonic eventTimeMillis per
+  // token, and fail-safe: a poison/unknown message acks (never loops), only a
+  // transient Play/Firestore failure throws for a Pub/Sub retry. Handles both
+  // subscriptionNotification and voidedPurchaseNotification (refund/chargeback
+  // → revoke). Deploys inert until the operator wires the Pub/Sub topic AND
+  // enables the provider (see the PR body).
+  handleRtdn: handleSubscriptionRtdn,
+  // Scheduled reconciliation (deployed as subscription-reconcileEntitlements).
+  // The integrity backstop: re-converges the three representations of
+  // entitlement to the authoritative subscriptions/{uid} record, clearing
+  // stale member privilege a lost/half-applied write left behind. Downgrade
+  // only, provider-gated, bounded + cursor-rotated, fail-safe per user. Does
+  // NOT re-query Play per subscription (that needs the raw token, which is
+  // never stored) — see reconcile-core.ts and the PR body.
+  reconcileEntitlements: reconcileSubscriptionEntitlements,
 };
 
 /**

@@ -241,6 +241,31 @@
       ],
       "additionalProperties": false
     },
+    "driveLifetimeStatsResponse": {
+      "type": "object",
+      "description": "TRUE-LIFETIME statistics aggregate from drives.lifetimeStats, computed over ALL of the caller's drives regardless of subscription tier — the deliberately UN-PAYWALLED counterpart to driveStatsResponse (which is tier-scoped). There is no tier field and no thisMonth* fields: lifetime achievement (profile 'my stats', the Vägfarare lifetime-distance badge) must not shrink on a downgrade, and this aggregate has no month window. All distances are metres and speeds metres/second. Every figure (totalDrives, the sums and the maxima) comes from a single in-memory scan of the owner's rides (no count()/sum() aggregation), so they are one consistent snapshot; totalDrives is the count of VALID drives in that snapshot, a drive with a malformed durationSeconds being dropped so it cannot corrupt a total. averageDriveMeters is totalDistanceMeters / totalDrives (0 when no drives); summary-only saves with a null distance still count toward the denominator. A maximum figure (longest/fastest/highestMax) is 0 when no drive carries that stat, never a false negative. serverNowMillis lets the client label the scope without trusting device time.",
+      "properties": {
+        "serverNowMillis": { "type": "integer", "minimum": 0 },
+        "totalDrives": { "type": "integer", "minimum": 0 },
+        "totalDistanceMeters": { "type": "number", "minimum": 0 },
+        "totalDurationSeconds": { "type": "number", "minimum": 0 },
+        "longestDriveMeters": { "type": "number", "minimum": 0 },
+        "averageDriveMeters": { "type": "number", "minimum": 0 },
+        "fastestAverageSpeedMps": { "type": "number", "minimum": 0 },
+        "highestMaxSpeedMps": { "type": "number", "minimum": 0 }
+      },
+      "required": [
+        "serverNowMillis",
+        "totalDrives",
+        "totalDistanceMeters",
+        "totalDurationSeconds",
+        "longestDriveMeters",
+        "averageDriveMeters",
+        "fastestAverageSpeedMps",
+        "highestMaxSpeedMps"
+      ],
+      "additionalProperties": false
+    },
     "deletableDriveItem": {
       "type": "object",
       "description": "One row of the owner-only deletion inventory returned by drives.listDeletable. Deliberately carries ONLY what a 'delete this drive' list needs — id, when it happened, and its label. No distance, speed, duration, route path/thumbnail, image or source-session field is included.",

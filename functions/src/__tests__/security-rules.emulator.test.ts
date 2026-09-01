@@ -1009,6 +1009,95 @@ describe('Firestore – partners (Phase 9i)', () => {
     await assertFails(getDoc(doc(suspendedFs, 'offers', 'of-active', 'details', 'member')));
   });
 
+  it('with partnerMemberOffersRequirePaid ON: offer detail needs a PAID subscription (free + legacy member denied; paid + admin allowed)', async () => {
+    const PAID = 'partner-rules-paid';
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const firestore = ctx.firestore();
+      // merge:true — config/featureFlags is shared across suites; overwriting
+      // the whole doc would wipe flags other tests seeded and make ordering
+      // matter (known emulator gotcha).
+      await setDoc(
+        doc(firestore, 'config', 'featureFlags'),
+        { partnerMemberOffersRequirePaid: true },
+        { merge: true },
+      );
+      // An active Plus subscription record for the paid user.
+      await setDoc(doc(firestore, 'subscriptions', PAID), {
+        userId: PAID,
+        platform: 'google',
+        status: 'active',
+        entitlement: 'member_monthly',
+        tier: 'plus',
+      });
+      // Parity fixtures mirroring effectiveSubscriptionTierFromStoredRecord:
+      // (a) userId null == absent (no mismatch) → paid.
+      await setDoc(doc(firestore, 'subscriptions', 'partner-rules-nulluser'), {
+        userId: null,
+        platform: 'google',
+        status: 'active',
+        entitlement: 'member_monthly',
+        tier: 'plus',
+      });
+      // (b) legacy active paid with tier null → resolves to Plus → paid.
+      await setDoc(doc(firestore, 'subscriptions', 'partner-rules-nulltier'), {
+        userId: 'partner-rules-nulltier',
+        platform: 'google',
+        status: 'active',
+        entitlement: 'member_monthly',
+        tier: null,
+      });
+      // (d) userId present but mismatched → NOT paid (denied).
+      await setDoc(doc(firestore, 'subscriptions', 'partner-rules-mismatch'), {
+        userId: 'someone-else',
+        platform: 'google',
+        status: 'active',
+        entitlement: 'member_monthly',
+        tier: 'plus',
+      });
+      // (c) 'partner-rules-nosub' deliberately has NO subscriptions doc.
+    });
+    try {
+      // Free user: denied.
+      const freeFs = testEnv.authenticatedContext(FREE).firestore();
+      await assertFails(getDoc(doc(freeFs, 'offers', 'of-active', 'details', 'member')));
+      // Legacy activeMember claim but NO paid subscriptions record: denied — the
+      // paid gate reads the authoritative record, not the relaxed claim.
+      const memberFs = testEnv.authenticatedContext(MEMBER, { activeMember: true }).firestore();
+      await assertFails(getDoc(doc(memberFs, 'offers', 'of-active', 'details', 'member')));
+      // Paid subscriber (Plus): allowed.
+      const paidFs = testEnv.authenticatedContext(PAID).firestore();
+      await assertSucceeds(getDoc(doc(paidFs, 'offers', 'of-active', 'details', 'member')));
+      // Admin: always allowed (bypasses the paid gate).
+      const adminFs = testEnv.authenticatedContext('partner-admin', { admin: true }).firestore();
+      await assertSucceeds(getDoc(doc(adminFs, 'offers', 'of-active', 'details', 'member')));
+
+      // Parity with the backend resolver — the rules decision must match what
+      // the callable gate would return for each stored record:
+      // (a) userId null (== absent, no mismatch) → paid → allowed.
+      const nullUserFs = testEnv.authenticatedContext('partner-rules-nulluser').firestore();
+      await assertSucceeds(getDoc(doc(nullUserFs, 'offers', 'of-active', 'details', 'member')));
+      // (b) legacy active paid, tier null → Plus → allowed.
+      const nullTierFs = testEnv.authenticatedContext('partner-rules-nulltier').firestore();
+      await assertSucceeds(getDoc(doc(nullTierFs, 'offers', 'of-active', 'details', 'member')));
+      // (c) no subscriptions doc at all → not paid → denied.
+      const noSubFs = testEnv.authenticatedContext('partner-rules-nosub').firestore();
+      await assertFails(getDoc(doc(noSubFs, 'offers', 'of-active', 'details', 'member')));
+      // (d) userId present but mismatched → not paid → denied.
+      const mismatchFs = testEnv.authenticatedContext('partner-rules-mismatch').firestore();
+      await assertFails(getDoc(doc(mismatchFs, 'offers', 'of-active', 'details', 'member')));
+    } finally {
+      // Reset the shared flag so later describe blocks see the default (OFF).
+      // merge:true so only this field is touched, not other suites' flags.
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(
+          doc(ctx.firestore(), 'config', 'featureFlags'),
+          { partnerMemberOffersRequirePaid: false },
+          { merge: true },
+        );
+      });
+    }
+  });
+
   it('applications are never client-readable — not even by the submitter', async () => {
     const memberFs = testEnv.authenticatedContext(MEMBER, { activeMember: true }).firestore();
     await assertFails(getDoc(doc(memberFs, 'partnerApplications', 'app-1')));

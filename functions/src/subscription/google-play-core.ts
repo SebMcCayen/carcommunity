@@ -93,6 +93,15 @@ function tierForProduct(productId: GooglePlayProductId): SubscriptionTier {
 }
 
 /**
+ * The paid tier a Play product id grants. Exported for the RTDN handler and
+ * reconciliation sweep, which need the tier when they only have the product id
+ * from the token-ownership registry (e.g. revoking a voided purchase).
+ */
+export function tierForGooglePlayProduct(productId: GooglePlayProductId): SubscriptionTier {
+  return tierForProduct(productId);
+}
+
+/**
  * One-way, deterministic Firebase UID binding sent to Play as the obfuscated
  * account id. SHA-256 hex is exactly 64 ASCII characters and contains no raw
  * UID or other PII.
