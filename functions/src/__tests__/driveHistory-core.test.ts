@@ -6,6 +6,7 @@ import {
   PLUS_DRIVE_HISTORY_DAYS,
   driveHistoryPageSize,
   driveHistoryPolicyForTier,
+  driveHistoryReadLimit,
   parseListDriveHistoryInput,
 } from '../drives/driveHistory-core';
 
@@ -16,6 +17,7 @@ describe('drive-history tier policy', () => {
     const policy = driveHistoryPolicyForTier('community', NOW);
     expect(policy).toEqual({ kind: 'latest_count', limit: COMMUNITY_DRIVE_HISTORY_LIMIT });
     expect(driveHistoryPageSize(policy, 100)).toBe(5);
+    expect(driveHistoryReadLimit(policy, 5)).toBe(5);
   });
 
   it('gives Plus a rolling 90-day, paginated window', () => {
@@ -27,12 +29,14 @@ describe('drive-history tier policy', () => {
     });
     expect(driveHistoryPageSize(policy)).toBe(DRIVE_HISTORY_PAGE_SIZE_DEFAULT);
     expect(driveHistoryPageSize(policy, 25)).toBe(25);
+    expect(driveHistoryReadLimit(policy, 25)).toBe(26);
   });
 
   it('gives Supporter paginated unlimited history', () => {
     const policy = driveHistoryPolicyForTier('supporter', NOW);
     expect(policy).toEqual({ kind: 'unlimited' });
     expect(driveHistoryPageSize(policy, 75)).toBe(75);
+    expect(driveHistoryReadLimit(policy, 25)).toBe(26);
   });
 });
 

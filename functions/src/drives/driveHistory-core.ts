@@ -65,3 +65,12 @@ export function driveHistoryPageSize(policy: DriveHistoryPolicy, requested?: num
   if (policy.kind === 'latest_count') return policy.limit;
   return requested ?? DRIVE_HISTORY_PAGE_SIZE_DEFAULT;
 }
+
+/**
+ * Paid tiers read one look-ahead document to determine whether another page
+ * exists. Community cannot page, so reading beyond its five visible drives
+ * would only add Firestore cost.
+ */
+export function driveHistoryReadLimit(policy: DriveHistoryPolicy, pageSize: number): number {
+  return policy.kind === 'latest_count' ? pageSize : pageSize + 1;
+}

@@ -27,6 +27,7 @@ import {
 import {
   driveHistoryPageSize,
   driveHistoryPolicyForTier,
+  driveHistoryReadLimit,
   parseListDriveHistoryInput,
   type DriveHistoryPolicy,
 } from './driveHistory-core';
@@ -51,7 +52,7 @@ export interface DriveHistoryItem {
   createdAtMillis: number;
   routeThumbnail: string | null;
   carImagePath: string | null;
-  convoyMembers: Array<{ uid: string; displayName: string | null; avatarPath: string | null }>;
+  convoyMembers: Array<{ uid: string; displayName?: string; avatarPath?: string }>;
 }
 
 export interface ListDriveHistoryResponse {
@@ -88,9 +89,9 @@ function boundedText(value: unknown, maxLength: number): string | null {
 
 function sanitiseConvoyMembers(
   value: unknown,
-): Array<{ uid: string; displayName: string | null; avatarPath: string | null }> {
+): Array<{ uid: string; displayName?: string; avatarPath?: string }> {
   if (!Array.isArray(value)) return [];
-  const result: Array<{ uid: string; displayName: string | null; avatarPath: string | null }> = [];
+  const result: Array<{ uid: string; displayName?: string; avatarPath?: string }> = [];
   const seen = new Set<string>();
   for (const raw of value) {
     if (result.length >= 24) break;
@@ -99,10 +100,12 @@ function sanitiseConvoyMembers(
     const uid = boundedText(candidate.uid, 128);
     if (!uid || seen.has(uid)) continue;
     seen.add(uid);
+    const displayName = boundedText(candidate.displayName, 200);
+    const avatarPath = boundedText(candidate.avatarPath, 500);
     result.push({
       uid,
-      displayName: boundedText(candidate.displayName, 200),
-      avatarPath: boundedText(candidate.avatarPath, 500),
+      ...(displayName ? { displayName } : {}),
+      ...(avatarPath ? { avatarPath } : {}),
     });
   }
   return result;
@@ -204,7 +207,7 @@ export const listDriveHistory = onCall(
     }
 
     const pageSize = driveHistoryPageSize(policy, parsed.input.pageSize);
-    const snapshot = await query.limit(pageSize + 1).get();
+    const snapshot = await query.limit(driveHistoryReadLimit(policy, pageSize)).get();
     const hasMoreWithinPolicy = policy.kind !== 'latest_count' && snapshot.size > pageSize;
     const visibleDocs = snapshot.docs.slice(0, pageSize);
     const drives = visibleDocs.map(toDriveHistoryItem).filter((drive) => drive != null);

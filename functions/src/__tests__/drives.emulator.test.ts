@@ -457,6 +457,15 @@ describe('drives-listHistory subscription visibility', () => {
   it('returns only the newest five drives for Community and signals retained history', async () => {
     const user = await createProvisionedUser('history-community');
     const rideIds = await seedDriveHistory(user, [0, 1, 2, 3, 4, 5, 6]);
+    await adminDb
+      .collection('rides')
+      .doc(rideIds[0]!)
+      .update({
+        convoyMembers: [
+          { uid: 'member-without-profile-fields' },
+          { uid: 'member-with-profile-fields', displayName: 'Anna', avatarPath: 'avatars/anna' },
+        ],
+      });
     await signInAs(user);
 
     const data = (await call('drives-listHistory', { pageSize: 25 })).data as {
@@ -479,6 +488,10 @@ describe('drives-listHistory subscription visibility', () => {
     expect(data.drives[0]).not.toHaveProperty('routePath');
     expect(data.drives[0]).not.toHaveProperty('previewImagePath');
     expect(data.drives[0]).not.toHaveProperty('sourceSessionId');
+    expect(data.drives[0]?.convoyMembers).toEqual([
+      { uid: 'member-without-profile-fields' },
+      { uid: 'member-with-profile-fields', displayName: 'Anna', avatarPath: 'avatars/anna' },
+    ]);
 
     // Hidden by the read policy does not mean locked or deleted: the owner can
     // still remove an older retained drive by id after a downgrade.
