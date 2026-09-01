@@ -56,6 +56,7 @@ import {
   reservePurchaseVerification,
 } from './purchase-token-ownership';
 import { PurchaseTokenOwnershipError } from './purchase-token-ownership-core';
+import { isSubscriptionProviderEnabled } from './provider-config';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -64,18 +65,6 @@ const CALLABLE_OPTS = {
   timeoutSeconds: 60,
   enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',
 };
-
-async function isProviderEnabled(platform: 'apple' | 'google'): Promise<boolean> {
-  try {
-    const snap = await db.collection('config').doc('subscriptionProviders').get();
-    return (snap.data()?.[platform] as { enabled?: boolean } | undefined)?.enabled === true;
-  } catch (error) {
-    logger.warn('Subscription provider config read failed; failing closed', {
-      error: String(error),
-    });
-    return false;
-  }
-}
 
 export interface VerifySubscriptionResponse {
   entitlement: string;
@@ -99,7 +88,7 @@ export const verify = onCall(
     // this invocation; it is never logged, persisted, or returned.
     const purchaseTokenHash = hashPurchaseToken(parsed.input.purchaseToken);
 
-    if (!(await isProviderEnabled(parsed.input.platform))) {
+    if (!(await isSubscriptionProviderEnabled(parsed.input.platform))) {
       // FAIL CLOSED: no store credentials → no entitlement, ever.
       throw new HttpsError(
         'failed-precondition',

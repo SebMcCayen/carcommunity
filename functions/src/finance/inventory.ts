@@ -224,6 +224,23 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     note: 'Downgrades lapsed entitlements.',
   },
   {
+    id: 'subscription-reconcileEntitlements',
+    source: 'subscription/reconcile.ts:reconcileEntitlements',
+    label: 'Subscription reconciliation backstop',
+    schedule: 'every 6 hours',
+    runsPerDay: 4,
+    // Cursor-rotated page of MAX_RECONCILE_PER_RUN (200) subscription docs +
+    // one Auth getUser and one users/{uid} read per candidate; writes only on
+    // the rare drift it downgrades (usually 0) plus one cursor doc. No Play
+    // API calls. No-op entirely while the Google provider is disabled.
+    writesPerRun: 1,
+    readsPerRun: 400,
+    deletesPerRun: 0,
+    avgSeconds: 20,
+    memoryGiB: 0.25,
+    note: 'Downgrade-only integrity backstop: re-converges entitlement claim/flag to the authoritative subscriptions record. Provider-gated (inert while off).',
+  },
+  {
     id: 'badges-evaluateBacklog',
     source: 'badges/scheduled.ts:evaluateBacklog',
     label: 'Badge progress sweep',
