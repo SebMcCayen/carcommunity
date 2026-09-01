@@ -52,6 +52,11 @@ class FirebaseRouteReplayRepository private constructor(
 
     private val cache = ConcurrentHashMap<String, List<RoutePoint>>()
 
+    /**
+     * Safe to call from the Main dispatcher (DrivesScreen invokes this from a
+     * `LaunchedEffect`): the blocking network read and the CPU-bound
+     * [RouteCodec.decode] run on [Dispatchers.IO], never on the caller's thread.
+     */
     override suspend fun loadRoute(uid: String, rideId: String): RouteReplayState {
         val key = "$uid/$rideId"
         cache[key]?.let { return RouteReplayState.Ready(it) }
@@ -59,13 +64,17 @@ class FirebaseRouteReplayRepository private constructor(
         // One pipeline, one failure state: fetch the signed URL, download the
         // bytes, decode. Any throw (callable error, network, HTTP non-200,
         // oversize) OR a null decode collapses to Unavailable, mirroring the old
-        // `runCatching{}.getOrNull() ?: Unavailable`.
+        // `runCatching{}.getOrNull() ?: Unavailable`. The whole pipeline runs on
+        // IO so the blocking HttpURLConnection read and the gzip/varint decode
+        // never touch Main (NetworkOnMainThreadException / jank).
         val points =
-            runCatching {
-                val url = fetchSignedUrl(rideId)
-                val bytes = downloadBytes(url)
-                RouteCodec.decode(bytes)
-            }.getOrNull() ?: return RouteReplayState.Unavailable
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val url = fetchSignedUrl(rideId)
+                    val bytes = downloadBytes(url)
+                    RouteCodec.decode(bytes)
+                }.getOrNull()
+            } ?: return RouteReplayState.Unavailable
 
         cache[key] = points
         return RouteReplayState.Ready(points)
