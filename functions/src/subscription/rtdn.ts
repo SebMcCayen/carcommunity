@@ -44,7 +44,7 @@ import { onMessagePublished } from 'firebase-functions/v2/pubsub';
 import { logger } from 'firebase-functions';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { CPU_TRIGGER, MAX_INSTANCES_TRIGGER } from '../shared/instanceLimits';
+import { CPU_TRIGGER } from '../shared/instanceLimits';
 import { applyEntitlement } from './entitlement';
 import { isSubscriptionProviderEnabled } from './provider-config';
 import {
@@ -383,8 +383,25 @@ async function markProcessedInStore(
   });
 }
 
+/**
+ * Lazily-created, module-level Play client reused across messages on a warm
+ * instance. It is a STATELESS transport (a GoogleAuth that caches its own
+ * access token) holding no request-specific data, so caching it is a pure
+ * connection-reuse win and safe under the functions-emulator module-cache
+ * caveat — unlike a tests-toggled flag, nothing about it varies per test.
+ * Tests never reach this: they inject their own deps.
+ */
+let cachedPlayClient: AdcGooglePlaySubscriptionClient | null = null;
+
+function playClient(): AdcGooglePlaySubscriptionClient {
+  if (cachedPlayClient === null) {
+    cachedPlayClient = new AdcGooglePlaySubscriptionClient();
+  }
+  return cachedPlayClient;
+}
+
 export function productionRtdnDeps(): RtdnDeps {
-  const client = new AdcGooglePlaySubscriptionClient();
+  const client = playClient();
   return {
     providerEnabled: isSubscriptionProviderEnabled,
     resolveOwner: resolveOwnerFromRegistry,
@@ -408,7 +425,17 @@ export const handleRtdn = onMessagePublished(
   {
     topic: RTDN_TOPIC,
     region: 'europe-west1',
-    maxInstances: MAX_INSTANCES_TRIGGER,
+    // STRICT SINGLETON (maxInstances: 1, concurrency: 1). The eventTimeMillis
+    // high-watermark is a read-then-write across the whole handler (check +
+    // apply + advance are NOT one Firestore transaction, because the apply
+    // touches Auth). With parallel instances two deliveries for the SAME token
+    // could both pass the watermark check and apply out of order (an older
+    // notification overwriting a newer one) while the watermark still advances,
+    // which would suppress the correction. Serialising every delivery keeps the
+    // ordering guarantee with no cross-instance locking. Subscription-event
+    // volume is low enough that a single instance is ample; the scheduled
+    // reconciliation is the backstop if a burst ever queues.
+    maxInstances: 1,
     cpu: CPU_TRIGGER,
     concurrency: 1,
     memory: '256MiB' as const,
