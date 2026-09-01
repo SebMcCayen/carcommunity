@@ -176,12 +176,15 @@ class FirebaseRouteReplayRepositoryTest {
     }
 
     @Test
-    fun `httpDownload aborts an oversize body`() = runTest {
-        // Stream just over the 16 MiB cap; readBounded must abort rather than
-        // buffer it all.
+    fun `httpDownload aborts an oversize body with no declared length`() = runTest {
+        // NO Content-Length header (unknown-length / read-until-close), so the
+        // fast-fail header check is skipped and readBounded's mid-stream abort is
+        // the path under test: stream just over the 16 MiB cap and it must abort
+        // rather than buffer it all. (The declared-over-cap fast-fail is covered
+        // by the separate test below.)
         val oversize = FirebaseRouteReplayRepository.MAX_ROUTE_BYTES + 4_096
         withRawServer({ out ->
-            out.write("HTTP/1.1 200 OK\r\nContent-Length: $oversize\r\nConnection: close\r\n\r\n".toByteArray())
+            out.write("HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n".toByteArray())
             val chunk = ByteArray(64 * 1024)
             var remaining = oversize
             try {
