@@ -20,10 +20,13 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
  * Partner company detail + its offers (Phase 12 slice 17). Stateless. Offers
- * show the teaser to any authenticated user; a caller who passes the member
- * gate can save/unsave a bookmark, expand the member detail, and reveal the
- * discount code (callable). While member gating is disabled that is every
- * signed-in, non-suspended user.
+ * show the teaser to any authenticated user; only a viewer who passes the
+ * member-offer gate ([canAccessMemberOffers]) can save/unsave a bookmark, expand
+ * the member detail, and reveal the discount code (callable). A viewer who does
+ * not sees the teaser plus an "upgrade" prompt in place of the member content.
+ * The gate is dark-flagged by the caller: while partnerMemberOffersRequirePaid
+ * is ON it means a PAID subscriber (Plus/Supporter); while OFF it is the relaxed
+ * member gate (every signed-in user), so the prompt never shows.
  * Only one offer is expanded at a time ([expandedOfferId]).
  */
 @Composable
@@ -31,7 +34,7 @@ fun PartnerDetailScreen(
     company: PartnerCompany?,
     offers: List<PartnerOffer>,
     savedOfferIds: Set<String>,
-    passesMemberGate: Boolean,
+    canAccessMemberOffers: Boolean,
     expandedOfferId: String?,
     expandedOfferDetail: OfferMemberDetail?,
     codeStatus: OfferCodeStatus,
@@ -93,7 +96,7 @@ fun PartnerDetailScreen(
                 offers.forEach { offer ->
                     OfferCard(
                         offer = offer,
-                        passesMemberGate = passesMemberGate,
+                        canAccessMemberOffers = canAccessMemberOffers,
                         isSaved = savedOfferIds.contains(offer.id),
                         isExpanded = expandedOfferId == offer.id,
                         detail = if (expandedOfferId == offer.id) expandedOfferDetail else null,
@@ -110,7 +113,7 @@ fun PartnerDetailScreen(
 @Composable
 private fun OfferCard(
     offer: PartnerOffer,
-    passesMemberGate: Boolean,
+    canAccessMemberOffers: Boolean,
     isSaved: Boolean,
     isExpanded: Boolean,
     detail: OfferMemberDetail?,
@@ -140,9 +143,18 @@ private fun OfferCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            if (!passesMemberGate) {
+            if (!canAccessMemberOffers) {
+                // Member offers are paid-only. Free (Community) callers see the
+                // public teaser above plus this upgrade prompt in place of the
+                // member detail, bookmark, and discount code — mirroring the
+                // server-side paid gate.
                 Text(
-                    text = stringResource(R.string.partnerOffers_memberRequiredHint),
+                    text = stringResource(R.string.partnerOffers_upgradeForMemberOffers),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = stringResource(R.string.partnerOffers_upgradeForMemberOffersHint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -456,6 +456,7 @@ import com.kungsbackacarcommunity.app.shell.rememberMapSurface
 import com.kungsbackacarcommunity.app.shell.currentIncidentClearFix
 import com.kungsbackacarcommunity.app.shell.runIncidentRemoval
 import com.kungsbackacarcommunity.app.subscription.BillingRepository
+import com.kungsbackacarcommunity.app.subscription.EffectiveSubscriptionTier
 import com.kungsbackacarcommunity.app.subscription.StoredSubscription
 import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
 import com.kungsbackacarcommunity.app.subscription.SubscriptionStateRepository
@@ -6589,6 +6590,12 @@ fun AuthenticatedApp(
                                 memberGated = false,
                                 isActiveMember = profile?.activeMember == true,
                             ),
+                        // Live flag: while ON, member partner offers require a
+                        // paid tier (dark until billing go-live). Read from the
+                        // same live `flags` listener, so a flip takes effect
+                        // without a relaunch.
+                        partnerMemberOffersRequirePaidEnabled =
+                            flags.isEnabled(FeatureFlag.PARTNER_MEMBER_OFFERS_REQUIRE_PAID),
                         // The SAME per-uid store the navigation search reads/writes,
                         // so the Saved-places management screen and the inline save
                         // flow share one source of truth.
@@ -8911,6 +8918,12 @@ private fun RouteHost(
     subscriptionVerifier: SubscriptionVerifier?,
     storedSubscription: StoredSubscription?,
     partnerStatsEnabled: Boolean,
+    // The `partnerMemberOffersRequirePaid` flag (contract default FALSE),
+    // resolved at the call site from the live flag listener. While TRUE, member
+    // partner offers require a paid tier (free callers see the public teaser +
+    // an upgrade prompt); while FALSE the Partners screen renders member offers
+    // exactly as today. Dark until billing go-live.
+    partnerMemberOffersRequirePaidEnabled: Boolean,
     savedPlacesStore: SavedPlacesStore,
     onOpenAddressSearch: () -> Unit,
     onChangeSavedPlaceAddress: (SavedPlace) -> Unit,
@@ -9354,7 +9367,21 @@ private fun RouteHost(
                     repository = partnersRepository,
                     offerCodeCoordinator = offerCodeCoordinator,
                     uid = uid,
-                    passesMemberGate = MemberGating.allows(profileActiveMember),
+                    // Member-offer gate, dark-flagged by
+                    // partnerMemberOffersRequirePaid (live flag). While ON,
+                    // member offers are a PAID product: gate on the real
+                    // subscription tier (Plus/Supporter) — same source the
+                    // drives/garage work observes (storedSubscription) — which
+                    // mirrors the server gate in firestore.rules /
+                    // partners.showOfferCode. While OFF the gate is the relaxed
+                    // member gate (every signed-in user), exactly as today, so
+                    // the feature is inert until billing go-live.
+                    canAccessMemberOffers =
+                        if (partnerMemberOffersRequirePaidEnabled) {
+                            storedSubscription.effectiveTier != EffectiveSubscriptionTier.COMMUNITY
+                        } else {
+                            MemberGating.allows(profileActiveMember)
+                        },
                     onBack = onClose,
                 )
             } else {

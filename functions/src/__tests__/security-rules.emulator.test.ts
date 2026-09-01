@@ -1009,6 +1009,46 @@ describe('Firestore – partners (Phase 9i)', () => {
     await assertFails(getDoc(doc(suspendedFs, 'offers', 'of-active', 'details', 'member')));
   });
 
+  it('with partnerMemberOffersRequirePaid ON: offer detail needs a PAID subscription (free + legacy member denied; paid + admin allowed)', async () => {
+    const PAID = 'partner-rules-paid';
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const firestore = ctx.firestore();
+      await setDoc(doc(firestore, 'config', 'featureFlags'), {
+        partnerMemberOffersRequirePaid: true,
+      });
+      // An active Plus subscription record for the paid user.
+      await setDoc(doc(firestore, 'subscriptions', PAID), {
+        userId: PAID,
+        platform: 'google',
+        status: 'active',
+        entitlement: 'member_monthly',
+        tier: 'plus',
+      });
+    });
+    try {
+      // Free user: denied.
+      const freeFs = testEnv.authenticatedContext(FREE).firestore();
+      await assertFails(getDoc(doc(freeFs, 'offers', 'of-active', 'details', 'member')));
+      // Legacy activeMember claim but NO paid subscriptions record: denied — the
+      // paid gate reads the authoritative record, not the relaxed claim.
+      const memberFs = testEnv.authenticatedContext(MEMBER, { activeMember: true }).firestore();
+      await assertFails(getDoc(doc(memberFs, 'offers', 'of-active', 'details', 'member')));
+      // Paid subscriber (Plus): allowed.
+      const paidFs = testEnv.authenticatedContext(PAID).firestore();
+      await assertSucceeds(getDoc(doc(paidFs, 'offers', 'of-active', 'details', 'member')));
+      // Admin: always allowed (bypasses the paid gate).
+      const adminFs = testEnv.authenticatedContext('partner-admin', { admin: true }).firestore();
+      await assertSucceeds(getDoc(doc(adminFs, 'offers', 'of-active', 'details', 'member')));
+    } finally {
+      // Reset the shared flag so later describe blocks see the default (OFF).
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), 'config', 'featureFlags'), {
+          partnerMemberOffersRequirePaid: false,
+        });
+      });
+    }
+  });
+
   it('applications are never client-readable — not even by the submitter', async () => {
     const memberFs = testEnv.authenticatedContext(MEMBER, { activeMember: true }).firestore();
     await assertFails(getDoc(doc(memberFs, 'partnerApplications', 'app-1')));

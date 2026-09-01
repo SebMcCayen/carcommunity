@@ -1,13 +1,14 @@
 /**
  * partners.createOffer / updateOffer / setOfferStatus — admin callables,
- * and partners.showOfferCode — member callable
+ * and partners.showOfferCode — paid-subscriber callable
  * (contracts/functions/functions.json).
  *
  * Deployed via the `partners` export group. Offers use the THREE-TIER
- * privacy split (legacy parity): the teaser document, the member-gated
- * details/member document, and the backend-only secret/code document. The
- * discount code is returned exclusively by showOfferCode to active members
- * for active offers — and is never logged (legacy rule).
+ * privacy split (legacy parity): the teaser document (public to any
+ * authenticated user), the paid-gated details/member document, and the
+ * backend-only secret/code document. The discount code is returned
+ * exclusively by showOfferCode to an active PAID subscriber (Plus/Supporter)
+ * or an admin, for active offers — and is never logged (legacy rule).
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -15,7 +16,8 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
 import { buildAdminAuditEvent } from '../admin/claims-core';
-import { requireMemberActor } from '../shared/memberActor';
+import { requireMemberActor, requirePaidOrAdminActor } from '../shared/memberActor';
+import { readFeatureFlag } from '../shared/featureFlags';
 import {
   buildOfferDocuments,
   buildOfferUpdates,
@@ -213,7 +215,17 @@ export interface ShowOfferCodeResponse {
 export const showOfferCode = onCall(
   CALLABLE_OPTS,
   async (request): Promise<ShowOfferCodeResponse> => {
-    const actor = await requireMemberActor(request);
+    // Member offers become a PAID product only while the dark
+    // `partnerMemberOffersRequirePaid` flag is ON: an active Plus/Supporter
+    // subscriber (or an admin) may reveal the discount code, a free (Community)
+    // caller is denied. While the flag is OFF the enforcement is inert and the
+    // callable keeps today's relaxed member gate — so the gate can deploy
+    // without hiding offers before billing is live. Both gates are
+    // server-authoritative and independent of the global member-gating switch.
+    const requirePaid = await readFeatureFlag('partnerMemberOffersRequirePaid');
+    const actor = requirePaid
+      ? await requirePaidOrAdminActor(request)
+      : await requireMemberActor(request);
 
     const parsed = parseShowOfferCodeInput(request.data);
     if (!parsed.ok) {

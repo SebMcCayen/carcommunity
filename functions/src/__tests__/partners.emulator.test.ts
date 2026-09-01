@@ -333,4 +333,64 @@ describe('offers and the three-tier privacy split', () => {
     ).data as { code: string | null };
     expect(revealed.code).toBe('KCC10');
   });
+
+  it('with partnerMemberOffersRequirePaid ON: only PAID subscribers (or admin) reveal the code', async () => {
+    const companyId = await createActiveCompany();
+    await signInAs(adminUser);
+    const created = (
+      await call('partners-createOffer', { ...validOffer, companyId })
+    ).data as { offerId: string };
+    await call('partners-setOfferStatus', { offerId: created.offerId, action: 'activate' });
+
+    // Flip the dark flag ON for the duration of this test only.
+    await adminDb
+      .collection('config')
+      .doc('featureFlags')
+      .set({ partnerMemberOffersRequirePaid: true }, { merge: true });
+    try {
+      // A free (Community) user — even one carrying the legacy activeMember flag
+      // but with no paid subscriptions/{uid} record — is now DENIED. `member`
+      // holds activeMember:true yet has no paid subscription, so it fails too.
+      await signInAs(freeUser);
+      expect(
+        await callableErrorCode(call('partners-showOfferCode', { offerId: created.offerId })),
+      ).toBe('functions/permission-denied');
+      await signInAs(member);
+      expect(
+        await callableErrorCode(call('partners-showOfferCode', { offerId: created.offerId })),
+      ).toBe('functions/permission-denied');
+
+      // A PAID subscriber (Plus) — an active member_monthly subscriptions record —
+      // reveals the code.
+      const paid = await createProvisionedUser('pt-paid');
+      await adminDb
+        .collection('subscriptions')
+        .doc(paid.uid)
+        .set({
+          userId: paid.uid,
+          platform: 'google',
+          status: 'active',
+          entitlement: 'member_monthly',
+          tier: 'plus',
+        });
+      await signInAs(paid);
+      const paidReveal = (
+        await call('partners-showOfferCode', { offerId: created.offerId })
+      ).data as { code: string | null };
+      expect(paidReveal.code).toBe('KCC10');
+
+      // An admin is never blocked by the paid gate.
+      await signInAs(adminUser);
+      const adminReveal = (
+        await call('partners-showOfferCode', { offerId: created.offerId })
+      ).data as { code: string | null };
+      expect(adminReveal.code).toBe('KCC10');
+    } finally {
+      // Reset the shared flag so other tests see the contract default (OFF).
+      await adminDb
+        .collection('config')
+        .doc('featureFlags')
+        .set({ partnerMemberOffersRequirePaid: false }, { merge: true });
+    }
+  });
 });

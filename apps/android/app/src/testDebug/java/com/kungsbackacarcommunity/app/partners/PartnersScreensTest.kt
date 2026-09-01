@@ -63,14 +63,14 @@ class PartnersScreensTest {
     }
 
     @Test
-    fun detail_nonMember_seesHint_noSaveOrCode() {
+    fun detail_freeUser_seesUpgradePrompt_noSaveOrCode() {
         composeTestRule.setContent {
             KccTheme {
                 PartnerDetailScreen(
                     company = company(),
                     offers = listOf(offer()),
                     savedOfferIds = emptySet(),
-                    passesMemberGate = false,
+                    canAccessMemberOffers = false,
                     expandedOfferId = null,
                     expandedOfferDetail = null,
                     codeStatus = OfferCodeStatus.Idle,
@@ -81,19 +81,22 @@ class PartnersScreensTest {
                 )
             }
         }
-        composeTestRule.onNodeWithText(str(R.string.partnerOffers_memberRequiredHint)).assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText(str(R.string.partnerOffers_upgradeForMemberOffers))
+            .assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.partnerOffers_showCode)).assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.partnerOffers_saveOffer)).assertDoesNotExist()
     }
 
     @Test
-    fun detail_member_expanded_showsCodeAfterReveal() {
+    fun detail_paidSubscriber_expanded_showsCodeAfterReveal() {
         composeTestRule.setContent {
             KccTheme {
                 PartnerDetailScreen(
                     company = company(),
                     offers = listOf(offer()),
                     savedOfferIds = setOf("o1"),
-                    passesMemberGate = true,
+                    canAccessMemberOffers = true,
                     expandedOfferId = "o1",
                     expandedOfferDetail = OfferMemberDetail("Great deal", null, "No cash value"),
                     codeStatus = OfferCodeStatus.Shown("o1", "SAVE20"),
@@ -118,7 +121,7 @@ class PartnersScreensTest {
                     company = company(),
                     offers = listOf(offer()),
                     savedOfferIds = emptySet(),
-                    passesMemberGate = true,
+                    canAccessMemberOffers = true,
                     expandedOfferId = null,
                     expandedOfferDetail = null,
                     codeStatus = OfferCodeStatus.Idle,
