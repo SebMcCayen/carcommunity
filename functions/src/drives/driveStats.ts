@@ -110,8 +110,13 @@ export const driveStats = onCall(
       const data = doc.data();
       return {
         distanceMeters: nullableNonnegativeNumber(data.distanceMeters),
+        // Same guard drives.listHistory applies: a corrupt negative or
+        // non-integer durationSeconds must not flow into totalDurationSeconds
+        // (schema minimum 0) — treat anything invalid as 0.
         durationSeconds:
-          typeof data.durationSeconds === 'number' && Number.isFinite(data.durationSeconds)
+          typeof data.durationSeconds === 'number' &&
+          Number.isSafeInteger(data.durationSeconds) &&
+          data.durationSeconds >= 0
             ? data.durationSeconds
             : 0,
         averageSpeedMps: nullableNonnegativeNumber(data.averageSpeedMetersPerSecond),
