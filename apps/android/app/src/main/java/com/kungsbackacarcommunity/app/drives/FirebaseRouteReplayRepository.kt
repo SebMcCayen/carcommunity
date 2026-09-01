@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.drives
 import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.functions.FirebaseFunctions
+import com.kungsbackacarcommunity.app.navigation.runCatchingCancellable
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -63,13 +64,15 @@ class FirebaseRouteReplayRepository private constructor(
 
         // One pipeline, one failure state: fetch the signed URL, download the
         // bytes, decode. Any throw (callable error, network, HTTP non-200,
-        // oversize) OR a null decode collapses to Unavailable, mirroring the old
-        // `runCatching{}.getOrNull() ?: Unavailable`. The whole pipeline runs on
-        // IO so the blocking HttpURLConnection read and the gzip/varint decode
-        // never touch Main (NetworkOnMainThreadException / jank).
+        // oversize) OR a null decode collapses to Unavailable. The whole pipeline
+        // runs on IO so the blocking HttpURLConnection read and the gzip/varint
+        // decode never touch Main (NetworkOnMainThreadException / jank).
+        // runCatchingCancellable (NOT plain runCatching) so a cancelled
+        // LaunchedEffect / navigation propagates its CancellationException instead
+        // of being swallowed into a spurious Unavailable.
         val points =
             withContext(Dispatchers.IO) {
-                runCatching {
+                runCatchingCancellable {
                     val url = fetchSignedUrl(rideId)
                     val bytes = downloadBytes(url)
                     RouteCodec.decode(bytes)

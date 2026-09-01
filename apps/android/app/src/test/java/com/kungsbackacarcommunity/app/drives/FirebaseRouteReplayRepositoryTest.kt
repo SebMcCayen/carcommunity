@@ -5,6 +5,7 @@ import java.io.OutputStream
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -92,6 +93,24 @@ class FirebaseRouteReplayRepositoryTest {
             )
 
         assertEquals(RouteReplayState.Unavailable, repo.loadRoute("uid-1", "ride-1"))
+    }
+
+    @Test
+    fun `cancellation propagates and is not collapsed to Unavailable`() = runTest {
+        val repo =
+            FirebaseRouteReplayRepository.createForTest(
+                fetchSignedUrl = { throw CancellationException("cancelled") },
+                downloadBytes = { throw AssertionError("downloader must not run") },
+            )
+
+        val thrown =
+            try {
+                repo.loadRoute("uid-1", "ride-1")
+                null
+            } catch (c: CancellationException) {
+                c
+            }
+        assertTrue("expected CancellationException to propagate but got $thrown", thrown != null)
     }
 
     @Test
