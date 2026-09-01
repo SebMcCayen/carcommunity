@@ -109,6 +109,15 @@
       "source": "docs/migration/backend-domain-mapping.md (documented as saveDrive)"
     },
     {
+      "name": "drives.listHistory",
+      "domain": "drives",
+      "description": "Returns a bounded, server-authoritative page of the caller's saved-drive metadata according to the effective subscription tier: Community gets the newest 5, Plus gets a rolling 90-day window, and Supporter gets paginated unlimited history. The response allowlists display fields and never exposes routePath, previewImagePath, sourceSessionId, or full GPS data. This first migration slice coexists with direct owner reads for already-released clients; Firestore/Storage closure follows only after the migrated Android client reaches testers. Deployed via grouped export as drives-listHistory (functions/src/drives/listDriveHistory.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/product-decisions.md (Subscription model)"
+    },
+    {
       "name": "drives.delete",
       "domain": "drives",
       "description": "Deletes an owned drive: removes the rideRoutes/{uid}/{rideId}/ Cloud Storage files first, then the rides/{rideId} document. Available to any active owner — membership not required (legacy parity: free users can delete drives saved during a previous membership). Deployed via grouped export as drives-delete (functions/src/drives/deleteDrive.ts).",

@@ -89,6 +89,110 @@
       "required": ["uid"],
       "additionalProperties": false
     },
+    "driveHistoryItem": {
+      "type": "object",
+      "description": "Allowlisted saved-drive metadata returned by drives.listHistory. Internal ownership, Storage-path, source-session and full-route fields are deliberately absent.",
+      "properties": {
+        "rideId": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "title": { "type": ["string", "null"], "maxLength": 200 },
+        "distanceMeters": { "type": ["number", "null"], "minimum": 0 },
+        "durationSeconds": { "type": "integer", "minimum": 0 },
+        "averageSpeedMetersPerSecond": { "type": ["number", "null"], "minimum": 0 },
+        "maxSpeedMetersPerSecond": { "type": ["number", "null"], "minimum": 0 },
+        "startedAtMillis": { "type": ["integer", "null"], "minimum": 0 },
+        "endedAtMillis": { "type": ["integer", "null"], "minimum": 0 },
+        "createdAtMillis": { "type": "integer", "minimum": 0 },
+        "routeThumbnail": { "type": ["string", "null"], "maxLength": 1000 },
+        "carImagePath": { "type": ["string", "null"], "maxLength": 500 },
+        "convoyMembers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/convoyMember" },
+          "maxItems": 24
+        }
+      },
+      "required": [
+        "rideId",
+        "title",
+        "distanceMeters",
+        "durationSeconds",
+        "averageSpeedMetersPerSecond",
+        "maxSpeedMetersPerSecond",
+        "startedAtMillis",
+        "endedAtMillis",
+        "createdAtMillis",
+        "routeThumbnail",
+        "carImagePath",
+        "convoyMembers"
+      ],
+      "additionalProperties": false
+    },
+    "listDriveHistoryRequest": {
+      "type": "object",
+      "description": "Optional cursor and bounded page size for drives.listHistory. Community never receives a continuation cursor.",
+      "properties": {
+        "cursorRideId": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "pageSize": { "type": "integer", "minimum": 1, "maximum": 25 }
+      },
+      "additionalProperties": false
+    },
+    "listDriveHistoryResponse": {
+      "type": "object",
+      "description": "Server-authoritative history page. Tier and time-window decisions are resolved from backend state and server time, never client claims or device time.",
+      "properties": {
+        "tier": { "enum": ["community", "plus", "supporter"] },
+        "policy": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": { "const": "latest_count" },
+                "limit": { "const": 5 }
+              },
+              "required": ["kind", "limit"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": { "const": "rolling_days" },
+                "days": { "const": 90 }
+              },
+              "required": ["kind", "days"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": { "kind": { "const": "unlimited" } },
+              "required": ["kind"],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "drives": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/driveHistoryItem" },
+          "maxItems": 25
+        },
+        "serverNowMillis": { "type": "integer", "minimum": 0 },
+        "windowStartsAtMillis": { "type": ["integer", "null"], "minimum": 0 },
+        "hasMore": { "type": "boolean" },
+        "nextCursorRideId": { "type": ["string", "null"], "maxLength": 300 },
+        "hasTierRestrictedHistory": { "type": ["boolean", "null"] },
+        "hiddenDriveCount": { "type": ["integer", "null"], "minimum": 0 }
+      },
+      "required": [
+        "tier",
+        "policy",
+        "drives",
+        "serverNowMillis",
+        "windowStartsAtMillis",
+        "hasMore",
+        "nextCursorRideId",
+        "hasTierRestrictedHistory",
+        "hiddenDriveCount"
+      ],
+      "additionalProperties": false
+    },
     "routePoint": {
       "type": "object",
       "description": "A single recorded GPS point submitted to drives.save. Points must be ordered by timestampMs.",
