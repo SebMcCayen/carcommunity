@@ -67,12 +67,16 @@ function voidedEnvelope(eventTimeMillis = 1000): DecodedRtdn {
 
 let applied: EntitlementRecordInput[];
 let marked: Array<{ hash: string; eventTimeMillis: number }>;
+let acknowledged: Array<{ productId: string; purchaseToken: string }>;
 
 function makeDeps(overrides: Partial<RtdnDeps> = {}): RtdnDeps {
   return {
     providerEnabled: vi.fn(async () => true),
     resolveOwner: vi.fn(async () => ({ uid: UID, productId: 'plus_monthly' as const })),
     verify: vi.fn(async () => activeOutcome),
+    acknowledge: vi.fn(async (productId: string, purchaseToken: string) => {
+      acknowledged.push({ productId, purchaseToken });
+    }),
     applyEntitlement: vi.fn(async (input: EntitlementRecordInput) => {
       applied.push(input);
     }),
@@ -86,9 +90,25 @@ function makeDeps(overrides: Partial<RtdnDeps> = {}): RtdnDeps {
   };
 }
 
+const pendingPurchaseOutcome: GooglePlayEntitlementOutcome = {
+  ...activeOutcome,
+  acknowledgementRequired: true,
+};
+
+function purchaseEnvelope(eventTimeMillis = 1000): DecodedRtdn {
+  return {
+    kind: 'subscription',
+    packageName: GOOGLE_PLAY_PACKAGE_NAME,
+    eventTimeMillis,
+    // notificationType 4 = SUBSCRIPTION_PURCHASED.
+    notification: { notificationType: 4, purchaseToken: RAW_TOKEN, subscriptionId: 'plus_monthly' },
+  };
+}
+
 beforeEach(() => {
   applied = [];
   marked = [];
+  acknowledged = [];
 });
 
 describe('runRtdnNotification — gating and routing', () => {
@@ -207,6 +227,53 @@ describe('runRtdnNotification — authoritative transitions', () => {
       startsAt: new Date('2026-07-01T00:00:00Z'),
       expiresAt: new Date('2026-08-01T00:00:00Z'),
     });
+  });
+});
+
+describe('runRtdnNotification — acknowledgement (billing-critical)', () => {
+  it('acknowledges a first-seen SUBSCRIPTION_PURCHASED after granting, then marks processed', async () => {
+    const deps = makeDeps({ verify: vi.fn(async () => pendingPurchaseOutcome) });
+    const outcome = await mod.runRtdnNotification(purchaseEnvelope(), deps);
+    expect(outcome).toBe('applied');
+    // Grant happened, then acknowledge with the RAW token + product id.
+    expect(applied).toHaveLength(1);
+    expect(acknowledged).toEqual([{ productId: 'plus_monthly', purchaseToken: RAW_TOKEN }]);
+    // Only marked processed AFTER a successful acknowledge.
+    expect(marked).toHaveLength(1);
+  });
+
+  it('does not acknowledge an already-acknowledged purchase', async () => {
+    // activeOutcome has acknowledgementRequired: false.
+    const deps = makeDeps();
+    await mod.runRtdnNotification(subscriptionEnvelope(), deps);
+    expect(acknowledged).toEqual([]);
+  });
+
+  it('does not acknowledge a downgrade/revoke transition', async () => {
+    const expiredPending: GooglePlayEntitlementOutcome = {
+      ...pendingPurchaseOutcome,
+      status: 'expired',
+      entitlement: 'none',
+    };
+    const deps = makeDeps({ verify: vi.fn(async () => expiredPending) });
+    await mod.runRtdnNotification(purchaseEnvelope(), deps);
+    expect(acknowledged).toEqual([]);
+  });
+
+  it('throws (→ retry) and does NOT advance the watermark when acknowledge fails', async () => {
+    const deps = makeDeps({
+      verify: vi.fn(async () => pendingPurchaseOutcome),
+      acknowledge: vi.fn(async () => {
+        throw new GooglePlayApiError('acknowledge');
+      }),
+    });
+    await expect(mod.runRtdnNotification(purchaseEnvelope(), deps)).rejects.toBeInstanceOf(
+      mod.TransientRtdnError,
+    );
+    // Entitlement was granted, but the idempotency watermark stayed put so the
+    // Pub/Sub retry re-runs and re-acknowledges.
+    expect(applied).toHaveLength(1);
+    expect(marked).toEqual([]);
   });
 });
 

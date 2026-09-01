@@ -81,7 +81,11 @@ export interface ReconcileResult {
   underPrivilegedCount: number;
   /** Records whose Auth account no longer exists. */
   orphanedCount: number;
-  /** Records whose reconciliation threw and will be retried next run. */
+  /**
+   * Records whose reconciliation threw. Left in place with no cursor special
+   * casing, so a failure is retried when the rotating cursor next WRAPS back
+   * around to this record — not on the immediately following run.
+   */
   failedCount: number;
   reconciledUids: string[];
 }
@@ -144,7 +148,7 @@ export async function runSubscriptionReconciliation(
       }
     } catch (error) {
       failedCount += 1;
-      logger.error('Subscription reconciliation failed for a record; will retry next run', {
+      logger.error('Subscription reconciliation failed for a record; will retry on next wrap', {
         uid: id,
         error: String(error),
       });

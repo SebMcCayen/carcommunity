@@ -91,6 +91,13 @@ export interface RtdnDeps {
     now: Date,
   ) => Promise<GooglePlayEntitlementOutcome>;
   applyEntitlement: (input: EntitlementRecordInput) => Promise<void>;
+  /**
+   * Server-side purchase acknowledgement — the SAME client routine the verify
+   * callable uses (client.acknowledgeSubscription). Google auto-cancels and
+   * refunds any purchase left unacknowledged for ~3 days, so a purchase first
+   * seen via RTDN must be acknowledged here too.
+   */
+  acknowledge: (productId: string, purchaseToken: string) => Promise<void>;
   /** Historical fields of the current subscriptions/{uid} record, for revoke. */
   readStoredSubscription: (uid: string) => Promise<StoredSubscriptionFields | null>;
   /** Idempotency high-watermark for a token (the last eventTimeMillis applied). */
@@ -275,6 +282,24 @@ export async function runRtdnNotification(
     startsAt: outcome.startsAt,
     expiresAt: outcome.expiresAt,
   });
+
+  // ACKNOWLEDGE, mirroring the verify callable: Google auto-cancels/refunds a
+  // purchase left unacknowledged for ~3 days, so a SUBSCRIPTION_PURCHASED (or
+  // a recovery) first observed via RTDN must be acknowledged after the grant.
+  // Done BEFORE markProcessed on purpose: an ack failure throws (transient
+  // retry) WITHOUT advancing the idempotency watermark, so the Pub/Sub retry
+  // re-runs and re-acknowledges. The retry re-fetches authoritative state, so
+  // an ack that actually succeeded shows ACKNOWLEDGED and is not repeated —
+  // the same idempotency the verify path relies on.
+  if (outcome.entitlement === 'member_monthly' && outcome.acknowledgementRequired) {
+    try {
+      await deps.acknowledge(outcome.productId, decoded.notification.purchaseToken);
+    } catch {
+      logger.error('RTDN purchase acknowledgement failed; will retry', { uid: owner.uid, type });
+      throw new TransientRtdnError('acknowledge_failed');
+    }
+  }
+
   await deps.markProcessed(purchaseTokenHash, decoded.eventTimeMillis, `subscription:${type}`);
   logger.info('RTDN subscription notification applied', {
     uid: owner.uid,
@@ -369,6 +394,8 @@ export function productionRtdnDeps(): RtdnDeps {
         expectedObfuscatedAccountId,
         now,
       }),
+    acknowledge: (productId, purchaseToken) =>
+      client.acknowledgeSubscription(productId, purchaseToken),
     applyEntitlement,
     readStoredSubscription: readStoredSubscriptionRecord,
     lastProcessedEventTime: lastProcessedEventTimeFromStore,
