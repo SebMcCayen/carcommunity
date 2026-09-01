@@ -17,9 +17,11 @@ import org.junit.Test
  * exercised through the package-internal test seam ([FirebaseRouteReplayRepository.createForTest])
  * with a fake signed-URL provider and a fake downloader, so no Firebase or live
  * network is needed. Separately, the REAL [java.net.HttpURLConnection] download
- * path ([FirebaseRouteReplayRepository.httpDownload]) is driven against a
- * loopback `HttpServer` to cover the success / non-200 / oversize behaviour that
- * the fake downloader cannot.
+ * path ([FirebaseRouteReplayRepository.httpDownload]) is driven against a raw
+ * loopback [java.net.ServerSocket] responder (deliberately NOT
+ * `com.sun.net.httpserver`, which is absent from the Android unit-test
+ * classpath) to cover the success / non-200 / oversize behaviour that the fake
+ * downloader cannot.
  *
  * The single observable contract is: success → [RouteReplayState.Ready];
  * EVERYTHING else → [RouteReplayState.Unavailable].
@@ -197,6 +199,21 @@ class FirebaseRouteReplayRepositoryTest {
             assertThrowsIo { FirebaseRouteReplayRepository.httpDownload(url) }
         }
     }
+
+    @Test
+    fun `httpDownload fails fast on an over-cap Content-Length without reading the body`() =
+        runTest {
+            // Advertise an over-cap length and send NO body. Fail-fast must throw
+            // from the header alone; without it, readBounded would just hit EOF and
+            // return an empty array (no throw) — so this distinguishes the two.
+            val declared = FirebaseRouteReplayRepository.MAX_ROUTE_BYTES + 1
+            withRawServer({ out ->
+                out.write("HTTP/1.1 200 OK\r\nContent-Length: $declared\r\nConnection: close\r\n\r\n".toByteArray())
+                out.flush()
+            }) { url ->
+                assertThrowsIo { FirebaseRouteReplayRepository.httpDownload(url) }
+            }
+        }
 
     // ---- helpers ------------------------------------------------------------
 

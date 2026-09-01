@@ -166,6 +166,14 @@ class FirebaseRouteReplayRepository private constructor(
                     if (status != HttpURLConnection.HTTP_OK) {
                         throw IOException("route download HTTP $status")
                     }
+                    // Fail fast on an advertised over-cap length so a hostile
+                    // server can't make us stream 16 MiB before aborting. The
+                    // bounded reader below is still the backstop for chunked /
+                    // unknown-length (-1) responses that lie or omit the header.
+                    val declaredLength = connection.contentLengthLong
+                    if (declaredLength > MAX_ROUTE_BYTES) {
+                        throw IOException("route Content-Length $declaredLength exceeds $MAX_ROUTE_BYTES")
+                    }
                     connection.inputStream.use { input -> readBounded(input) }
                 } finally {
                     connection.disconnect()
