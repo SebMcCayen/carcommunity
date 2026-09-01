@@ -210,7 +210,9 @@ export const listDriveHistory = onCall(
     const snapshot = await query.limit(driveHistoryReadLimit(policy, pageSize)).get();
     const hasMoreWithinPolicy = policy.kind !== 'latest_count' && snapshot.size > pageSize;
     const visibleDocs = snapshot.docs.slice(0, pageSize);
-    const drives = visibleDocs.map(toDriveHistoryItem).filter((drive) => drive != null);
+    const drives = visibleDocs
+      .map(toDriveHistoryItem)
+      .filter((drive): drive is DriveHistoryItem => drive != null);
 
     return {
       tier,

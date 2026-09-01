@@ -63,7 +63,7 @@ export function driveHistoryPolicyForTier(
 
 export function driveHistoryPageSize(policy: DriveHistoryPolicy, requested?: number): number {
   if (policy.kind === 'latest_count') return policy.limit;
-  return requested ?? DRIVE_HISTORY_PAGE_SIZE_DEFAULT;
+  return Math.min(requested ?? DRIVE_HISTORY_PAGE_SIZE_DEFAULT, DRIVE_HISTORY_PAGE_SIZE_MAX);
 }
 
 /**

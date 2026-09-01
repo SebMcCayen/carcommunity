@@ -3,6 +3,7 @@ import {
   COMMUNITY_DRIVE_HISTORY_LIMIT,
   DAY_MS,
   DRIVE_HISTORY_PAGE_SIZE_DEFAULT,
+  DRIVE_HISTORY_PAGE_SIZE_MAX,
   PLUS_DRIVE_HISTORY_DAYS,
   driveHistoryPageSize,
   driveHistoryPolicyForTier,
@@ -35,7 +36,7 @@ describe('drive-history tier policy', () => {
   it('gives Supporter paginated unlimited history', () => {
     const policy = driveHistoryPolicyForTier('supporter', NOW);
     expect(policy).toEqual({ kind: 'unlimited' });
-    expect(driveHistoryPageSize(policy, 75)).toBe(75);
+    expect(driveHistoryPageSize(policy, 75)).toBe(DRIVE_HISTORY_PAGE_SIZE_MAX);
     expect(driveHistoryReadLimit(policy, 25)).toBe(26);
   });
 });
