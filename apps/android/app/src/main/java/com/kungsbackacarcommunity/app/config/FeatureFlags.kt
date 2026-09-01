@@ -94,6 +94,24 @@ enum class FeatureFlag(val key: String, val default: Boolean) {
      * until then. Message reactions are a separate future feature.
      */
     CHAT_REPLIES("chatReplies", false),
+
+    /**
+     * The Slice-D subscription gate on FULL event details. Default OFF, and that
+     * default is load-bearing: billing is not live yet (no member holds a paid
+     * tier), so while OFF the app shows full event details AND the attendee list
+     * to everyone — exactly as today. On, the exact address + long description and
+     * the attendee list become a paid benefit (Plus or Supporter): a free
+     * Community viewer sees the basic view (title, date/time, general area, place
+     * name, short summary) plus an upgrade prompt, and no "who answered" roster.
+     *
+     * Read via the LIVE feature-flag listener (the same `flags` StateFlow every
+     * other flag uses), combined with the stored subscription tier: while OFF the
+     * detail screen is handed isPaidSubscriber=true (full view for all); while ON
+     * it is handed the real paid-tier value. The attendee list is ALSO enforced
+     * server-side by events-listAttendees behind the same flag. Must stay OFF
+     * until Play billing goes live, then be turned on deliberately.
+     */
+    EVENT_DETAILS_REQUIRE_PAID("eventDetailsRequirePaid", false),
 }
 
 /**

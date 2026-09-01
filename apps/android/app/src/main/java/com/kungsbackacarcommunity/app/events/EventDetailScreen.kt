@@ -80,6 +80,18 @@ fun EventDetailScreen(
     onRsvp: (RsvpStatus) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    // Whether the viewer holds a PAID subscription (Plus or Supporter). The FULL
+    // detail (exact street address + long description) and the attendee list are
+    // a paid benefit (Slice D): a paid viewer sees them, a free (Community) viewer
+    // sees the basic view — title, date/time, general area, place name and short
+    // summary, all rendered above the gate — plus an upgrade prompt in place of
+    // the full detail card, and no "who answered" roster. The attendee list is
+    // ALSO enforced server-side (events-listAttendees returns requiresPaid for a
+    // free caller); this flag is the UX half.
+    isPaidSubscriber: Boolean = false,
+    // Opens the subscription screen from the upgrade prompt. Null renders the
+    // prompt as an informational card with no action (config-less build).
+    onUpgrade: (() -> Unit)? = null,
     // True until the first Firestore snapshot arrives, so a null event reads
     // as "loading" rather than "error" on the very first composition.
     isLoading: Boolean = false,
@@ -299,7 +311,15 @@ fun EventDetailScreen(
             // non-published event sees neither (the cancelled notice above already
             // explains the state).
             if (Events.canSeeDetails(passesMemberGate, event.status)) {
-                DetailCard(detail)
+                if (isPaidSubscriber) {
+                    DetailCard(detail)
+                } else {
+                    // Community (free): the exact address + long description are a
+                    // paid benefit. The basic view (title, date/time, general area,
+                    // place name, short summary) already renders above this gate, so
+                    // here we show only the upgrade prompt in place of the full card.
+                    UpgradeCard(onUpgrade = onUpgrade)
+                }
             } else if (!passesMemberGate) {
                 InfoCard(
                     title = stringResource(R.string.events_memberRequiredTitle),
@@ -339,16 +359,23 @@ fun EventDetailScreen(
                 // Who answered — behind a button so the roster never makes the page
                 // long, and its events-listAttendees read is deferred until the
                 // viewer asks (onRevealAttendees). Tapping opens a dialog listing the
-                // people who answered, grouped by their answer. Same member+published
-                // gate as the details, so the roster is never teased to a non-member.
-                OutlinedButton(
-                    onClick = {
-                        showAttendeesDialog = true
-                        onRevealAttendees?.invoke()
-                    },
-                    modifier = Modifier.fillMaxWidth().testTag(EVENT_DETAIL_REVEAL_ATTENDEES_TAG),
-                ) {
-                    Text(text = stringResource(R.string.events_attendeesReveal))
+                // people who answered, grouped by their answer. The attendee LIST is
+                // a paid benefit (Slice D) — server-enforced by events-listAttendees
+                // (requiresPaid for a free caller) and mirrored here: a free viewer
+                // never sees the reveal button (the upgrade card above states the
+                // roster is paid). The public rsvpCounts tally still shows for
+                // everyone via RsvpCountsBreakdown, so a free viewer sees HOW MANY
+                // answered, just not WHO.
+                if (isPaidSubscriber) {
+                    OutlinedButton(
+                        onClick = {
+                            showAttendeesDialog = true
+                            onRevealAttendees?.invoke()
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag(EVENT_DETAIL_REVEAL_ATTENDEES_TAG),
+                    ) {
+                        Text(text = stringResource(R.string.events_attendeesReveal))
+                    }
                 }
             }
 
@@ -995,6 +1022,10 @@ const val EVENT_DETAIL_REMOVE_CONFIRM_TAG = "events_detail_remove_confirm"
 /** Test tag on the "Check who answered" button that opens the attendee roster dialog. */
 const val EVENT_DETAIL_REVEAL_ATTENDEES_TAG = "events_detail_reveal_attendees"
 
+/** Test tags on the free-viewer paid-upgrade prompt card and its action button. */
+const val EVENT_DETAIL_UPGRADE_TAG = "events_detail_upgrade"
+const val EVENT_DETAIL_UPGRADE_ACTION_TAG = "events_detail_upgrade_action"
+
 /** Test tag on the three-way RSVP count breakdown (Going / Maybe / Can't go). */
 const val RSVP_COUNTS_BREAKDOWN_TAG = "events_detail_rsvp_counts_breakdown"
 
@@ -1052,6 +1083,46 @@ private fun DetailCard(detail: EventDetail?) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+    }
+}
+
+/**
+ * The paid-upgrade prompt shown in place of the full detail card to a free
+ * (Community) viewer. States that the exact location, full description and the
+ * attendee list are a paid benefit, and — when [onUpgrade] is wired — offers a
+ * button into the subscription screen. Swedish primary copy
+ * ("Uppgradera för fullständig information"). The basic view (title, date, area,
+ * place name, summary) is unaffected: it renders above this card.
+ */
+@Composable
+private fun UpgradeCard(onUpgrade: (() -> Unit)?) {
+    Card(
+        modifier = Modifier.fillMaxWidth().testTag(EVENT_DETAIL_UPGRADE_TAG),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.events_upgradeDetailsTitle),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = stringResource(R.string.events_upgradeDetailsBody),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (onUpgrade != null) {
+                Button(
+                    onClick = onUpgrade,
+                    modifier = Modifier.fillMaxWidth().testTag(EVENT_DETAIL_UPGRADE_ACTION_TAG),
+                ) {
+                    Text(text = stringResource(R.string.events_upgradeDetailsAction))
+                }
             }
         }
     }
@@ -1132,6 +1203,7 @@ private fun EventDetailPreview() {
             detail = EventDetail("Bring your car.", "Storgatan 1"),
             myRsvp = RsvpStatus.GOING,
             passesMemberGate = true,
+            isPaidSubscriber = true,
             rsvpStatus = RsvpStatusUi.Idle,
             onRsvp = {},
             onBack = {},

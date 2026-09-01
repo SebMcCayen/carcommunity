@@ -9,6 +9,9 @@
  * - a member the caller blocked, AND a member who blocked the caller, are both
  *   filtered out (block honoured in either direction)
  * - a deleted / missing users/{uid} is skipped rather than shown nameless
+ * - SUBSCRIPTION GATE (Slice D): a free Community caller gets an empty roster +
+ *   requiresPaid; a paid tier (Plus/Supporter) or an admin gets the real roster
+ *   with requiresPaid:false
  *
  * NOTE: member gating is currently DISABLED (shared/memberGating.ts), so a
  * signed-in, non-suspended account passes the member gate regardless of the
@@ -121,6 +124,26 @@ async function setRsvp(eventId: string, uid: string, status: string): Promise<vo
     .set({ status, updatedAt: new Date() });
 }
 
+/**
+ * Grants a PAID subscription (Plus/Supporter) to a user, so the subscription
+ * gate on events-listAttendees (Slice D) admits them to the roster. Mirrors the
+ * shape effectiveSubscriptionTierFromStoredRecord resolves: an active
+ * member_monthly record with an explicit paid tier and a matching userId.
+ */
+async function grantPaidSubscription(uid: string, tier: 'plus' | 'supporter'): Promise<void> {
+  await adminDb.collection('subscriptions').doc(uid).set({
+    userId: uid,
+    platform: 'manual',
+    status: 'active',
+    entitlement: 'member_monthly',
+    tier,
+    purchaseTokenHash: null,
+    startsAt: null,
+    expiresAt: null,
+    updatedAt: new Date(),
+  });
+}
+
 let adminUser: TestUser;
 let viewer: TestUser;
 let going: TestUser;
@@ -228,7 +251,11 @@ describe('events-listAttendees', () => {
   it('returns the roster of a published event, grouped by status', async () => {
     await signInAs(viewer);
     const result = await call('events-listAttendees', { eventId: publishedEventId });
-    const attendees = (result.data as { attendees: Attendee[] }).attendees;
+    const payload = result.data as { attendees: Attendee[]; requiresPaid: boolean };
+    // Flag OFF (default): the roster is served to everyone — viewer holds no
+    // subscription (Community) yet still gets the full list, requiresPaid:false.
+    expect(payload.requiresPaid).toBe(false);
+    const attendees = payload.attendees;
     const byId = new Map(attendees.map((a) => [a.userId, a]));
 
     // going / maybe / not_going all present with the right answer + identity.
@@ -270,5 +297,76 @@ describe('events-listAttendees', () => {
     expect(await callableErrorCode(call('events-listAttendees', { eventId: 'no-such-event' }))).toBe(
       'functions/not-found',
     );
+  });
+
+  it('serves a free (Community) caller the full roster while the gate is OFF', async () => {
+    // Flag OFF baseline (billing not live): a caller with no subscription still
+    // gets the real list — the gate is dark, so nothing is withheld.
+    await signInAs(going);
+    const result = await call('events-listAttendees', { eventId: publishedEventId });
+    const payload = result.data as { attendees: Attendee[]; requiresPaid: boolean };
+    expect(payload.requiresPaid).toBe(false);
+    expect(payload.attendees.length).toBeGreaterThan(0);
+  });
+});
+
+// The subscription gate is DARK by default; these cases turn the
+// `eventDetailsRequirePaid` flag ON (as an operator would at Play billing
+// go-live) and assert the paid-vs-free behaviour, then restore the flag OFF so
+// the shared-emulator Firestore is left as the other suites expect.
+describe('events-listAttendees — subscription gate ON (eventDetailsRequirePaid)', () => {
+  beforeAll(async () => {
+    await adminDb
+      .collection('config')
+      .doc('featureFlags')
+      .set({ eventDetailsRequirePaid: true }, { merge: true });
+  });
+
+  afterAll(async () => {
+    await adminDb
+      .collection('config')
+      .doc('featureFlags')
+      .set({ eventDetailsRequirePaid: false }, { merge: true });
+  });
+
+  it('denies a free (Community) caller the roster, returning requiresPaid', async () => {
+    // `going` holds no subscription → Community. The gate withholds the names
+    // server-side (empty roster) and flags requiresPaid so the client can show
+    // an upgrade prompt rather than a fabricated "nobody answered".
+    await signInAs(going);
+    const result = await call('events-listAttendees', { eventId: publishedEventId });
+    const payload = result.data as { attendees: Attendee[]; requiresPaid: boolean };
+    expect(payload.requiresPaid).toBe(true);
+    expect(payload.attendees).toEqual([]);
+  });
+
+  it('grants a Plus caller the roster', async () => {
+    await grantPaidSubscription(viewer.uid, 'plus');
+    await signInAs(viewer);
+    const result = await call('events-listAttendees', { eventId: publishedEventId });
+    const payload = result.data as { attendees: Attendee[]; requiresPaid: boolean };
+    expect(payload.requiresPaid).toBe(false);
+    expect(payload.attendees.length).toBeGreaterThan(0);
+  });
+
+  it('grants a Supporter caller the roster', async () => {
+    // A second paid tier: promote `going` to Supporter and the same event now
+    // returns the real list.
+    await grantPaidSubscription(going.uid, 'supporter');
+    await signInAs(going);
+    const result = await call('events-listAttendees', { eventId: publishedEventId });
+    const payload = result.data as { attendees: Attendee[]; requiresPaid: boolean };
+    expect(payload.requiresPaid).toBe(false);
+    expect(payload.attendees.length).toBeGreaterThan(0);
+  });
+
+  it('grants an admin the roster even without a subscription', async () => {
+    // Admins moderate through the app and never hold a subscription, so the
+    // gate admits them regardless of tier.
+    await signInAs(adminUser);
+    const result = await call('events-listAttendees', { eventId: publishedEventId });
+    const payload = result.data as { attendees: Attendee[]; requiresPaid: boolean };
+    expect(payload.requiresPaid).toBe(false);
+    expect(payload.attendees.length).toBeGreaterThan(0);
   });
 });

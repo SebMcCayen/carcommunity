@@ -239,6 +239,74 @@ class EventsScreensTest {
     }
 
     /**
+     * Slice-D subscription gate (flag ON path). A free viewer who passes the
+     * member gate but is NOT a paid subscriber sees the BASIC view: the upgrade
+     * prompt in place of the full detail card, no full description, and no
+     * "Check who answered" roster reveal — but RSVP and the public counts stay,
+     * since RSVP is free and the tally is public.
+     */
+    @Test
+    fun detail_freeSubscriber_seesUpgradePrompt_basicView_noRosterReveal() {
+        composeTestRule.setContent {
+            KccTheme {
+                EventDetailScreen(
+                    event = event(),
+                    detail = EventDetail(description = "Bring your car", address = "Storgatan 1"),
+                    myRsvp = null,
+                    passesMemberGate = true,
+                    isPaidSubscriber = false,
+                    onUpgrade = {},
+                    rsvpStatus = RsvpStatusUi.Idle,
+                    onRsvp = {},
+                    onBack = {},
+                )
+            }
+        }
+        // Upgrade prompt shown instead of the full detail card.
+        composeTestRule.onNodeWithTag(EVENT_DETAIL_UPGRADE_TAG).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.events_upgradeDetailsAction)).assertIsDisplayed()
+        // The paid-only fields (full description, precise address) are NOT shown.
+        composeTestRule.onNodeWithText("Bring your car").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Storgatan 1").assertDoesNotExist()
+        // No "who answered" roster reveal for a free viewer.
+        composeTestRule.onNodeWithTag(EVENT_DETAIL_REVEAL_ATTENDEES_TAG).assertDoesNotExist()
+        // RSVP + public counts remain: RSVP is a free action, the tally is public.
+        composeTestRule.onNodeWithTag(rsvpButtonTag(RsvpStatus.GOING)).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(RSVP_COUNTS_BREAKDOWN_TAG).performScrollTo().assertIsDisplayed()
+    }
+
+    /**
+     * The paid counterpart: a Plus/Supporter viewer sees the FULL detail (long
+     * description + precise address) and the "Check who answered" reveal, and NOT
+     * the upgrade prompt.
+     */
+    @Test
+    fun detail_paidSubscriber_seesFullDetail_andRosterReveal() {
+        composeTestRule.setContent {
+            KccTheme {
+                EventDetailScreen(
+                    event = event(),
+                    detail = EventDetail(description = "Bring your car", address = "Storgatan 1"),
+                    myRsvp = null,
+                    passesMemberGate = true,
+                    isPaidSubscriber = true,
+                    onUpgrade = {},
+                    rsvpStatus = RsvpStatusUi.Idle,
+                    onRsvp = {},
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText("Bring your car").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Storgatan 1").assertIsDisplayed()
+        composeTestRule
+            .onNodeWithTag(EVENT_DETAIL_REVEAL_ATTENDEES_TAG)
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EVENT_DETAIL_UPGRADE_TAG).assertDoesNotExist()
+    }
+
+    /**
      * The place name is PUBLIC teaser data since the 2026-07 open-up (it labels
      * the map pin every signed-in user can see), so a non-member who opens the
      * detail from a pin must still be told WHERE the event is — only the precise
