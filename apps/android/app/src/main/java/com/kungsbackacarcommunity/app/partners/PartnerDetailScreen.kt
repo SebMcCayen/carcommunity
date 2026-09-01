@@ -23,7 +23,8 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
  * show the teaser to any authenticated user; only a viewer who passes the
  * member-offer gate ([canAccessMemberOffers]) can save/unsave a bookmark, expand
  * the member detail, and reveal the discount code (callable). A viewer who does
- * not sees the teaser plus an "upgrade" prompt in place of the member content.
+ * not pass it sees the teaser plus an "upgrade" prompt in place of the member
+ * content.
  * The gate is dark-flagged by the caller: while partnerMemberOffersRequirePaid
  * is ON it means a PAID subscriber (Plus/Supporter); while OFF it is the relaxed
  * member gate (every signed-in user), so the prompt never shows.

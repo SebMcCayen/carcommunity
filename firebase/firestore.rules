@@ -66,28 +66,37 @@ service cloud.firestore {
       return isAuthenticated() && isNotSuspended();
     }
 
-    // True when [sub] (a subscriptions/{uid} document's data) resolves to a
-    // PAID tier right now. Mirrors functions/src/subscription/subscription-core
+    // True when [sub] (a subscriptions/{uid} document Resource, or null when the
+    // record is absent) resolves to a PAID tier right now. Null-safe so the
+    // single get() below needs no companion exists() — a missing record short-
+    // circuits to false. Mirrors functions/src/subscription/subscription-core
     // effectiveSubscriptionTierFromStoredRecord + isPaidSubscriptionTier:
     // the legacy `member_monthly` entitlement, an access-granting status, and
     // a Plus/Supporter tier. A legacy record without an explicit tier is Plus
     // (paid), matching the original member_monthly product.
     function isPaidSubscriptionRecord(sub) {
-      return sub.entitlement == 'member_monthly'
-        && sub.status in ['active', 'grace_period', 'cancelled']
-        && (!('tier' in sub) || sub.tier == 'plus' || sub.tier == 'supporter');
+      return sub != null
+        // Mirror effectiveSubscriptionTierFromStoredRecord's expectedUserId
+        // guard: a record whose stored userId disagrees with the reader is
+        // malformed and must NOT count as paid (present-but-mismatched only;
+        // an absent userId is tolerated, exactly as the backend does).
+        && (!('userId' in sub.data) || sub.data.userId == request.auth.uid)
+        && sub.data.entitlement == 'member_monthly'
+        && sub.data.status in ['active', 'grace_period', 'cancelled']
+        && (!('tier' in sub.data) || sub.data.tier == 'plus' || sub.data.tier == 'supporter');
     }
 
     // Active PAID subscriber (Plus or Supporter). Reads the authoritative
-    // subscriptions/{uid} record (written by Cloud Functions only). Suspension
-    // always overrides entitlement. INDEPENDENT of the isActiveMember() gating
-    // switch above: partner member offers are a paid product and must stay
-    // gated on the PAID tier even while the global member gate is relaxed.
+    // subscriptions/{uid} record (written by Cloud Functions only) with a SINGLE
+    // get() — a missing doc returns null, which isPaidSubscriptionRecord treats
+    // as false. Suspension always overrides entitlement. INDEPENDENT of the
+    // isActiveMember() gating switch above: partner member offers are a paid
+    // product and must stay gated on the PAID tier even while the global member
+    // gate is relaxed.
     function isPaidSubscriber() {
       return isAuthenticated() && isNotSuspended()
-        && exists(/databases/$(database)/documents/subscriptions/$(request.auth.uid))
         && isPaidSubscriptionRecord(
-          get(/databases/$(database)/documents/subscriptions/$(request.auth.uid)).data
+          get(/databases/$(database)/documents/subscriptions/$(request.auth.uid))
         );
     }
 
@@ -1002,8 +1011,12 @@ service cloud.firestore {
         // (Community) caller is denied. While the flag is OFF the gate falls
         // back to the relaxed isActiveMember(), i.e. exactly today's behaviour,
         // so this rule deploys inert until billing go-live.
+        // isAuthenticated() FIRST so an unauthenticated (always-denied) probe
+        // short-circuits before the offer/flag/subscription get()s below —
+        // those doc reads must never run for a signed-out caller.
         allow read: if isAdmin()
-          || (get(/databases/$(database)/documents/offers/$(offerId)).data.status == 'active'
+          || (isAuthenticated()
+            && get(/databases/$(database)/documents/offers/$(offerId)).data.status == 'active'
             && (partnerMemberOffersRequirePaid() ? isPaidSubscriber() : isActiveMember()));
         // No client writes.
       }

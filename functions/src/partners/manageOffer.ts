@@ -1,14 +1,21 @@
 /**
  * partners.createOffer / updateOffer / setOfferStatus — admin callables,
- * and partners.showOfferCode — paid-subscriber callable
+ * and partners.showOfferCode — member-facing callable
  * (contracts/functions/functions.json).
  *
  * Deployed via the `partners` export group. Offers use the THREE-TIER
  * privacy split (legacy parity): the teaser document (public to any
- * authenticated user), the paid-gated details/member document, and the
+ * authenticated user), the member details/member document, and the
  * backend-only secret/code document. The discount code is returned
- * exclusively by showOfferCode to an active PAID subscriber (Plus/Supporter)
- * or an admin, for active offers — and is never logged (legacy rule).
+ * exclusively by showOfferCode for active offers, and is never logged
+ * (legacy rule).
+ *
+ * showOfferCode's gate is DARK-FLAGGED by `partnerMemberOffersRequirePaid`
+ * (contract default OFF): while OFF the callable keeps the relaxed member
+ * gate (requireMemberActor — today, every signed-in non-suspended user);
+ * while ON member offers are a PAID product, so only an active Plus/Supporter
+ * subscriber or an admin may reveal the code. Independent of the global
+ * member-gating switch; inert until billing go-live.
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -215,6 +222,11 @@ export interface ShowOfferCodeResponse {
 export const showOfferCode = onCall(
   CALLABLE_OPTS,
   async (request): Promise<ShowOfferCodeResponse> => {
+    // Cheap auth guard FIRST: reject unauthenticated callers before any
+    // Firestore read, so an anonymous caller cannot force the flag lookup below.
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Sign in to continue.');
+    }
     // Member offers become a PAID product only while the dark
     // `partnerMemberOffersRequirePaid` flag is ON: an active Plus/Supporter
     // subscriber (or an admin) may reveal the discount code, a free (Community)

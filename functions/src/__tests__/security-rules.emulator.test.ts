@@ -1013,9 +1013,14 @@ describe('Firestore – partners (Phase 9i)', () => {
     const PAID = 'partner-rules-paid';
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
       const firestore = ctx.firestore();
-      await setDoc(doc(firestore, 'config', 'featureFlags'), {
-        partnerMemberOffersRequirePaid: true,
-      });
+      // merge:true — config/featureFlags is shared across suites; overwriting
+      // the whole doc would wipe flags other tests seeded and make ordering
+      // matter (known emulator gotcha).
+      await setDoc(
+        doc(firestore, 'config', 'featureFlags'),
+        { partnerMemberOffersRequirePaid: true },
+        { merge: true },
+      );
       // An active Plus subscription record for the paid user.
       await setDoc(doc(firestore, 'subscriptions', PAID), {
         userId: PAID,
@@ -1041,10 +1046,13 @@ describe('Firestore – partners (Phase 9i)', () => {
       await assertSucceeds(getDoc(doc(adminFs, 'offers', 'of-active', 'details', 'member')));
     } finally {
       // Reset the shared flag so later describe blocks see the default (OFF).
+      // merge:true so only this field is touched, not other suites' flags.
       await testEnv.withSecurityRulesDisabled(async (ctx) => {
-        await setDoc(doc(ctx.firestore(), 'config', 'featureFlags'), {
-          partnerMemberOffersRequirePaid: false,
-        });
+        await setDoc(
+          doc(ctx.firestore(), 'config', 'featureFlags'),
+          { partnerMemberOffersRequirePaid: false },
+          { merge: true },
+        );
       });
     }
   });
