@@ -229,12 +229,12 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     label: 'Subscription reconciliation backstop',
     schedule: 'every 6 hours',
     runsPerDay: 4,
-    // Cursor-rotated page of MAX_RECONCILE_PER_RUN (200) subscription docs +
-    // one Auth getUser and one users/{uid} read per candidate; writes only on
-    // the rare drift it downgrades (usually 0) plus one cursor doc. No Play
-    // API calls. No-op entirely while the Google provider is disabled.
+    // One cursor-doc read + a cursor-rotated page of MAX_RECONCILE_PER_RUN
+    // (200) subscription docs + one Auth getUser and one users/{uid} read per
+    // candidate; writes only on the rare drift it downgrades (usually 0) plus
+    // one cursor doc. No Play API calls. No-op while the provider is disabled.
     writesPerRun: 1,
-    readsPerRun: 400,
+    readsPerRun: 401,
     deletesPerRun: 0,
     avgSeconds: 20,
     memoryGiB: 0.25,

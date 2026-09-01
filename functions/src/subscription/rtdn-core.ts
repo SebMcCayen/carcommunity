@@ -89,14 +89,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-/** Play may send eventTimeMillis as a JSON number or a stringified long. */
+/**
+ * Play may send eventTimeMillis as a JSON number or a stringified long. This
+ * is the monotonic idempotency watermark, so it must be a NON-NEGATIVE SAFE
+ * INTEGER: any non-integer, negative, NaN/Infinity, or unsafe value fails
+ * closed to null (→ the delivery is treated as poison and acked).
+ */
 function parseEventTimeMillis(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim() !== '') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
+  let candidate: number;
+  if (typeof value === 'number') {
+    candidate = value;
+  } else if (typeof value === 'string' && value.trim() !== '') {
+    candidate = Number(value);
+  } else {
+    return null;
   }
-  return null;
+  if (!Number.isSafeInteger(candidate) || candidate < 0) return null;
+  return candidate;
 }
 
 function isUsableToken(value: unknown): value is string {

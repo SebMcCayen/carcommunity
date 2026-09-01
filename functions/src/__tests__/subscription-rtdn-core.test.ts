@@ -150,6 +150,25 @@ describe('decodeRtdnMessageData', () => {
     ).toBeNull();
   });
 
+  it('returns null for a non-integer / negative / unsafe eventTimeMillis', () => {
+    // The watermark must be a non-negative safe integer — fail closed otherwise.
+    const rejected: unknown[] = [
+      '123.4',
+      123.4,
+      -1,
+      '-5',
+      Number.MAX_SAFE_INTEGER + 1,
+      'NaN',
+      Infinity,
+    ];
+    for (const bad of rejected) {
+      expect(
+        decodeRtdnMessageData(encode({ ...SUBSCRIPTION_ENVELOPE, eventTimeMillis: bad })),
+        `eventTimeMillis ${String(bad)} should be rejected`,
+      ).toBeNull();
+    }
+  });
+
   it('returns null for a non-integer notificationType', () => {
     expect(
       decodeRtdnMessageData(

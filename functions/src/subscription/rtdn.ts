@@ -260,10 +260,13 @@ export async function runRtdnNotification(
       logger.info('RTDN token no longer valid at Play → entitlement revoked', { uid: owner.uid });
       return 'revoked';
     }
-    // Play unavailable, or an unexpected downstream error → retry.
+    // Play unavailable, or an unexpected downstream error → retry. Log the
+    // error so operators can tell a Play outage from an unexpected failure;
+    // String(error) never contains the raw purchase token.
     logger.error('RTDN authoritative verification unavailable; will retry', {
       uid: owner.uid,
       type,
+      error: String(error),
     });
     throw new TransientRtdnError('play_verification_unavailable');
   }
@@ -294,8 +297,12 @@ export async function runRtdnNotification(
   if (outcome.entitlement === 'member_monthly' && outcome.acknowledgementRequired) {
     try {
       await deps.acknowledge(outcome.productId, decoded.notification.purchaseToken);
-    } catch {
-      logger.error('RTDN purchase acknowledgement failed; will retry', { uid: owner.uid, type });
+    } catch (error) {
+      logger.error('RTDN purchase acknowledgement failed; will retry', {
+        uid: owner.uid,
+        type,
+        error: String(error),
+      });
       throw new TransientRtdnError('acknowledge_failed');
     }
   }
