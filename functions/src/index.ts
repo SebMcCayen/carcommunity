@@ -41,6 +41,7 @@ import { checkIn } from './events/checkIn';
 import { setPublicSite, onPublicSiteWrite, syncHomepage } from './events/publicSite';
 import { deleteDrive } from './drives/deleteDrive';
 import { listDriveHistory } from './drives/listDriveHistory';
+import { routeUrl as drivesRouteUrl } from './drives/routeUrl';
 import { block as blockUser, unblock as unblockUser } from './blocking/manageBlocks';
 import { onBlockWrite } from './blocking/onBlockWrite';
 import {
@@ -406,18 +407,29 @@ export const events = {
 
 /**
  * Drives domain (grouped export → deployed as `drives-save`,
- * `drives-listHistory`, and `drives-delete`).
+ * `drives-listHistory`, `drives-delete`, and `drives-routeUrl`).
  *
  * Saved drives (contracts/functions/functions.json: drives.save,
- * drives.listHistory, drives.delete). Stats are computed server-side; route GPS
- * data lives in Cloud Storage under rideRoutes/{uid}/{rideId}/ (member-gated),
- * never in Firestore. The callable is the new tier-aware read path; temporary
- * direct owner reads remain only for already-released client compatibility.
+ * drives.listHistory, drives.delete, drives.routeUrl). Stats are computed
+ * server-side; route GPS data lives in Cloud Storage under
+ * rideRoutes/{uid}/{rideId}/ (member-gated), never in Firestore. listHistory is
+ * the new tier-aware read path; temporary direct owner reads remain only for
+ * already-released client compatibility.
+ *
+ * `drives-routeUrl` issues a short-lived (5 min) V4 signed URL for an owned,
+ * tier-visible drive's route.bin, so the app can download the full track without
+ * a direct owner Storage read — the migration off that direct-read rule (the
+ * storage.rules lockdown is a separate later PR). It re-derives tier visibility
+ * from server state (same policy as listHistory) so a downgraded member cannot
+ * replay a hidden drive by guessing a rideId, and fails closed to
+ * failed-precondition if V4 signing is unavailable (see routeUrl.ts for the
+ * required Service Account Token Creator IAM grant).
  */
 export const drives = {
   save: saveDrive,
   listHistory: listDriveHistory,
   delete: deleteDrive,
+  routeUrl: drivesRouteUrl,
 };
 
 /**

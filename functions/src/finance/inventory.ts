@@ -505,6 +505,9 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   // (Community) or two (Plus) count aggregations for the hidden-history UX.
   'drives.listHistory': 'variable-member',
   'drives.delete': 'variable-member',
+  // Owner reads one ride + one subscription doc (+ a bounded newest-5 query for
+  // Community) then generates a short-lived signed Storage URL; member-driven.
+  'drives.routeUrl': 'variable-member',
   'blocking.block': 'variable-member',
   'blocking.unblock': 'variable-member',
   'crownHunt.submitClaim': 'variable-member',

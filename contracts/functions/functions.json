@@ -127,6 +127,15 @@
       "source": "docs/migration/backend-domain-mapping.md (Saved drives -> Firestore + Cloud Storage)"
     },
     {
+      "name": "drives.routeUrl",
+      "domain": "drives",
+      "description": "Issues a short-lived (5 min) V4 signed download URL for an OWNED drive's full GPS route file (rideRoutes/{uid}/{rideId}/route.bin), so the client can download the track without a direct owner Storage read — the migration path off that read rule (the storage.rules lockdown is a separate later PR; rules are unchanged here). Owner-only: a missing ride or another member's ride is not-found (never reveals existence). Re-checks subscription-tier visibility from server state with the SAME policy as drives.listHistory (Community newest 5, Plus rolling 90 days off server now, Supporter all), so a downgraded member cannot replay a drive hidden beyond their window by guessing a rideId — outside the window is permission-denied. Missing/legacy route file is failed-precondition. V4 signing under ADC calls IAM signBlob AS the runtime service account, which requires roles/iam.serviceAccountTokenCreator on itself (an operator IAM grant that may be absent); if signing is unavailable the callable fails closed to failed-precondition without leaking internals. Returns { url, expiresAtMillis }. Deployed via grouped export as drives-routeUrl (functions/src/drives/routeUrl.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/product-decisions.md (Subscription model)"
+    },
+    {
       "name": "blocking.block",
       "domain": "blocking",
       "description": "Blocks a target user for the caller. Directional and idempotent: re-blocking keeps the original createdAt; self-blocking is invalid-argument; blocking a missing/deleted user is not-found (never permission-denied, so deletion can't be probed). Writes userBlocks/{callerUid}/blocked/{targetUid} with the denormalized displayName. Returns the block summary plus shouldRefreshMarkers. Ports services/api/src/lib/blocking-service.ts. Deployed via grouped export as blocking-block (functions/src/blocking/manageBlocks.ts).",

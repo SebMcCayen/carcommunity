@@ -291,6 +291,39 @@
       },
       "required": ["rideId"],
       "additionalProperties": false
+    },
+    "routeUrlRequest": {
+      "type": "object",
+      "description": "Input for drives.routeUrl (owner-only, tier-gated). Names the drive whose full GPS route file a signed download URL is requested for.",
+      "properties": {
+        "rideId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "pattern": "^(?!\\.\\.?$)[A-Za-z0-9._-]+$",
+          "description": "Firestore-safe document ID — no path separators."
+        }
+      },
+      "required": ["rideId"],
+      "additionalProperties": false
+    },
+    "routeUrlResponse": {
+      "type": "object",
+      "description": "Result of drives.routeUrl: a short-lived (5 min) V4 signed URL for the drive's route.bin, and the epoch-millis instant it expires. The client should download promptly and never persist the URL. permission-denied when the drive is outside the caller's subscription-tier history window; not-found for a missing or non-owned drive; failed-precondition when there is no stored route file or when V4 signing is unavailable.",
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Short-lived V4 signed read URL for rideRoutes/{uid}/{rideId}/route.bin."
+        },
+        "expiresAtMillis": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Unix epoch milliseconds at which the signed URL expires (~5 minutes after issue)."
+        }
+      },
+      "required": ["url", "expiresAtMillis"],
+      "additionalProperties": false
     }
   }
 }
