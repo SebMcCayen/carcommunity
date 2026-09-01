@@ -58,6 +58,19 @@ import { z } from 'zod';
  * `replyTo` snapshot is stored, and the Android reply entry point stays hidden —
  * so the feature is dark end-to-end until it is deliberately turned on. It only
  * gates PROCESSING of the optional field; an ordinary message is unaffected.
+ *
+ * `partnerMemberOffersRequirePaid` is default OFF for a billing-timing reason:
+ * it makes MEMBER partner offers a PAID product. On, a free (Community) member
+ * gets only the public offer teaser plus an upgrade prompt — the member detail
+ * (firestore.rules, isPaidSubscriber) and the discount code
+ * (partners.showOfferCode, requirePaidOrAdminActor) require Plus/Supporter;
+ * admins are unaffected. While OFF the enforcement is INERT: the callable falls
+ * back to the relaxed member gate and the rules fall back to isActiveMember(),
+ * so behaviour is exactly as today (every authenticated non-suspended user
+ * still receives member offers). It MUST stay OFF until the Google Play
+ * subscription provider is live and users can actually buy a paid tier —
+ * flipping it on beforehand would hide member offers from everyone with no way
+ * to upgrade. Independent of the global member-gating switch.
  */
 export const FEATURE_FLAG_DEFAULTS = {
   liveLocation: true,
@@ -75,6 +88,7 @@ export const FEATURE_FLAG_DEFAULTS = {
   crownHuntLiveShareScoring: false,
   reportTicketsBrowser: false,
   chatReplies: false,
+  partnerMemberOffersRequirePaid: false,
 } as const;
 
 export type FeatureFlagKey = keyof typeof FEATURE_FLAG_DEFAULTS;

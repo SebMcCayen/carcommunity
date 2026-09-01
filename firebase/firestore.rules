@@ -66,6 +66,63 @@ service cloud.firestore {
       return isAuthenticated() && isNotSuspended();
     }
 
+    // True when [sub] (a subscriptions/{uid} document Resource, or null when the
+    // record is absent) resolves to a PAID tier right now. Null-safe so the
+    // single get() below needs no companion exists() — a missing record short-
+    // circuits to false. Mirrors functions/src/subscription/subscription-core
+    // effectiveSubscriptionTierFromStoredRecord + isPaidSubscriptionTier:
+    // the legacy `member_monthly` entitlement, an access-granting status, and
+    // a Plus/Supporter tier. A legacy record without an explicit tier is Plus
+    // (paid), matching the original member_monthly product.
+    function isPaidSubscriptionRecord(sub) {
+      // Mirrors functions/src/subscription/subscription-core
+      // effectiveSubscriptionTierFromStoredRecord + isPaidSubscriptionTier
+      // EXACTLY, so the rules decision agrees with the callable gate. All
+      // reads use map.get(key, default) so a present-but-null field is treated
+      // the same as an ABSENT one (the backend uses JS `== null`), and a
+      // partial/missing doc cannot raise an error:
+      //   - userId: mismatch guard fires only when userId is non-null AND
+      //     differs from the reader (null/absent is tolerated);
+      //   - entitlement must be the legacy `member_monthly`;
+      //   - status must be an access-granting status;
+      //   - tier null/absent ⇒ legacy paid (Plus); otherwise Plus/Supporter
+      //     only (any other value is Community, i.e. not paid).
+      return sub != null
+        && (sub.data.get('userId', null) == null
+          || sub.data.get('userId', null) == request.auth.uid)
+        && sub.data.get('entitlement', '') == 'member_monthly'
+        && sub.data.get('status', '') in ['active', 'grace_period', 'cancelled']
+        && (sub.data.get('tier', null) == null
+          || sub.data.get('tier', null) == 'plus'
+          || sub.data.get('tier', null) == 'supporter');
+    }
+
+    // Active PAID subscriber (Plus or Supporter). Reads the authoritative
+    // subscriptions/{uid} record (written by Cloud Functions only) with a SINGLE
+    // get() — a missing doc returns null, which isPaidSubscriptionRecord treats
+    // as false. Suspension always overrides entitlement. INDEPENDENT of the
+    // isActiveMember() gating switch above: partner member offers are a paid
+    // product and must stay gated on the PAID tier even while the global member
+    // gate is relaxed.
+    function isPaidSubscriber() {
+      return isAuthenticated() && isNotSuspended()
+        && isPaidSubscriptionRecord(
+          get(/databases/$(database)/documents/subscriptions/$(request.auth.uid))
+        );
+    }
+
+    // Dark flag gating whether MEMBER partner offers require a PAID subscription.
+    // Reads config/featureFlags (authenticated-readable; written only by
+    // admin.setFeatureFlag). Absent document/field ⇒ false, matching the
+    // contract default OFF. While OFF the member-offer read gate stays on the
+    // relaxed isActiveMember(), so this deploys inert until billing go-live.
+    function partnerMemberOffersRequirePaid() {
+      // SINGLE get() via a let-binding; a missing doc is null ⇒ false (the
+      // contract default OFF), so no companion exists() read is needed.
+      let flags = get(/databases/$(database)/documents/config/featureFlags);
+      return flags != null && flags.data.get('partnerMemberOffersRequirePaid', false) == true;
+    }
+
     // True when [uid] is an ACCEPTED member of convoy [convoyId]. Fetches the
     // convoy doc ONCE (via a `let`) and checks both memberUids and the accepted
     // inviteStatus off the same snapshot — a single get() rather than two, which
@@ -943,7 +1000,9 @@ service cloud.firestore {
     // offers – partner offers, THREE-TIER privacy (Phase 9i)
     // Teaser document: all authenticated users while ACTIVE (title,
     // teaserText, type — never the description, terms, or code).
-    // details/member: active members while the offer is active.
+    // details/member: while the offer is active — the member-offer gate,
+    //   dark-flagged: PAID subscribers (Plus/Supporter) when
+    //   partnerMemberOffersRequirePaid is ON, else the relaxed isActiveMember().
     // secret/code: fully backend-only — the discount code is served
     // exclusively by partners.showOfferCode and never readable directly.
     // -------------------------------------------------------------------------
@@ -954,13 +1013,24 @@ service cloud.firestore {
       // No client writes.
 
       match /details/member {
-        // Active members while the offer is active; admins read it for the
-        // admin offer-detail view (Phase 13f) — this holds description/terms/
-        // discount fields, but NEVER the discount code (secret/code below
-        // stays fully backend-only).
+        // Member-offer detail — description/terms/discount fields, but NEVER
+        // the discount code (secret/code below stays fully backend-only).
+        // Admins always read it for the admin offer-detail view (Phase 13f).
+        //
+        // For non-admins the offer must be active AND the caller must pass the
+        // member-offer gate. That gate is DARK-FLAGGED: while
+        // partnerMemberOffersRequirePaid is ON, member offers are a paid product
+        // so only a PAID subscriber (Plus/Supporter) may read — a free
+        // (Community) caller is denied. While the flag is OFF the gate falls
+        // back to the relaxed isActiveMember(), i.e. exactly today's behaviour,
+        // so this rule deploys inert until billing go-live.
+        // isAuthenticated() FIRST so an unauthenticated (always-denied) probe
+        // short-circuits before the offer/flag/subscription get()s below —
+        // those doc reads must never run for a signed-out caller.
         allow read: if isAdmin()
-          || (isActiveMember()
-            && get(/databases/$(database)/documents/offers/$(offerId)).data.status == 'active');
+          || (isAuthenticated()
+            && get(/databases/$(database)/documents/offers/$(offerId)).data.status == 'active'
+            && (partnerMemberOffersRequirePaid() ? isPaidSubscriber() : isActiveMember()));
         // No client writes.
       }
 

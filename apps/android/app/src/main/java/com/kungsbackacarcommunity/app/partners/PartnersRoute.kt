@@ -23,7 +23,15 @@ fun PartnersRoute(
     repository: PartnersRepository,
     offerCodeCoordinator: OfferCodeCoordinator?,
     uid: String,
-    passesMemberGate: Boolean,
+    // Whether this viewer may access MEMBER offer content (detail, discount
+    // code, bookmark). The caller resolves the dark-flagged gate: while
+    // partnerMemberOffersRequirePaid is ON this is true only for a PAID
+    // subscriber (Plus/Supporter) — mirroring the server gate in
+    // firestore.rules / partners.showOfferCode — and a free (Community) caller
+    // sees the public teaser plus an upgrade prompt. While the flag is OFF this
+    // is the relaxed member gate, i.e. true for every signed-in user, exactly
+    // as today.
+    canAccessMemberOffers: Boolean,
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -38,8 +46,8 @@ fun PartnersRoute(
     val offers by
         remember(repository) { repository.observeActiveOffers() }.collectAsState(initial = emptyList())
     val savedIds by
-        remember(repository, uid, passesMemberGate) {
-            if (passesMemberGate) repository.observeSavedOfferIds(uid) else flowOf(emptySet())
+        remember(repository, uid, canAccessMemberOffers) {
+            if (canAccessMemberOffers) repository.observeSavedOfferIds(uid) else flowOf(emptySet())
         }
             .collectAsState(initial = emptySet())
     val codeStatus by
@@ -68,9 +76,9 @@ fun PartnersRoute(
     val company = (companiesState as? CompaniesState.Loaded)?.companies?.firstOrNull { it.id == companyId }
     val companyOffers = Partners.offersForCompany(offers, companyId)
     val expandedDetail by
-        remember(expandedOfferId, passesMemberGate, repository) {
+        remember(expandedOfferId, canAccessMemberOffers, repository) {
             val id = expandedOfferId
-            if (id != null && passesMemberGate) repository.observeOfferDetail(id) else flowOf(null)
+            if (id != null && canAccessMemberOffers) repository.observeOfferDetail(id) else flowOf(null)
         }
             .collectAsState(initial = null)
 
@@ -78,7 +86,7 @@ fun PartnersRoute(
         company = company,
         offers = companyOffers,
         savedOfferIds = savedIds,
-        passesMemberGate = passesMemberGate,
+        canAccessMemberOffers = canAccessMemberOffers,
         expandedOfferId = expandedOfferId,
         expandedOfferDetail = expandedDetail,
         codeStatus = codeStatus,

@@ -1488,6 +1488,8 @@
     "noOffers": "No current offers.",
     "memberRequired": "KCC Membership required to view this offer.",
     "memberRequiredHint": "Become a KCC member to access exclusive offers and benefits from our partners.",
+    "upgradeForMemberOffers": "Upgrade for member offers",
+    "upgradeForMemberOffersHint": "Upgrade to Plus or Supporter to unlock member offers and discount codes from our partners.",
     "showCode": "Show code",
     "saveOffer": "Save offer",
     "unsaveOffer": "Remove from saved",
