@@ -127,6 +127,15 @@
       "source": "docs/product-decisions.md (Subscription model)"
     },
     {
+      "name": "drives.lifetimeStats",
+      "domain": "drives",
+      "description": "Returns a TRUE-LIFETIME statistics aggregate over ALL of the caller's drives, with NO subscription-tier window and NO month range — the deliberately UN-PAYWALLED counterpart to drives.stats (which is tier-scoped so deeper stats are a paid benefit). Lifetime achievement (the profile 'my stats' fold and badges such as the Vägfarare lifetime-distance ladder) must not shrink when a member downgrades to Community, so this aggregate ignores tier entirely. Owner-only: aggregates rides where userId == the caller's uid. Returns serverNowMillis, totalDrives, totalDistanceMeters, totalDurationSeconds, longestDriveMeters, averageDriveMeters, fastestAverageSpeedMps, highestMaxSpeedMps (mirrors the Android DriveStatsCalculator fold minus the 'this month' tallies). Every figure (totalDrives, the sums and the maxima) is computed in-memory from a SINGLE projected scan of the owner's ride set — no count()/sum() aggregation, so all figures come from one consistent snapshot (mirrors drives.stats). Only the scalar stat fields are read — never routeThumbnail/convoyMembers or createdAt, so legacy drives lacking createdAt still count. A drive with a malformed durationSeconds is dropped so it cannot corrupt the aggregate; totalDrives is therefore the count of VALID drives in that snapshot. A maximum figure is 0 when no drive carries that stat. No input (an empty object, or any input, is ignored). Same actor gate as drives.stats but with NO tier or membership assertion (requireActiveActor: signed in, not suspended, not deleted), so a Community member gets their true totals. Rules are intentionally unchanged; the Android migration to consume it and the direct-read lockdown are separate later slices. Deployed via grouped export as drives-lifetimeStats (functions/src/drives/driveLifetimeStats.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/product-decisions.md (Subscription model)"
+    },
+    {
       "name": "drives.listDeletable",
       "domain": "drives",
       "description": "Owner-only deletion inventory: returns the ids of ALL the caller's owned drives regardless of tier window, with MINIMAL fields only (rideId, createdAtMillis, title, startedAtMillis) — no distances, speeds, durations, route paths/thumbnails, images or session ids. After a downgrade, drives beyond the tier window (Community past the newest 5, Plus older than 90 days) are omitted by drives.listHistory, so the user has no rideId to delete them; this returns those ids so drives.delete stays reachable. Paginated ({ cursorRideId?: string<=300, pageSize?: integer 1-50 }, orderBy createdAt desc then documentId desc) returning { drives[], hasMore, nextCursorRideId }. No tier or membership gate (parity with drives.delete); same actor gate as listHistory (requireActiveActor). It is a deletion index, deliberately NOT a stats or history bypass. Deployed via grouped export as drives-listDeletable (functions/src/drives/listDeletableDrives.ts).",

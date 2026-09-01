@@ -508,6 +508,12 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   // (no count()/sum() aggregation); all totals/maxima/month tallies are computed
   // in memory from that one snapshot.
   'drives.stats': 'variable-member',
+  // True-lifetime aggregate over ALL the caller's drives: a single projected
+  // scan of the owner's ride set (userId ==), no count()/sum() aggregation —
+  // every figure comes from that one snapshot. Lighter than drives.stats: NO
+  // subscription-doc read and NO createdAt order/filter (no tier window, no
+  // month range). Un-gated (any active owner, no tier/membership).
+  'drives.lifetimeStats': 'variable-member',
   // Owner-only paginated deletion inventory (one look-ahead read per page).
   'drives.listDeletable': 'variable-member',
   'drives.delete': 'variable-member',
