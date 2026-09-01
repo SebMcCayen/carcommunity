@@ -151,6 +151,8 @@ import { sendWave as sendWaveLive } from './live/sendWave';
 import { cleanupExpired as cleanupExpiredLive } from './live/scheduled';
 import { grantEntitlement, verify as verifySubscription } from './subscription/verify';
 import { expireLapsed as expireLapsedSubscriptions } from './subscription/scheduled';
+import { handleRtdn as handleSubscriptionRtdn } from './subscription/rtdn';
+import { reconcileEntitlements as reconcileSubscriptionEntitlements } from './subscription/reconcile';
 import {
   join as joinGroupDrive,
   leave as leaveGroupDrive,
@@ -1153,6 +1155,26 @@ export const subscription = {
   // under subscription_status, and never revokes on the ABSENCE of a
   // record — a perpetual manual grant is untouched.
   expireLapsed: expireLapsedSubscriptions,
+  // Google Play Real-time Developer Notifications handler (Pub/Sub trigger,
+  // deployed as subscription-handleRtdn). Turns each Play notification into
+  // the correct entitlement transition by re-fetching the AUTHORITATIVE state
+  // from subscriptionsv2.get (never trusting the notification body) and
+  // applying it via applyEntitlement. Provider-gated (no-op while the Google
+  // provider is disabled), idempotent on the monotonic eventTimeMillis per
+  // token, and fail-safe: a poison/unknown message acks (never loops), only a
+  // transient Play/Firestore failure throws for a Pub/Sub retry. Handles both
+  // subscriptionNotification and voidedPurchaseNotification (refund/chargeback
+  // → revoke). Deploys inert until the operator wires the Pub/Sub topic AND
+  // enables the provider (see the PR body).
+  handleRtdn: handleSubscriptionRtdn,
+  // Scheduled reconciliation (deployed as subscription-reconcileEntitlements).
+  // The integrity backstop: re-converges the three representations of
+  // entitlement to the authoritative subscriptions/{uid} record, clearing
+  // stale member privilege a lost/half-applied write left behind. Downgrade
+  // only, provider-gated, bounded + cursor-rotated, fail-safe per user. Does
+  // NOT re-query Play per subscription (that needs the raw token, which is
+  // never stored) — see reconcile-core.ts and the PR body.
+  reconcileEntitlements: reconcileSubscriptionEntitlements,
 };
 
 /**
