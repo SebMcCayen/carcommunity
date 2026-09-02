@@ -127,6 +127,18 @@ async function setSpawnFlag(enabled: boolean): Promise<void> {
     .set({ crownHunt: true, crownHuntSpawn: enabled }, { merge: true });
 }
 
+/**
+ * The Kronjakt PAYWALL dark flag. Merged so the spawn flags set above survive.
+ * Reset to false by every test that turns it on (the shared emulator Firestore
+ * persists across describe blocks, and the paywall must not leak into them).
+ */
+async function setRequirePaidFlag(enabled: boolean): Promise<void> {
+  await adminDb
+    .collection('config')
+    .doc('featureFlags')
+    .set({ crownHuntRequirePaid: enabled }, { merge: true });
+}
+
 /** Seeds the aggregate with `count` distinct recent users in `cellKey`. */
 async function seedActivity(cellKey: string, count: number, now: Date): Promise<void> {
   const cellRef = adminDb.collection('crownCellActivity').doc(cellKey);
@@ -519,6 +531,46 @@ describe('crownHunt.claimSpawn', () => {
       .data as ClaimResponse;
     expect(response.result).toBe('feature_disabled');
     await setSpawnFlag(true);
+  });
+
+  it('paywall OFF (default): a FREE member collects exactly as today', async () => {
+    // A freshly provisioned user has no activeMember entitlement → free.
+    const freeUser = await createProvisionedUser('cs-free-off');
+    const spawnId = await placeCrown();
+    await signInAs(freeUser);
+    const response = (await call('crownHunt-claimSpawn', claimInput({ spawnId })))
+      .data as ClaimResponse;
+    // crownHuntRequirePaid is absent from config/featureFlags ⇒ contract default
+    // OFF ⇒ the relaxed member gate ⇒ awarded, no paywall in force.
+    expect(response.result).toBe('awarded');
+  });
+
+  it('paywall ON: a FREE member is refused with not_eligible; a PAID member is unaffected', async () => {
+    await setRequirePaidFlag(true);
+    try {
+      // Free member — same `not_eligible` result code and Swedish message the
+      // suspension/deletion path already returns (a plain result, not a throw).
+      const freeUser = await createProvisionedUser('cs-free-on');
+      const freeSpawn = await placeCrown();
+      await signInAs(freeUser);
+      const freeResp = (await call('crownHunt-claimSpawn', claimInput({ spawnId: freeSpawn })))
+        .data as ClaimResponse;
+      expect(freeResp.result).toBe('not_eligible');
+      expect(freeResp.pointsAwarded).toBeNull();
+
+      // Paid member (activeMember on the users doc, which the callable reads) —
+      // a fresh one, so no prior-test claims can bump the daily cap.
+      const paidUser = await createProvisionedUser('cs-paid-on');
+      await adminDb.collection('users').doc(paidUser.uid).set({ activeMember: true }, { merge: true });
+      const paidSpawn = await placeCrown();
+      await signInAs(paidUser);
+      const paidResp = (await call('crownHunt-claimSpawn', claimInput({ spawnId: paidSpawn })))
+        .data as ClaimResponse;
+      expect(paidResp.result).toBe('awarded');
+    } finally {
+      // Never let the paywall leak into later describe blocks / suites.
+      await setRequirePaidFlag(false);
+    }
   });
 
   it('rejects malformed input as an error, not a result code', async () => {

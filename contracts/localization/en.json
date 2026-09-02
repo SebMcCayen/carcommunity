@@ -1233,6 +1233,7 @@
   },
   "crownHunt": {
     "screenTitle": "Crown Hunt",
+    "upsellPrompt": "Upgrade to play Crown Hunt",
     "mapLabel": "Crown Hunt map",
     "pointMarkerLabel": "Crown Hunt point:",
     "collectButton": "Collect",

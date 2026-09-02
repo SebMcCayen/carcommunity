@@ -1,5 +1,5 @@
 {
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Canonical feature flag registry: key, default value, operator-facing label, what the flag controls (and what turning it off stops), and how sensitive flipping it is. THIS FILE is the single source of truth. Every surface must carry exactly these keys — no more, no fewer: functions/src/shared/featureFlags-core.ts (mirrored, sync-tested), apps/android/.../config/FeatureFlags.kt (mirrored, sync-tested), and the admin portal's feature-flags page, which reads this file directly so it can never fall behind. Keys are camelCase. Defaults are the fallback when the backend document (or an individual field) is absent, and the initial static backend response. Flag values are backend-managed (admin.setFeatureFlag); clients never persist flag changes locally as authoritative. `sensitivity` drives the admin UI's warning treatment: \"safety\" = flipping it changes what members are invited to physically drive to and stop at, \"privacy\" = it governs data collected about members, \"standard\" = ordinary product surface.",
   "flags": [
     {
@@ -106,6 +106,13 @@
       "label": "Chat replies (reply to a message)",
       "sensitivity": "standard",
       "description": "Inline WhatsApp-style reply-to-message across the chat surfaces (community, convoy, and direct messages). On, the backend snapshots the replied-to message (author + a short text preview) onto the replying message so the quote renders without a lookup and survives the parent expiring, and a reply on the community channel notifies the replied-to author. Default OFF: while off the backend IGNORES any replyToMessageId a client sends (no parent read, no snapshot stored) and the Android reply action stays hidden, so the feature is dark end-to-end. Gates only reply PROCESSING — ordinary messages are unaffected. Message reactions are a separate future feature keyed off the same stable message id."
+    },
+    {
+      "key": "crownHuntRequirePaid",
+      "default": false,
+      "label": "Kronjakt requires a paid subscription",
+      "sensitivity": "standard",
+      "description": "Kronjakt PAYWALL — makes collecting crowns a PAID feature (any active paid tier, Plus OR Supporter). Default OFF: while off, behaviour is exactly as today — every signed-in, non-suspended member sees crowns and can collect. Turning it ON gates PARTICIPATION on the activeMember entitlement: server-side, a free member gets no spawn reads (Firestore rules) and every collect callable returns not_eligible (crownHunt.claimSpawn / crownHunt.submitClaim); client-side, crowns are hidden for free members and the participation toggle is locked behind an upgrade prompt. FREEZE semantics: a free member's EXISTING Kronpoäng balance and leaderboard rank stay VISIBLE and unchanged — the paywall stops new earning, it never claws back or hides history (the leaderboard, seasons, user-stats and points ledger read paths are deliberately NOT gated). Admins always keep access. Independent of the global member-gating switch — this is a NARROW Kronjakt-only gate."
     }
   ]
 }

@@ -1138,6 +1138,7 @@
     <string name="points_empty">Inga transaktioner ännu.</string>
     <string name="points_loadMore">Ladda fler</string>
     <string name="crownHunt_screenTitle">Kronjakt</string>
+    <string name="crownHunt_upsellPrompt">Uppgradera för att spela Kronjakten</string>
     <string name="crownHunt_mapLabel">Kronjakt-karta</string>
     <string name="crownHunt_pointMarkerLabel">Kronjakt-punkt:</string>
     <string name="crownHunt_collectButton">Samla in</string>

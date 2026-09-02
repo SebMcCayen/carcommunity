@@ -28,7 +28,7 @@ import { logger } from 'firebase-functions';
 import { adminRtdb, db } from '../firebase';
 import { readFeatureFlag } from '../shared/featureFlags';
 import { toUserAccessState } from '../shared/access';
-import { memberGateAllows } from '../shared/memberGating';
+import { crownHuntGateAllows, memberGateAllows } from '../shared/memberGating';
 import { creditPoints } from '../points/ledger';
 import {
   haversineDistanceMeters,
@@ -41,6 +41,7 @@ import {
 import { HIGH_VELOCITY_WINDOW_SECONDS, evaluateClaimRisk } from './crown-hunt-risk';
 import {
   CROWN_HUNT_FLAG_KEY,
+  CROWN_HUNT_REQUIRE_PAID_FLAG_KEY,
   MAX_CLAIM_SPEED_MPS,
   MAX_DAILY_SUCCESSFUL_CLAIMS,
   awardGuardDocId,
@@ -259,9 +260,20 @@ export const submitClaim = onCall(
     // 2 + 3. Account status and entitlement (result codes, not errors).
     // Entitlement is currently bypassed (shared/memberGating.ts); suspended
     // and deleted accounts still resolve to not_eligible.
+    //
+    // Kronjakt PAYWALL: the dark `crownHuntRequirePaid` flag (contract default
+    // OFF) chooses the gate. While OFF this is exactly today's relaxed
+    // `memberGateAllows`; while ON, collection is a paid feature and a free
+    // member is refused with the SAME `not_eligible` result code and Swedish
+    // message (no throw), via the narrow `crownHuntGateAllows` (activeMember,
+    // independent of the global MEMBER_GATING_ENABLED switch). The flag is read
+    // HERE — after the auth guard above resolved `uid` — so an unauthenticated
+    // caller never triggers the read.
     const userSnap = await db.collection('users').doc(uid).get();
     const state = toUserAccessState(userSnap.data());
-    if (!memberGateAllows(state)) {
+    const requirePaid = await readFeatureFlag(CROWN_HUNT_REQUIRE_PAID_FLAG_KEY);
+    const gateAllows = requirePaid ? crownHuntGateAllows(state) : memberGateAllows(state);
+    if (!gateAllows) {
       logRejection('not_eligible');
       return respond('not_eligible');
     }

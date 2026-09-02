@@ -3608,3 +3608,139 @@ describe('Cloud Storage – offer images', () => {
     await assertFails(getBytes(storageRef(ctx.storage(), `offerImages/company-2/offer.jpg`)));
   });
 });
+
+// ---------------------------------------------------------------------------
+// Firestore: Kronjakt PAYWALL (crownHuntRequirePaid) — dark flag, read gate
+//
+// When the dark `crownHuntRequirePaid` flag is ON, the crownSpawns and
+// crownHuntPoints READ rules require a PAID member (isPaidCrownHunter: the
+// activeMember custom claim). While OFF they fall back to the existing
+// isActiveMember(), i.e. exactly today. Admins always keep access.
+//
+// FREEZE INVARIANT: a free member's existing Kronpoäng and leaderboard rank
+// stay VISIBLE — the leaderboard, seasons and user-stats read paths are NOT
+// gated by this flag, so this suite proves a free member can still read them
+// with the paywall on.
+//
+// The flag doc is set ON in beforeAll and reset OFF in afterAll so it never
+// leaks into the other describe blocks (which assume the pre-paywall behaviour)
+// or into later suites (the emulator Firestore is shared and files run
+// sequentially).
+// ---------------------------------------------------------------------------
+
+describe('Firestore – Kronjakt paywall (crownHuntRequirePaid) read gate', () => {
+  const FREE = 'chp-free';
+  const PAID = 'chp-paid';
+  const CELL = '5940_1810';
+  const LIVE = 'chp-cs-live';
+
+  function clientLiveQuery(fs: ReturnType<ReturnType<typeof testEnv.authenticatedContext>['firestore']>) {
+    const deviceNow = Timestamp.fromMillis(Date.now() - 2000);
+    return query(
+      collection(fs, 'crownSpawns'),
+      where('cellKey', 'in', [CELL]),
+      where('status', '==', 'live'),
+      where('expiresAt', '>', deviceNow),
+    );
+  }
+
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const firestore = ctx.firestore();
+      // Paywall ON.
+      await setDoc(doc(firestore, 'config', 'featureFlags'), { crownHuntRequirePaid: true }, { merge: true });
+      // A live auto-spawned crown and an active hand-placed point.
+      await setDoc(doc(firestore, 'crownSpawns', LIVE), {
+        cellKey: CELL,
+        status: 'live',
+        expiresAt: Timestamp.fromMillis(Date.now() + 6 * 60 * 60 * 1000),
+        latitude: 59.4,
+        longitude: 18.1,
+        rewardPoints: 25,
+      });
+      await setDoc(doc(firestore, 'crownHuntPoints', 'chp-p-active'), {
+        title: 'Aktiv krona',
+        latitude: 59.4,
+        longitude: 18.1,
+        geofenceRadiusMeters: 50,
+        rewardPoints: 25,
+        status: 'active',
+      });
+      // FROZEN, still-visible artefacts: the free member's own rank + stats.
+      await setDoc(doc(firestore, 'crownHuntLeaderboardEntries', `alltime__${FREE}`), {
+        userId: FREE,
+        scope: 'alltime',
+        points: 120,
+        crownsCollected: 6,
+      });
+      await setDoc(doc(firestore, 'crownHuntUserStats', FREE), {
+        userId: FREE,
+        totalPoints: 120,
+      });
+      await setDoc(doc(firestore, 'crownHuntSeasons', 'chp-2000-01'), {
+        seasonId: 'chp-2000-01',
+        status: 'finalized',
+      });
+    });
+  });
+
+  afterAll(async () => {
+    // Never let the paywall leak into other describe blocks or later suites.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(
+        doc(ctx.firestore(), 'config', 'featureFlags'),
+        { crownHuntRequirePaid: false },
+        { merge: true },
+      );
+    });
+  });
+
+  it('flag ON: a FREE member is DENIED crownSpawns (list AND get) and active crownHuntPoints', async () => {
+    const freeFs = testEnv.authenticatedContext(FREE).firestore();
+    await assertFails(getDocs(clientLiveQuery(freeFs)));
+    await assertFails(getDoc(doc(freeFs, 'crownSpawns', LIVE)));
+    await assertFails(getDoc(doc(freeFs, 'crownHuntPoints', 'chp-p-active')));
+  });
+
+  it('flag ON: a PAID member (activeMember) is ALLOWED crownSpawns and active crownHuntPoints', async () => {
+    const paidFs = testEnv.authenticatedContext(PAID, { activeMember: true }).firestore();
+    await assertSucceeds(getDocs(clientLiveQuery(paidFs)));
+    await assertSucceeds(getDoc(doc(paidFs, 'crownSpawns', LIVE)));
+    await assertSucceeds(getDoc(doc(paidFs, 'crownHuntPoints', 'chp-p-active')));
+  });
+
+  it('flag ON: a suspended PAID member is STILL denied (suspension overrides entitlement)', async () => {
+    const suspFs = testEnv
+      .authenticatedContext('chp-susp', { activeMember: true, suspended: true })
+      .firestore();
+    await assertFails(getDoc(doc(suspFs, 'crownSpawns', LIVE)));
+    await assertFails(getDoc(doc(suspFs, 'crownHuntPoints', 'chp-p-active')));
+  });
+
+  it('flag ON: an admin keeps access to crownSpawns and crownHuntPoints', async () => {
+    const adminFs = testEnv.authenticatedContext('chp-admin', { admin: true }).firestore();
+    await assertSucceeds(getDocs(clientLiveQuery(adminFs)));
+    await assertSucceeds(getDoc(doc(adminFs, 'crownHuntPoints', 'chp-p-active')));
+  });
+
+  it('FREEZE: flag ON, a FREE member STILL reads their frozen rank, stats and seasons', async () => {
+    const freeFs = testEnv.authenticatedContext(FREE).firestore();
+    await assertSucceeds(getDoc(doc(freeFs, 'crownHuntLeaderboardEntries', `alltime__${FREE}`)));
+    await assertSucceeds(getDoc(doc(freeFs, 'crownHuntUserStats', FREE)));
+    await assertSucceeds(getDoc(doc(freeFs, 'crownHuntSeasons', 'chp-2000-01')));
+  });
+
+  it('flag OFF: a FREE member reads crownSpawns and points again (restores today)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(
+        doc(ctx.firestore(), 'config', 'featureFlags'),
+        { crownHuntRequirePaid: false },
+        { merge: true },
+      );
+    });
+    const freeFs = testEnv.authenticatedContext(FREE).firestore();
+    await assertSucceeds(getDocs(clientLiveQuery(freeFs)));
+    await assertSucceeds(getDoc(doc(freeFs, 'crownSpawns', LIVE)));
+    await assertSucceeds(getDoc(doc(freeFs, 'crownHuntPoints', 'chp-p-active')));
+  });
+});

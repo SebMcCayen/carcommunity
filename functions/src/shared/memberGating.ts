@@ -90,6 +90,35 @@ import {
 } from './access';
 
 /**
+ * NARROW Kronjakt-only member gate — deliberately NOT wired to
+ * [MEMBER_GATING_ENABLED].
+ *
+ * The Kronjakt paywall (`crownHuntRequirePaid`, contract default OFF) is a
+ * single feature going paid ahead of the rest of the app, so it cannot ride the
+ * global switch: flipping [MEMBER_GATING_ENABLED] re-locks EVERY feature at
+ * once, which is exactly what the paywall rollout must avoid. Callers gate the
+ * CHOICE of gate on the flag themselves — while the flag is off they keep using
+ * [memberGateAllows] (today's relaxed behaviour), and only while it is on do
+ * they switch to this — so this function always applies the real entitlement
+ * requirement regardless of the global switch.
+ *
+ * Suspended/deleted accounts are ALWAYS denied (isRestricted first, same as
+ * every gate here); otherwise it requires the `activeMember` entitlement (any
+ * active paid tier — Plus or Supporter both resolve to activeMember). Semantics
+ * are exactly canAccessMemberFeatures(). Admins are NOT specially admitted here:
+ * an admin without the entitlement is treated like any other free member for
+ * COLLECTION, matching what [memberGateAllows] does when the global switch is on
+ * (the crownSpawns READ rule keeps its own `|| isAdmin()` so an admin can still
+ * see and moderate crowns).
+ */
+export function crownHuntGateAllows(state: UserAccessState): boolean {
+  if (isRestricted(state)) {
+    return false;
+  }
+  return canAccessMemberFeatures(state);
+}
+
+/**
  * The single switch for every member-gated callable. `false` = all features
  * unlocked for any signed-in, non-suspended, non-deleted account.
  *

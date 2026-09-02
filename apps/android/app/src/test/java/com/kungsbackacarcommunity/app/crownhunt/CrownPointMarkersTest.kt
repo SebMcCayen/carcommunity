@@ -49,6 +49,37 @@ class CrownPointMarkersTest {
         assertFalse(CrownPointMarkers.crownsVisible(featureEnabled = false, participating = false))
     }
 
+    // ---- Paywall (crownHuntRequirePaid) ----------------------------------
+
+    @Test
+    fun crownHuntUnlockedFollowsTheFlagThenTheEntitlement() {
+        // Flag OFF: unlocked for everyone, regardless of entitlement — exactly
+        // today's behaviour (the shipped default).
+        assertTrue(CrownPointMarkers.crownHuntUnlocked(requirePaid = false, activeMember = false))
+        assertTrue(CrownPointMarkers.crownHuntUnlocked(requirePaid = false, activeMember = true))
+        // Flag ON: unlocked only for a paid (activeMember) member.
+        assertTrue(CrownPointMarkers.crownHuntUnlocked(requirePaid = true, activeMember = true))
+        assertFalse(
+            "paywall on + free member must be locked",
+            CrownPointMarkers.crownHuntUnlocked(requirePaid = true, activeMember = false),
+        )
+    }
+
+    @Test
+    fun crownsVisibleIsAlsoGatedByThePaywallUnlock() {
+        // Default (unlocked) keeps the pre-paywall two-gate behaviour.
+        assertTrue(CrownPointMarkers.crownsVisible(featureEnabled = true, participating = true))
+        // Locked hides the game even with the feature on and participating.
+        assertFalse(
+            "a locked (free) member sees no crowns even while participating",
+            CrownPointMarkers.crownsVisible(
+                featureEnabled = true,
+                participating = true,
+                unlocked = false,
+            ),
+        )
+    }
+
     // ---- Eligible point → a marker at its location -----------------------
 
     @Test

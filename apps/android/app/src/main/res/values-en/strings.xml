@@ -1138,6 +1138,7 @@
     <string name="points_empty">No transactions yet.</string>
     <string name="points_loadMore">Load more</string>
     <string name="crownHunt_screenTitle">Crown Hunt</string>
+    <string name="crownHunt_upsellPrompt">Upgrade to play Crown Hunt</string>
     <string name="crownHunt_mapLabel">Crown Hunt map</string>
     <string name="crownHunt_pointMarkerLabel">Crown Hunt point:</string>
     <string name="crownHunt_collectButton">Collect</string>

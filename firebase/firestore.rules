@@ -66,6 +66,33 @@ service cloud.firestore {
       return isAuthenticated() && isNotSuspended();
     }
 
+    // ---- KRONJAKT PAYWALL (dark, flag-gated) -------------------------------
+    // A PAID Kronjakt participant: authenticated, holding the `activeMember`
+    // entitlement (any active paid tier — Plus OR Supporter both write this
+    // custom claim via applyEntitlement), and not suspended. Reads the claim
+    // directly rather than the subscriptions/{uid} record, so — unlike the
+    // partner-offers gate — it needs NO extra get(): the paid signal is already
+    // on the token. Suspension always overrides entitlement (isNotSuspended).
+    // INDEPENDENT of the global isActiveMember() gating switch above: Kronjakt
+    // collection is going paid ahead of the rest of the app, so it must stay
+    // gated on the PAID entitlement even while the global member gate is relaxed.
+    function isPaidCrownHunter() {
+      return isAuthenticated()
+        && request.auth.token.activeMember == true
+        && isNotSuspended();
+    }
+
+    // Dark flag gating whether Kronjakt requires a PAID subscription. Reads
+    // config/featureFlags (authenticated-readable; written only by
+    // admin.setFeatureFlag). SINGLE get() via a let-binding; a missing
+    // document/field is null ⇒ false, matching the contract default OFF, so no
+    // companion exists() read is needed and this deploys inert until go-live.
+    // Mirrors the partner-offers flag-in-rules idiom (PR #1067).
+    function crownHuntRequirePaid() {
+      let flags = get(/databases/$(database)/documents/config/featureFlags);
+      return flags != null && flags.data.get('crownHuntRequirePaid', false) == true;
+    }
+
     // True when [uid] is an ACCEPTED member of convoy [convoyId]. Fetches the
     // convoy doc ONCE (via a `let`) and checks both memberUids and the accepted
     // inviteStatus off the same snapshot — a single get() rather than two, which
@@ -1342,7 +1369,14 @@ service cloud.firestore {
       // Members read ACTIVE points (map display); admins additionally read
       // drafts/paused/ended for the admin portal (Phase 13e). All writes go
       // through the safety-gated crownHunt.* admin callables.
-      allow read: if (isActiveMember() && resource.data.status == 'active') || isAdmin();
+      //
+      // KRONJAKT PAYWALL (dark): when crownHuntRequirePaid is ON, only a PAID
+      // member may read active points (a free member sees no crowns); while OFF
+      // the gate is the existing isActiveMember(), i.e. exactly today. The
+      // status=='active' term and the admin read are PRESERVED unchanged.
+      allow read: if ((crownHuntRequirePaid() ? isPaidCrownHunter() : isActiveMember())
+                      && resource.data.status == 'active')
+                  || isAdmin();
       // No client writes.
     }
 
@@ -1437,10 +1471,26 @@ service cloud.firestore {
     // could write one could mint Kronpoäng at a coordinate of its choosing.
     // -------------------------------------------------------------------------
     match /crownSpawns/{spawnId} {
-      allow list: if (isActiveMember()
+      // KRONJAKT PAYWALL (dark): when crownHuntRequirePaid is ON, only a PAID
+      // member may read spawns (a free member's map query returns nothing);
+      // while OFF the gate is the existing isActiveMember(), i.e. exactly today.
+      // The list/get split, the list `status == 'live'` term, the get
+      // `status == 'live' && expiresAt > request.time` terms, and the admin read
+      // are ALL PRESERVED unchanged (see the long note above for why each is
+      // shaped this way).
+      //
+      // FUTURE OPTIMISATION: crownHuntRequirePaid() adds ONE extra
+      // config/featureFlags get() per crownSpawns poll (the map re-queries every
+      // ~60 s). It is a small, cache-friendly single-doc read and negligible at
+      // this app's scale, but if Firestore spend ever shows it, fold the flag
+      // into the client (which already reads config/featureFlags on
+      // launch/resume) so it simply stops issuing the query for a free member,
+      // and drop this rules-side get() — the callable gate is the security
+      // boundary either way.
+      allow list: if ((crownHuntRequirePaid() ? isPaidCrownHunter() : isActiveMember())
                       && resource.data.status == 'live')
                   || isAdmin();
-      allow get: if (isActiveMember()
+      allow get: if ((crownHuntRequirePaid() ? isPaidCrownHunter() : isActiveMember())
                      && resource.data.status == 'live'
                      && resource.data.expiresAt > request.time)
                  || isAdmin();

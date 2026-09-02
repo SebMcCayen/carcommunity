@@ -61,7 +61,7 @@ import { logger } from 'firebase-functions';
 import { adminRtdb, db } from '../firebase';
 import { readFeatureFlag } from '../shared/featureFlags';
 import { toUserAccessState } from '../shared/access';
-import { memberGateAllows } from '../shared/memberGating';
+import { crownHuntGateAllows, memberGateAllows } from '../shared/memberGating';
 import { creditPoints } from '../points/ledger';
 import {
   haversineDistanceMeters,
@@ -70,7 +70,7 @@ import {
   isValidCoordinate,
 } from './crown-hunt-geo';
 import { HIGH_VELOCITY_WINDOW_SECONDS, evaluateClaimRisk } from './crown-hunt-risk';
-import { CROWN_HUNT_FLAG_KEY } from './crownhunt-core';
+import { CROWN_HUNT_FLAG_KEY, CROWN_HUNT_REQUIRE_PAID_FLAG_KEY } from './crownhunt-core';
 import {
   CROWN_SPAWN_FLAG_KEY,
   MAX_DAILY_SPAWN_CLAIMS,
@@ -274,8 +274,22 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
   // 2. Account status and entitlement (result codes, not errors — parity with
   // submitClaim). Entitlement is currently bypassed repo-wide
   // (shared/memberGating.ts); suspended and deleted accounts still fail.
+  //
+  // Kronjakt PAYWALL: the dark `crownHuntRequirePaid` flag (contract default
+  // OFF) chooses the gate. While OFF this is exactly today's relaxed
+  // `memberGateAllows`; while ON, collection is a paid feature and a free
+  // member is refused with the SAME `not_eligible` result code and Swedish
+  // message (no throw), via the narrow `crownHuntGateAllows` (activeMember,
+  // independent of the global MEMBER_GATING_ENABLED switch). The flag is read
+  // HERE — after the auth guard above resolved `uid` — so an unauthenticated
+  // caller never triggers the read.
   const userSnap = await db.collection('users').doc(uid).get();
-  if (!memberGateAllows(toUserAccessState(userSnap.data()))) {
+  const accessState = toUserAccessState(userSnap.data());
+  const requirePaid = await readFeatureFlag(CROWN_HUNT_REQUIRE_PAID_FLAG_KEY);
+  const gateAllows = requirePaid
+    ? crownHuntGateAllows(accessState)
+    : memberGateAllows(accessState);
+  if (!gateAllows) {
     logRejection('not_eligible');
     return respond('not_eligible');
   }

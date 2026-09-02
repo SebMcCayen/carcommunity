@@ -8,6 +8,7 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -234,6 +235,14 @@ fun MapHome(
     // so existing callers/tests/previews (and turn-by-turn) are unaffected.
     crownHuntPerksEnabled: Boolean = false,
     onOpenPerks: () -> Unit = {},
+    // Kronjakt PAYWALL (dark `crownHuntRequirePaid` flag). When
+    // [crownHuntUnlocked] is false the member is NOT entitled to play while the
+    // flag is on: the map-layers participation toggle is disabled and shows an
+    // upgrade prompt whose tap invokes [onUpgradeCrownHunt] (the host routes to
+    // the subscription screen). Defaults to unlocked + no-op so existing
+    // callers/tests/previews render exactly as today (toggle live, no prompt).
+    crownHuntUnlocked: Boolean = true,
+    onUpgradeCrownHunt: () -> Unit = {},
     // Whether the member has AT LEAST ONE perk live RIGHT NOW (a shield, a boost,
     // or a deployed own-trap that hasn't expired). When true the perk control gets
     // a discreet active tint; it reverts automatically the moment the last perk
@@ -946,6 +955,11 @@ fun MapHome(
                 onCrownHuntParticipatingChange = {
                     crownHuntParticipationController.setParticipating(it)
                 },
+                // Paywall: locks the participation toggle + shows an upgrade
+                // prompt for a free member while the flag is on (see MapHome's
+                // param docs); defaults keep today's behaviour when unlocked.
+                crownHuntUnlocked = crownHuntUnlocked,
+                onUpgradeCrownHunt = onUpgradeCrownHunt,
                 onDismiss = { layersOpen = false },
             )
         }
@@ -987,6 +1001,9 @@ const val MAP_HOME_LAYERS_NIGHT_TAG = "map_home_layers_night"
 
 /** Test tag on the Kronjakt ("Crown Hunt") participation toggle switch. */
 const val MAP_HOME_LAYERS_CROWN_HUNT_TAG = "map_home_layers_crown_hunt"
+
+/** Test tag on the Kronjakt paywall upgrade prompt (shown when the game is locked). */
+const val MAP_HOME_LAYERS_CROWN_HUNT_UPSELL_TAG = "map_home_layers_crown_hunt_upsell"
 
 /** Test tag on the live-location manage-sheet popup card (raised by the centre
  *  live control while sharing; also reused by turn-by-turn navigation). */
@@ -1038,6 +1055,12 @@ internal fun MapLayersPopup(
     // [com.kungsbackacarcommunity.app.crownhunt.CrownHuntParticipation].
     crownHuntParticipating: Boolean,
     onCrownHuntParticipatingChange: (Boolean) -> Unit,
+    // Kronjakt PAYWALL (dark `crownHuntRequirePaid` flag). When [crownHuntUnlocked]
+    // is false the participation row is LOCKED (the switch disabled) and an
+    // upgrade prompt is shown in its place, tapping which invokes
+    // [onUpgradeCrownHunt]. Defaults keep the unlocked (today's) behaviour.
+    crownHuntUnlocked: Boolean = true,
+    onUpgradeCrownHunt: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     Popup(
@@ -1137,18 +1160,40 @@ internal fun MapLayersPopup(
                 // popups; off takes the whole game off this member's screen. Help
                 // text under the row so "where did the crowns go?" is answered in
                 // place. A device-local viewing choice, not an account change.
+                //
+                // KRONJAKT PAYWALL: while [crownHuntUnlocked] is false (the dark
+                // flag is on AND this member is not paid) the toggle is LOCKED —
+                // participating cannot turn the game on when the backend will
+                // serve no crowns and refuse every collect — and an upgrade prompt
+                // replaces the help text, tapping which opens the subscription
+                // screen. While unlocked (the shipped default) this is exactly
+                // today: a live toggle with its help line.
                 LayerToggleRow(
                     label = stringResource(R.string.shell_layersCrownHunt),
-                    checked = crownHuntParticipating,
+                    checked = crownHuntParticipating && crownHuntUnlocked,
                     onCheckedChange = onCrownHuntParticipatingChange,
                     switchTestTag = MAP_HOME_LAYERS_CROWN_HUNT_TAG,
+                    enabled = crownHuntUnlocked,
                 )
-                Text(
-                    text = stringResource(R.string.shell_layersCrownHuntHelp),
-                    modifier = Modifier.padding(top = KccSpacing.s1),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (crownHuntUnlocked) {
+                    Text(
+                        text = stringResource(R.string.shell_layersCrownHuntHelp),
+                        modifier = Modifier.padding(top = KccSpacing.s1),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Text(
+                        text = stringResource(R.string.crownHunt_upsellPrompt),
+                        modifier =
+                            Modifier
+                                .padding(top = KccSpacing.s1)
+                                .clickable(onClick = onUpgradeCrownHunt)
+                                .testTag(MAP_HOME_LAYERS_CROWN_HUNT_UPSELL_TAG),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
                 // Resting-zoom preference: "how far away the focus is" when using the
                 // map as usual. A discrete section of its own so a sibling change to
                 // this same popup stays out of its way.
@@ -1183,6 +1228,10 @@ private fun LayerToggleRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     switchTestTag: String? = null,
+    // When false the switch is disabled (greyed, non-interactive) — used by the
+    // Kronjakt paywall to LOCK the participation row for a free member. Defaults
+    // true so every other row stays interactive.
+    enabled: Boolean = true,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -1192,11 +1241,17 @@ private fun LayerToggleRow(
             text = label,
             modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
+            color =
+                if (enabled) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
         )
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
+            enabled = enabled,
             modifier = if (switchTestTag != null) Modifier.testTag(switchTestTag) else Modifier,
         )
     }

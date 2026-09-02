@@ -77,6 +77,14 @@ export const MAX_DAILY_SUCCESSFUL_CLAIMS = 10;
 export const CROWN_HUNT_FLAG_KEY = 'crownHunt';
 export const CROWN_HUNT_FLAG_DEFAULT = true;
 
+/**
+ * The Kronjakt PAYWALL flag key (contract default OFF). When ON, the collect
+ * callables gate on the paid `activeMember` entitlement (crownHuntGateAllows)
+ * instead of the relaxed member gate; when OFF, Kronjakt collection behaves
+ * exactly as today. See contracts/features/feature-flags.json.
+ */
+export const CROWN_HUNT_REQUIRE_PAID_FLAG_KEY = 'crownHuntRequirePaid';
+
 // ---------------------------------------------------------------------------
 // Swedish claim result messages (legacy getClaimMessage, verbatim)
 // ---------------------------------------------------------------------------
