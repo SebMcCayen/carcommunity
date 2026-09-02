@@ -67,19 +67,21 @@ service cloud.firestore {
     }
 
     // ---- KRONJAKT PAYWALL (dark, flag-gated) -------------------------------
-    // A PAID Kronjakt participant: authenticated, holding the `activeMember`
-    // entitlement (any active paid tier — Plus OR Supporter both write this
-    // custom claim via applyEntitlement), and not suspended. Reads the claim
-    // directly rather than the subscriptions/{uid} record, so — unlike the
-    // partner-offers gate — it needs NO extra get(): the paid signal is already
-    // on the token. Suspension always overrides entitlement (isNotSuspended).
-    // INDEPENDENT of the global isActiveMember() gating switch above: Kronjakt
-    // collection is going paid ahead of the rest of the app, so it must stay
-    // gated on the PAID entitlement even while the global member gate is relaxed.
+    // A PAID Kronjakt participant. Delegates to isPaidSubscriber() so the crown
+    // gate reads the AUTHORITATIVE subscriptions/{uid} record (written only by
+    // Cloud Functions), exactly like the partner-offers and event-details gates
+    // — NOT the `activeMember` custom claim. The claim is stale until the client
+    // refreshes its ID token, so gating crown reads on it would deny a
+    // freshly-paid member the crown layer (which the Android UI, keyed off the
+    // same sub record, has already unlocked) until the token cycles. Reusing the
+    // sub-doc helper keeps rules, UI, and the backend resolver in agreement.
+    // isPaidSubscriber() already bundles authenticated + not-suspended, so
+    // suspension still overrides entitlement. INDEPENDENT of the global
+    // isActiveMember() gating switch above: Kronjakt collection is going paid
+    // ahead of the rest of the app, so it must stay gated on the PAID tier even
+    // while the global member gate is relaxed.
     function isPaidCrownHunter() {
-      return isAuthenticated()
-        && request.auth.token.activeMember == true
-        && isNotSuspended();
+      return isPaidSubscriber();
     }
 
     // Dark flag gating whether Kronjakt requires a PAID subscription. Reads
@@ -1444,9 +1446,11 @@ service cloud.firestore {
       // member may read active points (a free member sees no crowns); while OFF
       // the gate is the existing isActiveMember(), i.e. exactly today. The
       // status=='active' term and the admin read are PRESERVED unchanged.
-      allow read: if ((crownHuntRequirePaid() ? isPaidCrownHunter() : isActiveMember())
-                      && resource.data.status == 'active')
-                  || isAdmin();
+      // isAdmin() is evaluated FIRST so an admin short-circuits before the
+      // crownHuntRequirePaid() config/featureFlags get() — admins never pay it.
+      allow read: if isAdmin()
+                  || ((crownHuntRequirePaid() ? isPaidCrownHunter() : isActiveMember())
+                      && resource.data.status == 'active');
       // No client writes.
     }
 
@@ -1551,19 +1555,20 @@ service cloud.firestore {
       //
       // FUTURE OPTIMISATION: crownHuntRequirePaid() adds ONE extra
       // config/featureFlags get() per crownSpawns poll (the map re-queries every
-      // ~60 s). It is a small, cache-friendly single-doc read and negligible at
-      // this app's scale, but if Firestore spend ever shows it, fold the flag
-      // into the client (which already reads config/featureFlags on
-      // launch/resume) so it simply stops issuing the query for a free member,
-      // and drop this rules-side get() — the callable gate is the security
-      // boundary either way.
-      allow list: if ((crownHuntRequirePaid() ? isPaidCrownHunter() : isActiveMember())
-                      && resource.data.status == 'live')
-                  || isAdmin();
-      allow get: if ((crownHuntRequirePaid() ? isPaidCrownHunter() : isActiveMember())
+      // ~60 s) FOR NON-ADMINS — isAdmin() is evaluated FIRST below so an admin
+      // short-circuits before the flag get() and never pays it. It is a small,
+      // cache-friendly single-doc read and negligible at this app's scale, but
+      // if Firestore spend ever shows it, fold the flag into the client (which
+      // already reads config/featureFlags on launch/resume) so it simply stops
+      // issuing the query for a free member, and drop this rules-side get() —
+      // the callable gate is the security boundary either way.
+      allow list: if isAdmin()
+                  || ((crownHuntRequirePaid() ? isPaidCrownHunter() : isActiveMember())
+                      && resource.data.status == 'live');
+      allow get: if isAdmin()
+                 || ((crownHuntRequirePaid() ? isPaidCrownHunter() : isActiveMember())
                      && resource.data.status == 'live'
-                     && resource.data.expiresAt > request.time)
-                 || isAdmin();
+                     && resource.data.expiresAt > request.time);
       // No client writes.
     }
 

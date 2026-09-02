@@ -3770,6 +3770,26 @@ describe('Firestore – Kronjakt paywall (crownHuntRequirePaid) read gate', () =
         seasonId: 'chp-2000-01',
         status: 'finalized',
       });
+      // The crown gate reads the AUTHORITATIVE subscriptions/{uid} record (via
+      // isPaidSubscriber), NOT the activeMember custom claim — so a freshly-paid
+      // member is not denied until their ID token refreshes. Seed an active Plus
+      // record for the paid user, and one for the suspended user too (so the
+      // suspension test proves suspension overrides a VALID paid subscription).
+      // FREE gets NO subscriptions doc, so a missing record ⇒ not paid ⇒ denied.
+      await setDoc(doc(firestore, 'subscriptions', PAID), {
+        userId: PAID,
+        platform: 'google',
+        status: 'active',
+        entitlement: 'member_monthly',
+        tier: 'plus',
+      });
+      await setDoc(doc(firestore, 'subscriptions', 'chp-susp'), {
+        userId: 'chp-susp',
+        platform: 'google',
+        status: 'active',
+        entitlement: 'member_monthly',
+        tier: 'plus',
+      });
     });
   });
 
@@ -3791,17 +3811,18 @@ describe('Firestore – Kronjakt paywall (crownHuntRequirePaid) read gate', () =
     await assertFails(getDoc(doc(freeFs, 'crownHuntPoints', 'chp-p-active')));
   });
 
-  it('flag ON: a PAID member (activeMember) is ALLOWED crownSpawns and active crownHuntPoints', async () => {
-    const paidFs = testEnv.authenticatedContext(PAID, { activeMember: true }).firestore();
+  it('flag ON: a PAID member (via the subscriptions record, NO activeMember claim) is ALLOWED', async () => {
+    // Deliberately NO custom claim — the gate reads subscriptions/{uid}, so a
+    // paid record alone unlocks the crown reads (this is the staleness fix:
+    // access does not wait for an ID-token refresh to carry the claim).
+    const paidFs = testEnv.authenticatedContext(PAID).firestore();
     await assertSucceeds(getDocs(clientLiveQuery(paidFs)));
     await assertSucceeds(getDoc(doc(paidFs, 'crownSpawns', LIVE)));
     await assertSucceeds(getDoc(doc(paidFs, 'crownHuntPoints', 'chp-p-active')));
   });
 
-  it('flag ON: a suspended PAID member is STILL denied (suspension overrides entitlement)', async () => {
-    const suspFs = testEnv
-      .authenticatedContext('chp-susp', { activeMember: true, suspended: true })
-      .firestore();
+  it('flag ON: a suspended member with a valid PAID record is STILL denied (suspension overrides)', async () => {
+    const suspFs = testEnv.authenticatedContext('chp-susp', { suspended: true }).firestore();
     await assertFails(getDoc(doc(suspFs, 'crownSpawns', LIVE)));
     await assertFails(getDoc(doc(suspFs, 'crownHuntPoints', 'chp-p-active')));
   });

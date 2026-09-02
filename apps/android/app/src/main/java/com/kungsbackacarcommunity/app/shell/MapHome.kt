@@ -79,6 +79,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
@@ -1188,7 +1189,9 @@ internal fun MapLayersPopup(
                         modifier =
                             Modifier
                                 .padding(top = KccSpacing.s1)
-                                .clickable(onClick = onUpgradeCrownHunt)
+                                // role = Button so TalkBack announces the upsell
+                                // as a button, not plain text.
+                                .clickable(role = Role.Button, onClick = onUpgradeCrownHunt)
                                 .testTag(MAP_HOME_LAYERS_CROWN_HUNT_UPSELL_TAG),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary,
