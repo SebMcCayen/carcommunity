@@ -59,9 +59,9 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { adminRtdb, db } from '../firebase';
-import { readFeatureFlag } from '../shared/featureFlags';
+import { flagFromSnapshot, readFeatureFlagsSnapshot } from '../shared/featureFlags';
 import { toUserAccessState } from '../shared/access';
-import { memberGateAllows } from '../shared/memberGating';
+import { crownHuntGateAllows, memberGateAllows } from '../shared/memberGating';
 import { creditPoints } from '../points/ledger';
 import {
   haversineDistanceMeters,
@@ -70,7 +70,7 @@ import {
   isValidCoordinate,
 } from './crown-hunt-geo';
 import { HIGH_VELOCITY_WINDOW_SECONDS, evaluateClaimRisk } from './crown-hunt-risk';
-import { CROWN_HUNT_FLAG_KEY } from './crownhunt-core';
+import { CROWN_HUNT_FLAG_KEY, CROWN_HUNT_REQUIRE_PAID_FLAG_KEY } from './crownhunt-core';
 import {
   CROWN_SPAWN_FLAG_KEY,
   MAX_DAILY_SPAWN_CLAIMS,
@@ -259,13 +259,19 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
     });
   };
 
-  // 1. Feature flags. BOTH must be on: `crownHunt` is the domain switch, and
-  // `crownHuntSpawn` is the auto-spawn switch that also gates the spawner — a
-  // member must never be able to collect from a system that is officially off.
-  const [huntEnabled, spawnEnabled] = await Promise.all([
-    readFeatureFlag(CROWN_HUNT_FLAG_KEY),
-    readFeatureFlag(CROWN_SPAWN_FLAG_KEY),
-  ]);
+  // 1. Feature flags. Read config/featureFlags ONCE (this is a hot collect
+  // path) and derive every flag this invocation needs from that single
+  // snapshot via flagFromSnapshot — same default-on-missing/unreadable rule as
+  // readFeatureFlag. This is read AFTER the auth guard above resolved `uid`, so
+  // an unauthenticated caller never triggers the read.
+  //   • crownHunt      — the domain switch;
+  //   • crownHuntSpawn — the auto-spawn switch that also gates the spawner (a
+  //                      member must never collect from a system officially off);
+  //   • crownHuntRequirePaid — the paywall gate chooser, used at step 2.
+  const flagsSnap = await readFeatureFlagsSnapshot();
+  const huntEnabled = flagFromSnapshot(flagsSnap, CROWN_HUNT_FLAG_KEY);
+  const spawnEnabled = flagFromSnapshot(flagsSnap, CROWN_SPAWN_FLAG_KEY);
+  const requirePaid = flagFromSnapshot(flagsSnap, CROWN_HUNT_REQUIRE_PAID_FLAG_KEY);
   if (!huntEnabled || !spawnEnabled) {
     logRejection('feature_disabled');
     return respond('feature_disabled');
@@ -274,8 +280,20 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
   // 2. Account status and entitlement (result codes, not errors — parity with
   // submitClaim). Entitlement is currently bypassed repo-wide
   // (shared/memberGating.ts); suspended and deleted accounts still fail.
+  //
+  // Kronjakt PAYWALL: the dark `crownHuntRequirePaid` flag (contract default
+  // OFF, derived from the single snapshot above) chooses the gate. While OFF
+  // this is exactly today's relaxed `memberGateAllows`; while ON, collection is
+  // a paid feature and a free member is refused with the SAME `not_eligible`
+  // result code and Swedish message (no throw), via the narrow
+  // `crownHuntGateAllows` (activeMember, independent of the global
+  // MEMBER_GATING_ENABLED switch).
   const userSnap = await db.collection('users').doc(uid).get();
-  if (!memberGateAllows(toUserAccessState(userSnap.data()))) {
+  const accessState = toUserAccessState(userSnap.data());
+  const gateAllows = requirePaid
+    ? crownHuntGateAllows(accessState)
+    : memberGateAllows(accessState);
+  if (!gateAllows) {
     logRejection('not_eligible');
     return respond('not_eligible');
   }

@@ -95,6 +95,18 @@ async function signInAs(user: TestUser): Promise<void> {
 
 const call = (name: string, data: unknown) => httpsCallable(functions, name)(data);
 
+/**
+ * The Kronjakt PAYWALL dark flag (`crownHuntRequirePaid`). Merged so any other
+ * flag field survives; reset to false by every test that turns it on, because
+ * the shared emulator Firestore persists across describe blocks and suites.
+ */
+async function setRequirePaidFlag(enabled: boolean): Promise<void> {
+  await adminDb
+    .collection('config')
+    .doc('featureFlags')
+    .set({ crownHuntRequirePaid: enabled }, { merge: true });
+}
+
 let adminUser: TestUser;
 let member: TestUser;
 let freeUser: TestUser;
@@ -321,6 +333,36 @@ describe('crownHunt-submitClaim', () => {
     };
     expect(response.result).toBe('awarded');
     expect(response.pointsAwarded).toBe(25);
+  });
+
+  it('paywall ON: a FREE member gets not_eligible; a PAID member is awarded', async () => {
+    // The Kronjakt paywall applied to the hand-placed-point claim path. Mirrors
+    // the claimSpawn (auto-spawn) paywall test — both callables share the gate.
+    await setRequirePaidFlag(true);
+    try {
+      // Free member — refused with the same result code (and Swedish message) as
+      // the suspension path, as a plain result, not a throw.
+      const freePoint = await createActivePoint();
+      await signInAs(freeUser);
+      const freeResp = (await call('crownHunt-submitClaim', claimInput({ pointId: freePoint })))
+        .data as { result: string; pointsAwarded: number | null };
+      expect(freeResp.result).toBe('not_eligible');
+      expect(freeResp.pointsAwarded).toBeNull();
+
+      // Paid member — a fresh one (no prior-test claims → no daily-cap flake).
+      const paidUser = await createProvisionedUser('ch-paid-on');
+      await adminDb
+        .collection('users')
+        .doc(paidUser.uid)
+        .set({ activeMember: true }, { merge: true });
+      const paidPoint = await createActivePoint();
+      await signInAs(paidUser);
+      const paidResp = (await call('crownHunt-submitClaim', claimInput({ pointId: paidPoint })))
+        .data as { result: string; pointsAwarded: number | null };
+      expect(paidResp.result).toBe('awarded');
+    } finally {
+      await setRequirePaidFlag(false);
+    }
   });
 
   it('STILL returns not_eligible for a suspended user, as a result code', async () => {

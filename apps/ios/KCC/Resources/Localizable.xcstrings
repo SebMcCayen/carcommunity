@@ -11085,6 +11085,23 @@
         }
       }
     },
+    "crownHunt.upsellPrompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uppgradera för att spela Kronjakten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upgrade to play Crown Hunt"
+          }
+        }
+      }
+    },
     "dm.empty": {
       "extractionState": "manual",
       "localizations": {

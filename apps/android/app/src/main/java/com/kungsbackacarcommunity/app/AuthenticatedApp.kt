@@ -1073,6 +1073,22 @@ fun AuthenticatedApp(
                 route = null
             }
 
+            // KRONJAKT PAYWALL (dark flag `crownHuntRequirePaid`, contract
+            // default OFF). Derived ONCE here — where the live `flags` (from the
+            // realtime feature-flag listener) and `profile` are both in scope —
+            // so the crown map layer, the collect gate and the map-layers toggle
+            // all read one consistent value. While the flag is OFF this is always
+            // true, so everything below renders exactly as today; while ON it
+            // follows the PAID `activeMember` entitlement, mirroring the server
+            // gate (crownHuntGateAllows / isPaidCrownHunter) so the UI never
+            // offers a collection the backend would refuse. NOT the global
+            // MemberGating switch — that stays off; this is Kronjakt-only.
+            val crownHuntUnlocked =
+                CrownPointMarkers.crownHuntUnlocked(
+                    requirePaid = flags.isEnabled(FeatureFlag.CROWN_HUNT_REQUIRE_PAID),
+                    activeMember = profile?.activeMember == true,
+                )
+
             // Device-local persistence for the map-layers popup toggles (traffic
             // alerts, Mapbox congestion overlay, night-mode override, 3D buildings).
             // Seeds the hoisted states / the surface below on start-up and records
@@ -2346,7 +2362,12 @@ fun AuthenticatedApp(
             // confirmation, so it is safe to draw even with the auto-spawn engine
             // dark. Gated additionally by participation.
             val adminCrownsVisible =
-                CrownPointMarkers.crownsVisible(crownHuntFeatureEnabled, crownHuntParticipating)
+                CrownPointMarkers.crownsVisible(
+                    featureEnabled = crownHuntFeatureEnabled,
+                    participating = crownHuntParticipating,
+                    // Paywall: a free member sees no crowns while the flag is on.
+                    unlocked = crownHuntUnlocked,
+                )
             // BOTH flags AND participation. `crownHunt` is the feature as a whole;
             // `crownHuntSpawn` (contract default OFF) is the automatic half
             // specifically, because an auto-placed crown carries no admin's
@@ -2357,7 +2378,10 @@ fun AuthenticatedApp(
             val crownSpawnEnabled =
                 crownHuntFeatureEnabled &&
                     flags.isEnabled(FeatureFlag.CROWN_HUNT_SPAWN) &&
-                    crownHuntParticipating
+                    crownHuntParticipating &&
+                    // Paywall: no auto-spawn query (and so no collect button) for
+                    // a free member while the flag is on.
+                    crownHuntUnlocked
             val crownSpawnsFlow =
                 remember(crownSpawnController) {
                     crownSpawnController?.nearbySpawns
@@ -2942,6 +2966,10 @@ fun AuthenticatedApp(
                     crownDwellSecondsRemaining,
                 ) {
                     CrownCollectGate.evaluate(
+                        // crownSpawnEnabled already folds in the Kronjakt paywall
+                        // (crownHuntUnlocked), so a free member gets FeatureOff and
+                        // the Collect button never enables — matching the server,
+                        // which returns not_eligible from the collect callable.
                         featureEnabled = crownSpawnEnabled,
                         distanceMeters = crownDistanceMeters,
                         // Distance and accuracy come from the SAME ([crownGateFix])
@@ -6855,6 +6883,17 @@ fun AuthenticatedApp(
                                     crownHuntPerksEnabled = crownHuntPerksEnabled,
                                     onOpenPerks = { perkDeployOpen = true },
                                     perkActive = hasActivePerk,
+                                    // Kronjakt paywall: while locked (the dark
+                                    // crownHuntRequirePaid flag on AND this member
+                                    // is not a paid member) the map-layers
+                                    // participation toggle is disabled and shows an
+                                    // upgrade prompt; tapping it opens the
+                                    // subscription screen. While unlocked (the
+                                    // shipped default) the toggle behaves as today.
+                                    crownHuntUnlocked = crownHuntUnlocked,
+                                    onUpgradeCrownHunt = {
+                                        openRootRoute(ShellRoute.Subscription)
+                                    },
                                     // Live-session pill in the top search strip
                                     // (between the search icon and the avatar) while
                                     // a session runs: elapsed time + distance driven.

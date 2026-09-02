@@ -120,6 +120,13 @@
       "label": "Partner member offers require a paid subscription",
       "sensitivity": "standard",
       "description": "Gates MEMBER partner offers behind a PAID subscription (Plus or Supporter). On, a free (Community) member sees only the PUBLIC offer teaser plus an upgrade prompt: the member detail (offers/{id}/details/member, gated in firestore.rules on isPaidSubscriber) and the discount code (partners.showOfferCode, gated on requirePaidOrAdminActor) require a paid tier; admins are unaffected. Default OFF and DARK until billing go-live: while off the enforcement is inert and behaviour is exactly as today — the callable falls back to the relaxed member gate (requireMemberActor) and the rules fall back to isActiveMember(), so every authenticated non-suspended user still receives member offers and the app shows the full member content with no upgrade prompt. Keep OFF until the Google Play subscription provider is live and users can actually purchase a paid tier; flipping it on beforehand would lock member offers away from every user with no way to upgrade. Independent of the global member-gating switch."
+    },
+    {
+      "key": "crownHuntRequirePaid",
+      "default": false,
+      "label": "Kronjakt requires a paid subscription",
+      "sensitivity": "standard",
+      "description": "Kronjakt PAYWALL — makes collecting crowns a PAID feature (any active paid tier, Plus OR Supporter). Default OFF: while off, behaviour is exactly as today — every signed-in, non-suspended member sees crowns and can collect. Turning it ON gates PARTICIPATION on the activeMember entitlement. Backend enforcement is platform-neutral and the security boundary: a free member gets no spawn reads (Firestore rules) and every collect callable returns not_eligible (crownHunt.claimSpawn / crownHunt.submitClaim). Client gating is ANDROID-only this slice: crowns are hidden for free members and the participation toggle is locked behind an upgrade prompt. iOS client gating is DEFERRED per ADR-002 (iOS payment/paywall waits until the iOS app finishes its MVP) — the Kronjakt upsell string regenerates into the iOS xcstrings but is staged/unused, and iOS is still protected by the platform-neutral backend enforcement. FREEZE semantics: a free member's EXISTING Kronpoäng balance and leaderboard rank stay VISIBLE and unchanged — the paywall stops new earning, it never claws back or hides history (the leaderboard, seasons, user-stats and points ledger read paths are deliberately NOT gated). Admins always keep access. Independent of the global member-gating switch — this is a NARROW Kronjakt-only gate."
     }
   ]
 }

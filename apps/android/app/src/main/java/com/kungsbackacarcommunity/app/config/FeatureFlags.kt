@@ -128,6 +128,24 @@ enum class FeatureFlag(val key: String, val default: Boolean) {
      * would hide member offers from everyone with no way to upgrade.
      */
     PARTNER_MEMBER_OFFERS_REQUIRE_PAID("partnerMemberOffersRequirePaid", false),
+
+    /**
+     * The Kronjakt PAYWALL — the flagship capability gate for the subscription
+     * launch. Default OFF: while off, Kronjakt behaves exactly as today (every
+     * signed-in, non-suspended member sees crowns and can collect). Turning it ON
+     * makes participation a PAID feature (any active paid tier — Plus OR
+     * Supporter — i.e. `activeMember`): the crown map layer + collect button are
+     * hidden for a free member and the map-layers participation toggle is locked
+     * behind an upgrade prompt that routes to the subscription screen. The backend
+     * enforces the same gate (collect callables + Firestore rules), so this is a
+     * UI mirror, not a security boundary.
+     *
+     * FREEZE: a free member's existing Kronpoäng and leaderboard rank stay
+     * VISIBLE — the read-only Kronjakt stats/leaderboard hub is NOT gated by this
+     * flag, only new earning (collection) is. Operable end-to-end (contract,
+     * backend, this client, admin console).
+     */
+    CROWN_HUNT_REQUIRE_PAID("crownHuntRequirePaid", false),
 }
 
 /**

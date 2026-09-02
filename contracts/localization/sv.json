@@ -1236,6 +1236,7 @@
   },
   "crownHunt": {
     "screenTitle": "Kronjakt",
+    "upsellPrompt": "Uppgradera för att spela Kronjakten",
     "mapLabel": "Kronjakt-karta",
     "pointMarkerLabel": "Kronjakt-punkt:",
     "collectButton": "Samla in",

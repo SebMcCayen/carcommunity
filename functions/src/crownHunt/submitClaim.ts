@@ -26,9 +26,9 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { adminRtdb, db } from '../firebase';
-import { readFeatureFlag } from '../shared/featureFlags';
+import { flagFromSnapshot, readFeatureFlagsSnapshot } from '../shared/featureFlags';
 import { toUserAccessState } from '../shared/access';
-import { memberGateAllows } from '../shared/memberGating';
+import { crownHuntGateAllows, memberGateAllows } from '../shared/memberGating';
 import { creditPoints } from '../points/ledger';
 import {
   haversineDistanceMeters,
@@ -41,6 +41,7 @@ import {
 import { HIGH_VELOCITY_WINDOW_SECONDS, evaluateClaimRisk } from './crown-hunt-risk';
 import {
   CROWN_HUNT_FLAG_KEY,
+  CROWN_HUNT_REQUIRE_PAID_FLAG_KEY,
   MAX_CLAIM_SPEED_MPS,
   MAX_DAILY_SUCCESSFUL_CLAIMS,
   awardGuardDocId,
@@ -141,10 +142,6 @@ function replayStoredClaim(
   return respond(result);
 }
 
-/** crownHunt feature flag via the shared reader (Phase 9m). */
-async function isCrownHuntEnabled(): Promise<boolean> {
-  return readFeatureFlag(CROWN_HUNT_FLAG_KEY);
-}
 
 /** Latest trusted position from RTDB for jump detection; null when absent. */
 async function readLatestTrustedPosition(
@@ -250,18 +247,36 @@ export const submitClaim = onCall(
       });
     };
 
-    // 1. Feature flag (legacy step 1 — no attempt record).
-    if (!(await isCrownHuntEnabled())) {
+    // 1. Feature flags (legacy step 1 — no attempt record). Read
+    // config/featureFlags ONCE (this is a hot collect path) and derive both
+    // flags this invocation needs from that single snapshot via flagFromSnapshot
+    // — same default-on-missing/unreadable rule as readFeatureFlag. Read AFTER
+    // the auth guard above resolved `uid`, so an unauthenticated caller never
+    // triggers it.
+    //   • crownHunt            — the domain switch;
+    //   • crownHuntRequirePaid — the paywall gate chooser, used at step 2+3.
+    const flagsSnap = await readFeatureFlagsSnapshot();
+    if (!flagFromSnapshot(flagsSnap, CROWN_HUNT_FLAG_KEY)) {
       logRejection('feature_disabled');
       return respond('feature_disabled');
     }
+    const requirePaid = flagFromSnapshot(flagsSnap, CROWN_HUNT_REQUIRE_PAID_FLAG_KEY);
 
     // 2 + 3. Account status and entitlement (result codes, not errors).
     // Entitlement is currently bypassed (shared/memberGating.ts); suspended
     // and deleted accounts still resolve to not_eligible.
+    //
+    // Kronjakt PAYWALL: the dark `crownHuntRequirePaid` flag (contract default
+    // OFF, derived from the single snapshot above) chooses the gate. While OFF
+    // this is exactly today's relaxed `memberGateAllows`; while ON, collection
+    // is a paid feature and a free member is refused with the SAME
+    // `not_eligible` result code and Swedish message (no throw), via the narrow
+    // `crownHuntGateAllows` (activeMember, independent of the global
+    // MEMBER_GATING_ENABLED switch).
     const userSnap = await db.collection('users').doc(uid).get();
     const state = toUserAccessState(userSnap.data());
-    if (!memberGateAllows(state)) {
+    const gateAllows = requirePaid ? crownHuntGateAllows(state) : memberGateAllows(state);
+    if (!gateAllows) {
       logRejection('not_eligible');
       return respond('not_eligible');
     }

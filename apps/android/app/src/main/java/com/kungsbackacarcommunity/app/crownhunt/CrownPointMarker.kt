@@ -25,12 +25,36 @@ object CrownPointMarkers {
     /**
      * Whether the Crown-Hunt map layer + UI should be shown to this member.
      *
-     * TWO gates, ANDed: the [featureEnabled] flag (the feature as a whole) and
-     * the member's own [participating] choice. Either off hides the game. Pure,
-     * so the gating rule is a proven property rather than a scattered `if`.
+     * THREE gates, ANDed: the [featureEnabled] flag (the feature as a whole),
+     * the member's own [participating] choice, and the paywall [unlocked] state
+     * (see [crownHuntUnlocked]). Any one off hides the game. Pure, so the gating
+     * rule is a proven property rather than a scattered `if`.
+     *
+     * [unlocked] defaults to true so previews/tests and any caller that predates
+     * the paywall keep the pre-paywall behaviour (feature + participation only).
      */
-    fun crownsVisible(featureEnabled: Boolean, participating: Boolean): Boolean =
-        featureEnabled && participating
+    fun crownsVisible(
+        featureEnabled: Boolean,
+        participating: Boolean,
+        unlocked: Boolean = true,
+    ): Boolean = featureEnabled && participating && unlocked
+
+    /**
+     * Whether Kronjakt is UNLOCKED for this member under the paywall.
+     *
+     * The dark `crownHuntRequirePaid` flag decides. While it is OFF
+     * ([requirePaid] false) Kronjakt is unlocked for everyone — exactly today's
+     * behaviour. While it is ON, collection is a PAID feature and only a member
+     * holding the paid entitlement ([activeMember], i.e. any active paid tier —
+     * Plus or Supporter both set it) is unlocked; a free member is locked out of
+     * the crown layer and the collect button, and sees an upgrade prompt.
+     *
+     * Mirrors the SERVER gate exactly (crownHuntGateAllows / isPaidCrownHunter),
+     * which keys off the same `activeMember` entitlement — the UI never offers an
+     * action the backend would refuse. Pure, so both directions are unit-tested.
+     */
+    fun crownHuntUnlocked(requirePaid: Boolean, activeMember: Boolean): Boolean =
+        !requirePaid || activeMember
 
     /**
      * The markers for [points], or an EMPTY list when [visible] is false.

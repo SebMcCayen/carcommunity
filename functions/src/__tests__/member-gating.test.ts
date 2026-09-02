@@ -12,7 +12,12 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { MEMBER_GATING_ENABLED, backendGateAllows, memberGateAllows } from '../shared/memberGating';
+import {
+  MEMBER_GATING_ENABLED,
+  backendGateAllows,
+  crownHuntGateAllows,
+  memberGateAllows,
+} from '../shared/memberGating';
 import { canAccessMemberFeatures, hasBackendAccess, type UserAccessState } from '../shared/access';
 
 function state(overrides: Partial<UserAccessState> = {}): UserAccessState {
@@ -85,6 +90,54 @@ describe('backendGateAllows — with gating disabled', () => {
   it('STILL denies deleted callers of every role', () => {
     expect(backendGateAllows(state({ deleted: true }))).toBe(false);
     expect(backendGateAllows(state({ role: 'owner', deleted: true }))).toBe(false);
+  });
+});
+
+describe('crownHuntGateAllows — the Kronjakt paywall gate', () => {
+  // This gate is used by the collect callables ONLY when the dark
+  // `crownHuntRequirePaid` flag is on; the flag itself is read at the call site,
+  // so these tests pin the gate's own semantics: activeMember, with suspension/
+  // deletion always overriding — and, crucially, INDEPENDENT of the global
+  // MEMBER_GATING_ENABLED switch (unlike memberGateAllows, it enforces the
+  // entitlement even while that switch is off).
+
+  it('requires the paid activeMember entitlement — a free member is DENIED', () => {
+    // The whole point of the paywall, and the difference from memberGateAllows,
+    // which passes a free member while the global switch is off.
+    expect(crownHuntGateAllows(state({ activeMember: false }))).toBe(false);
+    expect(memberGateAllows(state({ activeMember: false }))).toBe(true);
+  });
+
+  it('lets a paid member through', () => {
+    expect(crownHuntGateAllows(state({ activeMember: true }))).toBe(true);
+  });
+
+  it('does NOT specially admit a free admin/owner (parity with the member gate)', () => {
+    // Collection is gated on the entitlement, not the role — the crownSpawns
+    // READ rule keeps its own `|| isAdmin()`, but the collect callable does not.
+    expect(crownHuntGateAllows(state({ role: 'admin', activeMember: false }))).toBe(false);
+    expect(crownHuntGateAllows(state({ role: 'owner', activeMember: false }))).toBe(false);
+    expect(crownHuntGateAllows(state({ role: 'admin', activeMember: true }))).toBe(true);
+  });
+
+  // ---- TEETH: suspension/deletion always override entitlement -------------
+
+  it('STILL denies a suspended paid member', () => {
+    expect(crownHuntGateAllows(state({ activeMember: true, suspended: true }))).toBe(false);
+  });
+
+  it('STILL denies a deleted paid member', () => {
+    expect(crownHuntGateAllows(state({ activeMember: true, deleted: true }))).toBe(false);
+  });
+
+  it('is independent of MEMBER_GATING_ENABLED (mirrors canAccessMemberFeatures)', () => {
+    // Whatever the global switch is, this gate equals canAccessMemberFeatures.
+    expect(crownHuntGateAllows(state({ activeMember: true }))).toBe(
+      canAccessMemberFeatures(state({ activeMember: true })),
+    );
+    expect(crownHuntGateAllows(state({ activeMember: false }))).toBe(
+      canAccessMemberFeatures(state({ activeMember: false })),
+    );
   });
 });
 

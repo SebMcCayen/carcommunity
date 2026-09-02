@@ -154,6 +154,7 @@ describe('feature flags — defaults are not drifting', () => {
       chatReplies: false,
       eventDetailsRequirePaid: false,
       partnerMemberOffersRequirePaid: false,
+      crownHuntRequirePaid: false,
     });
   });
 });

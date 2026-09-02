@@ -82,6 +82,21 @@ import { z } from 'zod';
  * subscription provider is live and users can actually buy a paid tier —
  * flipping it on beforehand would hide member offers from everyone with no way
  * to upgrade. Independent of the global member-gating switch.
+ *
+ * `crownHuntRequirePaid` is default OFF: it is the Kronjakt PAYWALL — the
+ * flagship capability gate for the subscription launch. While off, Kronjakt
+ * behaves exactly as today (every signed-in, non-suspended member sees crowns
+ * and can collect). Turning it ON makes PARTICIPATION a paid feature (any active
+ * paid tier — Plus OR Supporter — i.e. the `activeMember` entitlement): the
+ * collect callables (`crownHunt.claimSpawn` / `crownHunt.submitClaim`) switch
+ * their member gate from the relaxed `memberGateAllows` to `crownHuntGateAllows`
+ * (see shared/memberGating.ts) and return `not_eligible` for a free member, and
+ * the Firestore `crownSpawns`/`crownHuntPoints` read rules require the paid
+ * entitlement. It is a NARROW Kronjakt-only gate, INDEPENDENT of the global
+ * MEMBER_GATING_ENABLED switch. FREEZE semantics: a free member's existing
+ * Kronpoäng and leaderboard rank stay visible and unchanged — the leaderboard,
+ * seasons, user-stats and points-ledger read paths are deliberately not gated,
+ * so the paywall stops new earning without clawing back or hiding history.
  */
 export const FEATURE_FLAG_DEFAULTS = {
   liveLocation: true,
@@ -101,6 +116,7 @@ export const FEATURE_FLAG_DEFAULTS = {
   chatReplies: false,
   eventDetailsRequirePaid: false,
   partnerMemberOffersRequirePaid: false,
+  crownHuntRequirePaid: false,
 } as const;
 
 export type FeatureFlagKey = keyof typeof FEATURE_FLAG_DEFAULTS;
