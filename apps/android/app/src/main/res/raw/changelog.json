@@ -2,6 +2,21 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 51,
+      "versionName": "1.0.0",
+      "releaseDate": "2026-09-02",
+      "highlights": [
+        "KCC 1.0 – vår första publika version! 🎉",
+        "Nytt: abonnemangen KCC Plus och KCC Supporter med fler förmåner"
+      ],
+      "changes": [
+        "Abonnemang: KCC Plus och KCC Supporter, köps tryggt via Google Play",
+        "Garage: fler bilplatser på betalda nivåer (2 / 5 / 10 bilar)",
+        "Körhistorik: Community ser de 5 senaste körningarna, Plus de senaste 90 dagarna, Supporter obegränsat",
+        "Många förbättringar av prestanda och stabilitet inför lanseringen"
+      ]
+    },
+    {
       "versionCode": 50,
       "versionName": "0.8.39",
       "releaseDate": "2026-08-30",
