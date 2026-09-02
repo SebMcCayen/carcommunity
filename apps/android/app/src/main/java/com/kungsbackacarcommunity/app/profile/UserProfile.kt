@@ -21,13 +21,15 @@ data class UserProfile(
      */
     val activeMember: Boolean = false,
     /**
-     * Backend-managed admin/owner role (users/{uid}.role in {admin, owner}).
-     * True for a staff account, which the backend admits to admin-bypass paths
-     * regardless of subscription (canAccessAdminFeatures). Read from the SAME
-     * owner-readable profile snapshot already observed — no extra query, no new
-     * mechanism. Used only to keep a client-side paid-feature gate consistent
-     * with the server (e.g. the event-details roster, which the backend always
-     * serves to admins); the backend stays the enforcement boundary.
+     * True for a staff account that the backend admits to admin-bypass paths
+     * regardless of subscription — mirroring canAccessAdminFeatures exactly:
+     * users/{uid}.role in {admin, owner} AND not suspended AND not deleted.
+     * Derived from the SAME profile snapshot already observed (users/{uid} is
+     * readable by ANY authenticated user under the Firestore rules) — no extra
+     * query, no new mechanism. Used only to keep a client-side paid-feature gate
+     * consistent with the server (e.g. the event-details roster, which the
+     * backend always serves to admins); the backend stays the enforcement
+     * boundary.
      */
     val isAdmin: Boolean = false,
     /**

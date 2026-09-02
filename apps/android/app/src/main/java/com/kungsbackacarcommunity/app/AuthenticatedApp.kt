@@ -9311,7 +9311,7 @@ private fun RouteHost(
                     // bypass regardless of tier — the backend (events-listAttendees)
                     // always serves them the roster, so treating an admin with no
                     // subscription as "free" here would diverge from the server.
-                    isPaidSubscriber =
+                    showFullDetails =
                         Events.showFullDetails(
                             isAdmin = profileIsAdmin,
                             requirePaidEnabled = eventDetailsRequirePaidEnabled,
