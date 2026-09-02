@@ -75,14 +75,15 @@ fun EventsRoute(
     rsvpCoordinator: RsvpCoordinator?,
     uid: String,
     passesMemberGate: Boolean,
-    // Whether the viewer holds a PAID subscription (Plus or Supporter). Gates the
-    // FULL event detail (exact address + long description) and the attendee list
-    // behind the paid tier (Slice D): a free viewer sees the basic view + an
-    // upgrade prompt. The attendee list is additionally server-enforced by
-    // events-listAttendees; this drives the UX and skips the now-denied roster
-    // read for a free viewer. Default false so config-less builds/tests show the
-    // reduced view unless told otherwise.
-    isPaidSubscriber: Boolean = false,
+    // Whether the viewer may see the FULL event details — the Slice-D gate
+    // decision (admin OR gate-off OR paid subscriber; see Events.showFullDetails).
+    // Gates the full detail (exact address + long description) and the attendee
+    // list: a viewer without full access sees the basic view + an upgrade prompt.
+    // The attendee list is additionally server-enforced by events-listAttendees;
+    // this drives the UX and skips the now-denied roster read for such a viewer.
+    // Default false so config-less builds/tests show the reduced view unless told
+    // otherwise.
+    showFullDetails: Boolean = false,
     // Opens the subscription screen from the detail's upgrade prompt. Null leaves
     // the prompt informational (config-less build).
     onUpgrade: (() -> Unit)? = null,
@@ -458,7 +459,7 @@ fun EventsRoute(
     // triggers the events-listAttendees read (which would return an empty
     // requiresPaid roster anyway), and the reveal button is hidden in the screen.
     val attendeesVisible =
-        isPaidSubscriber &&
+        showFullDetails &&
             Events.canSeeDetails(passesMemberGate, event?.status ?: EventStatus.DRAFT)
     var attendeesReloadKey by rememberSaveable { mutableStateOf(0) }
     // The roster is collapsed behind the detail page's "Check who answered"
@@ -698,7 +699,7 @@ fun EventsRoute(
         detail = detail,
         myRsvp = myRsvp,
         passesMemberGate = passesMemberGate,
-        isPaidSubscriber = isPaidSubscriber,
+        showFullDetails = showFullDetails,
         onUpgrade = onUpgrade,
         rsvpStatus = rsvpStatus,
         isLoading = eventLoading,

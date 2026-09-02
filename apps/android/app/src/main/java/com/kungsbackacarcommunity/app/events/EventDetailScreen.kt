@@ -80,15 +80,16 @@ fun EventDetailScreen(
     onRsvp: (RsvpStatus) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    // Whether the viewer holds a PAID subscription (Plus or Supporter). The FULL
-    // detail (exact street address + long description) and the attendee list are
-    // a paid benefit (Slice D): a paid viewer sees them, a free (Community) viewer
-    // sees the basic view — title, date/time, general area, place name and short
-    // summary, all rendered above the gate — plus an upgrade prompt in place of
-    // the full detail card, and no "who answered" roster. The attendee list is
-    // ALSO enforced server-side (events-listAttendees returns requiresPaid for a
-    // free caller); this flag is the UX half.
-    isPaidSubscriber: Boolean = false,
+    // Whether the viewer may see the FULL event details (exact street address +
+    // long description + the attendee list) rather than the basic view + upgrade
+    // prompt — the Slice-D gate decision (admin OR gate-off OR paid subscriber;
+    // see Events.showFullDetails). When false the viewer sees the basic view —
+    // title, date/time, general area, place name and short summary, all rendered
+    // above the gate — plus an upgrade prompt in place of the full detail card,
+    // and no "who answered" roster. The attendee list is ALSO enforced
+    // server-side (events-listAttendees returns requiresPaid for a free caller);
+    // this flag is the UX half.
+    showFullDetails: Boolean = false,
     // Opens the subscription screen from the upgrade prompt. Null renders the
     // prompt as an informational card with no action (config-less build).
     onUpgrade: (() -> Unit)? = null,
@@ -311,7 +312,7 @@ fun EventDetailScreen(
             // non-published event sees neither (the cancelled notice above already
             // explains the state).
             if (Events.canSeeDetails(passesMemberGate, event.status)) {
-                if (isPaidSubscriber) {
+                if (showFullDetails) {
                     DetailCard(detail)
                 } else {
                     // Community (free): the exact address + long description are a
@@ -366,7 +367,7 @@ fun EventDetailScreen(
                 // roster is paid). The public rsvpCounts tally still shows for
                 // everyone via RsvpCountsBreakdown, so a free viewer sees HOW MANY
                 // answered, just not WHO.
-                if (isPaidSubscriber) {
+                if (showFullDetails) {
                     OutlinedButton(
                         onClick = {
                             showAttendeesDialog = true
@@ -1203,7 +1204,7 @@ private fun EventDetailPreview() {
             detail = EventDetail("Bring your car.", "Storgatan 1"),
             myRsvp = RsvpStatus.GOING,
             passesMemberGate = true,
-            isPaidSubscriber = true,
+            showFullDetails = true,
             rsvpStatus = RsvpStatusUi.Idle,
             onRsvp = {},
             onBack = {},

@@ -105,11 +105,12 @@ enum class FeatureFlag(val key: String, val default: Boolean) {
      * name, short summary) plus an upgrade prompt, and no "who answered" roster.
      *
      * Read via the LIVE feature-flag listener (the same `flags` StateFlow every
-     * other flag uses), combined with the stored subscription tier: while OFF the
-     * detail screen is handed isPaidSubscriber=true (full view for all); while ON
-     * it is handed the real paid-tier value. The attendee list is ALSO enforced
-     * server-side by events-listAttendees behind the same flag. Must stay OFF
-     * until Play billing goes live, then be turned on deliberately.
+     * other flag uses), combined with the stored subscription tier and the admin
+     * role (see Events.showFullDetails): while OFF the detail screen is handed
+     * showFullDetails=true (full view for all); while ON it reflects admin OR the
+     * real paid tier. The attendee list is ALSO enforced server-side by
+     * events-listAttendees behind the same flag. Must stay OFF until Play billing
+     * goes live, then be turned on deliberately.
      */
     EVENT_DETAILS_REQUIRE_PAID("eventDetailsRequirePaid", false),
 

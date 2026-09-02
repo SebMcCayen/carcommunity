@@ -44,6 +44,15 @@ class FirebaseProfileRepository private constructor(
                             avatarPath = snapshot.getString("avatarPath"),
                             onboardingComplete = snapshot.get("onboardingCompletedAt") != null,
                             activeMember = snapshot.getBoolean("activeMember") ?: false,
+                            // Backend-managed admin/owner role. Mirrors the backend's
+                            // canAccessAdminFeatures EXACTLY: admin/owner role AND not
+                            // suspended AND not deleted — suspension/deletion revoke
+                            // admin access there, so a suspended admin must not be
+                            // treated as an admin here either.
+                            isAdmin =
+                                snapshot.getString("role").let { it == "admin" || it == "owner" } &&
+                                    snapshot.getBoolean("suspended") != true &&
+                                    snapshot.getBoolean("deleted") != true,
                             createdAtMillis = snapshot.getTimestamp("createdAt")?.toDate()?.time,
                             social =
                                 SocialHandles(

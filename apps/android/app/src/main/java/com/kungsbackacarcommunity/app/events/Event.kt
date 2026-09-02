@@ -326,6 +326,24 @@ object Events {
     fun canSeeDetails(passesMemberGate: Boolean, status: EventStatus): Boolean =
         passesMemberGate && status == EventStatus.PUBLISHED
 
+    /**
+     * Whether the viewer sees the FULL event details (exact address + long
+     * description + attendee roster) rather than the basic view + upgrade prompt
+     * — the Slice-D subscription gate decision. Mirrors the backend
+     * (events-listAttendees):
+     *  - an admin/owner always sees full (the backend serves them the roster
+     *    regardless of tier), so treating an unsubscribed admin as "free" would
+     *    diverge from the server;
+     *  - while the `eventDetailsRequirePaid` gate is OFF (its default — billing
+     *    not live) everyone sees full, exactly as before Slice D;
+     *  - otherwise only a paid subscriber (Plus/Supporter) sees full.
+     */
+    fun showFullDetails(
+        isAdmin: Boolean,
+        requirePaidEnabled: Boolean,
+        isPaidSubscriber: Boolean,
+    ): Boolean = isAdmin || !requirePaidEnabled || isPaidSubscriber
+
     /** Published events sorted by soonest start first (nulls last, stable). */
     fun sortedForList(events: List<EventSummary>): List<EventSummary> =
         events.sortedWith(
