@@ -6398,6 +6398,7 @@ fun AuthenticatedApp(
                         route = route!!,
                         uid = uid,
                         profileActiveMember = profile?.activeMember == true,
+                        profileIsAdmin = profile?.isAdmin == true,
                         scope = scope,
                         onClose = closeRoute,
                         // Navigation from WITHIN an open route (a hub → its child,
@@ -8780,6 +8781,11 @@ private fun RouteHost(
     route: ShellRoute,
     uid: String,
     profileActiveMember: Boolean,
+    // Backend-managed admin/owner role (users/{uid}.role), from the observed
+    // profile. Admins are admitted to admin-bypass server paths regardless of
+    // subscription (e.g. the event-details roster), so the client gate mirrors
+    // that here to avoid a free-vs-admin divergence with the backend.
+    profileIsAdmin: Boolean,
     scope: kotlinx.coroutines.CoroutineScope,
     onClose: () -> Unit,
     onOpenRoute: (ShellRoute) -> Unit,
@@ -9301,9 +9307,16 @@ private fun RouteHost(
                     // viewer is treated as paid, so the full detail + attendee list
                     // render for everyone exactly as before. While ON, the real
                     // stored tier decides: a free (Community) viewer gets the basic
-                    // view + upgrade prompt, a paid tier the full view.
+                    // view + upgrade prompt, a paid tier the full view. Admins/owners
+                    // bypass regardless of tier — the backend (events-listAttendees)
+                    // always serves them the roster, so treating an admin with no
+                    // subscription as "free" here would diverge from the server.
                     isPaidSubscriber =
-                        !eventDetailsRequirePaidEnabled || storedSubscription.isPaidSubscriber,
+                        Events.showFullDetails(
+                            isAdmin = profileIsAdmin,
+                            requirePaidEnabled = eventDetailsRequirePaidEnabled,
+                            isPaidSubscriber = storedSubscription.isPaidSubscriber,
+                        ),
                     onUpgrade = { onOpenRoute(ShellRoute.Subscription) },
                     chatRepository = chatRepository,
                     chatCoordinator = chatCoordinator,
