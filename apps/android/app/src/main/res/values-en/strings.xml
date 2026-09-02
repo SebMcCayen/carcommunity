@@ -325,6 +325,9 @@
     <string name="events_memberRequiredBody">As a member you can see exact location, more information and RSVP.</string>
     <string name="events_memberGateBody">KCC Membership is required to see exact location, event details, and RSVP.</string>
     <string name="events_memberDetailPlaceholder">Description</string>
+    <string name="events_upgradeDetailsTitle">Full details for members</string>
+    <string name="events_upgradeDetailsBody">The exact address, the full description and who\'s coming are shown to Plus and Supporter members. You still see the title, time, area and a short description.</string>
+    <string name="events_upgradeDetailsAction">Upgrade for full details</string>
     <string name="events_organizerLabel">Organizer: %1$s</string>
     <string name="events_navigationPlaceholder">Navigation will open in Apple Maps or Google Maps in a later version.</string>
     <string name="events_rsvpGoing">Going</string>
@@ -1388,6 +1391,8 @@
     <string name="partnerOffers_noOffers">No current offers.</string>
     <string name="partnerOffers_memberRequired">KCC Membership required to view this offer.</string>
     <string name="partnerOffers_memberRequiredHint">Become a KCC member to access exclusive offers and benefits from our partners.</string>
+    <string name="partnerOffers_upgradeForMemberOffers">Upgrade for member offers</string>
+    <string name="partnerOffers_upgradeForMemberOffersHint">Upgrade to Plus or Supporter to unlock member offers and discount codes from our partners.</string>
     <string name="partnerOffers_showCode">Show code</string>
     <string name="partnerOffers_saveOffer">Save offer</string>
     <string name="partnerOffers_unsaveOffer">Remove from saved</string>

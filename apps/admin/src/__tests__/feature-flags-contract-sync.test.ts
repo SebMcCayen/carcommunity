@@ -152,6 +152,8 @@ describe('feature flags — defaults are not drifting', () => {
       crownHuntLiveShareScoring: false,
       reportTicketsBrowser: false,
       chatReplies: false,
+      eventDetailsRequirePaid: false,
+      partnerMemberOffersRequirePaid: false,
       crownHuntRequirePaid: false,
     });
   });

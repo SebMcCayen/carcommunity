@@ -96,6 +96,39 @@ enum class FeatureFlag(val key: String, val default: Boolean) {
     CHAT_REPLIES("chatReplies", false),
 
     /**
+     * The Slice-D subscription gate on FULL event details. Default OFF, and that
+     * default is load-bearing: billing is not live yet (no member holds a paid
+     * tier), so while OFF the app shows full event details AND the attendee list
+     * to everyone — exactly as today. On, the exact address + long description and
+     * the attendee list become a paid benefit (Plus or Supporter): a free
+     * Community viewer sees the basic view (title, date/time, general area, place
+     * name, short summary) plus an upgrade prompt, and no "who answered" roster.
+     *
+     * Read via the LIVE feature-flag listener (the same `flags` StateFlow every
+     * other flag uses), combined with the stored subscription tier: while OFF the
+     * detail screen is handed isPaidSubscriber=true (full view for all); while ON
+     * it is handed the real paid-tier value. The attendee list is ALSO enforced
+     * server-side by events-listAttendees behind the same flag. Must stay OFF
+     * until Play billing goes live, then be turned on deliberately.
+     */
+    EVENT_DETAILS_REQUIRE_PAID("eventDetailsRequirePaid", false),
+
+    /**
+     * Makes MEMBER partner offers a PAID product (Plus/Supporter). Default OFF.
+     * On, a free (Community) member sees only the public offer teaser plus an
+     * "upgrade for member offers" prompt; the member detail and discount code
+     * require a paid tier (enforced server-side in firestore.rules and
+     * partners.showOfferCode). While OFF the app renders member offers exactly
+     * as today (the relaxed member gate), matching the inert backend enforcement.
+     *
+     * Consumed by the Android UI (PartnersRoute), read via the LIVE feature-flag
+     * listener so a flip takes effect without a relaunch. Default OFF and DARK
+     * until billing go-live — flipping it on before users can buy a paid tier
+     * would hide member offers from everyone with no way to upgrade.
+     */
+    PARTNER_MEMBER_OFFERS_REQUIRE_PAID("partnerMemberOffersRequirePaid", false),
+
+    /**
      * The Kronjakt PAYWALL — the flagship capability gate for the subscription
      * launch. Default OFF: while off, Kronjakt behaves exactly as today (every
      * signed-in, non-suspended member sees crowns and can collect). Turning it ON

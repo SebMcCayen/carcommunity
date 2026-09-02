@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ProfileProjection } from '../convoy/convoy-core';
 import {
   assembleRoster,
+  canViewAttendeeRoster,
   isRsvpStatus,
   parseListAttendeesInput,
   resolveCallerBlockSet,
@@ -32,6 +33,24 @@ describe('parseListAttendeesInput', () => {
 
   it('rejects unknown extra fields', () => {
     expect(parseListAttendeesInput({ eventId: 'e1', extra: 1 }).ok).toBe(false);
+  });
+});
+
+describe('canViewAttendeeRoster (subscription gate — Slice D)', () => {
+  it('grants a paid tier (Plus or Supporter) the roster', () => {
+    expect(canViewAttendeeRoster(false, 'plus')).toBe(true);
+    expect(canViewAttendeeRoster(false, 'supporter')).toBe(true);
+  });
+
+  it('denies a free Community member the roster', () => {
+    expect(canViewAttendeeRoster(false, 'community')).toBe(false);
+  });
+
+  it('always grants an admin the roster regardless of tier', () => {
+    // Admins moderate through the app and never hold a subscription.
+    expect(canViewAttendeeRoster(true, 'community')).toBe(true);
+    expect(canViewAttendeeRoster(true, 'plus')).toBe(true);
+    expect(canViewAttendeeRoster(true, 'supporter')).toBe(true);
   });
 });
 

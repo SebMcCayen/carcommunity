@@ -325,6 +325,9 @@
     <string name="events_memberRequiredBody">Som medlem kan du se exakt plats, mer information och RSVP.</string>
     <string name="events_memberGateBody">KCC Medlem krävs för att se exakt plats, eventinformation och RSVP.</string>
     <string name="events_memberDetailPlaceholder">Beskrivning</string>
+    <string name="events_upgradeDetailsTitle">Fullständig information för medlemmar</string>
+    <string name="events_upgradeDetailsBody">Exakt adress, hela beskrivningen och vilka som kommer att visas för Plus- och Supporter-medlemmar. Du ser fortfarande titel, tid, område och en kort beskrivning.</string>
+    <string name="events_upgradeDetailsAction">Uppgradera för fullständig information</string>
     <string name="events_organizerLabel">Arrangör: %1$s</string>
     <string name="events_navigationPlaceholder">Navigering öppnas i Apple Maps eller Google Maps i en senare version.</string>
     <string name="events_rsvpGoing">Kommer</string>
@@ -1388,6 +1391,8 @@
     <string name="partnerOffers_noOffers">Inga aktuella erbjudanden.</string>
     <string name="partnerOffers_memberRequired">KCC Medlem krävs för att visa erbjudandet.</string>
     <string name="partnerOffers_memberRequiredHint">Bli KCC-medlem för att ta del av exklusiva erbjudanden och förmåner från våra partners.</string>
+    <string name="partnerOffers_upgradeForMemberOffers">Uppgradera för medlemserbjudanden</string>
+    <string name="partnerOffers_upgradeForMemberOffersHint">Uppgradera till Plus eller Supporter för att låsa upp medlemserbjudanden och rabattkoder från våra partners.</string>
     <string name="partnerOffers_showCode">Visa kod</string>
     <string name="partnerOffers_saveOffer">Spara erbjudande</string>
     <string name="partnerOffers_unsaveOffer">Ta bort från sparade</string>

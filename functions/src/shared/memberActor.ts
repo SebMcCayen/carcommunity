@@ -22,6 +22,10 @@ import {
   type UserAccessState,
 } from './access';
 import { backendGateAllows, memberGateAllows } from './memberGating';
+import {
+  effectiveSubscriptionTierFromStoredRecord,
+  isPaidSubscriptionTier,
+} from '../subscription/subscription-core';
 
 export interface AuthenticatedActor {
   uid: string;
@@ -84,4 +88,34 @@ export async function requireMemberOrAdminActor(
     throw new HttpsError('permission-denied', 'Member subscription required.');
   }
   return { ...actor, isAdmin: canAccessAdminFeatures(actor.state) };
+}
+
+/**
+ * Asserts a caller entitled to MEMBER partner offers: an active PAID subscriber
+ * (Plus OR Supporter) OR an admin/owner. Suspended and deleted accounts are
+ * always denied (requireActiveActor closes those doors first).
+ *
+ * Unlike requireMemberActor, this gate is INDEPENDENT of the global
+ * MEMBER_GATING switch (shared/memberGating.ts). Partner member offers are a
+ * paid product: entitlement is read directly from the authoritative
+ * subscriptions/{uid} record via effectiveSubscriptionTierFromStoredRecord, so
+ * a free (Community) caller is refused member offers even while the global
+ * member gate is relaxed for testing. The subscriptions record is written by
+ * Cloud Functions only after verification; a missing/malformed record fails
+ * closed to Community.
+ */
+export async function requirePaidOrAdminActor(
+  request: CallableRequest,
+): Promise<MemberOrAdminActor> {
+  const actor = await requireActiveActor(request);
+  const isAdmin = canAccessAdminFeatures(actor.state);
+  if (isAdmin) {
+    return { ...actor, isAdmin };
+  }
+  const subscriptionSnap = await db.collection('subscriptions').doc(actor.uid).get();
+  const tier = effectiveSubscriptionTierFromStoredRecord(subscriptionSnap.data(), actor.uid);
+  if (!isPaidSubscriptionTier(tier)) {
+    throw new HttpsError('permission-denied', 'A paid subscription is required for member offers.');
+  }
+  return { ...actor, isAdmin };
 }

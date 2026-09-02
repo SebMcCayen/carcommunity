@@ -62,6 +62,10 @@ class EventAttendeesScreenTest {
                     detail = null,
                     myRsvp = null,
                     passesMemberGate = passesMemberGate,
+                    // The "who answered" roster is a paid benefit (Slice D): its
+                    // reveal button and dialog only exist for a paid viewer, which
+                    // is the surface these tests exercise.
+                    isPaidSubscriber = true,
                     rsvpStatus = RsvpStatusUi.Idle,
                     onRsvp = {},
                     onBack = {},

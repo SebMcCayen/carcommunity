@@ -75,6 +75,17 @@ fun EventsRoute(
     rsvpCoordinator: RsvpCoordinator?,
     uid: String,
     passesMemberGate: Boolean,
+    // Whether the viewer holds a PAID subscription (Plus or Supporter). Gates the
+    // FULL event detail (exact address + long description) and the attendee list
+    // behind the paid tier (Slice D): a free viewer sees the basic view + an
+    // upgrade prompt. The attendee list is additionally server-enforced by
+    // events-listAttendees; this drives the UX and skips the now-denied roster
+    // read for a free viewer. Default false so config-less builds/tests show the
+    // reduced view unless told otherwise.
+    isPaidSubscriber: Boolean = false,
+    // Opens the subscription screen from the detail's upgrade prompt. Null leaves
+    // the prompt informational (config-less build).
+    onUpgrade: (() -> Unit)? = null,
     chatRepository: EventChatRepository?,
     chatCoordinator: ChatCoordinator?,
     chatEnabled: Boolean,
@@ -443,7 +454,12 @@ fun EventsRoute(
     // viewer's block list: someone the viewer blocked is invisible here just as
     // they are in chat and on profiles. The count rendered beside the list
     // stays the server's public tally — see EventAttendees.stateFor.
-    val attendeesVisible = Events.canSeeDetails(passesMemberGate, event?.status ?: EventStatus.DRAFT)
+    // The attendee roster is a paid benefit (Slice D): a free viewer never
+    // triggers the events-listAttendees read (which would return an empty
+    // requiresPaid roster anyway), and the reveal button is hidden in the screen.
+    val attendeesVisible =
+        isPaidSubscriber &&
+            Events.canSeeDetails(passesMemberGate, event?.status ?: EventStatus.DRAFT)
     var attendeesReloadKey by rememberSaveable { mutableStateOf(0) }
     // The roster is collapsed behind the detail page's "Check who answered"
     // button; it flips this true (via onRevealAttendees) so the events-listAttendees
@@ -682,6 +698,8 @@ fun EventsRoute(
         detail = detail,
         myRsvp = myRsvp,
         passesMemberGate = passesMemberGate,
+        isPaidSubscriber = isPaidSubscriber,
+        onUpgrade = onUpgrade,
         rsvpStatus = rsvpStatus,
         isLoading = eventLoading,
         onRsvp = { answer ->

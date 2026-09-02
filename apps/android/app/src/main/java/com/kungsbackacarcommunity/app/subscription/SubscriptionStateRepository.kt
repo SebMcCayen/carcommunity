@@ -52,6 +52,15 @@ val StoredSubscription?.effectiveTier: EffectiveSubscriptionTier
         }
 
 /**
+ * True when the stored record grants ANY paid tier (Plus or Supporter). Mirrors
+ * the backend `isPaidSubscriptionTier` predicate the event-details gate uses, so
+ * a UI surface can ask "is this a paying member?" without re-deriving the tier.
+ * The backend remains the enforcement boundary; this only keeps the UI honest.
+ */
+val StoredSubscription?.isPaidSubscriber: Boolean
+    get() = effectiveTier != EffectiveSubscriptionTier.COMMUNITY
+
+/**
  * Client-side mirror of the authoritative callable limits. Missing, malformed,
  * inactive, expired, or revoked records are Community. The backend remains the
  * enforcement boundary; this value only keeps the Garage UI honest.

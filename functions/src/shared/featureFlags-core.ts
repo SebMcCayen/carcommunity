@@ -59,6 +59,30 @@ import { z } from 'zod';
  * so the feature is dark end-to-end until it is deliberately turned on. It only
  * gates PROCESSING of the optional field; an ordinary message is unaffected.
  *
+ * `eventDetailsRequirePaid` is default OFF, and that default is LOAD-BEARING:
+ * it switches on the Slice-D subscription gate on full event details — the
+ * attendee list ('who answered') becomes a paid benefit (events-listAttendees
+ * returns an empty roster + requiresPaid to a free Community caller; admins
+ * always see it) and the Android detail shows the basic view + an upgrade prompt
+ * to a free viewer. While OFF, behaviour is EXACTLY as today: events-listAttendees
+ * runs no subscription read and returns the full roster to everyone, and the app
+ * shows full details to everyone — nothing is redacted or denied. Billing is not
+ * live yet (no member holds a paid tier), so the gate must stay dark until Play
+ * billing goes live and is then deliberately turned on, or it would lock full
+ * details away from a base that cannot upgrade.
+ * `partnerMemberOffersRequirePaid` is default OFF for a billing-timing reason:
+ * it makes MEMBER partner offers a PAID product. On, a free (Community) member
+ * gets only the public offer teaser plus an upgrade prompt — the member detail
+ * (firestore.rules, isPaidSubscriber) and the discount code
+ * (partners.showOfferCode, requirePaidOrAdminActor) require Plus/Supporter;
+ * admins are unaffected. While OFF the enforcement is INERT: the callable falls
+ * back to the relaxed member gate and the rules fall back to isActiveMember(),
+ * so behaviour is exactly as today (every authenticated non-suspended user
+ * still receives member offers). It MUST stay OFF until the Google Play
+ * subscription provider is live and users can actually buy a paid tier —
+ * flipping it on beforehand would hide member offers from everyone with no way
+ * to upgrade. Independent of the global member-gating switch.
+ *
  * `crownHuntRequirePaid` is default OFF: it is the Kronjakt PAYWALL — the
  * flagship capability gate for the subscription launch. While off, Kronjakt
  * behaves exactly as today (every signed-in, non-suspended member sees crowns
@@ -90,6 +114,8 @@ export const FEATURE_FLAG_DEFAULTS = {
   crownHuntLiveShareScoring: false,
   reportTicketsBrowser: false,
   chatReplies: false,
+  eventDetailsRequirePaid: false,
+  partnerMemberOffersRequirePaid: false,
   crownHuntRequirePaid: false,
 } as const;
 

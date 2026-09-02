@@ -13941,6 +13941,57 @@
         }
       }
     },
+    "events.upgradeDetailsAction": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uppgradera för fullständig information"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upgrade for full details"
+          }
+        }
+      }
+    },
+    "events.upgradeDetailsBody": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exakt adress, hela beskrivningen och vilka som kommer att visas för Plus- och Supporter-medlemmar. Du ser fortfarande titel, tid, område och en kort beskrivning."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The exact address, the full description and who's coming are shown to Plus and Supporter members. You still see the title, time, area and a short description."
+          }
+        }
+      }
+    },
+    "events.upgradeDetailsTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fullständig information för medlemmar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Full details for members"
+          }
+        }
+      }
+    },
     "feedback.close": {
       "extractionState": "manual",
       "localizations": {
@@ -22386,6 +22437,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Remove from saved"
+          }
+        }
+      }
+    },
+    "partnerOffers.upgradeForMemberOffers": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uppgradera för medlemserbjudanden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upgrade for member offers"
+          }
+        }
+      }
+    },
+    "partnerOffers.upgradeForMemberOffersHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uppgradera till Plus eller Supporter för att låsa upp medlemserbjudanden och rabattkoder från våra partners."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upgrade to Plus or Supporter to unlock member offers and discount codes from our partners."
           }
         }
       }
