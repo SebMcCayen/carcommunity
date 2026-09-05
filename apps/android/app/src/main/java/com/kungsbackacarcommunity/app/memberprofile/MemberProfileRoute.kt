@@ -103,8 +103,16 @@ fun MemberProfileRoute(
     // simply absent instead of present-and-failing.
     val canModerate = blockingCoordinator != null && targetUid.isNotBlank() && targetUid != viewerUid
 
+    // Subscribe only while a profile is actually visible; blocking disposes it.
+    val loaded = state as? MemberProfileState.Loaded
+    val displayedState = if (loaded != null) {
+        val badge by remember(repository, targetUid) { repository.observeSupporterBadge(targetUid) }
+            .collectAsState(initial = loaded.profile.supporterBadge)
+        loaded.copy(profile = loaded.profile.copy(supporterBadge = badge))
+    } else state
+
     MemberProfileScreen(
-        state = state,
+        state = displayedState,
         // Retry re-reads the friend graph too: its own load failure is silent by
         // design (see MemberFriendCoordinator.load), so without this a profile
         // that recovered on retry could keep an unresolved — and therefore

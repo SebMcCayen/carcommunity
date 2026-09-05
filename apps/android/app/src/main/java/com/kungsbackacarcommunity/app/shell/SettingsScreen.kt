@@ -83,6 +83,7 @@ fun SettingsScreen(
     onDeleteAccount: (() -> Unit)?,
     onWhatsNew: () -> Unit,
     modifier: Modifier = Modifier,
+    supporterBadgeSetting: @Composable () -> Unit = {},
 ) {
     val context = LocalContext.current
     val instagramUrl = stringResource(R.string.url_instagram)
@@ -91,6 +92,7 @@ fun SettingsScreen(
 
     AeroPage(title = stringResource(R.string.settingsMenu_title), modifier = modifier) {
         SettingsSectionHeader(stringResource(R.string.settingsMenu_accountSection))
+        supporterBadgeSetting()
         if (onManageSubscription != null) {
             HubRow(
                 stringResource(R.string.settingsMenu_manageSubscription),

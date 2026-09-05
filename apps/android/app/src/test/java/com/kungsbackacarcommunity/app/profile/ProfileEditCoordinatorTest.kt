@@ -27,6 +27,8 @@ class ProfileEditCoordinatorTest {
             socials += social
         }
 
+        override suspend fun updateShowSupporterBadge(uid: String, show: Boolean) = Unit
+
         override suspend fun updateAvatarPath(uid: String, avatarPath: String) {
             failWith?.let { throw it }
         }

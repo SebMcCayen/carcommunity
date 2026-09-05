@@ -9771,6 +9771,11 @@ private fun RouteHost(
 
         ShellRoute.Settings ->
             SettingsScreen(
+                supporterBadgeSetting = {
+                    profileRepository?.let {
+                        com.kungsbackacarcommunity.app.profile.SupporterBadgeSetting(it, uid)
+                    }
+                },
                 onManageSubscription =
                     if (billingRepository != null && subscriptionVerifier != null) {
                         { onOpenRoute(ShellRoute.Subscription) }

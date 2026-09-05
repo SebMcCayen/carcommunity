@@ -29,6 +29,7 @@ import { logger } from 'firebase-functions';
 import { adminAuth, db } from '../firebase';
 import { CPU_SCHEDULED, MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
 import { applyEntitlement } from './entitlement';
+import { reconcileSupporterBadge } from './supporter-badge';
 import { isSubscriptionProviderEnabled } from './provider-config';
 import {
   MAX_RECONCILE_PER_RUN,
@@ -68,6 +69,7 @@ export interface ReconcileDeps {
   queryPage: (afterId: string, limit: number) => Promise<ReconcileCandidate[]>;
   userPrivilege: (uid: string) => Promise<UserPrivilegeState>;
   applyEntitlement: (input: EntitlementRecordInput) => Promise<void>;
+  reconcileBadge: (uid: string) => Promise<void>;
 }
 
 export interface ReconcileResult {
@@ -90,9 +92,7 @@ export interface ReconcileResult {
   reconciledUids: string[];
 }
 
-export async function runSubscriptionReconciliation(
-  deps: ReconcileDeps,
-): Promise<ReconcileResult> {
+export async function runSubscriptionReconciliation(deps: ReconcileDeps): Promise<ReconcileResult> {
   const empty: ReconcileResult = {
     skipped: false,
     scanned: 0,
@@ -145,6 +145,16 @@ export async function runSubscriptionReconciliation(
         });
       } else {
         consistentCount += 1;
+      }
+      // Cosmetic repair must never block security-critical privilege removal.
+      // Independent of activeMember drift, including Supporter-to-Plus changes.
+      try {
+        await deps.reconcileBadge(id);
+      } catch (error) {
+        logger.error('Supporter badge repair failed; will retry on next wrap', {
+          uid: id,
+          error: String(error),
+        });
       }
     } catch (error) {
       failedCount += 1;
@@ -219,8 +229,7 @@ function toReconcileRecord(data: FirebaseFirestore.DocumentData): ReconcileRecor
     entitlement: storedEntitlement(data.entitlement),
     tier: storedTier(data.tier),
     platform: storedPlatform(data.platform),
-    purchaseTokenHash:
-      typeof data.purchaseTokenHash === 'string' ? data.purchaseTokenHash : null,
+    purchaseTokenHash: typeof data.purchaseTokenHash === 'string' ? data.purchaseTokenHash : null,
     startsAt: storedDate(data.startsAt),
     expiresAt: storedDate(data.expiresAt),
   };
@@ -253,7 +262,8 @@ async function userPrivilegeFromAuth(uid: string): Promise<UserPrivilegeState> {
   let claimActive = false;
   try {
     const user = await adminAuth.getUser(uid);
-    claimActive = (user.customClaims as { activeMember?: unknown } | undefined)?.activeMember === true;
+    claimActive =
+      (user.customClaims as { activeMember?: unknown } | undefined)?.activeMember === true;
   } catch (error) {
     if ((error as { code?: string } | null)?.code === 'auth/user-not-found') {
       return { exists: false, holds: false };
@@ -273,6 +283,7 @@ export function productionReconcileDeps(): ReconcileDeps {
     queryPage: queryPageFromStore,
     userPrivilege: userPrivilegeFromAuth,
     applyEntitlement,
+    reconcileBadge: reconcileSupporterBadge,
   };
 }
 

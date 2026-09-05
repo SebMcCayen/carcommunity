@@ -3,6 +3,10 @@
      Source: contracts/localization/sv.json
      Regenerate: node apps/android/scripts/generate-strings.mjs -->
 <resources>
+    <string name="supporterBadge_accessibility">Supporter-krona</string>
+    <string name="supporterBadge_settingTitle">Visa Supporter-krona</string>
+    <string name="supporterBadge_settingBody">Visar en liten krona på din profilbild när ditt Supporter-medlemskap är aktivt. Ditt val sparas även när medlemskapet upphör.</string>
+    <string name="supporterBadge_saveFailed">Det gick inte att spara ditt val. Försök igen.</string>
     <string name="app_name">Kungsbacka Car Community</string>
     <string name="appUpdate_title">Ny version tillgänglig</string>
     <string name="appUpdate_message">Det finns en nyare version av appen i Google Play. Den laddas ner i bakgrunden, så du kan fortsätta använda appen under tiden.</string>

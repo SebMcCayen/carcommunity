@@ -44,6 +44,9 @@ class FirebaseProfileRepository private constructor(
                             avatarPath = snapshot.getString("avatarPath"),
                             onboardingComplete = snapshot.get("onboardingCompletedAt") != null,
                             activeMember = snapshot.getBoolean("activeMember") ?: false,
+                            supporterBadge = SupporterBadge.fromFields(
+                                snapshot.get("supporterBadgeEligible"), snapshot.get("showSupporterBadge"),
+                            ),
                             // Backend-managed admin/owner role. Mirrors the backend's
                             // canAccessAdminFeatures EXACTLY: admin/owner role AND not
                             // suspended AND not deleted — suspension/deletion revoke
@@ -99,6 +102,10 @@ class FirebaseProfileRepository private constructor(
                 "updatedAt" to FieldValue.serverTimestamp(),
             ),
         )
+    }
+
+    override suspend fun updateShowSupporterBadge(uid: String, show: Boolean) {
+        writeUser(uid, mapOf("showSupporterBadge" to show, "updatedAt" to FieldValue.serverTimestamp()))
     }
 
     /** Owner update of a whitelisted subset of users/{uid} fields. */

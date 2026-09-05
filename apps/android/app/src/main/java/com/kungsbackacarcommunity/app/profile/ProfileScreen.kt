@@ -116,6 +116,7 @@ fun ProfileScreen(
         contentWindowInsets = WindowInsets.ime.union(WindowInsets.navigationBars),
     ) {
             AvatarSection(
+                supporterBadgeVisible = profile?.supporterBadge?.visible == true,
                 avatarUrl = avatarUrl,
                 uploadStatus = avatarUploadStatus,
                 onChangeAvatar = onChangeAvatar,
@@ -246,6 +247,7 @@ fun ProfileScreen(
 
 @Composable
 private fun AvatarSection(
+    supporterBadgeVisible: Boolean,
     avatarUrl: String?,
     uploadStatus: ImageUploadStatus,
     onChangeAvatar: (() -> Unit)?,
@@ -256,31 +258,33 @@ private fun AvatarSection(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
     ) {
-        Box(
-            modifier = Modifier
-                .size(96.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (avatarUrl != null) {
-                // Coil renders nothing (keeps the placeholder tint) when no URL
-                // resolves — a config-less build never crashes on rendering.
-                AsyncImage(
-                    model = avatarUrl,
-                    contentDescription = stringResource(R.string.profile_avatarAlt),
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                Text(
-                    text = "?",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (uploading) {
-                CircularProgressIndicator(modifier = Modifier.size(32.dp))
+        SupporterAvatarFrame(supporterBadgeVisible) {
+            Box(
+                modifier = Modifier
+                    .size(96.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (avatarUrl != null) {
+                    // Coil renders nothing (keeps the placeholder tint) when no URL
+                    // resolves — a config-less build never crashes on rendering.
+                    AsyncImage(
+                        model = avatarUrl,
+                        contentDescription = stringResource(R.string.profile_avatarAlt),
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Text(
+                        text = "?",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (uploading) {
+                    CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                }
             }
         }
 

@@ -265,6 +265,7 @@ service cloud.firestore {
         && (!keys.hasAny(['facebook']) || validFacebookHandle(data))
         && (!keys.hasAny(['instagram']) || validInstagramHandle(data))
         && (!keys.hasAny(['youtube']) || validYoutubeHandle(data))
+        && (!keys.hasAny(['showSupporterBadge']) || data.showSupporterBadge is bool)
         && (!keys.hasAny(['updatedAt']) || isServerTimestamp(data.updatedAt));
     }
 
@@ -278,7 +279,7 @@ service cloud.firestore {
       return keys.hasOnly([
           'displayName', 'avatarPath', 'bio',
           'facebook', 'instagram', 'youtube',
-          'updatedAt'
+          'updatedAt', 'showSupporterBadge'
         ])
         && validUserProfileFields(keys, uid);
     }
@@ -384,8 +385,14 @@ service cloud.firestore {
       // validation (Phase 9a). Suspended users may not edit their profile
       // (suspension overrides feature access); they retain read access.
       allow update: if isOwner(userId) && isNotSuspended() && validUserProfileUpdate(userId);
-      // Admins have unrestricted access.
-      allow read, write: if isAdmin();
+      // Crown eligibility is backend-only, even for admin clients. Its saved
+      // preference remains owner-only; other admin profile operations survive.
+      allow read, delete: if isAdmin();
+      allow create: if isAdmin()
+        && !request.resource.data.keys().hasAny(['supporterBadgeEligible', 'showSupporterBadge']);
+      allow update: if isAdmin()
+        && !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['supporterBadgeEligible', 'showSupporterBadge']);
 
       // Badges (Phase 9f + tiered ladders) — users/{uid}/badges/{badgeKey}.
       // Awarded by the backend only (automatic tier evaluators +

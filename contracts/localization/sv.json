@@ -1,4 +1,10 @@
 {
+  "supporterBadge": {
+    "accessibility": "Supporter-krona",
+    "settingTitle": "Visa Supporter-krona",
+    "settingBody": "Visar en liten krona på din profilbild när ditt Supporter-medlemskap är aktivt. Ditt val sparas även när medlemskapet upphör.",
+    "saveFailed": "Det gick inte att spara ditt val. Försök igen."
+  },
   "app": {
     "name": "Kungsbacka Car Community"
   },

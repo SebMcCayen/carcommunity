@@ -60,6 +60,7 @@ function makeDeps(
     }),
     queryPage: vi.fn(async () => page),
     userPrivilege: vi.fn(async () => ({ exists: true, holds: true })),
+    reconcileBadge: vi.fn(async () => {}),
     applyEntitlement: vi.fn(async (input: EntitlementRecordInput) => {
       applied.push(input);
     }),
@@ -97,6 +98,29 @@ describe('runSubscriptionReconciliation', () => {
     expect(result.consistentCount).toBe(1);
     expect(result.reconciledCount).toBe(0);
     expect(applied).toEqual([]);
+    expect(deps.reconcileBadge).toHaveBeenCalledWith('u1');
+  });
+
+  it('repairs cosmetic projection for Supporter and Plus even when privilege is unchanged', async () => {
+    const deps = makeDeps([
+      { id: 'supporter', record: { ...granting, tier: 'supporter' } },
+      { id: 'plus', record: granting },
+    ]);
+    await mod.runSubscriptionReconciliation(deps);
+    expect(deps.reconcileBadge).toHaveBeenCalledWith('supporter');
+    expect(deps.reconcileBadge).toHaveBeenCalledWith('plus');
+    expect(applied).toEqual([]);
+  });
+
+  it('does not let a cosmetic repair failure block privilege removal', async () => {
+    const deps = makeDeps([{ id: 'u1', record: nonGranting }], {
+      reconcileBadge: vi.fn(async () => {
+        throw new Error('badge write failed');
+      }),
+    });
+    const result = await mod.runSubscriptionReconciliation(deps);
+    expect(result.reconciledCount).toBe(1);
+    expect(applied[0]).toMatchObject({ userId: 'u1', entitlement: 'none' });
   });
 
   it('flags but does not fix an under-privileged member', async () => {
@@ -142,10 +166,13 @@ describe('runSubscriptionReconciliation', () => {
   });
 
   it('advances the cursor to the last id on a full page', async () => {
-    const fullPage: ReconcileCandidate[] = Array.from({ length: MAX_RECONCILE_PER_RUN }, (_, i) => ({
-      id: `u${i}`,
-      record: granting,
-    }));
+    const fullPage: ReconcileCandidate[] = Array.from(
+      { length: MAX_RECONCILE_PER_RUN },
+      (_, i) => ({
+        id: `u${i}`,
+        record: granting,
+      }),
+    );
     const deps = makeDeps(fullPage);
     await mod.runSubscriptionReconciliation(deps);
     expect(cursorWrites).toEqual([`u${MAX_RECONCILE_PER_RUN - 1}`]);

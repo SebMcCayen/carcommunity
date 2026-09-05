@@ -48,6 +48,7 @@ data class UserProfile(
      * normal state and renders nothing at all.
      */
     val social: SocialHandles = SocialHandles.EMPTY,
+    val supporterBadge: SupporterBadge = SupporterBadge(),
 )
 
 /** Observed state of the profile document. */

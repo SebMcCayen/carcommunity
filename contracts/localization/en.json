@@ -1,4 +1,10 @@
 {
+  "supporterBadge": {
+    "accessibility": "Supporter crown",
+    "settingTitle": "Show Supporter crown",
+    "settingBody": "Shows a small crown on your profile picture while your Supporter membership is active. Your choice is saved even when your membership ends.",
+    "saveFailed": "Could not save your choice. Please try again."
+  },
   "app": {
     "name": "Kungsbacka Car Community"
   },
