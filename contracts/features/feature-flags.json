@@ -124,9 +124,9 @@
     {
       "key": "crownHuntRequirePaid",
       "default": false,
-      "label": "Kronjakt requires a paid subscription",
+      "label": "Legacy Crown Hunt paywall (unused)",
       "sensitivity": "standard",
-      "description": "Kronjakt PAYWALL — makes collecting crowns a PAID feature (any active paid tier, Plus OR Supporter). Default OFF: while off, behaviour is exactly as today — every signed-in, non-suspended member sees crowns and can collect. Turning it ON gates PARTICIPATION on the activeMember entitlement. Backend enforcement is platform-neutral and the security boundary: a free member gets no spawn reads (Firestore rules) and every collect callable returns not_eligible (crownHunt.claimSpawn / crownHunt.submitClaim). Client gating is ANDROID-only this slice: crowns are hidden for free members and the participation toggle is locked behind an upgrade prompt. iOS client gating is DEFERRED per ADR-002 (iOS payment/paywall waits until the iOS app finishes its MVP) — the Kronjakt upsell string regenerates into the iOS xcstrings but is staged/unused, and iOS is still protected by the platform-neutral backend enforcement. FREEZE semantics: a free member's EXISTING Kronpoäng balance and leaderboard rank stay VISIBLE and unchanged — the paywall stops new earning, it never claws back or hides history (the leaderboard, seasons, user-stats and points ledger read paths are deliberately NOT gated). Admins always keep access. Independent of the global member-gating switch — this is a NARROW Kronjakt-only gate."
+      "description": "Deprecated compatibility flag, ignored by Crown Hunt backend, Firestore rules and Android participation. Free unrestricted users can participate. Tier differentiation is the separate server-authoritative daily crown-only KP allowance: free 2250, Plus/Supporter 3000, reset at Europe/Stockholm midnight. Keep the key for older clients; it must not be used to lock participation."
     }
   ]
 }

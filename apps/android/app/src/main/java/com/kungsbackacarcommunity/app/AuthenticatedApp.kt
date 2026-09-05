@@ -1073,16 +1073,8 @@ fun AuthenticatedApp(
                 route = null
             }
 
-            // KRONJAKT PAYWALL (dark flag `crownHuntRequirePaid`, contract
-            // default OFF). Derived ONCE here — where the live `flags` (from the
-            // realtime feature-flag listener) and `profile` are both in scope —
-            // so the crown map layer, the collect gate and the map-layers toggle
-            // all read one consistent value. While the flag is OFF this is always
-            // true, so everything below renders exactly as today; while ON it
-            // follows the PAID `activeMember` entitlement, mirroring the server
-            // gate (crownHuntGateAllows / isPaidCrownHunter) so the UI never
-            // offers a collection the backend would refuse. NOT the global
-            // MemberGating switch — that stays off; this is Kronjakt-only.
+            // Free and paid users participate. Legacy arguments are ignored;
+            // the server applies each tier's separate Crown Hunt KP allowance.
             val crownHuntUnlocked =
                 CrownPointMarkers.crownHuntUnlocked(
                     requirePaid = flags.isEnabled(FeatureFlag.CROWN_HUNT_REQUIRE_PAID),

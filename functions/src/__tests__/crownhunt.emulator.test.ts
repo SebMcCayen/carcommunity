@@ -335,7 +335,7 @@ describe('crownHunt-submitClaim', () => {
     expect(response.pointsAwarded).toBe(25);
   });
 
-  it('paywall ON: a FREE member gets not_eligible; a PAID member is awarded', async () => {
+  it('legacy paywall ON: free and paid members can collect', async () => {
     // The Kronjakt paywall applied to the hand-placed-point claim path. Mirrors
     // the claimSpawn (auto-spawn) paywall test — both callables share the gate.
     await setRequirePaidFlag(true);
@@ -346,8 +346,8 @@ describe('crownHunt-submitClaim', () => {
       await signInAs(freeUser);
       const freeResp = (await call('crownHunt-submitClaim', claimInput({ pointId: freePoint })))
         .data as { result: string; pointsAwarded: number | null };
-      expect(freeResp.result).toBe('not_eligible');
-      expect(freeResp.pointsAwarded).toBeNull();
+      expect(freeResp.result).toBe('awarded');
+      expect(freeResp.pointsAwarded).toBe(25);
 
       // Paid member — a fresh one (no prior-test claims → no daily-cap flake).
       const paidUser = await createProvisionedUser('ch-paid-on');

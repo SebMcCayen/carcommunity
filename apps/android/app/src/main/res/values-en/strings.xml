@@ -1170,6 +1170,8 @@
     <string name="crownHunt_resultPointInactive">This point is no longer available.</string>
     <string name="crownHunt_resultCooldownActive">Wait before collecting again.</string>
     <string name="crownHunt_resultDailyLimit">You have reached today\'s collection limit.</string>
+    <string name="crownHunt_allowanceReached">Today\'s Crown Hunt KP allowance is used up. The crown has not been collected.</string>
+    <string name="crownHunt_allowanceRemaining">%1$d of %2$d Crown Hunt KP remaining at collection time. Resets %3$s (Stockholm).</string>
     <string name="crownHunt_resultRiskReview">The claim needs review and no points have been awarded yet.</string>
     <string name="crownHunt_resultFeatureDisabled">Crown Hunt is not available right now.</string>
     <string name="crownHunt_resultNotEligible">You are not eligible to collect right now.</string>

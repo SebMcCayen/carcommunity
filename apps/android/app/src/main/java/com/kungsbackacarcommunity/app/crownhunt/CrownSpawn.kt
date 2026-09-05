@@ -159,6 +159,7 @@ data class CrownSpawnClaimOutcome(
     val pointsAwarded: Int?,
     val newBalance: Int?,
     val rarity: CrownRarity?,
+    val allowance: CrownAllowance? = null,
 )
 
 /**

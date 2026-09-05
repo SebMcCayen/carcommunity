@@ -1267,6 +1267,8 @@
     "resultPointInactive": "Denna punkt är inte längre tillgänglig.",
     "resultCooldownActive": "Vänta innan du samlar in igen.",
     "resultDailyLimit": "Du har nått dagens gräns för insamlingar.",
+    "allowanceReached": "Dagens KP-gräns för Kronjakt är nådd. Kronan har inte samlats in.",
+    "allowanceRemaining": "%1$d av %2$d KP kvar för Kronjakt vid insamlingen. Ny dagsgräns %3$s (Stockholm).",
     "resultRiskReview": "Claimen behöver granskas och inga poäng har delats ut ännu.",
     "resultFeatureDisabled": "Kronjakt är inte tillgängligt just nu.",
     "resultNotEligible": "Du är inte behörig att samla in just nu.",

@@ -222,6 +222,7 @@ private fun Map<String, Any?>.toClaimOutcome(): CrownSpawnClaimOutcome? {
         result = result,
         pointsAwarded = (this["pointsAwarded"] as? Number)?.toInt(),
         newBalance = (this["newBalance"] as? Number)?.toInt(),
+        allowance = CrownAllowance.fromWire(this["allowance"]),
         rarity = CrownRarity.fromWire(this["rarity"] as? String),
     )
 }

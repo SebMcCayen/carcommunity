@@ -78,10 +78,8 @@ export const CROWN_HUNT_FLAG_KEY = 'crownHunt';
 export const CROWN_HUNT_FLAG_DEFAULT = true;
 
 /**
- * The Kronjakt PAYWALL flag key (contract default OFF). When ON, the collect
- * callables gate on the paid `activeMember` entitlement (crownHuntGateAllows)
- * instead of the relaxed member gate; when OFF, Kronjakt collection behaves
- * exactly as today. See contracts/features/feature-flags.json.
+ * Legacy compatibility key. Crown participation is now free and this flag is
+ * ignored by the Crown backend/rules/Android. Paid tiers get a larger KP allowance.
  */
 export const CROWN_HUNT_REQUIRE_PAID_FLAG_KEY = 'crownHuntRequirePaid';
 

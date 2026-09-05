@@ -1170,6 +1170,8 @@
     <string name="crownHunt_resultPointInactive">Denna punkt är inte längre tillgänglig.</string>
     <string name="crownHunt_resultCooldownActive">Vänta innan du samlar in igen.</string>
     <string name="crownHunt_resultDailyLimit">Du har nått dagens gräns för insamlingar.</string>
+    <string name="crownHunt_allowanceReached">Dagens KP-gräns för Kronjakt är nådd. Kronan har inte samlats in.</string>
+    <string name="crownHunt_allowanceRemaining">%1$d av %2$d KP kvar för Kronjakt vid insamlingen. Ny dagsgräns %3$s (Stockholm).</string>
     <string name="crownHunt_resultRiskReview">Claimen behöver granskas och inga poäng har delats ut ännu.</string>
     <string name="crownHunt_resultFeatureDisabled">Kronjakt är inte tillgängligt just nu.</string>
     <string name="crownHunt_resultNotEligible">Du är inte behörig att samla in just nu.</string>

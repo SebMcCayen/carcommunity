@@ -1267,6 +1267,8 @@
     "resultPointInactive": "This point is no longer available.",
     "resultCooldownActive": "Wait before collecting again.",
     "resultDailyLimit": "You have reached today's collection limit.",
+    "allowanceReached": "Today's Crown Hunt KP allowance is used up. The crown has not been collected.",
+    "allowanceRemaining": "%1$d of %2$d Crown Hunt KP remaining at collection time. Resets %3$s (Stockholm).",
     "resultRiskReview": "The claim needs review and no points have been awarded yet.",
     "resultFeatureDisabled": "Crown Hunt is not available right now.",
     "resultNotEligible": "You are not eligible to collect right now.",

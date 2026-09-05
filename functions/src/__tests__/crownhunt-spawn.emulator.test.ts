@@ -545,7 +545,7 @@ describe('crownHunt.claimSpawn', () => {
     expect(response.result).toBe('awarded');
   });
 
-  it('paywall ON: a FREE member is refused with not_eligible; a PAID member is unaffected', async () => {
+  it('legacy paywall ON: free and paid members can collect', async () => {
     await setRequirePaidFlag(true);
     try {
       // Free member — same `not_eligible` result code and Swedish message the
@@ -555,8 +555,8 @@ describe('crownHunt.claimSpawn', () => {
       await signInAs(freeUser);
       const freeResp = (await call('crownHunt-claimSpawn', claimInput({ spawnId: freeSpawn })))
         .data as ClaimResponse;
-      expect(freeResp.result).toBe('not_eligible');
-      expect(freeResp.pointsAwarded).toBeNull();
+      expect(freeResp.result).toBe('awarded');
+      expect(freeResp.pointsAwarded).toBeGreaterThan(0);
 
       // Paid member (activeMember on the users doc, which the callable reads) —
       // a fresh one, so no prior-test claims can bump the daily cap.

@@ -66,33 +66,13 @@ service cloud.firestore {
       return isAuthenticated() && isNotSuspended();
     }
 
-    // ---- KRONJAKT PAYWALL (dark, flag-gated) -------------------------------
-    // A PAID Kronjakt participant. Delegates to isPaidSubscriber() so the crown
-    // gate reads the AUTHORITATIVE subscriptions/{uid} record (written only by
-    // Cloud Functions), exactly like the partner-offers and event-details gates
-    // — NOT the `activeMember` custom claim. The claim is stale until the client
-    // refreshes its ID token, so gating crown reads on it would deny a
-    // freshly-paid member the crown layer (which the Android UI, keyed off the
-    // same sub record, has already unlocked) until the token cycles. Reusing the
-    // sub-doc helper keeps rules, UI, and the backend resolver in agreement.
-    // isPaidSubscriber() already bundles authenticated + not-suspended, so
-    // suspension still overrides entitlement. INDEPENDENT of the global
-    // isActiveMember() gating switch above: Kronjakt collection is going paid
-    // ahead of the rest of the app, so it must stay gated on the PAID tier even
-    // while the global member gate is relaxed.
-    function isPaidCrownHunter() {
-      return isPaidSubscriber();
-    }
-
-    // Dark flag gating whether Kronjakt requires a PAID subscription. Reads
-    // config/featureFlags (authenticated-readable; written only by
-    // admin.setFeatureFlag). SINGLE get() via a let-binding; a missing
-    // document/field is null ⇒ false, matching the contract default OFF, so no
-    // companion exists() read is needed and this deploys inert until go-live.
-    // Mirrors the partner-offers flag-in-rules idiom (PR #1067).
-    function crownHuntRequirePaid() {
-      let flags = get(/databases/$(database)/documents/config/featureFlags);
-      return flags != null && flags.data.get('crownHuntRequirePaid', false) == true;
+    // Crown participation is independent of subscription and global member gates.
+    // Read server-owned restrictions too, so a stale token cannot bypass them.
+    function canCollectCrowns() {
+      let user = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return isAuthenticated() && isNotSuspended()
+        && (user == null || (user.data.get('suspended', false) != true
+                            && user.data.get('deleted', false) != true));
     }
 
     // True when [sub] (a subscriptions/{uid} document Resource, or null when the
@@ -1468,14 +1448,9 @@ service cloud.firestore {
       // drafts/paused/ended for the admin portal (Phase 13e). All writes go
       // through the safety-gated crownHunt.* admin callables.
       //
-      // KRONJAKT PAYWALL (dark): when crownHuntRequirePaid is ON, only a PAID
-      // member may read active points (a free member sees no crowns); while OFF
-      // the gate is the existing isActiveMember(), i.e. exactly today. The
-      // status=='active' term and the admin read are PRESERVED unchanged.
-      // isAdmin() is evaluated FIRST so an admin short-circuits before the
-      // crownHuntRequirePaid() config/featureFlags get() — admins never pay it.
+      // Free, unrestricted accounts may read active crowns.
       allow read: if isAdmin()
-                  || ((crownHuntRequirePaid() ? isPaidCrownHunter() : isActiveMember())
+                  || (canCollectCrowns()
                       && resource.data.status == 'active');
       // No client writes.
     }
@@ -1490,7 +1465,7 @@ service cloud.firestore {
       // Owner reads their own claim history; admins read every claim for the
       // review queue (Phase 13e). Anti-fraud risk data stays backend-only in
       // crownHuntClaimRisk (below) — this grant does not expose it.
-      allow read: if (isActiveMember() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow read: if (canCollectCrowns() && resource.data.userId == request.auth.uid) || isAdmin();
       // No client writes.
     }
 
@@ -1570,29 +1545,19 @@ service cloud.firestore {
     // NO client writes. A crown is a reward-bearing document: a client that
     // could write one could mint Kronpoäng at a coordinate of its choosing.
     // -------------------------------------------------------------------------
+    // Private backend-only allowance. Even owners cannot read/list or modify it;
+    // claim responses expose only their own cap/remaining/reset snapshot.
+    match /crownDailyAllowances/{uid}/{document=**} {
+      allow read, write: if false;
+    }
+
     match /crownSpawns/{spawnId} {
-      // KRONJAKT PAYWALL (dark): when crownHuntRequirePaid is ON, only a PAID
-      // member may read spawns (a free member's map query returns nothing);
-      // while OFF the gate is the existing isActiveMember(), i.e. exactly today.
-      // The list/get split, the list `status == 'live'` term, the get
-      // `status == 'live' && expiresAt > request.time` terms, and the admin read
-      // are ALL PRESERVED unchanged (see the long note above for why each is
-      // shaped this way).
-      //
-      // FUTURE OPTIMISATION: crownHuntRequirePaid() adds ONE extra
-      // config/featureFlags get() per crownSpawns poll (the map re-queries every
-      // ~60 s) FOR NON-ADMINS — isAdmin() is evaluated FIRST below so an admin
-      // short-circuits before the flag get() and never pays it. It is a small,
-      // cache-friendly single-doc read and negligible at this app's scale, but
-      // if Firestore spend ever shows it, fold the flag into the client (which
-      // already reads config/featureFlags on launch/resume) so it simply stops
-      // issuing the query for a free member, and drop this rules-side get() —
-      // the callable gate is the security boundary either way.
+      // Free, unrestricted accounts may read live crowns.
       allow list: if isAdmin()
-                  || ((crownHuntRequirePaid() ? isPaidCrownHunter() : isActiveMember())
+                  || (canCollectCrowns()
                       && resource.data.status == 'live');
       allow get: if isAdmin()
-                 || ((crownHuntRequirePaid() ? isPaidCrownHunter() : isActiveMember())
+                 || (canCollectCrowns()
                      && resource.data.status == 'live'
                      && resource.data.expiresAt > request.time);
       // No client writes.
@@ -1679,7 +1644,7 @@ service cloud.firestore {
     // inside the award transaction.
     // -------------------------------------------------------------------------
     match /crownSpawnCollectors/{collectorId} {
-      allow read: if isActiveMember() && resource.data.userId == request.auth.uid;
+      allow read: if canCollectCrowns() && resource.data.userId == request.auth.uid;
       // No client writes — the pickup record is a reward-integrity artefact.
     }
 
@@ -1727,7 +1692,7 @@ service cloud.firestore {
     // client that could write one could drain a rival at will.
     // -------------------------------------------------------------------------
     match /activePerks/{trapId} {
-      allow read: if (isActiveMember() && resource.data.placedByUid == request.auth.uid) || isAdmin();
+      allow read: if (canCollectCrowns() && resource.data.placedByUid == request.auth.uid) || isAdmin();
       // No client writes.
     }
 
@@ -1749,7 +1714,7 @@ service cloud.firestore {
     // by crownHunt.deployPerk (Admin SDK) — no client writes.
     // -------------------------------------------------------------------------
     match /perkShieldPublic/{userId} {
-      allow read: if isActiveMember();
+      allow read: if canCollectCrowns();
       // No client writes.
     }
 
@@ -1859,7 +1824,7 @@ service cloud.firestore {
     // Risk data is NOT here — see crownSpawnClaimRisk below.
     // -------------------------------------------------------------------------
     match /crownSpawnClaims/{claimId} {
-      allow read: if (isActiveMember() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow read: if (canCollectCrowns() && resource.data.userId == request.auth.uid) || isAdmin();
       // No client writes.
     }
 
@@ -1910,10 +1875,10 @@ service cloud.firestore {
     //    per-cell map to members would tell a client where to wait for spawns.
     // -------------------------------------------------------------------------
     match /crownHuntLeaderboardEntries/{entryId} {
-      // isActiveMember() (not bare isAuthenticated) so suspension overrides
+      // canCollectCrowns() (not bare isAuthenticated) so suspension overrides
       // access, matching every other member-facing read in this ruleset. While
       // member gating is disabled it resolves to signed-in AND not suspended.
-      allow read: if isActiveMember();
+      allow read: if canCollectCrowns();
       allow write: if false;
     }
 
@@ -1937,7 +1902,7 @@ service cloud.firestore {
     }
 
     match /crownHuntSeasons/{seasonId} {
-      allow read: if isActiveMember();
+      allow read: if canCollectCrowns();
       allow write: if false;
     }
 

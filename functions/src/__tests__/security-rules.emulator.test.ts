@@ -3803,11 +3803,36 @@ describe('Firestore – Kronjakt paywall (crownHuntRequirePaid) read gate', () =
     });
   });
 
-  it('flag ON: a FREE member is DENIED crownSpawns (list AND get) and active crownHuntPoints', async () => {
+  it('legacy flag ON: a FREE member can list/get live spawns and active points', async () => {
     const freeFs = testEnv.authenticatedContext(FREE).firestore();
-    await assertFails(getDocs(clientLiveQuery(freeFs)));
-    await assertFails(getDoc(doc(freeFs, 'crownSpawns', LIVE)));
-    await assertFails(getDoc(doc(freeFs, 'crownHuntPoints', 'chp-p-active')));
+    await assertSucceeds(getDocs(clientLiveQuery(freeFs)));
+    await assertSucceeds(getDoc(doc(freeFs, 'crownSpawns', LIVE)));
+    await assertSucceeds(getDoc(doc(freeFs, 'crownHuntPoints', 'chp-p-active')));
+  });
+
+  it('allowance is private and neither its counter nor subscription truth can be forged', async () => {
+    const fs = testEnv.authenticatedContext(FREE).firestore();
+    const path = `crownDailyAllowances/${FREE}/days/2026-09-05`;
+    await testEnv.withSecurityRulesDisabled(async ctx => {
+      await setDoc(doc(ctx.firestore(), path), { earned: 2250 });
+    });
+    await assertFails(getDoc(doc(fs, path)));
+    await assertFails(getDocs(collection(fs, `crownDailyAllowances/${FREE}/days`)));
+    await assertFails(setDoc(doc(fs, path), { earned: 0 }));
+    await assertFails(setDoc(doc(fs, 'subscriptions', FREE), { tier: 'supporter', status: 'active', entitlement: 'member_monthly' }));
+    await assertFails(setDoc(doc(fs, 'users', FREE), { activeMember: true }));
+    const stranger = testEnv.authenticatedContext('allowance-stranger').firestore();
+    await assertFails(getDoc(doc(stranger, path)));
+  });
+
+  it.each(['suspended', 'deleted'])('server %s restriction blocks crown reads even with a stale unrestricted token', async field => {
+    const uid = `crown-restricted-${field}`;
+    await testEnv.withSecurityRulesDisabled(async ctx => {
+      await setDoc(doc(ctx.firestore(), 'users', uid), { [field]: true });
+    });
+    const fs = testEnv.authenticatedContext(uid).firestore();
+    await assertFails(getDocs(clientLiveQuery(fs)));
+    await assertFails(getDoc(doc(fs, 'crownHuntPoints', 'chp-p-active')));
   });
 
   it('flag ON: a PAID member (via the subscriptions record, NO activeMember claim) is ALLOWED', async () => {
