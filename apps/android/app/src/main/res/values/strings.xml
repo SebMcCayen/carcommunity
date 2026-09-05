@@ -595,7 +595,7 @@
     <string name="friends_retry">Försök igen</string>
     <string name="friends_unknownMember">Medlem</string>
     <string name="friends_errorSignedOut">Logga in för att hantera vänner.</string>
-    <string name="friends_errorNotMember">Vänner är tillgängliga för aktiva medlemmar.</string>
+    <string name="friends_errorNotMember">Ditt konto kan inte använda vänfunktionen just nu.</string>
     <string name="friends_errorInvalid">Ange ett giltigt smeknamn.</string>
     <string name="friends_errorSelfRequest">Det där är du! Du kan inte skicka en vänförfrågan till dig själv.</string>
     <string name="friends_errorNotFound">Ingen medlem matchar det smeknamnet. Kontrollera stavningen, eller prova de första bokstäverna.</string>
@@ -655,7 +655,7 @@
     <string name="convoy_unknownMember">Medlem</string>
     <string name="convoy_close">Stäng</string>
     <string name="convoy_errorSignedOut">Logga in för att hantera konvojer.</string>
-    <string name="convoy_errorNotMember">Konvojer är tillgängliga för aktiva medlemmar.</string>
+    <string name="convoy_errorNotMember">Ditt konto kan inte använda konvojer just nu.</string>
     <string name="convoy_errorInvalid">Förfrågan var inte giltig.</string>
     <string name="convoy_errorNotFound">Konvojen är inte längre tillgänglig.</string>
     <string name="convoy_errorNoInvitees">Ingen kunde läggas till i konvojen.</string>
@@ -815,7 +815,7 @@
     <string name="groupDrive_errorLeave">Kunde inte lämna. Försök igen.</string>
     <string name="groupDrive_errorUpdateStatus">Kunde inte uppdatera status. Försök igen.</string>
     <string name="groupDrive_notParticipating">Du deltar inte i gruppkörningen.</string>
-    <string name="groupDrive_memberRequired">Aktivt medlemskap krävs för gruppkörning.</string>
+    <string name="groupDrive_memberRequired">Gruppkörning kräver ett publicerat event och att du har svarat Kommer eller Kanske.</string>
     <string name="groupDrive_rsvpRequired">Du behöver RSVP:a Kommer eller Kanske för att delta i gruppkörningen.</string>
     <string name="groupDrive_rejoinNotice">Du har återanslutit dig till gruppkörningen.</string>
     <string name="groupDrive_countJoined">Deltar</string>
@@ -905,7 +905,7 @@
     <string name="savedDrives_driveKept">Körningen har sparats.</string>
     <string name="savedDrives_driveDeleted">Körningen har raderats.</string>
     <string name="savedDrives_closeButton">Stäng</string>
-    <string name="savedDrives_memberRequired">Aktivt medlemskap krävs för att spara körningar.</string>
+    <string name="savedDrives_memberRequired">Ditt konto kan inte spara körningar just nu.</string>
     <string name="savedDrives_recordTitle">Spela in körning</string>
     <string name="savedDrives_recordStart">Starta inspelning</string>
     <string name="savedDrives_recordStop">Stoppa inspelning</string>
@@ -1549,7 +1549,7 @@
     <string name="dm_send">Skicka</string>
     <string name="dm_loadOlder">Ladda tidigare meddelanden</string>
     <string name="dm_sendErrorSignedOut">Logga in för att skicka meddelanden.</string>
-    <string name="dm_sendErrorNotMember">Direktmeddelanden är tillgängliga för aktiva medlemmar.</string>
+    <string name="dm_sendErrorNotMember">Ditt konto kan inte skicka direktmeddelanden just nu.</string>
     <string name="dm_sendErrorInvalid">Skriv ett meddelande att skicka.</string>
     <string name="dm_sendErrorCannotDeliver">Det här meddelandet kan inte levereras just nu.</string>
     <string name="dm_sendErrorGeneric">Kunde inte skicka ditt meddelande. Försök igen.</string>
@@ -1570,7 +1570,7 @@
     <string name="channel_unknownSender">Medlem</string>
     <string name="channel_openSenderProfile">Öppna profilen för %1$s</string>
     <string name="channel_sendErrorSignedOut">Logga in för att skicka meddelanden.</string>
-    <string name="channel_sendErrorNotMember">Chatten är tillgänglig för aktiva medlemmar.</string>
+    <string name="channel_sendErrorNotMember">Ditt konto kan inte använda chatten just nu.</string>
     <string name="channel_sendErrorInvalid">Skriv ett meddelande att skicka.</string>
     <string name="channel_sendErrorCannotDeliver">Det här meddelandet kan inte levereras just nu.</string>
     <string name="channel_sendErrorGeneric">Kunde inte skicka ditt meddelande. Försök igen.</string>

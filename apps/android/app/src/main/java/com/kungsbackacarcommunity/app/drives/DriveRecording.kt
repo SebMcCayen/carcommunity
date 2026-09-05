@@ -144,16 +144,15 @@ sealed interface RecordingState {
     ) : RecordingState {
         /**
          * True when the backend refused the save outright and retrying cannot
-         * help. `drives-save` is member-gated (requireMemberActor), so a caller
-         * without the activeMember entitlement gets `PERMISSION_DENIED` on every
-         * attempt; telling them to "try again" would loop forever.
+         * help. `drives-save` rejects restricted accounts with
+         * `PERMISSION_DENIED`; telling them to "try again" would loop forever.
          */
         val isPermanentRefusal: Boolean
             get() = code == PERMISSION_DENIED
     }
 
     companion object {
-        /** Firebase Functions status for a backend refusal (the member gate). */
+        /** Firebase Functions status for a backend access refusal. */
         const val PERMISSION_DENIED: String = "PERMISSION_DENIED"
 
         /**
@@ -164,7 +163,7 @@ sealed interface RecordingState {
          * same request is safe: at worst it returns the already-created drive.
          *
          * This is deliberately a CLOSED allow-list, not "everything that isn't
-         * PERMISSION_DENIED": a `PERMISSION_DENIED` (the member gate) or an
+         * PERMISSION_DENIED": a `PERMISSION_DENIED` (restricted access) or an
          * `INVALID_ARGUMENT` (a malformed payload — a client bug) can NEVER be
          * fixed by trying again, so retrying them would just loop. A null
          * (unclassified) code is likewise not retried — the background save
@@ -226,41 +225,17 @@ object DriveSaveConfirmation {
 /**
  * Whether a live-sharing session should ALSO record a drive for History.
  *
- * This mirrors the SAVE gate rather than the live-sharing one, and the
- * distinction is the whole point. Sharing your OWN position is FREE
- * (live-startSession only needs requireActiveActor), whereas SAVING a drive is
- * member-gated (drives-save uses requireMemberActor — and note that gate has no
- * admin/owner bypass, unlike requireMemberOrAdminActor). Gating the recording on
- * the sharing rule instead of the saving rule is what shipped in v0.8.0: a
- * non-member's session recorded a drive, the end-of-session prompt then forced a
- * save/discard choice, and Save could only ever fail with PERMISSION_DENIED.
- *
- * Member gating is currently DISABLED, so BOTH gates are open and everyone
- * records and saves. That does not make this function redundant — it makes it
- * load-bearing in the other direction: pass the GATE RESULT here
- * (MemberGating.allows(...)), never the raw activeMember entitlement, or the
- * app would refuse to record drives the backend would happily store. Whichever
- * way the switches are set, recording and saving must agree.
- *
- * [RecordDriveScreen] already applies exactly this rule to the manual recorder
- * (it refuses to record without passing the member gate); this keeps the
- * live-sharing entry point honest with it, so no recording is started that
- * cannot be saved.
+ * Sharing and saving are free for authenticated active accounts. Subscription
+ * entitlement is deliberately absent: only backend availability and the live
+ * sharing capability decide whether automatic recording starts.
  */
 object DriveRecordingGate {
     /**
      * @param hasDrivesBackend false in a config-less/CI build with no drives
      *   repository — live sharing still works, nothing records.
-     * @param passesMemberGate whether the caller passes the MEMBER GATE that
-     *   drives-save enforces — NOT the raw `users/{uid}.activeMember`
-     *   entitlement. While member gating is disabled
-     *   (functions/src/shared/memberGating.ts, config/MemberGating.kt) that
-     *   gate is open to any signed-in, non-suspended user, so callers must
-     *   pass `MemberGating.allows(...)` here rather than the raw flag. Passing
-     *   the raw flag would refuse to record drives the backend would save.
      */
-    fun shouldRecord(hasDrivesBackend: Boolean, canShareLive: Boolean, passesMemberGate: Boolean): Boolean =
-        hasDrivesBackend && canShareLive && passesMemberGate
+    fun shouldRecord(hasDrivesBackend: Boolean, canShareLive: Boolean): Boolean =
+        hasDrivesBackend && canShareLive
 }
 
 /**

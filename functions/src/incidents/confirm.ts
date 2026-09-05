@@ -3,7 +3,7 @@
  * crowd-sourced incident (contracts/functions/functions.json: incidents.confirm).
  *
  * Deployed via the `incidents` export group as `incidents-confirm`
- * (europe-west1). Member-gated (requireMemberActor), matching `incidents.report`
+ * (europe-west1). Active-account-gated (requireActiveActor), matching `incidents.report`
  * rather than the read-only `incidents.listNearby`: a confirmation is a WRITE
  * that changes what every user on the map sees and keeps a marker alive, so it
  * demands the same trust level as creating one in the first place.
@@ -44,7 +44,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { requireMemberActor } from '../shared/memberActor';
+import { requireActiveActor } from '../shared/memberActor';
 import {
   CLEAR_VOTES_SUBCOLLECTION,
   INCIDENT_TYPES,
@@ -88,7 +88,7 @@ export interface ConfirmResponse {
 }
 
 export const confirm = onCall(CALLABLE_OPTS, async (request): Promise<ConfirmResponse> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseConfirmInput(request.data);
   if (!parsed.ok) {

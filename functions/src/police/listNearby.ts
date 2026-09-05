@@ -4,7 +4,7 @@
  * police.listNearby).
  *
  * Deployed via the `police` export group as `police-listNearby` (europe-west1).
- * MEMBER-gated (requireMemberActor) to match the member-read `policeReports` rule
+ * Active-account-gated (requireActiveActor) to match the member-read `policeReports` rule
  * and the feature's least-privilege audience — unlike incidents.listNearby, which
  * is open to every signed-in user because that layer is deliberately shared with
  * all. Mirrors the crownHunt geo approach otherwise: the requested radius is
@@ -21,7 +21,7 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { requireMemberActor } from '../shared/memberActor';
+import { requireActiveActor } from '../shared/memberActor';
 import {
   FIRESTORE_IN_CHUNK,
   POLICE_ACTIVE_STATUS,
@@ -56,7 +56,7 @@ export interface ListNearbyResponse {
 }
 
 export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNearbyResponse> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseListNearbyInput(request.data);
   if (!parsed.ok) {

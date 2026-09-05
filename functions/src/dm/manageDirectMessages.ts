@@ -1,6 +1,6 @@
 /**
  * dm.sendMessage / dm.listConversations / dm.getMessages / dm.markRead —
- * member-gated 1:1 direct-messaging callables (contracts/functions/functions.json).
+ * active-account 1:1 direct-messaging callables (contracts/functions/functions.json).
  *
  * Deployed via the `dm` export group as `dm-sendMessage`,
  * `dm-listConversations`, `dm-getMessages`, `dm-markRead`. Stacked on the
@@ -46,7 +46,7 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { requireMemberActor } from '../shared/memberActor';
+import { requireActiveActor } from '../shared/memberActor';
 import { toUserAccessState } from '../shared/access';
 import { writeInAppNotification } from '../notifications/deliver';
 import { filterHiddenAuthors } from '../blocking/block-visibility';
@@ -149,7 +149,7 @@ export interface SendMessageResponse {
 }
 
 export const sendMessage = onCall(CALLABLE_OPTS, async (request): Promise<SendMessageResponse> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseSendMessageInput(request.data);
   if (!parsed.ok) {
@@ -370,7 +370,7 @@ export interface ListConversationsResponse {
 export const listConversations = onCall(
   CALLABLE_OPTS,
   async (request): Promise<ListConversationsResponse> => {
-    const actor = await requireMemberActor(request);
+    const actor = await requireActiveActor(request);
 
     const parsed = parseListConversationsInput(request.data);
     if (!parsed.ok) {
@@ -427,7 +427,7 @@ export interface GetMessagesResponse {
 }
 
 export const getMessages = onCall(CALLABLE_OPTS, async (request): Promise<GetMessagesResponse> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseGetMessagesInput(request.data);
   if (!parsed.ok) {
@@ -496,7 +496,7 @@ export interface MarkReadResponse {
 }
 
 export const markRead = onCall(CALLABLE_OPTS, async (request): Promise<MarkReadResponse> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseMarkReadInput(request.data);
   if (!parsed.ok) {

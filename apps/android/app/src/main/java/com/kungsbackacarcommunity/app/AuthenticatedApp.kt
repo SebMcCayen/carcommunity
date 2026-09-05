@@ -2073,8 +2073,7 @@ fun AuthenticatedApp(
             // child of the shell's outer Box, so it draws OVER the full-screen nav
             // view rather than under it.
             val incidentReportingEnabled =
-                incidentController != null &&
-                    MemberGating.allows(profile?.activeMember == true)
+                incidentController != null
             val reportIncident: (IncidentType, ReportLocation) -> Unit = { type, location ->
                 incidentController?.let { controller ->
                     scope.launch {
@@ -3590,24 +3589,13 @@ fun AuthenticatedApp(
                 }
             }
 
-            // Only record a drive the user could actually SAVE. drives-save is
-            // member-gated (requireMemberActor) while live sharing is free, so
-            // gating the recording on canShareLive — as v0.8.0 did — handed a
-            // non-member an end-of-session prompt whose Save could only ever fail
-            // with PERMISSION_DENIED, forever. The manual recorder
-            // (RecordDriveScreen) already applies this same member rule.
-            // Member gating is currently DISABLED (config/MemberGating.kt) and
-            // drives-save admits any signed-in, non-suspended caller to match,
-            // so this resolves to true for everyone. Routing it through the
-            // switch (rather than the raw entitlement) is what keeps recording
-            // aligned with saving: gating recording on the RAW flag while the
-            // backend saves for everyone would invert the v0.8.0 bug — we would
-            // refuse to record drives the server would happily store.
+            // Recording and saving are free for active authenticated accounts.
+            // The backend enforces suspension/deletion; automatic recording
+            // still requires an available drives backend and live sharing.
             val canRecordDrive =
                 DriveRecordingGate.shouldRecord(
                     hasDrivesBackend = drivesRepository != null,
                     canShareLive = canShareLive,
-                    passesMemberGate = MemberGating.allows(profile?.activeMember == true),
                 )
 
             // Bind the recording lifecycle to the live-sharing state. Both calls

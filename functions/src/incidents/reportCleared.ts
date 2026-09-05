@@ -3,7 +3,7 @@
  * (contracts/functions/functions.json: incidents.reportCleared).
  *
  * Deployed via the `incidents` export group as `incidents-reportCleared`
- * (europe-west1). Member-gated (requireMemberActor), matching `incidents.report`
+ * (europe-west1). Active-account-gated (requireActiveActor), matching `incidents.report`
  * and `incidents.confirm`: it is a WRITE that changes what every user on the map
  * sees.
  *
@@ -95,7 +95,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { requireMemberActor } from '../shared/memberActor';
+import { requireActiveActor } from '../shared/memberActor';
 import {
   haversineDistanceMeters,
   isPositionFresh,
@@ -171,7 +171,7 @@ function reject(
 export const reportCleared = onCall(
   CALLABLE_OPTS,
   async (request): Promise<ReportClearedResponse> => {
-    const actor = await requireMemberActor(request);
+    const actor = await requireActiveActor(request);
 
     // Validate BEFORE the rate limit so a malformed call is rejected without
     // touching Firestore and without burning the caller's window — the same
@@ -198,7 +198,7 @@ export const reportCleared = onCall(
     }
 
     // Server-managed admin claim (set only by admin.setAdminRole); a suspended
-    // admin is already rejected by requireMemberActor above.
+    // admin is already rejected by requireActiveActor above.
     const isAdmin = request.auth?.token.admin === true;
 
     const ref = db.collection('incidents').doc(incidentId);

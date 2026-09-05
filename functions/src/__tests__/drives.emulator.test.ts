@@ -229,11 +229,7 @@ describe('drives-save', () => {
       'functions/unauthenticated',
     );
 
-    // Member gating is disabled (functions/src/shared/memberGating.ts): a
-    // non-member may save a drive they recorded. This is the bug Seb hit —
-    // recording was never member-gated but saving was, so a non-member could
-    // record a drive and then be refused when saving it, with no way to keep
-    // the recording. RE-LOCKING MUST RE-ALIGN BOTH GATES or it returns.
+    // Saving is permanently free, independent of the legacy member switch.
     await signInAs(freeUser);
     const saved = (await call('drives-save', validSave)).data as { rideId: string };
     expect(typeof saved.rideId).toBe('string');
@@ -250,29 +246,17 @@ describe('drives-save', () => {
     );
   });
 
-  /**
-   * Regression (v0.8.0 "Could not save the drive") — now INVERTED, because
-   * this PR is the fix for it.
-   *
-   * The diagnosis, preserved: the owner/admin ROLE does NOT bypass the member
-   * entitlement here. saveDrive gates on requireMemberActor (activeMember
-   * only), not requireMemberOrAdminActor (role bypass), so an owner whose
-   * users/{uid}.activeMember was false got refused exactly like a free user.
-   * That was the whole delta between live-startSession (requireActiveActor —
-   * free, succeeded) and drives-save (requireMemberActor — refused) for the
-   * same account in the same session.
-   *
-   * The role still does not bypass anything — that asymmetry is untouched.
-   * What changed is the gate itself: member gating is DISABLED
-   * (functions/src/shared/memberGating.ts), so requireMemberActor now resolves
-   * to active-actor semantics and the unentitled owner saves like anyone else.
-   * Re-locking (MEMBER_GATING_ENABLED = true) restores the refusal — and the
-   * original bug with it, unless the recording ENTRY is gated to match.
-   */
-  it('SAVES for an owner without an active membership (gating disabled)', async () => {
+  it('SAVES for an owner without an active membership', async () => {
     await signInAs(unentitledOwner);
     const saved = (await call('drives-save', validSave)).data as { rideId: string };
     expect(typeof saved.rideId).toBe('string');
+  });
+
+  it('rejects a deleted free caller', async () => {
+    const deleted = await createProvisionedUser('drives-deleted-free');
+    await adminDb.collection('users').doc(deleted.uid).set({ activeMember: false, deleted: true }, { merge: true });
+    await signInAs(deleted);
+    expect(await callableErrorCode(call('drives-save', validSave))).toBe('functions/permission-denied');
   });
 
   it('STILL rejects a SUSPENDED owner (role never bypassed suspension either)', async () => {

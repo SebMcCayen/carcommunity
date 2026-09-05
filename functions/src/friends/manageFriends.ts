@@ -1,6 +1,6 @@
 /**
  * friend.sendRequest / friend.respondRequest / friend.cancelRequest /
- * friend.remove / friend.list — member-gated callables
+ * friend.remove / friend.list — active-account callables
  * (contracts/functions/functions.json).
  *
  * Deployed via the `friend` export group (functions/src/index.ts) as
@@ -55,7 +55,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import type { DocumentReference, DocumentSnapshot, QuerySnapshot } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { chunk } from '../incidents/incidents-core';
-import { requireMemberActor } from '../shared/memberActor';
+import { requireActiveActor } from '../shared/memberActor';
 import { isRestricted, toUserAccessState } from '../shared/access';
 import { writeInAppNotification } from '../notifications/deliver';
 import {
@@ -320,7 +320,7 @@ export type SendRequestResult =
   | { status: 'friends'; friend: FriendSummary };
 
 export const sendRequest = onCall(CALLABLE_OPTS, async (request): Promise<SendRequestResult> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseSendRequestInput(request.data);
   if (!parsed.ok) {
@@ -475,7 +475,7 @@ export type RespondRequestResult =
   | { status: 'declined' };
 
 export const respondRequest = onCall(CALLABLE_OPTS, async (request): Promise<RespondRequestResult> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseRespondRequestInput(request.data);
   if (!parsed.ok) {
@@ -539,7 +539,7 @@ export const respondRequest = onCall(CALLABLE_OPTS, async (request): Promise<Res
 
     // Both parties must still exist and be non-restricted (not soft-deleted or
     // suspended) at write time — either could have been deleted/suspended
-    // between requireMemberActor and this transaction. Otherwise we would write
+    // between requireActiveActor and this transaction. Otherwise we would write
     // friendship docs with null projections for a ghost/restricted account.
     // Neutral failed-precondition (never reveals which side / why), matching the
     // block handling above.
@@ -640,7 +640,7 @@ export interface CancelRequestResult {
  * request (respondRequest not-founds it).
  */
 export const cancelRequest = onCall(CALLABLE_OPTS, async (request): Promise<CancelRequestResult> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseCancelRequestInput(request.data);
   if (!parsed.ok) {
@@ -685,7 +685,7 @@ export interface RemoveFriendResult {
 }
 
 export const remove = onCall(CALLABLE_OPTS, async (request): Promise<RemoveFriendResult> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseRemoveFriendInput(request.data);
   if (!parsed.ok) {
@@ -829,7 +829,7 @@ async function loadLiveProfiles(uids: string[]): Promise<LiveProfiles> {
 }
 
 export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListFriendsResult> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseListInput(request.data);
   if (!parsed.ok) {

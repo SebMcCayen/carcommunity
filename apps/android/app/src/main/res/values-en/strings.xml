@@ -595,7 +595,7 @@
     <string name="friends_retry">Try again</string>
     <string name="friends_unknownMember">Member</string>
     <string name="friends_errorSignedOut">Please sign in to manage friends.</string>
-    <string name="friends_errorNotMember">Friends are available to active members.</string>
+    <string name="friends_errorNotMember">Your account cannot access friends right now.</string>
     <string name="friends_errorInvalid">Enter a valid nickname.</string>
     <string name="friends_errorSelfRequest">That\'s you! You can\'t send yourself a friend request.</string>
     <string name="friends_errorNotFound">No member found matching that nickname. Check the spelling, or try the first few letters.</string>
@@ -655,7 +655,7 @@
     <string name="convoy_unknownMember">Member</string>
     <string name="convoy_close">Close</string>
     <string name="convoy_errorSignedOut">Please sign in to manage convoys.</string>
-    <string name="convoy_errorNotMember">Convoys are available to active members.</string>
+    <string name="convoy_errorNotMember">Your account cannot access convoys right now.</string>
     <string name="convoy_errorInvalid">That request wasn\'t valid.</string>
     <string name="convoy_errorNotFound">That convoy is no longer available.</string>
     <string name="convoy_errorNoInvitees">No one could be added to the convoy.</string>
@@ -815,7 +815,7 @@
     <string name="groupDrive_errorLeave">Could not leave. Please try again.</string>
     <string name="groupDrive_errorUpdateStatus">Could not update status. Please try again.</string>
     <string name="groupDrive_notParticipating">You are not participating in the group drive.</string>
-    <string name="groupDrive_memberRequired">An active membership is required for group driving.</string>
+    <string name="groupDrive_memberRequired">Group driving requires a published event and a Going or Maybe RSVP.</string>
     <string name="groupDrive_rsvpRequired">You need to RSVP Going or Maybe to join the group drive.</string>
     <string name="groupDrive_rejoinNotice">You have rejoined the group drive.</string>
     <string name="groupDrive_countJoined">Joined</string>
@@ -905,7 +905,7 @@
     <string name="savedDrives_driveKept">Drive saved.</string>
     <string name="savedDrives_driveDeleted">Drive deleted.</string>
     <string name="savedDrives_closeButton">Close</string>
-    <string name="savedDrives_memberRequired">An active membership is required to save drives.</string>
+    <string name="savedDrives_memberRequired">Your account cannot save drives right now.</string>
     <string name="savedDrives_recordTitle">Record drive</string>
     <string name="savedDrives_recordStart">Start recording</string>
     <string name="savedDrives_recordStop">Stop recording</string>
@@ -1549,7 +1549,7 @@
     <string name="dm_send">Send</string>
     <string name="dm_loadOlder">Load earlier messages</string>
     <string name="dm_sendErrorSignedOut">Please sign in to send messages.</string>
-    <string name="dm_sendErrorNotMember">Direct messages are available to active members.</string>
+    <string name="dm_sendErrorNotMember">Your account cannot send direct messages right now.</string>
     <string name="dm_sendErrorInvalid">Enter a message to send.</string>
     <string name="dm_sendErrorCannotDeliver">This message can\'t be delivered right now.</string>
     <string name="dm_sendErrorGeneric">Couldn\'t send your message. Please try again.</string>
@@ -1570,7 +1570,7 @@
     <string name="channel_unknownSender">Member</string>
     <string name="channel_openSenderProfile">Open %1$s\'s profile</string>
     <string name="channel_sendErrorSignedOut">Please sign in to send messages.</string>
-    <string name="channel_sendErrorNotMember">Chat is available to active members.</string>
+    <string name="channel_sendErrorNotMember">Your account cannot access chat right now.</string>
     <string name="channel_sendErrorInvalid">Enter a message to send.</string>
     <string name="channel_sendErrorCannotDeliver">This message can\'t be delivered right now.</string>
     <string name="channel_sendErrorGeneric">Couldn\'t send your message. Please try again.</string>

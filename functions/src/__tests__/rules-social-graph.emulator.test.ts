@@ -24,13 +24,10 @@
  * These tests assert the INTENT stated in each rule's comment ("a
  * non-participant cannot read this DM"), not the shape of the documents.
  *
- * TWO RULE FINDINGS ARE RECORDED HERE, both left UNFIXED because either fix
- * would change who can see what — search this file for "KNOWN RULE GAP" and
- * "KNOWN TRAP":
- *   1. convoyChats/{convoyId}/messages gates on isAuthenticated() while every
- *      sibling chat surface gates on isActiveMember(), so a SUSPENDED accepted
- *      member keeps a live read on convoy chat history. (it.skip'd assertion.)
- *   2. convoys/{convoyId} carries `resource.data.memberUids is list`, and a
+ * The former suspended convoy-chat read gap is closed by the free-social
+ * active-account rules; its regression below now runs. One independent
+ * query trap remains outside that change (search "KNOWN TRAP"):
+ *      convoys/{convoyId} carries `resource.data.memberUids is list`, and a
  *      type assertion on resource.data is false for every `list` operation, so
  *      NO client query on `convoys` can ever succeed. Fails closed, but the
  *      rule's comment reads as if a roster query were permitted.
@@ -784,30 +781,8 @@ describe('Firestore rules – convoys and convoyChats', () => {
     await assertFails(getDoc(doc(db, 'convoyChats', 'rc-cv-no-such-convoy', 'messages', 'm1')));
   });
 
-  /**
-   * KNOWN RULE GAP — NOT A BUG FIX, AWAITING A DECISION (2026-07-30).
-   *
-   * `convoyChats/{convoyId}/messages` gates on `isAuthenticated()`, while the
-   * parent `convoys/{convoyId}` gates on `isActiveMember()` (which folds in
-   * `isNotSuspended()`), and `communityChat` does the same. So a SUSPENDED
-   * member who was an accepted convoy member keeps a live Firestore read on
-   * that convoy's chat history — via a raw listener, which the Android client
-   * really does use (ConvoyChatRepository.kt) — even though they can no longer
-   * read the convoy document itself.
-   *
-   * EXPOSURE: convoy chat message text + denormalized sender displayName /
-   * avatarPath for convoys the suspended account had accepted. Not a leak to
-   * non-members: the accepted-membership check still holds.
-   * REACHABILITY: be an accepted convoy member, then get suspended. No forging
-   * required; the client already listens on this path.
-   *
-   * The one-line fix is `isAuthenticated()` -> `isActiveMember()`, matching
-   * every sibling chat surface and the file-wide invariant that "suspension
-   * always overrides feature access". It is left UNAPPLIED because it changes
-   * who can see what, which is Seb's call — see the PR description. Unskip this
-   * test with that change.
-   */
-  it.skip('a SUSPENDED accepted member should lose convoy chat read access', async () => {
+  // Restricted accounts lose convoy chat reads even while still accepted.
+  it('a SUSPENDED accepted member should lose convoy chat read access', async () => {
     const db = testEnv
       .authenticatedContext(ACCEPTED, { activeMember: true, suspended: true })
       .firestore();

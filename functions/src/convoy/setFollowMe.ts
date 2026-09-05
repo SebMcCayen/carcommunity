@@ -32,7 +32,7 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { requireMemberActor } from '../shared/memberActor';
+import { requireActiveActor } from '../shared/memberActor';
 import { requireAcceptedConvoyMember } from '../chatchannels/convoyMembership';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 import { CONVOY_ENDED_MESSAGE } from './convoy-core';
@@ -64,7 +64,7 @@ export interface SetFollowMeResponse {
 export const setFollowMe = onCall(
   CALLABLE_OPTS,
   async (request): Promise<SetFollowMeResponse> => {
-    const actor = await requireMemberActor(request);
+    const actor = await requireActiveActor(request);
 
     const parsed = parseSetFollowMeInput(request.data);
     if (!parsed.ok) {

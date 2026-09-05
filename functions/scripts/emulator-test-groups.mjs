@@ -64,6 +64,7 @@ export const GROUPS = [
     name: 'Social, Chat & Notifications',
     patterns: [
       'rules-social-graph',
+      'rules-free-social',
       'friends',
       'dm',
       'user-search',

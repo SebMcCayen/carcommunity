@@ -12,7 +12,7 @@
  *
  * Eligibility mirrors each channel's READ rule exactly — you can report what
  * you can see, and nothing else:
- *  - community: any active member (requireMemberActor, matching communityChat.*)
+ *  - community: any active member (requireActiveActor, matching communityChat.*)
  *  - convoy: an ACCEPTED member of that convoy (requireAcceptedConvoyMember,
  *    the same gate convoyChat.post/list use — a missing convoy or an outsider
  *    is not-found so a convoy can't be probed via the report endpoint).
@@ -38,7 +38,7 @@ import { logger } from 'firebase-functions';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { requireMemberActor } from '../shared/memberActor';
+import { requireActiveActor } from '../shared/memberActor';
 import { COMMUNITY_CHANNEL_ID } from './chat-core';
 import { requireAcceptedConvoyMember } from './convoyMembership';
 import {
@@ -60,7 +60,7 @@ const CALLABLE_OPTS = {
 };
 
 export const reportMessage = onCall(CALLABLE_OPTS, async (request): Promise<ReportResponse> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseReportChannelMessageInput(request.data);
   if (!parsed.ok) {

@@ -27,7 +27,7 @@ class GroupDriveTest {
         assertTrue(GroupDrive.canJoin(true, EventStatus.PUBLISHED, RsvpStatus.GOING))
         assertTrue(GroupDrive.canJoin(true, EventStatus.PUBLISHED, RsvpStatus.MAYBE))
         assertFalse(GroupDrive.canJoin(true, EventStatus.PUBLISHED, RsvpStatus.NOT_GOING))
-        assertFalse(GroupDrive.canJoin(false, EventStatus.PUBLISHED, RsvpStatus.GOING))
+        assertTrue(GroupDrive.canJoin(false, EventStatus.PUBLISHED, RsvpStatus.GOING))
         assertFalse(GroupDrive.canJoin(true, EventStatus.CANCELLED, RsvpStatus.GOING))
     }
 

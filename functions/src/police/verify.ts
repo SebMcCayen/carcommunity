@@ -4,7 +4,7 @@
  * police.dispute).
  *
  * Deployed via the `police` export group as `police-confirm` and `police-dispute`
- * (europe-west1). Both are member-gated (requireMemberActor), matching
+ * (europe-west1). Both are active-account-gated (requireActiveActor), matching
  * police.report/remove: a verify is a WRITE that changes a count every nearby
  * member sees on the pin's tap sheet, so it demands the same trust as reporting.
  *
@@ -34,7 +34,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { requireMemberActor } from '../shared/memberActor';
+import { requireActiveActor } from '../shared/memberActor';
 import {
   POLICE_VOTE_RATE_LIMIT_COLLECTION,
   POLICE_VOTES_SUBCOLLECTION,
@@ -197,12 +197,12 @@ async function castVote(data: unknown, uid: string, kind: PoliceVoteKind): Promi
 }
 
 export const confirm = onCall(CALLABLE_OPTS, async (request): Promise<VerifyResponse> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
   return castVote(request.data, actor.uid, 'confirm');
 });
 
 export const dispute = onCall(CALLABLE_OPTS, async (request): Promise<VerifyResponse> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
   return castVote(request.data, actor.uid, 'dispute');
 });
 

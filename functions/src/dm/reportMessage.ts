@@ -10,7 +10,7 @@
  *
  * Eligibility mirrors the conversation's read rule: the caller must be one of
  * the two stored `members` (dm-core isConversationMember), checked with the
- * same requireMemberActor gate the rest of the dm domain uses. A missing
+ * same requireActiveActor gate the rest of the dm domain uses. A missing
  * conversation and a conversation the caller isn't in both return NOT-FOUND,
  * never permission-denied — parity with dm.getMessages, so the report endpoint
  * can't be used to probe whether two people have a conversation.
@@ -32,7 +32,7 @@ import { logger } from 'firebase-functions';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { requireMemberActor } from '../shared/memberActor';
+import { requireActiveActor } from '../shared/memberActor';
 import { isConversationMember } from './dm-core';
 import {
   CONVERSATION_NOT_FOUND_MESSAGE,
@@ -54,7 +54,7 @@ const CALLABLE_OPTS = {
 };
 
 export const reportMessage = onCall(CALLABLE_OPTS, async (request): Promise<ReportResponse> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseReportDirectMessageInput(request.data);
   if (!parsed.ok) {

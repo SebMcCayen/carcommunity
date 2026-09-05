@@ -618,9 +618,12 @@ service cloud.firestore {
       // the groupDrive.* callables so join preconditions (published +
       // RSVP going|maybe + not ended) are enforced server-side.
       match /groupDriveParticipants/{userId} {
-        allow read: if isAdmin() || isOwner(userId)
-          || (isActiveMember()
-            && get(/databases/$(database)/documents/events/$(eventId)).data.status == 'published');
+        allow read: if isAuthenticated() && isNotSuspended()
+          && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+              && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
+          && (isAdmin() || isOwner(userId)
+            || get(/databases/$(database)/documents/events/$(eventId)).data.status == 'published');
         // No client writes: groupDrive.join / updateStatus / leave only.
       }
 
@@ -766,12 +769,19 @@ service cloud.firestore {
     // resolution, block checks, auto-accept, status transitions).
     // -------------------------------------------------------------------------
     match /users/{userId}/friends/{friendId} {
-      allow read: if isOwner(userId);
+      allow read: if isAuthenticated() && isNotSuspended()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
+        && isOwner(userId);
       // No client writes: friend.respondRequest / friend.remove callables only.
     }
 
     match /friendRequests/{requestId} {
-      allow read: if isAuthenticated()
+      allow read: if isAuthenticated() && isNotSuspended()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
         && (resource.data.fromUid == request.auth.uid
           || resource.data.toUid == request.auth.uid);
       // No client writes: friend.sendRequest / friend.respondRequest callables
@@ -801,7 +811,11 @@ service cloud.firestore {
       // listener, and the trigger blanks the document's `lastMessage` preview
       // (functions/src/dm/blockedConversation.ts) so the copy that is still
       // delivered carries no counterparty content.
-      allow read: if isAuthenticated() && request.auth.uid in resource.data.members;
+      allow read: if isAuthenticated() && isNotSuspended()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
+        && request.auth.uid in resource.data.members;
       // No client writes: dm.* callables only.
 
       match /messages/{messageId} {
@@ -816,7 +830,11 @@ service cloud.firestore {
         // counterparty having blocked the caller, each hides the thread.
         // dmMessagesReadable also carries the membership check and fails closed
         // on a malformed conversation — see its definition above.
-        allow read: if isAuthenticated() && dmMessagesReadable(pairId);
+        allow read: if isAuthenticated() && isNotSuspended()
+          && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+              && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
+          && dmMessagesReadable(pairId);
         // No client writes: dm.sendMessage callable only.
       }
     }
@@ -856,14 +874,17 @@ service cloud.firestore {
     //    attempt is denied whoever makes it (pinned by the convoy emulator tests).
     // -------------------------------------------------------------------------
     match /convoys/{convoyId} {
-      // Active members only (isActiveMember carries the suspension override) AND
-      // in the convoy's memberUids — a suspended / no-longer-entitled member
+      // Active accounts only, independently of subscription entitlement, AND
+      // in the convoy's memberUids — a suspended / deleted member
       // loses read access even while still listed in memberUids. A member who has
       // LEFT is removed from memberUids by convoy.leave, so this one condition is
       // also what revokes their convoy read AND (via the convoyChats rule below)
       // their chat access the instant they leave — while the chat history itself
       // is left untouched for the members still in it.
-      allow read: if isActiveMember()
+      allow read: if isAuthenticated() && isNotSuspended()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
         && resource.data.memberUids is list
         && request.auth.uid in resource.data.memberUids;
       // No client writes: the convoy.* callables only (create / respond / start /
@@ -891,11 +912,17 @@ service cloud.firestore {
     match /communityChat/{channelId} {
       // The channel doc itself carries no member-visible payload; the roster is
       // the whole membership. Reads happen at the messages level below.
-      allow read: if isActiveMember();
+      allow read: if isAuthenticated() && isNotSuspended()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true));
       // No client writes: communityChat.post callable only.
 
       match /messages/{messageId} {
-        allow read: if isActiveMember();
+        allow read: if isAuthenticated() && isNotSuspended()
+          && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+              && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true));
         // No client writes: communityChat.post callable only.
       }
     }
@@ -920,7 +947,10 @@ service cloud.firestore {
     // owner-update whitelist, so a client cannot forge or clear one).
     // -------------------------------------------------------------------------
     match /convoyChats/{convoyId}/messages/{messageId} {
-      allow read: if isAuthenticated()
+      allow read: if isAuthenticated() && isNotSuspended()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
         && request.auth.uid in
           get(/databases/$(database)/documents/convoys/$(convoyId)).data.memberUids
         && get(/databases/$(database)/documents/convoys/$(convoyId))
@@ -937,7 +967,10 @@ service cloud.firestore {
     // through the convoy.sendReaction callable (which re-checks accepted
     // membership AND enforces the anti-spam cooldown) — no client writes.
     match /convoyChats/{convoyId}/reactions/{reactionId} {
-      allow read: if isAuthenticated()
+      allow read: if isAuthenticated() && isNotSuspended()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
         && request.auth.uid in
           get(/databases/$(database)/documents/convoys/$(convoyId)).data.memberUids
         && get(/databases/$(database)/documents/convoys/$(convoyId))
@@ -972,8 +1005,11 @@ service cloud.firestore {
     //    from bloating the doc.
     // -------------------------------------------------------------------------
     match /convoys/{convoyId}/followMe/{followMeId} {
-      allow read: if isActiveMember()
-        // isActiveMember() (not just isAuthenticated) so a SUSPENDED member — who
+      allow read: if isAuthenticated() && isNotSuspended()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
+        // The active-account check ensures a SUSPENDED member — who
         // may still be listed in memberUids — loses trail access immediately, the
         // same suspension override the convoy doc read enforces.
         // Single fixed doc by design — scope the rule to it so adding any other
@@ -985,8 +1021,11 @@ service cloud.firestore {
       // the value ALREADY stored (set by the callable), so only that member passes
       // — and the request may not change it. The convoy get() re-checks live
       // membership so a leader who has since left cannot keep writing.
-      allow update: if isActiveMember()
-        // isActiveMember() so a suspended leader is blocked from further trail
+      allow update: if isAuthenticated() && isNotSuspended()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
+        // The active-account check blocks a suspended leader from further trail
         // writes the moment they are suspended (parity with the read rule).
         && followMeId == 'current'
         && resource.data.leaderUid == request.auth.uid
@@ -1215,7 +1254,10 @@ service cloud.firestore {
     // expiry, or spoof the Trafikverket source.
     // -------------------------------------------------------------------------
     match /incidents/{incidentId} {
-      allow read: if isAuthenticated()
+      allow read: if isAuthenticated() && isNotSuspended()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
         && resource.data.status == 'active'
         && resource.data.expiresAt > request.time
         && (resource.data.source != 'trafikverket'
@@ -1306,7 +1348,10 @@ service cloud.firestore {
     // forge another user's pin or backdate its expiry.
     // -------------------------------------------------------------------------
     match /policeReports/{reportId} {
-      allow read: if isActiveMember()
+      allow read: if isAuthenticated() && isNotSuspended()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
         && resource.data.status == 'active'
         && resource.data.expiresAt > request.time;
       // No client writes — police.report / police.remove / police.confirm /
