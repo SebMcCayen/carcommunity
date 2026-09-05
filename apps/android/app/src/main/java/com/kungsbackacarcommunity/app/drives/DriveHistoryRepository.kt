@@ -35,13 +35,11 @@ data class DriveHistoryPage(
 )
 
 /**
- * Server-authoritative statistics aggregate over ONLY the caller's tier-visible
- * drives ([drives-stats]). Every figure is computed server-side from one scan of
- * the tier-visible set, so it can never widen access to drives the read policy
- * hides. Deeper statistics are therefore a paid benefit, consistent with history
- * visibility.
+ * Free server-authoritative statistics over all retained owner drives
+ * ([drives-stats]). Aggregates never include individual drive IDs or routes;
+ * history browsing remains separately tier-limited.
  *
- * [fastestAverageSpeedMps] / [highestMaxSpeedMps] are null when NO tier-visible
+ * [fastestAverageSpeedMps] / [highestMaxSpeedMps] are null when NO retained
  * drive contributes one (the server returns 0 for "none"; the mapper normalises
  * that to null so the screen renders the missing-value dash rather than a false
  * "0 km/h"). [thisMonthDrives] / [thisMonthDistanceMeters] are 0 when no month
@@ -78,7 +76,7 @@ class DriveHistoryException(
  * ([drives-stats]). Deliberately SEPARATE from [DrivesRepository]: the owner
  * `observeDrives` query stays for the profile "my stats" lifetime fold (and other
  * released clients) until the later Firestore lockdown PR, whereas THESE reads are
- * the tier-enforced surfaces the History and Statistics screens now use.
+ * the History and Statistics screens use with their distinct access policies.
  * Firebase-free interface for testability.
  */
 interface DriveHistoryRepository {
@@ -93,7 +91,7 @@ interface DriveHistoryRepository {
     suspend fun listHistory(cursorRideId: String?, pageSize: Int?): DriveHistoryPage
 
     /**
-     * Fetches the tier-visible statistics aggregate. [monthStartMillis] /
+     * Fetches the free lifetime statistics aggregate. [monthStartMillis] /
      * [monthEndMillis] define the viewer's LOCAL calendar month for the
      * "this month" fields and MUST be supplied together (or both null); the server
      * validates them strictly against its own clock.

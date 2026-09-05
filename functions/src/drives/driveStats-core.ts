@@ -1,11 +1,8 @@
 /**
  * Pure logic for the saved-drive statistics aggregate (drives.stats).
  *
- * drives.stats aggregates over ONLY the caller's tier-visible drives — the
- * exact same subscription policy as drives.listHistory (Community = their
- * latest 5, Plus = the rolling 90-day window, Supporter = everything). Deeper
- * statistics are therefore a paid benefit, consistent with history visibility,
- * and the aggregate can never widen access to drives the read policy hides.
+ * drives.stats aggregates all of the caller's retained drives for every tier.
+ * Only aggregate figures are exposed; individual history visibility is separate.
  *
  * This module holds the untrusted-input validation (including the strict
  * "this month" boundary checks, which depend on server time and so cannot live
@@ -67,8 +64,7 @@ export interface MonthRange {
 }
 
 export type MonthRangeResult =
-  | { ok: true; range: MonthRange | null }
-  | { ok: false; message: string };
+  { ok: true; range: MonthRange | null } | { ok: false; message: string };
 
 /**
  * Applies the server-time-relative boundary checks to a parsed input. Absent
@@ -90,7 +86,10 @@ export function resolveMonthRange(
   }
   const span = endMillis - startMillis;
   if (span < MONTH_MIN_SPAN_MS || span > MONTH_MAX_SPAN_MS) {
-    return { ok: false, message: 'The month range must span a single calendar month (27–32 days).' };
+    return {
+      ok: false,
+      message: 'The month range must span a single calendar month (27–32 days).',
+    };
   }
   if (startMillis < serverNowMillis - MONTH_MAX_PAST_MS) {
     return { ok: false, message: 'The month range starts too far in the past.' };
@@ -101,13 +100,13 @@ export function resolveMonthRange(
   return { ok: true, range: { startMillis, endMillis } };
 }
 
-/** One tier-visible ride reduced to the fields the stats scan needs. */
+/** One owner ride reduced to the fields the stats scan needs. */
 export interface DriveStatSample {
   distanceMeters: number | null;
   durationSeconds: number;
   averageSpeedMps: number | null;
   maxSpeedMps: number | null;
-  createdAtMillis: number;
+  createdAtMillis: number | null;
 }
 
 function nonNegativeFiniteOrNull(value: unknown): number | null {
@@ -116,10 +115,8 @@ function nonNegativeFiniteOrNull(value: unknown): number | null {
 
 /**
  * Validates one ride's raw stored fields into a scan sample, or returns null to
- * DROP the drive from the aggregate entirely. Mirrors drives.listHistory's
- * toDriveHistoryItem: a durationSeconds that is not a non-negative safe integer,
- * or a missing createdAt, skips the whole drive so a corrupt value can never
- * produce a negative or nonsensical total (the response schema is minimum 0).
+ * DROP a drive with an invalid duration. Missing/invalid dates are preserved as
+ * null: legacy drives count toward lifetime figures but not month figures.
  * distanceMeters / averageSpeedMps / maxSpeedMps degrade to null when malformed
  * and are then simply excluded from their sums and maxima — never coerced to a
  * negative or a false 0. The caller extracts createdAtMillis from the Firestore
@@ -139,26 +136,21 @@ export function buildDriveStatSample(input: {
   ) {
     return null;
   }
-  if (input.createdAtMillis == null || !Number.isFinite(input.createdAtMillis)) {
-    return null;
-  }
   return {
     distanceMeters: nonNegativeFiniteOrNull(input.distanceMeters),
     durationSeconds: input.durationSeconds,
     averageSpeedMps: nonNegativeFiniteOrNull(input.averageSpeedMps),
     maxSpeedMps: nonNegativeFiniteOrNull(input.maxSpeedMps),
-    createdAtMillis: input.createdAtMillis,
+    createdAtMillis:
+      input.createdAtMillis != null && Number.isFinite(input.createdAtMillis)
+        ? input.createdAtMillis
+        : null,
   };
 }
 
 /**
- * The figures derived from the in-memory scan of the tier-visible docs. The
- * distance/duration TOTALS live here too — not in a Firestore sum() aggregation
- * — because Firestore cannot index a two-field sum aggregation alongside the
- * tier ordering, and per-field sum aggregations would each need a hand-deployed
- * composite index that is out of scope for this additive slice. Since the scan
- * already reads every tier-visible doc for the max/longest figures, summing in
- * the same pass costs no extra read and yields one consistent snapshot.
+ * Figures from one projected owner-only scan. Summing in the same pass as the
+ * maxima costs no additional document reads and keeps the figures consistent.
  */
 export interface ScannedDriveStats {
   totalDistanceMeters: number;
@@ -171,10 +163,8 @@ export interface ScannedDriveStats {
 }
 
 /**
- * Reduces the tier-visible ride samples to the max/longest figures and the
- * "this month" tallies. Because it only ever sees samples the caller may
- * already view, the month intersection cannot expose hidden history: a drive
- * outside the tier window is simply never passed in. The month window is
+ * Reduces all retained owner rides to totals, maxima and month tallies. Only
+ * aggregate figures are returned, not individually hidden history. The month window is
  * half-open [start, end) so the boundary instant belongs to the next month.
  * A missing figure (null) never lowers a maximum; when none exists the maximum
  * stays 0 (read as "no drive with this stat"), never a false negative.
@@ -204,6 +194,7 @@ export function scanDriveStats(
     }
     if (
       monthRange &&
+      sample.createdAtMillis != null &&
       sample.createdAtMillis >= monthRange.startMillis &&
       sample.createdAtMillis < monthRange.endMillis
     ) {
@@ -224,10 +215,10 @@ export function scanDriveStats(
 
 /**
  * Server-authoritative statistics response. Every figure is derived from the
- * caller's tier-visible drives only (see the module header). `thisMonth*` fields
+ * caller's retained drives regardless of tier. `thisMonth*` fields
  * are 0 when no month range was supplied — the client renders no "this month"
- * section rather than a spurious zero. Tier and serverNowMillis let the client
- * label the scope without trusting device time.
+ * section rather than a spurious zero. Tier is retained for wire compatibility;
+ * serverNowMillis supplies authoritative time.
  */
 export interface DriveStatsResponse {
   tier: SubscriptionTier;
@@ -237,10 +228,10 @@ export interface DriveStatsResponse {
   totalDurationSeconds: number;
   longestDriveMeters: number;
   /**
-   * Mean distance per tier-visible drive (totalDistanceMeters / totalDrives).
+   * Mean distance per retained drive (totalDistanceMeters / totalDrives).
    * Summary-only saves (null distance) still count toward the denominator, so
    * this is "average metres recorded per drive", not "average of drives that
-   * have a distance". 0 when there are no visible drives.
+   * have a distance". 0 when there are no valid retained drives.
    */
   averageDriveMeters: number;
   fastestAverageSpeedMps: number;

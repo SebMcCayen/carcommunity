@@ -338,6 +338,12 @@
     }
   },
   "subscription": {
+    "accessPolicyTitle": "Subscription access policy",
+    "accessPolicyFree": "All tiers: published event details, RSVP, friends, DMs, community chat, convoys, drive saving, incident reporting and lifetime driving statistics. Manual announcements are admin-only; reading is free.",
+    "accessPolicyPaid": "Plus and Supporter: event check-in, attendee names and member partner offers/codes. Crown Hunt is free to join: Community has 2,250 KP/day and paid tiers 3,000 KP/day, resetting at Stockholm midnight. Existing crown-count limits still apply.",
+    "accessPolicySupporter": "Supporter also has a profile-picture crown, visible by default and hideable in Settings. Badge eligibility follows effective entitlement, not admin role.",
+    "accessPolicyHistory": "Garage: 2 / 5 / 10 vehicles. History browsing: newest 5 / rolling 90 days / unlimited for Community / Plus / Supporter. Expiry hides older entries but does not delete them or reduce lifetime statistics.",
+    "accessPolicyRollout": "Policy reference, not live deployment status. Do not enable legacy global membership gates; validate each release in Internal Testing. Live-map access and route replay are unchanged.",
     "title": "Subscription",
     "subtitle": "Look up a user's membership and grant or revoke it manually.",
     "userIdLabel": "User ID",

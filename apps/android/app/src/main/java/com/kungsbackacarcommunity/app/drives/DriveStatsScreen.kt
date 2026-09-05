@@ -23,10 +23,9 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
  * The figures used to be a client-side fold over the History list, which was only
  * correct while that list was fully loaded; once history became tier-gated and
  * paginated (slice B1) the fold would have silently reported "loaded page only".
- * The aggregate is therefore computed server-side over exactly the caller's
- * tier-visible drives (Community = their newest 5, Plus = the rolling 90-day
- * window, Supporter = everything), so deeper statistics are a paid benefit
- * consistent with history visibility. All distance/duration/speed rendering still
+ * The aggregate is therefore computed server-side over all retained owner drives
+ * for every tier, independently of history browsing limits.
+ * All distance/duration/speed rendering still
  * goes through [DriveFormatters]; the drive count is a bare integer.
  */
 @Composable

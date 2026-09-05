@@ -338,6 +338,12 @@
     }
   },
   "subscription": {
+    "accessPolicyTitle": "Åtkomst per prenumeration",
+    "accessPolicyFree": "Alla nivåer: publicerade eventdetaljer, RSVP, vänner, DM, communitychatt, konvojer, sparande av körningar, incidentrapportering och körstatistik för hela historiken. Manuella annonser skrivs endast av admin; läsning är gratis.",
+    "accessPolicyPaid": "Plus och Supporter: eventincheckning, deltagarnamn och partnernas medlemserbjudanden/koder. Kronjakt är öppen för alla: Community har 2 250 KP/dag och betalda nivåer 3 000 KP/dag, med återställning vid midnatt i Stockholm. Befintliga antalstak för kronor gäller fortfarande.",
+    "accessPolicySupporter": "Supporter får även en krona på profilbilden, synlig som standard och möjlig att dölja i Inställningar. Märket följer aktiv förmån, inte adminrollen.",
+    "accessPolicyHistory": "Garage: 2 / 5 / 10 fordon. Historikvisning: de 5 senaste / rullande 90 dagar / obegränsad för Community / Plus / Supporter. När medlemskapet upphör döljs äldre poster utan att raderas eller minska livstidsstatistiken.",
+    "accessPolicyRollout": "Policyreferens, inte driftstatus. Aktivera inte äldre globala medlemsgrindar; verifiera varje release i intern testning. Livekartans åtkomst och ruttuppspelning är oförändrade.",
     "title": "Prenumeration",
     "subtitle": "Slå upp en användares medlemskap och bevilja eller återkalla det manuellt.",
     "userIdLabel": "Användar-ID",

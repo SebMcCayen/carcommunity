@@ -211,9 +211,9 @@
     <string name="privacySettings_error">Något gick fel. Försök igen.</string>
     <string name="privacySettings_saved">Sparat.</string>
     <string name="subscription_teaserTitle">Medlemskap</string>
-    <string name="subscription_teaserBody">Lås upp fler funktioner i communityn snart.</string>
+    <string name="subscription_teaserBody">Upptäck Plus-förmåner eller stötta communityn med Supporter.</string>
     <string name="subscription_memberMonthlyTitle">Månadsmedlemskap</string>
-    <string name="subscription_memberRequiredBody">Medlemskap krävs för att se andra livepositioner, eventdetaljer och RSVP.</string>
+    <string name="subscription_memberRequiredBody">Eventdetaljer, RSVP, sociala funktioner och körstatistik är gratis. Plus och Supporter ger eventincheckning, deltagarnamn och partnernas medlemserbjudanden.</string>
     <string name="subscription_purchaseHandledExternally">Köp hanteras via App Store eller Google Play i en senare version.</string>
     <string name="subscription_accessLimitedBySuspension">Din åtkomst kan begränsas vid avstängning eller regelbrott.</string>
     <string name="subscription_currentEntitlementMember">Du har ett aktivt medlemskap.</string>
@@ -222,9 +222,9 @@
     <string name="subscription_currentEntitlementFree">Inget aktivt medlemskap.</string>
     <string name="subscription_currentPlanTitle">Ditt medlemskap</string>
     <string name="subscription_plusTitle">Plus · 39 kr/månad</string>
-    <string name="subscription_plusBody">De viktigaste medlemsfunktionerna, upp till 5 garagefordon och 90 dagars körhistorik.</string>
+    <string name="subscription_plusBody">Eventincheckning, deltagarnamn, partnernas medlemserbjudanden, upp till 5 garagefordon, 90 dagars körhistorik och 3 000 Kronjakt-KP per dag (Community: 2 250).</string>
     <string name="subscription_supporterTitle">Supporter · 119 kr/månad</string>
-    <string name="subscription_supporterBody">Alla medlemsfunktioner, upp till 10 garagefordon, obegränsad körhistorik och möjlighet till Supporter-märke.</string>
+    <string name="subscription_supporterBody">Allt i Plus, upp till 10 garagefordon, obegränsad körhistorik och en valfri Supporter-krona på din profilbild. Ditt stöd hjälper till att finansiera projektet.</string>
     <string name="subscription_screenTitle">Medlemskap</string>
     <string name="subscription_subscribeAction">Teckna månadsmedlemskap</string>
     <string name="subscription_subscribePlusAction">Välj Plus</string>

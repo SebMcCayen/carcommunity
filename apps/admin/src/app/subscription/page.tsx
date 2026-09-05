@@ -202,6 +202,15 @@ export default function SubscriptionPage() {
         <p className={styles.subtitle}>{t('subscription.subtitle')}</p>
       </header>
 
+      <details className={styles.card}>
+        <summary>{t('subscription.accessPolicyTitle')}</summary>
+        <p>{t('subscription.accessPolicyFree')}</p>
+        <p>{t('subscription.accessPolicyPaid')}</p>
+        <p>{t('subscription.accessPolicySupporter')}</p>
+        <p>{t('subscription.accessPolicyHistory')}</p>
+        <p className={styles.hint}>{t('subscription.accessPolicyRollout')}</p>
+      </details>
+
       <form className={styles.lookupForm} onSubmit={handleLookup}>
         <label className={styles.label} htmlFor="sub-user-id">
           {t('subscription.userIdLabel')}

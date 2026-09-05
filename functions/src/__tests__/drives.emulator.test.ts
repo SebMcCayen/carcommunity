@@ -721,12 +721,11 @@ describe('drives-routeUrl signed route access', () => {
   });
 });
 
-describe('drives-stats tier-scoped aggregation', () => {
+describe('drives-stats free lifetime aggregation', () => {
   // Identical drive set for three users on different tiers. Ages in days:
   // [0,1,2,3,4,5,100,200]; distanceMeters=(i+1)*1000; duration=60;
-  // avg=(i+1); max=(i+1)*2. Tier windows select different subsets:
-  //   Community = newest 5 (i 0..4), Plus = last 90 days (i 0..5),
-  //   Supporter = all 8. So every aggregate differs by tier.
+  // avg=(i+1); max=(i+1)*2. Every tier gets all 8 in statistics,
+  // independently of the separate history browsing window.
   const SPECS: StatsDriveSpec[] = [0, 1, 2, 3, 4, 5, 100, 200].map((ageDays, i) => ({
     ageDays,
     distanceMeters: (i + 1) * 1_000,
@@ -735,37 +734,39 @@ describe('drives-stats tier-scoped aggregation', () => {
     maxSpeedMetersPerSecond: (i + 1) * 2,
   }));
 
-  it('Community aggregates only its newest five drives', async () => {
+  it('Community aggregates all retained drives without exposing individual records', async () => {
     const user = await createProvisionedUser('stats-community');
     await seedStatsDrives(user, SPECS);
     await signInAs(user);
     const data = (await call('drives-stats', {})).data as Record<string, number | string>;
     expect(data.tier).toBe('community');
-    expect(data.totalDrives).toBe(5);
-    expect(data.totalDistanceMeters).toBe(15_000); // 1000+2000+3000+4000+5000
-    expect(data.totalDurationSeconds).toBe(300); // 5 * 60
-    expect(data.longestDriveMeters).toBe(5_000);
-    expect(data.fastestAverageSpeedMps).toBe(5);
-    expect(data.highestMaxSpeedMps).toBe(10);
-    expect(data.averageDriveMeters).toBe(3_000); // 15000 / 5
+    expect(data.totalDrives).toBe(8);
+    expect(data.totalDistanceMeters).toBe(36_000);
+    expect(data.totalDurationSeconds).toBe(480);
+    expect(data.longestDriveMeters).toBe(8_000);
+    expect(data.fastestAverageSpeedMps).toBe(8);
+    expect(data.highestMaxSpeedMps).toBe(16);
+    expect(data.averageDriveMeters).toBe(4_500);
+    expect(data).not.toHaveProperty('drives');
+    expect(data).not.toHaveProperty('rideIds');
     // No month range supplied → thisMonth fields are zeroed.
     expect(data.thisMonthDrives).toBe(0);
     expect(data.thisMonthDistanceMeters).toBe(0);
     expect(typeof data.serverNowMillis).toBe('number');
   });
 
-  it('Plus aggregates the rolling 90-day window', async () => {
+  it('Plus statistics include drives older than 90 days', async () => {
     const user = await createProvisionedUser('stats-plus');
     await setPaidTier(user, 'plus');
     await seedStatsDrives(user, SPECS);
     await signInAs(user);
     const data = (await call('drives-stats', {})).data as Record<string, number | string>;
     expect(data.tier).toBe('plus');
-    expect(data.totalDrives).toBe(6); // ages 0..5 within 90 days
-    expect(data.totalDistanceMeters).toBe(21_000); // 15000 + 6000
-    expect(data.longestDriveMeters).toBe(6_000);
-    expect(data.fastestAverageSpeedMps).toBe(6);
-    expect(data.highestMaxSpeedMps).toBe(12);
+    expect(data.totalDrives).toBe(8);
+    expect(data.totalDistanceMeters).toBe(36_000);
+    expect(data.longestDriveMeters).toBe(8_000);
+    expect(data.fastestAverageSpeedMps).toBe(8);
+    expect(data.highestMaxSpeedMps).toBe(16);
   });
 
   it('Supporter aggregates the complete history', async () => {
@@ -783,11 +784,7 @@ describe('drives-stats tier-scoped aggregation', () => {
     expect(data.highestMaxSpeedMps).toBe(16);
   });
 
-  it('never lets the month range widen access past the tier window (Community intersection)', async () => {
-    // Seven drives all created within the last week — so ALL of them fall
-    // inside the supplied month window — but Community may only see its newest
-    // five. thisMonthDrives must therefore be 5, not 7: the month range is
-    // intersected with the tier-visible set, never applied to hidden history.
+  it('includes all Community drives within the month even beyond the five-history limit', async () => {
     const user = await createProvisionedUser('stats-intersect');
     await seedStatsDrives(
       user,
@@ -808,11 +805,9 @@ describe('drives-stats tier-scoped aggregation', () => {
       })
     ).data as Record<string, number | string>;
     expect(data.tier).toBe('community');
-    expect(data.totalDrives).toBe(5);
-    // The two hidden drives (i 5,6) are inside the month window but NOT visible,
-    // so they are excluded from the month tally.
-    expect(data.thisMonthDrives).toBe(5);
-    expect(data.thisMonthDistanceMeters).toBe(15_000);
+    expect(data.totalDrives).toBe(7);
+    expect(data.thisMonthDrives).toBe(7);
+    expect(data.thisMonthDistanceMeters).toBe(28_000);
   });
 
   it('applies the month range as a real filter for a paid tier', async () => {
@@ -822,8 +817,20 @@ describe('drives-stats tier-scoped aggregation', () => {
     const user = await createProvisionedUser('stats-month-filter');
     await setPaidTier(user, 'supporter');
     await seedStatsDrives(user, [
-      { ageDays: 0, distanceMeters: 4_000, durationSeconds: 60, averageSpeedMetersPerSecond: 5, maxSpeedMetersPerSecond: 10 },
-      { ageDays: 40, distanceMeters: 9_000, durationSeconds: 60, averageSpeedMetersPerSecond: 9, maxSpeedMetersPerSecond: 18 },
+      {
+        ageDays: 0,
+        distanceMeters: 4_000,
+        durationSeconds: 60,
+        averageSpeedMetersPerSecond: 5,
+        maxSpeedMetersPerSecond: 10,
+      },
+      {
+        ageDays: 40,
+        distanceMeters: 9_000,
+        durationSeconds: 60,
+        averageSpeedMetersPerSecond: 9,
+        maxSpeedMetersPerSecond: 18,
+      },
     ]);
     await signInAs(user);
     const now = Date.now();
@@ -844,9 +851,9 @@ describe('drives-stats tier-scoped aggregation', () => {
     await signInAs(user);
     const now = Date.now();
     // Half-supplied range.
-    expect(
-      await callableErrorCode(call('drives-stats', { monthStartMillis: now - DAY })),
-    ).toBe('functions/invalid-argument');
+    expect(await callableErrorCode(call('drives-stats', { monthStartMillis: now - DAY }))).toBe(
+      'functions/invalid-argument',
+    );
     // Entirely in the future (does not straddle now).
     expect(
       await callableErrorCode(
@@ -862,7 +869,10 @@ describe('drives-stats tier-scoped aggregation', () => {
     // Non-integer bound.
     expect(
       await callableErrorCode(
-        call('drives-stats', { monthStartMillis: now - 10 * DAY + 0.5, monthEndMillis: now + 20 * DAY }),
+        call('drives-stats', {
+          monthStartMillis: now - 10 * DAY + 0.5,
+          monthEndMillis: now + 20 * DAY,
+        }),
       ),
     ).toBe('functions/invalid-argument');
   });
@@ -918,7 +928,13 @@ describe('drives-lifetimeStats true-lifetime aggregation (un-paywalled)', () => 
   it('drops a malformed-duration drive entirely (excluded from totalDrives and the sums)', async () => {
     const user = await createProvisionedUser('lifetime-malformed');
     await seedStatsDrives(user, [
-      { ageDays: 0, distanceMeters: 3_000, durationSeconds: 60, averageSpeedMetersPerSecond: 5, maxSpeedMetersPerSecond: 10 },
+      {
+        ageDays: 0,
+        distanceMeters: 3_000,
+        durationSeconds: 60,
+        averageSpeedMetersPerSecond: 5,
+        maxSpeedMetersPerSecond: 10,
+      },
     ]);
     // A second ride with a corrupt (negative) durationSeconds, written directly.
     await adminDb
@@ -962,14 +978,26 @@ describe('drives-lifetimeStats true-lifetime aggregation (un-paywalled)', () => 
     expect(data.averageDriveMeters).toBe(0);
   });
 
-  it('only ever aggregates the CALLER\'s own drives', async () => {
+  it("only ever aggregates the CALLER's own drives", async () => {
     const owner = await createProvisionedUser('lifetime-owner');
     const other = await createProvisionedUser('lifetime-other');
     await seedStatsDrives(owner, [
-      { ageDays: 0, distanceMeters: 1_000, durationSeconds: 60, averageSpeedMetersPerSecond: 5, maxSpeedMetersPerSecond: 10 },
+      {
+        ageDays: 0,
+        distanceMeters: 1_000,
+        durationSeconds: 60,
+        averageSpeedMetersPerSecond: 5,
+        maxSpeedMetersPerSecond: 10,
+      },
     ]);
     await seedStatsDrives(other, [
-      { ageDays: 0, distanceMeters: 8_000, durationSeconds: 60, averageSpeedMetersPerSecond: 9, maxSpeedMetersPerSecond: 18 },
+      {
+        ageDays: 0,
+        distanceMeters: 8_000,
+        durationSeconds: 60,
+        averageSpeedMetersPerSecond: 9,
+        maxSpeedMetersPerSecond: 18,
+      },
     ]);
     await signInAs(owner);
     const data = (await call('drives-lifetimeStats', {})).data as Record<string, number>;
@@ -1046,13 +1074,21 @@ describe('drives-listDeletable owner inventory', () => {
 
     const second = (
       await call('drives-listDeletable', { pageSize: 2, cursorRideId: first.nextCursorRideId })
-    ).data as { drives: Array<{ rideId: string }>; hasMore: boolean; nextCursorRideId: string | null };
+    ).data as {
+      drives: Array<{ rideId: string }>;
+      hasMore: boolean;
+      nextCursorRideId: string | null;
+    };
     expect(second.drives.map((d) => d.rideId)).toEqual(rideIds.slice(2, 4));
     expect(second.hasMore).toBe(true);
 
     const third = (
       await call('drives-listDeletable', { pageSize: 2, cursorRideId: second.nextCursorRideId })
-    ).data as { drives: Array<{ rideId: string }>; hasMore: boolean; nextCursorRideId: string | null };
+    ).data as {
+      drives: Array<{ rideId: string }>;
+      hasMore: boolean;
+      nextCursorRideId: string | null;
+    };
     expect(third.drives.map((d) => d.rideId)).toEqual(rideIds.slice(4, 5));
     expect(third.hasMore).toBe(false);
     expect(third.nextCursorRideId).toBeNull();

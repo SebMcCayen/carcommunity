@@ -208,7 +208,7 @@
     },
     "driveStatsResponse": {
       "type": "object",
-      "description": "Server-authoritative statistics aggregate from drives.stats, computed over ONLY the caller's tier-visible drives (the same subscription policy as drives.listHistory: Community = newest 5, Plus = rolling 90 days, Supporter = everything), so deeper stats are a paid benefit and the aggregate never widens access to hidden history. All distances are metres and speeds metres/second. A maximum figure (longest/fastest/highestMax) is 0 when no visible drive carries that stat, never a false negative. thisMonthDrives/thisMonthDistanceMeters are 0 when no month range was supplied. tier and serverNowMillis let the client label the scope without trusting device time.",
+      "description": "Free owner-only aggregate over all retained drives for every tier. History browsing remains separately limited. Distances are metres and speeds metres/second. Missing maxima are 0. thisMonth fields are 0 without a month range; undated drives count only toward lifetime figures. tier is retained for compatibility and never filters statistics.",
       "properties": {
         "tier": { "enum": ["community", "plus", "supporter"] },
         "serverNowMillis": { "type": "integer", "minimum": 0 },
@@ -219,7 +219,7 @@
         "averageDriveMeters": {
           "type": "number",
           "minimum": 0,
-          "description": "Mean distance per tier-visible drive (totalDistanceMeters / totalDrives); summary-only saves with a null distance still count toward the denominator. 0 when there are no visible drives."
+          "description": "Mean recorded distance per retained drive (totalDistanceMeters / totalDrives); summary-only saves with null distance count toward the denominator. Zero when no valid drives remain."
         },
         "fastestAverageSpeedMps": { "type": "number", "minimum": 0 },
         "highestMaxSpeedMps": { "type": "number", "minimum": 0 },
@@ -243,7 +243,7 @@
     },
     "driveLifetimeStatsResponse": {
       "type": "object",
-      "description": "TRUE-LIFETIME statistics aggregate from drives.lifetimeStats, computed over ALL of the caller's drives regardless of subscription tier — the deliberately UN-PAYWALLED counterpart to driveStatsResponse (which is tier-scoped). There is no tier field and no thisMonth* fields: lifetime achievement (profile 'my stats', the Vägfarare lifetime-distance badge) must not shrink on a downgrade, and this aggregate has no month window. All distances are metres and speeds metres/second. Every figure (totalDrives, the sums and the maxima) comes from a single in-memory scan of the owner's rides (no count()/sum() aggregation), so they are one consistent snapshot; totalDrives is the count of VALID drives in that snapshot, a drive with a malformed durationSeconds being dropped so it cannot corrupt a total. averageDriveMeters is totalDistanceMeters / totalDrives (0 when no drives); summary-only saves with a null distance still count toward the denominator. A maximum figure (longest/fastest/highestMax) is 0 when no drive carries that stat, never a false negative. serverNowMillis lets the client label the scope without trusting device time.",
+      "description": "Free owner-only lifetime aggregate across all retained drives for every tier, like driveStatsResponse but without tier or month fields. Only scalar aggregates are returned. Invalid durations exclude a drive; undated drives still count. Distances are metres and speeds metres/second. Missing maxima and empty averages are 0.",
       "properties": {
         "serverNowMillis": { "type": "integer", "minimum": 0 },
         "totalDrives": { "type": "integer", "minimum": 0 },

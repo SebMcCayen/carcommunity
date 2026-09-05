@@ -211,9 +211,9 @@
     <string name="privacySettings_error">Something went wrong. Please try again.</string>
     <string name="privacySettings_saved">Saved.</string>
     <string name="subscription_teaserTitle">Membership</string>
-    <string name="subscription_teaserBody">Unlock more community features soon.</string>
+    <string name="subscription_teaserBody">Explore Plus benefits or support the community with Supporter.</string>
     <string name="subscription_memberMonthlyTitle">Monthly Membership</string>
-    <string name="subscription_memberRequiredBody">Membership is required to view other live locations, event details and RSVP.</string>
+    <string name="subscription_memberRequiredBody">Event details, RSVP, social features and driving statistics are free. Plus and Supporter include event check-in, attendee names and member partner offers.</string>
     <string name="subscription_purchaseHandledExternally">Purchases are handled via the App Store or Google Play in a later version.</string>
     <string name="subscription_accessLimitedBySuspension">Your access may be restricted in the event of suspension or violations.</string>
     <string name="subscription_currentEntitlementMember">You have an active membership.</string>
@@ -222,9 +222,9 @@
     <string name="subscription_currentEntitlementFree">No active membership.</string>
     <string name="subscription_currentPlanTitle">Your membership</string>
     <string name="subscription_plusTitle">Plus · SEK 39/month</string>
-    <string name="subscription_plusBody">The essential member features, up to 5 garage vehicles and 90 days of drive history.</string>
+    <string name="subscription_plusBody">Event check-in, attendee names, member partner offers, up to 5 garage vehicles, 90 days of drive history and 3,000 Crown Hunt KP per day (Community: 2,250).</string>
     <string name="subscription_supporterTitle">Supporter · SEK 119/month</string>
-    <string name="subscription_supporterBody">All member features, up to 10 garage vehicles, unlimited drive history and an optional Supporter badge.</string>
+    <string name="subscription_supporterBody">Everything in Plus, up to 10 garage vehicles, unlimited drive history and an optional Supporter crown on your profile picture. Your support helps fund the project.</string>
     <string name="subscription_screenTitle">Membership</string>
     <string name="subscription_subscribeAction">Subscribe to monthly membership</string>
     <string name="subscription_subscribePlusAction">Choose Plus</string>
