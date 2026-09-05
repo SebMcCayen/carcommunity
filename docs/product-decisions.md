@@ -151,7 +151,8 @@ Detta dokument är den låsta produktsanningen för `carcommunity` och ska anvä
 ## Maps
 
 - Kartor används för live location och eventrelaterad orientering.
-- Exakt live position för andra användare är subscriptionsstyrd.
+- Livekartans äldre avsedda subscriptionsgrind är avstängd. Beslutet 2026-09-05
+  ändrar inte denna åtkomst (se Live location sharing ovan).
 
 ## Event chat
 
