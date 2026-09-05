@@ -76,7 +76,7 @@ export const GROUPS = [
   },
   {
     name: 'Events, Convoy, Live & Garage',
-    patterns: ['events*', 'convoy*', 'live*', 'drives', 'garage', 'subscription-expiry'],
+    patterns: ['events*', 'convoy*', 'live*', 'drives', 'garage', 'subscription-expiry', 'supporter-badge'],
   },
   {
     name: 'Crown Hunt, Points, Badges, Incidents & Partners',
