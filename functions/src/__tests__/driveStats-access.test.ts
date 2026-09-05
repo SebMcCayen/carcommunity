@@ -56,6 +56,7 @@ describe('free owner-only driving statistics', () => {
         }),
       });
       const result = await driveStats.run(request);
+      expect(result.tier).toBe(tier);
       expect(result.totalDrives).toBe(8);
       expect(result.totalDistanceMeters).toBe(8000);
       expect(result.totalDurationSeconds).toBe(480);
@@ -67,6 +68,15 @@ describe('free owner-only driving statistics', () => {
   );
 
   it('does not shrink statistics after entitlement is removed', async () => {
+    mocks.subscription.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        userId: 'owner',
+        tier: 'supporter',
+        entitlement: 'member_monthly',
+        status: 'active',
+      }),
+    });
     const before = await driveStats.run(request);
     mocks.subscription.mockResolvedValue({
       exists: true,
@@ -78,6 +88,8 @@ describe('free owner-only driving statistics', () => {
       }),
     });
     const after = await driveStats.run(request);
+    expect(before.tier).toBe('supporter');
+    expect(after.tier).toBe('community');
     expect(after.totalDrives).toBe(before.totalDrives);
     expect(after.totalDistanceMeters).toBe(before.totalDistanceMeters);
   });
