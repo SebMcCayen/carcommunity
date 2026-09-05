@@ -13964,13 +13964,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Exakt adress, hela beskrivningen och vilka som kommer att visas för Plus- och Supporter-medlemmar. Du ser fortfarande titel, tid, område och en kort beskrivning."
+            "value": "Fullständig träffinformation och RSVP är gratis. Plus och Supporter låser upp incheckning och deltagarnamn."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The exact address, the full description and who's coming are shown to Plus and Supporter members. You still see the title, time, area and a short description."
+            "value": "Full event details and RSVP are free. Plus and Supporter unlock check-in and attendee names."
           }
         }
       }
@@ -13981,13 +13981,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Fullständig information för medlemmar"
+            "value": "Mer med Plus eller Supporter"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Full details for members"
+            "value": "More with Plus or Supporter"
           }
         }
       }

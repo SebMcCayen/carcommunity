@@ -30,6 +30,8 @@ export type SubscriptionProductId = (typeof SUBSCRIPTION_PRODUCT_IDS)[number];
 export const SUBSCRIPTION_ACCESS_CAPABILITIES = [
   'exactOtherUserLivePositions',
   'fullEventDetails',
+  'eventCheckIn',
+  'attendeeNames',
   'partnerOffers',
 ] as const;
 export type SubscriptionAccessCapability = (typeof SUBSCRIPTION_ACCESS_CAPABILITIES)[number];
@@ -49,8 +51,11 @@ export interface SubscriptionCapabilityProfile {
   hasIntroDiscount: false;
   garageVehicleLimit: 2 | 5 | 10;
   driveHistory: DriveHistoryLimit;
+  /** Legacy/future-only capability; does not gate current map visibility. */
   exactOtherUserLivePositions: boolean;
   fullEventDetails: boolean;
+  eventCheckIn: boolean;
+  attendeeNames: boolean;
   partnerOffers: boolean;
   supporterBadge: {
     available: boolean;
@@ -75,7 +80,9 @@ export const SUBSCRIPTION_CAPABILITY_PROFILES = {
     garageVehicleLimit: 2,
     driveHistory: { kind: 'latest', count: 5 },
     exactOtherUserLivePositions: false,
-    fullEventDetails: false,
+    fullEventDetails: true,
+    eventCheckIn: false,
+    attendeeNames: false,
     partnerOffers: false,
     supporterBadge: { available: false, defaultVisible: false },
   },
@@ -89,6 +96,8 @@ export const SUBSCRIPTION_CAPABILITY_PROFILES = {
     driveHistory: { kind: 'rolling_days', days: 90 },
     exactOtherUserLivePositions: true,
     fullEventDetails: true,
+    eventCheckIn: true,
+    attendeeNames: true,
     partnerOffers: true,
     supporterBadge: { available: false, defaultVisible: false },
   },
@@ -102,6 +111,8 @@ export const SUBSCRIPTION_CAPABILITY_PROFILES = {
     driveHistory: { kind: 'unlimited' },
     exactOtherUserLivePositions: true,
     fullEventDetails: true,
+    eventCheckIn: true,
+    attendeeNames: true,
     partnerOffers: true,
     supporterBadge: { available: true, defaultVisible: true },
   },

@@ -65,7 +65,7 @@ class EventAttendeesScreenTest {
                     // The "who answered" roster is a paid benefit (Slice D): its
                     // reveal button and dialog only exist for a viewer with full
                     // access, which is the surface these tests exercise.
-                    showFullDetails = true,
+                    canViewAttendees = true,
                     rsvpStatus = RsvpStatusUi.Idle,
                     onRsvp = {},
                     onBack = {},

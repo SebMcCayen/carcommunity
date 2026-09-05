@@ -5,7 +5,7 @@
  * Drives the exported runEventCreatedFanOut runner directly (the same test seam
  * the reminder sweep uses) against seeded active-member user docs + a published
  * event, covering: a broadcast to every active member, the creator being
- * excluded, an inactive (non-member) user being excluded, a per-category opt-out
+ * excluded, a free user being included, a per-category opt-out
  * being honoured, idempotency across re-runs, and a cancelled event aborting the
  * announcement.
  *
@@ -19,7 +19,7 @@
  * plus CI loading the events-onEventPublished function.
  *
  * ISOLATION NOTE: emulator test files share one Firestore, and this fan-out
- * queries the WHOLE users collection for activeMember==true — so it necessarily
+ * queries the WHOLE users collection regardless of activeMember — so it necessarily
  * writes an item to every active member other files have seeded too. Every
  * assertion is therefore scoped to THIS file's own uids and the per-event
  * deterministic id (event-created-{eventId}); NEVER to an absolute inbox size or
@@ -149,14 +149,14 @@ describe('event-created fan-out (runEventCreatedFanOut)', () => {
     expect(await createdItem(other, eventId)).not.toBeNull();
   });
 
-  it('does NOT notify an inactive (non-member) user — active members only', async () => {
+  it('notifies a free user without activeMember entitlement', async () => {
     const creator = await seedUser('ec-inactive-creator');
     const inactive = await seedUser('ec-inactive', { activeMember: false });
     const eventId = await seedPublishedEvent(creator);
 
     await runEventCreatedFanOut(eventId);
 
-    expect(await createdItem(inactive, eventId)).toBeNull();
+    expect(await createdItem(inactive, eventId)).not.toBeNull();
   });
 
   it('honours a per-category event_created opt-out', async () => {

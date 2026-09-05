@@ -9340,22 +9340,15 @@ private fun RouteHost(
                     repository = eventsRepository,
                     rsvpCoordinator = rsvpCoordinator,
                     uid = uid,
-                    passesMemberGate = MemberGating.allows(profileActiveMember),
-                    // Slice-D subscription gate, DARK by default. While the
-                    // `eventDetailsRequirePaid` flag is OFF (billing not live) every
-                    // viewer is treated as paid, so the full detail + attendee list
-                    // render for everyone exactly as before. While ON, the real
-                    // stored tier decides: a free (Community) viewer gets the basic
-                    // view + upgrade prompt, a paid tier the full view. Admins/owners
-                    // bypass regardless of tier — the backend (events-listAttendees)
-                    // always serves them the roster, so treating an admin with no
-                    // subscription as "free" here would diverge from the server.
-                    showFullDetails =
-                        Events.showFullDetails(
+                    passesMemberGate = true,
+                    // Published details and RSVP are free. Identity access uses
+                    // verified subscription state, with admin moderation retained.
+                    canViewAttendees =
+                        Events.canViewAttendees(
                             isAdmin = profileIsAdmin,
-                            requirePaidEnabled = eventDetailsRequirePaidEnabled,
                             isPaidSubscriber = storedSubscription.isPaidSubscriber,
                         ),
+                    isPaidSubscriber = storedSubscription.isPaidSubscriber,
                     onUpgrade = { onOpenRoute(ShellRoute.Subscription) },
                     chatRepository = chatRepository,
                     chatCoordinator = chatCoordinator,
@@ -9437,21 +9430,9 @@ private fun RouteHost(
                     repository = partnersRepository,
                     offerCodeCoordinator = offerCodeCoordinator,
                     uid = uid,
-                    // Member-offer gate, dark-flagged by
-                    // partnerMemberOffersRequirePaid (live flag). While ON,
-                    // member offers are a PAID product: gate on the real
-                    // subscription tier (Plus/Supporter) — same source the
-                    // drives/garage work observes (storedSubscription) — which
-                    // mirrors the server gate in firestore.rules /
-                    // partners.showOfferCode. While OFF the gate is the relaxed
-                    // member gate (every signed-in user), exactly as today, so
-                    // the feature is inert until billing go-live.
+                    // Member offers always require verified paid/admin access.
                     canAccessMemberOffers =
-                        if (partnerMemberOffersRequirePaidEnabled) {
-                            storedSubscription.effectiveTier != EffectiveSubscriptionTier.COMMUNITY
-                        } else {
-                            MemberGating.allows(profileActiveMember)
-                        },
+                        profileIsAdmin || storedSubscription.isPaidSubscriber,
                     onBack = onClose,
                 )
             } else {

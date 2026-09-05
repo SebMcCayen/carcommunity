@@ -19,16 +19,8 @@
  * - Only PUBLISHED events expose a roster. Draft / cancelled / completed events
  *   return `not-found`, mirroring the teaser-doc read rule (a draft is not
  *   member-visible at all) and avoiding any leak of a non-public attendee list.
- * - SUBSCRIPTION GATE (Slice D) — DARK by default via the `eventDetailsRequirePaid`
- *   feature flag. While the flag is OFF (its contract default, and where it stays
- *   until Play billing goes live) the roster is returned to everyone exactly as
- *   before and NO subscription read happens. When an operator turns it ON the
- *   roster becomes a PAID benefit: a free Community member gets
- *   `{ attendees: [], requiresPaid: true }` — names withheld server-side, no
- *   roster fan-out — and the client renders an upgrade prompt; a paid tier
- *   (Plus/Supporter) or an admin gets the real list with `requiresPaid: false`.
- *   Tier is resolved from the caller's own subscriptions/{uid} record (never
- *   client-supplied), like drives.listHistory.
+ * - Identities always require verified Plus/Supporter or admin moderation.
+ *   Full event details and RSVP remain free.
  *
  * ## Roster membership
  * The caller is included in their own roster: this surface answers "who
@@ -57,7 +49,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldPath } from 'firebase-admin/firestore';
 import type { DocumentReference } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { requireMemberOrAdminActor } from '../shared/memberActor';
+import { requireActiveActor } from '../shared/memberActor';
 import { toProfileProjection, type ProfileProjection } from '../convoy/convoy-core';
 import type { EventStatus } from './events-core';
 import {
@@ -70,17 +62,8 @@ import {
   type RsvpEntry,
 } from './listAttendees-core';
 import { effectiveSubscriptionTierFromStoredRecord } from '../subscription/subscription-core';
-import { readFeatureFlag } from '../shared/featureFlags';
+import { canAccessAdminFeatures } from '../shared/access';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
-
-/**
- * Dark gate for the Slice-D subscription enforcement. Default OFF: while off,
- * this callable runs no subscription read and returns the full roster to
- * everyone (exactly as before Slice D). Only when an operator flips it ON — at
- * Play billing go-live — does the paid gate below take effect. See
- * contracts/features/feature-flags.json.
- */
-const EVENT_DETAILS_REQUIRE_PAID_FLAG_KEY = 'eventDetailsRequirePaid' as const;
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -133,7 +116,8 @@ async function queryBlockedSubset(blockerUid: string, blockedUids: string[]): Pr
 export const listAttendees = onCall(
   CALLABLE_OPTS,
   async (request): Promise<ListAttendeesResponse> => {
-    const actor = await requireMemberOrAdminActor(request);
+    const activeActor = await requireActiveActor(request);
+    const actor = { ...activeActor, isAdmin: canAccessAdminFeatures(activeActor.state) };
 
     const parsed = parseListAttendeesInput(request.data);
     if (!parsed.ok) {
@@ -152,17 +136,8 @@ export const listAttendees = onCall(
       throw new HttpsError('not-found', 'Event not found.');
     }
 
-    // Subscription gate (Slice D) — DARK by default (eventDetailsRequirePaid).
-    // While the flag is OFF the roster is served to everyone exactly as before;
-    // no subscription read happens. Only when an operator turns it ON (at Play
-    // billing go-live) is the roster a PAID benefit: a free Community member gets
-    // an empty roster + requiresPaid so the client shows an upgrade prompt, while
-    // a paid tier (Plus/Supporter) or an admin gets the real list. The tier is
-    // resolved server-side from the caller's own subscriptions/{uid} record — the
-    // client never sends it — mirroring the drives history/stats callables. The
-    // gate short-circuits BEFORE the roster reads so a denied caller costs one
-    // subscription read, not the whole fan-out.
-    if (await readFeatureFlag(EVENT_DETAILS_REQUIRE_PAID_FLAG_KEY)) {
+    // Enforce paid access before reading RSVP identities, regardless of flags.
+    {
       // Admins bypass the paid gate and never need a subscription lookup, so the
       // tier is resolved ONLY for a non-admin caller — an admin never triggers
       // the subscriptions/{uid} read.

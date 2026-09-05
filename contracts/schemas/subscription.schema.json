@@ -64,8 +64,13 @@
         "hasIntroDiscount": { "const": false },
         "garageVehicleLimit": { "type": "integer", "enum": [2, 5, 10] },
         "driveHistory": { "$ref": "#/$defs/driveHistoryLimit" },
-        "exactOtherUserLivePositions": { "type": "boolean" },
+        "exactOtherUserLivePositions": {
+          "type": "boolean",
+          "description": "Legacy/future-only capability. Does not gate current map visibility."
+        },
         "fullEventDetails": { "type": "boolean" },
+        "eventCheckIn": { "type": "boolean" },
+        "attendeeNames": { "type": "boolean" },
         "partnerOffers": { "type": "boolean" },
         "supporterBadge": {
           "type": "object",
@@ -87,6 +92,8 @@
         "driveHistory",
         "exactOtherUserLivePositions",
         "fullEventDetails",
+        "eventCheckIn",
+        "attendeeNames",
         "partnerOffers",
         "supporterBadge"
       ],
@@ -105,7 +112,9 @@
                 "required": ["kind", "count"]
               },
               "exactOtherUserLivePositions": { "const": false },
-              "fullEventDetails": { "const": false },
+              "fullEventDetails": { "const": true },
+              "eventCheckIn": { "const": false },
+              "attendeeNames": { "const": false },
               "partnerOffers": { "const": false },
               "supporterBadge": {
                 "properties": {
@@ -134,6 +143,8 @@
               },
               "exactOtherUserLivePositions": { "const": true },
               "fullEventDetails": { "const": true },
+              "eventCheckIn": { "const": true },
+              "attendeeNames": { "const": true },
               "partnerOffers": { "const": true },
               "supporterBadge": {
                 "properties": {
@@ -159,6 +170,8 @@
               },
               "exactOtherUserLivePositions": { "const": true },
               "fullEventDetails": { "const": true },
+              "eventCheckIn": { "const": true },
+              "attendeeNames": { "const": true },
               "partnerOffers": { "const": true },
               "supporterBadge": {
                 "properties": {

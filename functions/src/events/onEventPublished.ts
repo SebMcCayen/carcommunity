@@ -15,26 +15,17 @@
  * other write (rsvpCounts bump, reminder marker, an edit or cancel of an
  * already-live event) fires anything.
  *
- * AUDIENCE — all ACTIVE members, minus the event's own creator.
+ * AUDIENCE — all eligible users, minus the event's own creator.
  * ------------------------------------------------------------
- * A community-wide meetup announcement, so the audience mirrors the admin
- * broadcast's `members` audience: users/{uid}.activeMember == true. Per-recipient
- * eligibility (deleted / suspended / per-category `event_created` opt-out) is
- * OWNED by writeInAppNotification (decideInAppDelivery) — never re-checked here —
- * and push follows automatically via notifications-onNotificationCreated. The
- * creator is skipped: they already know about their own event.
+ * All user records are considered, regardless of subscription. Delivery policy
+ * excludes restricted accounts, opt-outs, and the creator; push follows inbox writes.
  *
  * IDEMPOTENCY. A deterministic per-event notificationId
  * ([eventCreatedNotificationId]) makes each recipient's write create-if-absent,
  * so a redelivered trigger (Firestore triggers are at-least-once) or a retry
  * after a partial fan-out never double-notifies.
  *
- * COST. `activeMember == true` is a single-equality query (the same one
- * notifications.adminSend uses for the `members` audience) — no composite index.
- * Paged with a documentId cursor and capped at MAX_RECIPIENTS, with the
- * per-member writes chunked exactly like the reminder sweep's fan-out. For a
- * single-town community this is a handful of members; the paging/cap is a safety
- * valve, not an expected bound.
+ * COST. Paged by documentId, capped at MAX_RECIPIENTS, with chunked writes.
  */
 
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
@@ -42,7 +33,10 @@ import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { toUserAccessState } from '../shared/access';
-import { buildNotificationDocument, decideInAppDelivery } from '../notifications/notifications-core';
+import {
+  buildNotificationDocument,
+  decideInAppDelivery,
+} from '../notifications/notifications-core';
 import {
   EVENT_CREATED_TITLE,
   type EventCreatedFanOutSummary,
@@ -69,7 +63,7 @@ const MAX_RECIPIENTS = 10_000;
 const GRPC_ALREADY_EXISTS = 6;
 
 /**
- * Fans the "new event" notice out to every active member (bar the creator) for
+ * Fans the "new event" notice out to every eligible user (bar the creator) for
  * one just-published event. Exported so the emulator test can drive it directly
  * against seeded users + an event doc — the same test seam as the reminder
  * sweep's runEventReminders, so the untested surface stays just the onDocumentWritten
@@ -96,9 +90,7 @@ const GRPC_ALREADY_EXISTS = 6;
  * still `published` — a defensive re-derivation against the fresh document, so a
  * cancel racing the trigger notifies nobody rather than announcing a dead event.
  */
-export async function runEventCreatedFanOut(
-  eventId: string,
-): Promise<EventCreatedFanOutSummary> {
+export async function runEventCreatedFanOut(eventId: string): Promise<EventCreatedFanOutSummary> {
   const summary: EventCreatedFanOutSummary = { delivered: 0, skipped: 0, failed: 0, capped: false };
 
   const eventSnap = await db.collection('events').doc(eventId).get();
@@ -146,13 +138,8 @@ export async function runEventCreatedFanOut(
         summary.capped = true;
         break;
       }
-      // Single-equality query (the same one notifications.adminSend's `members`
-      // audience uses) — NO composite index. Ordered by documentId for a stable
-      // cursor.
-      let query = usersRef
-        .where('activeMember', '==', true)
-        .orderBy(FieldPath.documentId())
-        .limit(PAGE_SIZE);
+      // Delivery policy filters restricted and opted-out users.
+      let query = usersRef.orderBy(FieldPath.documentId()).limit(PAGE_SIZE);
       if (cursor !== null) {
         query = query.startAfter(cursor);
       }

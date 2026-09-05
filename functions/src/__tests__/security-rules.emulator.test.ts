@@ -988,13 +988,12 @@ describe('Firestore – partners (Phase 9i)', () => {
     await assertFails(getDoc(doc(freeFs, 'offers', 'of-draft')));
   });
 
-  it('offer detail is readable by members and (gating disabled) free users; the secret code is unreadable by everyone', async () => {
+  it('offer detail denies free and legacy-only members even with flags off; secret code is backend-only', async () => {
     const memberFs = testEnv.authenticatedContext(MEMBER, { activeMember: true }).firestore();
-    await assertSucceeds(getDoc(doc(memberFs, 'offers', 'of-active', 'details', 'member')));
-    // Was: denied. Re-locking the firestore.rules isActiveMember() switch
-    // restores the member-only detail tier.
+    await assertFails(getDoc(doc(memberFs, 'offers', 'of-active', 'details', 'member')));
+    // Legacy membership and flag values cannot bypass verified paid entitlement.
     const freeFs = testEnv.authenticatedContext(FREE).firestore();
-    await assertSucceeds(getDoc(doc(freeFs, 'offers', 'of-active', 'details', 'member')));
+    await assertFails(getDoc(doc(freeFs, 'offers', 'of-active', 'details', 'member')));
     // The discount code tier is closed even to members and admin clients —
     // the unlock does NOT reach it (it is not member-gated, it is backend-only).
     await assertFails(getDoc(doc(memberFs, 'offers', 'of-active', 'secret', 'code')));

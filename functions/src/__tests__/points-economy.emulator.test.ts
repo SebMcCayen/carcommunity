@@ -400,6 +400,17 @@ describe('incident_report_confirmed via the confirmations trigger', () => {
 });
 
 describe('events.checkIn — geofence + dwell', () => {
+  async function createPaidAttendee(prefix: string): Promise<TestUser> {
+    const user = await createProvisionedUser(prefix);
+    await adminDb.collection('subscriptions').doc(user.uid).set({
+      userId: user.uid,
+      entitlement: 'member_monthly',
+      status: 'active',
+      tier: 'plus',
+    });
+    return user;
+  }
+
   /**
    * Publishes an event whose window is [startsAt, endsAt].
    *
@@ -437,7 +448,7 @@ describe('events.checkIn — geofence + dwell', () => {
     const endsAt = new Date(Date.now() + 2 * 60 * 60_000);
     const eventId = await publishEvent(startsAt, endsAt);
 
-    const user = await createProvisionedUser('pe-attend');
+    const user = await createPaidAttendee('pe-attend');
     await signInAs(user);
 
     // A single ping proves nothing.
@@ -532,7 +543,7 @@ describe('events.checkIn — geofence + dwell', () => {
     const countsRef = adminDb.collection('eventAttendanceCounts').doc(eventId);
     await countsRef.set({ eventId, verifiedCount: -3 });
 
-    const user = await createProvisionedUser('pe-tally');
+    const user = await createPaidAttendee('pe-tally');
     await signInAs(user);
 
     const sample = { eventId, latitude: LAT, longitude: LON, accuracyMeters: 8 };
@@ -582,7 +593,7 @@ describe('events.checkIn — geofence + dwell', () => {
   it('rejects a self-reported mock location as risk_review, crediting no dwell', async () => {
     const startsAt = new Date(Date.now() - 20 * 60_000);
     const eventId = await publishEvent(startsAt, new Date(Date.now() + 2 * 60 * 60_000));
-    const user = await createProvisionedUser('pe-mock');
+    const user = await createPaidAttendee('pe-mock');
     await signInAs(user);
 
     // A fix reported as mock scores at the review threshold on its own, exactly

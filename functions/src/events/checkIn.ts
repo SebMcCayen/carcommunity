@@ -58,7 +58,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { adminRtdb, db } from '../firebase';
-import { requireMemberActor } from '../shared/memberActor';
+import { requirePaidActor } from '../shared/memberActor';
 import {
   isPlausibleJump,
   isPositionFresh,
@@ -243,7 +243,7 @@ async function readLatestTrustedPosition(
 }
 
 export const checkIn = onCall(CALLABLE_OPTS, async (request): Promise<CheckInResponse> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requirePaidActor(request);
 
   const parsed = parseCheckInInput(request.data);
   if (!parsed.ok) {

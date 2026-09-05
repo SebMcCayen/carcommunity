@@ -239,14 +239,11 @@ class EventsScreensTest {
     }
 
     /**
-     * Slice-D subscription gate (flag ON path). A free viewer who passes the
-     * member gate but is NOT a paid subscriber sees the BASIC view: the upgrade
-     * prompt in place of the full detail card, no full description, and no
-     * "Check who answered" roster reveal — but RSVP and the public counts stay,
-     * since RSVP is free and the tally is public.
+     * Free viewers see the full description, address, RSVP, and aggregate counts.
+     * Attendee names remain paid and the upgrade prompt describes only paid benefits.
      */
     @Test
-    fun detail_freeTier_seesUpgradePrompt_basicView_noRosterReveal() {
+    fun detail_freeTier_seesFullDetails_andRsvp_butNoRosterReveal() {
         composeTestRule.setContent {
             KccTheme {
                 EventDetailScreen(
@@ -254,7 +251,7 @@ class EventsScreensTest {
                     detail = EventDetail(description = "Bring your car", address = "Storgatan 1"),
                     myRsvp = null,
                     passesMemberGate = true,
-                    showFullDetails = false,
+                    canViewAttendees = false,
                     onUpgrade = {},
                     rsvpStatus = RsvpStatusUi.Idle,
                     onRsvp = {},
@@ -262,12 +259,12 @@ class EventsScreensTest {
                 )
             }
         }
-        // Upgrade prompt shown instead of the full detail card.
+        // Upgrade prompt describes paid attendance features alongside free details.
         composeTestRule.onNodeWithTag(EVENT_DETAIL_UPGRADE_TAG).performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.events_upgradeDetailsAction)).assertIsDisplayed()
-        // The paid-only fields (full description, precise address) are NOT shown.
-        composeTestRule.onNodeWithText("Bring your car").assertDoesNotExist()
-        composeTestRule.onNodeWithText("Storgatan 1").assertDoesNotExist()
+        // Full description and precise address are free.
+        composeTestRule.onNodeWithText("Bring your car").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Storgatan 1").performScrollTo().assertIsDisplayed()
         // No "who answered" roster reveal for a free viewer.
         composeTestRule.onNodeWithTag(EVENT_DETAIL_REVEAL_ATTENDEES_TAG).assertDoesNotExist()
         // RSVP + public counts remain: RSVP is a free action, the tally is public.
@@ -289,7 +286,7 @@ class EventsScreensTest {
                     detail = EventDetail(description = "Bring your car", address = "Storgatan 1"),
                     myRsvp = null,
                     passesMemberGate = true,
-                    showFullDetails = true,
+                    canViewAttendees = true,
                     onUpgrade = {},
                     rsvpStatus = RsvpStatusUi.Idle,
                     onRsvp = {},

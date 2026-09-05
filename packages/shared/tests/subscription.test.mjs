@@ -73,10 +73,28 @@ describe('subscription tier contract', () => {
     assert.deepEqual(community.driveHistory, { kind: 'latest', count: 5 });
     assert.deepEqual(plus.driveHistory, { kind: 'rolling_days', days: 90 });
     assert.deepEqual(supporter.driveHistory, { kind: 'unlimited' });
-    assert.equal(plus.exactOtherUserLivePositions, true);
+    // Legacy map capability values remain unchanged and do not activate a map gate.
+    assert.deepEqual(
+      [
+        community.exactOtherUserLivePositions,
+        plus.exactOtherUserLivePositions,
+        supporter.exactOtherUserLivePositions,
+      ],
+      [false, true, true],
+    );
     assert.equal(plus.fullEventDetails, true);
+    for (const tier of ['community', 'plus', 'supporter']) {
+      assert.equal(hasSubscriptionCapability(tier, 'fullEventDetails'), true);
+      for (const capability of ['eventCheckIn', 'attendeeNames']) {
+        assert.equal(hasSubscriptionCapability(tier, capability), tier !== 'community');
+        assert.equal(
+          subscriptionSchema.$defs.tierCapabilityProfile.required.includes(capability),
+          true,
+        );
+      }
+    }
     assert.equal(plus.partnerOffers, true);
-    assert.equal(hasSubscriptionCapability('community', 'fullEventDetails'), false);
+    assert.equal(hasSubscriptionCapability('community', 'fullEventDetails'), true);
     assert.equal(hasSubscriptionCapability('plus', 'fullEventDetails'), true);
     assert.deepEqual(supporter.supporterBadge, { available: true, defaultVisible: true });
   });

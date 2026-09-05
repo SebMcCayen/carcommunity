@@ -10,12 +10,7 @@
  * exclusively by showOfferCode for active offers, and is never logged
  * (legacy rule).
  *
- * showOfferCode's gate is DARK-FLAGGED by `partnerMemberOffersRequirePaid`
- * (contract default OFF): while OFF the callable keeps the relaxed member
- * gate (requireMemberActor — today, every signed-in non-suspended user);
- * while ON member offers are a PAID product, so only an active Plus/Supporter
- * subscriber or an admin may reveal the code. Independent of the global
- * member-gating switch; inert until billing go-live.
+ * Member detail and codes always require verified Plus/Supporter or admin access.
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -23,8 +18,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
 import { buildAdminAuditEvent } from '../admin/claims-core';
-import { requireMemberActor, requirePaidOrAdminActor } from '../shared/memberActor';
-import { readFeatureFlag } from '../shared/featureFlags';
+import { requirePaidOrAdminActor } from '../shared/memberActor';
 import {
   buildOfferDocuments,
   buildOfferUpdates,
@@ -236,17 +230,8 @@ export const showOfferCode = onCall(
     }
     const { offerId } = parsed.input;
 
-    // Member offers become a PAID product only while the dark
-    // `partnerMemberOffersRequirePaid` flag is ON: an active Plus/Supporter
-    // subscriber (or an admin) may reveal the discount code, a free (Community)
-    // caller is denied. While the flag is OFF the enforcement is inert and the
-    // callable keeps today's relaxed member gate — so the gate can deploy
-    // without hiding offers before billing is live. Both gates are
-    // server-authoritative and independent of the global member-gating switch.
-    const requirePaid = await readFeatureFlag('partnerMemberOffersRequirePaid');
-    const actor = requirePaid
-      ? await requirePaidOrAdminActor(request)
-      : await requireMemberActor(request);
+    // Paid entitlement is independent of legacy feature flags.
+    const actor = await requirePaidOrAdminActor(request);
 
     const offerRef = db.collection('offers').doc(offerId);
 

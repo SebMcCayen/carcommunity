@@ -149,9 +149,9 @@ describe('partners-updateCompany (Phase 16 coverage audit)', () => {
       companyId: created.companyId,
       name: 'Redigerad AB',
     });
-    expect(
-      (await adminDb.collection('companies').doc(created.companyId).get()).data()!.name,
-    ).toBe('Redigerad AB');
+    expect((await adminDb.collection('companies').doc(created.companyId).get()).data()!.name).toBe(
+      'Redigerad AB',
+    );
 
     // Active companies are edit-locked (shared lifecycle).
     await call('partners-setCompanyStatus', { companyId: created.companyId, action: 'activate' });
@@ -271,9 +271,10 @@ describe('offers and the three-tier privacy split', () => {
   it('creates the three documents and edit-locks active offers', async () => {
     const companyId = await createActiveCompany();
     await signInAs(adminUser);
-    const created = (
-      await call('partners-createOffer', { ...validOffer, companyId })
-    ).data as { offerId: string; status: string };
+    const created = (await call('partners-createOffer', { ...validOffer, companyId })).data as {
+      offerId: string;
+      status: string;
+    };
     expect(created.status).toBe('draft');
 
     const offerRef = adminDb.collection('offers').doc(created.offerId);
@@ -298,11 +299,15 @@ describe('offers and the three-tier privacy split', () => {
   it('reveals the code only to members for active offers', async () => {
     const companyId = await createActiveCompany();
     await signInAs(adminUser);
-    const created = (
-      await call('partners-createOffer', { ...validOffer, companyId })
-    ).data as { offerId: string };
+    const created = (await call('partners-createOffer', { ...validOffer, companyId })).data as {
+      offerId: string;
+    };
 
-    // Draft offer: even members get not-found.
+    // Draft offer: even paid members get not-found.
+    await adminDb
+      .collection('subscriptions')
+      .doc(member.uid)
+      .set({ userId: member.uid, status: 'active', entitlement: 'member_monthly', tier: 'plus' });
     await signInAs(member);
     expect(
       await callableErrorCode(call('partners-showOfferCode', { offerId: created.offerId })),
@@ -311,13 +316,11 @@ describe('offers and the three-tier privacy split', () => {
     await signInAs(adminUser);
     await call('partners-setOfferStatus', { offerId: created.offerId, action: 'activate' });
 
-    // Was: permission-denied for a free user. Member gating is disabled, so
-    // the code is revealed to any signed-in, non-suspended user.
+    // Free users are denied even with the legacy flag absent or off.
     await signInAs(freeUser);
-    const freeReveal = (
-      await call('partners-showOfferCode', { offerId: created.offerId })
-    ).data as { code: string | null };
-    expect(freeReveal.code).toBe('KCC10');
+    expect(
+      await callableErrorCode(call('partners-showOfferCode', { offerId: created.offerId })),
+    ).toBe('functions/permission-denied');
 
     // Teeth: a suspended user is still refused the code.
     const suspended = await createProvisionedUser('partners-suspended');
@@ -328,18 +331,18 @@ describe('offers and the three-tier privacy split', () => {
     ).toBe('functions/permission-denied');
 
     await signInAs(member);
-    const revealed = (
-      await call('partners-showOfferCode', { offerId: created.offerId })
-    ).data as { code: string | null };
+    const revealed = (await call('partners-showOfferCode', { offerId: created.offerId })).data as {
+      code: string | null;
+    };
     expect(revealed.code).toBe('KCC10');
   });
 
   it('with partnerMemberOffersRequirePaid ON: only PAID subscribers (or admin) reveal the code', async () => {
     const companyId = await createActiveCompany();
     await signInAs(adminUser);
-    const created = (
-      await call('partners-createOffer', { ...validOffer, companyId })
-    ).data as { offerId: string };
+    const created = (await call('partners-createOffer', { ...validOffer, companyId })).data as {
+      offerId: string;
+    };
     await call('partners-setOfferStatus', { offerId: created.offerId, action: 'activate' });
 
     // Flip the dark flag ON for the duration of this test only.
@@ -348,6 +351,7 @@ describe('offers and the three-tier privacy split', () => {
       .doc('featureFlags')
       .set({ partnerMemberOffersRequirePaid: true }, { merge: true });
     try {
+      await adminDb.collection('subscriptions').doc(member.uid).delete();
       // A free (Community) user — even one carrying the legacy activeMember flag
       // but with no paid subscriptions/{uid} record — is now DENIED. `member`
       // holds activeMember:true yet has no paid subscription, so it fails too.

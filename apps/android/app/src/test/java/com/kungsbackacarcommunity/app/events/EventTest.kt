@@ -45,34 +45,10 @@ class EventTest {
     }
 
     @Test
-    fun `showFullDetails - OFF flag shows full to everyone (unchanged pre-Slice-D)`() {
-        // Gate OFF: paid, free, admin or not — all see the full view.
-        assertTrue(
-            Events.showFullDetails(isAdmin = false, requirePaidEnabled = false, isPaidSubscriber = false),
-        )
-        assertTrue(
-            Events.showFullDetails(isAdmin = false, requirePaidEnabled = false, isPaidSubscriber = true),
-        )
-    }
-
-    @Test
-    fun `showFullDetails - ON flag admin without a paid record still sees full (mirrors backend)`() {
-        // The regression this guards: an admin/owner with no subscription must
-        // NOT be treated as free while the gate is ON — the backend serves them
-        // the roster regardless of tier.
-        assertTrue(
-            Events.showFullDetails(isAdmin = true, requirePaidEnabled = true, isPaidSubscriber = false),
-        )
-    }
-
-    @Test
-    fun `showFullDetails - ON flag free non-admin sees basic, paid sees full`() {
-        assertFalse(
-            Events.showFullDetails(isAdmin = false, requirePaidEnabled = true, isPaidSubscriber = false),
-        )
-        assertTrue(
-            Events.showFullDetails(isAdmin = false, requirePaidEnabled = true, isPaidSubscriber = true),
-        )
+    fun `attendee identities require paid with admin moderation exception`() {
+        assertFalse(Events.canViewAttendees(isAdmin = false, isPaidSubscriber = false))
+        assertTrue(Events.canViewAttendees(isAdmin = false, isPaidSubscriber = true))
+        assertTrue(Events.canViewAttendees(isAdmin = true, isPaidSubscriber = false))
     }
 
     @Test

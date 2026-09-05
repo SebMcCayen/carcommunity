@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.partners
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -23,14 +24,7 @@ fun PartnersRoute(
     repository: PartnersRepository,
     offerCodeCoordinator: OfferCodeCoordinator?,
     uid: String,
-    // Whether this viewer may access MEMBER offer content (detail, discount
-    // code, bookmark). The caller resolves the dark-flagged gate: while
-    // partnerMemberOffersRequirePaid is ON this is true only for a PAID
-    // subscriber (Plus/Supporter) — mirroring the server gate in
-    // firestore.rules / partners.showOfferCode — and a free (Community) caller
-    // sees the public teaser plus an upgrade prompt. While the flag is OFF this
-    // is the relaxed member gate, i.e. true for every signed-in user, exactly
-    // as today.
+    // Verified paid subscriber or admin; legacy flags never unlock member offers.
     canAccessMemberOffers: Boolean,
     onBack: () -> Unit,
 ) {
@@ -62,6 +56,13 @@ fun PartnersRoute(
         offerCodeCoordinator?.reset()
     }
 
+    LaunchedEffect(canAccessMemberOffers, uid) {
+        if (!canAccessMemberOffers) {
+            expandedOfferId = null
+            offerCodeCoordinator?.reset()
+        }
+    }
+
     val companyId = selectedCompanyId
     if (companyId == null) {
         PartnersListScreen(
@@ -88,14 +89,14 @@ fun PartnersRoute(
         savedOfferIds = savedIds,
         canAccessMemberOffers = canAccessMemberOffers,
         expandedOfferId = expandedOfferId,
-        expandedOfferDetail = expandedDetail,
-        codeStatus = codeStatus,
+        expandedOfferDetail = if (canAccessMemberOffers) expandedDetail else null,
+        codeStatus = if (canAccessMemberOffers) codeStatus else OfferCodeStatus.Idle,
         onToggleExpand = { offerId ->
             expandedOfferId = if (expandedOfferId == offerId) null else offerId
             offerCodeCoordinator?.reset()
         },
         onShowCode = { offerId ->
-            offerCodeCoordinator?.let { c -> scope.launch { c.reveal(offerId) } }
+            if (canAccessMemberOffers) offerCodeCoordinator?.let { c -> scope.launch { c.reveal(offerId) } }
         },
         onToggleSave = { offerId, saved ->
             scope.launch {
