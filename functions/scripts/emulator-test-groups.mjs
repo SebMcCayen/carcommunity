@@ -77,12 +77,21 @@ export const GROUPS = [
   },
   {
     name: 'Events, Convoy, Live & Garage',
-    patterns: ['events*', 'convoy*', 'live*', 'drives', 'garage', 'subscription-expiry', 'supporter-badge'],
+    patterns: [
+      'events*',
+      'convoy*',
+      'live*',
+      'drives',
+      'garage',
+      'subscription-expiry',
+      'supporter-badge',
+    ],
   },
   {
     name: 'Crown Hunt, Points, Badges, Incidents & Partners',
     patterns: [
       'crownhunt*',
+      'crown-allowance',
       'leaderboard',
       'points*',
       'badges',
@@ -148,7 +157,9 @@ export function assignGroups(files) {
 
   const groups = GROUPS.map((g) => ({
     name: g.name,
-    files: assignments.filter((a) => a.groups.length === 1 && a.groups[0] === g.name).map((a) => a.file),
+    files: assignments
+      .filter((a) => a.groups.length === 1 && a.groups[0] === g.name)
+      .map((a) => a.file),
   }));
 
   const errors = [];
@@ -198,7 +209,9 @@ function main() {
   }
 
   if (errors.length > 0) {
-    console.error('\n[groups] COVERAGE GUARD FAILED — the emulator suite is not a clean partition:');
+    console.error(
+      '\n[groups] COVERAGE GUARD FAILED — the emulator suite is not a clean partition:',
+    );
     for (const e of errors) console.error(`  - ${e}`);
     process.exit(1);
   }

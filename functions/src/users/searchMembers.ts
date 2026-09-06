@@ -29,18 +29,8 @@
  *    optional `limit`;
  *  - a per-uid fixed-window rate limit, checked before the scan.
  *
- * ACCESS: `requireMemberActor`, declared as 'member' in the registry. Be aware
- * that member gating is currently DISABLED repo-wide
- * (shared/memberGating.ts MEMBER_GATING_ENABLED = false), so today the
- * entitlement half is bypassed and every signed-in, non-suspended,
- * non-deleted caller passes. Suspension and soft-deletion are never bypassed.
- *
- * Do NOT "fix" that with a bespoke entitlement check here. `activeMember`
- * defaults to false on provisioning (auth/provisioning.ts), so a local check
- * would deny EVERY caller — shipping a search nobody can use — while the other
- * 40-odd member callables stay open, and it would silently break the documented
- * five-switch re-locking procedure in memberGating.ts. Flipping that one flag is
- * what turns this endpoint (and every sibling) member-only, with no change here.
+ * ACCESS: requireActiveActor. Finding friends is free for signed-in,
+ * non-suspended, non-deleted accounts, independent of legacy membership gates.
  *
  * BLOCKING: rows are filtered in BOTH directions (the caller blocked them, or
  * they blocked the caller), mirroring friend.sendRequest's either-way rule. The
@@ -54,7 +44,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import type { DocumentReference, DocumentSnapshot } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { requireMemberActor } from '../shared/memberActor';
+import { requireActiveActor } from '../shared/memberActor';
 import { isRestricted, toUserAccessState } from '../shared/access';
 import {
   MEMBER_SEARCH_RATE_LIMIT_COLLECTION,
@@ -134,7 +124,9 @@ async function withoutBlockedEitherWay(
   ]);
 
   const snapshots: DocumentSnapshot[] = await db.getAll(...refs);
-  const blockedPaths = new Set(snapshots.filter((snap) => snap.exists).map((snap) => snap.ref.path));
+  const blockedPaths = new Set(
+    snapshots.filter((snap) => snap.exists).map((snap) => snap.ref.path),
+  );
 
   return pairs
     .filter(
@@ -180,58 +172,61 @@ async function enforceSearchRateLimit(uid: string): Promise<void> {
   );
 }
 
-export const searchMembers = onCall(CALLABLE_OPTS, async (request): Promise<SearchMembersResult> => {
-  const actor = await requireMemberActor(request);
+export const searchMembers = onCall(
+  CALLABLE_OPTS,
+  async (request): Promise<SearchMembersResult> => {
+    const actor = await requireActiveActor(request);
 
-  // Validate BEFORE the rate limit. The actor gate above has already read
-  // users/{uid}, so this is NOT a "no Firestore work" path — what it buys is
-  // that a malformed call pays neither the counter get + write nor the range
-  // scan, and never burns the caller's rate-limit window on a bad payload.
-  const parsed = parseSearchMembersInput(request.data);
-  if (!parsed.ok) {
-    throw new HttpsError('invalid-argument', parsed.message);
-  }
+    // Validate BEFORE the rate limit. The actor gate above has already read
+    // users/{uid}, so this is NOT a "no Firestore work" path — what it buys is
+    // that a malformed call pays neither the counter get + write nor the range
+    // scan, and never burns the caller's rate-limit window on a bad payload.
+    const parsed = parseSearchMembersInput(request.data);
+    if (!parsed.ok) {
+      throw new HttpsError('invalid-argument', parsed.message);
+    }
 
-  const key = toSearchQueryKey(parsed.input.query);
-  // Too short is checked before the rate limit for the same reason, and it is
-  // the COMMON case on a typeahead (every first keystroke lands here). Tagged
-  // with its own reason so the client can render "keep typing" silently instead
-  // of treating it as the app-bug case that a malformed payload represents.
-  if (!isSearchableKey(key)) {
-    throw new HttpsError('invalid-argument', QUERY_TOO_SHORT_MESSAGE, {
-      reason: REASON_QUERY_TOO_SHORT,
-    });
-  }
+    const key = toSearchQueryKey(parsed.input.query);
+    // Too short is checked before the rate limit for the same reason, and it is
+    // the COMMON case on a typeahead (every first keystroke lands here). Tagged
+    // with its own reason so the client can render "keep typing" silently instead
+    // of treating it as the app-bug case that a malformed payload represents.
+    if (!isSearchableKey(key)) {
+      throw new HttpsError('invalid-argument', QUERY_TOO_SHORT_MESSAGE, {
+        reason: REASON_QUERY_TOO_SHORT,
+      });
+    }
 
-  await enforceSearchRateLimit(actor.uid);
+    await enforceSearchRateLimit(actor.uid);
 
-  const limit = clampSearchLimit(parsed.input.limit);
-  const { start, end } = searchKeyRange(key);
+    const limit = clampSearchLimit(parsed.input.limit);
+    const { start, end } = searchKeyRange(key);
 
-  // Single-field range + orderBy on the SAME field: covered by the automatic
-  // single-field index, so this needs no composite index (identical shape to
-  // friends/manageFriends.ts resolveTarget). Ordering by the key ASC also makes
-  // the page deterministic and puts the shortest — i.e. closest — name first,
-  // which is the one a typeahead should show at the top.
-  const snapshot = await db
-    .collection('users')
-    .where('displayNameLower', '>=', start)
-    .where('displayNameLower', '<', end)
-    .orderBy('displayNameLower', 'asc')
-    .limit(SEARCH_SCAN_LIMIT)
-    .get();
+    // Single-field range + orderBy on the SAME field: covered by the automatic
+    // single-field index, so this needs no composite index (identical shape to
+    // friends/manageFriends.ts resolveTarget). Ordering by the key ASC also makes
+    // the page deterministic and puts the shortest — i.e. closest — name first,
+    // which is the one a typeahead should show at the top.
+    const snapshot = await db
+      .collection('users')
+      .where('displayNameLower', '>=', start)
+      .where('displayNameLower', '<', end)
+      .orderBy('displayNameLower', 'asc')
+      .limit(SEARCH_SCAN_LIMIT)
+      .get();
 
-  const candidates = snapshot.docs
-    // Never surface the caller to themselves (they cannot friend themselves),
-    // nor suspended/soft-deleted accounts — the same restriction friend
-    // nickname resolution applies, so a name found here is a name that can
-    // actually be acted on.
-    .filter((doc) => doc.id !== actor.uid && !isRestricted(toUserAccessState(doc.data())))
-    .slice(0, limit)
-    .map((doc) => toMemberSearchHit(doc.id, doc.data()));
+    const candidates = snapshot.docs
+      // Never surface the caller to themselves (they cannot friend themselves),
+      // nor suspended/soft-deleted accounts — the same restriction friend
+      // nickname resolution applies, so a name found here is a name that can
+      // actually be acted on.
+      .filter((doc) => doc.id !== actor.uid && !isRestricted(toUserAccessState(doc.data())))
+      .slice(0, limit)
+      .map((doc) => toMemberSearchHit(doc.id, doc.data()));
 
-  return { members: await withoutBlockedEitherWay(actor.uid, candidates) };
-});
+    return { members: await withoutBlockedEitherWay(actor.uid, candidates) };
+  },
+);
 
 // One-time deploy step for the rate-limit counter's TTL (spent windows
 // self-delete so the collection never accumulates):

@@ -25,21 +25,8 @@ service firebase.storage {
         && (!('suspended' in request.auth.token) || request.auth.token.suspended != true);
     }
 
-    // ---- MEMBER GATING SWITCH (Storage rules layer) ------------------------
-    // Member gating is currently DISABLED so every feature is testable without
-    // a subscription. The entitlement term is dropped; isAuthenticated() and
-    // isNotSuspended() are DELIBERATELY KEPT — this helper bundles the
-    // suspension guard for every call site (see the vehicleImages note below
-    // for what happened in PR #428 when that bundling was overlooked).
-    //
-    // TO RE-LOCK: restore the activeMember term, i.e. replace the return below
-    // with:
-    //   return isAuthenticated() && request.auth.token.activeMember == true
-    //     && isNotSuspended();
-    // then redeploy rules. Independent of functions/src/shared/memberGating.ts,
-    // firestore.rules, database.rules.json AND the Android UI switch in
-    // apps/android/.../config/MemberGating.kt — flip all FIVE together
-    // (memberGating.ts is the authoritative runbook).
+    // Legacy compatibility helper: route replay is unchanged by this release.
+    // Drive saving has its own active-account guard and is free.
     function isActiveMember() {
       return isAuthenticated() && isNotSuspended();
     }
