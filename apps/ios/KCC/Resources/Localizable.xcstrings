@@ -3866,13 +3866,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Chatten är tillgänglig för aktiva medlemmar."
+            "value": "Ditt konto kan inte använda chatten just nu."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Chat is available to active members."
+            "value": "Your account cannot access chat right now."
           }
         }
       }
@@ -6994,13 +6994,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Konvojer är tillgängliga för aktiva medlemmar."
+            "value": "Ditt konto kan inte använda konvojer just nu."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Convoys are available to active members."
+            "value": "Your account cannot access convoys right now."
           }
         }
       }
@@ -7987,6 +7987,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Police"
+          }
+        }
+      }
+    },
+    "crownHunt.allowanceReached": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dagens KP-gräns för Kronjakt är nådd. Kronan har inte samlats in."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Today's Crown Hunt KP allowance is used up. The crown has not been collected."
+          }
+        }
+      }
+    },
+    "crownHunt.allowanceRemaining": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld av %2$lld KP kvar för Kronjakt vid insamlingen. Ny dagsgräns %3$@ (Stockholm)."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld of %2$lld Crown Hunt KP remaining at collection time. Resets %3$@ (Stockholm)."
           }
         }
       }
@@ -11397,13 +11431,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Direktmeddelanden är tillgängliga för aktiva medlemmar."
+            "value": "Ditt konto kan inte skicka direktmeddelanden just nu."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Direct messages are available to active members."
+            "value": "Your account cannot send direct messages right now."
           }
         }
       }
@@ -14644,13 +14678,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vänner är tillgängliga för aktiva medlemmar."
+            "value": "Ditt konto kan inte använda vänfunktionen just nu."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Friends are available to active members."
+            "value": "Your account cannot access friends right now."
           }
         }
       }
@@ -16735,13 +16769,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aktivt medlemskap krävs för gruppkörning."
+            "value": "Gruppkörning kräver ett publicerat event och att du har svarat Kommer eller Kanske."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "An active membership is required for group driving."
+            "value": "Group driving requires a published event and a Going or Maybe RSVP."
           }
         }
       }
@@ -25864,13 +25898,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aktivt medlemskap krävs för att spara körningar."
+            "value": "Ditt konto kan inte spara körningar just nu."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "An active membership is required to save drives."
+            "value": "Your account cannot save drives right now."
           }
         }
       }
@@ -30556,13 +30590,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Medlemskap krävs för att se andra livepositioner, eventdetaljer och RSVP."
+            "value": "Eventdetaljer, RSVP, sociala funktioner och körstatistik är gratis. Plus och Supporter ger eventincheckning, deltagarnamn och partnernas medlemserbjudanden."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Membership is required to view other live locations, event details and RSVP."
+            "value": "Event details, RSVP, social features and driving statistics are free. Plus and Supporter include event check-in, attendee names and member partner offers."
           }
         }
       }
@@ -30573,13 +30607,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "De viktigaste medlemsfunktionerna, upp till 5 garagefordon och 90 dagars körhistorik."
+            "value": "Eventincheckning, deltagarnamn, partnernas medlemserbjudanden, upp till 5 garagefordon, 90 dagars körhistorik och 3 000 Kronjakt-KP per dag (Community: 2 250)."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The essential member features, up to 5 garage vehicles and 90 days of drive history."
+            "value": "Event check-in, attendee names, member partner offers, up to 5 garage vehicles, 90 days of drive history and 3,000 Crown Hunt KP per day (Community: 2,250)."
           }
         }
       }
@@ -30811,13 +30845,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Alla medlemsfunktioner, upp till 10 garagefordon, obegränsad körhistorik och möjlighet till Supporter-märke."
+            "value": "Allt i Plus, upp till 10 garagefordon, obegränsad körhistorik och en valfri Supporter-krona på din profilbild. Ditt stöd hjälper till att finansiera projektet."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "All member features, up to 10 garage vehicles, unlimited drive history and an optional Supporter badge."
+            "value": "Everything in Plus, up to 10 garage vehicles, unlimited drive history and an optional Supporter crown on your profile picture. Your support helps fund the project."
           }
         }
       }
@@ -30845,13 +30879,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Lås upp fler funktioner i communityn snart."
+            "value": "Upptäck Plus-förmåner eller stötta communityn med Supporter."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Unlock more community features soon."
+            "value": "Explore Plus benefits or support the community with Supporter."
           }
         }
       }
@@ -30886,6 +30920,74 @@
           "stringUnit": {
             "state": "translated",
             "value": "Upgrade to Supporter"
+          }
+        }
+      }
+    },
+    "supporterBadge.accessibility": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supporter-krona"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supporter crown"
+          }
+        }
+      }
+    },
+    "supporterBadge.saveFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det gick inte att spara ditt val. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not save your choice. Please try again."
+          }
+        }
+      }
+    },
+    "supporterBadge.settingBody": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visar en liten krona på din profilbild när ditt Supporter-medlemskap är aktivt. Ditt val sparas även när medlemskapet upphör."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shows a small crown on your profile picture while your Supporter membership is active. Your choice is saved even when your membership ends."
+          }
+        }
+      }
+    },
+    "supporterBadge.settingTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa Supporter-krona"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Supporter crown"
           }
         }
       }
