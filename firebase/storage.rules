@@ -98,28 +98,28 @@ service firebase.storage {
     // Max 50 MB per file. drives.delete removes this prefix with the drive.
     // -------------------------------------------------------------------------
     match /rideRoutes/{userId}/{rideId}/{fileName} {
-      // Saving is free. Consult backend account state as well as the token so
-      // stale claims cannot keep uploads open after suspension or deletion.
-      function canSaveDrive() {
+      // Saving is free; replay keeps its existing tier gate. Both operations
+      // consult stored account state so stale tokens cannot bypass restrictions.
+      function hasActiveRouteAccount() {
         return isAuthenticated() && isNotSuspended()
           && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
-          && storedAccountAllowsSaving();
+          && storedRouteAccountIsUnrestricted();
       }
-      function storedAccountAllowsSaving() {
+      function storedRouteAccountIsUnrestricted() {
         let account = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
         return account.get('suspended', false) != true
           && account.get('deleted', false) != true;
       }
-      allow read: if isOwner(userId) && isActiveMember();
+      allow read: if isOwner(userId) && isActiveMember() && hasActiveRouteAccount();
       // Only the two canonical files may exist under the prefix — anything
       // else would be unmetered private storage and would make drives.delete
       // cleanup unbounded.
-      allow write: if isOwner(userId) && canSaveDrive() && isUnderMB(50) &&
+      allow write: if isOwner(userId) && hasActiveRouteAccount() && isUnderMB(50) &&
         ((fileName == 'route.bin'
             && request.resource.contentType.matches('application/(octet-stream|gzip|x-gzip)'))
           || (fileName == 'preview.png' && request.resource.contentType == 'image/png'));
-      allow read: if isAdmin();
-      allow write: if isAdmin() && canSaveDrive();
+      allow read: if isAdmin() && hasActiveRouteAccount();
+      allow write: if isAdmin() && hasActiveRouteAccount();
     }
 
     // -------------------------------------------------------------------------

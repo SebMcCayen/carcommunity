@@ -254,9 +254,14 @@ describe('drives-save', () => {
 
   it('rejects a deleted free caller', async () => {
     const deleted = await createProvisionedUser('drives-deleted-free');
-    await adminDb.collection('users').doc(deleted.uid).set({ activeMember: false, deleted: true }, { merge: true });
+    await adminDb
+      .collection('users')
+      .doc(deleted.uid)
+      .set({ activeMember: false, deleted: true }, { merge: true });
     await signInAs(deleted);
-    expect(await callableErrorCode(call('drives-save', validSave))).toBe('functions/permission-denied');
+    expect(await callableErrorCode(call('drives-save', validSave))).toBe(
+      'functions/permission-denied',
+    );
   });
 
   it('STILL rejects a SUSPENDED owner (role never bypassed suspension either)', async () => {
@@ -615,6 +620,22 @@ describe('drives-routeUrl signed route access', () => {
       'functions/unauthenticated',
     );
   });
+
+  it.each(['suspended', 'deleted', 'missing'])(
+    'denies route links for a %s profile with a stale token',
+    async (state) => {
+      const user = await createProvisionedUser(`routeurl-restricted-${state}`);
+      await setPaidTier(user, 'supporter');
+      const [rideId] = await seedDriveHistory(user, [0]);
+      await signInAs(user);
+      const profile = adminDb.collection('users').doc(user.uid);
+      if (state === 'missing') await profile.delete();
+      else await profile.update({ [state]: true });
+      expect(await callableErrorCode(call('drives-routeUrl', { rideId }))).toBe(
+        'functions/permission-denied',
+      );
+    },
+  );
 
   it("returns not-found for a missing ride and for another owner's ride (no existence leak)", async () => {
     const owner = await createProvisionedUser('routeurl-owner');

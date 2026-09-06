@@ -1,5 +1,5 @@
 /**
- * events.listAttendees — member-readable roster of who RSVP'd to a published
+ * events.listAttendees — paid/admin-readable roster of who RSVP'd to a published
  * event, with each member's answer (going / maybe / not_going).
  *
  * Deployed via the `events` export group as `events-listAttendees`
@@ -14,8 +14,9 @@
  * the owner-or-admin read rule stays untouched) and applies blocking centrally.
  *
  * ## Gating
- * - Caller must be an active member OR an admin (`requireMemberOrAdminActor`);
- *   suspended/deleted accounts are always rejected.
+ * - `requireActiveActor` rejects unauthenticated or suspended/deleted accounts.
+ *   An explicit verified paid-tier/admin check then gates attendee identities;
+ *   free active accounts receive an empty roster with `requiresPaid: true`.
  * - Only PUBLISHED events expose a roster. Draft / cancelled / completed events
  *   return `not-found`, mirroring the teaser-doc read rule (a draft is not
  *   member-visible at all) and avoiding any leak of a non-public attendee list.

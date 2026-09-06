@@ -3519,6 +3519,47 @@ describe('Cloud Storage – ownership validation', () => {
     );
   });
 
+  it.each([false, true])(
+    'stored restrictions deny stale-token route reads (admin=%s)',
+    async (admin) => {
+      const id = `route-read-restricted-${admin}`;
+      const ctx = testEnv.authenticatedContext(id, { activeMember: true, admin });
+      for (const state of ['suspended', 'deleted', 'missing']) {
+        for (const fileName of ['route.bin', 'preview.png']) {
+          // The admin case uses another owner's object, exercising the
+          // independent moderation grant rather than the owner-read grant.
+          const path = `rideRoutes/${admin ? OWNER : id}/${id}-${state}/${fileName}`;
+          await testEnv.withSecurityRulesDisabled(async (bypass) => {
+            await setDoc(doc(bypass.firestore(), `users/${id}`), {
+              activeMember: false,
+              suspended: false,
+              deleted: false,
+            });
+            await uploadBytes(storageRef(bypass.storage(), path), new Uint8Array([1, 2]), {
+              contentType: fileName === 'preview.png' ? 'image/png' : 'application/octet-stream',
+            });
+          });
+          const route = storageRef(ctx.storage(), path);
+          await assertSucceeds(getBytes(route));
+          if (admin) {
+            const suspendedToken = testEnv.authenticatedContext(id, {
+              admin: true,
+              activeMember: true,
+              suspended: true,
+            });
+            await assertFails(getBytes(storageRef(suspendedToken.storage(), path)));
+          }
+          await testEnv.withSecurityRulesDisabled(async (bypass) => {
+            const profile = doc(bypass.firestore(), `users/${id}`);
+            if (state === 'missing') await deleteDoc(profile);
+            else await updateDoc(profile, { [state]: true });
+          });
+          await assertFails(getBytes(route));
+        }
+      }
+    },
+  );
+
   it("another member cannot read someone else's ride route", async () => {
     const ctx = testEnv.authenticatedContext(OTHER, { activeMember: true });
     await assertFails(
@@ -3732,7 +3773,9 @@ describe('Firestore – Kronjakt paywall (crownHuntRequirePaid) read gate', () =
   const CELL = '5940_1810';
   const LIVE = 'chp-cs-live';
 
-  function clientLiveQuery(fs: ReturnType<ReturnType<typeof testEnv.authenticatedContext>['firestore']>) {
+  function clientLiveQuery(
+    fs: ReturnType<ReturnType<typeof testEnv.authenticatedContext>['firestore']>,
+  ) {
     const deviceNow = Timestamp.fromMillis(Date.now() - 2000);
     return query(
       collection(fs, 'crownSpawns'),
@@ -3746,7 +3789,11 @@ describe('Firestore – Kronjakt paywall (crownHuntRequirePaid) read gate', () =
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
       const firestore = ctx.firestore();
       // Paywall ON.
-      await setDoc(doc(firestore, 'config', 'featureFlags'), { crownHuntRequirePaid: true }, { merge: true });
+      await setDoc(
+        doc(firestore, 'config', 'featureFlags'),
+        { crownHuntRequirePaid: true },
+        { merge: true },
+      );
       // A live auto-spawned crown and an active hand-placed point.
       await setDoc(doc(firestore, 'crownSpawns', LIVE), {
         cellKey: CELL,
@@ -3823,27 +3870,36 @@ describe('Firestore – Kronjakt paywall (crownHuntRequirePaid) read gate', () =
   it('allowance is private and neither its counter nor subscription truth can be forged', async () => {
     const fs = testEnv.authenticatedContext(FREE).firestore();
     const path = `crownDailyAllowances/${FREE}/days/2026-09-05`;
-    await testEnv.withSecurityRulesDisabled(async ctx => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), path), { earned: 2250 });
     });
     await assertFails(getDoc(doc(fs, path)));
     await assertFails(getDocs(collection(fs, `crownDailyAllowances/${FREE}/days`)));
     await assertFails(setDoc(doc(fs, path), { earned: 0 }));
-    await assertFails(setDoc(doc(fs, 'subscriptions', FREE), { tier: 'supporter', status: 'active', entitlement: 'member_monthly' }));
+    await assertFails(
+      setDoc(doc(fs, 'subscriptions', FREE), {
+        tier: 'supporter',
+        status: 'active',
+        entitlement: 'member_monthly',
+      }),
+    );
     await assertFails(setDoc(doc(fs, 'users', FREE), { activeMember: true }));
     const stranger = testEnv.authenticatedContext('allowance-stranger').firestore();
     await assertFails(getDoc(doc(stranger, path)));
   });
 
-  it.each(['suspended', 'deleted'])('server %s restriction blocks crown reads even with a stale unrestricted token', async field => {
-    const uid = `crown-restricted-${field}`;
-    await testEnv.withSecurityRulesDisabled(async ctx => {
-      await setDoc(doc(ctx.firestore(), 'users', uid), { [field]: true });
-    });
-    const fs = testEnv.authenticatedContext(uid).firestore();
-    await assertFails(getDocs(clientLiveQuery(fs)));
-    await assertFails(getDoc(doc(fs, 'crownHuntPoints', 'chp-p-active')));
-  });
+  it.each(['suspended', 'deleted'])(
+    'server %s restriction blocks crown reads even with a stale unrestricted token',
+    async (field) => {
+      const uid = `crown-restricted-${field}`;
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), 'users', uid), { [field]: true });
+      });
+      const fs = testEnv.authenticatedContext(uid).firestore();
+      await assertFails(getDocs(clientLiveQuery(fs)));
+      await assertFails(getDoc(doc(fs, 'crownHuntPoints', 'chp-p-active')));
+    },
+  );
 
   it('flag ON: a PAID member (via the subscriptions record, NO activeMember claim) is ALLOWED', async () => {
     // Deliberately NO custom claim — the gate reads subscriptions/{uid}, so a

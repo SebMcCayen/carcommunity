@@ -20,7 +20,7 @@ import {
   Timestamp,
   updateDoc,
 } from 'firebase/firestore';
-import { ref, uploadBytes } from 'firebase/storage';
+import { getBytes, ref, uploadBytes } from 'firebase/storage';
 import { afterAll, beforeAll, describe, it } from 'vitest';
 
 let env: RulesTestEnvironment;
@@ -197,6 +197,9 @@ describe('free social rules independent of legacy membership', () => {
     await assertSucceeds(
       uploadBytes(route, new Uint8Array([1, 2]), { contentType: 'application/octet-stream' }),
     );
+    // Saving is free even under the simulated re-lock; the existing replay
+    // subscription switch is deliberately preserved by the account-state fix.
+    await assertFails(getBytes(route));
     await assertFails(
       uploadBytes(ref(storage, 'rideRoutes/peer/saved/route.bin'), new Uint8Array([1]), {
         contentType: 'application/octet-stream',
