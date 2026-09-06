@@ -177,7 +177,6 @@ const LAT = 57.4879;
 const LON = 12.0763;
 const north = (metres: number) => ({ latitude: LAT + metres / 111_320, longitude: LON });
 
-let member: TestUser;
 let organiser: TestUser;
 let reporter: TestUser;
 let confirmer: TestUser;
@@ -192,7 +191,6 @@ beforeAll(async () => {
   functions = getFunctions(app, REGION);
   connectFunctionsEmulator(functions, EMULATOR_HOST, 5001);
 
-  member = await createProvisionedUser('pe-member');
   organiser = await createProvisionedUser('pe-organiser');
   await adminAuth.setCustomUserClaims(organiser.uid, { admin: true });
   await adminDb.collection('users').doc(organiser.uid).set({ role: 'admin' }, { merge: true });
