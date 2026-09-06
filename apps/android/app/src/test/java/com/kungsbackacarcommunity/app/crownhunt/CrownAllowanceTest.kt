@@ -11,6 +11,7 @@ class CrownAllowanceTest {
     @Test
     fun parsesServerAllowanceIncludingDstReset() {
         assertEquals(CrownAllowance(2250, 0, Instant.parse("2026-03-29T22:00:00Z")), CrownAllowance.fromWire(payload))
+        assertEquals(3000, CrownAllowance.fromWire(payload + ("cap" to 3000))?.cap)
     }
 
     @Test
@@ -20,6 +21,8 @@ class CrownAllowanceTest {
             assertNull(CrownAllowance.fromWire(payload + ("remaining" to bad)))
         }
         assertNull(CrownAllowance.fromWire(payload + ("resetsAt" to "invalid")))
-        assertNull(CrownAllowance.fromWire(payload + ("cap" to 0)))
+        for (badCap in listOf(0, 1, 2249, 2251, 3001, Int.MAX_VALUE)) {
+            assertNull(CrownAllowance.fromWire(payload + ("cap" to badCap)))
+        }
     }
 }

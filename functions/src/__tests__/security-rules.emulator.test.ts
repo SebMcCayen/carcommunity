@@ -3450,6 +3450,16 @@ describe('Cloud Storage – ownership validation', () => {
   const OWNER = 'storage-owner';
   const OTHER = 'storage-other';
 
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `users/${OWNER}`), {
+        activeMember: false,
+        suspended: false,
+        deleted: false,
+      });
+    });
+  });
+
   it('owner can upload a profile image to their own path', async () => {
     const ctx = testEnv.authenticatedContext(OWNER);
     const data = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);

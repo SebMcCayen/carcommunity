@@ -102,9 +102,13 @@ service firebase.storage {
       // stale claims cannot keep uploads open after suspension or deletion.
       function canSaveDrive() {
         return isAuthenticated() && isNotSuspended()
-          && (!firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
-            || (firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
-              && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true));
+          && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+          && storedAccountAllowsSaving();
+      }
+      function storedAccountAllowsSaving() {
+        let account = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+        return account.get('suspended', false) != true
+          && account.get('deleted', false) != true;
       }
       allow read: if isOwner(userId) && isActiveMember();
       // Only the two canonical files may exist under the prefix — anything

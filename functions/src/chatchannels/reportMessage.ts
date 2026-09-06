@@ -12,7 +12,8 @@
  *
  * Eligibility mirrors each channel's READ rule exactly — you can report what
  * you can see, and nothing else:
- *  - community: any active member (requireActiveActor, matching communityChat.*)
+ *  - community: any active account, including free users (requireActiveActor,
+ *    matching communityChat.*)
  *  - convoy: an ACCEPTED member of that convoy (requireAcceptedConvoyMember,
  *    the same gate convoyChat.post/list use — a missing convoy or an outsider
  *    is not-found so a convoy can't be probed via the report endpoint).

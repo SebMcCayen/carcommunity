@@ -1,13 +1,12 @@
 /**
  * police.listNearby — read of ACTIVE, unexpired user-reported POLICE pins near a
- * point, gated to active MEMBERS (contracts/functions/functions.json:
+ * point, available to active accounts on every tier (contracts/functions/functions.json:
  * police.listNearby).
  *
  * Deployed via the `police` export group as `police-listNearby` (europe-west1).
- * Active-account-gated (requireActiveActor) to match the member-read `policeReports` rule
- * and the feature's least-privilege audience — unlike incidents.listNearby, which
- * is open to every signed-in user because that layer is deliberately shared with
- * all. Mirrors the crownHunt geo approach otherwise: the requested radius is
+ * Active-account-gated (requireActiveActor), matching the `policeReports` read
+ * rule; a subscription is not required. Mirrors the crownHunt geo approach:
+ * the requested radius is
  * clamped, the covering grid cells are enumerated, and only those cells are read
  * via chunked Firestore `in` queries (`geoCell in [...]`) — never a
  * full-collection scan. Results are filtered to unexpired docs within the exact

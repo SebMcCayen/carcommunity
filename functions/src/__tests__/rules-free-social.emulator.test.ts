@@ -204,6 +204,30 @@ describe('free social rules independent of legacy membership', () => {
     );
   });
 
+  it.each([false, true])('denies uploads after profile removal (admin=%s)', async (admin) => {
+    const id = uid(`removed-${admin}`);
+    const storage = env.authenticatedContext(id, { admin, activeMember: true }).storage();
+    const upload = () =>
+      uploadBytes(ref(storage, `rideRoutes/${id}/saved/route.bin`), new Uint8Array([1]), {
+        contentType: 'application/octet-stream',
+      });
+    // Unprovisioned and purged profiles both fail closed, including the admin
+    // write alternative; a normal provisioned free account still succeeds.
+    await assertFails(upload());
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `users/${id}`), {
+        activeMember: false,
+        suspended: false,
+        deleted: false,
+      });
+    });
+    await assertSucceeds(upload());
+    await env.withSecurityRulesDisabled(async (context) => {
+      await deleteDoc(doc(context.firestore(), `users/${id}`));
+    });
+    await assertFails(upload());
+  });
+
   it.each(['suspended', 'deleted', 'claim-suspended'])(
     'denies %s uploads, including an admin token',
     async (subject) => {
