@@ -44,10 +44,7 @@ import {
 } from 'firebase/functions';
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import {
-  Timestamp,
-  getFirestore as getAdminFirestore,
-} from 'firebase-admin/firestore';
+import { Timestamp, getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   DAILY_POINTS_CAP,
@@ -124,7 +121,12 @@ async function ledgerEntry(
   uid: string,
   key: string,
 ): Promise<FirebaseFirestore.DocumentData | undefined> {
-  const snap = await adminDb.collection('pointsLedger').doc(uid).collection('entries').doc(key).get();
+  const snap = await adminDb
+    .collection('pointsLedger')
+    .doc(uid)
+    .collection('entries')
+    .doc(key)
+    .get();
   return snap.exists ? snap.data() : undefined;
 }
 
@@ -133,7 +135,12 @@ async function awaitLedgerEntry(uid: string, key: string): Promise<FirebaseFires
 }
 
 async function entryCount(uid: string): Promise<number> {
-  const snap = await adminDb.collection('pointsLedger').doc(uid).collection('entries').count().get();
+  const snap = await adminDb
+    .collection('pointsLedger')
+    .doc(uid)
+    .collection('entries')
+    .count()
+    .get();
   return snap.data().count;
 }
 
@@ -239,9 +246,9 @@ describe('points.recordDailyOpen', () => {
     expect(await callableErrorCode(call('points-recordDailyOpen', { streak: 7 }))).toBe(
       'functions/invalid-argument',
     );
-    expect(
-      await callableErrorCode(call('points-recordDailyOpen', { day: '2020-01-01' })),
-    ).toBe('functions/invalid-argument');
+    expect(await callableErrorCode(call('points-recordDailyOpen', { day: '2020-01-01' }))).toBe(
+      'functions/invalid-argument',
+    );
     // Nothing was written by any of the rejected calls.
     expect(await entryCount(user.uid)).toBe(0);
   });
@@ -302,7 +309,10 @@ describe('drive_5km via the rides trigger', () => {
     const day = stockholmDayKey(new Date());
 
     const long = await saveDrive(6_000, `nodaily-${Date.now()}`);
-    const entry = await awaitLedgerEntry(user.uid, economyIdempotencyKey('drive_5km', long.rideId)!);
+    const entry = await awaitLedgerEntry(
+      user.uid,
+      economyIdempotencyKey('drive_5km', long.rideId)!,
+    );
     expect(entry.amount).toBe(15);
 
     // The drive credited the WEEKLY driving total...
@@ -316,10 +326,7 @@ describe('drive_5km via the rides trigger', () => {
     // ...but left the DAILY total untouched: driving is decoupled from the
     // daily cap in BOTH directions, so it consumes none of the headroom the
     // daily cap leaves for non-driving rules (issue #861).
-    const daily = await adminDb
-      .collection('pointsDailyTotals')
-      .doc(`${user.uid}__${day}`)
-      .get();
+    const daily = await adminDb.collection('pointsDailyTotals').doc(`${user.uid}__${day}`).get();
     expect(daily.exists).toBe(false);
   });
 
@@ -334,7 +341,9 @@ describe('drive_5km via the rides trigger', () => {
     await awaitLedgerEntry(user.uid, economyIdempotencyKey('drive_5km', rides[1]!)!);
     // Give the third trigger time to run and be refused.
     await new Promise((resolve) => setTimeout(resolve, 3_000));
-    expect(await ledgerEntry(user.uid, economyIdempotencyKey('drive_5km', rides[2]!)!)).toBeUndefined();
+    expect(
+      await ledgerEntry(user.uid, economyIdempotencyKey('drive_5km', rides[2]!)!),
+    ).toBeUndefined();
 
     const counter = await adminDb
       .collection('pointsRuleCounters')
@@ -381,11 +390,7 @@ describe('incident_report_confirmed via the confirmations trigger', () => {
     await signInAs(confirmer);
     await call('incidents-confirm', { incidentId: reported.id });
 
-    const key = economyIdempotencyKey(
-      'incident_report_confirmed',
-      reported.id,
-      confirmer.uid,
-    )!;
+    const key = economyIdempotencyKey('incident_report_confirmed', reported.id, confirmer.uid)!;
     const entry = await awaitLedgerEntry(reporter.uid, key);
     expect(entry.amount).toBe(15);
     // The confirmer earns nothing for confirming.
@@ -436,10 +441,13 @@ describe('events.checkIn — geofence + dwell', () => {
       })
     ).data as { eventId: string };
     await call('events-publish', { eventId: created.eventId });
-    await adminDb.collection('events').doc(created.eventId).update({
-      startsAt: Timestamp.fromDate(startsAt),
-      endsAt: Timestamp.fromDate(endsAt),
-    });
+    await adminDb
+      .collection('events')
+      .doc(created.eventId)
+      .update({
+        startsAt: Timestamp.fromDate(startsAt),
+        endsAt: Timestamp.fromDate(endsAt),
+      });
     return created.eventId;
   }
 
@@ -577,7 +585,7 @@ describe('events.checkIn — geofence + dwell', () => {
   it('refuses a sample outside the [start-30, end+30] window', async () => {
     const startsAt = new Date(Date.now() + 4 * 60 * 60_000);
     const eventId = await publishEvent(startsAt, new Date(startsAt.getTime() + 60 * 60_000));
-    await signInAs(member);
+    await signInAs(await createPaidAttendee('pe-window'));
     const response = (
       await call('events-checkIn', {
         eventId,
@@ -624,7 +632,7 @@ describe('events.checkIn — geofence + dwell', () => {
   it('refuses a forged dwell, distance or point value', async () => {
     const startsAt = new Date(Date.now() - 10 * 60_000);
     const eventId = await publishEvent(startsAt, new Date(startsAt.getTime() + 2 * 60 * 60_000));
-    await signInAs(member);
+    await signInAs(await createPaidAttendee('pe-forged'));
     for (const forged of [{ dwellMs: 999_999 }, { points: 50 }, { verified: true }]) {
       expect(
         await callableErrorCode(
@@ -768,7 +776,10 @@ describe('Kronjakt crowns fold into the daily cap', () => {
     // answer to the weekly driving cap alone, so collecting crowns no longer
     // zeroes out a genuine saved drive (issue #861). Before the fix this
     // returned `cap_reached` and wrote no ledger entry.
-    const entry = await awaitLedgerEntry(user.uid, economyIdempotencyKey('drive_5km', ride.rideId)!);
+    const entry = await awaitLedgerEntry(
+      user.uid,
+      economyIdempotencyKey('drive_5km', ride.rideId)!,
+    );
     expect(entry.amount).toBe(15);
     // Paid in full → the description is the bare label, with no "15 p → x p" clip.
     expect(String(entry.description)).not.toContain('→');

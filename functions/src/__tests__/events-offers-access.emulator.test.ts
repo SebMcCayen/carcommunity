@@ -94,7 +94,8 @@ beforeAll(async () => {
     endsAt: Timestamp.fromMillis(Date.now() + 60 * 60_000),
     latitude: 57.49,
     longitude: 12.08,
-    rsvpCounts: { going: 1, maybe: 0, not_going: 0 },
+    // The running RSVP trigger counts the seeded Plus RSVP below.
+    rsvpCounts: { going: 0, maybe: 0, not_going: 0 },
   });
   await db
     .doc('events/access-event/details/private')
@@ -134,8 +135,14 @@ describe('events/offers permanent access policy', () => {
     await assertFails(getDocs(collection(fs, 'events/access-event/rsvps')));
     await assertFails(getDoc(doc(fs, 'events/access-event/rsvps/plus')));
     await assertFails(setDoc(doc(fs, 'events/access-event/rsvps/plus'), { status: 'going' }));
+    // The seed and the free user's create/update are asynchronous trigger
+    // writes. Wait for their final aggregate instead of racing the worker.
+    await expect
+      .poll(async () => (await getDoc(doc(fs, 'events/access-event'))).data()?.rsvpCounts, {
+        timeout: 30_000,
+      })
+      .toEqual({ going: 1, maybe: 1, not_going: 0 });
     const event = (await getDoc(doc(fs, 'events/access-event'))).data()!;
-    expect(event.rsvpCounts).toEqual({ going: 1, maybe: 0, not_going: 0 });
     expect(event).not.toHaveProperty('attendees');
     const anon = env.unauthenticatedContext().firestore();
     await assertFails(getDoc(doc(anon, 'events/access-event/details/private')));
