@@ -2,6 +2,26 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 52,
+      "versionName": "1.0.1",
+      "releaseDate": "2026-09-07",
+      "highlights": [
+        "Träffinformation och RSVP är gratis för alla inloggade",
+        "Kronjakten är öppen för alla med tydliga dagliga poänggränser",
+        "Supporter-krona på profilbilden – välj själv om den ska synas"
+      ],
+      "changes": [
+        "Träffar: alla inloggade kan läsa fullständig information och svara på inbjudningar",
+        "Träffar: incheckning och deltagarnamn är förmåner för Plus och Supporter",
+        "Community: vänner, privata meddelanden, chatt, konvojer och incidentrapportering är gratis",
+        "Körningar: alla kan spara körningar och se sin körstatistik",
+        "Kronjakten: Community kan samla upp till 2 250 Kronpoäng per dag, Plus och Supporter upp till 3 000",
+        "Profil: Supporter-kronan kan visas på profilbilden och döljas i Inställningar",
+        "Nyheter: information om nya träffar kan läsas av alla",
+        "Medlemskap: tydligare beskrivningar av gratis funktioner och betalda förmåner"
+      ]
+    },
+    {
       "versionCode": 51,
       "versionName": "1.0.0",
       "releaseDate": "2026-09-02",
