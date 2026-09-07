@@ -39,7 +39,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { FieldPath, Timestamp } from 'firebase-admin/firestore';
 import { adminStorage, db } from '../firebase';
-import { requireActiveActor } from '../shared/memberActor';
+import { isRestricted, toUserAccessState } from '../shared/access';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 import { effectiveSubscriptionTierFromStoredRecord } from '../subscription/subscription-core';
 import { COMMUNITY_DRIVE_HISTORY_LIMIT } from './driveHistory-core';
@@ -64,7 +64,16 @@ const CALLABLE_OPTS = {
 export type RouteUrlResponse = SignedRouteUrl;
 
 export const routeUrl = onCall(CALLABLE_OPTS, async (request): Promise<RouteUrlResponse> => {
-  const actor = await requireActiveActor(request);
+  // Require a stored profile as well as an active account. The shared actor
+  // guard tolerates missing profiles for onboarding; route downloads must not
+  // do so when a stale token outlives profile deletion and files still remain.
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Sign in to continue.');
+  const profile = await db.collection('users').doc(uid).get();
+  if (!profile.exists || isRestricted(toUserAccessState(profile.data()))) {
+    throw new HttpsError('permission-denied', 'Account access is restricted.');
+  }
+  const actor = { uid };
 
   const parsed = parseRouteUrlInput(request.data);
   if (!parsed.ok) throw new HttpsError('invalid-argument', parsed.message);

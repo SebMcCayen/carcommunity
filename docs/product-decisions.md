@@ -88,18 +88,31 @@ Detta dokument är den låsta produktsanningen för `carcommunity` och ska anvä
 - Community / Plus / Supporter får ha högst 2 / 5 / 10 fordon i garaget.
 - Körhistorik är de 5 senaste för Community, rullande 90 dagar för Plus och obegränsad för
   Supporter.
-- Plus ger exakt liveposition för andra användare, fullständiga eventdetaljer och
-  partnererbjudanden. Supporter ska vara en verifierbar superset av samtliga Plus-förmågor.
+- Godkänd åtkomstpolicy 2026-09-05: fullständiga publicerade eventdetaljer, RSVP,
+  vänner, DM, communitychatt, konvojer/gruppkörning, sparande av körningar,
+  incidentrapportering och körstatistik är gratis för inloggade, ej begränsade konton.
+- Plus ger eventincheckning, deltagarnamn och partnernas medlemserbjudanden.
+  Supporter ska vara en verifierbar superset av samtliga Plus-förmågor.
+- Körstatistik omfattar alla behållna egna körningar på samtliga nivåer; den ger inte
+  utökad åtkomst till enskilda historikposter eller rutter. Efter avslutad betald period
+  visas de fem senaste körningarna i Community. Äldre körningar raderas inte.
+- Kronjakt är öppen för alla nivåer. Separat Kronjakt-budget: Community 2 250 KP/dag,
+  Plus och Supporter 3 000 KP/dag, med återställning vid midnatt Europe/Stockholm.
+  Andra poängkällors gränser ändras inte. Befintliga antalstak för kronor behålls.
+  Pågående dygn nollställs inte vid nivåbyte och intjänade poäng tas inte tillbaka.
+- Livekartans åtkomst och sparad ruttuppspelning ändras inte av detta beslut.
+  Aktivera inte de äldre globala medlemsgrindarna för att införa de smala betalförmånerna.
 - Supporter-badge visas som standard men är frivillig och kan alltid döljas av användaren.
-- Detta beslut etablerar kontrakt och migreringsgrund. Det aktiverar inte paywalls,
-  `MemberGating`, butiksköp eller någon provider-adapter.
+- Kodändringar införs via granskade PR:er och intern testning före bred utrullning.
+  Ett uppdaterat dokument innebär inte att funktioner eller regler är driftsatta.
 - User-subscription hanteras via Apple/Google billing.
 - Businessbetalningar sker via separat fakturering, inte via in-app purchase.
 
 ## Roles and permissions
 
 - Supporter är en subscription tier, inte en behörighetsroll. Ingen separat supporter-roll skapas.
-- Admin behöver inte subscription.
+- Admin behöver inte subscription för administration/moderering. Personlig
+  eventincheckning kräver betald nivå även för administratörer.
 - Backend avgör åtkomst med hårda access checks.
 
 ## Live location sharing
@@ -112,7 +125,8 @@ Detta dokument är den låsta produktsanningen för `carcommunity` och ska anvä
 - Egen delning exkluderar blockerade relationer (bägge riktningar) och suspenderade konton; en delare kan aldrig upptäckas av någon de blockerat eller som blockerat dem.
 - Gratisanvändare kan dela sin egen live location.
 - Aktiv subscription krävs för att se andras live positioner (avsedd framtida grind; medlemsgrindning är för närvarande avstängd i backend, så alla inloggade icke-suspenderade användare kan se just nu).
-- Gratisanvändare kan se begränsad community-status men inte exakta live positioner.
+- Den äldre avsedda livepositionsgrinden ovan är inte en aktiv Plus-förmån idag;
+  oförändrad nuvarande åtkomst får inte beskrivas som ett aktiverat betalkrav.
 
 ## Blocking and suspension
 
@@ -122,8 +136,12 @@ Detta dokument är den låsta produktsanningen för `carcommunity` och ska anvä
 
 ## Events and RSVP
 
-- Gratisanvändare kan se att event finns, men detaljinformation kräver subscription.
-- Eventfunktionalitet ska stödja tydlig RSVP-hantering på MVP-nivå.
+- Alla inloggade, ej begränsade användare får läsa fullständiga publicerade eventdetaljer
+  och svara på RSVP. Deltagarnamn är betalda; antal deltagare får visas gratis.
+- Eventincheckning kräver aktiv Plus/Supporter och befintliga plats-/tidskontroller.
+- Nya eventannonser är läsbara för alla nivåer. Endast administratörer får skriva
+  manuella annonser; backend får automatiskt annonsera publicerade medlemsevent.
+  Notispreferenser, blockering, publiceringsstatus och idempotens respekteras.
 
 ## Navigation
 
@@ -133,7 +151,8 @@ Detta dokument är den låsta produktsanningen för `carcommunity` och ska anvä
 ## Maps
 
 - Kartor används för live location och eventrelaterad orientering.
-- Exakt live position för andra användare är subscriptionsstyrd.
+- Livekartans äldre avsedda subscriptionsgrind är avstängd. Beslutet 2026-09-05
+  ändrar inte denna åtkomst (se Live location sharing ovan).
 
 ## Event chat
 

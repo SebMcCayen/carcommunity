@@ -90,6 +90,17 @@ export async function requireMemberOrAdminActor(
   return { ...actor, isAdmin: canAccessAdminFeatures(actor.state) };
 }
 
+/** Requires verified paid entitlement for personal attendance, with no admin bypass. */
+export async function requirePaidActor(request: CallableRequest): Promise<AuthenticatedActor> {
+  const actor = await requireActiveActor(request);
+  const subscription = await db.collection('subscriptions').doc(actor.uid).get();
+  const tier = effectiveSubscriptionTierFromStoredRecord(subscription.data(), actor.uid);
+  if (!isPaidSubscriptionTier(tier)) {
+    throw new HttpsError('permission-denied', 'A paid subscription is required.');
+  }
+  return actor;
+}
+
 /**
  * Asserts a caller entitled to MEMBER partner offers: an active PAID subscriber
  * (Plus OR Supporter) OR an admin/owner. Suspended and deleted accounts are

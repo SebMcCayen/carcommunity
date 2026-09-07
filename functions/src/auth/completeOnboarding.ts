@@ -14,7 +14,7 @@
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
-import { db } from '../firebase';
+import { adminAuth, db } from '../firebase';
 import { computeOnboardingWrites, parseCompleteOnboardingInput } from './onboarding-core';
 import { buildUserPrivateDocument, buildUserProfileDocument } from './provisioning';
 import { evaluateEarlyMember } from '../badges/awards';
@@ -79,6 +79,26 @@ export const completeOnboarding = onCall(
       // not proceed regardless of client state.
       if (profile?.suspended === true || profile?.deleted === true) {
         throw new HttpsError('permission-denied', 'Account access is restricted.');
+      }
+
+      // A deleted profile may also mean account purging is in progress. A
+      // previously issued token must not recreate it after Auth was disabled
+      // or removed. Preserve the fast-signup fallback for live, enabled users.
+      if (!profileSnap.exists) {
+        const authUser = await adminAuth.getUser(uid).catch((error: unknown) => {
+          if (
+            typeof error === 'object' &&
+            error !== null &&
+            'code' in error &&
+            error.code === 'auth/user-not-found'
+          ) {
+            throw new HttpsError('permission-denied', 'Account access is restricted.');
+          }
+          throw error;
+        });
+        if (authUser.disabled) {
+          throw new HttpsError('permission-denied', 'Account access is restricted.');
+        }
       }
 
       // First-write-wins provisioning fallback: the onUserCreate trigger is

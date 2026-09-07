@@ -1,6 +1,6 @@
 /**
  * communityChat.post / communityChat.list / communityChat.markRead —
- * member-gated COMMUNITY (app-wide) chat callables
+ * active-account COMMUNITY (app-wide) chat callables
  * (contracts/functions/functions.json).
  *
  * Deployed via the `communityChat` export group (functions/src/index.ts) as
@@ -81,9 +81,8 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue, Timestamp, type DocumentReference } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { requireMemberActor } from '../shared/memberActor';
-import { toUserAccessState } from '../shared/access';
-import { memberGateAllows } from '../shared/memberGating';
+import { requireActiveActor } from '../shared/memberActor';
+import { isRestricted, toUserAccessState } from '../shared/access';
 import { writeInAppNotification } from '../notifications/deliver';
 import { filterHiddenAuthors } from '../blocking/block-visibility';
 import { loadHiddenUids } from '../blocking/blockVisibilityStore';
@@ -163,14 +162,12 @@ async function loadProfile(uid: string): Promise<ProfileProjection | null> {
 
 /**
  * Narrows client-supplied mention candidates to the ones actually worth a
- * notice: a real, non-suspended, non-deleted account that passes the member
- * gate, whom the sender has not blocked and who has not blocked the sender.
- *
- * Member gating is currently DISABLED (shared/memberGating.ts), so non-member
- * accounts are mentionable today; re-enabling it drops them again.
+ * notice: a real, non-suspended, non-deleted account, whom the sender has not
+ * blocked and who has not blocked the sender. Free accounts are mentionable
+ * regardless of subscription gates in other domains.
  *
  * Everything here is a DROP, never a throw. A uid that fails is either a race
- * (the member deleted their account, lost their subscription, or blocked the
+ * (the member deleted their account, was suspended, or blocked the
  * sender after the picker resolved them) or a client that sent something it
  * shouldn't have — and neither is a reason to reject a message a human wrote.
  * The message posts; the bad mention just isn't one.
@@ -200,7 +197,7 @@ async function resolveMentions(candidates: string[], senderUid: string): Promise
 
   return candidates.filter((_uid, index) => {
     const profile = profileSnaps[index]!;
-    if (!profile.exists || !memberGateAllows(toUserAccessState(profile.data()))) {
+    if (!profile.exists || isRestricted(toUserAccessState(profile.data()))) {
       return false;
     }
     // Two block docs per candidate, in the order they were requested above.
@@ -294,7 +291,7 @@ async function replayCommittedSend(
 }
 
 export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunityResponse> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parsePostCommunityInput(request.data);
   if (!parsed.ok) {
@@ -460,7 +457,7 @@ export interface ListCommunityResponse {
 }
 
 export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListCommunityResponse> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseListCommunityInput(request.data);
   if (!parsed.ok) {
@@ -521,7 +518,7 @@ export interface MarkReadCommunityResponse {
 export const markRead = onCall(
   CALLABLE_OPTS,
   async (request): Promise<MarkReadCommunityResponse> => {
-    const actor = await requireMemberActor(request);
+    const actor = await requireActiveActor(request);
 
     const parsed = parseMarkReadCommunityInput(request.data);
     if (!parsed.ok) {

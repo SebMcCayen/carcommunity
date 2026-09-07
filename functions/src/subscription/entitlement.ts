@@ -18,6 +18,7 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminAuth, db } from '../firebase';
 import { applyPrivilegeChange, computeUpdatedClaims } from '../admin/claims-core';
+import { supporterBadgeEligible } from './supporter-badge-core';
 import {
   buildSubscriptionDocument,
   grantsLegacyActiveMember,
@@ -55,7 +56,11 @@ export async function applyEntitlement(
       );
       batch.set(
         db.collection('users').doc(input.userId),
-        { activeMember: active, updatedAt: FieldValue.serverTimestamp() },
+        {
+          activeMember: active,
+          supporterBadgeEligible: supporterBadgeEligible(input, new Date()),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
         { merge: true },
       );
       if (options.auditEvent) {

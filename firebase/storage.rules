@@ -25,21 +25,8 @@ service firebase.storage {
         && (!('suspended' in request.auth.token) || request.auth.token.suspended != true);
     }
 
-    // ---- MEMBER GATING SWITCH (Storage rules layer) ------------------------
-    // Member gating is currently DISABLED so every feature is testable without
-    // a subscription. The entitlement term is dropped; isAuthenticated() and
-    // isNotSuspended() are DELIBERATELY KEPT — this helper bundles the
-    // suspension guard for every call site (see the vehicleImages note below
-    // for what happened in PR #428 when that bundling was overlooked).
-    //
-    // TO RE-LOCK: restore the activeMember term, i.e. replace the return below
-    // with:
-    //   return isAuthenticated() && request.auth.token.activeMember == true
-    //     && isNotSuspended();
-    // then redeploy rules. Independent of functions/src/shared/memberGating.ts,
-    // firestore.rules, database.rules.json AND the Android UI switch in
-    // apps/android/.../config/MemberGating.kt — flip all FIVE together
-    // (memberGating.ts is the authoritative runbook).
+    // Legacy compatibility helper: route replay is unchanged by this release.
+    // Drive saving has its own active-account guard and is free.
     function isActiveMember() {
       return isAuthenticated() && isNotSuspended();
     }
@@ -111,15 +98,28 @@ service firebase.storage {
     // Max 50 MB per file. drives.delete removes this prefix with the drive.
     // -------------------------------------------------------------------------
     match /rideRoutes/{userId}/{rideId}/{fileName} {
-      allow read: if isOwner(userId) && isActiveMember();
+      // Saving is free; replay keeps its existing tier gate. Both operations
+      // consult stored account state so stale tokens cannot bypass restrictions.
+      function hasActiveRouteAccount() {
+        return isAuthenticated() && isNotSuspended()
+          && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+          && storedRouteAccountIsUnrestricted();
+      }
+      function storedRouteAccountIsUnrestricted() {
+        let account = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+        return account.get('suspended', false) != true
+          && account.get('deleted', false) != true;
+      }
+      allow read: if isOwner(userId) && isActiveMember() && hasActiveRouteAccount();
       // Only the two canonical files may exist under the prefix — anything
       // else would be unmetered private storage and would make drives.delete
       // cleanup unbounded.
-      allow write: if isOwner(userId) && isActiveMember() && isUnderMB(50) &&
+      allow write: if isOwner(userId) && hasActiveRouteAccount() && isUnderMB(50) &&
         ((fileName == 'route.bin'
             && request.resource.contentType.matches('application/(octet-stream|gzip|x-gzip)'))
           || (fileName == 'preview.png' && request.resource.contentType == 'image/png'));
-      allow read, write: if isAdmin();
+      allow read: if isAdmin() && hasActiveRouteAccount();
+      allow write: if isAdmin() && hasActiveRouteAccount();
     }
 
     // -------------------------------------------------------------------------

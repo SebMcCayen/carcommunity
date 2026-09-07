@@ -33,6 +33,8 @@ data class MemberProfile(
      * member's owner-only ride history, which the profile never does.
      */
     val createdAtMillis: Long? = null,
+    val supporterBadge: com.kungsbackacarcommunity.app.profile.SupporterBadge =
+        com.kungsbackacarcommunity.app.profile.SupporterBadge(),
 )
 
 /**

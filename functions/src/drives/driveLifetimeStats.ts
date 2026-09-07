@@ -4,9 +4,8 @@
  * Deployed via the `drives` export group as `drives-lifetimeStats`.
  *
  * TRUE-LIFETIME statistics aggregate over ALL of the caller's drives, with NO
- * subscription-tier window and NO month range. This is the deliberately
- * UN-PAYWALLED counterpart to drives.stats (which is tier-scoped so deeper
- * stats are a paid benefit): the profile "my stats" fold and the badge system
+ * subscription-tier window and NO month range. Like drives.stats, this is free
+ * for every tier: the profile "my stats" fold and the badge system
  * (e.g. the Vägfarare lifetime-distance badge) measure genuine lifetime
  * achievement, which must not shrink when a member downgrades to Community.
  *

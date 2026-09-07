@@ -3,6 +3,10 @@
      Source: contracts/localization/sv.json
      Regenerate: node apps/android/scripts/generate-strings.mjs -->
 <resources>
+    <string name="supporterBadge_accessibility">Supporter-krona</string>
+    <string name="supporterBadge_settingTitle">Visa Supporter-krona</string>
+    <string name="supporterBadge_settingBody">Visar en liten krona på din profilbild när ditt Supporter-medlemskap är aktivt. Ditt val sparas även när medlemskapet upphör.</string>
+    <string name="supporterBadge_saveFailed">Det gick inte att spara ditt val. Försök igen.</string>
     <string name="app_name">Kungsbacka Car Community</string>
     <string name="appUpdate_title">Ny version tillgänglig</string>
     <string name="appUpdate_message">Det finns en nyare version av appen i Google Play. Den laddas ner i bakgrunden, så du kan fortsätta använda appen under tiden.</string>
@@ -211,9 +215,9 @@
     <string name="privacySettings_error">Något gick fel. Försök igen.</string>
     <string name="privacySettings_saved">Sparat.</string>
     <string name="subscription_teaserTitle">Medlemskap</string>
-    <string name="subscription_teaserBody">Lås upp fler funktioner i communityn snart.</string>
+    <string name="subscription_teaserBody">Upptäck Plus-förmåner eller stötta communityn med Supporter.</string>
     <string name="subscription_memberMonthlyTitle">Månadsmedlemskap</string>
-    <string name="subscription_memberRequiredBody">Medlemskap krävs för att se andra livepositioner, eventdetaljer och RSVP.</string>
+    <string name="subscription_memberRequiredBody">Eventdetaljer, RSVP, sociala funktioner och körstatistik är gratis. Plus och Supporter ger eventincheckning, deltagarnamn och partnernas medlemserbjudanden.</string>
     <string name="subscription_purchaseHandledExternally">Köp hanteras via App Store eller Google Play i en senare version.</string>
     <string name="subscription_accessLimitedBySuspension">Din åtkomst kan begränsas vid avstängning eller regelbrott.</string>
     <string name="subscription_currentEntitlementMember">Du har ett aktivt medlemskap.</string>
@@ -222,9 +226,9 @@
     <string name="subscription_currentEntitlementFree">Inget aktivt medlemskap.</string>
     <string name="subscription_currentPlanTitle">Ditt medlemskap</string>
     <string name="subscription_plusTitle">Plus · 39 kr/månad</string>
-    <string name="subscription_plusBody">De viktigaste medlemsfunktionerna, upp till 5 garagefordon och 90 dagars körhistorik.</string>
+    <string name="subscription_plusBody">Eventincheckning, deltagarnamn, partnernas medlemserbjudanden, upp till 5 garagefordon, 90 dagars körhistorik och 3 000 Kronjakt-KP per dag (Community: 2 250).</string>
     <string name="subscription_supporterTitle">Supporter · 119 kr/månad</string>
-    <string name="subscription_supporterBody">Alla medlemsfunktioner, upp till 10 garagefordon, obegränsad körhistorik och möjlighet till Supporter-märke.</string>
+    <string name="subscription_supporterBody">Allt i Plus, upp till 10 garagefordon, obegränsad körhistorik och en valfri Supporter-krona på din profilbild. Ditt stöd hjälper till att finansiera projektet.</string>
     <string name="subscription_screenTitle">Medlemskap</string>
     <string name="subscription_subscribeAction">Teckna månadsmedlemskap</string>
     <string name="subscription_subscribePlusAction">Välj Plus</string>
@@ -321,13 +325,13 @@
     <string name="events_noPastTitle">Inga tidigare träffar</string>
     <string name="events_noPastBody">När en träff har varit hamnar den här, så att du kan gå tillbaka och titta på den.</string>
     <string name="events_completedBadge">Avslutad</string>
-    <string name="events_memberRequiredTitle">Eventdetaljer kräver KCC Medlem.</string>
-    <string name="events_memberRequiredBody">Som medlem kan du se exakt plats, mer information och RSVP.</string>
-    <string name="events_memberGateBody">KCC Medlem krävs för att se exakt plats, eventinformation och RSVP.</string>
+    <string name="events_memberRequiredTitle">Träffinformation är inte tillgänglig</string>
+    <string name="events_memberRequiredBody">Information om publicerade träffar och RSVP är gratis för inloggade användare. Ditt konto kan inte komma åt den här träffen just nu.</string>
+    <string name="events_memberGateBody">Information om publicerade träffar och RSVP är gratis. Incheckning och deltagarnamn kräver Plus eller Supporter.</string>
     <string name="events_memberDetailPlaceholder">Beskrivning</string>
-    <string name="events_upgradeDetailsTitle">Fullständig information för medlemmar</string>
-    <string name="events_upgradeDetailsBody">Exakt adress, hela beskrivningen och vilka som kommer att visas för Plus- och Supporter-medlemmar. Du ser fortfarande titel, tid, område och en kort beskrivning.</string>
-    <string name="events_upgradeDetailsAction">Uppgradera för fullständig information</string>
+    <string name="events_upgradeDetailsTitle">Mer med Plus eller Supporter</string>
+    <string name="events_upgradeDetailsBody">Fullständig träffinformation och RSVP är gratis. Plus och Supporter låser upp incheckning och deltagarnamn.</string>
+    <string name="events_upgradeDetailsAction">Se Plus och Supporter</string>
     <string name="events_organizerLabel">Arrangör: %1$s</string>
     <string name="events_navigationPlaceholder">Navigering öppnas i Apple Maps eller Google Maps i en senare version.</string>
     <string name="events_rsvpGoing">Kommer</string>
@@ -341,7 +345,7 @@
     <string name="events_loadMore">Ladda fler</string>
     <string name="events_cancelledBadge">Inställt</string>
     <string name="events_cancelledNotice">Eventet är inställt.</string>
-    <string name="events_lockIndicator">Kräver KCC Medlem.</string>
+    <string name="events_lockIndicator">Kräver Plus eller Supporter.</string>
     <string name="events_navigateHere">Navigera hit</string>
     <string name="events_navigationError">Det gick inte att öppna navigationen.</string>
     <string name="events_rsvpSubmitError">RSVP misslyckades. Försök igen.</string>
@@ -591,7 +595,7 @@
     <string name="friends_retry">Försök igen</string>
     <string name="friends_unknownMember">Medlem</string>
     <string name="friends_errorSignedOut">Logga in för att hantera vänner.</string>
-    <string name="friends_errorNotMember">Vänner är tillgängliga för aktiva medlemmar.</string>
+    <string name="friends_errorNotMember">Ditt konto kan inte använda vänfunktionen just nu.</string>
     <string name="friends_errorInvalid">Ange ett giltigt smeknamn.</string>
     <string name="friends_errorSelfRequest">Det där är du! Du kan inte skicka en vänförfrågan till dig själv.</string>
     <string name="friends_errorNotFound">Ingen medlem matchar det smeknamnet. Kontrollera stavningen, eller prova de första bokstäverna.</string>
@@ -651,7 +655,7 @@
     <string name="convoy_unknownMember">Medlem</string>
     <string name="convoy_close">Stäng</string>
     <string name="convoy_errorSignedOut">Logga in för att hantera konvojer.</string>
-    <string name="convoy_errorNotMember">Konvojer är tillgängliga för aktiva medlemmar.</string>
+    <string name="convoy_errorNotMember">Ditt konto kan inte använda konvojer just nu.</string>
     <string name="convoy_errorInvalid">Förfrågan var inte giltig.</string>
     <string name="convoy_errorNotFound">Konvojen är inte längre tillgänglig.</string>
     <string name="convoy_errorNoInvitees">Ingen kunde läggas till i konvojen.</string>
@@ -811,7 +815,7 @@
     <string name="groupDrive_errorLeave">Kunde inte lämna. Försök igen.</string>
     <string name="groupDrive_errorUpdateStatus">Kunde inte uppdatera status. Försök igen.</string>
     <string name="groupDrive_notParticipating">Du deltar inte i gruppkörningen.</string>
-    <string name="groupDrive_memberRequired">Aktivt medlemskap krävs för gruppkörning.</string>
+    <string name="groupDrive_memberRequired">Gruppkörning kräver ett publicerat event och att du har svarat Kommer eller Kanske.</string>
     <string name="groupDrive_rsvpRequired">Du behöver RSVP:a Kommer eller Kanske för att delta i gruppkörningen.</string>
     <string name="groupDrive_rejoinNotice">Du har återanslutit dig till gruppkörningen.</string>
     <string name="groupDrive_countJoined">Deltar</string>
@@ -901,7 +905,7 @@
     <string name="savedDrives_driveKept">Körningen har sparats.</string>
     <string name="savedDrives_driveDeleted">Körningen har raderats.</string>
     <string name="savedDrives_closeButton">Stäng</string>
-    <string name="savedDrives_memberRequired">Aktivt medlemskap krävs för att spara körningar.</string>
+    <string name="savedDrives_memberRequired">Ditt konto kan inte spara körningar just nu.</string>
     <string name="savedDrives_recordTitle">Spela in körning</string>
     <string name="savedDrives_recordStart">Starta inspelning</string>
     <string name="savedDrives_recordStop">Stoppa inspelning</string>
@@ -1166,6 +1170,8 @@
     <string name="crownHunt_resultPointInactive">Denna punkt är inte längre tillgänglig.</string>
     <string name="crownHunt_resultCooldownActive">Vänta innan du samlar in igen.</string>
     <string name="crownHunt_resultDailyLimit">Du har nått dagens gräns för insamlingar.</string>
+    <string name="crownHunt_allowanceReached">Dagens KP-gräns för Kronjakt är nådd. Kronan har inte samlats in.</string>
+    <string name="crownHunt_allowanceRemaining">%1$d av %2$d KP kvar för Kronjakt vid insamlingen. Ny dagsgräns %3$s (Stockholm).</string>
     <string name="crownHunt_resultRiskReview">Claimen behöver granskas och inga poäng har delats ut ännu.</string>
     <string name="crownHunt_resultFeatureDisabled">Kronjakt är inte tillgängligt just nu.</string>
     <string name="crownHunt_resultNotEligible">Du är inte behörig att samla in just nu.</string>
@@ -1545,7 +1551,7 @@
     <string name="dm_send">Skicka</string>
     <string name="dm_loadOlder">Ladda tidigare meddelanden</string>
     <string name="dm_sendErrorSignedOut">Logga in för att skicka meddelanden.</string>
-    <string name="dm_sendErrorNotMember">Direktmeddelanden är tillgängliga för aktiva medlemmar.</string>
+    <string name="dm_sendErrorNotMember">Ditt konto kan inte skicka direktmeddelanden just nu.</string>
     <string name="dm_sendErrorInvalid">Skriv ett meddelande att skicka.</string>
     <string name="dm_sendErrorCannotDeliver">Det här meddelandet kan inte levereras just nu.</string>
     <string name="dm_sendErrorGeneric">Kunde inte skicka ditt meddelande. Försök igen.</string>
@@ -1566,7 +1572,7 @@
     <string name="channel_unknownSender">Medlem</string>
     <string name="channel_openSenderProfile">Öppna profilen för %1$s</string>
     <string name="channel_sendErrorSignedOut">Logga in för att skicka meddelanden.</string>
-    <string name="channel_sendErrorNotMember">Chatten är tillgänglig för aktiva medlemmar.</string>
+    <string name="channel_sendErrorNotMember">Ditt konto kan inte använda chatten just nu.</string>
     <string name="channel_sendErrorInvalid">Skriv ett meddelande att skicka.</string>
     <string name="channel_sendErrorCannotDeliver">Det här meddelandet kan inte levereras just nu.</string>
     <string name="channel_sendErrorGeneric">Kunde inte skicka ditt meddelande. Försök igen.</string>

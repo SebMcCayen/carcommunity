@@ -100,12 +100,12 @@ async function newMember(displayName: string): Promise<TestUser> {
     const snap = await adminDb.collection('users').doc(uid).get();
     return snap.exists ? true : undefined;
   });
-  await adminAuth.setCustomUserClaims(uid, { activeMember: true });
+  await adminAuth.setCustomUserClaims(uid, { activeMember: false });
   await adminDb
     .collection('users')
     .doc(uid)
     .set(
-      { activeMember: true, displayName, avatarPath: `profileImages/${uid}/a.jpg` },
+      { activeMember: false, displayName, avatarPath: `profileImages/${uid}/a.jpg` },
       { merge: true },
     );
   return { uid, email, password };

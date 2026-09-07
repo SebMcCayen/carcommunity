@@ -37,7 +37,7 @@ import { logger } from 'firebase-functions';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { readFeatureFlag } from '../shared/featureFlags';
-import { requireMemberActor } from '../shared/memberActor';
+import { requireActiveActor } from '../shared/memberActor';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 import { isValidCoordinate, haversineDistanceMeters } from './crown-hunt-geo';
 import { crownCellKey, utcDayKey } from './crown-spawn-core';
@@ -120,11 +120,8 @@ function assertActivationAllowed(active: ActivePerkEffects, kind: PerkKind): voi
 }
 
 export const deployPerk = onCall(CALLABLE_OPTS, async (request): Promise<DeployPerkResponse> => {
-  // Member-gated, matching buyPerk (requireMemberActor = requireActiveActor +
-  // memberGateAllows). Member gating is disabled repo-wide today, so this
-  // presently asserts only signed-in + not suspended/deleted; when it is
-  // re-locked, deployPerk rejects non-members exactly as buyPerk does.
-  const actor = await requireMemberActor(request);
+  // Crown participation, including owned perks, is open to unrestricted users.
+  const actor = await requireActiveActor(request);
   const uid = actor.uid;
 
   const parsed = parseDeployPerkInput(request.data);

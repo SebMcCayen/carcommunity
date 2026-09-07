@@ -209,3 +209,62 @@ describe('auth-completeOnboarding callable', () => {
     expect(second.privacyPolicyAcceptedAt).toBe(first.privacyPolicyAcceptedAt);
   });
 });
+
+describe('auth-completeOnboarding missing-profile stale-token bypass', () => {
+  let adminAuth: (typeof import('../firebase'))['adminAuth'];
+  let adminDb: (typeof import('../firebase'))['db'];
+  let completeOnboarding: (typeof import('../auth/completeOnboarding'))['completeOnboarding'];
+
+  beforeAll(async () => {
+    process.env.FIREBASE_AUTH_EMULATOR_HOST ??= `${EMULATOR_HOST}:9099`;
+    process.env.FIRESTORE_EMULATOR_HOST ??= `${EMULATOR_HOST}:8080`;
+    process.env.FIREBASE_DATABASE_EMULATOR_HOST ??= `${EMULATOR_HOST}:9000`;
+    process.env.GCLOUD_PROJECT ??= PROJECT_ID;
+    process.env.FIREBASE_CONFIG ??= JSON.stringify({
+      projectId: PROJECT_ID,
+      databaseURL: `https://${PROJECT_ID}-default-rtdb.firebaseio.com`,
+    });
+    ({ adminAuth, db: adminDb } = await import('../firebase'));
+    ({ completeOnboarding } = await import('../auth/completeOnboarding'));
+  });
+
+  it.each(['disabled', 'deleted', 'enabled'])(
+    'only enabled live Auth can reprovision a missing profile (Auth=%s)',
+    async (state) => {
+      const email = `onboarding-missing-${state}-${Date.now()}@example.com`;
+      const { user } = await createUserWithEmailAndPassword(auth, email, 'password-123');
+      const profileRef = adminDb.collection('users').doc(user.uid);
+      const privateRef = adminDb.collection('userPrivate').doc(user.uid);
+      // Let the original provisioning trigger finish before removing its profile.
+      await pollUntil(async () => {
+        const [profile, priv] = await Promise.all([profileRef.get(), privateRef.get()]);
+        return profile.exists && priv.exists ? true : undefined;
+      });
+      const staleAuth = { uid: user.uid, token: (await user.getIdTokenResult()).claims };
+      if (state === 'disabled') await adminAuth.updateUser(user.uid, { disabled: true });
+      else if (state === 'deleted') await adminAuth.deleteUser(user.uid);
+      await profileRef.delete();
+      const privateBefore = (await privateRef.get()).data();
+      expect((await profileRef.get()).exists).toBe(false);
+
+      // Invoke the real guard with claims captured before disable/delete. This
+      // bypasses transport token rejection, not the live Auth/Firestore checks.
+      const invocation = completeOnboarding.run({ auth: staleAuth, data: validInput } as never);
+      if (state !== 'enabled') {
+        await expect(invocation).rejects.toMatchObject({ code: 'permission-denied' });
+        expect((await profileRef.get()).exists).toBe(false);
+        expect((await privateRef.get()).data()).toEqual(privateBefore);
+      } else {
+        const status = await invocation;
+        expect(typeof status.onboardingCompletedAt).toBe('string');
+        expect((await profileRef.get()).data()).toMatchObject({
+          role: 'user',
+          suspended: false,
+          deleted: false,
+        });
+        expect((await profileRef.get()).data()?.onboardingCompletedAt).toBeTruthy();
+        expect((await privateRef.get()).data()?.licenceConfirmedAt).toBeTruthy();
+      }
+    },
+  );
+});

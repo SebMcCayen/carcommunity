@@ -1,9 +1,9 @@
 /**
- * incidents.report — member-gated create of a crowd-sourced incident
+ * incidents.report — active-account-gated create of a crowd-sourced incident
  * (contracts/functions/functions.json: incidents.report).
  *
  * Deployed via the `incidents` export group as `incidents-report`
- * (europe-west1). Requires an active member (requireMemberActor). The incident
+ * (europe-west1). Requires an active account (requireActiveActor). The incident
  * is written to `incidents/{id}` with a computed `geoCell` (nearby-query index)
  * and a per-type `expiresAt` TTL; `createdAt` is a server timestamp. All writes
  * flow through this callable — clients cannot write the collection directly.
@@ -12,7 +12,7 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { requireMemberActor } from '../shared/memberActor';
+import { requireActiveActor } from '../shared/memberActor';
 import {
   buildIncidentFields,
   expiryFor,
@@ -31,7 +31,7 @@ const CALLABLE_OPTS = {
 };
 
 export const report = onCall(CALLABLE_OPTS, async (request): Promise<IncidentView> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseReportInput(request.data);
   if (!parsed.ok) {

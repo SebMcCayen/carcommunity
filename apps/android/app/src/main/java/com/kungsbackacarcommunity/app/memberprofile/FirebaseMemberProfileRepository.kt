@@ -13,12 +13,16 @@ import com.kungsbackacarcommunity.app.garage.Vehicle
 import com.kungsbackacarcommunity.app.garage.VehiclePowertrain
 import com.kungsbackacarcommunity.app.navigation.runCatchingCancellable
 import com.kungsbackacarcommunity.app.profile.SocialHandles
+import com.kungsbackacarcommunity.app.profile.SupporterBadge
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.callbackFlow
 
 /**
  * [MemberProfileRepository] backed by one-shot Firestore reads of another
  * member's publicly-readable docs, Guarded ([createIfAvailable]).
  *
- * Reads (all `get()`, no listeners):
+ * Detail reads (one-shot); observeSupporterBadge additionally listens to the
+ * public users/{uid} document while the profile is visible.
  *  - users/{targetUid} — public profile (rules: any authenticated user).
  *  - vehicles where userId == targetUid — the member's garage (rules: any
  *    authenticated user).
@@ -40,6 +44,17 @@ import com.kungsbackacarcommunity.app.profile.SocialHandles
 class FirebaseMemberProfileRepository private constructor(
     private val firestore: FirebaseFirestore,
 ) : MemberProfileRepository {
+
+    override fun observeSupporterBadge(uid: String) = callbackFlow {
+        val listener = firestore.collection(USERS).document(uid).addSnapshotListener { snapshot, error ->
+            trySend(
+                if (error == null && snapshot?.exists() == true) {
+                    SupporterBadge.fromFields(snapshot.get("supporterBadgeEligible"), snapshot.get("showSupporterBadge"))
+                } else SupporterBadge(),
+            )
+        }
+        awaitClose { listener.remove() }
+    }
 
     override suspend fun loadMemberProfile(targetUid: String): MemberProfileResult {
         if (targetUid.isBlank()) return MemberProfileResult.NotFound
@@ -131,6 +146,9 @@ private fun DocumentSnapshot.toMemberProfile(): MemberProfile? {
         displayName = getString("displayName"),
         bio = getString("bio"),
         avatarPath = getString("avatarPath"),
+        supporterBadge = com.kungsbackacarcommunity.app.profile.SupporterBadge.fromFields(
+            get("supporterBadgeEligible"), get("showSupporterBadge"),
+        ),
         // Stored verbatim; SocialLinks re-validates every handle at RENDER time
         // (SocialLinks.links), so a document written before the social rules
         // were deployed still cannot produce a link this app did not build.

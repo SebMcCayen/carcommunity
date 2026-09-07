@@ -378,23 +378,21 @@ class DriveRecordingTest {
     // ---------------------------------------------------------------------
 
     @Test
-    fun `a non-member live session records nothing, since drives-save would refuse it`() {
-        assertFalse(
+    fun `a free live session records and can save`() {
+        assertTrue(
             DriveRecordingGate.shouldRecord(
                 hasDrivesBackend = true,
                 canShareLive = true,
-                passesMemberGate = false,
             ),
         )
     }
 
     @Test
-    fun `a member live session records`() {
+    fun `an active live session records`() {
         assertTrue(
             DriveRecordingGate.shouldRecord(
                 hasDrivesBackend = true,
                 canShareLive = true,
-                passesMemberGate = true,
             ),
         )
     }
@@ -405,7 +403,6 @@ class DriveRecordingTest {
             DriveRecordingGate.shouldRecord(
                 hasDrivesBackend = false,
                 canShareLive = true,
-                passesMemberGate = true,
             ),
         )
     }
@@ -416,7 +413,6 @@ class DriveRecordingTest {
             DriveRecordingGate.shouldRecord(
                 hasDrivesBackend = true,
                 canShareLive = false,
-                passesMemberGate = true,
             ),
         )
     }

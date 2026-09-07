@@ -115,7 +115,7 @@ export function reactionCooldownRemainingMs(
  * so leaving one convoy and reacting in another is never throttled by the other's
  * cooldown, and so the doc is naturally short-lived (it TTL-expires with the
  * convoy's activity). Both ids are validated (convoyId by the schema, uid by
- * requireMemberActor) so the join is Firestore-safe by construction.
+ * requireActiveActor) so the join is Firestore-safe by construction.
  */
 export function reactionCooldownDocId(convoyId: string, uid: string): string {
   return `${convoyId}__${uid}`;

@@ -445,7 +445,9 @@ private fun ProfileHeader(profile: MemberProfile, pointsBalance: Long?) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
-            Avatar(profile.avatarPath)
+            com.kungsbackacarcommunity.app.profile.SupporterAvatarFrame(profile.supporterBadge.visible) {
+                Avatar(profile.avatarPath)
+            }
             // Directly under the profile picture, as asked. Renders NOTHING
             // when this member has filled none in — no empty row, no
             // placeholders (ProfileSocialLinksRow).

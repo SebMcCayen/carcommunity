@@ -60,9 +60,9 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { adminRtdb, db } from '../firebase';
 import { flagFromSnapshot, readFeatureFlagsSnapshot } from '../shared/featureFlags';
-import { toUserAccessState } from '../shared/access';
-import { crownHuntGateAllows, memberGateAllows } from '../shared/memberGating';
-import { creditPoints } from '../points/ledger';
+import { isRestricted, toUserAccessState } from '../shared/access';
+import { creditCrownPoints, CrownAllowanceReached, type CrownAllowance } from './daily-allowance';
+import { crownAllowanceMessage, roundedCrownReward } from './daily-allowance-core';
 import {
   haversineDistanceMeters,
   isPlausibleJump,
@@ -70,7 +70,7 @@ import {
   isValidCoordinate,
 } from './crown-hunt-geo';
 import { HIGH_VELOCITY_WINDOW_SECONDS, evaluateClaimRisk } from './crown-hunt-risk';
-import { CROWN_HUNT_FLAG_KEY, CROWN_HUNT_REQUIRE_PAID_FLAG_KEY } from './crownhunt-core';
+import { CROWN_HUNT_FLAG_KEY } from './crownhunt-core';
 import {
   CROWN_SPAWN_FLAG_KEY,
   MAX_DAILY_SPAWN_CLAIMS,
@@ -101,6 +101,7 @@ const CALLABLE_OPTS = {
 };
 
 export interface ClaimSpawnResponse {
+  allowance?: CrownAllowance;
   result: CrownSpawnClaimResult;
   pointsAwarded: number | null;
   newBalance: number | null;
@@ -151,6 +152,7 @@ function replayStoredClaim(
       newBalance: (existing.balanceAfter as number | null) ?? null,
       rarity,
       message: getSpawnClaimMessage(result),
+      ...(existing.allowance ? { allowance: existing.allowance as CrownAllowance } : {}),
     };
   }
   return respond(result, rarity);
@@ -267,32 +269,18 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
   //   • crownHunt      — the domain switch;
   //   • crownHuntSpawn — the auto-spawn switch that also gates the spawner (a
   //                      member must never collect from a system officially off);
-  //   • crownHuntRequirePaid — the paywall gate chooser, used at step 2.
   const flagsSnap = await readFeatureFlagsSnapshot();
   const huntEnabled = flagFromSnapshot(flagsSnap, CROWN_HUNT_FLAG_KEY);
   const spawnEnabled = flagFromSnapshot(flagsSnap, CROWN_SPAWN_FLAG_KEY);
-  const requirePaid = flagFromSnapshot(flagsSnap, CROWN_HUNT_REQUIRE_PAID_FLAG_KEY);
   if (!huntEnabled || !spawnEnabled) {
     logRejection('feature_disabled');
     return respond('feature_disabled');
   }
 
-  // 2. Account status and entitlement (result codes, not errors — parity with
-  // submitClaim). Entitlement is currently bypassed repo-wide
-  // (shared/memberGating.ts); suspended and deleted accounts still fail.
-  //
-  // Kronjakt PAYWALL: the dark `crownHuntRequirePaid` flag (contract default
-  // OFF, derived from the single snapshot above) chooses the gate. While OFF
-  // this is exactly today's relaxed `memberGateAllows`; while ON, collection is
-  // a paid feature and a free member is refused with the SAME `not_eligible`
-  // result code and Swedish message (no throw), via the narrow
-  // `crownHuntGateAllows` (activeMember, independent of the global
-  // MEMBER_GATING_ENABLED switch).
+  // Free and paid accounts participate; only restrictions gate collection.
   const userSnap = await db.collection('users').doc(uid).get();
   const accessState = toUserAccessState(userSnap.data());
-  const gateAllows = requirePaid
-    ? crownHuntGateAllows(accessState)
-    : memberGateAllows(accessState);
+  const gateAllows = userSnap.exists && !isRestricted(accessState);
   if (!gateAllows) {
     logRejection('not_eligible');
     return respond('not_eligible');
@@ -521,12 +509,7 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
   // writes so the SAME member cannot double-collect, while two DIFFERENT members
   // touch different collector docs and so never contend). The pre-transaction
   // reads in step 4/4b are only fast paths, never the authority.
-  // Kronjakt PvP BOOST (Dubbla Poäng): while a member's boost is active the
-  // crown pays 2x. Best-effort + flag-gated (returns 1 when crownHuntPerks is
-  // OFF or on any error), so this is a no-op until PvP is switched on. The
-  // doubled amount is still credited with `source: 'crown_hunt'`, so the
-  // existing daily fold charges the FULL boosted amount to the 300/day cap —
-  // the bonus half cannot break the economy.
+  // Resolve multipliers first; the allowance clips the final rounded reward.
   const boostMultiplier = await resolveActiveBoostMultiplier(uid, now);
   // Kronjakt LIVE-SHARE scoring: a crown collected while NOT live-sharing pays
   // half. Best-effort + flag-gated + FAIL-OPEN (returns 1 when
@@ -536,8 +519,10 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
   // rounded amount keeps `source: 'crown_hunt'` so the daily fold charges what
   // was actually awarded.
   const liveShareMultiplier = await resolveLiveShareMultiplier(uid, now);
-  const rewardPoints = Math.round(
-    (spawn!.rewardPoints as number) * boostMultiplier * liveShareMultiplier,
+  const rewardPoints = roundedCrownReward(
+    spawn!.rewardPoints as number,
+    boostMultiplier,
+    liveShareMultiplier,
   );
   const dailyCounterRef = db
     .collection('crownSpawnDailyClaims')
@@ -553,7 +538,7 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
   let txCollectMode: CrownCollectMode = collectMode;
 
   try {
-    const ledgerResult = await creditPoints(
+    const ledgerResult = await creditCrownPoints(
       {
         targetUid: uid,
         amount: rewardPoints,
@@ -620,6 +605,7 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
           distanceMeters,
           dwellSeconds: (recordedAtDate.getTime() - previousRecordedAt.getTime()) / 1000,
           pointsAwarded: mutation.amount,
+          allowance: mutation.allowance,
           balanceAfter: mutation.balanceAfter,
           pointsLedgerEntryId: mutation.entryId,
           createdAt: FieldValue.serverTimestamp(),
@@ -684,7 +670,13 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
         }
         nextDailyCount = currentDaily + 1;
       },
+      now,
     );
+
+    if (ledgerResult.alreadyApplied) {
+      const stored = await claimsRef.doc(scopedKey).get();
+      if (stored.exists) return replayStoredClaim(stored.data()!, input.spawnId);
+    }
 
     return {
       result: 'awarded',
@@ -692,8 +684,18 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
       newBalance: ledgerResult.balanceAfter,
       rarity,
       message: getSpawnClaimMessage('awarded'),
+      allowance: ledgerResult.allowance,
     };
   } catch (error) {
+    if (error instanceof CrownAllowanceReached) {
+      // No failed claim record: upgrading or tomorrow's reset may make this
+      // same crown/key payable. Nothing has been consumed by the transaction.
+      return {
+        ...respond('daily_limit_reached', rarity),
+        allowance: error.allowance,
+        message: crownAllowanceMessage(error.allowance),
+      };
+    }
     if (!(error instanceof SpawnClaimRejection)) {
       throw error;
     }

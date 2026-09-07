@@ -27,9 +27,9 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { adminRtdb, db } from '../firebase';
 import { flagFromSnapshot, readFeatureFlagsSnapshot } from '../shared/featureFlags';
-import { toUserAccessState } from '../shared/access';
-import { crownHuntGateAllows, memberGateAllows } from '../shared/memberGating';
-import { creditPoints } from '../points/ledger';
+import { isRestricted, toUserAccessState } from '../shared/access';
+import { creditCrownPoints, CrownAllowanceReached, type CrownAllowance } from './daily-allowance';
+import { crownAllowanceMessage, roundedCrownReward } from './daily-allowance-core';
 import {
   haversineDistanceMeters,
   isPlausibleJump,
@@ -41,7 +41,6 @@ import {
 import { HIGH_VELOCITY_WINDOW_SECONDS, evaluateClaimRisk } from './crown-hunt-risk';
 import {
   CROWN_HUNT_FLAG_KEY,
-  CROWN_HUNT_REQUIRE_PAID_FLAG_KEY,
   MAX_CLAIM_SPEED_MPS,
   MAX_DAILY_SUCCESSFUL_CLAIMS,
   awardGuardDocId,
@@ -107,6 +106,7 @@ function classifyClaimGuardRejection(
 }
 
 export interface SubmitClaimResponse {
+  allowance?: CrownAllowance;
   result: CrownHuntClaimResult;
   pointsAwarded: number | null;
   newBalance: number | null;
@@ -137,11 +137,11 @@ function replayStoredClaim(
       pointsAwarded: (existing.pointsAwarded as number | null) ?? null,
       newBalance: (existing.balanceAfter as number | null) ?? null,
       message: getClaimMessage(result),
+      ...(existing.allowance ? { allowance: existing.allowance as CrownAllowance } : {}),
     };
   }
   return respond(result);
 }
-
 
 /** Latest trusted position from RTDB for jump detection; null when absent. */
 async function readLatestTrustedPosition(
@@ -149,9 +149,11 @@ async function readLatestTrustedPosition(
 ): Promise<{ latitude: number; longitude: number; recordedAt: string } | null> {
   try {
     const snap = await adminRtdb.ref(`liveLocation/${uid}/latest`).get();
-    const value = snap.val() as
-      | { latitude?: unknown; longitude?: unknown; recordedAt?: unknown }
-      | null;
+    const value = snap.val() as {
+      latitude?: unknown;
+      longitude?: unknown;
+      recordedAt?: unknown;
+    } | null;
     if (
       value &&
       typeof value.latitude === 'number' &&
@@ -260,22 +262,11 @@ export const submitClaim = onCall(
       logRejection('feature_disabled');
       return respond('feature_disabled');
     }
-    const requirePaid = flagFromSnapshot(flagsSnap, CROWN_HUNT_REQUIRE_PAID_FLAG_KEY);
 
-    // 2 + 3. Account status and entitlement (result codes, not errors).
-    // Entitlement is currently bypassed (shared/memberGating.ts); suspended
-    // and deleted accounts still resolve to not_eligible.
-    //
-    // Kronjakt PAYWALL: the dark `crownHuntRequirePaid` flag (contract default
-    // OFF, derived from the single snapshot above) chooses the gate. While OFF
-    // this is exactly today's relaxed `memberGateAllows`; while ON, collection
-    // is a paid feature and a free member is refused with the SAME
-    // `not_eligible` result code and Swedish message (no throw), via the narrow
-    // `crownHuntGateAllows` (activeMember, independent of the global
-    // MEMBER_GATING_ENABLED switch).
+    // Free and paid accounts participate; only restrictions gate collection.
     const userSnap = await db.collection('users').doc(uid).get();
     const state = toUserAccessState(userSnap.data());
-    const gateAllows = requirePaid ? crownHuntGateAllows(state) : memberGateAllows(state);
+    const gateAllows = userSnap.exists && !isRestricted(state);
     if (!gateAllows) {
       logRejection('not_eligible');
       return respond('not_eligible');
@@ -521,11 +512,7 @@ export const submitClaim = onCall(
     //     second concurrent award for the same window loses (already_claimed);
     //   - crownHuntDailyClaims/{uid__utcDay}: a counter read in the read guard
     //     and incremented here, so the daily cap holds under concurrency.
-    // Kronjakt PvP BOOST (Dubbla Poäng): a hand-placed crown also pays 2x while
-    // the collector's boost is active. Best-effort + flag-gated (returns 1 when
-    // crownHuntPerks is OFF), so it is a no-op until PvP is enabled; the doubled
-    // award keeps `source: 'crown_hunt'`, so the daily fold charges the full
-    // boosted amount to the 300/day cap.
+    // Resolve multipliers before applying the crown-only daily allowance.
     const boostMultiplier = await resolveActiveBoostMultiplier(uid, now);
     // Kronjakt LIVE-SHARE scoring: a hand-placed crown collected while NOT
     // live-sharing pays half. Best-effort + flag-gated + FAIL-OPEN (returns 1
@@ -535,8 +522,10 @@ export const submitClaim = onCall(
     // multiplier; the rounded amount keeps `source: 'crown_hunt'` so the daily
     // fold charges what was actually awarded.
     const liveShareMultiplier = await resolveLiveShareMultiplier(uid, now);
-    const rewardPoints = Math.round(
-      (point!.rewardPoints as number) * boostMultiplier * liveShareMultiplier,
+    const rewardPoints = roundedCrownReward(
+      point!.rewardPoints as number,
+      boostMultiplier,
+      liveShareMultiplier,
     );
     const repeatRule = point!.repeatRule as CrownHuntRepeatRule;
     // Distinct-collector cap is read AUTHORITATIVELY from the in-transaction
@@ -570,7 +559,7 @@ export const submitClaim = onCall(
     let capReached = false;
 
     try {
-      const ledgerResult = await creditPoints(
+      const ledgerResult = await creditCrownPoints(
         {
           targetUid: uid,
           amount: rewardPoints,
@@ -612,6 +601,7 @@ export const submitClaim = onCall(
             positionRecordedAt: Timestamp.fromDate(recordedAtDate),
             reportedSpeedMetersPerSecond: input.speedMetersPerSecond ?? null,
             pointsAwarded: mutation.amount,
+            allowance: mutation.allowance,
             balanceAfter: mutation.balanceAfter,
             pointsLedgerEntryId: mutation.entryId,
             createdAt: FieldValue.serverTimestamp(),
@@ -723,15 +713,29 @@ export const submitClaim = onCall(
             }
           }
         },
+        now,
       );
+
+      if (ledgerResult.alreadyApplied) {
+        const stored = await claimsRef.doc(scopedKey).get();
+        if (stored.exists) return replayStoredClaim(stored.data()!, input.pointId);
+      }
 
       return {
         result: 'awarded',
         pointsAwarded: ledgerResult.amount,
         newBalance: ledgerResult.balanceAfter,
         message: getClaimMessage('awarded'),
+        allowance: ledgerResult.allowance,
       };
     } catch (error) {
+      if (error instanceof CrownAllowanceReached) {
+        return {
+          ...respond('daily_limit_reached'),
+          allowance: error.allowance,
+          message: crownAllowanceMessage(error.allowance),
+        };
+      }
       const guarded = classifyClaimGuardRejection(error);
       if (!guarded) {
         throw error;

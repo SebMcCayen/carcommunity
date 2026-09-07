@@ -128,7 +128,7 @@ async function newMember(displayName: string): Promise<TestUser> {
     const snap = await adminDb.collection('users').doc(uid).get();
     return snap.exists ? true : undefined;
   });
-  await adminAuth.setCustomUserClaims(uid, { activeMember: true });
+  await adminAuth.setCustomUserClaims(uid, { activeMember: false });
   await adminDb
     .collection('users')
     .doc(uid)
@@ -136,7 +136,7 @@ async function newMember(displayName: string): Promise<TestUser> {
     // auth/onboarding-core.ts) persist alongside displayName. Nickname
     // resolution queries ONLY this key, so a helper that wrote displayName
     // alone would make every seeded member unfindable.
-    .set({ activeMember: true, displayName, displayNameLower: toSearchKey(displayName) }, { merge: true });
+    .set({ activeMember: false, displayName, displayNameLower: toSearchKey(displayName) }, { merge: true });
   return { uid, email, password };
 }
 

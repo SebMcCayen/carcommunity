@@ -1,7 +1,7 @@
 /**
  * convoy.create / convoy.respond / convoy.start / convoy.end / convoy.list /
  * convoy.leave / convoy.invite / convoy.setDestination / convoy.clearDestination
- * — member-gated convoy callables (contracts/functions/functions.json).
+ * — active-account convoy callables (contracts/functions/functions.json).
  *
  * Deployed via the `convoy` export group (functions/src/index.ts) as
  * `convoy-create`, `convoy-respond`, `convoy-start`, `convoy-end`,
@@ -56,9 +56,8 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { FieldPath, FieldValue, Timestamp, type Transaction } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { requireMemberActor } from '../shared/memberActor';
-import { toUserAccessState } from '../shared/access';
-import { memberGateAllows } from '../shared/memberGating';
+import { requireActiveActor } from '../shared/memberActor';
+import { isRestricted, toUserAccessState } from '../shared/access';
 import { writeInAppNotification } from '../notifications/deliver';
 import { reportServerError } from '../errors/serverErrors';
 import {
@@ -366,17 +365,12 @@ const UNKNOWN_MEMBER_NAME = 'En medlem';
 
 /**
  * Reads a users/{uid} profile projection. Returns null when the user is missing
- * or fails the member gate — soft-deleted OR suspended OR (while gating is
- * enabled) not an active member. Member gating is currently DISABLED (see
- * shared/memberGating.ts), so today only missing/suspended/deleted users are
- * skipped. When gating is re-enabled this again also skips non-members: every
- * convoy callable is member-gated, so a non-member invitee could never accept /
- * decline / see the convoy; treating them as null here means they are skipped
- * (as not_found) rather than written into memberUids/members and notified.
+ * or restricted (soft-deleted or suspended). Free accounts can always join
+ * convoys; subscription entitlement does not affect invitee eligibility.
  */
 async function loadProfile(uid: string): Promise<ProfileProjection | null> {
   const snap = await db.collection('users').doc(uid).get();
-  if (!snap.exists || !memberGateAllows(toUserAccessState(snap.data()))) {
+  if (!snap.exists || isRestricted(toUserAccessState(snap.data()))) {
     return null;
   }
   return toProfileProjection(snap.data());
@@ -553,7 +547,7 @@ export interface CreateConvoyResult {
 }
 
 export const create = onCall(CALLABLE_OPTS, async (request): Promise<CreateConvoyResult> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseCreateConvoyInput(request.data);
   if (!parsed.ok) {
@@ -650,7 +644,7 @@ export interface RespondConvoyResult {
 }
 
 export const respond = onCall(CALLABLE_OPTS, async (request): Promise<RespondConvoyResult> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseRespondConvoyInput(request.data);
   if (!parsed.ok) {
@@ -733,7 +727,7 @@ export const respond = onCall(CALLABLE_OPTS, async (request): Promise<RespondCon
 // ---------------------------------------------------------------------------
 
 export const start = onCall(CALLABLE_OPTS, async (request): Promise<{ convoy: ConvoySummary }> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseConvoyIdInput(request.data);
   if (!parsed.ok) {
@@ -796,7 +790,7 @@ export const start = onCall(CALLABLE_OPTS, async (request): Promise<{ convoy: Co
  * admin surface has no convoy tooling at all, so there is nothing to preserve.
  */
 export const end = onCall(CALLABLE_OPTS, async (request): Promise<{ convoy: ConvoySummary }> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseConvoyIdInput(request.data);
   if (!parsed.ok) {
@@ -888,7 +882,7 @@ export interface ListConvoysResult {
 }
 
 export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListConvoysResult> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseListConvoysInput(request.data);
   if (!parsed.ok) {
@@ -996,7 +990,7 @@ export interface LeaveConvoyResult {
  * exactly the bug this shape prevents.
  */
 export const leave = onCall(CALLABLE_OPTS, async (request): Promise<LeaveConvoyResult> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseConvoyIdInput(request.data);
   if (!parsed.ok) {
@@ -1215,7 +1209,7 @@ export interface InviteToConvoyResult {
  * `already_member` reason already say which of the two it was.
  */
 export const invite = onCall(CALLABLE_OPTS, async (request): Promise<InviteToConvoyResult> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseInviteToConvoyInput(request.data);
   if (!parsed.ok) {
@@ -1441,7 +1435,7 @@ export const invite = onCall(CALLABLE_OPTS, async (request): Promise<InviteToCon
 export const setDestination = onCall(
   CALLABLE_OPTS,
   async (request): Promise<{ convoy: ConvoySummary }> => {
-    const actor = await requireMemberActor(request);
+    const actor = await requireActiveActor(request);
 
     const parsed = parseSetConvoyDestinationInput(request.data);
     if (!parsed.ok) {
@@ -1521,7 +1515,7 @@ export const setDestination = onCall(
 export const clearDestination = onCall(
   CALLABLE_OPTS,
   async (request): Promise<{ convoy: ConvoySummary }> => {
-    const actor = await requireMemberActor(request);
+    const actor = await requireActiveActor(request);
 
     const parsed = parseConvoyIdInput(request.data);
     if (!parsed.ok) {

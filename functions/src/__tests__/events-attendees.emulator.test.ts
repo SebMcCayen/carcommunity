@@ -173,6 +173,7 @@ beforeAll(async () => {
   await adminDb.collection('users').doc(adminUser.uid).set({ role: 'admin' }, { merge: true });
 
   viewer = await createProvisionedUser('att-viewer', 'Viewer');
+  await grantPaidSubscription(viewer.uid, 'plus');
   going = await createProvisionedUser('att-going', 'Gina Going');
   maybe = await createProvisionedUser('att-maybe', 'Max Maybe');
   notGoing = await createProvisionedUser('att-not', 'Nils NotGoing');
@@ -236,16 +237,16 @@ afterAll(async () => {
 describe('events-listAttendees', () => {
   it('rejects unauthenticated callers', async () => {
     await auth.signOut();
-    expect(await callableErrorCode(call('events-listAttendees', { eventId: publishedEventId }))).toBe(
-      'functions/unauthenticated',
-    );
+    expect(
+      await callableErrorCode(call('events-listAttendees', { eventId: publishedEventId })),
+    ).toBe('functions/unauthenticated');
   });
 
   it('rejects a suspended caller', async () => {
     await signInAs(suspended);
-    expect(await callableErrorCode(call('events-listAttendees', { eventId: publishedEventId }))).toBe(
-      'functions/permission-denied',
-    );
+    expect(
+      await callableErrorCode(call('events-listAttendees', { eventId: publishedEventId })),
+    ).toBe('functions/permission-denied');
   });
 
   it('returns the roster of a published event, grouped by status', async () => {
@@ -294,19 +295,18 @@ describe('events-listAttendees', () => {
 
   it('returns not-found for an unknown event', async () => {
     await signInAs(viewer);
-    expect(await callableErrorCode(call('events-listAttendees', { eventId: 'no-such-event' }))).toBe(
-      'functions/not-found',
-    );
+    expect(
+      await callableErrorCode(call('events-listAttendees', { eventId: 'no-such-event' })),
+    ).toBe('functions/not-found');
   });
 
-  it('serves a free (Community) caller the full roster while the gate is OFF', async () => {
-    // Flag OFF baseline (billing not live): a caller with no subscription still
-    // gets the real list — the gate is dark, so nothing is withheld.
+  it('withholds a free caller roster even while the legacy flag is OFF', async () => {
+    // Legacy flag OFF must not grant roster access without a paid subscription.
     await signInAs(going);
     const result = await call('events-listAttendees', { eventId: publishedEventId });
     const payload = result.data as { attendees: Attendee[]; requiresPaid: boolean };
-    expect(payload.requiresPaid).toBe(false);
-    expect(payload.attendees.length).toBeGreaterThan(0);
+    expect(payload.requiresPaid).toBe(true);
+    expect(payload.attendees).toEqual([]);
   });
 });
 

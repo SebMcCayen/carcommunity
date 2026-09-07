@@ -1,5 +1,5 @@
 /**
- * convoyChat.post / convoyChat.list / convoyChat.markRead — member-gated
+ * convoyChat.post / convoyChat.list / convoyChat.markRead — active-account-gated
  * per-CONVOY chat callables (contracts/functions/functions.json).
  *
  * Deployed via the `convoyChat` export group (functions/src/index.ts) as
@@ -59,7 +59,7 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue, Timestamp, type DocumentReference } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { requireMemberActor } from '../shared/memberActor';
+import { requireActiveActor } from '../shared/memberActor';
 import { requireAcceptedConvoyMember } from './convoyMembership';
 import { toUserAccessState } from '../shared/access';
 import { writeInAppNotification } from '../notifications/deliver';
@@ -228,7 +228,7 @@ async function replayCommittedSend(
 }
 
 export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyResponse> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parsePostConvoyInput(request.data);
   if (!parsed.ok) {
@@ -405,7 +405,7 @@ export interface ListConvoyResponse {
 }
 
 export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListConvoyResponse> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseListConvoyInput(request.data);
   if (!parsed.ok) {
@@ -481,7 +481,7 @@ export interface MarkReadConvoyResponse {
 export const markRead = onCall(
   CALLABLE_OPTS,
   async (request): Promise<MarkReadConvoyResponse> => {
-    const actor = await requireMemberActor(request);
+    const actor = await requireActiveActor(request);
 
     const parsed = parseMarkReadConvoyInput(request.data);
     if (!parsed.ok) {

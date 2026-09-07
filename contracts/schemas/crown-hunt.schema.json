@@ -131,10 +131,36 @@
       "required": ["pointId", "latitude", "longitude", "recordedAt", "idempotencyKey"],
       "additionalProperties": false
     },
+    "crownAllowance": {
+      "type": "object",
+      "description": "Private snapshot at collection time. Crown-only KP allowance, independent of other-source awards. Free 2250; verified Plus/Supporter 3000. Server day starts at Europe/Stockholm midnight, including DST. Upgrades immediately add headroom; downgrades never reset or claw back earned KP. Amount is clipped AFTER boosts/live-share multiplication and rounding. At zero, daily_limit_reached carries this object and consumes no crown, collector slot or successful-claim count. Existing UTC count limits remain separate. Historical replays retain their original snapshot; legacy replies may omit it.",
+      "properties": {
+        "cap": { "type": "integer", "enum": [2250, 3000] },
+        "earned": { "type": "integer", "minimum": 0 },
+        "remaining": { "type": "integer", "minimum": 0 },
+        "resetsAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["cap", "earned", "remaining", "resetsAt"],
+      "additionalProperties": false
+    },
+    "claimSpawnResponse": {
+      "type": "object",
+      "properties": {
+        "result": { "$ref": "#/$defs/crownSpawnClaimResult" },
+        "pointsAwarded": { "type": ["integer", "null"] },
+        "newBalance": { "type": ["integer", "null"] },
+        "rarity": { "type": ["string", "null"] },
+        "message": { "type": "string" },
+        "allowance": { "$ref": "#/$defs/crownAllowance" }
+      },
+      "required": ["result", "pointsAwarded", "newBalance", "rarity", "message"],
+      "additionalProperties": false
+    },
     "submitClaimResponse": {
       "type": "object",
       "properties": {
         "result": { "$ref": "#/$defs/crownHuntClaimResult" },
+        "allowance": { "$ref": "#/$defs/crownAllowance" },
         "pointsAwarded": { "type": ["integer", "null"] },
         "newBalance": { "type": ["integer", "null"] },
         "message": { "type": "string", "description": "Swedish user-facing message." }

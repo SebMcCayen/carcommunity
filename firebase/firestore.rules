@@ -41,58 +41,32 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.token.admin == true && isNotSuspended();
     }
 
+    // Profile restrictions must not be reset by an administrator's stale token.
+    // Check the acting admin's stored account before any client profile mutation.
+    function canAdministerProfiles() {
+      return isAdmin()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true;
+    }
+
     // Active member: subscription entitlement verified by backend and stored
     // as a custom claim. Clients must not self-elevate this claim.
     // Suspension always overrides entitlement (canAccessMemberFeatures).
     //
-    // ---- MEMBER GATING SWITCH (Firestore rules layer) ----------------------
-    // Member gating is currently DISABLED so every feature is testable without
-    // a subscription. The entitlement term is dropped from the return below;
-    // the isAuthenticated() and isNotSuspended() terms are DELIBERATELY KEPT —
-    // isActiveMember() bundles the suspension guard for every call site, and
-    // dropping the helper wholesale would silently un-suspend suspended users
-    // (exactly the regression Copilot caught in PR #428's storage.rules).
-    //
-    // TO RE-LOCK: restore the activeMember term, i.e. replace the return below
-    // with:
-    //   return isAuthenticated() && request.auth.token.activeMember == true
-    //     && isNotSuspended();
-    // then redeploy rules. This switch is INDEPENDENT of the callable-layer
-    // switch in functions/src/shared/memberGating.ts, of storage.rules /
-    // database.rules.json, AND of the Android UI switch in
-    // apps/android/.../config/MemberGating.kt — all FIVE must be flipped
-    // together (memberGating.ts is the authoritative runbook).
+    // Legacy compatibility helper. Do not blanket-relock approved free features.
+    // Paid benefits use independent verified-subscription guards.
     function isActiveMember() {
       return isAuthenticated() && isNotSuspended();
     }
 
-    // ---- KRONJAKT PAYWALL (dark, flag-gated) -------------------------------
-    // A PAID Kronjakt participant. Delegates to isPaidSubscriber() so the crown
-    // gate reads the AUTHORITATIVE subscriptions/{uid} record (written only by
-    // Cloud Functions), exactly like the partner-offers and event-details gates
-    // — NOT the `activeMember` custom claim. The claim is stale until the client
-    // refreshes its ID token, so gating crown reads on it would deny a
-    // freshly-paid member the crown layer (which the Android UI, keyed off the
-    // same sub record, has already unlocked) until the token cycles. Reusing the
-    // sub-doc helper keeps rules, UI, and the backend resolver in agreement.
-    // isPaidSubscriber() already bundles authenticated + not-suspended, so
-    // suspension still overrides entitlement. INDEPENDENT of the global
-    // isActiveMember() gating switch above: Kronjakt collection is going paid
-    // ahead of the rest of the app, so it must stay gated on the PAID tier even
-    // while the global member gate is relaxed.
-    function isPaidCrownHunter() {
-      return isPaidSubscriber();
-    }
-
-    // Dark flag gating whether Kronjakt requires a PAID subscription. Reads
-    // config/featureFlags (authenticated-readable; written only by
-    // admin.setFeatureFlag). SINGLE get() via a let-binding; a missing
-    // document/field is null ⇒ false, matching the contract default OFF, so no
-    // companion exists() read is needed and this deploys inert until go-live.
-    // Mirrors the partner-offers flag-in-rules idiom (PR #1067).
-    function crownHuntRequirePaid() {
-      let flags = get(/databases/$(database)/documents/config/featureFlags);
-      return flags != null && flags.data.get('crownHuntRequirePaid', false) == true;
+    // Crown participation is independent of subscription and global member gates.
+    // Read server-owned restrictions too, so a stale token cannot bypass them.
+    function canCollectCrowns() {
+      let user = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return isAuthenticated() && isNotSuspended()
+        && (user == null || (user.data.get('suspended', false) != true
+                            && user.data.get('deleted', false) != true));
     }
 
     // True when [sub] (a subscriptions/{uid} document Resource, or null when the
@@ -138,18 +112,6 @@ service cloud.firestore {
         && isPaidSubscriptionRecord(
           get(/databases/$(database)/documents/subscriptions/$(request.auth.uid))
         );
-    }
-
-    // Dark flag gating whether MEMBER partner offers require a PAID subscription.
-    // Reads config/featureFlags (authenticated-readable; written only by
-    // admin.setFeatureFlag). Absent document/field ⇒ false, matching the
-    // contract default OFF. While OFF the member-offer read gate stays on the
-    // relaxed isActiveMember(), so this deploys inert until billing go-live.
-    function partnerMemberOffersRequirePaid() {
-      // SINGLE get() via a let-binding; a missing doc is null ⇒ false (the
-      // contract default OFF), so no companion exists() read is needed.
-      let flags = get(/databases/$(database)/documents/config/featureFlags);
-      return flags != null && flags.data.get('partnerMemberOffersRequirePaid', false) == true;
     }
 
     // True when [uid] is an ACCEPTED member of convoy [convoyId]. Fetches the
@@ -265,6 +227,7 @@ service cloud.firestore {
         && (!keys.hasAny(['facebook']) || validFacebookHandle(data))
         && (!keys.hasAny(['instagram']) || validInstagramHandle(data))
         && (!keys.hasAny(['youtube']) || validYoutubeHandle(data))
+        && (!keys.hasAny(['showSupporterBadge']) || data.showSupporterBadge is bool)
         && (!keys.hasAny(['updatedAt']) || isServerTimestamp(data.updatedAt));
     }
 
@@ -278,7 +241,7 @@ service cloud.firestore {
       return keys.hasOnly([
           'displayName', 'avatarPath', 'bio',
           'facebook', 'instagram', 'youtube',
-          'updatedAt'
+          'updatedAt', 'showSupporterBadge'
         ])
         && validUserProfileFields(keys, uid);
     }
@@ -384,8 +347,14 @@ service cloud.firestore {
       // validation (Phase 9a). Suspended users may not edit their profile
       // (suspension overrides feature access); they retain read access.
       allow update: if isOwner(userId) && isNotSuspended() && validUserProfileUpdate(userId);
-      // Admins have unrestricted access.
-      allow read, write: if isAdmin();
+      // Crown eligibility is backend-only, even for admin clients. Its saved
+      // preference remains owner-only; other admin profile operations survive.
+      allow delete: if canAdministerProfiles();
+      allow create: if canAdministerProfiles()
+        && !request.resource.data.keys().hasAny(['supporterBadgeEligible', 'showSupporterBadge']);
+      allow update: if canAdministerProfiles()
+        && !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['supporterBadgeEligible', 'showSupporterBadge']);
 
       // Badges (Phase 9f + tiered ladders) — users/{uid}/badges/{badgeKey}.
       // Awarded by the backend only (automatic tier evaluators +
@@ -555,7 +524,7 @@ service cloud.firestore {
     // Split-document model: events/{eventId} holds teaser-safe + operational
     // fields (title, approximateArea, status, rsvpCounts, ...) PLUS the event's
     // map location (locationName, latitude, longitude); the long description and
-    // the precise street address are member-only and live in
+    // the precise street address are free to authenticated users while published in
     // events/{eventId}/details/private. All mutations go through the
     // events.* callables (Admin SDK) — no client writes, including admins, so
     // every admin lifecycle change carries an adminAuditEvents record.
@@ -609,7 +578,7 @@ service cloud.firestore {
       // inherits member read access.
       match /details/private {
         allow read: if isAdmin()
-          || (isActiveMember()
+          || (isAuthenticated() && isNotSuspended()
             && get(/databases/$(database)/documents/events/$(eventId)).data.status == 'published');
         // No client writes: managed by the events.* callables.
       }
@@ -623,15 +592,18 @@ service cloud.firestore {
       // the groupDrive.* callables so join preconditions (published +
       // RSVP going|maybe + not ended) are enforced server-side.
       match /groupDriveParticipants/{userId} {
-        allow read: if isAdmin() || isOwner(userId)
-          || (isActiveMember()
-            && get(/databases/$(database)/documents/events/$(eventId)).data.status == 'published');
+        allow read: if isAuthenticated() && isNotSuspended()
+          && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+              && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
+          && (isAdmin() || isOwner(userId)
+            || get(/databases/$(database)/documents/events/$(eventId)).data.status == 'published');
         // No client writes: groupDrive.join / updateStatus / leave only.
       }
 
       match /rsvps/{userId} {
         allow read: if isOwner(userId) || isAdmin();
-        allow create, update: if isOwner(userId) && isActiveMember()
+        allow create, update: if isOwner(userId) && isNotSuspended()
           && get(/databases/$(database)/documents/events/$(eventId)).data.status == 'published'
           && validRsvpDocument();
         // No client deletes.
@@ -771,12 +743,19 @@ service cloud.firestore {
     // resolution, block checks, auto-accept, status transitions).
     // -------------------------------------------------------------------------
     match /users/{userId}/friends/{friendId} {
-      allow read: if isOwner(userId);
+      allow read: if isAuthenticated() && isNotSuspended()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
+        && isOwner(userId);
       // No client writes: friend.respondRequest / friend.remove callables only.
     }
 
     match /friendRequests/{requestId} {
-      allow read: if isAuthenticated()
+      allow read: if isAuthenticated() && isNotSuspended()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
         && (resource.data.fromUid == request.auth.uid
           || resource.data.toUid == request.auth.uid);
       // No client writes: friend.sendRequest / friend.respondRequest callables
@@ -806,7 +785,11 @@ service cloud.firestore {
       // listener, and the trigger blanks the document's `lastMessage` preview
       // (functions/src/dm/blockedConversation.ts) so the copy that is still
       // delivered carries no counterparty content.
-      allow read: if isAuthenticated() && request.auth.uid in resource.data.members;
+      allow read: if isAuthenticated() && isNotSuspended()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
+        && request.auth.uid in resource.data.members;
       // No client writes: dm.* callables only.
 
       match /messages/{messageId} {
@@ -821,7 +804,11 @@ service cloud.firestore {
         // counterparty having blocked the caller, each hides the thread.
         // dmMessagesReadable also carries the membership check and fails closed
         // on a malformed conversation — see its definition above.
-        allow read: if isAuthenticated() && dmMessagesReadable(pairId);
+        allow read: if isAuthenticated() && isNotSuspended()
+          && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+              && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
+          && dmMessagesReadable(pairId);
         // No client writes: dm.sendMessage callable only.
       }
     }
@@ -861,14 +848,17 @@ service cloud.firestore {
     //    attempt is denied whoever makes it (pinned by the convoy emulator tests).
     // -------------------------------------------------------------------------
     match /convoys/{convoyId} {
-      // Active members only (isActiveMember carries the suspension override) AND
-      // in the convoy's memberUids — a suspended / no-longer-entitled member
+      // Active accounts only, independently of subscription entitlement, AND
+      // in the convoy's memberUids — a suspended / deleted member
       // loses read access even while still listed in memberUids. A member who has
       // LEFT is removed from memberUids by convoy.leave, so this one condition is
       // also what revokes their convoy read AND (via the convoyChats rule below)
       // their chat access the instant they leave — while the chat history itself
       // is left untouched for the members still in it.
-      allow read: if isActiveMember()
+      allow read: if isAuthenticated() && isNotSuspended()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
         && resource.data.memberUids is list
         && request.auth.uid in resource.data.memberUids;
       // No client writes: the convoy.* callables only (create / respond / start /
@@ -896,11 +886,17 @@ service cloud.firestore {
     match /communityChat/{channelId} {
       // The channel doc itself carries no member-visible payload; the roster is
       // the whole membership. Reads happen at the messages level below.
-      allow read: if isActiveMember();
+      allow read: if isAuthenticated() && isNotSuspended()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true));
       // No client writes: communityChat.post callable only.
 
       match /messages/{messageId} {
-        allow read: if isActiveMember();
+        allow read: if isAuthenticated() && isNotSuspended()
+          && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+              && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true));
         // No client writes: communityChat.post callable only.
       }
     }
@@ -925,7 +921,10 @@ service cloud.firestore {
     // owner-update whitelist, so a client cannot forge or clear one).
     // -------------------------------------------------------------------------
     match /convoyChats/{convoyId}/messages/{messageId} {
-      allow read: if isAuthenticated()
+      allow read: if isAuthenticated() && isNotSuspended()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
         && request.auth.uid in
           get(/databases/$(database)/documents/convoys/$(convoyId)).data.memberUids
         && get(/databases/$(database)/documents/convoys/$(convoyId))
@@ -942,7 +941,10 @@ service cloud.firestore {
     // through the convoy.sendReaction callable (which re-checks accepted
     // membership AND enforces the anti-spam cooldown) — no client writes.
     match /convoyChats/{convoyId}/reactions/{reactionId} {
-      allow read: if isAuthenticated()
+      allow read: if isAuthenticated() && isNotSuspended()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
         && request.auth.uid in
           get(/databases/$(database)/documents/convoys/$(convoyId)).data.memberUids
         && get(/databases/$(database)/documents/convoys/$(convoyId))
@@ -977,8 +979,11 @@ service cloud.firestore {
     //    from bloating the doc.
     // -------------------------------------------------------------------------
     match /convoys/{convoyId}/followMe/{followMeId} {
-      allow read: if isActiveMember()
-        // isActiveMember() (not just isAuthenticated) so a SUSPENDED member — who
+      allow read: if isAuthenticated() && isNotSuspended()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
+        // The active-account check ensures a SUSPENDED member — who
         // may still be listed in memberUids — loses trail access immediately, the
         // same suspension override the convoy doc read enforces.
         // Single fixed doc by design — scope the rule to it so adding any other
@@ -990,8 +995,11 @@ service cloud.firestore {
       // the value ALREADY stored (set by the callable), so only that member passes
       // — and the request may not change it. The convoy get() re-checks live
       // membership so a leader who has since left cannot keep writing.
-      allow update: if isActiveMember()
-        // isActiveMember() so a suspended leader is blocked from further trail
+      allow update: if isAuthenticated() && isNotSuspended()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
+        // The active-account check blocks a suspended leader from further trail
         // writes the moment they are suspended (parity with the read rule).
         && followMeId == 'current'
         && resource.data.leaderUid == request.auth.uid
@@ -1029,9 +1037,8 @@ service cloud.firestore {
     // offers – partner offers, THREE-TIER privacy (Phase 9i)
     // Teaser document: all authenticated users while ACTIVE (title,
     // teaserText, type — never the description, terms, or code).
-    // details/member: while the offer is active — the member-offer gate,
-    //   dark-flagged: PAID subscribers (Plus/Supporter) when
-    //   partnerMemberOffersRequirePaid is ON, else the relaxed isActiveMember().
+    // details/member: active offer content always requires verified Plus/Supporter
+    //   or admin moderation access, independently of legacy flags.
     // secret/code: fully backend-only — the discount code is served
     // exclusively by partners.showOfferCode and never readable directly.
     // -------------------------------------------------------------------------
@@ -1042,24 +1049,11 @@ service cloud.firestore {
       // No client writes.
 
       match /details/member {
-        // Member-offer detail — description/terms/discount fields, but NEVER
-        // the discount code (secret/code below stays fully backend-only).
-        // Admins always read it for the admin offer-detail view (Phase 13f).
-        //
-        // For non-admins the offer must be active AND the caller must pass the
-        // member-offer gate. That gate is DARK-FLAGGED: while
-        // partnerMemberOffersRequirePaid is ON, member offers are a paid product
-        // so only a PAID subscriber (Plus/Supporter) may read — a free
-        // (Community) caller is denied. While the flag is OFF the gate falls
-        // back to the relaxed isActiveMember(), i.e. exactly today's behaviour,
-        // so this rule deploys inert until billing go-live.
-        // isAuthenticated() FIRST so an unauthenticated (always-denied) probe
-        // short-circuits before the offer/flag/subscription get()s below —
-        // those doc reads must never run for a signed-out caller.
+        // Protected offer detail always requires paid entitlement or admin moderation.
         allow read: if isAdmin()
           || (isAuthenticated()
             && get(/databases/$(database)/documents/offers/$(offerId)).data.status == 'active'
-            && (partnerMemberOffersRequirePaid() ? isPaidSubscriber() : isActiveMember()));
+            && isPaidSubscriber());
         // No client writes.
       }
 
@@ -1234,7 +1228,10 @@ service cloud.firestore {
     // expiry, or spoof the Trafikverket source.
     // -------------------------------------------------------------------------
     match /incidents/{incidentId} {
-      allow read: if isAuthenticated()
+      allow read: if isAuthenticated() && isNotSuspended()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
         && resource.data.status == 'active'
         && resource.data.expiresAt > request.time
         && (resource.data.source != 'trafikverket'
@@ -1325,7 +1322,10 @@ service cloud.firestore {
     // forge another user's pin or backdate its expiry.
     // -------------------------------------------------------------------------
     match /policeReports/{reportId} {
-      allow read: if isActiveMember()
+      allow read: if isAuthenticated() && isNotSuspended()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true))
         && resource.data.status == 'active'
         && resource.data.expiresAt > request.time;
       // No client writes — police.report / police.remove / police.confirm /
@@ -1442,14 +1442,9 @@ service cloud.firestore {
       // drafts/paused/ended for the admin portal (Phase 13e). All writes go
       // through the safety-gated crownHunt.* admin callables.
       //
-      // KRONJAKT PAYWALL (dark): when crownHuntRequirePaid is ON, only a PAID
-      // member may read active points (a free member sees no crowns); while OFF
-      // the gate is the existing isActiveMember(), i.e. exactly today. The
-      // status=='active' term and the admin read are PRESERVED unchanged.
-      // isAdmin() is evaluated FIRST so an admin short-circuits before the
-      // crownHuntRequirePaid() config/featureFlags get() — admins never pay it.
+      // Free, unrestricted accounts may read active crowns.
       allow read: if isAdmin()
-                  || ((crownHuntRequirePaid() ? isPaidCrownHunter() : isActiveMember())
+                  || (canCollectCrowns()
                       && resource.data.status == 'active');
       // No client writes.
     }
@@ -1464,7 +1459,7 @@ service cloud.firestore {
       // Owner reads their own claim history; admins read every claim for the
       // review queue (Phase 13e). Anti-fraud risk data stays backend-only in
       // crownHuntClaimRisk (below) — this grant does not expose it.
-      allow read: if (isActiveMember() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow read: if (canCollectCrowns() && resource.data.userId == request.auth.uid) || isAdmin();
       // No client writes.
     }
 
@@ -1544,29 +1539,19 @@ service cloud.firestore {
     // NO client writes. A crown is a reward-bearing document: a client that
     // could write one could mint Kronpoäng at a coordinate of its choosing.
     // -------------------------------------------------------------------------
+    // Private backend-only allowance. Even owners cannot read/list or modify it;
+    // claim responses expose only their own cap/remaining/reset snapshot.
+    match /crownDailyAllowances/{uid}/{document=**} {
+      allow read, write: if false;
+    }
+
     match /crownSpawns/{spawnId} {
-      // KRONJAKT PAYWALL (dark): when crownHuntRequirePaid is ON, only a PAID
-      // member may read spawns (a free member's map query returns nothing);
-      // while OFF the gate is the existing isActiveMember(), i.e. exactly today.
-      // The list/get split, the list `status == 'live'` term, the get
-      // `status == 'live' && expiresAt > request.time` terms, and the admin read
-      // are ALL PRESERVED unchanged (see the long note above for why each is
-      // shaped this way).
-      //
-      // FUTURE OPTIMISATION: crownHuntRequirePaid() adds ONE extra
-      // config/featureFlags get() per crownSpawns poll (the map re-queries every
-      // ~60 s) FOR NON-ADMINS — isAdmin() is evaluated FIRST below so an admin
-      // short-circuits before the flag get() and never pays it. It is a small,
-      // cache-friendly single-doc read and negligible at this app's scale, but
-      // if Firestore spend ever shows it, fold the flag into the client (which
-      // already reads config/featureFlags on launch/resume) so it simply stops
-      // issuing the query for a free member, and drop this rules-side get() —
-      // the callable gate is the security boundary either way.
+      // Free, unrestricted accounts may read live crowns.
       allow list: if isAdmin()
-                  || ((crownHuntRequirePaid() ? isPaidCrownHunter() : isActiveMember())
+                  || (canCollectCrowns()
                       && resource.data.status == 'live');
       allow get: if isAdmin()
-                 || ((crownHuntRequirePaid() ? isPaidCrownHunter() : isActiveMember())
+                 || (canCollectCrowns()
                      && resource.data.status == 'live'
                      && resource.data.expiresAt > request.time);
       // No client writes.
@@ -1653,7 +1638,7 @@ service cloud.firestore {
     // inside the award transaction.
     // -------------------------------------------------------------------------
     match /crownSpawnCollectors/{collectorId} {
-      allow read: if isActiveMember() && resource.data.userId == request.auth.uid;
+      allow read: if canCollectCrowns() && resource.data.userId == request.auth.uid;
       // No client writes — the pickup record is a reward-integrity artefact.
     }
 
@@ -1701,7 +1686,7 @@ service cloud.firestore {
     // client that could write one could drain a rival at will.
     // -------------------------------------------------------------------------
     match /activePerks/{trapId} {
-      allow read: if (isActiveMember() && resource.data.placedByUid == request.auth.uid) || isAdmin();
+      allow read: if (canCollectCrowns() && resource.data.placedByUid == request.auth.uid) || isAdmin();
       // No client writes.
     }
 
@@ -1723,7 +1708,7 @@ service cloud.firestore {
     // by crownHunt.deployPerk (Admin SDK) — no client writes.
     // -------------------------------------------------------------------------
     match /perkShieldPublic/{userId} {
-      allow read: if isActiveMember();
+      allow read: if canCollectCrowns();
       // No client writes.
     }
 
@@ -1833,7 +1818,7 @@ service cloud.firestore {
     // Risk data is NOT here — see crownSpawnClaimRisk below.
     // -------------------------------------------------------------------------
     match /crownSpawnClaims/{claimId} {
-      allow read: if (isActiveMember() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow read: if (canCollectCrowns() && resource.data.userId == request.auth.uid) || isAdmin();
       // No client writes.
     }
 
@@ -1884,10 +1869,10 @@ service cloud.firestore {
     //    per-cell map to members would tell a client where to wait for spawns.
     // -------------------------------------------------------------------------
     match /crownHuntLeaderboardEntries/{entryId} {
-      // isActiveMember() (not bare isAuthenticated) so suspension overrides
+      // canCollectCrowns() (not bare isAuthenticated) so suspension overrides
       // access, matching every other member-facing read in this ruleset. While
       // member gating is disabled it resolves to signed-in AND not suspended.
-      allow read: if isActiveMember();
+      allow read: if canCollectCrowns();
       allow write: if false;
     }
 
@@ -1911,7 +1896,7 @@ service cloud.firestore {
     }
 
     match /crownHuntSeasons/{seasonId} {
-      allow read: if isActiveMember();
+      allow read: if canCollectCrowns();
       allow write: if false;
     }
 

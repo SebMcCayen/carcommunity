@@ -75,15 +75,9 @@ fun EventsRoute(
     rsvpCoordinator: RsvpCoordinator?,
     uid: String,
     passesMemberGate: Boolean,
-    // Whether the viewer may see the FULL event details — the Slice-D gate
-    // decision (admin OR gate-off OR paid subscriber; see Events.showFullDetails).
-    // Gates the full detail (exact address + long description) and the attendee
-    // list: a viewer without full access sees the basic view + an upgrade prompt.
-    // The attendee list is additionally server-enforced by events-listAttendees;
-    // this drives the UX and skips the now-denied roster read for such a viewer.
-    // Default false so config-less builds/tests show the reduced view unless told
-    // otherwise.
-    showFullDetails: Boolean = false,
+    // Full details and RSVP are free; identities require verified paid/admin access.
+    canViewAttendees: Boolean = false,
+    isPaidSubscriber: Boolean = false,
     // Opens the subscription screen from the detail's upgrade prompt. Null leaves
     // the prompt informational (config-less build).
     onUpgrade: (() -> Unit)? = null,
@@ -459,7 +453,7 @@ fun EventsRoute(
     // triggers the events-listAttendees read (which would return an empty
     // requiresPaid roster anyway), and the reveal button is hidden in the screen.
     val attendeesVisible =
-        showFullDetails &&
+        canViewAttendees &&
             Events.canSeeDetails(passesMemberGate, event?.status ?: EventStatus.DRAFT)
     var attendeesReloadKey by rememberSaveable { mutableStateOf(0) }
     // The roster is collapsed behind the detail page's "Check who answered"
@@ -471,7 +465,10 @@ fun EventsRoute(
         mutableStateOf<EventAttendeesState>(EventAttendeesState.Loading)
     }
     LaunchedEffect(selected, attendeesVisible, attendeesRevealed, attendeesReloadKey, blockingRepository, uid) {
-        if (!attendeesVisible || !attendeesRevealed) return@LaunchedEffect
+        if (!attendeesVisible || !attendeesRevealed) {
+            attendees = EventAttendeesState.Unavailable
+            return@LaunchedEffect
+        }
         attendees = EventAttendeesState.Loading
         val result = repository.loadAttendees(selected)
         // Only a Loaded roster has rows to filter, and stateFor ignores the
@@ -549,7 +546,7 @@ fun EventsRoute(
         }
     }
     val checkInAvailable =
-        event != null && EventCheckIn.canCheckIn(passesMemberGate, event, nowMillis)
+        event != null && EventCheckIn.canCheckIn(isPaidSubscriber, event, nowMillis)
 
     // --- Navigate / calendar / share wiring ---
     val hasMapToken = stringResource(R.string.mapbox_access_token).isNotBlank()
@@ -699,7 +696,7 @@ fun EventsRoute(
         detail = detail,
         myRsvp = myRsvp,
         passesMemberGate = passesMemberGate,
-        showFullDetails = showFullDetails,
+        canViewAttendees = canViewAttendees,
         onUpgrade = onUpgrade,
         rsvpStatus = rsvpStatus,
         isLoading = eventLoading,
@@ -713,14 +710,18 @@ fun EventsRoute(
         onRetry = { reloadKey++ },
         onOpenChat = if (chatEligible) { { showChat = true } } else null,
         onOpenGroupDrive = if (groupDriveEligible) { { showGroupDrive = true } } else null,
-        attendees = attendees,
+        attendees = if (attendeesVisible) attendees else EventAttendeesState.Unavailable,
         onOpenMember = onViewProfile,
         onRetryAttendees = { attendeesReloadKey++ },
         checkInAvailable = checkInAvailable,
         checkInState = checkInState,
         attendance = attendance,
         firstSampleAtMillis = firstSampleAtMillis,
-        onCheckIn = { event?.let { current -> scope.launch { checkInCoordinator.checkIn(current) } } },
+        onCheckIn = {
+            if (isPaidSubscriber) {
+                event?.let { current -> scope.launch { checkInCoordinator.checkIn(current) } }
+            }
+        },
         onNavigate = onNavigate,
         onShareEvent = onShareEvent,
         onAddToCalendar = onAddToCalendar,

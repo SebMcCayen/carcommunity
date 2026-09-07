@@ -432,6 +432,7 @@ class MapFirstShellTest {
         ) = Unit
 
         override suspend fun updateAvatarPath(uid: String, avatarPath: String) = Unit
+        override suspend fun updateShowSupporterBadge(uid: String, show: Boolean) = Unit
     }
 
     /** A Play source that always reports a mandatory (blocking) update. */

@@ -1073,16 +1073,8 @@ fun AuthenticatedApp(
                 route = null
             }
 
-            // KRONJAKT PAYWALL (dark flag `crownHuntRequirePaid`, contract
-            // default OFF). Derived ONCE here — where the live `flags` (from the
-            // realtime feature-flag listener) and `profile` are both in scope —
-            // so the crown map layer, the collect gate and the map-layers toggle
-            // all read one consistent value. While the flag is OFF this is always
-            // true, so everything below renders exactly as today; while ON it
-            // follows the PAID `activeMember` entitlement, mirroring the server
-            // gate (crownHuntGateAllows / isPaidCrownHunter) so the UI never
-            // offers a collection the backend would refuse. NOT the global
-            // MemberGating switch — that stays off; this is Kronjakt-only.
+            // Free and paid users participate. Legacy arguments are ignored;
+            // the server applies each tier's separate Crown Hunt KP allowance.
             val crownHuntUnlocked =
                 CrownPointMarkers.crownHuntUnlocked(
                     requirePaid = flags.isEnabled(FeatureFlag.CROWN_HUNT_REQUIRE_PAID),
@@ -2073,8 +2065,7 @@ fun AuthenticatedApp(
             // child of the shell's outer Box, so it draws OVER the full-screen nav
             // view rather than under it.
             val incidentReportingEnabled =
-                incidentController != null &&
-                    MemberGating.allows(profile?.activeMember == true)
+                incidentController != null
             val reportIncident: (IncidentType, ReportLocation) -> Unit = { type, location ->
                 incidentController?.let { controller ->
                     scope.launch {
@@ -3590,24 +3581,13 @@ fun AuthenticatedApp(
                 }
             }
 
-            // Only record a drive the user could actually SAVE. drives-save is
-            // member-gated (requireMemberActor) while live sharing is free, so
-            // gating the recording on canShareLive — as v0.8.0 did — handed a
-            // non-member an end-of-session prompt whose Save could only ever fail
-            // with PERMISSION_DENIED, forever. The manual recorder
-            // (RecordDriveScreen) already applies this same member rule.
-            // Member gating is currently DISABLED (config/MemberGating.kt) and
-            // drives-save admits any signed-in, non-suspended caller to match,
-            // so this resolves to true for everyone. Routing it through the
-            // switch (rather than the raw entitlement) is what keeps recording
-            // aligned with saving: gating recording on the RAW flag while the
-            // backend saves for everyone would invert the v0.8.0 bug — we would
-            // refuse to record drives the server would happily store.
+            // Recording and saving are free for active authenticated accounts.
+            // The backend enforces suspension/deletion; automatic recording
+            // still requires an available drives backend and live sharing.
             val canRecordDrive =
                 DriveRecordingGate.shouldRecord(
                     hasDrivesBackend = drivesRepository != null,
                     canShareLive = canShareLive,
-                    passesMemberGate = MemberGating.allows(profile?.activeMember == true),
                 )
 
             // Bind the recording lifecycle to the live-sharing state. Both calls
@@ -9340,22 +9320,15 @@ private fun RouteHost(
                     repository = eventsRepository,
                     rsvpCoordinator = rsvpCoordinator,
                     uid = uid,
-                    passesMemberGate = MemberGating.allows(profileActiveMember),
-                    // Slice-D subscription gate, DARK by default. While the
-                    // `eventDetailsRequirePaid` flag is OFF (billing not live) every
-                    // viewer is treated as paid, so the full detail + attendee list
-                    // render for everyone exactly as before. While ON, the real
-                    // stored tier decides: a free (Community) viewer gets the basic
-                    // view + upgrade prompt, a paid tier the full view. Admins/owners
-                    // bypass regardless of tier — the backend (events-listAttendees)
-                    // always serves them the roster, so treating an admin with no
-                    // subscription as "free" here would diverge from the server.
-                    showFullDetails =
-                        Events.showFullDetails(
+                    passesMemberGate = true,
+                    // Published details and RSVP are free. Identity access uses
+                    // verified subscription state, with admin moderation retained.
+                    canViewAttendees =
+                        Events.canViewAttendees(
                             isAdmin = profileIsAdmin,
-                            requirePaidEnabled = eventDetailsRequirePaidEnabled,
                             isPaidSubscriber = storedSubscription.isPaidSubscriber,
                         ),
+                    isPaidSubscriber = storedSubscription.isPaidSubscriber,
                     onUpgrade = { onOpenRoute(ShellRoute.Subscription) },
                     chatRepository = chatRepository,
                     chatCoordinator = chatCoordinator,
@@ -9437,21 +9410,9 @@ private fun RouteHost(
                     repository = partnersRepository,
                     offerCodeCoordinator = offerCodeCoordinator,
                     uid = uid,
-                    // Member-offer gate, dark-flagged by
-                    // partnerMemberOffersRequirePaid (live flag). While ON,
-                    // member offers are a PAID product: gate on the real
-                    // subscription tier (Plus/Supporter) — same source the
-                    // drives/garage work observes (storedSubscription) — which
-                    // mirrors the server gate in firestore.rules /
-                    // partners.showOfferCode. While OFF the gate is the relaxed
-                    // member gate (every signed-in user), exactly as today, so
-                    // the feature is inert until billing go-live.
+                    // Member offers always require verified paid/admin access.
                     canAccessMemberOffers =
-                        if (partnerMemberOffersRequirePaidEnabled) {
-                            storedSubscription.effectiveTier != EffectiveSubscriptionTier.COMMUNITY
-                        } else {
-                            MemberGating.allows(profileActiveMember)
-                        },
+                        profileIsAdmin || storedSubscription.isPaidSubscriber,
                     onBack = onClose,
                 )
             } else {
@@ -9771,6 +9732,11 @@ private fun RouteHost(
 
         ShellRoute.Settings ->
             SettingsScreen(
+                supporterBadgeSetting = {
+                    profileRepository?.let {
+                        com.kungsbackacarcommunity.app.profile.SupporterBadgeSetting(it, uid)
+                    }
+                },
                 onManageSubscription =
                     if (billingRepository != null && subscriptionVerifier != null) {
                         { onOpenRoute(ShellRoute.Subscription) }

@@ -14,7 +14,7 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { requireMemberActor, requireActiveActor } from '../shared/memberActor';
+import { requireActiveActor } from '../shared/memberActor';
 import {
   buildParticipantDocument,
   guardJoinableEvent,
@@ -42,7 +42,7 @@ export interface ParticipantResponse {
 }
 
 export const join = onCall(CALLABLE_OPTS, async (request): Promise<ParticipantResponse> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseJoinGroupDriveInput(request.data);
   if (!parsed.ok) {
@@ -96,7 +96,7 @@ export const join = onCall(CALLABLE_OPTS, async (request): Promise<ParticipantRe
 export const updateStatus = onCall(
   CALLABLE_OPTS,
   async (request): Promise<ParticipantResponse> => {
-    const actor = await requireMemberActor(request);
+    const actor = await requireActiveActor(request);
 
     const parsed = parseUpdateDriveStatusInput(request.data);
     if (!parsed.ok) {

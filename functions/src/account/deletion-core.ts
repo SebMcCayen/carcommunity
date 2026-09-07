@@ -99,6 +99,8 @@ export const PURGE_DOC_TREES = [
   'userLifecycle',
   'notifications',
   'pointsLedger',
+  // Crown-only daily earning counters and their days subcollection.
+  'crownDailyAllowances',
   // Backend-only achievement counters (functions/src/badges). Same rule as
   // userLifecycle: this document holds per-user activity — crowns collected,
   // lifetime distance driven, events attended, convoys led and the local-day

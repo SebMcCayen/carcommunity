@@ -3,6 +3,10 @@
      Source: contracts/localization/en.json
      Regenerate: node apps/android/scripts/generate-strings.mjs -->
 <resources>
+    <string name="supporterBadge_accessibility">Supporter crown</string>
+    <string name="supporterBadge_settingTitle">Show Supporter crown</string>
+    <string name="supporterBadge_settingBody">Shows a small crown on your profile picture while your Supporter membership is active. Your choice is saved even when your membership ends.</string>
+    <string name="supporterBadge_saveFailed">Could not save your choice. Please try again.</string>
     <string name="app_name">Kungsbacka Car Community</string>
     <string name="appUpdate_title">New version available</string>
     <string name="appUpdate_message">A newer version of the app is available on Google Play. It downloads in the background, so you can keep using the app while it does.</string>
@@ -211,9 +215,9 @@
     <string name="privacySettings_error">Something went wrong. Please try again.</string>
     <string name="privacySettings_saved">Saved.</string>
     <string name="subscription_teaserTitle">Membership</string>
-    <string name="subscription_teaserBody">Unlock more community features soon.</string>
+    <string name="subscription_teaserBody">Explore Plus benefits or support the community with Supporter.</string>
     <string name="subscription_memberMonthlyTitle">Monthly Membership</string>
-    <string name="subscription_memberRequiredBody">Membership is required to view other live locations, event details and RSVP.</string>
+    <string name="subscription_memberRequiredBody">Event details, RSVP, social features and driving statistics are free. Plus and Supporter include event check-in, attendee names and member partner offers.</string>
     <string name="subscription_purchaseHandledExternally">Purchases are handled via the App Store or Google Play in a later version.</string>
     <string name="subscription_accessLimitedBySuspension">Your access may be restricted in the event of suspension or violations.</string>
     <string name="subscription_currentEntitlementMember">You have an active membership.</string>
@@ -222,9 +226,9 @@
     <string name="subscription_currentEntitlementFree">No active membership.</string>
     <string name="subscription_currentPlanTitle">Your membership</string>
     <string name="subscription_plusTitle">Plus · SEK 39/month</string>
-    <string name="subscription_plusBody">The essential member features, up to 5 garage vehicles and 90 days of drive history.</string>
+    <string name="subscription_plusBody">Event check-in, attendee names, member partner offers, up to 5 garage vehicles, 90 days of drive history and 3,000 Crown Hunt KP per day (Community: 2,250).</string>
     <string name="subscription_supporterTitle">Supporter · SEK 119/month</string>
-    <string name="subscription_supporterBody">All member features, up to 10 garage vehicles, unlimited drive history and an optional Supporter badge.</string>
+    <string name="subscription_supporterBody">Everything in Plus, up to 10 garage vehicles, unlimited drive history and an optional Supporter crown on your profile picture. Your support helps fund the project.</string>
     <string name="subscription_screenTitle">Membership</string>
     <string name="subscription_subscribeAction">Subscribe to monthly membership</string>
     <string name="subscription_subscribePlusAction">Choose Plus</string>
@@ -321,13 +325,13 @@
     <string name="events_noPastTitle">No past events</string>
     <string name="events_noPastBody">Once an event has been held it moves here, so you can look it up afterwards.</string>
     <string name="events_completedBadge">Held</string>
-    <string name="events_memberRequiredTitle">Event details require KCC Membership.</string>
-    <string name="events_memberRequiredBody">As a member you can see exact location, more information and RSVP.</string>
-    <string name="events_memberGateBody">KCC Membership is required to see exact location, event details, and RSVP.</string>
+    <string name="events_memberRequiredTitle">Event information unavailable</string>
+    <string name="events_memberRequiredBody">Published event details and RSVP are free for signed-in users. Your account cannot access this event right now.</string>
+    <string name="events_memberGateBody">Published event details and RSVP are free. Check-in and attendee names require Plus or Supporter.</string>
     <string name="events_memberDetailPlaceholder">Description</string>
-    <string name="events_upgradeDetailsTitle">Full details for members</string>
-    <string name="events_upgradeDetailsBody">The exact address, the full description and who\'s coming are shown to Plus and Supporter members. You still see the title, time, area and a short description.</string>
-    <string name="events_upgradeDetailsAction">Upgrade for full details</string>
+    <string name="events_upgradeDetailsTitle">More with Plus or Supporter</string>
+    <string name="events_upgradeDetailsBody">Full event details and RSVP are free. Plus and Supporter unlock check-in and attendee names.</string>
+    <string name="events_upgradeDetailsAction">See Plus and Supporter</string>
     <string name="events_organizerLabel">Organizer: %1$s</string>
     <string name="events_navigationPlaceholder">Navigation will open in Apple Maps or Google Maps in a later version.</string>
     <string name="events_rsvpGoing">Going</string>
@@ -341,7 +345,7 @@
     <string name="events_loadMore">Load more</string>
     <string name="events_cancelledBadge">Cancelled</string>
     <string name="events_cancelledNotice">This event has been cancelled.</string>
-    <string name="events_lockIndicator">Requires KCC Membership.</string>
+    <string name="events_lockIndicator">Requires Plus or Supporter.</string>
     <string name="events_navigateHere">Navigate here</string>
     <string name="events_navigationError">Could not open navigation.</string>
     <string name="events_rsvpSubmitError">RSVP failed. Please try again.</string>
@@ -591,7 +595,7 @@
     <string name="friends_retry">Try again</string>
     <string name="friends_unknownMember">Member</string>
     <string name="friends_errorSignedOut">Please sign in to manage friends.</string>
-    <string name="friends_errorNotMember">Friends are available to active members.</string>
+    <string name="friends_errorNotMember">Your account cannot access friends right now.</string>
     <string name="friends_errorInvalid">Enter a valid nickname.</string>
     <string name="friends_errorSelfRequest">That\'s you! You can\'t send yourself a friend request.</string>
     <string name="friends_errorNotFound">No member found matching that nickname. Check the spelling, or try the first few letters.</string>
@@ -651,7 +655,7 @@
     <string name="convoy_unknownMember">Member</string>
     <string name="convoy_close">Close</string>
     <string name="convoy_errorSignedOut">Please sign in to manage convoys.</string>
-    <string name="convoy_errorNotMember">Convoys are available to active members.</string>
+    <string name="convoy_errorNotMember">Your account cannot access convoys right now.</string>
     <string name="convoy_errorInvalid">That request wasn\'t valid.</string>
     <string name="convoy_errorNotFound">That convoy is no longer available.</string>
     <string name="convoy_errorNoInvitees">No one could be added to the convoy.</string>
@@ -811,7 +815,7 @@
     <string name="groupDrive_errorLeave">Could not leave. Please try again.</string>
     <string name="groupDrive_errorUpdateStatus">Could not update status. Please try again.</string>
     <string name="groupDrive_notParticipating">You are not participating in the group drive.</string>
-    <string name="groupDrive_memberRequired">An active membership is required for group driving.</string>
+    <string name="groupDrive_memberRequired">Group driving requires a published event and a Going or Maybe RSVP.</string>
     <string name="groupDrive_rsvpRequired">You need to RSVP Going or Maybe to join the group drive.</string>
     <string name="groupDrive_rejoinNotice">You have rejoined the group drive.</string>
     <string name="groupDrive_countJoined">Joined</string>
@@ -901,7 +905,7 @@
     <string name="savedDrives_driveKept">Drive saved.</string>
     <string name="savedDrives_driveDeleted">Drive deleted.</string>
     <string name="savedDrives_closeButton">Close</string>
-    <string name="savedDrives_memberRequired">An active membership is required to save drives.</string>
+    <string name="savedDrives_memberRequired">Your account cannot save drives right now.</string>
     <string name="savedDrives_recordTitle">Record drive</string>
     <string name="savedDrives_recordStart">Start recording</string>
     <string name="savedDrives_recordStop">Stop recording</string>
@@ -1166,6 +1170,8 @@
     <string name="crownHunt_resultPointInactive">This point is no longer available.</string>
     <string name="crownHunt_resultCooldownActive">Wait before collecting again.</string>
     <string name="crownHunt_resultDailyLimit">You have reached today\'s collection limit.</string>
+    <string name="crownHunt_allowanceReached">Today\'s Crown Hunt KP allowance is used up. The crown has not been collected.</string>
+    <string name="crownHunt_allowanceRemaining">%1$d of %2$d Crown Hunt KP remaining at collection time. Resets %3$s (Stockholm).</string>
     <string name="crownHunt_resultRiskReview">The claim needs review and no points have been awarded yet.</string>
     <string name="crownHunt_resultFeatureDisabled">Crown Hunt is not available right now.</string>
     <string name="crownHunt_resultNotEligible">You are not eligible to collect right now.</string>
@@ -1545,7 +1551,7 @@
     <string name="dm_send">Send</string>
     <string name="dm_loadOlder">Load earlier messages</string>
     <string name="dm_sendErrorSignedOut">Please sign in to send messages.</string>
-    <string name="dm_sendErrorNotMember">Direct messages are available to active members.</string>
+    <string name="dm_sendErrorNotMember">Your account cannot send direct messages right now.</string>
     <string name="dm_sendErrorInvalid">Enter a message to send.</string>
     <string name="dm_sendErrorCannotDeliver">This message can\'t be delivered right now.</string>
     <string name="dm_sendErrorGeneric">Couldn\'t send your message. Please try again.</string>
@@ -1566,7 +1572,7 @@
     <string name="channel_unknownSender">Member</string>
     <string name="channel_openSenderProfile">Open %1$s\'s profile</string>
     <string name="channel_sendErrorSignedOut">Please sign in to send messages.</string>
-    <string name="channel_sendErrorNotMember">Chat is available to active members.</string>
+    <string name="channel_sendErrorNotMember">Your account cannot access chat right now.</string>
     <string name="channel_sendErrorInvalid">Enter a message to send.</string>
     <string name="channel_sendErrorCannotDeliver">This message can\'t be delivered right now.</string>
     <string name="channel_sendErrorGeneric">Couldn\'t send your message. Please try again.</string>

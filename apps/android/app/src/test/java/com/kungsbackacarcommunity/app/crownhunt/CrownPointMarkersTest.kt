@@ -52,15 +52,15 @@ class CrownPointMarkersTest {
     // ---- Paywall (crownHuntRequirePaid) ----------------------------------
 
     @Test
-    fun crownHuntUnlockedFollowsTheFlagThenTheEntitlement() {
+    fun crownHuntUnlockedForFreeAndPaidRegardlessOfLegacyFlag() {
         // Flag OFF: unlocked for everyone, regardless of entitlement — exactly
         // today's behaviour (the shipped default).
         assertTrue(CrownPointMarkers.crownHuntUnlocked(requirePaid = false, activeMember = false))
         assertTrue(CrownPointMarkers.crownHuntUnlocked(requirePaid = false, activeMember = true))
-        // Flag ON: unlocked only for a paid (activeMember) member.
+        // Legacy flag ON: free accounts still participate.
         assertTrue(CrownPointMarkers.crownHuntUnlocked(requirePaid = true, activeMember = true))
-        assertFalse(
-            "paywall on + free member must be locked",
+        assertTrue(
+            "legacy paywall must not lock free participation",
             CrownPointMarkers.crownHuntUnlocked(requirePaid = true, activeMember = false),
         )
     }

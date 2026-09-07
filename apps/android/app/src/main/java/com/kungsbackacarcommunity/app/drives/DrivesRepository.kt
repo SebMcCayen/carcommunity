@@ -25,9 +25,9 @@ sealed interface DrivesState {
  * [code] is the callable status name (e.g. Firebase Functions'
  * `PERMISSION_DENIED`), carried out of the Firebase layer so the pure domain can
  * act on it without a Firebase import. It exists for two reasons:
- * - `drives-save` is MEMBER-gated (functions/src/drives/saveDrive.ts uses
- *   requireMemberActor), so a non-member is refused permanently. That is not a
- *   transient failure and must not be presented as "try again";
+ * - `drives-save` uses requireActiveActor, so a restricted account is refused
+ *   permanently. That is not a transient failure and must not be presented
+ *   as "try again";
  * - the auto error report files a stable, fingerprintable code instead of a
  *   free-text message.
  *
@@ -67,7 +67,7 @@ data class DriveSaveResult(
 /**
  * Saved-drives access (Phase 12 slice 12). Firebase-free for testability.
  * Reads are owner-scoped (`rides.userId == uid`, rules-gated); mutations are
- * save (via the member-gated `drives-save` callable) and delete (via
+ * save (via the active-account `drives-save` callable) and delete (via
  * `drives-delete`).
  */
 interface DrivesRepository {
@@ -85,7 +85,7 @@ interface DrivesRepository {
      *
      * @throws DriveSaveException on any save failure, carrying the callable
      *   status code (null if the failure had none) so callers can separate a
-     *   permanent refusal (the member gate) from a retryable fault.
+     *   permanent refusal (restricted account access) from a retryable fault.
      */
     suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult
 

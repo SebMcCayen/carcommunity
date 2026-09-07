@@ -223,17 +223,25 @@ afterAll(async () => {
 });
 
 describe('drives-save', () => {
+  it('rejects a stale token after profile removal without creating a drive', async () => {
+    const user = await createProvisionedUser('drives-missing-profile');
+    await signInAs(user);
+    await adminDb.collection('users').doc(user.uid).delete();
+    expect(await callableErrorCode(call('drives-save', validSave))).toBe(
+      'functions/permission-denied',
+    );
+    expect((await adminDb.collection('rides').where('userId', '==', user.uid).get()).empty).toBe(
+      true,
+    );
+  });
+
   it('rejects unauthenticated callers, but SAVES for a signed-in non-member', async () => {
     await auth.signOut();
     expect(await callableErrorCode(call('drives-save', validSave))).toBe(
       'functions/unauthenticated',
     );
 
-    // Member gating is disabled (functions/src/shared/memberGating.ts): a
-    // non-member may save a drive they recorded. This is the bug Seb hit —
-    // recording was never member-gated but saving was, so a non-member could
-    // record a drive and then be refused when saving it, with no way to keep
-    // the recording. RE-LOCKING MUST RE-ALIGN BOTH GATES or it returns.
+    // Saving is permanently free, independent of the legacy member switch.
     await signInAs(freeUser);
     const saved = (await call('drives-save', validSave)).data as { rideId: string };
     expect(typeof saved.rideId).toBe('string');
@@ -250,29 +258,22 @@ describe('drives-save', () => {
     );
   });
 
-  /**
-   * Regression (v0.8.0 "Could not save the drive") — now INVERTED, because
-   * this PR is the fix for it.
-   *
-   * The diagnosis, preserved: the owner/admin ROLE does NOT bypass the member
-   * entitlement here. saveDrive gates on requireMemberActor (activeMember
-   * only), not requireMemberOrAdminActor (role bypass), so an owner whose
-   * users/{uid}.activeMember was false got refused exactly like a free user.
-   * That was the whole delta between live-startSession (requireActiveActor —
-   * free, succeeded) and drives-save (requireMemberActor — refused) for the
-   * same account in the same session.
-   *
-   * The role still does not bypass anything — that asymmetry is untouched.
-   * What changed is the gate itself: member gating is DISABLED
-   * (functions/src/shared/memberGating.ts), so requireMemberActor now resolves
-   * to active-actor semantics and the unentitled owner saves like anyone else.
-   * Re-locking (MEMBER_GATING_ENABLED = true) restores the refusal — and the
-   * original bug with it, unless the recording ENTRY is gated to match.
-   */
-  it('SAVES for an owner without an active membership (gating disabled)', async () => {
+  it('SAVES for an owner without an active membership', async () => {
     await signInAs(unentitledOwner);
     const saved = (await call('drives-save', validSave)).data as { rideId: string };
     expect(typeof saved.rideId).toBe('string');
+  });
+
+  it('rejects a deleted free caller', async () => {
+    const deleted = await createProvisionedUser('drives-deleted-free');
+    await adminDb
+      .collection('users')
+      .doc(deleted.uid)
+      .set({ activeMember: false, deleted: true }, { merge: true });
+    await signInAs(deleted);
+    expect(await callableErrorCode(call('drives-save', validSave))).toBe(
+      'functions/permission-denied',
+    );
   });
 
   it('STILL rejects a SUSPENDED owner (role never bypassed suspension either)', async () => {
@@ -632,6 +633,22 @@ describe('drives-routeUrl signed route access', () => {
     );
   });
 
+  it.each(['suspended', 'deleted', 'missing'])(
+    'denies route links for a %s profile with a stale token',
+    async (state) => {
+      const user = await createProvisionedUser(`routeurl-restricted-${state}`);
+      await setPaidTier(user, 'supporter');
+      const [rideId] = await seedDriveHistory(user, [0]);
+      await signInAs(user);
+      const profile = adminDb.collection('users').doc(user.uid);
+      if (state === 'missing') await profile.delete();
+      else await profile.update({ [state]: true });
+      expect(await callableErrorCode(call('drives-routeUrl', { rideId }))).toBe(
+        'functions/permission-denied',
+      );
+    },
+  );
+
   it("returns not-found for a missing ride and for another owner's ride (no existence leak)", async () => {
     const owner = await createProvisionedUser('routeurl-owner');
     const [ownedRideId] = await seedDriveHistory(owner, [0]);
@@ -721,12 +738,11 @@ describe('drives-routeUrl signed route access', () => {
   });
 });
 
-describe('drives-stats tier-scoped aggregation', () => {
+describe('drives-stats free lifetime aggregation', () => {
   // Identical drive set for three users on different tiers. Ages in days:
   // [0,1,2,3,4,5,100,200]; distanceMeters=(i+1)*1000; duration=60;
-  // avg=(i+1); max=(i+1)*2. Tier windows select different subsets:
-  //   Community = newest 5 (i 0..4), Plus = last 90 days (i 0..5),
-  //   Supporter = all 8. So every aggregate differs by tier.
+  // avg=(i+1); max=(i+1)*2. Every tier gets all 8 in statistics,
+  // independently of the separate history browsing window.
   const SPECS: StatsDriveSpec[] = [0, 1, 2, 3, 4, 5, 100, 200].map((ageDays, i) => ({
     ageDays,
     distanceMeters: (i + 1) * 1_000,
@@ -735,37 +751,39 @@ describe('drives-stats tier-scoped aggregation', () => {
     maxSpeedMetersPerSecond: (i + 1) * 2,
   }));
 
-  it('Community aggregates only its newest five drives', async () => {
+  it('Community aggregates all retained drives without exposing individual records', async () => {
     const user = await createProvisionedUser('stats-community');
     await seedStatsDrives(user, SPECS);
     await signInAs(user);
     const data = (await call('drives-stats', {})).data as Record<string, number | string>;
     expect(data.tier).toBe('community');
-    expect(data.totalDrives).toBe(5);
-    expect(data.totalDistanceMeters).toBe(15_000); // 1000+2000+3000+4000+5000
-    expect(data.totalDurationSeconds).toBe(300); // 5 * 60
-    expect(data.longestDriveMeters).toBe(5_000);
-    expect(data.fastestAverageSpeedMps).toBe(5);
-    expect(data.highestMaxSpeedMps).toBe(10);
-    expect(data.averageDriveMeters).toBe(3_000); // 15000 / 5
+    expect(data.totalDrives).toBe(8);
+    expect(data.totalDistanceMeters).toBe(36_000);
+    expect(data.totalDurationSeconds).toBe(480);
+    expect(data.longestDriveMeters).toBe(8_000);
+    expect(data.fastestAverageSpeedMps).toBe(8);
+    expect(data.highestMaxSpeedMps).toBe(16);
+    expect(data.averageDriveMeters).toBe(4_500);
+    expect(data).not.toHaveProperty('drives');
+    expect(data).not.toHaveProperty('rideIds');
     // No month range supplied → thisMonth fields are zeroed.
     expect(data.thisMonthDrives).toBe(0);
     expect(data.thisMonthDistanceMeters).toBe(0);
     expect(typeof data.serverNowMillis).toBe('number');
   });
 
-  it('Plus aggregates the rolling 90-day window', async () => {
+  it('Plus statistics include drives older than 90 days', async () => {
     const user = await createProvisionedUser('stats-plus');
     await setPaidTier(user, 'plus');
     await seedStatsDrives(user, SPECS);
     await signInAs(user);
     const data = (await call('drives-stats', {})).data as Record<string, number | string>;
     expect(data.tier).toBe('plus');
-    expect(data.totalDrives).toBe(6); // ages 0..5 within 90 days
-    expect(data.totalDistanceMeters).toBe(21_000); // 15000 + 6000
-    expect(data.longestDriveMeters).toBe(6_000);
-    expect(data.fastestAverageSpeedMps).toBe(6);
-    expect(data.highestMaxSpeedMps).toBe(12);
+    expect(data.totalDrives).toBe(8);
+    expect(data.totalDistanceMeters).toBe(36_000);
+    expect(data.longestDriveMeters).toBe(8_000);
+    expect(data.fastestAverageSpeedMps).toBe(8);
+    expect(data.highestMaxSpeedMps).toBe(16);
   });
 
   it('Supporter aggregates the complete history', async () => {
@@ -783,11 +801,7 @@ describe('drives-stats tier-scoped aggregation', () => {
     expect(data.highestMaxSpeedMps).toBe(16);
   });
 
-  it('never lets the month range widen access past the tier window (Community intersection)', async () => {
-    // Seven drives all created within the last week — so ALL of them fall
-    // inside the supplied month window — but Community may only see its newest
-    // five. thisMonthDrives must therefore be 5, not 7: the month range is
-    // intersected with the tier-visible set, never applied to hidden history.
+  it('includes all Community drives within the month even beyond the five-history limit', async () => {
     const user = await createProvisionedUser('stats-intersect');
     await seedStatsDrives(
       user,
@@ -808,11 +822,9 @@ describe('drives-stats tier-scoped aggregation', () => {
       })
     ).data as Record<string, number | string>;
     expect(data.tier).toBe('community');
-    expect(data.totalDrives).toBe(5);
-    // The two hidden drives (i 5,6) are inside the month window but NOT visible,
-    // so they are excluded from the month tally.
-    expect(data.thisMonthDrives).toBe(5);
-    expect(data.thisMonthDistanceMeters).toBe(15_000);
+    expect(data.totalDrives).toBe(7);
+    expect(data.thisMonthDrives).toBe(7);
+    expect(data.thisMonthDistanceMeters).toBe(28_000);
   });
 
   it('applies the month range as a real filter for a paid tier', async () => {
@@ -822,8 +834,20 @@ describe('drives-stats tier-scoped aggregation', () => {
     const user = await createProvisionedUser('stats-month-filter');
     await setPaidTier(user, 'supporter');
     await seedStatsDrives(user, [
-      { ageDays: 0, distanceMeters: 4_000, durationSeconds: 60, averageSpeedMetersPerSecond: 5, maxSpeedMetersPerSecond: 10 },
-      { ageDays: 40, distanceMeters: 9_000, durationSeconds: 60, averageSpeedMetersPerSecond: 9, maxSpeedMetersPerSecond: 18 },
+      {
+        ageDays: 0,
+        distanceMeters: 4_000,
+        durationSeconds: 60,
+        averageSpeedMetersPerSecond: 5,
+        maxSpeedMetersPerSecond: 10,
+      },
+      {
+        ageDays: 40,
+        distanceMeters: 9_000,
+        durationSeconds: 60,
+        averageSpeedMetersPerSecond: 9,
+        maxSpeedMetersPerSecond: 18,
+      },
     ]);
     await signInAs(user);
     const now = Date.now();
@@ -844,9 +868,9 @@ describe('drives-stats tier-scoped aggregation', () => {
     await signInAs(user);
     const now = Date.now();
     // Half-supplied range.
-    expect(
-      await callableErrorCode(call('drives-stats', { monthStartMillis: now - DAY })),
-    ).toBe('functions/invalid-argument');
+    expect(await callableErrorCode(call('drives-stats', { monthStartMillis: now - DAY }))).toBe(
+      'functions/invalid-argument',
+    );
     // Entirely in the future (does not straddle now).
     expect(
       await callableErrorCode(
@@ -862,7 +886,10 @@ describe('drives-stats tier-scoped aggregation', () => {
     // Non-integer bound.
     expect(
       await callableErrorCode(
-        call('drives-stats', { monthStartMillis: now - 10 * DAY + 0.5, monthEndMillis: now + 20 * DAY }),
+        call('drives-stats', {
+          monthStartMillis: now - 10 * DAY + 0.5,
+          monthEndMillis: now + 20 * DAY,
+        }),
       ),
     ).toBe('functions/invalid-argument');
   });
@@ -918,7 +945,13 @@ describe('drives-lifetimeStats true-lifetime aggregation (un-paywalled)', () => 
   it('drops a malformed-duration drive entirely (excluded from totalDrives and the sums)', async () => {
     const user = await createProvisionedUser('lifetime-malformed');
     await seedStatsDrives(user, [
-      { ageDays: 0, distanceMeters: 3_000, durationSeconds: 60, averageSpeedMetersPerSecond: 5, maxSpeedMetersPerSecond: 10 },
+      {
+        ageDays: 0,
+        distanceMeters: 3_000,
+        durationSeconds: 60,
+        averageSpeedMetersPerSecond: 5,
+        maxSpeedMetersPerSecond: 10,
+      },
     ]);
     // A second ride with a corrupt (negative) durationSeconds, written directly.
     await adminDb
@@ -962,14 +995,26 @@ describe('drives-lifetimeStats true-lifetime aggregation (un-paywalled)', () => 
     expect(data.averageDriveMeters).toBe(0);
   });
 
-  it('only ever aggregates the CALLER\'s own drives', async () => {
+  it("only ever aggregates the CALLER's own drives", async () => {
     const owner = await createProvisionedUser('lifetime-owner');
     const other = await createProvisionedUser('lifetime-other');
     await seedStatsDrives(owner, [
-      { ageDays: 0, distanceMeters: 1_000, durationSeconds: 60, averageSpeedMetersPerSecond: 5, maxSpeedMetersPerSecond: 10 },
+      {
+        ageDays: 0,
+        distanceMeters: 1_000,
+        durationSeconds: 60,
+        averageSpeedMetersPerSecond: 5,
+        maxSpeedMetersPerSecond: 10,
+      },
     ]);
     await seedStatsDrives(other, [
-      { ageDays: 0, distanceMeters: 8_000, durationSeconds: 60, averageSpeedMetersPerSecond: 9, maxSpeedMetersPerSecond: 18 },
+      {
+        ageDays: 0,
+        distanceMeters: 8_000,
+        durationSeconds: 60,
+        averageSpeedMetersPerSecond: 9,
+        maxSpeedMetersPerSecond: 18,
+      },
     ]);
     await signInAs(owner);
     const data = (await call('drives-lifetimeStats', {})).data as Record<string, number>;
@@ -1046,13 +1091,21 @@ describe('drives-listDeletable owner inventory', () => {
 
     const second = (
       await call('drives-listDeletable', { pageSize: 2, cursorRideId: first.nextCursorRideId })
-    ).data as { drives: Array<{ rideId: string }>; hasMore: boolean; nextCursorRideId: string | null };
+    ).data as {
+      drives: Array<{ rideId: string }>;
+      hasMore: boolean;
+      nextCursorRideId: string | null;
+    };
     expect(second.drives.map((d) => d.rideId)).toEqual(rideIds.slice(2, 4));
     expect(second.hasMore).toBe(true);
 
     const third = (
       await call('drives-listDeletable', { pageSize: 2, cursorRideId: second.nextCursorRideId })
-    ).data as { drives: Array<{ rideId: string }>; hasMore: boolean; nextCursorRideId: string | null };
+    ).data as {
+      drives: Array<{ rideId: string }>;
+      hasMore: boolean;
+      nextCursorRideId: string | null;
+    };
     expect(third.drives.map((d) => d.rideId)).toEqual(rideIds.slice(4, 5));
     expect(third.hasMore).toBe(false);
     expect(third.nextCursorRideId).toBeNull();

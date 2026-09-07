@@ -66,6 +66,7 @@ data class ClaimOutcome(
     val result: CrownHuntClaimResult,
     val pointsAwarded: Int?,
     val newBalance: Int?,
+    val allowance: CrownAllowance? = null,
 )
 
 object CrownHunt {

@@ -3,7 +3,7 @@
  * (contracts/functions/functions.json: police.remove).
  *
  * Deployed via the `police` export group as `police-remove` (europe-west1).
- * Member-gated (requireMemberActor), matching police.report — reporting a pin and
+ * Active-account-gated (requireActiveActor), matching police.report — reporting a pin and
  * un-reporting it demand the same trust level. A caller may remove ONLY a pin they
  * reported: the stored (never-returned) `reporterUid` is compared to the caller and
  * anyone else is rejected with permission-denied. This is deliberately stricter
@@ -20,7 +20,7 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
-import { requireMemberActor } from '../shared/memberActor';
+import { requireActiveActor } from '../shared/memberActor';
 import { parseVoteInput } from './police-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 
@@ -37,7 +37,7 @@ export interface RemoveResponse {
 }
 
 export const remove = onCall(CALLABLE_OPTS, async (request): Promise<RemoveResponse> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseVoteInput(request.data);
   if (!parsed.ok) {

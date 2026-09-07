@@ -126,5 +126,6 @@ private fun Map<String, Any?>.toClaimOutcome(): ClaimOutcome? {
         result = result,
         pointsAwarded = (this["pointsAwarded"] as? Number)?.toInt(),
         newBalance = (this["newBalance"] as? Number)?.toInt(),
+        allowance = CrownAllowance.fromWire(this["allowance"]),
     )
 }

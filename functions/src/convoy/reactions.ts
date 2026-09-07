@@ -36,7 +36,7 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { requireMemberActor } from '../shared/memberActor';
+import { requireActiveActor } from '../shared/memberActor';
 import { requireAcceptedConvoyMember } from '../chatchannels/convoyMembership';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 import {
@@ -89,7 +89,7 @@ export interface SendReactionResponse {
 }
 
 export const sendReaction = onCall(CALLABLE_OPTS, async (request): Promise<SendReactionResponse> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseSendReactionInput(request.data);
   if (!parsed.ok) {

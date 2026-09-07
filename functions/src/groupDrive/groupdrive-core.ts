@@ -79,7 +79,7 @@ export const parseLeaveGroupDriveInput = (d: unknown) =>
 
 // ---------------------------------------------------------------------------
 // Guards (legacy canJoinEventGroupDrive, decomposed — the member check is
-// requireMemberActor's job)
+// requireActiveActor's job)
 // ---------------------------------------------------------------------------
 
 export type GuardResult =

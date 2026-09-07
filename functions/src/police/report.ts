@@ -1,9 +1,9 @@
 /**
- * police.report — member-gated create of a short-lived, user-reported POLICE pin
+ * police.report — active-account-gated create of a short-lived, user-reported POLICE pin
  * (contracts/functions/functions.json: police.report).
  *
  * Deployed via the `police` export group as `police-report` (europe-west1).
- * Requires an active member (requireMemberActor). The pin is written to
+ * Requires an active account (requireActiveActor). The pin is written to
  * `policeReports/{id}` with a computed `geoCell` (nearby-query index) and a SHORT
  * `expiresAt` TTL ({@link policeExpiryFor}); `createdAt` is a server timestamp.
  * All writes flow through this callable — clients cannot write the collection
@@ -20,7 +20,7 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { requireMemberActor } from '../shared/memberActor';
+import { requireActiveActor } from '../shared/memberActor';
 import {
   POLICE_REPORT_RATE_LIMIT_COLLECTION,
   buildPoliceReportFields,
@@ -43,7 +43,7 @@ const CALLABLE_OPTS = {
 };
 
 export const report = onCall(CALLABLE_OPTS, async (request): Promise<PoliceReportView> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   // Validate BEFORE the rate limit so a malformed call never burns the caller's
   // report window on a bad payload.

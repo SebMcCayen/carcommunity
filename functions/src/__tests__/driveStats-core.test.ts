@@ -16,16 +16,19 @@ const AUG_END = Date.parse('2026-09-01T00:00:00.000Z');
 describe('drive-stats input parsing', () => {
   it('accepts an empty request and a paired month range', () => {
     expect(parseDriveStatsInput({})).toEqual({ ok: true, input: {} });
-    expect(
-      parseDriveStatsInput({ monthStartMillis: AUG_START, monthEndMillis: AUG_END }),
-    ).toEqual({ ok: true, input: { monthStartMillis: AUG_START, monthEndMillis: AUG_END } });
+    expect(parseDriveStatsInput({ monthStartMillis: AUG_START, monthEndMillis: AUG_END })).toEqual({
+      ok: true,
+      input: { monthStartMillis: AUG_START, monthEndMillis: AUG_END },
+    });
   });
 
   it('rejects unknown fields, non-integers, and a half-supplied month range', () => {
     expect(parseDriveStatsInput({ extra: true }).ok).toBe(false);
     expect(parseDriveStatsInput({ monthStartMillis: 1.5, monthEndMillis: 2 }).ok).toBe(false);
     // NaN / Infinity are rejected by z.number().int() under zod v4.
-    expect(parseDriveStatsInput({ monthStartMillis: Number.NaN, monthEndMillis: 2 }).ok).toBe(false);
+    expect(parseDriveStatsInput({ monthStartMillis: Number.NaN, monthEndMillis: 2 }).ok).toBe(
+      false,
+    );
     expect(parseDriveStatsInput({ monthStartMillis: AUG_START }).ok).toBe(false);
     expect(parseDriveStatsInput({ monthEndMillis: AUG_END }).ok).toBe(false);
   });
@@ -66,9 +69,9 @@ describe('drive-stats month-range validation', () => {
   });
 
   it('rejects an inverted range (start after end)', () => {
-    expect(resolveMonthRange({ monthStartMillis: AUG_END, monthEndMillis: AUG_START }, NOW).ok).toBe(
-      false,
-    );
+    expect(
+      resolveMonthRange({ monthStartMillis: AUG_END, monthEndMillis: AUG_START }, NOW).ok,
+    ).toBe(false);
   });
 });
 
@@ -109,9 +112,15 @@ describe('drive-stats sample validation (buildDriveStatSample)', () => {
     expect(scanned.totalDurationSeconds).toBeGreaterThanOrEqual(0);
   });
 
-  it('DROPS a drive with a missing/invalid createdAt', () => {
-    expect(buildDriveStatSample({ ...base, createdAtMillis: null })).toBeNull();
-    expect(buildDriveStatSample({ ...base, createdAtMillis: Number.NaN })).toBeNull();
+  it('counts legacy drives without a valid date in lifetime totals, not this month', () => {
+    for (const createdAtMillis of [null, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const sample = buildDriveStatSample({ ...base, createdAtMillis });
+      expect(sample).toEqual({ ...base, createdAtMillis: null });
+      const stats = scanDriveStats([sample!], { startMillis: AUG_START, endMillis: AUG_END });
+      expect(stats.totalDistanceMeters).toBe(1_000);
+      expect(stats.totalDurationSeconds).toBe(600);
+      expect(stats.thisMonthDrives).toBe(0);
+    }
   });
 
   it('degrades malformed distance/speed fields to null without dropping the drive', () => {
@@ -133,14 +142,38 @@ describe('drive-stats sample validation (buildDriveStatSample)', () => {
 describe('drive-stats in-memory scan', () => {
   const samples: DriveStatSample[] = [
     // In August (this month).
-    { distanceMeters: 1_000, durationSeconds: 100, averageSpeedMps: 10, maxSpeedMps: 20, createdAtMillis: AUG_START + DAY_MS },
-    { distanceMeters: 5_000, durationSeconds: 200, averageSpeedMps: 25, maxSpeedMps: 40, createdAtMillis: AUG_START + 2 * DAY_MS },
+    {
+      distanceMeters: 1_000,
+      durationSeconds: 100,
+      averageSpeedMps: 10,
+      maxSpeedMps: 20,
+      createdAtMillis: AUG_START + DAY_MS,
+    },
+    {
+      distanceMeters: 5_000,
+      durationSeconds: 200,
+      averageSpeedMps: 25,
+      maxSpeedMps: 40,
+      createdAtMillis: AUG_START + 2 * DAY_MS,
+    },
     // Outside August (previous month) — must NOT count toward thisMonth, but
     // DOES contribute to the totals and max/longest figures (still tier-visible).
-    { distanceMeters: 9_000, durationSeconds: 300, averageSpeedMps: 30, maxSpeedMps: 55, createdAtMillis: AUG_START - 5 * DAY_MS },
+    {
+      distanceMeters: 9_000,
+      durationSeconds: 300,
+      averageSpeedMps: 30,
+      maxSpeedMps: 55,
+      createdAtMillis: AUG_START - 5 * DAY_MS,
+    },
     // Summary-only save: null distance/speeds must never lower a maximum, and its
     // null distance is skipped in the distance total but its duration still counts.
-    { distanceMeters: null, durationSeconds: 400, averageSpeedMps: null, maxSpeedMps: null, createdAtMillis: AUG_START + 3 * DAY_MS },
+    {
+      distanceMeters: null,
+      durationSeconds: 400,
+      averageSpeedMps: null,
+      maxSpeedMps: null,
+      createdAtMillis: AUG_START + 3 * DAY_MS,
+    },
   ];
 
   it('computes totals and maxima across ALL visible samples, month tallies over the range only', () => {
@@ -165,8 +198,20 @@ describe('drive-stats in-memory scan', () => {
   it('treats the month window as half-open [start, end)', () => {
     const scanned = scanDriveStats(
       [
-        { distanceMeters: 1, durationSeconds: 10, averageSpeedMps: null, maxSpeedMps: null, createdAtMillis: AUG_START },
-        { distanceMeters: 2, durationSeconds: 20, averageSpeedMps: null, maxSpeedMps: null, createdAtMillis: AUG_END },
+        {
+          distanceMeters: 1,
+          durationSeconds: 10,
+          averageSpeedMps: null,
+          maxSpeedMps: null,
+          createdAtMillis: AUG_START,
+        },
+        {
+          distanceMeters: 2,
+          durationSeconds: 20,
+          averageSpeedMps: null,
+          maxSpeedMps: null,
+          createdAtMillis: AUG_END,
+        },
       ],
       { startMillis: AUG_START, endMillis: AUG_END },
     );

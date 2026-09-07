@@ -24,8 +24,7 @@ import { logger } from 'firebase-functions';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { readFeatureFlag } from '../shared/featureFlags';
-import { toUserAccessState } from '../shared/access';
-import { memberGateAllows } from '../shared/memberGating';
+import { isRestricted, toUserAccessState } from '../shared/access';
 import { debitPoints } from '../points/ledger';
 import { DEBIT_OVERDRAFT_MESSAGE, toStoredBalance } from '../points/points-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
@@ -102,7 +101,7 @@ export const buyPerk = onCall(CALLABLE_OPTS, async (request): Promise<BuyPerkRes
   // 2. Account status. Suspended/deleted users cannot spend (debitPoints also
   // enforces this, but reject early with a member-facing message).
   const userSnap = await db.collection('users').doc(uid).get();
-  if (!memberGateAllows(toUserAccessState(userSnap.data()))) {
+  if (!userSnap.exists || isRestricted(toUserAccessState(userSnap.data()))) {
     logger.info('crownHunt.buyPerk rejected', {
       reason: PERK_PURCHASE_REASON_SHOP_UNAVAILABLE,
       cause: 'account_blocked',

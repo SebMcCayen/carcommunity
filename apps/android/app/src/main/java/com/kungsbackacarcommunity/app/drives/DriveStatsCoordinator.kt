@@ -14,21 +14,21 @@ sealed interface DriveStatsUiState {
 
     /**
      * The aggregate loaded. [snapshot] is server-authoritative over the caller's
-     * tier-visible drives; the screen renders its own "no drives yet" empty state
+     * retained drives; the screen renders its own "no drives yet" empty state
      * when [DriveStatsSnapshot.totalDrives] is 0.
      */
     data class Loaded(val snapshot: DriveStatsSnapshot) : DriveStatsUiState
 }
 
 /**
- * Loads the tier-visible statistics aggregate ([drives-stats]) as a [StateFlow],
+ * Loads the free lifetime statistics aggregate ([drives-stats]) as a [StateFlow],
  * replacing the old client-side fold over the History list (which silently became
  * "loaded page only" once history was paginated). Pure Kotlin (Firebase-free) so
  * it is unit-testable with a fake [DriveHistoryRepository].
  *
  * [load] is called when the Statistics page opens and again on any
- * subscription-tier change, so the figures always reflect the caller's current
- * tier. The month bounds are the viewer's LOCAL calendar month, resolved at the
+ * subscription-tier change for compatibility; totals no longer depend on tier.
+ * The month bounds are the viewer's LOCAL calendar month, resolved at the
  * composable edge ([DrivePeriodBoundaries]) and validated server-side.
  */
 class DriveStatsCoordinator(

@@ -39,22 +39,11 @@ object CrownPointMarkers {
         unlocked: Boolean = true,
     ): Boolean = featureEnabled && participating && unlocked
 
-    /**
-     * Whether Kronjakt is UNLOCKED for this member under the paywall.
-     *
-     * The dark `crownHuntRequirePaid` flag decides. While it is OFF
-     * ([requirePaid] false) Kronjakt is unlocked for everyone — exactly today's
-     * behaviour. While it is ON, collection is a PAID feature and only a member
-     * holding the paid entitlement ([activeMember], i.e. any active paid tier —
-     * Plus or Supporter both set it) is unlocked; a free member is locked out of
-     * the crown layer and the collect button, and sees an upgrade prompt.
-     *
-     * Mirrors the SERVER gate exactly (crownHuntGateAllows / isPaidCrownHunter),
-     * which keys off the same `activeMember` entitlement — the UI never offers an
-     * action the backend would refuse. Pure, so both directions are unit-tested.
+    /** Legacy flag arguments are ignored: free accounts can participate too.
+     * Account restrictions are enforced by the session and server.
      */
-    fun crownHuntUnlocked(requirePaid: Boolean, activeMember: Boolean): Boolean =
-        !requirePaid || activeMember
+    @Suppress("UNUSED_PARAMETER")
+    fun crownHuntUnlocked(requirePaid: Boolean, activeMember: Boolean): Boolean = true
 
     /**
      * The markers for [points], or an EMPTY list when [visible] is false.

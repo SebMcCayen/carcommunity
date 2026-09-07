@@ -108,6 +108,17 @@ afterEach(() => {
 });
 
 describe('SubscriptionPage query-param flow', () => {
+  it('explains the free and paid access policy without granting anything', async () => {
+    await renderAt('/subscription');
+    const policy = container.querySelector('details');
+    expect(policy?.textContent).toContain(t('subscription.accessPolicyFree'));
+    expect(policy?.textContent).toContain(t('subscription.accessPolicyPaid'));
+    expect(policy?.textContent).toContain(t('subscription.accessPolicyHistory'));
+    expect(policy?.textContent).toContain(t('subscription.accessPolicyRollout'));
+    expect(grantMock).not.toHaveBeenCalled();
+    expect(revokeMock).not.toHaveBeenCalled();
+  });
+
   it('prefills, locks read-only, shows the hint, and auto-looks-up a preset uid', async () => {
     await renderAt('/subscription?uid=uid-1');
 
@@ -144,10 +155,7 @@ describe('SubscriptionPage query-param flow', () => {
     expect(reason).not.toBeNull();
     await act(async () => {
       const el = reason as HTMLInputElement;
-      const setter = Object.getOwnPropertyDescriptor(
-        HTMLInputElement.prototype,
-        'value',
-      )?.set;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
       setter?.call(el, 'granting for A');
       el.dispatchEvent(new Event('input', { bubbles: true }));
     });

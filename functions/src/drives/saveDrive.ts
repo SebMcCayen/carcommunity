@@ -9,10 +9,9 @@
  * route thumbnail (route-thumbnail.ts), and creates `rides/{rideId}`. The client then
  * uploads the compressed route file and map preview to the canonical
  * Cloud Storage paths returned in the response (`rideRoutes/{uid}/{rideId}/`,
- * owner+member-gated by storage rules).
+ * owner-gated for uploads by storage rules).
  *
- * Member-only (legacy parity: free users cannot save drives; drives saved
- * during a previous membership remain listable/deletable). Idempotent per
+ * Available permanently to authenticated, non-restricted accounts. Idempotent per
  * sourceSessionId: a retry returns the existing drive instead of duplicating
  * it (legacy sourceLiveLocationSessionId dedupe).
  *
@@ -25,7 +24,7 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { requireMemberActor } from '../shared/memberActor';
+import { requireActiveActor } from '../shared/memberActor';
 import {
   buildRideDocument,
   computeDriveStats,
@@ -67,14 +66,14 @@ export const saveDrive = onCall(
   async (request): Promise<SaveDriveResponse> => {
     // Captured as the handler progresses so an unexpected failure downstream can
     // be logged with triage context (see mapSaveDriveError). uid is seeded from
-    // the auth context up front so it is still available if requireMemberActor
+    // the auth context up front so it is still available if requireActiveActor
     // throws inside its users/{uid} read — the exact transient case #800 targets;
     // the rest stay undefined until their step succeeds.
     let uid: string | undefined = request.auth?.uid;
     let sourceSessionId: string | undefined;
     let pointCount: number | undefined;
     try {
-      const actor = await requireMemberActor(request);
+      const actor = await requireActiveActor(request);
       uid = actor.uid;
 
       const parsed = parseSaveDriveInput(request.data);
@@ -108,6 +107,16 @@ export const saveDrive = onCall(
         : ridesRef.doc();
 
       const alreadySaved = await db.runTransaction(async (tx) => {
+        // Keep saving aligned with route uploads and serialize against profile
+        // removal/restriction changes, even when the caller has a stale token.
+        const profile = await tx.get(db.collection('users').doc(actor.uid));
+        if (
+          !profile.exists ||
+          profile.data()?.suspended === true ||
+          profile.data()?.deleted === true
+        ) {
+          throw new HttpsError('permission-denied', 'Account access is restricted.');
+        }
         const existing = await tx.get(rideRef);
         if (existing.exists) {
           return true;

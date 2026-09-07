@@ -51,6 +51,15 @@
           "type": "boolean",
           "description": "Subscription entitlement — backend-managed only."
         },
+        "supporterBadgeEligible": {
+          "type": "boolean",
+          "description": "Backend-managed cosmetic Supporter eligibility. Absent means false. Never grants feature access."
+        },
+        "showSupporterBadge": {
+          "type": "boolean",
+          "default": true,
+          "description": "Owner-writable visibility preference; absent means true. Preserved through expiry, downgrade and reactivation."
+        },
         "suspended": {
           "type": "boolean",
           "description": "Moderation state — backend-managed only."

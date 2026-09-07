@@ -458,8 +458,9 @@ private fun CrownProximityBar(distanceMeters: Double, collectRadiusMeters: Doubl
 @Composable
 private fun CrownOutcomeBody(outcome: CrownSpawnClaimOutcome, onDismiss: () -> Unit) {
     val awarded = outcome.result == CrownSpawnClaimResult.AWARDED
+    CrownAllowanceText(outcome.allowance)
     Text(
-        text = stringResource(CrownSpawnMessages.resultMessageRes(outcome.result)),
+        text = stringResource(if (outcome.result == CrownSpawnClaimResult.DAILY_LIMIT_REACHED && outcome.allowance != null) R.string.crownHunt_allowanceReached else CrownSpawnMessages.resultMessageRes(outcome.result)),
         style =
             if (awarded) {
                 MaterialTheme.typography.titleMedium

@@ -80,16 +80,8 @@ fun EventDetailScreen(
     onRsvp: (RsvpStatus) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    // Whether the viewer may see the FULL event details (exact street address +
-    // long description + the attendee list) rather than the basic view + upgrade
-    // prompt — the Slice-D gate decision (admin OR gate-off OR paid subscriber;
-    // see Events.showFullDetails). When false the viewer sees the basic view —
-    // title, date/time, general area, place name and short summary, all rendered
-    // above the gate — plus an upgrade prompt in place of the full detail card,
-    // and no "who answered" roster. The attendee list is ALSO enforced
-    // server-side (events-listAttendees returns requiresPaid for a free caller);
-    // this flag is the UX half.
-    showFullDetails: Boolean = false,
+    // Paid identity access is independent of the free full-detail card.
+    canViewAttendees: Boolean = false,
     // Opens the subscription screen from the upgrade prompt. Null renders the
     // prompt as an informational card with no action (config-less build).
     onUpgrade: (() -> Unit)? = null,
@@ -303,24 +295,9 @@ fun EventDetailScreen(
                 }
             }
 
-            // 2. Description — the member-gated detail (long write-up + precise
-            // street address), or the membership gate. Shown only when the rules
-            // would actually serve it: passes the member gate AND published. A
-            // caller who fails the gate sees the membership upsell INSTEAD of the
-            // detail (that copy is the block, not a hint beside it, so it
-            // disappears while gating is disabled); someone who passes but is on a
-            // non-published event sees neither (the cancelled notice above already
-            // explains the state).
+            // Published full details are free for eligible signed-in users.
             if (Events.canSeeDetails(passesMemberGate, event.status)) {
-                if (showFullDetails) {
-                    DetailCard(detail)
-                } else {
-                    // Community (free): the exact address + long description are a
-                    // paid benefit. The basic view (title, date/time, general area,
-                    // place name, short summary) already renders above this gate, so
-                    // here we show only the upgrade prompt in place of the full card.
-                    UpgradeCard(onUpgrade = onUpgrade)
-                }
+                DetailCard(detail)
             } else if (!passesMemberGate) {
                 InfoCard(
                     title = stringResource(R.string.events_memberRequiredTitle),
@@ -356,6 +333,7 @@ fun EventDetailScreen(
                 // roster read needed, so it is always shown. Neutral tallies at equal
                 // weight; the same three labels the buttons above use, mirrored.
                 RsvpCountsBreakdown(event.counts)
+                if (!canViewAttendees) UpgradeCard(onUpgrade = onUpgrade)
 
                 // Who answered — behind a button so the roster never makes the page
                 // long, and its events-listAttendees read is deferred until the
@@ -367,7 +345,7 @@ fun EventDetailScreen(
                 // roster is paid). The public rsvpCounts tally still shows for
                 // everyone via RsvpCountsBreakdown, so a free viewer sees HOW MANY
                 // answered, just not WHO.
-                if (showFullDetails) {
+                if (canViewAttendees) {
                     OutlinedButton(
                         onClick = {
                             showAttendeesDialog = true
@@ -488,7 +466,7 @@ fun EventDetailScreen(
             // "Check who answered" dialog — the roster, grouped by answer. Opened
             // from the button above; the deferred roster read has already been
             // triggered (onRevealAttendees) when it opened.
-            if (showAttendeesDialog) {
+            if (showAttendeesDialog && canViewAttendees) {
                 AttendeesDialog(
                     state = attendees,
                     goingCount = event.counts.going,
@@ -1089,14 +1067,7 @@ private fun DetailCard(detail: EventDetail?) {
     }
 }
 
-/**
- * The paid-upgrade prompt shown in place of the full detail card to a free
- * (Community) viewer. States that the exact location, full description and the
- * attendee list are a paid benefit, and — when [onUpgrade] is wired — offers a
- * button into the subscription screen. Swedish primary copy
- * ("Uppgradera för fullständig information"). The basic view (title, date, area,
- * place name, summary) is unaffected: it renders above this card.
- */
+/** Explains the paid attendee-name and check-in benefits; full details stay free. */
 @Composable
 private fun UpgradeCard(onUpgrade: (() -> Unit)?) {
     Card(
@@ -1204,7 +1175,7 @@ private fun EventDetailPreview() {
             detail = EventDetail("Bring your car.", "Storgatan 1"),
             myRsvp = RsvpStatus.GOING,
             passesMemberGate = true,
-            showFullDetails = true,
+            canViewAttendees = true,
             rsvpStatus = RsvpStatusUi.Idle,
             onRsvp = {},
             onBack = {},

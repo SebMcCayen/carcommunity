@@ -167,11 +167,34 @@ describe('account purge (hard delete after retention)', () => {
     const now = new Date();
 
     // Seed data across the purge plan.
-    await adminDb.collection('userPrivate').doc(uid).collection('pushTokens').doc('t'.repeat(64))
+    await adminDb
+      .collection('userPrivate')
+      .doc(uid)
+      .collection('pushTokens')
+      .doc('t'.repeat(64))
       .set({ platform: 'android', createdAt: Timestamp.now(), lastSeenAt: Timestamp.now() });
-    await adminDb.collection('notifications').doc(uid).collection('items').doc('n1')
-      .set({ category: 'system_notice', title: 'x', previewText: 'x', read: false, createdAt: Timestamp.now() });
-    await adminDb.collection('pointsLedger').doc(uid).set({ balance: 10, updatedAt: Timestamp.now() });
+    await adminDb
+      .collection('notifications')
+      .doc(uid)
+      .collection('items')
+      .doc('n1')
+      .set({
+        category: 'system_notice',
+        title: 'x',
+        previewText: 'x',
+        read: false,
+        createdAt: Timestamp.now(),
+      });
+    await adminDb
+      .collection('pointsLedger')
+      .doc(uid)
+      .set({ balance: 10, updatedAt: Timestamp.now() });
+    await adminDb
+      .collection('crownDailyAllowances')
+      .doc(uid)
+      .collection('days')
+      .doc('2026-09-05')
+      .set({ earned: 100, updatedAt: Timestamp.now() });
     await adminDb.collection('userLifecycle').doc(uid).set({ lastLoginAt: Timestamp.now() });
     await adminDb.collection('vehicles').add({ userId: uid, make: 'Volvo' });
     await adminDb.collection('rides').add({ userId: uid, distanceMeters: 1000 });
@@ -182,15 +205,23 @@ describe('account purge (hard delete after retention)', () => {
     // (a) A 1:1 DM conversation the user is a member of + a message in it.
     const convRef = adminDb.collection('conversations').doc(`${uid}__friend`);
     await convRef.set({ members: [uid, 'friend-uid'], createdAt: Timestamp.now() });
-    await convRef.collection('messages').add({ senderUid: uid, text: 'dm hi', createdAt: Timestamp.now() });
-    await convRef.collection('messages').add({ senderUid: 'friend-uid', text: 'dm reply', createdAt: Timestamp.now() });
+    await convRef
+      .collection('messages')
+      .add({ senderUid: uid, text: 'dm hi', createdAt: Timestamp.now() });
+    await convRef
+      .collection('messages')
+      .add({ senderUid: 'friend-uid', text: 'dm reply', createdAt: Timestamp.now() });
     // (b) A community message authored by the user.
     const communityMsg = await adminDb
-      .collection('communityChat').doc('global').collection('messages')
+      .collection('communityChat')
+      .doc('global')
+      .collection('messages')
       .add({ senderUid: uid, text: 'community hi', createdAt: Timestamp.now() });
     // (c) A convoy message authored by the user.
     const convoyMsg = await adminDb
-      .collection('convoyChats').doc('convoy-1').collection('messages')
+      .collection('convoyChats')
+      .doc('convoy-1')
+      .collection('messages')
       .add({ senderUid: uid, text: 'convoy hi', createdAt: Timestamp.now() });
 
     // Social-graph MIRRORS — rows living on OTHER users' documents.
@@ -198,14 +229,37 @@ describe('account purge (hard delete after retention)', () => {
     const friendUid = 'graph-friend-uid';
     const ownFriendRef = adminDb.collection('users').doc(uid).collection('friends').doc(friendUid);
     const mirrorFriendRef = adminDb
-      .collection('users').doc(friendUid).collection('friends').doc(uid);
-    await ownFriendRef.set({ friendUid, displayName: 'Vän', avatarPath: null, createdAt: Timestamp.now() });
-    await mirrorFriendRef.set({ friendUid: uid, displayName: 'Raderad', avatarPath: null, createdAt: Timestamp.now() });
+      .collection('users')
+      .doc(friendUid)
+      .collection('friends')
+      .doc(uid);
+    await ownFriendRef.set({
+      friendUid,
+      displayName: 'Vän',
+      avatarPath: null,
+      createdAt: Timestamp.now(),
+    });
+    await mirrorFriendRef.set({
+      friendUid: uid,
+      displayName: 'Raderad',
+      avatarPath: null,
+      createdAt: Timestamp.now(),
+    });
     // (e) Pending friend requests in BOTH directions (pair-keyed, owned by neither side).
     const outgoingReqRef = adminDb.collection('friendRequests').doc(`${uid}__req-target`);
     const incomingReqRef = adminDb.collection('friendRequests').doc(`req-sender__${uid}`);
-    await outgoingReqRef.set({ fromUid: uid, toUid: 'req-target', status: 'pending', createdAt: Timestamp.now() });
-    await incomingReqRef.set({ fromUid: 'req-sender', toUid: uid, status: 'pending', createdAt: Timestamp.now() });
+    await outgoingReqRef.set({
+      fromUid: uid,
+      toUid: 'req-target',
+      status: 'pending',
+      createdAt: Timestamp.now(),
+    });
+    await incomingReqRef.set({
+      fromUid: 'req-sender',
+      toUid: uid,
+      status: 'pending',
+      createdAt: Timestamp.now(),
+    });
     // (f) Convoy membership: one the user merely belongs to, one they OWN (which
     //     must be ended so the survivors aren't stranded), one they are alone in
     //     (deleted outright).
@@ -234,7 +288,11 @@ describe('account purge (hard delete after retention)', () => {
       memberUids: [uid, 'convoy-passenger-uid'],
       members: {
         [uid]: { uid, role: 'owner', inviteStatus: 'accepted' },
-        'convoy-passenger-uid': { uid: 'convoy-passenger-uid', role: 'member', inviteStatus: 'accepted' },
+        'convoy-passenger-uid': {
+          uid: 'convoy-passenger-uid',
+          role: 'member',
+          inviteStatus: 'accepted',
+        },
       },
       memberProfiles: {
         [uid]: { displayName: 'Raderad', avatarPath: null },
@@ -397,27 +455,40 @@ describe('account purge (hard delete after retention)', () => {
     // Controls that must SURVIVE the purge:
     // - another user's community message,
     const otherCommunityMsg = await adminDb
-      .collection('communityChat').doc('global').collection('messages')
+      .collection('communityChat')
+      .doc('global')
+      .collection('messages')
       .add({ senderUid: 'other-uid', text: 'keep me', createdAt: Timestamp.now() });
     // - a DM conversation the user is NOT part of,
     const otherConvRef = adminDb.collection('conversations').doc('x__y');
     await otherConvRef.set({ members: ['x-uid', 'y-uid'], createdAt: Timestamp.now() });
     // - an EVENT chat message authored by the user (keyed on authorUserId; retained),
     const eventMsg = await adminDb
-      .collection('events').doc('event-1').collection('messages')
+      .collection('events')
+      .doc('event-1')
+      .collection('messages')
       .add({ authorUserId: uid, text: 'event hi', createdAt: Timestamp.now() });
     // - a friendship between two OTHER members (the collection-group mirror
     //   sweep must not touch friend rows that merely live next to the deleted
     //   user's),
     const bystanderFriendRef = adminDb
-      .collection('users').doc(friendUid).collection('friends').doc('bystander-uid');
+      .collection('users')
+      .doc(friendUid)
+      .collection('friends')
+      .doc('bystander-uid');
     await bystanderFriendRef.set({
-      friendUid: 'bystander-uid', displayName: 'Kvar', avatarPath: null, createdAt: Timestamp.now(),
+      friendUid: 'bystander-uid',
+      displayName: 'Kvar',
+      avatarPath: null,
+      createdAt: Timestamp.now(),
     });
     // - a friend request between two other members,
     const bystanderReqRef = adminDb.collection('friendRequests').doc('req-sender__req-target');
     await bystanderReqRef.set({
-      fromUid: 'req-sender', toUid: 'req-target', status: 'pending', createdAt: Timestamp.now(),
+      fromUid: 'req-sender',
+      toUid: 'req-target',
+      status: 'pending',
+      createdAt: Timestamp.now(),
     });
     // - a block between two OTHER members, sitting in the same `blocked`
     //   subcollection as one of the mirror rows: the collection-group sweep must
@@ -454,21 +525,27 @@ describe('account purge (hard delete after retention)', () => {
     });
 
     // A due (31-day-old pending) request and soft-delete state.
-    await adminDb.collection('accountDeletionRequests').doc(uid).set({
-      userId: uid,
-      reason: null,
-      status: 'pending',
-      createdAt: Timestamp.fromDate(new Date(now.getTime() - 31 * dayMs)),
-    });
+    await adminDb
+      .collection('accountDeletionRequests')
+      .doc(uid)
+      .set({
+        userId: uid,
+        reason: null,
+        status: 'pending',
+        createdAt: Timestamp.fromDate(new Date(now.getTime() - 31 * dayMs)),
+      });
 
     // A NOT-due request for another user must be untouched.
     const fresh = await createProvisionedUser('purge-fresh');
-    await adminDb.collection('accountDeletionRequests').doc(fresh.uid).set({
-      userId: fresh.uid,
-      reason: null,
-      status: 'pending',
-      createdAt: Timestamp.fromDate(new Date(now.getTime() - 1 * dayMs)),
-    });
+    await adminDb
+      .collection('accountDeletionRequests')
+      .doc(fresh.uid)
+      .set({
+        userId: fresh.uid,
+        reason: null,
+        status: 'pending',
+        createdAt: Timestamp.fromDate(new Date(now.getTime() - 1 * dayMs)),
+      });
 
     const result = await runAccountPurge(now);
     expect(result.purgedUids).toContain(uid);
@@ -476,9 +553,16 @@ describe('account purge (hard delete after retention)', () => {
 
     // Firestore trees and owned docs gone.
     expect((await adminDb.collection('users').doc(uid).get()).exists).toBe(false);
-    expect((await adminDb.collection('userPrivate').doc(uid).collection('pushTokens').get()).size).toBe(0);
-    expect((await adminDb.collection('notifications').doc(uid).collection('items').get()).size).toBe(0);
+    expect(
+      (await adminDb.collection('userPrivate').doc(uid).collection('pushTokens').get()).size,
+    ).toBe(0);
+    expect(
+      (await adminDb.collection('notifications').doc(uid).collection('items').get()).size,
+    ).toBe(0);
     expect((await adminDb.collection('pointsLedger').doc(uid).get()).exists).toBe(false);
+    expect(
+      (await adminDb.collection('crownDailyAllowances').doc(uid).collection('days').get()).empty,
+    ).toBe(true);
     expect((await adminDb.collection('userLifecycle').doc(uid).get()).exists).toBe(false);
     expect((await adminDb.collection('vehicles').where('userId', '==', uid).get()).size).toBe(0);
     expect((await adminDb.collection('rides').where('userId', '==', uid).get()).size).toBe(0);
@@ -510,12 +594,12 @@ describe('account purge (hard delete after retention)', () => {
     expect((await mirrorBlockARef.get()).exists).toBe(false);
     expect((await mirrorBlockBRef.get()).exists).toBe(false);
     expect((await adminRtdb.ref(`liveLocationBlocks/${uid}`).get()).exists()).toBe(false);
-    expect(
-      (await adminRtdb.ref(`liveLocationBlocks/${blockerAUid}/${uid}`).get()).exists(),
-    ).toBe(false);
-    expect(
-      (await adminRtdb.ref(`liveLocationBlocks/${blockerBUid}/${uid}`).get()).exists(),
-    ).toBe(false);
+    expect((await adminRtdb.ref(`liveLocationBlocks/${blockerAUid}/${uid}`).get()).exists()).toBe(
+      false,
+    );
+    expect((await adminRtdb.ref(`liveLocationBlocks/${blockerBUid}/${uid}`).get()).exists()).toBe(
+      false,
+    );
     // ...including the row whose document id is not the deleted uid: the sweep
     // deletes it and clears the RTDB node keyed on that id — the one
     // blocking-onBlockWrite actually wrote.

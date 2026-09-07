@@ -36,4 +36,7 @@ interface ProfileRepository {
      * @throws Exception when the write is rejected (rules, network).
      */
     suspend fun updateAvatarPath(uid: String, avatarPath: String)
+
+    /** Owner preference only; never writes eligibility or subscription data. */
+    suspend fun updateShowSupporterBadge(uid: String, show: Boolean)
 }

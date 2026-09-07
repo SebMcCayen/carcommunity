@@ -95,56 +95,13 @@ enum class FeatureFlag(val key: String, val default: Boolean) {
      */
     CHAT_REPLIES("chatReplies", false),
 
-    /**
-     * The Slice-D subscription gate on FULL event details. Default OFF, and that
-     * default is load-bearing: billing is not live yet (no member holds a paid
-     * tier), so while OFF the app shows full event details AND the attendee list
-     * to everyone — exactly as today. On, the exact address + long description and
-     * the attendee list become a paid benefit (Plus or Supporter): a free
-     * Community viewer sees the basic view (title, date/time, general area, place
-     * name, short summary) plus an upgrade prompt, and no "who answered" roster.
-     *
-     * Read via the LIVE feature-flag listener (the same `flags` StateFlow every
-     * other flag uses), combined with the stored subscription tier and the admin
-     * role (see Events.showFullDetails): while OFF the detail screen is handed
-     * showFullDetails=true (full view for all); while ON it reflects admin OR the
-     * real paid tier. The attendee list is ALSO enforced server-side by
-     * events-listAttendees behind the same flag. Must stay OFF until Play billing
-     * goes live, then be turned on deliberately.
-     */
+    /** Legacy compatibility key: full details are free; roster access is always paid/admin. */
     EVENT_DETAILS_REQUIRE_PAID("eventDetailsRequirePaid", false),
 
-    /**
-     * Makes MEMBER partner offers a PAID product (Plus/Supporter). Default OFF.
-     * On, a free (Community) member sees only the public offer teaser plus an
-     * "upgrade for member offers" prompt; the member detail and discount code
-     * require a paid tier (enforced server-side in firestore.rules and
-     * partners.showOfferCode). While OFF the app renders member offers exactly
-     * as today (the relaxed member gate), matching the inert backend enforcement.
-     *
-     * Consumed by the Android UI (PartnersRoute), read via the LIVE feature-flag
-     * listener so a flip takes effect without a relaunch. Default OFF and DARK
-     * until billing go-live — flipping it on before users can buy a paid tier
-     * would hide member offers from everyone with no way to upgrade.
-     */
+    /** Legacy compatibility key: member offers always require paid/admin access. */
     PARTNER_MEMBER_OFFERS_REQUIRE_PAID("partnerMemberOffersRequirePaid", false),
 
-    /**
-     * The Kronjakt PAYWALL — the flagship capability gate for the subscription
-     * launch. Default OFF: while off, Kronjakt behaves exactly as today (every
-     * signed-in, non-suspended member sees crowns and can collect). Turning it ON
-     * makes participation a PAID feature (any active paid tier — Plus OR
-     * Supporter — i.e. `activeMember`): the crown map layer + collect button are
-     * hidden for a free member and the map-layers participation toggle is locked
-     * behind an upgrade prompt that routes to the subscription screen. The backend
-     * enforces the same gate (collect callables + Firestore rules), so this is a
-     * UI mirror, not a security boundary.
-     *
-     * FREEZE: a free member's existing Kronpoäng and leaderboard rank stay
-     * VISIBLE — the read-only Kronjakt stats/leaderboard hub is NOT gated by this
-     * flag, only new earning (collection) is. Operable end-to-end (contract,
-     * backend, this client, admin console).
-     */
+    /** Legacy key, ignored for participation: all tiers can play with daily KP limits. */
     CROWN_HUNT_REQUIRE_PAID("crownHuntRequirePaid", false),
 }
 

@@ -110,7 +110,7 @@ fun CrownPointPopup(
                 // description and button give way to the outcome.
                 val done = status as? CrownHuntClaimStatus.Done
                 if (done != null) {
-                    CrownPointOutcomeBody(result = done.outcome.result, points = done.outcome.pointsAwarded, onDismiss = onDismiss)
+                    CrownPointOutcomeBody(result = done.outcome.result, points = done.outcome.pointsAwarded, allowance = done.outcome.allowance, onDismiss = onDismiss)
                 } else {
                     CrownPointCollectBody(
                         point = point,
@@ -259,11 +259,13 @@ private fun CrownPointCollectBody(
 private fun CrownPointOutcomeBody(
     result: CrownHuntClaimResult,
     points: Int?,
+    allowance: CrownAllowance?,
     onDismiss: () -> Unit,
 ) {
     val awarded = result == CrownHuntClaimResult.AWARDED
+    CrownAllowanceText(allowance)
     Text(
-        text = stringResource(crownHuntClaimResultRes(result)),
+        text = stringResource(if (result == CrownHuntClaimResult.DAILY_LIMIT_REACHED && allowance != null) R.string.crownHunt_allowanceReached else crownHuntClaimResultRes(result)),
         style =
             if (awarded) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge,
         color = MaterialTheme.colorScheme.onSurface,

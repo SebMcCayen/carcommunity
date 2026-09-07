@@ -2,7 +2,7 @@
  * drives.save error mapping — stops a transient/unexpected failure from
  * surfacing as an opaque INTERNAL/500 with no server log (GitHub #800).
  *
- * `drives-save` had no try/catch around `requireMemberActor`'s `users/{uid}`
+ * `drives-save` had no try/catch around `requireActiveActor`'s `users/{uid}`
  * read or `db.runTransaction`, so a transient Firestore exception (`UNAVAILABLE`
  * / `ABORTED` / `DEADLINE_EXCEEDED`) or any other unexpected throw became a
  * non-`HttpsError` → HTTP 500, which the Android SDK surfaces as code `INTERNAL`
