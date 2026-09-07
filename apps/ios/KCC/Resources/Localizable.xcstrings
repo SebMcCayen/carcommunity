@@ -12978,13 +12978,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kräver KCC Medlem."
+            "value": "Kräver Plus eller Supporter."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Requires KCC Membership."
+            "value": "Requires Plus or Supporter."
           }
         }
       }
@@ -13148,13 +13148,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "KCC Medlem krävs för att se exakt plats, eventinformation och RSVP."
+            "value": "Information om publicerade träffar och RSVP är gratis. Incheckning och deltagarnamn kräver Plus eller Supporter."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "KCC Membership is required to see exact location, event details, and RSVP."
+            "value": "Published event details and RSVP are free. Check-in and attendee names require Plus or Supporter."
           }
         }
       }
@@ -13165,13 +13165,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Som medlem kan du se exakt plats, mer information och RSVP."
+            "value": "Information om publicerade träffar och RSVP är gratis för inloggade användare. Ditt konto kan inte komma åt den här träffen just nu."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "As a member you can see exact location, more information and RSVP."
+            "value": "Published event details and RSVP are free for signed-in users. Your account cannot access this event right now."
           }
         }
       }
@@ -13182,13 +13182,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Eventdetaljer kräver KCC Medlem."
+            "value": "Träffinformation är inte tillgänglig"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Event details require KCC Membership."
+            "value": "Event information unavailable"
           }
         }
       }
@@ -13981,13 +13981,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Uppgradera för fullständig information"
+            "value": "Se Plus och Supporter"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Upgrade for full details"
+            "value": "See Plus and Supporter"
           }
         }
       }

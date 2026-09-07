@@ -41,6 +41,15 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.token.admin == true && isNotSuspended();
     }
 
+    // Profile restrictions must not be reset by an administrator's stale token.
+    // Check the acting admin's stored account before any client profile mutation.
+    function canAdministerProfiles() {
+      return isAdmin()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true;
+    }
+
     // Active member: subscription entitlement verified by backend and stored
     // as a custom claim. Clients must not self-elevate this claim.
     // Suspension always overrides entitlement (canAccessMemberFeatures).
@@ -340,10 +349,10 @@ service cloud.firestore {
       allow update: if isOwner(userId) && isNotSuspended() && validUserProfileUpdate(userId);
       // Crown eligibility is backend-only, even for admin clients. Its saved
       // preference remains owner-only; other admin profile operations survive.
-      allow read, delete: if isAdmin();
-      allow create: if isAdmin()
+      allow delete: if canAdministerProfiles();
+      allow create: if canAdministerProfiles()
         && !request.resource.data.keys().hasAny(['supporterBadgeEligible', 'showSupporterBadge']);
-      allow update: if isAdmin()
+      allow update: if canAdministerProfiles()
         && !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['supporterBadgeEligible', 'showSupporterBadge']);
 

@@ -176,6 +176,82 @@ describe('Firestore – user profile', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Firestore: stale admin profile restrictions
+// ---------------------------------------------------------------------------
+
+describe('Firestore – stale admin profile restriction bypass', () => {
+  it.each(['suspended', 'deleted', 'missing'])(
+    'a stale admin cannot rewrite a %s actor profile to regain route access',
+    async (state) => {
+      const uid = `profile-admin-restricted-${state}`;
+      const peer = `${uid}-peer`;
+      const ctx = testEnv.authenticatedContext(uid, { admin: true, suspended: false });
+      const fs = ctx.firestore();
+      const actorRef = doc(fs, 'users', uid);
+      const peerRef = doc(fs, 'users', peer);
+      const routePath = `rideRoutes/${peer}/saved/route.bin`;
+      await testEnv.withSecurityRulesDisabled(async (bypass) => {
+        await setDoc(doc(bypass.firestore(), 'users', uid), {
+          role: 'admin',
+          suspended: false,
+          deleted: false,
+        });
+        await setDoc(doc(bypass.firestore(), 'users', peer), {
+          role: 'user',
+          suspended: true,
+          deleted: true,
+        });
+        await uploadBytes(storageRef(bypass.storage(), routePath), new Uint8Array([1, 2]), {
+          contentType: 'application/octet-stream',
+        });
+      });
+      // Confirm the exact same token can read through the independent admin grant.
+      const route = storageRef(ctx.storage(), routePath);
+      await assertSucceeds(getBytes(route));
+      await testEnv.withSecurityRulesDisabled(async (bypass) => {
+        const profile = doc(bypass.firestore(), 'users', uid);
+        if (state === 'missing') await deleteDoc(profile);
+        else await updateDoc(profile, { [state]: true });
+      });
+
+      if (state === 'missing') {
+        await assertFails(setDoc(actorRef, { role: 'admin', suspended: false, deleted: false }));
+      } else {
+        await assertFails(updateDoc(actorRef, { suspended: false, deleted: false }));
+        // Deleting the restriction record must not open the onboarding fallback.
+        await assertFails(deleteDoc(actorRef));
+      }
+      await assertFails(setDoc(doc(fs, 'users', `${uid}-created`), { role: 'user' }));
+      await assertFails(updateDoc(peerRef, { suspended: false, deleted: false }));
+      await assertFails(deleteDoc(peerRef));
+      await assertFails(getBytes(route));
+      const actor = await getDoc(actorRef);
+      if (state === 'missing') expect(actor.exists()).toBe(false);
+      else expect(actor.data()?.[state]).toBe(true);
+    },
+  );
+
+  it('an existing unrestricted admin can still create, update and delete profiles', async () => {
+    const uid = 'profile-admin-healthy-control';
+    await testEnv.withSecurityRulesDisabled(async (bypass) => {
+      await setDoc(doc(bypass.firestore(), 'users', uid), {
+        role: 'admin',
+        activeMember: false,
+        suspended: false,
+        deleted: false,
+      });
+    });
+    const fs = testEnv.authenticatedContext(uid, { admin: true, suspended: false }).firestore();
+    const peer = doc(fs, 'users', `${uid}-peer`);
+    await assertSucceeds(setDoc(peer, { role: 'user', suspended: true, deleted: true }));
+    await assertSucceeds(updateDoc(peer, { suspended: false, deleted: false }));
+    expect((await getDoc(peer)).data()).toMatchObject({ suspended: false, deleted: false });
+    await assertSucceeds(deleteDoc(peer));
+    expect((await getDoc(peer)).exists()).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Firestore: badges (Phase 9f)
 // ---------------------------------------------------------------------------
 

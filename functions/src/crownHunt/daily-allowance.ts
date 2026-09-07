@@ -77,10 +77,15 @@ export async function creditCrownPoints(
             : sum;
         }, 0);
       }
+      // Corrupt counters or migration totals must never award points or become
+      // an unclassified INTERNAL error. Leave the stored state untouched.
+      if (typeof earned !== 'number' || !Number.isSafeInteger(earned) || earned < 0) {
+        throw new HttpsError('failed-precondition', 'Crown allowance is unavailable.');
+      }
       const paid = isPaidSubscriptionTier(
         effectiveSubscriptionTierFromStoredRecord(subscription.data(), uid),
       );
-      allowance = crownAllowance(paid, earned as number, now);
+      allowance = crownAllowance(paid, earned, now);
       if (allowance.remaining === 0) throw new CrownAllowanceReached(allowance);
       const amount = Math.min(params.amount, allowance.remaining);
       allowance = crownAllowance(paid, allowance.earned + amount, now);

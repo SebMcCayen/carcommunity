@@ -223,6 +223,18 @@ afterAll(async () => {
 });
 
 describe('drives-save', () => {
+  it('rejects a stale token after profile removal without creating a drive', async () => {
+    const user = await createProvisionedUser('drives-missing-profile');
+    await signInAs(user);
+    await adminDb.collection('users').doc(user.uid).delete();
+    expect(await callableErrorCode(call('drives-save', validSave))).toBe(
+      'functions/permission-denied',
+    );
+    expect((await adminDb.collection('rides').where('userId', '==', user.uid).get()).empty).toBe(
+      true,
+    );
+  });
+
   it('rejects unauthenticated callers, but SAVES for a signed-in non-member', async () => {
     await auth.signOut();
     expect(await callableErrorCode(call('drives-save', validSave))).toBe(

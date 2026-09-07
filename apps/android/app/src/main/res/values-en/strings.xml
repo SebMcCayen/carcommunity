@@ -325,13 +325,13 @@
     <string name="events_noPastTitle">No past events</string>
     <string name="events_noPastBody">Once an event has been held it moves here, so you can look it up afterwards.</string>
     <string name="events_completedBadge">Held</string>
-    <string name="events_memberRequiredTitle">Event details require KCC Membership.</string>
-    <string name="events_memberRequiredBody">As a member you can see exact location, more information and RSVP.</string>
-    <string name="events_memberGateBody">KCC Membership is required to see exact location, event details, and RSVP.</string>
+    <string name="events_memberRequiredTitle">Event information unavailable</string>
+    <string name="events_memberRequiredBody">Published event details and RSVP are free for signed-in users. Your account cannot access this event right now.</string>
+    <string name="events_memberGateBody">Published event details and RSVP are free. Check-in and attendee names require Plus or Supporter.</string>
     <string name="events_memberDetailPlaceholder">Description</string>
     <string name="events_upgradeDetailsTitle">More with Plus or Supporter</string>
     <string name="events_upgradeDetailsBody">Full event details and RSVP are free. Plus and Supporter unlock check-in and attendee names.</string>
-    <string name="events_upgradeDetailsAction">Upgrade for full details</string>
+    <string name="events_upgradeDetailsAction">See Plus and Supporter</string>
     <string name="events_organizerLabel">Organizer: %1$s</string>
     <string name="events_navigationPlaceholder">Navigation will open in Apple Maps or Google Maps in a later version.</string>
     <string name="events_rsvpGoing">Going</string>
@@ -345,7 +345,7 @@
     <string name="events_loadMore">Load more</string>
     <string name="events_cancelledBadge">Cancelled</string>
     <string name="events_cancelledNotice">This event has been cancelled.</string>
-    <string name="events_lockIndicator">Requires KCC Membership.</string>
+    <string name="events_lockIndicator">Requires Plus or Supporter.</string>
     <string name="events_navigateHere">Navigate here</string>
     <string name="events_navigationError">Could not open navigation.</string>
     <string name="events_rsvpSubmitError">RSVP failed. Please try again.</string>

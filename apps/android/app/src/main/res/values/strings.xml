@@ -325,13 +325,13 @@
     <string name="events_noPastTitle">Inga tidigare träffar</string>
     <string name="events_noPastBody">När en träff har varit hamnar den här, så att du kan gå tillbaka och titta på den.</string>
     <string name="events_completedBadge">Avslutad</string>
-    <string name="events_memberRequiredTitle">Eventdetaljer kräver KCC Medlem.</string>
-    <string name="events_memberRequiredBody">Som medlem kan du se exakt plats, mer information och RSVP.</string>
-    <string name="events_memberGateBody">KCC Medlem krävs för att se exakt plats, eventinformation och RSVP.</string>
+    <string name="events_memberRequiredTitle">Träffinformation är inte tillgänglig</string>
+    <string name="events_memberRequiredBody">Information om publicerade träffar och RSVP är gratis för inloggade användare. Ditt konto kan inte komma åt den här träffen just nu.</string>
+    <string name="events_memberGateBody">Information om publicerade träffar och RSVP är gratis. Incheckning och deltagarnamn kräver Plus eller Supporter.</string>
     <string name="events_memberDetailPlaceholder">Beskrivning</string>
     <string name="events_upgradeDetailsTitle">Mer med Plus eller Supporter</string>
     <string name="events_upgradeDetailsBody">Fullständig träffinformation och RSVP är gratis. Plus och Supporter låser upp incheckning och deltagarnamn.</string>
-    <string name="events_upgradeDetailsAction">Uppgradera för fullständig information</string>
+    <string name="events_upgradeDetailsAction">Se Plus och Supporter</string>
     <string name="events_organizerLabel">Arrangör: %1$s</string>
     <string name="events_navigationPlaceholder">Navigering öppnas i Apple Maps eller Google Maps i en senare version.</string>
     <string name="events_rsvpGoing">Kommer</string>
@@ -345,7 +345,7 @@
     <string name="events_loadMore">Ladda fler</string>
     <string name="events_cancelledBadge">Inställt</string>
     <string name="events_cancelledNotice">Eventet är inställt.</string>
-    <string name="events_lockIndicator">Kräver KCC Medlem.</string>
+    <string name="events_lockIndicator">Kräver Plus eller Supporter.</string>
     <string name="events_navigateHere">Navigera hit</string>
     <string name="events_navigationError">Det gick inte att öppna navigationen.</string>
     <string name="events_rsvpSubmitError">RSVP misslyckades. Försök igen.</string>

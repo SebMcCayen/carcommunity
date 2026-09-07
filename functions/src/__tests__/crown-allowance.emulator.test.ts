@@ -26,17 +26,15 @@ beforeAll(async () => {
   ({ submitClaim: submit } = await import('../crownHunt/submitClaim'));
   ({ claimSpawn: spawn } = await import('../crownHunt/claimSpawn'));
   originalFlags = (await db.doc('config/featureFlags').get()).data() ?? {};
-  await db
-    .doc('config/featureFlags')
-    .set(
-      {
-        crownHunt: true,
-        crownHuntSpawn: true,
-        crownHuntPerks: false,
-        crownHuntLiveShareScoring: false,
-      },
-      { merge: true },
-    );
+  await db.doc('config/featureFlags').set(
+    {
+      crownHunt: true,
+      crownHuntSpawn: true,
+      crownHuntPerks: false,
+      crownHuntLiveShareScoring: false,
+    },
+    { merge: true },
+  );
 });
 
 afterAll(async () => {
@@ -65,14 +63,12 @@ async function user(earned = 0) {
   return uid;
 }
 async function tier(uid: string, value: 'plus' | 'supporter' | 'community') {
-  await db
-    .doc(`subscriptions/${uid}`)
-    .set({
-      userId: uid,
-      tier: value,
-      status: 'active',
-      entitlement: value === 'community' ? 'none' : 'member_monthly',
-    });
+  await db.doc(`subscriptions/${uid}`).set({
+    userId: uid,
+    tier: value,
+    status: 'active',
+    entitlement: value === 'community' ? 'none' : 'member_monthly',
+  });
 }
 function award(uid: string, key: string, amount = 500, now = new Date()) {
   return credit(
@@ -92,6 +88,23 @@ function award(uid: string, key: string, amount = 500, now = new Date()) {
 }
 
 describe('atomic crown allowance', () => {
+  it.each([
+    {},
+    { earned: null },
+    { earned: '5' },
+    { earned: -1 },
+    { earned: 0.5 },
+    { earned: Number.MAX_SAFE_INTEGER + 1 },
+  ])('refuses a malformed allowance counter without crediting points: %j', async (malformed) => {
+    const uid = await user();
+    const key = randomUUID();
+    await counter(uid).set(malformed);
+    await expect(award(uid, key)).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect((await counter(uid).get()).data()).toEqual(malformed);
+    expect((await db.doc(`crownHuntClaims/${key}`).get()).exists).toBe(false);
+    expect((await db.collection(`pointsLedger/${uid}/entries`).get()).empty).toBe(true);
+  });
+
   it('serializes competing awards, clips remaining KP, and retries without double counting', async () => {
     const uid = await user(2240);
     const keys = [randomUUID(), randomUUID()];
@@ -173,26 +186,22 @@ describe('both real claim handlers share the allowance', () => {
     const pointId = randomUUID(),
       spawnId = randomUUID();
     const base = { latitude: lat, longitude: lng, rewardPoints: 25, createdAt: Timestamp.now() };
-    await db
-      .doc(`crownHuntPoints/${pointId}`)
-      .set({
-        ...base,
-        title: 'test',
-        status: 'active',
-        geofenceRadiusMeters: 50,
-        repeatRule: 'once',
-        maxCollectors: 1,
-        collectorCount: 0,
-      });
-    await db
-      .doc(`crownSpawns/${spawnId}`)
-      .set({
-        ...base,
-        status: 'live',
-        collectMode: mode,
-        rarity: 'common',
-        expiresAt: Timestamp.fromMillis(Date.now() + 3600_000),
-      });
+    await db.doc(`crownHuntPoints/${pointId}`).set({
+      ...base,
+      title: 'test',
+      status: 'active',
+      geofenceRadiusMeters: 50,
+      repeatRule: 'once',
+      maxCollectors: 1,
+      collectorCount: 0,
+    });
+    await db.doc(`crownSpawns/${spawnId}`).set({
+      ...base,
+      status: 'live',
+      collectMode: mode,
+      rarity: 'common',
+      expiresAt: Timestamp.fromMillis(Date.now() + 3600_000),
+    });
     const common = {
       latitude: lat,
       longitude: lng,

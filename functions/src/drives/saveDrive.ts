@@ -107,6 +107,16 @@ export const saveDrive = onCall(
         : ridesRef.doc();
 
       const alreadySaved = await db.runTransaction(async (tx) => {
+        // Keep saving aligned with route uploads and serialize against profile
+        // removal/restriction changes, even when the caller has a stale token.
+        const profile = await tx.get(db.collection('users').doc(actor.uid));
+        if (
+          !profile.exists ||
+          profile.data()?.suspended === true ||
+          profile.data()?.deleted === true
+        ) {
+          throw new HttpsError('permission-denied', 'Account access is restricted.');
+        }
         const existing = await tx.get(rideRef);
         if (existing.exists) {
           return true;
