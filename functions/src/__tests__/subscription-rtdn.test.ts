@@ -30,7 +30,7 @@ beforeAll(async () => {
     storageBucket: 'demo-test.appspot.com',
   });
   mod = await import('../subscription/rtdn');
-});
+}, 30_000);
 
 const UID = 'user-1';
 const RAW_TOKEN = 'raw-purchase-token';
