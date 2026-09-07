@@ -97,6 +97,10 @@ jobs:
         working-directory: apps/android
         run: ./gradlew --no-daemon :app:assembleRelease
 
+      - name: Verify 16 KB native-library alignment
+        working-directory: apps/android
+        run: bash scripts/check-16kb-elf-alignment.sh
+
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v7
         with:
@@ -193,6 +197,14 @@ jobs:
         env:
           ORG_GRADLE_PROJECT_MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
         run: ./gradlew --no-daemon :app:compileDebugKotlin
+
+      - name: Verify nav SDK 16 KB native-library alignment
+        working-directory: apps/android
+        env:
+          ORG_GRADLE_PROJECT_MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
+        run: |
+          ./gradlew --no-daemon :app:mergeReleaseNativeLibs
+          bash scripts/check-16kb-elf-alignment.sh
 
       - name: Assert the nav source set was actually compiled
         run: |

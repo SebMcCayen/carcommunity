@@ -80,18 +80,20 @@ firebase-appcheck-debug = { group = "com.google.firebase", name = "firebase-appc
 # (diagnostics/CrashReporter.kt), which deliberately carries no stack trace.
 firebase-crashlytics = { group = "com.google.firebase", name = "firebase-crashlytics" }
 
-# Mapbox
-mapbox-maps = { group = "com.mapbox.maps", name = "android", version.ref = "mapbox" }
+# Mapbox. The `-ndk27` artifacts are built with 16 KB ELF page alignment.
+# Mapbox's default (NDK 23) artifacts are only 4 KB aligned and make Play reject
+# the whole app as incompatible with 16 KB-page devices.
+mapbox-maps = { group = "com.mapbox.maps", name = "android-ndk27", version.ref = "mapbox" }
 
 # Mapbox Navigation SDK v3 (turn-by-turn). These artifacts live in the
 # authenticated Mapbox downloads maven repo (unlike the public Maps SDK), so
 # they are added ONLY when a build-time MAPBOX_DOWNLOADS_TOKEN is configured
 # (see app/build.gradle.kts) — the config-less / CI build compiles the no-SDK
 # navigation stub instead, keeping resolution and CI green without the token.
-mapbox-nav-navigation = { group = "com.mapbox.navigationcore", name = "navigation", version.ref = "mapboxNav" }
-mapbox-nav-ui-maps = { group = "com.mapbox.navigationcore", name = "ui-maps", version.ref = "mapboxNav" }
-mapbox-nav-tripdata = { group = "com.mapbox.navigationcore", name = "tripdata", version.ref = "mapboxNav" }
-mapbox-nav-ui-components = { group = "com.mapbox.navigationcore", name = "ui-components", version.ref = "mapboxNav" }
+mapbox-nav-navigation = { group = "com.mapbox.navigationcore", name = "navigation-ndk27", version.ref = "mapboxNav" }
+mapbox-nav-ui-maps = { group = "com.mapbox.navigationcore", name = "ui-maps-ndk27", version.ref = "mapboxNav" }
+mapbox-nav-tripdata = { group = "com.mapbox.navigationcore", name = "tripdata-ndk27", version.ref = "mapboxNav" }
+mapbox-nav-ui-components = { group = "com.mapbox.navigationcore", name = "ui-components-ndk27", version.ref = "mapboxNav" }
 androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
 
 # Google Play Services — fused location provider (Phase 12 slice 6)
