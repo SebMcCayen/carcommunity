@@ -38,13 +38,16 @@ import kotlin.math.roundToLong
  * the Firebase repository proves the wiring, this proves the assembly.
  */
 
-/** The two boards a member can switch between at the top of the screen. */
+/** The boards a member can switch between at the top of the screen, in tab order. */
 enum class LeaderboardScope {
-    /** The never-resetting all-time board (`leaderboards/alltime`). */
-    ALL_TIME,
-
     /** The current Europe/Stockholm month (`leaderboards/{YYYY-MM}`). */
     THIS_MONTH,
+
+    /** The previous Europe/Stockholm calendar month (`leaderboards/{YYYY-MM}`). */
+    LAST_MONTH,
+
+    /** The never-resetting all-time board (`leaderboards/alltime`). */
+    ALL_TIME,
 }
 
 /**
@@ -151,6 +154,9 @@ sealed interface LeaderboardUiState {
 }
 
 object LeaderboardBoard {
+    /** The board selected whenever a member first enters the leaderboard. */
+    val DEFAULT_SCOPE: LeaderboardScope = LeaderboardScope.THIS_MONTH
+
     /** How many top rows form the podium. */
     const val PODIUM_SIZE: Int = 3
 
@@ -159,18 +165,20 @@ object LeaderboardBoard {
 
     /**
      * The document id to read for [scope]. All-time is the fixed [ALL_TIME_DOC_ID];
-     * this-month is the `YYYY-MM` id from [seasonId] (derived from
+     * monthly scopes use the `YYYY-MM` id from [seasonId] (derived from
      * [com.kungsbackacarcommunity.app.crownhunt.CrownSeasonClock] so the client and
-     * the backend agree on the month boundary and format).
+     * the backend agree on the month boundary and format). The provider receives
+     * how many calendar months to step back: zero for this month, one for last month.
      *
-     * [seasonId] is a LAZY provider, evaluated ONLY for the monthly scope — the
+     * [seasonId] is a LAZY provider, evaluated ONLY for a monthly scope — the
      * all-time board never needs a season id, so resolving one (an `Instant.now()`
      * + format) for it would be wasted work.
      */
-    fun scopeDocId(scope: LeaderboardScope, seasonId: () -> String): String =
+    fun scopeDocId(scope: LeaderboardScope, seasonId: (monthsAgo: Int) -> String): String =
         when (scope) {
             LeaderboardScope.ALL_TIME -> ALL_TIME_DOC_ID
-            LeaderboardScope.THIS_MONTH -> seasonId()
+            LeaderboardScope.THIS_MONTH -> seasonId(0)
+            LeaderboardScope.LAST_MONTH -> seasonId(1)
         }
 
     /**

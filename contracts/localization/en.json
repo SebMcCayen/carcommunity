@@ -1431,6 +1431,7 @@
     "title": "Leaderboard",
     "scopeAllTime": "All-time",
     "scopeThisMonth": "This month",
+    "scopeLastMonth": "Last month",
     "categoryCrownPoints": "Crown Points",
     "categoryDistance": "Distance",
     "categoryEvents": "Events attended",

@@ -1332,6 +1332,7 @@
     <string name="leaderboard_title">Leaderboard</string>
     <string name="leaderboard_scopeAllTime">All-time</string>
     <string name="leaderboard_scopeThisMonth">This month</string>
+    <string name="leaderboard_scopeLastMonth">Last month</string>
     <string name="leaderboard_categoryCrownPoints">Crown Points</string>
     <string name="leaderboard_categoryDistance">Distance</string>
     <string name="leaderboard_categoryEvents">Events attended</string>

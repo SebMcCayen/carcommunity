@@ -1332,6 +1332,7 @@
     <string name="leaderboard_title">Topplista</string>
     <string name="leaderboard_scopeAllTime">Genom tiderna</string>
     <string name="leaderboard_scopeThisMonth">Denna månad</string>
+    <string name="leaderboard_scopeLastMonth">Förra månaden</string>
     <string name="leaderboard_categoryCrownPoints">Kronpoäng</string>
     <string name="leaderboard_categoryDistance">Sträcka</string>
     <string name="leaderboard_categoryEvents">Besökta event</string>

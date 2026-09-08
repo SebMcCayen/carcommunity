@@ -68,4 +68,25 @@ class CrownSeasonClockTest {
             CrownSeasonClock.seasonIdForInstant(Instant.parse("2026-01-31T23:30:00Z"), stockholm),
         )
     }
+
+    @Test
+    fun previousMonthRollsAcrossTheYearBoundary() {
+        assertEquals(
+            "2025-12",
+            CrownSeasonClock.seasonIdMonthsAgo(
+                monthsAgo = 1,
+                now = Instant.parse("2026-01-15T12:00:00Z"),
+                zone = stockholm,
+            ),
+        )
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun monthsAgoRejectsFutureMonths() {
+        CrownSeasonClock.seasonIdMonthsAgo(
+            monthsAgo = -1,
+            now = Instant.parse("2026-01-15T12:00:00Z"),
+            zone = stockholm,
+        )
+    }
 }

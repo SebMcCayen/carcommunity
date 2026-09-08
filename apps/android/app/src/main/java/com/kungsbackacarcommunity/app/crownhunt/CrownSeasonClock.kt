@@ -37,6 +37,20 @@ object CrownSeasonClock {
     fun currentSeasonId(now: Instant = Instant.now(), zone: ZoneId = STOCKHOLM): String =
         seasonIdForInstant(now, zone)
 
+    /**
+     * The `YYYY-MM` season id [monthsAgo] calendar months before [now]. Month
+     * subtraction happens in [zone], so January correctly rolls back to December
+     * of the previous year and the boundary stays aligned with Stockholm time.
+     */
+    fun seasonIdMonthsAgo(
+        monthsAgo: Int,
+        now: Instant = Instant.now(),
+        zone: ZoneId = STOCKHOLM,
+    ): String {
+        require(monthsAgo >= 0) { "monthsAgo must not be negative" }
+        return SEASON_ID.format(now.atZone(zone).minusMonths(monthsAgo.toLong()))
+    }
+
     /** The reserved scope id for the never-resetting all-time board. */
     const val ALL_TIME_SCOPE: String = "alltime"
 }

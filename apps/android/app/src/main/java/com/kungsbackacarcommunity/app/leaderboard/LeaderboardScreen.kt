@@ -43,13 +43,13 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.shell.AeroPage
 
-/** testTag on the All-time / This-month scope toggle, for UI tests. */
+/** testTag on the leaderboard scope toggle, for UI tests. */
 const val LEADERBOARD_SCOPE_TABS_TAG = "leaderboardScopeTabs"
 
 /**
  * Social leaderboard screen. Stateless.
  *
- * A read-only view of the precomputed board: an All-time / This-month toggle at the
+ * A read-only view of the precomputed board: a monthly / all-time toggle at the
  * top, then, per competitive category (in the server's render order), a podium of
  * the top three and a list down to rank ten. Everything shown — ranks, names,
  * avatars, ordering — is resolved server-side; this screen only formats each raw
@@ -85,29 +85,35 @@ fun LeaderboardScreen(
     }
 }
 
-/** The two-option scope switch, rendered as a two-tab [TabRow]. */
+/** The scope switch, rendered in [LeaderboardScope] declaration order. */
 @Composable
 private fun ScopeToggle(
     scope: LeaderboardScope,
     onScopeChange: (LeaderboardScope) -> Unit,
 ) {
-    val selectedIndex = if (scope == LeaderboardScope.ALL_TIME) 0 else 1
+    val scopes = LeaderboardScope.entries
+    val selectedIndex = scopes.indexOf(scope)
     TabRow(
         selectedTabIndex = selectedIndex,
         modifier = Modifier.fillMaxWidth().testTag(LEADERBOARD_SCOPE_TABS_TAG),
     ) {
-        Tab(
-            selected = selectedIndex == 0,
-            onClick = { onScopeChange(LeaderboardScope.ALL_TIME) },
-            text = { Text(stringResource(R.string.leaderboard_scopeAllTime)) },
-        )
-        Tab(
-            selected = selectedIndex == 1,
-            onClick = { onScopeChange(LeaderboardScope.THIS_MONTH) },
-            text = { Text(stringResource(R.string.leaderboard_scopeThisMonth)) },
-        )
+        scopes.forEachIndexed { index, tabScope ->
+            Tab(
+                selected = selectedIndex == index,
+                onClick = { onScopeChange(tabScope) },
+                text = { Text(stringResource(scopeTitleRes(tabScope))) },
+            )
+        }
     }
 }
+
+/** The localized tab label for [scope]. */
+private fun scopeTitleRes(scope: LeaderboardScope): Int =
+    when (scope) {
+        LeaderboardScope.THIS_MONTH -> R.string.leaderboard_scopeThisMonth
+        LeaderboardScope.LAST_MONTH -> R.string.leaderboard_scopeLastMonth
+        LeaderboardScope.ALL_TIME -> R.string.leaderboard_scopeAllTime
+    }
 
 /** One category: a header, then the podium + list, or a friendly empty state. */
 @Composable
