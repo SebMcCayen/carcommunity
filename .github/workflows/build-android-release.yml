@@ -135,6 +135,10 @@ jobs:
           ORG_GRADLE_PROJECT_MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
         run: ./gradlew --no-daemon bundleRelease
 
+      - name: Verify 16 KB native-library alignment
+        working-directory: apps/android
+        run: bash scripts/check-16kb-elf-alignment.sh
+
       - name: Verify the AAB is signed
         run: |
           set -euo pipefail
