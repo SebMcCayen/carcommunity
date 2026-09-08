@@ -2,6 +2,20 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 53,
+      "versionName": "1.0.2",
+      "releaseDate": "2026-09-08",
+      "highlights": [
+        "Chatten ligger nu tätt ovanför tangentbordet",
+        "Bättre stöd för nya Android-enheter"
+      ],
+      "changes": [
+        "Chatt: tog bort det tomma utrymmet mellan meddelandefältet och tangentbordet",
+        "Kompatibilitet: förbättrat stöd för Android-enheter med 16 KB minnessidor",
+        "Mindre tekniska förbättringar och stabilitetsuppdateringar"
+      ]
+    },
+    {
       "versionCode": 52,
       "versionName": "1.0.1",
       "releaseDate": "2026-09-07",
