@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -85,6 +86,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -8443,26 +8445,37 @@ fun AuthenticatedApp(
 
                 val chatHubVisible = chatHubOpen && chatHubGateOpen
                 if (chatHubVisible) {
+                    val reserveBottomBar =
+                        shouldReserveChatHubBottomBar(
+                            imeBottomPx = WindowInsets.ime.getBottom(LocalDensity.current),
+                        )
                     // The FULL-PAGE chat HUB — the canonical chat surface. EVERY chat
                     // entry point (the map's chat icon, the convoy bar's chat icon,
                     // and Community/Convoy chat notifications) sets `chatHubOpen`, so
                     // they all land here on the tabbed hub (Community / Convoys /
                     // Friends / Notifications) rather than the old read-only peek.
                     //
-                    // Hosted in the map shell — NOT a full-screen route — and inset
-                    // above the shell's bottom bar (the same navigationBarsPadding +
-                    // ShellBottomBarHeight the map body uses), so the bottom nav bar
-                    // stays visible and usable beneath the hub: tapping a tab there
-                    // leaves chat (see ShellBottomBar.onSelect, which clears
-                    // `chatHubOpen`). `showHubBackArrow` adds a top-left Back arrow so
-                    // a gesture-nav user with no system Back button can exit to the
-                    // map; it runs the same `onClose` action as system Back.
+                    // Hosted in the map shell — NOT a full-screen route. With the
+                    // keyboard closed it is inset above the shell's bottom bar, so
+                    // that bar stays visible and usable. Once the keyboard opens the
+                    // bar is behind the IME, so reserving its 64dp row would create a
+                    // matching empty band between the IME and the message composer.
+                    // Drop both shell-bottom reservations in that state and let the
+                    // composer's own ime.union(navigationBars) inset be the single
+                    // source of keyboard clearance.
                     Box(
                         modifier =
                             Modifier
                                 .fillMaxSize()
-                                .navigationBarsPadding()
-                                .padding(bottom = ShellBottomBarHeight),
+                                .then(
+                                    if (reserveBottomBar) {
+                                        Modifier
+                                            .navigationBarsPadding()
+                                            .padding(bottom = ShellBottomBarHeight)
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
                     ) {
                         ChatHubRoute(
                             uid = uid,
@@ -8563,6 +8576,13 @@ fun AuthenticatedApp(
  * moves the bar and those overlays together and they cannot drift apart.
  */
 internal val ShellBottomBarHeight = 64.dp
+
+/**
+ * The chat hub shares the map shell's bottom navigation only while the keyboard
+ * is closed. With a visible IME that navigation is already covered, and keeping
+ * its space would stack a dead 64dp band below the composer's own IME inset.
+ */
+internal fun shouldReserveChatHubBottomBar(imeBottomPx: Int): Boolean = imeBottomPx <= 0
 
 /**
  * The 5-tab bottom navigation; Map is the default, highlighted home tab.
