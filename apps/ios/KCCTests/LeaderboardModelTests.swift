@@ -278,7 +278,7 @@ final class LeaderboardModelTests: XCTestCase {
     }
 
     func testPreviousMonthRollsAcrossTheYearBoundary() throws {
-        let stockholm = TimeZone(identifier: "Europe/Stockholm")
+        let stockholm = try XCTUnwrap(TimeZone(identifier: "Europe/Stockholm"))
         let midJanuary = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-01-15T12:00:00Z"))
         XCTAssertEqual(
             LeaderboardSeasonClock.seasonId(monthsAgo: 1, from: midJanuary, zone: stockholm),
