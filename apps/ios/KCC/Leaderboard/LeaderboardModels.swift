@@ -36,14 +36,17 @@ import Foundation
 /// split and the iOS ``Events`` pure core: the Firebase repository proves the
 /// wiring, this proves the assembly.
 
-/// The two boards a member can switch between at the top of the screen — the
-/// iOS mirror of Android's `LeaderboardScope`.
+/// The boards a member can switch between at the top of the screen, in display
+/// order — the iOS mirror of Android's `LeaderboardScope`.
 enum LeaderboardScope: Hashable, Sendable, CaseIterable {
-    /// The never-resetting all-time board (`leaderboards/alltime`).
-    case allTime
-
     /// The current Europe/Stockholm month (`leaderboards/{YYYY-MM}`).
     case thisMonth
+
+    /// The previous Europe/Stockholm calendar month (`leaderboards/{YYYY-MM}`).
+    case lastMonth
+
+    /// The never-resetting all-time board (`leaderboards/alltime`).
+    case allTime
 }
 
 /// How a category's raw stored `value` is presented — Android's
@@ -169,6 +172,9 @@ struct LeaderboardPodiumSplit: Equatable, Sendable {
 /// Social LEADERBOARD — pure (Firebase-free) core. The iOS counterpart of
 /// Android's `LeaderboardBoard` object.
 enum LeaderboardBoard {
+    /// The board selected whenever a member first enters the leaderboard.
+    static let defaultScope: LeaderboardScope = .thisMonth
+
     /// How many top rows form the podium.
     static let podiumSize = 3
 
@@ -178,17 +184,19 @@ enum LeaderboardBoard {
     private static let metresPerKm = 1_000.0
 
     /// The document id to read for `scope`. All-time is the fixed
-    /// ``allTimeDocId``; this-month is the `YYYY-MM` id from `seasonId`
+    /// ``allTimeDocId``; monthly scopes use the `YYYY-MM` id from `seasonId`
     /// (derived from ``LeaderboardSeasonClock`` so the client and the backend
-    /// agree on the month boundary and format).
+    /// agree on the month boundary and format). The provider receives how many
+    /// calendar months to step back: zero for this month, one for last month.
     ///
-    /// `seasonId` is a LAZY autoclosure, evaluated ONLY for the monthly scope
+    /// `seasonId` is a LAZY closure, evaluated ONLY for a monthly scope
     /// — the all-time board never needs a season id, so resolving one (a
     /// `Date()` + format) for it would be wasted work.
-    static func scopeDocId(_ scope: LeaderboardScope, seasonId: @autoclosure () -> String) -> String {
+    static func scopeDocId(_ scope: LeaderboardScope, seasonId: (Int) -> String) -> String {
         switch scope {
         case .allTime: return allTimeDocId
-        case .thisMonth: return seasonId()
+        case .thisMonth: return seasonId(0)
+        case .lastMonth: return seasonId(1)
         }
     }
 
@@ -298,10 +306,28 @@ enum LeaderboardSeasonClock {
     /// a non-Latin numbering system would otherwise format a season id that
     /// does not exist and read an empty board.
     static func seasonId(for date: Date = Date(), zone: TimeZone? = stockholm) -> String {
+        seasonId(monthsAgo: 0, from: date, zone: zone)
+    }
+
+    /// The `YYYY-MM` season id `monthsAgo` calendar months before `date`.
+    /// Subtraction uses `zone`, so January correctly rolls back to December of
+    /// the previous year and month boundaries stay aligned with Stockholm.
+    static func seasonId(
+        monthsAgo: Int,
+        from date: Date = Date(),
+        zone: TimeZone? = stockholm
+    ) -> String {
+        precondition(monthsAgo >= 0, "monthsAgo must not be negative")
+        let timeZone = zone ?? .gmt
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        guard let target = calendar.date(byAdding: .month, value: -monthsAgo, to: date) else {
+            preconditionFailure("Could not subtract calendar months")
+        }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = zone ?? .gmt
+        formatter.timeZone = timeZone
         formatter.dateFormat = "yyyy-MM"
-        return formatter.string(from: date)
+        return formatter.string(from: target)
     }
 }

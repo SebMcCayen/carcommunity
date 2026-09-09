@@ -225,16 +225,16 @@ final class LeaderboardCoordinatorTests: XCTestCase {
         // start / reload / select are no-ops without a repository.
         XCTAssertEqual(coordinator.state, .unavailable)
         coordinator.reload()
-        coordinator.select(scope: .thisMonth)
+        coordinator.select(scope: .lastMonth)
         XCTAssertEqual(coordinator.state, .unavailable)
-        XCTAssertEqual(coordinator.scope, .allTime)
+        XCTAssertEqual(coordinator.scope, .thisMonth)
     }
 
     @MainActor
     func testInitialStateIsLoadingBeforeStart() {
         let coordinator = LeaderboardCoordinator(repository: FakeLeaderboardRepository())
         XCTAssertEqual(coordinator.state, .loading)
-        XCTAssertEqual(coordinator.scope, .allTime)
+        XCTAssertEqual(coordinator.scope, .thisMonth)
         XCTAssertEqual(coordinator.selectedCategory, .crownPoints)
     }
 
@@ -252,7 +252,7 @@ final class LeaderboardCoordinatorTests: XCTestCase {
             return false
         }
         XCTAssertEqual(repository.subscribeCount, 1)
-        XCTAssertEqual(repository.lastScope, .allTime)
+        XCTAssertEqual(repository.lastScope, .thisMonth)
         XCTAssertEqual(coordinator.selectedCategoryBoard?.entries.map(\.uid), ["a", "b"])
     }
 
@@ -372,11 +372,11 @@ final class LeaderboardCoordinatorTests: XCTestCase {
         coordinator.start()
         await waitForState(of: coordinator) { $0 != .loading }
 
-        coordinator.select(scope: .thisMonth)
-        XCTAssertEqual(coordinator.scope, .thisMonth)
+        coordinator.select(scope: .lastMonth)
+        XCTAssertEqual(coordinator.scope, .lastMonth)
         XCTAssertEqual(coordinator.state, .loading)
         XCTAssertEqual(repository.subscribeCount, 2)
-        XCTAssertEqual(repository.lastScope, .thisMonth)
+        XCTAssertEqual(repository.lastScope, .lastMonth)
     }
 
     @MainActor
@@ -388,13 +388,13 @@ final class LeaderboardCoordinatorTests: XCTestCase {
         coordinator.start()
         await waitForState(of: coordinator) { $0 != .loading }
 
-        coordinator.select(scope: .allTime)
+        coordinator.select(scope: .thisMonth)
         // No tear-down of the live listener.
         XCTAssertEqual(repository.subscribeCount, 1)
     }
 
     @MainActor
-    func testSwitchingToThisMonthWhileStreakSelectedFallsBackToFirstCategory() async {
+    func testSwitchingToAMonthlyScopeWhileStreakSelectedFallsBackToFirstCategory() async {
         let repository = FakeLeaderboardRepository()
         repository.script([Self.loadedAllTime()])
         let coordinator = LeaderboardCoordinator(repository: repository)
@@ -402,11 +402,12 @@ final class LeaderboardCoordinatorTests: XCTestCase {
         await waitForState(of: coordinator) { $0 != .loading }
 
         // Streak is an all-time-only category.
+        coordinator.select(scope: .allTime)
         coordinator.select(category: .streak)
         XCTAssertEqual(coordinator.selectedCategory, .streak)
 
-        coordinator.select(scope: .thisMonth)
-        // This-month does not publish streak, so the picker falls back.
+        coordinator.select(scope: .lastMonth)
+        // Last-month does not publish streak, so the picker falls back.
         XCTAssertFalse(coordinator.availableCategories.contains(.streak))
         XCTAssertEqual(coordinator.selectedCategory, .crownPoints)
     }
@@ -446,8 +447,12 @@ final class LeaderboardCoordinatorTests: XCTestCase {
     @MainActor
     func testAvailableCategoriesTrackTheScope() {
         let coordinator = LeaderboardCoordinator(repository: FakeLeaderboardRepository())
+        XCTAssertFalse(coordinator.availableCategories.contains(.streak))
+        XCTAssertEqual(coordinator.availableCategories.count, 5)
+        coordinator.select(scope: .allTime)
         XCTAssertTrue(coordinator.availableCategories.contains(.streak))
-        coordinator.select(scope: .thisMonth)
+        XCTAssertEqual(coordinator.availableCategories.count, 6)
+        coordinator.select(scope: .lastMonth)
         XCTAssertFalse(coordinator.availableCategories.contains(.streak))
         XCTAssertEqual(coordinator.availableCategories.count, 5)
     }
@@ -560,7 +565,7 @@ final class LeaderboardCoordinatorTests: XCTestCase {
         // the same negative cache.
         let url = URL(string: "https://example.test/avatar.jpg")!
         repository.scriptAvatarURL(url, for: path)
-        coordinator.select(scope: .thisMonth)
+        coordinator.select(scope: .lastMonth)
         let second = await coordinator.avatarURL(for: path)
         XCTAssertEqual(second, url)
         XCTAssertEqual(repository.avatarResolveCount, 2)

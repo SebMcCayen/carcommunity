@@ -10,9 +10,9 @@ import Foundation
 ///
 /// The scope is resolved to a document id by
 /// ``LeaderboardBoard/scopeDocId(_:seasonId:)``: the all-time board is the
-/// fixed `alltime` id, the monthly board is the current Europe/Stockholm
-/// `YYYY-MM` season id from ``LeaderboardSeasonClock`` — the exact month the
-/// backend generator writes. Nothing here writes; the read rule
+/// fixed `alltime` id, while monthly boards use the current or previous
+/// Europe/Stockholm `YYYY-MM` season id from ``LeaderboardSeasonClock`` — the
+/// exact month ids the backend generator writes. Nothing here writes; the read rule
 /// (firebase/firestore.rules `leaderboards/{scope}` → `allow read: if
 /// isActiveMember()`) is the whole security surface, and the pure fold in
 /// ``LeaderboardBoard`` turns the document map into the UI model, so this class
@@ -31,12 +31,12 @@ import Foundation
 final class FirebaseLeaderboardRepository: LeaderboardRepository, @unchecked Sendable {
     private let firestore: Firestore
     private let storage: Storage
-    private let seasonId: @Sendable () -> String
+    private let seasonId: @Sendable (Int) -> String
 
     private init(
         firestore: Firestore,
         storage: Storage,
-        seasonId: @escaping @Sendable () -> String
+        seasonId: @escaping @Sendable (Int) -> String
     ) {
         self.firestore = firestore
         self.storage = storage
@@ -46,7 +46,7 @@ final class FirebaseLeaderboardRepository: LeaderboardRepository, @unchecked Sen
     func observeBoard(scope: LeaderboardScope, viewerUid: String?) -> AsyncStream<LeaderboardSnapshot> {
         // Lazy: the season id (a `Date()` + format) is resolved ONLY for the
         // monthly scope — the all-time board's id is fixed.
-        let docId = LeaderboardBoard.scopeDocId(scope, seasonId: seasonId())
+        let docId = LeaderboardBoard.scopeDocId(scope, seasonId: seasonId)
         let document = firestore.collection(Self.collection).document(docId)
         return AsyncStream { continuation in
             let registration = document.addSnapshotListener { snapshot, error in
@@ -182,7 +182,7 @@ final class FirebaseLeaderboardRepository: LeaderboardRepository, @unchecked Sen
         let repository = FirebaseLeaderboardRepository(
             firestore: firestore,
             storage: storage,
-            seasonId: { LeaderboardSeasonClock.seasonId() }
+            seasonId: { LeaderboardSeasonClock.seasonId(monthsAgo: $0) }
         )
         cached = repository
         return repository

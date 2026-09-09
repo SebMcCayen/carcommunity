@@ -49,7 +49,7 @@ const val LEADERBOARD_SCOPE_TABS_TAG = "leaderboardScopeTabs"
 /**
  * Social leaderboard screen. Stateless.
  *
- * A read-only view of the precomputed board: a monthly / all-time toggle at the
+ * A read-only view of the precomputed board: a three-scope selector at the
  * top, then, per competitive category (in the server's render order), a podium of
  * the top three and a list down to rank ten. Everything shown — ranks, names,
  * avatars, ordering — is resolved server-side; this screen only formats each raw

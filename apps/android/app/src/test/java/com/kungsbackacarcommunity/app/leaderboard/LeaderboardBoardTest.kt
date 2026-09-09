@@ -18,7 +18,7 @@ class LeaderboardBoardTest {
 
     @Test
     fun allTimeScopeReadsTheReservedDocId() {
-        assertEquals("alltime", LeaderboardBoard.scopeDocId(LeaderboardScope.ALL_TIME) { "2026-08" })
+        assertEquals("alltime", LeaderboardBoard.scopeDocId(LeaderboardScope.ALL_TIME) { _ -> "2026-08" })
     }
 
     @Test
@@ -49,7 +49,7 @@ class LeaderboardBoardTest {
         // not be invoked for it. A throwing provider proves the laziness.
         assertEquals(
             "alltime",
-            LeaderboardBoard.scopeDocId(LeaderboardScope.ALL_TIME) {
+            LeaderboardBoard.scopeDocId(LeaderboardScope.ALL_TIME) { _ ->
                 throw AssertionError("season provider must not run for the all-time scope")
             },
         )
@@ -63,7 +63,7 @@ class LeaderboardBoardTest {
                 LeaderboardScope.LAST_MONTH,
                 LeaderboardScope.ALL_TIME,
             ),
-            LeaderboardScope.entries,
+            LeaderboardScope.entries.toList(),
         )
         assertEquals(LeaderboardScope.THIS_MONTH, LeaderboardBoard.DEFAULT_SCOPE)
     }
