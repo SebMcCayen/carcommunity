@@ -57,7 +57,7 @@ const val LEADERBOARD_SCOPE_TABS_TAG = "leaderboardScopeTabs"
  *
  * The `streak` category exists only on the all-time board (a daily-collection
  * streak spans months), which [LeaderboardBoard.categoriesFor] already enforces —
- * so the monthly view simply carries four categories, not five.
+ * so each monthly view carries five categories, not the all-time board's six.
  *
  * Back is handled centrally by the shell (the pinned AeroPage arrow +
  * system-Back dispatcher), so this screen takes no back callback of its own.
