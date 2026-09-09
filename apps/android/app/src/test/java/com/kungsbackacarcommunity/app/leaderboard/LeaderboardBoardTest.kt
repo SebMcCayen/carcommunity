@@ -18,12 +18,29 @@ class LeaderboardBoardTest {
 
     @Test
     fun allTimeScopeReadsTheReservedDocId() {
-        assertEquals("alltime", LeaderboardBoard.scopeDocId(LeaderboardScope.ALL_TIME) { "2026-08" })
+        assertEquals("alltime", LeaderboardBoard.scopeDocId(LeaderboardScope.ALL_TIME) { _ -> "2026-08" })
     }
 
     @Test
     fun thisMonthScopeReadsTheSeasonId() {
-        assertEquals("2026-08", LeaderboardBoard.scopeDocId(LeaderboardScope.THIS_MONTH) { "2026-08" })
+        assertEquals(
+            "2026-08",
+            LeaderboardBoard.scopeDocId(LeaderboardScope.THIS_MONTH) { monthsAgo ->
+                assertEquals(0, monthsAgo)
+                "2026-08"
+            },
+        )
+    }
+
+    @Test
+    fun lastMonthScopeReadsThePreviousSeasonId() {
+        assertEquals(
+            "2026-07",
+            LeaderboardBoard.scopeDocId(LeaderboardScope.LAST_MONTH) { monthsAgo ->
+                assertEquals(1, monthsAgo)
+                "2026-07"
+            },
+        )
     }
 
     @Test
@@ -32,10 +49,23 @@ class LeaderboardBoardTest {
         // not be invoked for it. A throwing provider proves the laziness.
         assertEquals(
             "alltime",
-            LeaderboardBoard.scopeDocId(LeaderboardScope.ALL_TIME) {
+            LeaderboardBoard.scopeDocId(LeaderboardScope.ALL_TIME) { _ ->
                 throw AssertionError("season provider must not run for the all-time scope")
             },
         )
+    }
+
+    @Test
+    fun scopesAreInDisplayOrderAndDefaultToThisMonth() {
+        assertEquals(
+            listOf(
+                LeaderboardScope.THIS_MONTH,
+                LeaderboardScope.LAST_MONTH,
+                LeaderboardScope.ALL_TIME,
+            ),
+            LeaderboardScope.entries.toList(),
+        )
+        assertEquals(LeaderboardScope.THIS_MONTH, LeaderboardBoard.DEFAULT_SCOPE)
     }
 
     // ── categoriesFor ───────────────────────────────────────────────────────
@@ -57,18 +87,20 @@ class LeaderboardBoardTest {
 
     @Test
     fun monthlyCategoriesOmitStreakButKeepOrder() {
-        val monthly = LeaderboardBoard.categoriesFor(LeaderboardScope.THIS_MONTH)
-        assertEquals(
-            listOf(
-                LeaderboardCategory.CROWN_POINTS,
-                LeaderboardCategory.DISTANCE,
-                LeaderboardCategory.EVENTS,
-                LeaderboardCategory.CONVOYS,
-                LeaderboardCategory.WAVES,
-            ),
-            monthly,
-        )
-        assertFalse(monthly.contains(LeaderboardCategory.STREAK))
+        listOf(LeaderboardScope.THIS_MONTH, LeaderboardScope.LAST_MONTH).forEach { scope ->
+            val monthly = LeaderboardBoard.categoriesFor(scope)
+            assertEquals(
+                listOf(
+                    LeaderboardCategory.CROWN_POINTS,
+                    LeaderboardCategory.DISTANCE,
+                    LeaderboardCategory.EVENTS,
+                    LeaderboardCategory.CONVOYS,
+                    LeaderboardCategory.WAVES,
+                ),
+                monthly,
+            )
+            assertFalse(monthly.contains(LeaderboardCategory.STREAK))
+        }
     }
 
     // ── displayValue ────────────────────────────────────────────────────────

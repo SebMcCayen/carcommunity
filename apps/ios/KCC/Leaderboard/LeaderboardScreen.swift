@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The social leaderboard — the iOS slice of Android's `LeaderboardScreen`.
 ///
-/// A read-only view of the precomputed board: an All-time / This-month toggle
+/// A read-only view of the precomputed board: a three-scope selector
 /// and a category picker at the top, then, for the chosen category, a podium of
 /// the top three and a list down the rest. Everything shown — ranks, names,
 /// avatars, ordering — is resolved server-side; this screen only formats each
@@ -95,24 +95,33 @@ struct LeaderboardScreen: View {
 
 // MARK: - Toggle + picker
 
-/// The All-time / This-month scope switch, a two-option segmented control —
-/// Android's two-tab `TabRow`.
+/// The This-month / Last-month / All-time scope switch — Android's three-tab
+/// `TabRow` — rendered in ``LeaderboardScope/allCases`` order.
 private struct ScopeToggle: View {
     let coordinator: LeaderboardCoordinator
 
     var body: some View {
         Picker(
-            "leaderboard.scopeAllTime",
+            "leaderboard.title",
             selection: Binding(
                 get: { coordinator.scope },
                 set: { coordinator.select(scope: $0) }
             )
         ) {
-            Text("leaderboard.scopeAllTime").tag(LeaderboardScope.allTime)
-            Text("leaderboard.scopeThisMonth").tag(LeaderboardScope.thisMonth)
+            ForEach(LeaderboardScope.allCases, id: \.self) { scope in
+                Text(scopeTitleKey(scope)).tag(scope)
+            }
         }
         .pickerStyle(.segmented)
         .labelsHidden()
+    }
+
+    private func scopeTitleKey(_ scope: LeaderboardScope) -> LocalizedStringKey {
+        switch scope {
+        case .thisMonth: return "leaderboard.scopeThisMonth"
+        case .lastMonth: return "leaderboard.scopeLastMonth"
+        case .allTime: return "leaderboard.scopeAllTime"
+        }
     }
 }
 

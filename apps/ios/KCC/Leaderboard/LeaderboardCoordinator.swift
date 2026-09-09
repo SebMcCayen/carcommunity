@@ -28,8 +28,8 @@ enum LeaderboardUiState: Equatable, Sendable {
     case failed(code: String?)
 }
 
-/// Orchestrates the read-only social leaderboard: holds the All-time /
-/// This-month scope selection, subscribes the matching board stream, and folds
+/// Orchestrates the read-only social leaderboard: holds the three-scope
+/// selection, subscribes the matching board stream, and folds
 /// its emissions into ``LeaderboardUiState``. Pure Swift (no Firebase/SwiftUI
 /// types) so it is unit-testable with a fake repository — the iOS counterpart
 /// of Android's leaderboard wiring in `LeaderboardRoute` (the `scope` state +
@@ -75,13 +75,13 @@ final class LeaderboardCoordinator {
     private var avatarURLCache: [String: URL] = [:]
 
     /// The selected board. Changing it re-subscribes; the screen drives it from
-    /// the All-time / This-month toggle.
-    private(set) var scope: LeaderboardScope = .allTime
+    /// the This-month / Last-month / All-time selector.
+    private(set) var scope: LeaderboardScope = LeaderboardBoard.defaultScope
     /// The category whose podium is shown. Scope switching re-subscribes;
     /// category switching does NOT — every category rides on the one document
     /// read, so it is a pure display choice, driven by the screen's category
     /// picker. Kept valid for the current scope: selecting the all-time-only
-    /// `streak` and then switching to This-month falls back to the first
+    /// `streak` and then switching to a monthly scope falls back to the first
     /// category (Android stacks every category, so it never faces this; the
     /// iOS one-at-a-time picker must).
     private(set) var selectedCategory: LeaderboardCategory = .crownPoints

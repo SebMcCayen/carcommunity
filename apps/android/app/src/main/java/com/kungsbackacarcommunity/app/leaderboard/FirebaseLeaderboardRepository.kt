@@ -14,16 +14,18 @@ import kotlinx.coroutines.flow.callbackFlow
  * precomputed `leaderboards/{scope}` document.
  *
  * The scope is resolved to a document id by [LeaderboardBoard.scopeDocId]: the
- * all-time board is the fixed `alltime` id, the monthly board is the current
- * Europe/Stockholm `YYYY-MM` season id from [CrownSeasonClock] — the exact month
- * the backend generator writes. Nothing here writes; the read rule (firestore.rules
+ * all-time board is the fixed `alltime` id, while the monthly boards use the
+ * current or previous Europe/Stockholm `YYYY-MM` season id from [CrownSeasonClock]
+ * — the exact month ids the backend generator writes. Nothing here writes; the read rule (firestore.rules
  * `leaderboards/{scope}` → `allow read: if isActiveMember()`) is the whole security
  * surface, and the pure fold in [LeaderboardBoard] turns the document map into the
  * UI model, so this class only extracts raw rows and forwards listener lifecycle.
  */
 class FirebaseLeaderboardRepository private constructor(
     private val firestore: FirebaseFirestore,
-    private val seasonIdProvider: () -> String = { CrownSeasonClock.currentSeasonId() },
+    private val seasonIdProvider: (monthsAgo: Int) -> String = { monthsAgo ->
+        CrownSeasonClock.seasonIdMonthsAgo(monthsAgo)
+    },
 ) : LeaderboardRepository {
 
     override fun observeBoard(
@@ -31,7 +33,7 @@ class FirebaseLeaderboardRepository private constructor(
         viewerUid: String?,
     ): Flow<LeaderboardUiState> = callbackFlow {
         trySend(LeaderboardUiState.Loading)
-        // Lazy: seasonIdProvider (an Instant.now() + format) runs ONLY for the
+        // Lazy: seasonIdProvider (an Instant.now() + format) runs ONLY for a
         // monthly scope — the all-time board's id is fixed.
         val docId = LeaderboardBoard.scopeDocId(scope, seasonIdProvider)
         val registration =

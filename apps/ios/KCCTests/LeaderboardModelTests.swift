@@ -30,23 +30,40 @@ final class LeaderboardModelTests: XCTestCase {
     // MARK: - scopeDocId
 
     func testScopeDocIdIsFixedForAllTime() {
-        let id = LeaderboardBoard.scopeDocId(.allTime, seasonId: "2026-08")
+        let id = LeaderboardBoard.scopeDocId(.allTime) { _ in "2026-08" }
         XCTAssertEqual(id, LeaderboardBoard.allTimeDocId)
         XCTAssertEqual(id, "alltime")
     }
 
     func testScopeDocIdIsTheSeasonIdForThisMonth() {
-        XCTAssertEqual(LeaderboardBoard.scopeDocId(.thisMonth, seasonId: "2026-08"), "2026-08")
+        let id = LeaderboardBoard.scopeDocId(.thisMonth) { monthsAgo in
+            XCTAssertEqual(monthsAgo, 0)
+            return "2026-08"
+        }
+        XCTAssertEqual(id, "2026-08")
+    }
+
+    func testScopeDocIdIsThePreviousSeasonIdForLastMonth() {
+        let id = LeaderboardBoard.scopeDocId(.lastMonth) { monthsAgo in
+            XCTAssertEqual(monthsAgo, 1)
+            return "2026-07"
+        }
+        XCTAssertEqual(id, "2026-07")
     }
 
     func testScopeDocIdDoesNotEvaluateSeasonIdForAllTime() {
-        // The season id is a lazy autoclosure: it must NOT run for all-time.
+        // The season id is a lazy closure: it must NOT run for all-time.
         var evaluated = false
-        _ = LeaderboardBoard.scopeDocId(
-            .allTime,
-            seasonId: { evaluated = true; return "2026-08" }()
-        )
+        _ = LeaderboardBoard.scopeDocId(.allTime) { _ in
+            evaluated = true
+            return "2026-08"
+        }
         XCTAssertFalse(evaluated)
+    }
+
+    func testScopesAreInDisplayOrderAndDefaultToThisMonth() {
+        XCTAssertEqual(LeaderboardScope.allCases, [.thisMonth, .lastMonth, .allTime])
+        XCTAssertEqual(LeaderboardBoard.defaultScope, .thisMonth)
     }
 
     // MARK: - categoriesFor
@@ -58,10 +75,12 @@ final class LeaderboardModelTests: XCTestCase {
         )
     }
 
-    func testThisMonthOmitsTheAllTimeOnlyStreak() {
-        let categories = LeaderboardBoard.categories(for: .thisMonth)
-        XCTAssertEqual(categories, [.crownPoints, .distance, .events, .convoys, .waves])
-        XCTAssertFalse(categories.contains(.streak))
+    func testMonthlyScopesOmitTheAllTimeOnlyStreak() {
+        for scope in [LeaderboardScope.thisMonth, .lastMonth] {
+            let categories = LeaderboardBoard.categories(for: scope)
+            XCTAssertEqual(categories, [.crownPoints, .distance, .events, .convoys, .waves])
+            XCTAssertFalse(categories.contains(.streak))
+        }
     }
 
     // MARK: - board fold
@@ -256,5 +275,14 @@ final class LeaderboardModelTests: XCTestCase {
         // time zone. 2026-08-31T23:30:00Z is still August in UTC.
         let lateAugustUtc = Date(timeIntervalSince1970: 1_788_219_000)
         XCTAssertEqual(LeaderboardSeasonClock.seasonId(for: lateAugustUtc, zone: nil), "2026-08")
+    }
+
+    func testPreviousMonthRollsAcrossTheYearBoundary() throws {
+        let stockholm = try XCTUnwrap(TimeZone(identifier: "Europe/Stockholm"))
+        let midJanuary = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-01-15T12:00:00Z"))
+        XCTAssertEqual(
+            LeaderboardSeasonClock.seasonId(monthsAgo: 1, from: midJanuary, zone: stockholm),
+            "2025-12"
+        )
     }
 }

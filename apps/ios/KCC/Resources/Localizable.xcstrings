@@ -18378,6 +18378,23 @@
         }
       }
     },
+    "leaderboard.scopeLastMonth": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Förra månaden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last month"
+          }
+        }
+      }
+    },
     "leaderboard.scopeThisMonth": {
       "extractionState": "manual",
       "localizations": {

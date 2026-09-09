@@ -10,7 +10,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.flow.flowOf
 
 /**
- * Social leaderboard route: holds the All-time / This-month scope selection and
+ * Social leaderboard route: holds the three-scope leaderboard selection and
  * wires the matching read-only board stream into [LeaderboardScreen].
  *
  * A pure read of the precomputed `leaderboards/{scope}` document via [repository]
@@ -31,7 +31,7 @@ fun LeaderboardRoute(
     repository: LeaderboardRepository?,
     uid: String?,
 ) {
-    var scope by rememberSaveable { mutableStateOf(LeaderboardScope.ALL_TIME) }
+    var scope by rememberSaveable { mutableStateOf(LeaderboardBoard.DEFAULT_SCOPE) }
 
     val state by
         remember(repository, uid, scope) {
