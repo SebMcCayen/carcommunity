@@ -25,16 +25,24 @@ struct ShellView: View {
     /// effect below), never recreate it.
     @State private var mapSurface = StubMapSurface()
 
-    /// The events-list wiring, created once on first shell appearance. Nil in
-    /// a config-less build (no GoogleService-Info.plist →
-    /// ``FirebaseEventsRepository/createIfAvailable()`` returns nil); the
-    /// events route then renders ``EventsScreen``'s placeholder state instead
-    /// of crashing.
+    /// Feature coordinators are composed once for the signed-in shell. Every
+    /// factory is config-safe, so a build without GoogleService-Info.plist
+    /// still renders each route's unavailable state rather than crashing.
     @State private var eventsCoordinator: EventsCoordinator?
-    /// Whether the one-shot events wiring above ran. A separate flag because
-    /// a nil `eventsCoordinator` is also the legitimate steady state of a
-    /// config-less build, so nil cannot mean "not attempted yet".
-    @State private var hasWiredEvents = false
+    @State private var leaderboardCoordinator: LeaderboardCoordinator?
+    @State private var notificationsCoordinator: NotificationsInboxCoordinator?
+    @State private var notificationSettingsCoordinator: NotificationSettingsCoordinator?
+    @State private var friendsCoordinator: FriendsCoordinator?
+    @State private var conversationsCoordinator: ConversationsCoordinator?
+    @State private var chatHubCoordinator: ChatHubCoordinator?
+    @State private var crownHuntComposition: CrownHuntComposition?
+    @State private var liveLocationCoordinator: LiveLocationCoordinator?
+    @State private var friendsRepository: FriendsRepository?
+    @State private var conversationsRepository: ConversationsRepository?
+    @State private var dmTarget: DmRouteTarget?
+    @State private var dmCoordinator: ChatCoordinator?
+    @State private var locationProvider = CoreLocationProvider()
+    @State private var hasWiredFeatures = false
 
     /// What is drawn over the shell's map right now — the ONE pure value
     /// every cover-derived decision reads. `navigating` / `navSearchOpen` are
@@ -71,12 +79,7 @@ struct ShellView: View {
         .onChange(of: mapCover, initial: true) { _, cover in
             mapSurface.setActive(ShellMapHost.surfaceActive(cover: cover))
         }
-        .task {
-            guard !hasWiredEvents else { return }
-            hasWiredEvents = true
-            eventsCoordinator = FirebaseEventsRepository.createIfAvailable()
-                .map { EventsCoordinator(repository: $0) }
-        }
+        .task(id: signedInUid) { await wireFeatures() }
     }
 
     /// Per-tab content. The panel tabs draw the SAME single surface behind
@@ -97,6 +100,11 @@ struct ShellView: View {
                         profileButton
                     }
                 }
+                .overlay(alignment: .bottomTrailing) {
+                    if case .signedIn = session.state {
+                        mapCommunicationControls
+                    }
+                }
         case .history:
             // The read-only drives history (Android's DrivesListScreen). The
             // panel wires itself (repository + uid) at the feature level, so
@@ -104,7 +112,11 @@ struct ShellView: View {
             panelTab { DrivesPanel() }
         case .social:
             panelTab {
-                SocialHubPanel(onOpenEvents: { routes = routes.opening(.events) })
+                SocialHubPanel(
+                    onOpenEvents: { routes = routes.opening(.events) },
+                    onOpenCrownHunt: { routes = routes.opening(.crownHunt) },
+                    onOpenLeaderboard: { routes = routes.opening(.leaderboard) }
+                )
             }
         case .garage:
             panelTab { GaragePanel() }
@@ -142,13 +154,49 @@ struct ShellView: View {
     }
 
     private var profileButton: some View {
-        Button {
-            routes = routes.opening(.profile)
+        Menu {
+            Button {
+                routes = routes.opening(.profile)
+            } label: {
+                Label("shell.moreProfile", systemImage: "person")
+            }
+            if friendsCoordinator != nil {
+                Button {
+                    routes = routes.opening(.friends)
+                } label: {
+                    Label("shell.friendsTitle", systemImage: "person.2")
+                }
+            }
         } label: {
             Label("shell.moreProfile", systemImage: "person.circle")
                 .labelStyle(.iconOnly)
                 .font(.system(size: 28))
         }
+        .padding(KccSpacing.s4)
+    }
+
+    private var mapCommunicationControls: some View {
+        VStack(spacing: KccSpacing.s3) {
+            Button {
+                guard ChatHubCoordinator.canPresentHub(cover: mapCover, navigating: false) else { return }
+                routes = routes.opening(.chatHub)
+            } label: {
+                Image(systemName: "bubble.left.and.bubble.right.fill")
+                    .frame(width: 48, height: 48)
+                    .background(.regularMaterial, in: Circle())
+            }
+            .accessibilityLabel(Text("chatHub.title"))
+
+            Button {
+                routes = routes.opening(.liveLocation)
+            } label: {
+                Image(systemName: "location.fill")
+                    .frame(width: 48, height: 48)
+                    .background(.regularMaterial, in: Circle())
+            }
+            .accessibilityLabel(Text("liveLocation.screenTitle"))
+        }
+        .font(.system(size: 20, weight: .semibold))
         .padding(KccSpacing.s4)
     }
 
@@ -175,7 +223,87 @@ struct ShellView: View {
                                 Label("shell.back", systemImage: "chevron.backward")
                             }
                         }
+                }
+            }
+        case .leaderboard:
+            routeNavigation {
+                LeaderboardScreen(coordinator: leaderboardCoordinator)
+            }
+        case .crownHunt:
+            if let composition = crownHuntComposition {
+                CrownHuntHubView(
+                    statsCoordinator: composition.statsCoordinator,
+                    claimsCoordinator: composition.claimsCoordinator,
+                    shopCoordinator: composition.shopCoordinator,
+                    crownHuntEnabled: composition.flags.crownHuntEnabled
+                )
+                .background(.background, ignoresSafeAreaEdges: .all)
+                .overlay(alignment: .topLeading) { routeBackButton }
+            } else {
+                unavailableRoute
+            }
+        case .liveLocation:
+            if let liveLocationCoordinator {
+                LiveLocationScreen(
+                    coordinator: liveLocationCoordinator,
+                    onBack: { routes = routes.poppingOne() }
+                )
+            } else {
+                unavailableRoute
+            }
+        case .chatHub:
+            routeNavigation {
+                ChatHubScreen(
+                    coordinator: chatHubCoordinator,
+                    conversationsCoordinator: conversationsCoordinator,
+                    makeNewDialogueCoordinator: makeNewDialogueCoordinator,
+                    onOpenConversation: openDm,
+                    notificationsCoordinator: notificationsCoordinator,
+                    onOpenNotificationSettings: {
+                        routes = routes.opening(.notificationSettings)
                     }
+                )
+            }
+        case .notifications:
+            routeNavigation {
+                NotificationsInboxScreen(
+                    coordinator: notificationsCoordinator,
+                    onOpenSettings: { routes = routes.opening(.notificationSettings) }
+                )
+            }
+        case .notificationSettings:
+            routeNavigation {
+                NotificationSettingsScreen(coordinator: notificationSettingsCoordinator)
+            }
+        case .friends:
+            routeNavigation {
+                FriendsScreen(
+                    coordinator: friendsCoordinator,
+                    onMessageFriend: { friend in
+                        openDm(uid: friend.uid, displayName: friend.displayName)
+                    },
+                    onViewProfile: nil
+                )
+            }
+        case .conversations:
+            routeNavigation {
+                ConversationsScreen(
+                    coordinator: conversationsCoordinator,
+                    makeNewDialogueCoordinator: makeNewDialogueCoordinator,
+                    onOpenConversation: openDm
+                )
+            }
+        case .chat:
+            if let target = dmTarget {
+                routeNavigation {
+                    ChatScreen(
+                        coordinator: dmCoordinator,
+                        otherName: target.displayName,
+                        currentUid: signedInUid ?? ""
+                    )
+                }
+            } else {
+                unavailableRoute
             }
         default:
             // No other route is reachable yet — each renders here as its
@@ -185,12 +313,117 @@ struct ShellView: View {
         }
     }
 
+    private var routeBackButton: some View {
+        Button {
+            routes = routes.poppingOne()
+        } label: {
+            Label("shell.back", systemImage: "chevron.backward")
+        }
+        .padding(KccSpacing.s4)
+    }
+
+    private var unavailableRoute: some View {
+        VStack(spacing: KccSpacing.s3) {
+            Text("shell.unavailable")
+                .foregroundStyle(.secondary)
+            routeBackButton
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.background, ignoresSafeAreaEdges: .all)
+    }
+
+    private func routeNavigation<Content: View>(
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        NavigationStack {
+            content()
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        routeBackButton
+                    }
+                }
+        }
+        .background(.background, ignoresSafeAreaEdges: .all)
+    }
+
+    private var makeNewDialogueCoordinator: (() -> NewDialogueCoordinator)? {
+        friendsRepository.map { repository in
+            { NewDialogueCoordinator(friends: repository) }
+        }
+    }
+
+    private func openDm(uid: String, displayName: String?) {
+        guard !uid.isEmpty, let conversationsRepository, let selfUid = signedInUid else { return }
+        dmTarget = DmRouteTarget(uid: uid, displayName: displayName)
+        dmCoordinator = ChatCoordinator(
+            repository: conversationsRepository,
+            selfUid: selfUid,
+            otherUid: uid
+        )
+        routes = routes.opening(.chat)
+    }
+
+    @MainActor
+    private func wireFeatures() async {
+        guard !hasWiredFeatures else { return }
+        hasWiredFeatures = true
+
+        let uid = signedInUid
+        let friends = FirebaseFriendsRepository.createIfAvailable()
+        let conversations = FirebaseConversationsRepository.createIfAvailable()
+        let notifications = FirebaseNotificationsRepository.createIfAvailable()
+
+        friendsRepository = friends
+        conversationsRepository = conversations
+        eventsCoordinator = FirebaseEventsRepository.createIfAvailable().map(EventsCoordinator.init(repository:))
+        leaderboardCoordinator = LeaderboardCoordinator(
+            repository: FirebaseLeaderboardRepository.createIfAvailable()
+        )
+        notificationsCoordinator = NotificationsInboxCoordinator(repository: notifications, uid: uid)
+        notificationSettingsCoordinator = NotificationSettingsCoordinator(
+            repository: FirebaseNotificationSettingsRepository.createIfAvailable(),
+            uid: uid
+        )
+        friendsCoordinator = friends.map {
+            FriendsCoordinator(
+                repository: $0,
+                pointsRepository: FirebaseFriendPointsRepository.createIfAvailable()
+            )
+        }
+        if let conversations, let uid {
+            conversationsCoordinator = ConversationsCoordinator(
+                repository: conversations,
+                blockVisibility: FirebaseBlockVisibilityRepository.createOrEmpty(),
+                uid: uid
+            )
+        }
+        chatHubCoordinator = ChatHubCoordinator(
+            communityRepository: FirebaseCommunityChatRepository.createIfAvailable(),
+            convoyRepository: FirebaseConvoyChatRepository.createIfAvailable()
+        )
+        liveLocationCoordinator = LiveLocationCoordinator.live(provider: locationProvider)
+        crownHuntComposition = await CrownHuntComposition.live(
+            uid: uid,
+            passesMemberGate: uid != nil
+        )
+    }
+
     private var signedInDisplayName: String? {
         if case .signedIn(_, let displayName) = session.state {
             return displayName
         }
         return nil
     }
+
+    private var signedInUid: String? {
+        if case .signedIn(let uid, _) = session.state { return uid }
+        return nil
+    }
+}
+
+private struct DmRouteTarget: Equatable, Sendable {
+    let uid: String
+    let displayName: String?
 }
 
 extension ShellTab {

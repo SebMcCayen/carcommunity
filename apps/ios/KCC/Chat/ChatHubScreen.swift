@@ -2,17 +2,38 @@ import SwiftUI
 
 /// The chat hub opened from the map chat bubble — a four-tab scaffold
 /// (Community / Convoys / Friends / Notifications), the iOS port of Android's
-/// `ChatHubContent`. Community and Convoys are FUNCTIONAL here; Friends (the
-/// existing 1:1 DMs) and Notifications (the in-app inbox) are separate features
-/// that render a placeholder until they land.
+/// `ChatHubContent`. Community, Convoys, the existing 1:1 DMs, and the in-app
+/// notification inbox are connected by the signed-in shell. Each tab retains
+/// its own unavailable state when its backing service cannot be configured.
 ///
-/// Exported ready for a later shell-wiring PR: the shell presents this behind
+/// The shell presents this behind
 /// ``ChatHubCoordinator/canPresentHub(cover:navigating:)`` (which consumes the
 /// unmodified `ShellNavigation.chatHubAllowed` gate) via `ShellRoute.chatHub`.
-/// The `coordinator` is nil in a config-less build; each functional tab then
-/// degrades to its own placeholder.
+/// A nil coordinator is supported by previews and isolated hosts; individual
+/// feature coordinators may also be nil in config-less builds.
 struct ChatHubScreen: View {
     let coordinator: ChatHubCoordinator?
+    let conversationsCoordinator: ConversationsCoordinator?
+    let makeNewDialogueCoordinator: (() -> NewDialogueCoordinator)?
+    let onOpenConversation: ((_ uid: String, _ displayName: String?) -> Void)?
+    let notificationsCoordinator: NotificationsInboxCoordinator?
+    let onOpenNotificationSettings: (() -> Void)?
+
+    init(
+        coordinator: ChatHubCoordinator?,
+        conversationsCoordinator: ConversationsCoordinator? = nil,
+        makeNewDialogueCoordinator: (() -> NewDialogueCoordinator)? = nil,
+        onOpenConversation: ((_ uid: String, _ displayName: String?) -> Void)? = nil,
+        notificationsCoordinator: NotificationsInboxCoordinator? = nil,
+        onOpenNotificationSettings: (() -> Void)? = nil
+    ) {
+        self.coordinator = coordinator
+        self.conversationsCoordinator = conversationsCoordinator
+        self.makeNewDialogueCoordinator = makeNewDialogueCoordinator
+        self.onOpenConversation = onOpenConversation
+        self.notificationsCoordinator = notificationsCoordinator
+        self.onOpenNotificationSettings = onOpenNotificationSettings
+    }
 
     var body: some View {
         if let coordinator {
@@ -71,19 +92,18 @@ struct ChatHubScreen: View {
                 coordinator: coordinator.convoyList,
                 chatRepliesEnabled: coordinator.chatRepliesEnabled
             )
-        case .friends, .notifications:
-            // Separate features (DMs / in-app inbox); they wire up when those
-            // land. Scaffold shows the neutral unavailable notice for now.
-            deferredTab
+        case .friends:
+            ConversationsScreen(
+                coordinator: conversationsCoordinator,
+                makeNewDialogueCoordinator: makeNewDialogueCoordinator,
+                onOpenConversation: onOpenConversation
+            )
+        case .notifications:
+            NotificationsInboxScreen(
+                coordinator: notificationsCoordinator,
+                onOpenSettings: onOpenNotificationSettings
+            )
         }
-    }
-
-    private var deferredTab: some View {
-        Text("chatHub.unavailable")
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .padding(KccSpacing.s4)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var unavailable: some View {

@@ -116,6 +116,24 @@ final class ShellNavTests: XCTestCase {
         XCTAssertEqual(popped.parents, [])
     }
 
+    func testPoppingAConversationReturnsToTheChatHub() {
+        let popped = ShellRouteStack.empty
+            .opening(.chatHub)
+            .opening(.chat)
+            .poppingOne()
+        XCTAssertEqual(popped.current, .chatHub)
+        XCTAssertEqual(popped.parents, [])
+    }
+
+    func testPoppingNotificationSettingsReturnsToTheInbox() {
+        let popped = ShellRouteStack.empty
+            .opening(.notifications)
+            .opening(.notificationSettings)
+            .poppingOne()
+        XCTAssertEqual(popped.current, .notifications)
+        XCTAssertEqual(popped.parents, [])
+    }
+
     func testPoppingATopLevelRouteClosesTheStack() {
         // Back from the profile (opened from the map home) leaves nothing
         // open — the shell falls through to its tab Back rules.

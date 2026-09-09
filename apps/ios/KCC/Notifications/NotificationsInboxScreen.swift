@@ -15,11 +15,12 @@ import SwiftUI
 /// same seam every Firebase-backed surface honors.
 ///
 /// Reached via ``ShellRoute/notifications`` — the shell wraps this screen in a
-/// `NavigationStack` and supplies the Back affordance (future wiring PR).
+/// `NavigationStack` and supplies the Back affordance.
 struct NotificationsInboxScreen: View {
     /// Nil only where no coordinator is constructed; the unavailable STATE
     /// (config-less build) is modelled inside the coordinator.
     let coordinator: NotificationsInboxCoordinator?
+    var onOpenSettings: (() -> Void)? = nil
 
     var body: some View {
         content
@@ -40,6 +41,14 @@ struct NotificationsInboxScreen: View {
                     Text("notifications.markAllRead")
                 }
                 .disabled(coordinator.markReadStatus == .working)
+            }
+        }
+        if let onOpenSettings {
+            ToolbarItem(placement: .secondaryAction) {
+                Button(action: onOpenSettings) {
+                    Image(systemName: "gearshape")
+                }
+                .accessibilityLabel(Text("notifications.settingsTitle"))
             }
         }
     }

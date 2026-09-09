@@ -6,37 +6,47 @@ import SwiftUI
 /// feature yet says so honestly instead of dead-ending.
 
 /// The Social hub panel. Android's Social hub lists Events / Crown Hunt /
-/// Leaderboard / Partners (label-sorted, unavailable entries omitted); only
-/// the events slice is ported, so this hub carries the one entry. The entry
-/// stays present in a config-less build — the events route itself renders the
-/// coordinator's unavailable placeholder, never a crash.
+/// Leaderboard / Partners (label-sorted, unavailable entries omitted). iOS
+/// currently has the first three feature slices, so those are the entries this
+/// panel exposes; Partners remains absent until its repository and screen land.
 struct SocialHubPanel: View {
-    /// Opens ``ShellRoute/events`` full-screen via the shell's route stack.
     let onOpenEvents: () -> Void
+    let onOpenCrownHunt: () -> Void
+    let onOpenLeaderboard: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s4) {
             Text("shell.socialTitle")
                 .font(.system(size: KccTypeScale.headingLg, weight: KccTypeScale.semibold))
 
-            Button(action: onOpenEvents) {
-                HStack(spacing: KccSpacing.s3) {
-                    Image(systemName: "calendar")
-                        .foregroundStyle(.secondary)
-                    Text("shell.socialEvents")
-                        .font(.system(size: KccTypeScale.bodyMd))
-                    Spacer()
-                    Image(systemName: "chevron.forward")
-                        .font(.system(size: KccTypeScale.bodySm))
-                        .foregroundStyle(.secondary)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+            hubRow(label: "shell.socialEvents", icon: "calendar", action: onOpenEvents)
+            hubRow(label: "shell.socialCrownHunt", icon: "crown", action: onOpenCrownHunt)
+            hubRow(label: "shell.socialLeaderboard", icon: "trophy", action: onOpenLeaderboard)
 
             Spacer()
         }
         .padding(KccSpacing.s6)
+    }
+
+    private func hubRow(
+        label: LocalizedStringKey,
+        icon: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: KccSpacing.s3) {
+                Image(systemName: icon)
+                    .foregroundStyle(.secondary)
+                Text(label)
+                    .font(.system(size: KccTypeScale.bodyMd))
+                Spacer()
+                Image(systemName: "chevron.forward")
+                    .font(.system(size: KccTypeScale.bodySm))
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -62,7 +72,7 @@ struct ComingSoonPanel: View {
 }
 
 #Preview("Social hub") {
-    SocialHubPanel(onOpenEvents: {})
+    SocialHubPanel(onOpenEvents: {}, onOpenCrownHunt: {}, onOpenLeaderboard: {})
 }
 
 #Preview("Coming soon") {
