@@ -8,7 +8,8 @@ import SwiftUI
 ///
 /// The shell presents this behind
 /// ``ChatHubCoordinator/canPresentHub(cover:navigating:)`` (which consumes the
-/// unmodified `ShellNavigation.chatHubAllowed` gate) via `ShellRoute.chatHub`.
+/// unmodified `ShellNavigation.chatHubAllowed` gate) via the translucent
+/// `ShellRoute.chatHub` overlay hosted inside the Map tab.
 /// A nil coordinator is supported by previews and isolated hosts; individual
 /// feature coordinators may also be nil in config-less builds.
 struct ChatHubScreen: View {

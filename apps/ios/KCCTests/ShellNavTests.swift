@@ -289,6 +289,18 @@ final class ShellNavTests: XCTestCase {
         )
     }
 
+    func testChatHubRouteKeepsTheMapLiveBehindItsOverlay() {
+        XCTAssertEqual(
+            ShellNavigation.mapCover(
+                tab: .map,
+                route: .chatHub,
+                navigating: false,
+                navSearchOpen: false
+            ),
+            .transparent
+        )
+    }
+
     // MARK: - chat hub gate
 
     func testChatHubShowsOverTheMapHome() {

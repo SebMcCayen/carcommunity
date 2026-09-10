@@ -229,7 +229,10 @@ final class LiveLocationCoordinatorTests: XCTestCase {
     @MainActor
     func testStartSharingCallsTheCallableWithTheFixedDefaultWindow() async {
         let repository = FakeLiveLocationRepository()
-        let coordinator = makeCoordinator(repository: repository, provider: StubLocationProvider())
+        let coordinator = makeCoordinator(
+            repository: repository,
+            provider: StubLocationProvider(authorization: .whileInUse)
+        )
         coordinator.start()
 
         let result = await coordinator.startSharing()
@@ -508,7 +511,10 @@ final class LiveLocationCoordinatorTests: XCTestCase {
     @MainActor
     func testFailedStartSurfacesFailedStatus() async {
         let repository = FakeLiveLocationRepository()
-        let coordinator = makeCoordinator(repository: repository, provider: StubLocationProvider())
+        let coordinator = makeCoordinator(
+            repository: repository,
+            provider: StubLocationProvider(authorization: .whileInUse)
+        )
         coordinator.start()
         repository.nextError = FakeError()
 
@@ -546,6 +552,22 @@ final class LiveLocationCoordinatorTests: XCTestCase {
         XCTAssertTrue(repository.startedDurations.isEmpty)
     }
 
+    @MainActor
+    func testStartSharingRejectedWithoutLocationPermission() async {
+        let repository = FakeLiveLocationRepository()
+        let coordinator = makeCoordinator(
+            repository: repository,
+            provider: StubLocationProvider(authorization: .denied)
+        )
+        coordinator.start()
+
+        let result = await coordinator.startSharing()
+
+        XCTAssertEqual(result, .failed)
+        XCTAssertEqual(coordinator.actionStatus, .idle)
+        XCTAssertTrue(repository.startedDurations.isEmpty)
+    }
+
     /// A repository can exist (Firebase configured) with nobody signed in —
     /// `wired` is false, and `startSharing()` must not reach the callable.
     @MainActor
@@ -567,7 +589,10 @@ final class LiveLocationCoordinatorTests: XCTestCase {
     @MainActor
     func testStartSharingStillReportsBusyOverTheFlagGate() async {
         let repository = FakeLiveLocationRepository()
-        let coordinator = makeCoordinator(repository: repository, provider: StubLocationProvider())
+        let coordinator = makeCoordinator(
+            repository: repository,
+            provider: StubLocationProvider(authorization: .whileInUse)
+        )
         coordinator.start()
         repository.setHoldStart(true)
 
@@ -601,6 +626,24 @@ final class LiveLocationCoordinatorTests: XCTestCase {
         repository.emitSession(activeSession())
         await waitUntil { coordinator.isSharing }
         XCTAssertEqual(coordinator.toggleAction, .stop)
+    }
+
+    @MainActor
+    func testDisabledScreenEntryReturnsOnlyForAnActiveSession() async {
+        let repository = FakeLiveLocationRepository()
+        let coordinator = makeCoordinator(
+            repository: repository,
+            provider: StubLocationProvider(),
+            canShare: false
+        )
+        coordinator.start()
+
+        XCTAssertFalse(coordinator.canPresentScreen)
+
+        repository.emitSession(activeSession())
+        await waitUntil { coordinator.isSharing }
+
+        XCTAssertTrue(coordinator.canPresentScreen)
     }
 
     @MainActor

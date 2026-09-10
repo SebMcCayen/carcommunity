@@ -37,6 +37,7 @@ struct ShellView: View {
     @State private var chatHubCoordinator: ChatHubCoordinator?
     @State private var crownHuntComposition: CrownHuntComposition?
     @State private var liveLocationCoordinator: LiveLocationCoordinator?
+    @State private var locationPermissionCoordinator: LocationPermissionCoordinator?
     @State private var friendsRepository: FriendsRepository?
     @State private var conversationsRepository: ConversationsRepository?
     @State private var dmTarget: DmRouteTarget?
@@ -67,7 +68,7 @@ struct ShellView: View {
         // Android shell's route-host pattern), each carrying its own back
         // affordance that pops one level via the pure stack.
         .overlay {
-            if let route = routes.current {
+            if let route = routes.current, route != .chatHub {
                 routeHost(for: route)
             }
         }
@@ -77,6 +78,11 @@ struct ShellView: View {
         // Transparent/None keep it live, Opaque stands it down.
         .onChange(of: mapCover, initial: true) { _, cover in
             mapSurface.setActive(ShellMapHost.surfaceActive(cover: cover))
+        }
+        .onChange(of: selectedTab) { _, tab in
+            if tab != .map, routes.current == .chatHub {
+                routes = routes.poppingOne()
+            }
         }
         .task(id: signedInUid) { await wireFeatures() }
     }
@@ -102,6 +108,11 @@ struct ShellView: View {
                 .overlay(alignment: .bottomTrailing) {
                     if case .signedIn = session.state {
                         mapCommunicationControls
+                    }
+                }
+                .overlay {
+                    if routes.current == .chatHub {
+                        chatHubOverlay
                     }
                 }
         case .history:
@@ -187,14 +198,16 @@ struct ShellView: View {
             }
             .accessibilityLabel(Text("chatHub.title"))
 
-            Button {
-                routes = routes.opening(.liveLocation)
-            } label: {
-                Image(systemName: "location.fill")
-                    .frame(width: 48, height: 48)
-                    .background(.regularMaterial, in: Circle())
+            if let liveLocationCoordinator, liveLocationCoordinator.canPresentScreen {
+                Button {
+                    routes = routes.opening(.liveLocation)
+                } label: {
+                    Image(systemName: "location.fill")
+                        .frame(width: 48, height: 48)
+                        .background(.regularMaterial, in: Circle())
+                }
+                .accessibilityLabel(Text("liveLocation.screenTitle"))
             }
-            .accessibilityLabel(Text("liveLocation.screenTitle"))
         }
         .font(.system(size: 20, weight: .semibold))
         .padding(KccSpacing.s4)
@@ -243,27 +256,17 @@ struct ShellView: View {
                 unavailableRoute
             }
         case .liveLocation:
-            if let liveLocationCoordinator {
+            if let liveLocationCoordinator, let locationPermissionCoordinator {
                 LiveLocationScreen(
                     coordinator: liveLocationCoordinator,
+                    permissionCoordinator: locationPermissionCoordinator,
                     onBack: { routes = routes.poppingOne() }
                 )
             } else {
                 unavailableRoute
             }
         case .chatHub:
-            routeNavigation {
-                ChatHubScreen(
-                    coordinator: chatHubCoordinator,
-                    conversationsCoordinator: conversationsCoordinator,
-                    makeNewDialogueCoordinator: makeNewDialogueCoordinator,
-                    onOpenConversation: openDm,
-                    notificationsCoordinator: notificationsCoordinator,
-                    onOpenNotificationSettings: {
-                        routes = routes.opening(.notificationSettings)
-                    }
-                )
-            }
+            EmptyView()
         case .notifications:
             routeNavigation {
                 NotificationsInboxScreen(
@@ -320,6 +323,31 @@ struct ShellView: View {
             Label("shell.back", systemImage: "chevron.backward")
         }
         .padding(KccSpacing.s4)
+    }
+
+    private var chatHubOverlay: some View {
+        NavigationStack {
+            ChatHubScreen(
+                coordinator: chatHubCoordinator,
+                conversationsCoordinator: conversationsCoordinator,
+                makeNewDialogueCoordinator: makeNewDialogueCoordinator,
+                onOpenConversation: openDm,
+                notificationsCoordinator: notificationsCoordinator,
+                onOpenNotificationSettings: {
+                    routes = routes.opening(.notificationSettings)
+                }
+            )
+            .background(.regularMaterial, ignoresSafeAreaEdges: .all)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        routes = routes.poppingOne()
+                    } label: {
+                        Label("shell.back", systemImage: "chevron.backward")
+                    }
+                }
+            }
+        }
     }
 
     private var unavailableRoute: some View {
@@ -381,6 +409,11 @@ struct ShellView: View {
         let friends = FirebaseFriendsRepository.createIfAvailable()
         let conversations = FirebaseConversationsRepository.createIfAvailable()
         let notifications = FirebaseNotificationsRepository.createIfAvailable()
+        if locationPermissionCoordinator == nil {
+            let permissionCoordinator = LocationPermissionCoordinator(provider: locationProvider)
+            permissionCoordinator.start()
+            locationPermissionCoordinator = permissionCoordinator
+        }
         friendsRepository = friends
         conversationsRepository = conversations
         eventsCoordinator = FirebaseEventsRepository.createIfAvailable().map(EventsCoordinator.init(repository:))
@@ -421,10 +454,15 @@ struct ShellView: View {
         // overwrite the new session's coordinators after its await returns.
         guard !Task.isCancelled, uid == signedInUid else { return }
 
-        liveLocationCoordinator = LiveLocationCoordinator.live(
+        let liveLocation = LiveLocationCoordinator.live(
             provider: locationProvider,
             canShare: crownHunt.flags.liveLocationEnabled
         )
+        // Observe the own session from the shell so a flag-disabled feature
+        // can still reveal its control when an existing session needs Stop or
+        // Hide access. Starting this listener does not request GPS permission.
+        liveLocation.start()
+        liveLocationCoordinator = liveLocation
         crownHuntComposition = crownHunt
     }
 
