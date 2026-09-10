@@ -158,6 +158,19 @@ describe('buildPublicLeaderboardFile', () => {
     expect((file.month as Record<string, unknown>).streak).toBeUndefined();
   });
 
+  it('publishes the previous monthly podium as a separately labelled block', () => {
+    const current = buildPublicMonthBlock('2026-09', fullCategories());
+    const previous = buildPublicMonthBlock('2026-08', fullCategories());
+    const file = parse(
+      buildPublicLeaderboardFile(fullCategories(), current, GENERATED_AT, previous),
+    );
+
+    expect(file.month?.yyyymm).toBe('2026-09');
+    expect(file.previousMonth?.yyyymm).toBe('2026-08');
+    expect(file.previousMonth?.crownPoints).toHaveLength(3);
+    expect((file.previousMonth as Record<string, unknown>).streak).toBeUndefined();
+  });
+
   it('never emits a uid anywhere in the serialized file', () => {
     const monthBlock = buildPublicMonthBlock('2026-08', fullCategories());
     const content = buildPublicLeaderboardFile(fullCategories(), monthBlock, GENERATED_AT);

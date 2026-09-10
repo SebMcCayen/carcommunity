@@ -30,7 +30,7 @@ vi.mock('../leaderboard/leaderboardRepo', () => ({
   syncHomepageLeaderboardFile: syncMock,
 }));
 
-import { publishPublicLeaderboard } from '../leaderboard/publicLeaderboard';
+import { previousMonthId, publishPublicLeaderboard } from '../leaderboard/publicLeaderboard';
 
 const NOW = new Date('2026-08-16T10:00:00Z');
 
@@ -44,11 +44,16 @@ afterEach(() => {
 });
 
 describe('publishPublicLeaderboard', () => {
+  it('derives the previous calendar month across year boundaries', () => {
+    expect(previousMonthId('2026-09')).toBe('2026-08');
+    expect(previousMonthId('2026-01')).toBe('2025-12');
+  });
+
   it('resolves to { status: "failed" } (does NOT throw) when a Firestore read rejects', async () => {
     getMock.mockRejectedValue(new Error('firestore unavailable'));
     // Must not reject — the whole point of the never-throw contract.
     const result = await publishPublicLeaderboard('token', NOW);
-    expect(result).toEqual({ status: 'failed', hasMonth: false });
+    expect(result).toEqual({ status: 'failed', hasMonth: false, hasPreviousMonth: false });
     // A read blew up before the sync, so GitHub is never touched.
     expect(syncMock).not.toHaveBeenCalled();
   });
@@ -59,7 +64,7 @@ describe('publishPublicLeaderboard', () => {
     getMock.mockResolvedValue({ exists: false });
     syncMock.mockRejectedValue(new Error('unexpected'));
     const result = await publishPublicLeaderboard('token', NOW);
-    expect(result).toEqual({ status: 'failed', hasMonth: false });
+    expect(result).toEqual({ status: 'failed', hasMonth: false, hasPreviousMonth: false });
   });
 
   it('returns the sync status on the happy path (wrap does not change behaviour)', async () => {
@@ -77,11 +82,12 @@ describe('publishPublicLeaderboard', () => {
           },
         }),
       })
+      .mockResolvedValueOnce({ exists: false })
       .mockResolvedValueOnce({ exists: false });
     syncMock.mockResolvedValue('committed');
 
     const result = await publishPublicLeaderboard('token', NOW);
-    expect(result).toEqual({ status: 'committed', hasMonth: false });
+    expect(result).toEqual({ status: 'committed', hasMonth: false, hasPreviousMonth: false });
     expect(syncMock).toHaveBeenCalledTimes(1);
     // The published content is the built public JSON string (top-3, no uid).
     const [content] = syncMock.mock.calls[0] as [string];
