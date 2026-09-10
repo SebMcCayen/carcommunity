@@ -12,11 +12,10 @@
 //
 // Deliberate deviations from the Kotlin source (documented per the parity
 // instructions):
-// - No `Content` view requirement yet. Android's `MapSurface.Content` is the
-//   composable that renders the surface; the iOS map view (and with it the
-//   stub's placeholder rendering, its composition counter and its pan-gesture
-//   counter) arrives with the map-UI PR. The seam stays UI-framework-free so
-//   this file is pure Swift.
+// - No `Content` view requirement. Android's `MapSurface.Content` renders the
+//   surface; iOS keeps its Mapbox/SwiftUI host in `MapHomeView` so this state
+//   and command seam remains UI-framework-free and config-less tests can use
+//   it without linking renderer types into their logic.
 // - Android's `@DrawableRes iconRes: Int` marker fields are `iconName: String`
 //   here (an asset-catalog / SF Symbol name) — the platform-native way to hand
 //   the surface a glyph without coupling the seam to UIKit types.
@@ -450,9 +449,10 @@ protocol MapProjection: AnyObject {
 /// The entire shell (search bar, "Loading roads…" state, floating controls,
 /// "Create route" CTA, bottom nav) is written against this abstraction so it
 /// compiles, unit-tests, and passes CI **without** a device, GPS, or a Mapbox
-/// access token. The current implementation is ``StubMapSurface``; the real
-/// Mapbox render + live GPS drop in later behind this same protocol (the
-/// Mapbox SDK is deliberately NOT a dependency of this seam).
+/// access token. ``StubMapSurface`` currently carries the shell state and
+/// commands; `MapHomeView` supplies the Mapbox Standard renderer when a token
+/// is configured. Later interaction/location slices can replace the stub with
+/// an SDK-backed implementation without making this seam depend on Mapbox.
 ///
 /// Hooks (mirroring Android's `MapSurface`):
 /// - ``recenter()`` — recentre the camera on the user (stub records the
@@ -839,16 +839,15 @@ protocol MapSurface: MapProjection {
     /// no-op beyond storing the value on the stub.
     func setBillboardMarkers(_ markers: [MapBillboardMarker])
 
-    // Android's seam additionally requires `Content(modifier:)` — the
-    // composable that renders the surface. The iOS view requirement arrives
-    // with the map-UI PR (see the file-header deviation note), keeping this
-    // seam pure Swift.
+    // Android's seam additionally requires `Content(modifier:)`. iOS keeps
+    // rendering in MapHomeView (see the file-header deviation note), leaving
+    // this state/command seam pure Swift.
 }
 
 /// Placeholder ``MapSurface`` with no device/SDK dependency, mirroring
 /// Android's `StubMapSurface`: the CI/config-less implementation the shell is
-/// developed and tested against until the real Mapbox surface drops in behind
-/// the same protocol. Deterministic for tests — construct with an explicit
+/// developed and tested against while Mapbox rendering is hosted separately
+/// by `MapHomeView`. Deterministic for tests — construct with an explicit
 /// `initialState` (and `autoLoad: false`) to pin the load state.
 ///
 /// ``recenterCount`` and the last ``userMarker`` are observable so unit tests
@@ -1187,5 +1186,7 @@ final class StubMapSurface: MapSurface {
     /// from `MapZoomPreference.DEFAULT_ZOOM` (= `MapMarkers.OWN_MARKER_ZOOM`,
     /// 16.0); the preference itself is not ported yet, so the value lives
     /// here until it is. Keep the two in sync.
-    private static let defaultBrowsingZoom: Double = 16.0
+    /// Shared opening/resting camera zoom for both the config-less seam and
+    /// the native Mapbox renderer.
+    static let defaultBrowsingZoom: Double = 16.0
 }
