@@ -9,6 +9,8 @@ import Foundation
 /// field, is absent or malformed — a flag degrades to its documented default,
 /// never to "off". Pure Swift so the merge/lookup is unit-testable.
 enum CrownHuntFeatureFlag: String, CaseIterable, Sendable {
+    /// Live location sharing. Contract default ON.
+    case liveLocation = "liveLocation"
     /// Kronjakt as a whole (hand-placed points). Contract default ON.
     case crownHunt = "crownHunt"
     /// The AUTOMATIC spawn half. Contract default OFF — out of scope here, but
@@ -26,6 +28,7 @@ enum CrownHuntFeatureFlag: String, CaseIterable, Sendable {
     /// deliberately switches them on.
     var contractDefault: Bool {
         switch self {
+        case .liveLocation: return true
         case .crownHunt: return true
         case .crownHuntSpawn: return false
         case .crownHuntPerks: return false
@@ -38,6 +41,8 @@ enum CrownHuntFeatureFlag: String, CaseIterable, Sendable {
 /// contract default. Pure value type so gating decisions (does the shop tab
 /// render? is the live-share section shown?) are testable without Firebase.
 struct CrownHuntFlags: Equatable, Sendable {
+    /// Whether starting a live-location session is available.
+    let liveLocationEnabled: Bool
     /// Kronjakt as a whole. Contract default ON; "Off hides Kronjakt entirely"
     /// per contracts/features/feature-flags.json — the gate a host must check
     /// before offering the hub at all (the shell-wiring PR that actually
@@ -53,6 +58,7 @@ struct CrownHuntFlags: Equatable, Sendable {
 
     /// Every flag at its contract default — the config-less / pre-read posture.
     static let contractDefaults = CrownHuntFlags(
+        liveLocationEnabled: CrownHuntFeatureFlag.liveLocation.contractDefault,
         crownHuntEnabled: CrownHuntFeatureFlag.crownHunt.contractDefault,
         perksEnabled: CrownHuntFeatureFlag.crownHuntPerks.contractDefault,
         liveShareScoringEnabled: CrownHuntFeatureFlag.crownHuntLiveShareScoring.contractDefault
@@ -67,6 +73,7 @@ struct CrownHuntFlags: Equatable, Sendable {
             (document?[flag.rawValue] as? Bool) ?? flag.contractDefault
         }
         return CrownHuntFlags(
+            liveLocationEnabled: value(.liveLocation),
             crownHuntEnabled: value(.crownHunt),
             perksEnabled: value(.crownHuntPerks),
             liveShareScoringEnabled: value(.crownHuntLiveShareScoring)

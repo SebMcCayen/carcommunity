@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Live-location session control surface — the iOS port of Android's
 /// `live/LiveLocationScreen.kt`, for `ShellRoute.liveLocation` (the wiring PR
@@ -24,15 +25,23 @@ import SwiftUI
 /// non-suspended viewer not in a block relationship), so the screen explains
 /// rather than configures.
 struct LiveLocationScreen: View {
+    @Environment(\.openURL) private var openURL
     @State private var coordinator: LiveLocationCoordinator
+    @State private var permissionCoordinator: LocationPermissionCoordinator
+    @State private var pendingStart = false
     private let onBack: (() -> Void)?
 
     /// The screen owns no provider/repository choices: the caller (the
     /// wiring PR's shell, previews, tests) supplies the coordinator —
-    /// typically ``LiveLocationCoordinator/live(provider:)`` with the
+    /// typically ``LiveLocationCoordinator/live(provider:canShare:)`` with the
     /// shell's shared ``LocationProvider``.
-    init(coordinator: LiveLocationCoordinator, onBack: (() -> Void)? = nil) {
+    init(
+        coordinator: LiveLocationCoordinator,
+        permissionCoordinator: LocationPermissionCoordinator,
+        onBack: (() -> Void)? = nil
+    ) {
         _coordinator = State(initialValue: coordinator)
+        _permissionCoordinator = State(initialValue: permissionCoordinator)
         self.onBack = onBack
     }
 
@@ -87,14 +96,14 @@ struct LiveLocationScreen: View {
                     // fixed 6h default window auto-stops with no prompt to
                     // prolong; the user can Stop anytime.
                     Button {
-                        Task { await coordinator.startSharing() }
+                        requestStart()
                     } label: {
                         Text("liveLocation.start")
                             .font(.system(size: KccTypeScale.bodyMd, weight: .semibold))
                             .frame(maxWidth: .infinity, minHeight: 44)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(busy)
+                    .disabled(busy || permissionCoordinator.state == .requesting)
                 } else {
                     // Start is blocked: the LIVE_LOCATION flag is off, or
                     // this is a config-less/signed-out build. Explain instead
@@ -145,7 +154,72 @@ struct LiveLocationScreen: View {
         // Renders as a full-screen route above the tab shell, so it paints
         // an opaque, scheme-aware background of its own.
         .background(.background, ignoresSafeAreaEdges: .all)
-        .task { coordinator.start() }
+        .task {
+            coordinator.start()
+            permissionCoordinator.start()
+        }
+        .onChange(of: permissionCoordinator.state) { _, state in
+            if state == .granted {
+                startAfterPermissionGrant()
+            }
+        }
+        .alert(
+            Text("map.locationNeededTitle"),
+            isPresented: permissionPromptIsPresented
+        ) {
+            if permissionCoordinator.state == .rationale {
+                Button("map.locationDismiss", role: .cancel) {
+                    pendingStart = false
+                    permissionCoordinator.dismissRationale()
+                }
+                Button("map.locationAllow") {
+                    permissionCoordinator.proceedFromRationale()
+                }
+            } else {
+                Button("map.locationDismiss", role: .cancel) {
+                    pendingStart = false
+                    permissionCoordinator.dismissSettingsHint()
+                }
+                Button("map.locationOpenSettings") {
+                    permissionCoordinator.dismissSettingsHint()
+                    guard let url = URL(string: UIApplication.openSettingsURLString) else {
+                        pendingStart = false
+                        return
+                    }
+                    openURL(url)
+                }
+            }
+        } message: {
+            Text("map.locationPermissionBody")
+        }
+    }
+
+    private func requestStart() {
+        pendingStart = true
+        permissionCoordinator.requestAccess()
+        if permissionCoordinator.state == .granted {
+            startAfterPermissionGrant()
+        }
+    }
+
+    private func startAfterPermissionGrant() {
+        guard pendingStart else { return }
+        pendingStart = false
+        Task { await coordinator.startSharing() }
+    }
+
+    private var permissionPromptIsPresented: Binding<Bool> {
+        Binding(
+            get: {
+                permissionCoordinator.state == .rationale
+                    || permissionCoordinator.state == .deniedNeedsSettings
+            },
+            set: { _ in
+                // Alert actions own the state transition. Letting SwiftUI's
+                // automatic dismissal mutate it would cancel the pending
+                // start before the system permission dialog is raised.
+            }
+        )
     }
 
     private func infoCard(title: LocalizedStringKey, body: LocalizedStringKey) -> some View {
@@ -172,11 +246,13 @@ struct LiveLocationScreen: View {
 }
 
 #Preview("Not sharing (unwired build)") {
+    let provider = StubLocationProvider()
     LiveLocationScreen(
         coordinator: LiveLocationCoordinator(
             repository: nil,
-            provider: StubLocationProvider()
+            provider: provider
         ),
+        permissionCoordinator: LocationPermissionCoordinator(provider: provider),
         onBack: {}
     )
 }

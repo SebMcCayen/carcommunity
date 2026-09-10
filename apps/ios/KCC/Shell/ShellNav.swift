@@ -204,6 +204,9 @@ enum ShellNavigation {
     ) -> MapCover {
         if navigating { return .opaque }
         if navSearchOpen { return .transparent }
+        // Chat Hub is hosted inside the Map tab as a translucent overlay,
+        // above the live map and below the shell tab bar.
+        if route == .chatHub { return .transparent }
         if route != nil { return .opaque }
         // History / Social / Garage are translucent PANELS over the map: the
         // map behind them is visible, so it has to keep rendering its puck and

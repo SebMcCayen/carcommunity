@@ -80,6 +80,11 @@ final class LiveLocationCoordinator {
     /// observed-session rule (`LiveLocation.isSharing`), not a local flag.
     var isSharing: Bool { LiveLocation.isSharing(session, at: now()) }
 
+    /// Whether the shell should offer the management screen. A disabled flag
+    /// hides an idle feature, while an already-active session keeps Stop/Hide
+    /// reachable regardless of the current flag value.
+    var canPresentScreen: Bool { canShare || isSharing }
+
     /// What the floating map share toggle should do right now — the input
     /// side of the ported ``LiveShareToggle``.
     var toggleAction: LiveShareAction {
@@ -141,10 +146,14 @@ final class LiveLocationCoordinator {
     /// Production wiring: the Firebase repository (nil in config-less
     /// builds) plus the given provider — the factory the screen and the
     /// wiring PR call.
-    static func live(provider: LocationProvider) -> LiveLocationCoordinator {
+    static func live(
+        provider: LocationProvider,
+        canShare: Bool
+    ) -> LiveLocationCoordinator {
         LiveLocationCoordinator(
             repository: FirebaseLiveLocationRepository.createIfAvailable(),
-            provider: provider
+            provider: provider,
+            canShare: canShare
         )
     }
 
@@ -175,8 +184,9 @@ final class LiveLocationCoordinator {
     /// ``LiveLocation/defaultSessionDuration``; no duration is chosen).
     /// Publishing begins when the session echoes back as active.
     ///
-    /// Gated on ``canShare`` (the LIVE_LOCATION flag) and ``wired`` (Firebase
-    /// configured + signed in) BEFORE issuing `live-startSession` — unlike
+    /// Gated on ``canShare`` (the LIVE_LOCATION flag), ``wired`` (Firebase
+    /// configured + signed in), and an existing location grant BEFORE issuing
+    /// `live-startSession` — unlike
     /// ``stopSharing()``/``hideMeNow()``, which must still work with the flag
     /// off (a session already running should always be stoppable, and
     /// hide-me-now is the always-on privacy escape hatch). A command already
@@ -184,7 +194,7 @@ final class LiveLocationCoordinator {
     @discardableResult
     func startSharing() async -> LiveCommandResult {
         guard actionStatus != .working else { return .busy }
-        guard canShare, wired else { return .failed }
+        guard canShare, wired, provider.authorization.isAuthorized else { return .failed }
         return await execute { repository in
             try await repository.startSession(duration: LiveLocation.defaultSessionDuration)
         }

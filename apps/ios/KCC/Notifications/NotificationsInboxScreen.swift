@@ -15,17 +15,28 @@ import SwiftUI
 /// same seam every Firebase-backed surface honors.
 ///
 /// Reached via ``ShellRoute/notifications`` — the shell wraps this screen in a
-/// `NavigationStack` and supplies the Back affordance (future wiring PR).
+/// `NavigationStack` and supplies the Back affordance.
 struct NotificationsInboxScreen: View {
     /// Nil only where no coordinator is constructed; the unavailable STATE
     /// (config-less build) is modelled inside the coordinator.
     let coordinator: NotificationsInboxCoordinator?
+    var onOpenSettings: (() -> Void)? = nil
+    /// False when embedded in Chat Hub, whose title owns the navigation bar.
+    var showsNavigationTitle = true
 
     var body: some View {
-        content
-            .navigationTitle(Text("notifications.title"))
+        titledContent
             .task { coordinator?.start() }
             .toolbar { toolbarContent }
+    }
+
+    @ViewBuilder
+    private var titledContent: some View {
+        if showsNavigationTitle {
+            content.navigationTitle(Text("notifications.title"))
+        } else {
+            content
+        }
     }
 
     @ToolbarContentBuilder
@@ -40,6 +51,14 @@ struct NotificationsInboxScreen: View {
                     Text("notifications.markAllRead")
                 }
                 .disabled(coordinator.markReadStatus == .working)
+            }
+        }
+        if let onOpenSettings {
+            ToolbarItem(placement: .secondaryAction) {
+                Button(action: onOpenSettings) {
+                    Image(systemName: "gearshape")
+                }
+                .accessibilityLabel(Text("notifications.settingsTitle"))
             }
         }
     }

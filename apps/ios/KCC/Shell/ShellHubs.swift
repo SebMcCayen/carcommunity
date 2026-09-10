@@ -6,38 +6,98 @@ import SwiftUI
 /// feature yet says so honestly instead of dead-ending.
 
 /// The Social hub panel. Android's Social hub lists Events / Crown Hunt /
-/// Leaderboard / Partners (label-sorted, unavailable entries omitted); only
-/// the events slice is ported, so this hub carries the one entry. The entry
-/// stays present in a config-less build — the events route itself renders the
-/// coordinator's unavailable placeholder, never a crash.
+/// Leaderboard / Partners (label-sorted, unavailable entries omitted). iOS
+/// currently has the first three feature slices, so those are the entries this
+/// panel exposes; Partners remains absent until its repository and screen land.
 struct SocialHubPanel: View {
-    /// Opens ``ShellRoute/events`` full-screen via the shell's route stack.
+    @Environment(\.locale) private var locale
+
+    let crownHuntEnabled: Bool
     let onOpenEvents: () -> Void
+    let onOpenCrownHunt: () -> Void
+    let onOpenLeaderboard: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s4) {
             Text("shell.socialTitle")
                 .font(.system(size: KccTypeScale.headingLg, weight: KccTypeScale.semibold))
 
-            Button(action: onOpenEvents) {
-                HStack(spacing: KccSpacing.s3) {
-                    Image(systemName: "calendar")
-                        .foregroundStyle(.secondary)
-                    Text("shell.socialEvents")
-                        .font(.system(size: KccTypeScale.bodyMd))
-                    Spacer()
-                    Image(systemName: "chevron.forward")
-                        .font(.system(size: KccTypeScale.bodySm))
-                        .foregroundStyle(.secondary)
-                }
-                .contentShape(Rectangle())
+            ForEach(entries) { entry in
+                hubRow(label: entry.label, icon: entry.icon, action: entry.action)
             }
-            .buttonStyle(.plain)
 
             Spacer()
         }
         .padding(KccSpacing.s6)
     }
+
+    private var entries: [SocialHubEntry] {
+        var entries = [
+            SocialHubEntry(
+                id: .events,
+                label: "shell.socialEvents",
+                localizedLabel: String(localized: "shell.socialEvents", locale: locale),
+                icon: "calendar",
+                action: onOpenEvents
+            ),
+            SocialHubEntry(
+                id: .leaderboard,
+                label: "shell.socialLeaderboard",
+                localizedLabel: String(localized: "shell.socialLeaderboard", locale: locale),
+                icon: "trophy",
+                action: onOpenLeaderboard
+            )
+        ]
+        if crownHuntEnabled {
+            entries.append(
+                SocialHubEntry(
+                    id: .crownHunt,
+                    label: "shell.socialCrownHunt",
+                    localizedLabel: String(localized: "shell.socialCrownHunt", locale: locale),
+                    icon: "crown",
+                    action: onOpenCrownHunt
+                )
+            )
+        }
+        return entries.sorted {
+            $0.localizedLabel.localizedStandardCompare($1.localizedLabel) == .orderedAscending
+        }
+    }
+
+    private func hubRow(
+        label: LocalizedStringKey,
+        icon: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: KccSpacing.s3) {
+                Image(systemName: icon)
+                    .foregroundStyle(.secondary)
+                Text(label)
+                    .font(.system(size: KccTypeScale.bodyMd))
+                Spacer()
+                Image(systemName: "chevron.forward")
+                    .font(.system(size: KccTypeScale.bodySm))
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct SocialHubEntry: Identifiable {
+    enum ID: Hashable {
+        case events
+        case crownHunt
+        case leaderboard
+    }
+
+    let id: ID
+    let label: LocalizedStringKey
+    let localizedLabel: String
+    let icon: String
+    let action: () -> Void
 }
 
 /// Placeholder panel content for the tabs whose hubs are not ported yet
@@ -62,7 +122,12 @@ struct ComingSoonPanel: View {
 }
 
 #Preview("Social hub") {
-    SocialHubPanel(onOpenEvents: {})
+    SocialHubPanel(
+        crownHuntEnabled: true,
+        onOpenEvents: {},
+        onOpenCrownHunt: {},
+        onOpenLeaderboard: {}
+    )
 }
 
 #Preview("Coming soon") {

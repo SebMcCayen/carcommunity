@@ -2,11 +2,10 @@ import Foundation
 import Observation
 
 /// Owns the chat-hub scaffold: the selected tab and the coordinators behind the
-/// two FUNCTIONAL tabs (Community + Convoys). The Friends and Notifications tabs
-/// are separate features (the existing DMs / in-app inbox on Android) and wire
-/// up when those land — here they render a placeholder, so the hub holds no
-/// coordinator for them. The iOS counterpart of Android's `ChatHubContent`
-/// state hoisting.
+/// channel tabs (Community + Convoys). Friends and Notifications keep their own
+/// coordinators because they are also standalone features; ``ChatHubScreen``
+/// receives those from the signed-in shell. This is the iOS counterpart of
+/// Android's `ChatHubContent` state hoisting.
 ///
 /// Built from the two channel repositories (nil in a config-less build, so the
 /// hub degrades to placeholders instead of crashing — the ``createIfAvailable``
@@ -43,9 +42,8 @@ final class ChatHubCoordinator {
         self.convoyList = convoyRepository.map(ConvoyListCoordinator.init(repository:))
     }
 
-    /// Selects a tab. All four are selectable — Friends/Notifications simply
-    /// render their placeholder — matching Android's swipeable pager where every
-    /// page exists even before its feature is built.
+    /// Selects a tab. All four are selectable, matching Android's swipeable
+    /// pager where every page exists.
     func select(_ tab: ChatTab) {
         selectedTab = tab
     }
