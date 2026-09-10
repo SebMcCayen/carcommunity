@@ -10,6 +10,9 @@ import SwiftUI
 /// currently has the first three feature slices, so those are the entries this
 /// panel exposes; Partners remains absent until its repository and screen land.
 struct SocialHubPanel: View {
+    @Environment(\.locale) private var locale
+
+    let crownHuntEnabled: Bool
     let onOpenEvents: () -> Void
     let onOpenCrownHunt: () -> Void
     let onOpenLeaderboard: () -> Void
@@ -19,13 +22,46 @@ struct SocialHubPanel: View {
             Text("shell.socialTitle")
                 .font(.system(size: KccTypeScale.headingLg, weight: KccTypeScale.semibold))
 
-            hubRow(label: "shell.socialEvents", icon: "calendar", action: onOpenEvents)
-            hubRow(label: "shell.socialCrownHunt", icon: "crown", action: onOpenCrownHunt)
-            hubRow(label: "shell.socialLeaderboard", icon: "trophy", action: onOpenLeaderboard)
+            ForEach(entries) { entry in
+                hubRow(label: entry.label, icon: entry.icon, action: entry.action)
+            }
 
             Spacer()
         }
         .padding(KccSpacing.s6)
+    }
+
+    private var entries: [SocialHubEntry] {
+        var entries = [
+            SocialHubEntry(
+                id: .events,
+                label: "shell.socialEvents",
+                localizedLabel: String(localized: "shell.socialEvents", locale: locale),
+                icon: "calendar",
+                action: onOpenEvents
+            ),
+            SocialHubEntry(
+                id: .leaderboard,
+                label: "shell.socialLeaderboard",
+                localizedLabel: String(localized: "shell.socialLeaderboard", locale: locale),
+                icon: "trophy",
+                action: onOpenLeaderboard
+            )
+        ]
+        if crownHuntEnabled {
+            entries.append(
+                SocialHubEntry(
+                    id: .crownHunt,
+                    label: "shell.socialCrownHunt",
+                    localizedLabel: String(localized: "shell.socialCrownHunt", locale: locale),
+                    icon: "crown",
+                    action: onOpenCrownHunt
+                )
+            )
+        }
+        return entries.sorted {
+            $0.localizedLabel.localizedStandardCompare($1.localizedLabel) == .orderedAscending
+        }
     }
 
     private func hubRow(
@@ -50,6 +86,20 @@ struct SocialHubPanel: View {
     }
 }
 
+private struct SocialHubEntry: Identifiable {
+    enum ID: Hashable {
+        case events
+        case crownHunt
+        case leaderboard
+    }
+
+    let id: ID
+    let label: LocalizedStringKey
+    let localizedLabel: String
+    let icon: String
+    let action: () -> Void
+}
+
 /// Placeholder panel content for the tabs whose hubs are not ported yet
 /// (History): the localized tab title plus the shared
 /// `shell.comingSoon` notice. Exists so those tabs can already render as
@@ -72,7 +122,12 @@ struct ComingSoonPanel: View {
 }
 
 #Preview("Social hub") {
-    SocialHubPanel(onOpenEvents: {}, onOpenCrownHunt: {}, onOpenLeaderboard: {})
+    SocialHubPanel(
+        crownHuntEnabled: true,
+        onOpenEvents: {},
+        onOpenCrownHunt: {},
+        onOpenLeaderboard: {}
+    )
 }
 
 #Preview("Coming soon") {

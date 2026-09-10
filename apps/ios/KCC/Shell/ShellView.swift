@@ -112,6 +112,7 @@ struct ShellView: View {
         case .social:
             panelTab {
                 SocialHubPanel(
+                    crownHuntEnabled: crownHuntComposition?.flags.crownHuntEnabled == true,
                     onOpenEvents: { routes = routes.opening(.events) },
                     onOpenCrownHunt: { routes = routes.opening(.crownHunt) },
                     onOpenLeaderboard: { routes = routes.opening(.leaderboard) }
@@ -234,10 +235,10 @@ struct ShellView: View {
                     statsCoordinator: composition.statsCoordinator,
                     claimsCoordinator: composition.claimsCoordinator,
                     shopCoordinator: composition.shopCoordinator,
-                    crownHuntEnabled: composition.flags.crownHuntEnabled
+                    crownHuntEnabled: composition.flags.crownHuntEnabled,
+                    onBack: { routes = routes.poppingOne() }
                 )
                 .background(.background, ignoresSafeAreaEdges: .all)
-                .overlay(alignment: .topLeading) { routeBackButton }
             } else {
                 unavailableRoute
             }
@@ -365,19 +366,21 @@ struct ShellView: View {
     @MainActor
     private func wireFeatures() async {
         let uid = signedInUid
+
+        // Remove a conversation built for the previous identity before doing
+        // any asynchronous flag work. If Chat was opened from a parent hub,
+        // return to that hub; otherwise close the route entirely.
+        if routes.current == .chat {
+            routes = routes.poppingOne()
+        }
+        dmTarget = nil
+        dmCoordinator = nil
+        liveLocationCoordinator = nil
+        crownHuntComposition = nil
+
         let friends = FirebaseFriendsRepository.createIfAvailable()
         let conversations = FirebaseConversationsRepository.createIfAvailable()
         let notifications = FirebaseNotificationsRepository.createIfAvailable()
-        let crownHunt = await CrownHuntComposition.live(
-            uid: uid,
-            passesMemberGate: uid != nil
-        )
-
-        // `.task(id: signedInUid)` cancels and restarts this work when the
-        // identity changes. Do not let a slower composition for the old user
-        // overwrite the new session's coordinators after its await returns.
-        guard !Task.isCancelled, uid == signedInUid else { return }
-
         friendsRepository = friends
         conversationsRepository = conversations
         eventsCoordinator = FirebaseEventsRepository.createIfAvailable().map(EventsCoordinator.init(repository:))
@@ -407,13 +410,22 @@ struct ShellView: View {
             communityRepository: FirebaseCommunityChatRepository.createIfAvailable(),
             convoyRepository: FirebaseConvoyChatRepository.createIfAvailable()
         )
-        liveLocationCoordinator = LiveLocationCoordinator.live(provider: locationProvider)
-        crownHuntComposition = crownHunt
 
-        // A direct signed-in-user swap must not leave a DM coordinator or
-        // destination created with the previous self uid.
-        dmTarget = nil
-        dmCoordinator = nil
+        let crownHunt = await CrownHuntComposition.live(
+            uid: uid,
+            passesMemberGate: uid != nil
+        )
+
+        // `.task(id: signedInUid)` cancels and restarts this work when the
+        // identity changes. Do not let a slower composition for the old user
+        // overwrite the new session's coordinators after its await returns.
+        guard !Task.isCancelled, uid == signedInUid else { return }
+
+        liveLocationCoordinator = LiveLocationCoordinator.live(
+            provider: locationProvider,
+            canShare: crownHunt.flags.liveLocationEnabled
+        )
+        crownHuntComposition = crownHunt
     }
 
     private var signedInDisplayName: String? {

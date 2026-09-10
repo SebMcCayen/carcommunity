@@ -22,6 +22,7 @@ struct CrownHuntHubView: View {
     /// operator switching the whole feature off actually hides it rather than
     /// leaving the tabs reachable.
     let crownHuntEnabled: Bool
+    let onBack: () -> Void
 
     var body: some View {
         if crownHuntEnabled {
@@ -29,6 +30,9 @@ struct CrownHuntHubView: View {
                 NavigationStack {
                     CrownHuntHomeScreen(coordinator: statsCoordinator)
                         .toolbar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                backButton
+                            }
                             ToolbarItem(placement: .topBarTrailing) {
                                 NavigationLink {
                                     ClaimHistoryScreen(coordinator: claimsCoordinator)
@@ -44,14 +48,32 @@ struct CrownHuntHubView: View {
                 if shopCoordinator.isShopEnabled {
                     NavigationStack {
                         PerkShopScreen(coordinator: shopCoordinator)
+                            .toolbar {
+                                ToolbarItem(placement: .topBarLeading) {
+                                    backButton
+                                }
+                            }
                     }
                     .tabItem { Label("crownHunt.tabShop", systemImage: "bag") }
                 }
             }
         } else {
-            CrownHuntMessageState(
-                title: "crownHunt.screenTitle", message: "crownHunt.resultFeatureDisabled"
-            )
+            NavigationStack {
+                CrownHuntMessageState(
+                    title: "crownHunt.screenTitle", message: "crownHunt.resultFeatureDisabled"
+                )
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        backButton
+                    }
+                }
+            }
+        }
+    }
+
+    private var backButton: some View {
+        Button(action: onBack) {
+            Label("shell.back", systemImage: "chevron.backward")
         }
     }
 }

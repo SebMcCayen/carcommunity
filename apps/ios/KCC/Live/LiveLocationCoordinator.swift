@@ -141,10 +141,14 @@ final class LiveLocationCoordinator {
     /// Production wiring: the Firebase repository (nil in config-less
     /// builds) plus the given provider — the factory the screen and the
     /// wiring PR call.
-    static func live(provider: LocationProvider) -> LiveLocationCoordinator {
+    static func live(
+        provider: LocationProvider,
+        canShare: Bool
+    ) -> LiveLocationCoordinator {
         LiveLocationCoordinator(
             repository: FirebaseLiveLocationRepository.createIfAvailable(),
-            provider: provider
+            provider: provider,
+            canShare: canShare
         )
     }
 

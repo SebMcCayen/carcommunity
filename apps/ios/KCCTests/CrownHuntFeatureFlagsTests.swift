@@ -11,6 +11,7 @@ final class CrownHuntFeatureFlagsTests: XCTestCase {
         // feature-flags.json: crownHuntPerks / crownHuntLiveShareScoring both OFF.
         XCTAssertFalse(CrownHuntFeatureFlag.crownHuntPerks.contractDefault)
         XCTAssertFalse(CrownHuntFeatureFlag.crownHuntLiveShareScoring.contractDefault)
+        XCTAssertTrue(CrownHuntFeatureFlag.liveLocation.contractDefault)
         XCTAssertTrue(CrownHuntFeatureFlag.crownHunt.contractDefault)
         XCTAssertFalse(CrownHuntFeatureFlag.crownHuntSpawn.contractDefault)
     }
@@ -18,6 +19,7 @@ final class CrownHuntFeatureFlagsTests: XCTestCase {
     func testNilDocumentYieldsContractDefaults() {
         let flags = CrownHuntFlags.resolve(from: nil)
         XCTAssertEqual(flags, .contractDefaults)
+        XCTAssertTrue(flags.liveLocationEnabled)
         XCTAssertTrue(flags.crownHuntEnabled)
         XCTAssertFalse(flags.perksEnabled)
         XCTAssertFalse(flags.liveShareScoringEnabled)
@@ -47,6 +49,11 @@ final class CrownHuntFeatureFlagsTests: XCTestCase {
     func testCrownHuntFlagCanBeSwitchedOff() {
         let flags = CrownHuntFlags.resolve(from: ["crownHunt": false])
         XCTAssertFalse(flags.crownHuntEnabled)
+    }
+
+    func testLiveLocationFlagCanBeSwitchedOff() {
+        let flags = CrownHuntFlags.resolve(from: ["liveLocation": false])
+        XCTAssertFalse(flags.liveLocationEnabled)
     }
 
     func testMalformedFieldDegradesToDefault() {
