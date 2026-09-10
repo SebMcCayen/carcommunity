@@ -42,7 +42,6 @@ struct ShellView: View {
     @State private var dmTarget: DmRouteTarget?
     @State private var dmCoordinator: ChatCoordinator?
     @State private var locationProvider = CoreLocationProvider()
-    @State private var hasWiredFeatures = false
 
     /// What is drawn over the shell's map right now — the ONE pure value
     /// every cover-derived decision reads. `navigating` / `navSearchOpen` are
@@ -365,13 +364,19 @@ struct ShellView: View {
 
     @MainActor
     private func wireFeatures() async {
-        guard !hasWiredFeatures else { return }
-        hasWiredFeatures = true
-
         let uid = signedInUid
         let friends = FirebaseFriendsRepository.createIfAvailable()
         let conversations = FirebaseConversationsRepository.createIfAvailable()
         let notifications = FirebaseNotificationsRepository.createIfAvailable()
+        let crownHunt = await CrownHuntComposition.live(
+            uid: uid,
+            passesMemberGate: uid != nil
+        )
+
+        // `.task(id: signedInUid)` cancels and restarts this work when the
+        // identity changes. Do not let a slower composition for the old user
+        // overwrite the new session's coordinators after its await returns.
+        guard !Task.isCancelled, uid == signedInUid else { return }
 
         friendsRepository = friends
         conversationsRepository = conversations
@@ -390,6 +395,7 @@ struct ShellView: View {
                 pointsRepository: FirebaseFriendPointsRepository.createIfAvailable()
             )
         }
+        conversationsCoordinator = nil
         if let conversations, let uid {
             conversationsCoordinator = ConversationsCoordinator(
                 repository: conversations,
@@ -402,10 +408,12 @@ struct ShellView: View {
             convoyRepository: FirebaseConvoyChatRepository.createIfAvailable()
         )
         liveLocationCoordinator = LiveLocationCoordinator.live(provider: locationProvider)
-        crownHuntComposition = await CrownHuntComposition.live(
-            uid: uid,
-            passesMemberGate: uid != nil
-        )
+        crownHuntComposition = crownHunt
+
+        // A direct signed-in-user swap must not leave a DM coordinator or
+        // destination created with the previous self uid.
+        dmTarget = nil
+        dmCoordinator = nil
     }
 
     private var signedInDisplayName: String? {

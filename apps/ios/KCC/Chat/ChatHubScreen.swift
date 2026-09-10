@@ -96,12 +96,14 @@ struct ChatHubScreen: View {
             ConversationsScreen(
                 coordinator: conversationsCoordinator,
                 makeNewDialogueCoordinator: makeNewDialogueCoordinator,
-                onOpenConversation: onOpenConversation
+                onOpenConversation: onOpenConversation,
+                showsNavigationTitle: false
             )
         case .notifications:
             NotificationsInboxScreen(
                 coordinator: notificationsCoordinator,
-                onOpenSettings: onOpenNotificationSettings
+                onOpenSettings: onOpenNotificationSettings,
+                showsNavigationTitle: false
             )
         }
     }

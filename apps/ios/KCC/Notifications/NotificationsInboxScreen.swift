@@ -21,12 +21,22 @@ struct NotificationsInboxScreen: View {
     /// (config-less build) is modelled inside the coordinator.
     let coordinator: NotificationsInboxCoordinator?
     var onOpenSettings: (() -> Void)? = nil
+    /// False when embedded in Chat Hub, whose title owns the navigation bar.
+    var showsNavigationTitle = true
 
     var body: some View {
-        content
-            .navigationTitle(Text("notifications.title"))
+        titledContent
             .task { coordinator?.start() }
             .toolbar { toolbarContent }
+    }
+
+    @ViewBuilder
+    private var titledContent: some View {
+        if showsNavigationTitle {
+            content.navigationTitle(Text("notifications.title"))
+        } else {
+            content
+        }
     }
 
     @ToolbarContentBuilder

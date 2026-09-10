@@ -18,12 +18,13 @@ struct ConversationsScreen: View {
     var makeNewDialogueCoordinator: (() -> NewDialogueCoordinator)?
     /// Opens (or re-opens) the 1:1 thread with the given member.
     var onOpenConversation: ((_ uid: String, _ displayName: String?) -> Void)?
+    /// False when embedded in Chat Hub, whose title owns the navigation bar.
+    var showsNavigationTitle = true
 
     @State private var showPicker = false
 
     var body: some View {
-        content
-            .navigationTitle(Text("dm.title"))
+        titledContent
             .task { coordinator?.start() }
             .toolbar {
                 // Compose-new-message affordance (Android renders a FAB; the
@@ -59,6 +60,15 @@ struct ConversationsScreen: View {
                     )
                 }
             }
+    }
+
+    @ViewBuilder
+    private var titledContent: some View {
+        if showsNavigationTitle {
+            content.navigationTitle(Text("dm.title"))
+        } else {
+            content
+        }
     }
 
     private var canStartNew: Bool {
