@@ -21,6 +21,11 @@ packages:
   Firebase:
     url: https://github.com/firebase/firebase-ios-sdk
     from: 12.0.0
+  MapboxMaps:
+    # The binary distribution keeps local and CI builds fast. Pin this to the
+    # same Maps SDK version as Android and to a release built for Xcode 26.3.
+    url: https://github.com/mapbox/mapbox-maps-ios-binary.git
+    exactVersion: 11.26.0
 
 targets:
   KCC:
@@ -50,6 +55,8 @@ targets:
       # through callables.
       - package: Firebase
         product: FirebaseDatabase
+      - package: MapboxMaps
+        product: MapboxMaps
     info:
       path: KCC/Info.plist
       properties:
@@ -57,6 +64,10 @@ targets:
         CFBundleDevelopmentRegion: sv
         UILaunchScreen: {}
         ITSAppUsesNonExemptEncryption: false
+        # Public runtime token only (pk....). Inject MAPBOX_ACCESS_TOKEN as a
+        # user-defined build setting; an absent/invalid token deliberately
+        # leaves the config-less map placeholder active for CI.
+        MBXAccessToken: $(MAPBOX_ACCESS_TOKEN)
         # Single-source the version from the build settings below.
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The five-tab, map-first shell. The Map tab is the (stub-backed) map home;
+/// The five-tab, map-first shell. One persistent map sits behind the tab host;
 /// History / Social / Garage render as translucent panels over the map per
 /// `translucentPanelTabs`; the tab set, default tab, and the map-cover rules
 /// all come from the pure ``ShellNavigation`` logic so behaviour stays unit-tested
@@ -57,11 +57,17 @@ struct ShellView: View {
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            ForEach(ShellTab.allCases, id: \.self) { tab in
-                content(for: tab)
-                    .tabItem { Label(tab.title, systemImage: tab.systemImage) }
-                    .tag(tab)
+        ZStack {
+            // Exactly one native Mapbox view for the signed-in shell. Tabs and
+            // routes cover it instead of recreating its Metal render surface.
+            MapHomeView(surface: mapSurface)
+
+            TabView(selection: $selectedTab) {
+                ForEach(ShellTab.allCases, id: \.self) { tab in
+                    content(for: tab)
+                        .tabItem { Label(tab.title, systemImage: tab.systemImage) }
+                        .tag(tab)
+                }
             }
         }
         // Route host: sub-routes render full-screen OVER the tab shell (the
@@ -87,16 +93,14 @@ struct ShellView: View {
         .task(id: signedInUid) { await wireFeatures() }
     }
 
-    /// Per-tab content. The panel tabs draw the SAME single surface behind
-    /// their card — several lightweight SwiftUI readers of the one
-    /// ``StubMapSurface`` instance, which is the stub-era equivalent of
-    /// Android's one composable behind every panel (the stub has no render
-    /// surface to duplicate; the real map-UI PR hosts exactly one view).
+    /// Per-tab foreground content. The persistent map is owned by `body`, so
+    /// map and panel tabs stay transparent wherever it should remain visible.
     @ViewBuilder
     private func content(for tab: ShellTab) -> some View {
         switch tab {
         case .map:
-            MapHomeView(surface: mapSurface)
+            Color.clear
+                .ignoresSafeArea()
                 // The map-home profile entry (Android: the map-home top-right
                 // profile menu button). Only when a session actually exists —
                 // the unavailable shell has no one to show or sign out.
@@ -135,21 +139,17 @@ struct ShellView: View {
             // Not a panel tab: an opaque page (the map-cover rule stands the
             // surface down here). The Create chooser fills in with its slice.
             placeholder(for: tab)
+                .background(.background, ignoresSafeAreaEdges: .all)
         }
     }
 
-    /// A translucent panel tab: the live (stub) map behind, the
-    /// bottom-anchored card over it — what makes ``MapCover/transparent``
-    /// real. Dismissing the panel returns to the Map tab, matching Android's
-    /// panel dismiss.
+    /// A translucent panel tab: the persistent map remains visible above the
+    /// bottom-anchored card. Dismiss returns to the Map tab.
     private func panelTab(@ViewBuilder content: @escaping () -> some View) -> some View {
-        ZStack {
-            MapHomeView(surface: mapSurface)
-            TranslucentShellPanel(
-                onDismiss: { selectedTab = .map },
-                content: content
-            )
-        }
+        TranslucentShellPanel(
+            onDismiss: { selectedTab = .map },
+            content: content
+        )
     }
 
     @ViewBuilder

@@ -35,6 +35,17 @@ time — exactly like Android's `google-services.json`:
 
 Never commit a real `GoogleService-Info.plist`.
 
+## Mapbox configuration
+
+The Standard map uses Mapbox Maps SDK 11.26.0. Supply the public runtime token
+as the `MAPBOX_ACCESS_TOKEN` Xcode build setting (for example in an untracked
+local `.xcconfig`, or as `MAPBOX_ACCESS_TOKEN=pk.…` on an `xcodebuild` command).
+The generated Info.plist exposes it to Mapbox as `MBXAccessToken`.
+
+Never commit a token or use the private `sk.` downloads token here. Without a
+valid `pk.` token the app still builds and shows the localized map placeholder,
+which is the expected CI behavior.
+
 ## Building and testing (CLI)
 
 ```bash
