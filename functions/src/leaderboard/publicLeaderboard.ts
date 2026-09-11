@@ -19,7 +19,10 @@
 
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
-import { seasonIdForInstant } from '../crownHunt/crown-hunt-stats-core';
+import {
+  previousSeasonId,
+  seasonIdForInstant,
+} from '../crownHunt/crown-hunt-stats-core';
 import { LEADERBOARD_ALL_TIME_SCOPE } from './leaderboard-core';
 import {
   buildPublicLeaderboardFile,
@@ -54,15 +57,9 @@ export interface PublicLeaderboardPublishResult {
   hasPreviousMonth: boolean;
 }
 
-/** Returns the calendar month immediately before a canonical `YYYY-MM` id. */
-export function previousMonthId(monthId: string): string {
-  const [yearText, monthText] = monthId.split('-');
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const previousYear = month === 1 ? year - 1 : year;
-  const previousMonth = month === 1 ? 12 : month - 1;
-  return `${previousYear}-${String(previousMonth).padStart(2, '0')}`;
-}
+// Preserve the leaderboard-specific export while sharing the canonical season
+// rollover implementation (including four-digit year/month padding).
+export { previousSeasonId as previousMonthId };
 
 /**
  * Reads the published `leaderboards/{scope}` documents (all-time + current and
@@ -84,7 +81,7 @@ export async function publishPublicLeaderboard(
   // down the scheduled generator run that invoked us.
   try {
     const monthId = seasonIdForInstant(now);
-    const previousId = previousMonthId(monthId);
+    const previousId = previousSeasonId(monthId);
     const [alltime, monthCategories, previousMonthCategories] = await Promise.all([
       readScopeCategories(LEADERBOARD_ALL_TIME_SCOPE),
       readScopeCategories(monthId),
