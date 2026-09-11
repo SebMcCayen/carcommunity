@@ -25,7 +25,7 @@
  * SCOPES + CATEGORIES.
  *  - `alltime` publishes all six categories: crownPoints, distance, events,
  *    convoys, waves, streak.
- *  - `month` publishes the five monthly categories: crownPoints, distance,
+ *  - `month` and `previousMonth` publish the five monthly categories: crownPoints, distance,
  *    events, convoys, waves — NO streak (a monthly "longest streak" is not a
  *    category the monthly board tracks). The month block is OMITTED entirely (null) when
  *    no `leaderboards/{YYYY-MM}` document exists yet — the monthly board is a
@@ -179,6 +179,8 @@ export interface PublicLeaderboardFile {
   alltime: PublicAlltimeBlock;
   /** The current month's podium, or null when no monthly board exists yet. */
   month: PublicMonthBlock | null;
+  /** The previous month's podium, or null when that monthly board is absent. */
+  previousMonth: PublicMonthBlock | null;
 }
 
 /**
@@ -189,17 +191,20 @@ export interface PublicLeaderboardFile {
  * @param alltime   the `leaderboards/alltime.categories` map, or null if absent.
  * @param month     the current month's block (buildPublicMonthBlock) or null.
  * @param generatedAt the stamp (ignored by homepageLeaderboardEquivalent).
+ * @param previousMonth the previous month's block, or null when absent.
  */
 export function buildPublicLeaderboardFile(
   alltime: StoredCategories | null,
   month: PublicMonthBlock | null,
   generatedAt: Date,
+  previousMonth: PublicMonthBlock | null = null,
 ): string {
   const file: PublicLeaderboardFile = {
     _generated: PUBLIC_LEADERBOARD_FILE_NOTICE,
     generatedAt: generatedAt.toISOString(),
     alltime: buildPublicAlltimeBlock(alltime),
     month,
+    previousMonth,
   };
   return `${JSON.stringify(file, null, 2)}\n`;
 }

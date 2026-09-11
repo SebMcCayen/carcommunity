@@ -13,15 +13,16 @@
  *
  * It publishes WHATEVER `leaderboards/{scope}` documents exist:
  *  - `leaderboards/alltime` — written by the all-time generator (PR1, merged);
- *  - `leaderboards/{YYYY-MM}` — the current month, written by the monthly board
- *    (PR #887, not yet merged). Absent until then → the month block is null and
- *    the site shows only the all-time podium. No coupling to the monthly PR: this
- *    just reads the current month's doc id and omits the block when it is missing.
+ *  - `leaderboards/{YYYY-MM}` — the current and immediately previous calendar
+ *    month. Either block is null when its source document is absent.
  */
 
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
-import { seasonIdForInstant } from '../crownHunt/crown-hunt-stats-core';
+import {
+  previousSeasonId,
+  seasonIdForInstant,
+} from '../crownHunt/crown-hunt-stats-core';
 import { LEADERBOARD_ALL_TIME_SCOPE } from './leaderboard-core';
 import {
   buildPublicLeaderboardFile,
@@ -53,11 +54,16 @@ async function readScopeCategories(scope: string): Promise<StoredCategories | nu
 export interface PublicLeaderboardPublishResult {
   status: HomepageSyncStatus;
   hasMonth: boolean;
+  hasPreviousMonth: boolean;
 }
 
+// Preserve the leaderboard-specific export while sharing the canonical season
+// rollover implementation (including four-digit year/month padding).
+export { previousSeasonId as previousMonthId };
+
 /**
- * Reads the published `leaderboards/{scope}` documents (all-time + current
- * month), builds the public top-3 JSON and syncs it to the homepage repo. Never
+ * Reads the published `leaderboards/{scope}` documents (all-time + current and
+ * previous month), builds the public top-3 JSON and syncs it to the homepage repo. Never
  * throws — every failure resolves to a `status` of 'failed'.
  *
  * @param token the HOMEPAGE_REPO_TOKEN secret value.
@@ -75,27 +81,44 @@ export async function publishPublicLeaderboard(
   // down the scheduled generator run that invoked us.
   try {
     const monthId = seasonIdForInstant(now);
-    const [alltime, monthCategories] = await Promise.all([
+    const previousId = previousSeasonId(monthId);
+    const [alltime, monthCategories, previousMonthCategories] = await Promise.all([
       readScopeCategories(LEADERBOARD_ALL_TIME_SCOPE),
       readScopeCategories(monthId),
+      readScopeCategories(previousId),
     ]);
 
     const month = monthCategories ? buildPublicMonthBlock(monthId, monthCategories) : null;
-    const content = buildPublicLeaderboardFile(alltime, month, now);
+    const previousMonth = previousMonthCategories
+      ? buildPublicMonthBlock(previousId, previousMonthCategories)
+      : null;
+    const content = buildPublicLeaderboardFile(alltime, month, now, previousMonth);
     const status = await syncHomepageLeaderboardFile(content, token, {
       month: monthId,
       hasMonth: month ? 1 : 0,
+      previousMonth: previousId,
+      hasPreviousMonth: previousMonth ? 1 : 0,
     });
     // One summary line per publish (matches the events publisher); 'unchanged'
     // runs stay quiet so a stable board is not hourly log noise.
     if (status !== 'unchanged') {
-      logger.info('Public leaderboard sync', { status, month: monthId, hasMonth: month !== null });
+      logger.info('Public leaderboard sync', {
+        status,
+        month: monthId,
+        hasMonth: month !== null,
+        previousMonth: previousId,
+        hasPreviousMonth: previousMonth !== null,
+      });
     }
-    return { status, hasMonth: month !== null };
+    return {
+      status,
+      hasMonth: month !== null,
+      hasPreviousMonth: previousMonth !== null,
+    };
   } catch (error) {
     // Non-identifying context only (never the token or member data). Consistent
     // with the 'failed' shape syncHomepageLeaderboardFile itself returns.
     logger.error('Public leaderboard publish failed', { error: String(error) });
-    return { status: 'failed', hasMonth: false };
+    return { status: 'failed', hasMonth: false, hasPreviousMonth: false };
   }
 }
