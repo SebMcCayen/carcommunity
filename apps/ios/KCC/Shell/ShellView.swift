@@ -51,6 +51,8 @@ struct ShellView: View {
     @State private var showStopConfirmation = false
     @State private var pendingSingleSessionStart = false
     @State private var pendingStartVehicleId: String?
+    @State private var pendingSessionCommand: SingleSessionCommand?
+    @State private var sessionCommandTask: Task<Void, Never>?
     @State private var sessionActionError = false
 
     /// What is drawn over the shell's map right now — the ONE pure value
@@ -107,7 +109,14 @@ struct ShellView: View {
         .onChange(of: locationPermissionCoordinator?.state) { _, state in
             if state == .granted { startSingleSessionAfterPermissionGrant() }
         }
-        .sheet(isPresented: $showStartDriving) {
+        .onChange(of: liveLocationCoordinator?.isSharing) { _, sharing in
+            guard let sharing,
+                  let command = pendingSessionCommand,
+                  command.isReconciled(isSharing: sharing)
+            else { return }
+            clearSessionCommand()
+        }
+        .sheet(isPresented: $showStartDriving, onDismiss: releaseStartDrivingGarage) {
             if let startDrivingGarage {
                 StartDrivingSheet(
                     garage: startDrivingGarage,
@@ -455,11 +464,21 @@ struct ShellView: View {
                     return
                 }
                 selectedTab = .map
-                guard liveLocationCoordinator?.actionStatus != .working else { return }
-                if liveLocationCoordinator?.isSharing == true {
+                guard let liveLocationCoordinator,
+                      liveLocationCoordinator.actionStatus != .working,
+                      pendingSessionCommand == nil
+                else { return }
+                sessionActionError = false
+                if liveLocationCoordinator.isSharing {
                     showStopConfirmation = true
-                } else {
+                } else if liveLocationCoordinator.canShare && liveLocationCoordinator.wired {
+                    startDrivingGarage = GarageCoordinator(
+                        repository: FirebaseVehiclesRepository.createIfAvailable(),
+                        uid: signedInUid
+                    )
                     showStartDriving = true
+                } else {
+                    routes = routes.opening(.liveLocation)
                 }
             }
         )
@@ -480,8 +499,17 @@ struct ShellView: View {
     }
 
     private func requestSingleSessionStart(vehicleId: String?) {
+        sessionActionError = false
+        guard pendingSessionCommand == nil,
+              let liveLocationCoordinator,
+              liveLocationCoordinator.canShare,
+              liveLocationCoordinator.wired
+        else {
+            routes = routes.opening(.liveLocation)
+            return
+        }
         guard let locationPermissionCoordinator else {
-            sessionActionError = true
+            routes = routes.opening(.liveLocation)
             return
         }
         pendingSingleSessionStart = true
@@ -493,20 +521,88 @@ struct ShellView: View {
     }
 
     private func startSingleSessionAfterPermissionGrant() {
-        guard pendingSingleSessionStart, let liveLocationCoordinator else { return }
+        guard pendingSingleSessionStart else { return }
+        guard pendingSessionCommand == nil,
+              let liveLocationCoordinator,
+              liveLocationCoordinator.canShare,
+              liveLocationCoordinator.wired
+        else {
+            cancelPendingSingleSessionStart()
+            routes = routes.opening(.liveLocation)
+            return
+        }
         let vehicleId = pendingStartVehicleId
+        let identity = signedInUid
         cancelPendingSingleSessionStart()
-        Task {
+        pendingSessionCommand = .starting
+        sessionCommandTask = Task {
             let result = await liveLocationCoordinator.startSharing(vehicleId: vehicleId)
-            if case .failed = result { sessionActionError = true }
+            await finishSessionCommand(
+                result,
+                command: .starting,
+                identity: identity,
+                coordinator: liveLocationCoordinator
+            )
         }
     }
 
     private func stopSingleSession() {
-        guard let liveLocationCoordinator else { return }
-        Task {
+        guard pendingSessionCommand == nil, let liveLocationCoordinator else { return }
+        sessionActionError = false
+        let identity = signedInUid
+        pendingSessionCommand = .stopping
+        sessionCommandTask = Task {
             let result = await liveLocationCoordinator.stopSharing()
-            if case .failed = result { sessionActionError = true }
+            await finishSessionCommand(
+                result,
+                command: .stopping,
+                identity: identity,
+                coordinator: liveLocationCoordinator
+            )
+        }
+    }
+
+    private func finishSessionCommand(
+        _ result: LiveCommandResult,
+        command: SingleSessionCommand,
+        identity: String?,
+        coordinator: LiveLocationCoordinator
+    ) async {
+        guard !Task.isCancelled,
+              identity == signedInUid,
+              coordinator === liveLocationCoordinator,
+              pendingSessionCommand == command
+        else { return }
+
+        switch result {
+        case .failed:
+            pendingSessionCommand = nil
+            sessionCommandTask = nil
+            sessionActionError = true
+        case .busy:
+            pendingSessionCommand = nil
+            sessionCommandTask = nil
+        case .success:
+            if command.isReconciled(isSharing: coordinator.isSharing) {
+                clearSessionCommand()
+                return
+            }
+            // A successful callable normally echoes through RTDB immediately.
+            // Bound the optimistic lock so a lost listener event cannot leave
+            // Create/Stop disabled for the rest of the signed-in session.
+            do {
+                try await Task.sleep(for: .seconds(15))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled,
+                  identity == signedInUid,
+                  coordinator === liveLocationCoordinator,
+                  pendingSessionCommand == command
+            else { return }
+            pendingSessionCommand = nil
+            sessionCommandTask = nil
+            sessionActionError = true
         }
     }
 
@@ -515,11 +611,22 @@ struct ShellView: View {
         pendingStartVehicleId = nil
     }
 
+    private func clearSessionCommand() {
+        sessionCommandTask?.cancel()
+        sessionCommandTask = nil
+        pendingSessionCommand = nil
+    }
+
+    private func releaseStartDrivingGarage() {
+        startDrivingGarage = nil
+    }
+
     private var permissionPromptIsPresented: Binding<Bool> {
         Binding(
             get: {
-                locationPermissionCoordinator?.state == .rationale
-                    || locationPermissionCoordinator?.state == .deniedNeedsSettings
+                pendingSingleSessionStart
+                    && (locationPermissionCoordinator?.state == .rationale
+                        || locationPermissionCoordinator?.state == .deniedNeedsSettings)
             },
             set: { _ in }
         )
@@ -532,6 +639,8 @@ struct ShellView: View {
         showStartDriving = false
         showStopConfirmation = false
         cancelPendingSingleSessionStart()
+        clearSessionCommand()
+        sessionActionError = false
 
         // Remove a conversation built for the previous identity before doing
         // any asynchronous flag work. If Chat was opened from a parent hub,
@@ -602,10 +711,6 @@ struct ShellView: View {
         // Hide access. Starting this listener does not request GPS permission.
         liveLocation.start()
         liveLocationCoordinator = liveLocation
-        startDrivingGarage = GarageCoordinator(
-            repository: FirebaseVehiclesRepository.createIfAvailable(),
-            uid: uid
-        )
         crownHuntComposition = crownHunt
     }
 

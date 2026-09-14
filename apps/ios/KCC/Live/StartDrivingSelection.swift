@@ -13,3 +13,18 @@ enum StartDrivingSelection {
         return vehicles.first(where: \.isMainCar)?.id ?? vehicles.first?.id
     }
 }
+
+/// Optimistic command state retained until the RTDB own-session listener
+/// confirms the callable's effect. This closes the interval between a
+/// successful callable response and the observed session echo.
+enum SingleSessionCommand: Equatable, Sendable {
+    case starting
+    case stopping
+
+    func isReconciled(isSharing: Bool) -> Bool {
+        switch self {
+        case .starting: isSharing
+        case .stopping: !isSharing
+        }
+    }
+}

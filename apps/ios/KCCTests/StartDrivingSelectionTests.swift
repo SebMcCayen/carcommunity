@@ -46,6 +46,13 @@ final class StartDrivingSelectionTests: XCTestCase {
         )
     }
 
+    func testSingleSessionCommandsReconcileOnlyToTheirExpectedSharingState() {
+        XCTAssertTrue(SingleSessionCommand.starting.isReconciled(isSharing: true))
+        XCTAssertFalse(SingleSessionCommand.starting.isReconciled(isSharing: false))
+        XCTAssertTrue(SingleSessionCommand.stopping.isReconciled(isSharing: false))
+        XCTAssertFalse(SingleSessionCommand.stopping.isReconciled(isSharing: true))
+    }
+
     private func vehicle(id: String, isMain: Bool = false) -> Vehicle {
         Vehicle(
             id: id,
