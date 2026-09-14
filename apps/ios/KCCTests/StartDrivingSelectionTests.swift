@@ -53,6 +53,14 @@ final class StartDrivingSelectionTests: XCTestCase {
         XCTAssertFalse(SingleSessionCommand.stopping.isReconciled(isSharing: true))
     }
 
+    func testDeferredCreateIntentDoesNotCrossIdentityBoundary() {
+        let intent = SingleSessionCreateIntent(identity: "driver-a")
+
+        XCTAssertTrue(intent.belongs(to: "driver-a"))
+        XCTAssertFalse(intent.belongs(to: "driver-b"))
+        XCTAssertFalse(intent.belongs(to: nil))
+    }
+
     private func vehicle(id: String, isMain: Bool = false) -> Vehicle {
         Vehicle(
             id: id,

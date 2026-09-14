@@ -28,3 +28,14 @@ enum SingleSessionCommand: Equatable, Sendable {
         }
     }
 }
+
+/// A Create-tab tap that occurred while feature composition was still in
+/// flight. Capturing the identity prevents a deferred tap from crossing an
+/// account boundary when `.task(id:)` rewires the shell.
+struct SingleSessionCreateIntent: Equatable, Sendable {
+    let identity: String?
+
+    func belongs(to identity: String?) -> Bool {
+        self.identity == identity
+    }
+}

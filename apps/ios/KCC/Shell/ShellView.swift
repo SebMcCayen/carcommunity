@@ -51,6 +51,7 @@ struct ShellView: View {
     @State private var showStopConfirmation = false
     @State private var pendingSingleSessionStart = false
     @State private var pendingStartVehicleId: String?
+    @State private var pendingCreateIntent: SingleSessionCreateIntent?
     @State private var pendingSessionCommand: SingleSessionCommand?
     @State private var sessionCommandTask: Task<Void, Never>?
     @State private var sessionActionError = false
@@ -464,24 +465,31 @@ struct ShellView: View {
                     return
                 }
                 selectedTab = .map
-                guard let liveLocationCoordinator,
-                      liveLocationCoordinator.actionStatus != .working,
-                      pendingSessionCommand == nil
-                else { return }
                 sessionActionError = false
-                if liveLocationCoordinator.isSharing {
-                    showStopConfirmation = true
-                } else if liveLocationCoordinator.canShare && liveLocationCoordinator.wired {
-                    startDrivingGarage = GarageCoordinator(
-                        repository: FirebaseVehiclesRepository.createIfAvailable(),
-                        uid: signedInUid
-                    )
-                    showStartDriving = true
-                } else {
-                    routes = routes.opening(.liveLocation)
+                guard pendingSessionCommand == nil else { return }
+                guard let liveLocationCoordinator else {
+                    pendingCreateIntent = SingleSessionCreateIntent(identity: signedInUid)
+                    return
                 }
+                pendingCreateIntent = nil
+                presentSingleSessionAction(using: liveLocationCoordinator)
             }
         )
+    }
+
+    private func presentSingleSessionAction(using coordinator: LiveLocationCoordinator) {
+        guard coordinator.actionStatus != .working else { return }
+        if coordinator.isSharing {
+            showStopConfirmation = true
+        } else if coordinator.canShare && coordinator.wired {
+            startDrivingGarage = GarageCoordinator(
+                repository: FirebaseVehiclesRepository.createIfAvailable(),
+                uid: signedInUid
+            )
+            showStartDriving = true
+        } else {
+            routes = routes.opening(.liveLocation)
+        }
     }
 
     private func tabTitle(_ tab: ShellTab) -> LocalizedStringKey {
@@ -636,6 +644,10 @@ struct ShellView: View {
     private func wireFeatures() async {
         let uid = signedInUid
 
+        if pendingCreateIntent?.belongs(to: uid) == false {
+            pendingCreateIntent = nil
+        }
+
         showStartDriving = false
         showStopConfirmation = false
         cancelPendingSingleSessionStart()
@@ -712,6 +724,11 @@ struct ShellView: View {
         liveLocation.start()
         liveLocationCoordinator = liveLocation
         crownHuntComposition = crownHunt
+
+        if pendingCreateIntent?.belongs(to: uid) == true {
+            pendingCreateIntent = nil
+            presentSingleSessionAction(using: liveLocation)
+        }
     }
 
     private var signedInDisplayName: String? {
