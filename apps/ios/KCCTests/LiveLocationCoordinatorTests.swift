@@ -525,6 +525,21 @@ final class LiveLocationCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testStartSharingPassesSelectedVehicleToRepository() async {
+        let repository = FakeLiveLocationRepository()
+        let coordinator = makeCoordinator(
+            repository: repository,
+            provider: StubLocationProvider(authorization: .whileInUse)
+        )
+        coordinator.start()
+
+        let result = await coordinator.startSharing(vehicleId: "vehicle-7")
+
+        XCTAssertEqual(result, .success)
+        XCTAssertEqual(repository.startedVehicleIds, ["vehicle-7"])
+    }
+
+    @MainActor
     func testUnwiredCommandsFailWithoutCrashing() async {
         let coordinator = makeCoordinator(repository: nil, provider: StubLocationProvider())
         coordinator.start()

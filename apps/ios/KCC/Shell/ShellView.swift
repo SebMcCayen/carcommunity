@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The five-tab, map-first shell. One persistent map sits behind the tab host;
 /// History / Social / Garage render as translucent panels over the map per
@@ -6,6 +7,8 @@ import SwiftUI
 /// all come from the pure ``ShellNavigation`` logic so behaviour stays unit-tested
 /// outside SwiftUI.
 struct ShellView: View {
+    @Environment(\.openURL) private var openURL
+
     /// The signed-in session, threaded from ``RootView``. The config-less /
     /// unavailable state renders the bare shell with no profile entry —
     /// Android's "unavailable entries are omitted" hub rule.
@@ -38,11 +41,17 @@ struct ShellView: View {
     @State private var crownHuntComposition: CrownHuntComposition?
     @State private var liveLocationCoordinator: LiveLocationCoordinator?
     @State private var locationPermissionCoordinator: LocationPermissionCoordinator?
+    @State private var startDrivingGarage: GarageCoordinator?
     @State private var friendsRepository: FriendsRepository?
     @State private var conversationsRepository: ConversationsRepository?
     @State private var dmTarget: DmRouteTarget?
     @State private var dmCoordinator: ChatCoordinator?
     @State private var locationProvider = CoreLocationProvider()
+    @State private var showStartDriving = false
+    @State private var showStopConfirmation = false
+    @State private var pendingSingleSessionStart = false
+    @State private var pendingStartVehicleId: String?
+    @State private var sessionActionError = false
 
     /// What is drawn over the shell's map right now — the ONE pure value
     /// every cover-derived decision reads. `navigating` / `navSearchOpen` are
@@ -62,10 +71,15 @@ struct ShellView: View {
             // routes cover it instead of recreating its Metal render surface.
             MapHomeView(surface: mapSurface)
 
-            TabView(selection: $selectedTab) {
+            TabView(selection: tabSelection) {
                 ForEach(ShellTab.allCases, id: \.self) { tab in
                     content(for: tab)
-                        .tabItem { Label(tab.title, systemImage: tab.systemImage) }
+                        .tabItem {
+                            Label(
+                                tabTitle(tab),
+                                systemImage: tabSystemImage(tab)
+                            )
+                        }
                         .tag(tab)
                 }
             }
@@ -89,6 +103,59 @@ struct ShellView: View {
             if tab != .map, routes.current == .chatHub {
                 routes = routes.poppingOne()
             }
+        }
+        .onChange(of: locationPermissionCoordinator?.state) { _, state in
+            if state == .granted { startSingleSessionAfterPermissionGrant() }
+        }
+        .sheet(isPresented: $showStartDriving) {
+            if let startDrivingGarage {
+                StartDrivingSheet(
+                    garage: startDrivingGarage,
+                    isStarting: liveLocationCoordinator?.actionStatus == .working,
+                    onStart: requestSingleSessionStart
+                )
+            }
+        }
+        .confirmationDialog(
+            "liveLocation.stop",
+            isPresented: $showStopConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("liveLocation.stop", role: .destructive) {
+                stopSingleSession()
+            }
+            Button("shell.liveSharePromptCancel", role: .cancel) {}
+        }
+        .alert(Text("map.locationNeededTitle"), isPresented: permissionPromptIsPresented) {
+            if locationPermissionCoordinator?.state == .rationale {
+                Button("map.locationDismiss", role: .cancel) {
+                    cancelPendingSingleSessionStart()
+                    locationPermissionCoordinator?.dismissRationale()
+                }
+                Button("map.locationAllow") {
+                    locationPermissionCoordinator?.proceedFromRationale()
+                }
+            } else {
+                Button("map.locationDismiss", role: .cancel) {
+                    cancelPendingSingleSessionStart()
+                    locationPermissionCoordinator?.dismissSettingsHint()
+                }
+                Button("map.locationOpenSettings") {
+                    locationPermissionCoordinator?.dismissSettingsHint()
+                    guard let url = URL(string: UIApplication.openSettingsURLString) else {
+                        cancelPendingSingleSessionStart()
+                        return
+                    }
+                    openURL(url)
+                }
+            }
+        } message: {
+            Text("map.locationPermissionBody")
+        }
+        .alert("liveLocation.statusError", isPresented: $sessionActionError) {
+            Button("notifications.errorDismiss", role: .cancel) {}
+        } message: {
+            Text("liveLocation.error")
         }
         .task(id: signedInUid) { await wireFeatures() }
     }
@@ -136,10 +203,9 @@ struct ShellView: View {
         case .garage:
             panelTab { GaragePanel() }
         case .create:
-            // Not a panel tab: an opaque page (the map-cover rule stands the
-            // surface down here). The Create chooser fills in with its slice.
-            placeholder(for: tab)
-                .background(.background, ignoresSafeAreaEdges: .all)
+            // Create is an action, never a destination. `tabSelection` keeps
+            // Map selected and presents Start driving (or Stop) instead.
+            Color.clear.ignoresSafeArea()
         }
     }
 
@@ -150,18 +216,6 @@ struct ShellView: View {
             onDismiss: { selectedTab = .map },
             content: content
         )
-    }
-
-    @ViewBuilder
-    private func placeholder(for tab: ShellTab) -> some View {
-        VStack(spacing: 12) {
-            Image(systemName: tab.systemImage)
-                .font(.system(size: 44))
-                .foregroundStyle(.secondary)
-            Text(tab.title)
-                .font(.title2)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var profileButton: some View {
@@ -391,9 +445,93 @@ struct ShellView: View {
         routes = routes.opening(.chat)
     }
 
+    private var tabSelection: Binding<ShellTab> {
+        Binding(
+            get: { selectedTab },
+            set: { tab in
+                if routes.current == .chatHub { routes = routes.poppingOne() }
+                guard tab == .create else {
+                    selectedTab = tab
+                    return
+                }
+                selectedTab = .map
+                guard liveLocationCoordinator?.actionStatus != .working else { return }
+                if liveLocationCoordinator?.isSharing == true {
+                    showStopConfirmation = true
+                } else {
+                    showStartDriving = true
+                }
+            }
+        )
+    }
+
+    private func tabTitle(_ tab: ShellTab) -> LocalizedStringKey {
+        if tab == .create, liveLocationCoordinator?.isSharing == true {
+            return "liveLocation.stop"
+        }
+        return tab.title
+    }
+
+    private func tabSystemImage(_ tab: ShellTab) -> String {
+        if tab == .create, liveLocationCoordinator?.isSharing == true {
+            return "stop.circle.fill"
+        }
+        return tab.systemImage
+    }
+
+    private func requestSingleSessionStart(vehicleId: String?) {
+        guard let locationPermissionCoordinator else {
+            sessionActionError = true
+            return
+        }
+        pendingSingleSessionStart = true
+        pendingStartVehicleId = vehicleId
+        locationPermissionCoordinator.requestAccess()
+        if locationPermissionCoordinator.state == .granted {
+            startSingleSessionAfterPermissionGrant()
+        }
+    }
+
+    private func startSingleSessionAfterPermissionGrant() {
+        guard pendingSingleSessionStart, let liveLocationCoordinator else { return }
+        let vehicleId = pendingStartVehicleId
+        cancelPendingSingleSessionStart()
+        Task {
+            let result = await liveLocationCoordinator.startSharing(vehicleId: vehicleId)
+            if case .failed = result { sessionActionError = true }
+        }
+    }
+
+    private func stopSingleSession() {
+        guard let liveLocationCoordinator else { return }
+        Task {
+            let result = await liveLocationCoordinator.stopSharing()
+            if case .failed = result { sessionActionError = true }
+        }
+    }
+
+    private func cancelPendingSingleSessionStart() {
+        pendingSingleSessionStart = false
+        pendingStartVehicleId = nil
+    }
+
+    private var permissionPromptIsPresented: Binding<Bool> {
+        Binding(
+            get: {
+                locationPermissionCoordinator?.state == .rationale
+                    || locationPermissionCoordinator?.state == .deniedNeedsSettings
+            },
+            set: { _ in }
+        )
+    }
+
     @MainActor
     private func wireFeatures() async {
         let uid = signedInUid
+
+        showStartDriving = false
+        showStopConfirmation = false
+        cancelPendingSingleSessionStart()
 
         // Remove a conversation built for the previous identity before doing
         // any asynchronous flag work. If Chat was opened from a parent hub,
@@ -404,6 +542,7 @@ struct ShellView: View {
         dmTarget = nil
         dmCoordinator = nil
         liveLocationCoordinator = nil
+        startDrivingGarage = nil
         crownHuntComposition = nil
 
         let friends = FirebaseFriendsRepository.createIfAvailable()
@@ -463,6 +602,10 @@ struct ShellView: View {
         // Hide access. Starting this listener does not request GPS permission.
         liveLocation.start()
         liveLocationCoordinator = liveLocation
+        startDrivingGarage = GarageCoordinator(
+            repository: FirebaseVehiclesRepository.createIfAvailable(),
+            uid: uid
+        )
         crownHuntComposition = crownHunt
     }
 

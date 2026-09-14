@@ -192,11 +192,14 @@ final class LiveLocationCoordinator {
     /// hide-me-now is the always-on privacy escape hatch). A command already
     /// in flight still wins with `.busy`, matching ``execute(_:)``.
     @discardableResult
-    func startSharing() async -> LiveCommandResult {
+    func startSharing(vehicleId: String? = nil) async -> LiveCommandResult {
         guard actionStatus != .working else { return .busy }
         guard canShare, wired, provider.authorization.isAuthorized else { return .failed }
         return await execute { repository in
-            try await repository.startSession(duration: LiveLocation.defaultSessionDuration)
+            try await repository.startSession(
+                duration: LiveLocation.defaultSessionDuration,
+                vehicleId: vehicleId
+            )
         }
     }
 
