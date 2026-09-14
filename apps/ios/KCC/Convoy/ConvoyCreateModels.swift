@@ -7,6 +7,9 @@ enum ConvoyCreateError: Equatable, Sendable {
     case invalid
     case noInvitees
     case alreadyInConvoy
+    /// The callable overloads failed-precondition; the coordinator resolves it
+    /// with a fresh list before selecting a user-facing reason.
+    case unresolvedPrecondition
     case generic
 }
 
@@ -16,7 +19,7 @@ enum ConvoyCreateErrorMapper {
         case .unauthenticated: .signedOut
         case .permissionDenied: .notMember
         case .invalidArgument: .invalid
-        case .failedPrecondition: .noInvitees
+        case .failedPrecondition: .unresolvedPrecondition
         default: .generic
         }
     }
@@ -38,7 +41,7 @@ enum ConvoyCreateStrings {
         case .invalid: "convoy.errorInvalid"
         case .noInvitees: "convoy.errorNoInvitees"
         case .alreadyInConvoy: "convoy.errorAlreadyInConvoy"
-        case .generic: "convoy.errorGeneric"
+        case .unresolvedPrecondition, .generic: "convoy.errorGeneric"
         }
     }
 }

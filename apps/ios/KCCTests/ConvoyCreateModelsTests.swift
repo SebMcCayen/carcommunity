@@ -70,7 +70,10 @@ final class ConvoyCreateModelsTests: XCTestCase {
         XCTAssertEqual(ConvoyCreateErrorMapper.mapCreate(.unauthenticated), .signedOut)
         XCTAssertEqual(ConvoyCreateErrorMapper.mapCreate(.permissionDenied), .notMember)
         XCTAssertEqual(ConvoyCreateErrorMapper.mapCreate(.invalidArgument), .invalid)
-        XCTAssertEqual(ConvoyCreateErrorMapper.mapCreate(.failedPrecondition), .noInvitees)
+        XCTAssertEqual(
+            ConvoyCreateErrorMapper.mapCreate(.failedPrecondition),
+            .unresolvedPrecondition
+        )
         XCTAssertEqual(ConvoyCreateErrorMapper.mapCreate(.internalError), .generic)
         XCTAssertEqual(ConvoyCreateErrorMapper.mapList(.unauthenticated), .signedOut)
         XCTAssertEqual(ConvoyCreateErrorMapper.mapList(.permissionDenied), .notMember)

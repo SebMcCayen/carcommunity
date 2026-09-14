@@ -77,7 +77,19 @@ final class ConvoyCreateCoordinator {
         createState = .working
         switch await repository.create(inviteeUids: invitees, vehicleId: normalizedVehicleId) {
         case .created(let created): createState = .created(created)
+        case .failed(.unresolvedPrecondition):
+            await resolveCreatePrecondition(using: repository)
         case .failed(let error): createState = .failed(error)
+        }
+    }
+
+    private func resolveCreatePrecondition(using repository: ConvoyCreateRepository) async {
+        switch await repository.list() {
+        case .loaded(let snapshot):
+            availability = .ready(hasActiveConvoy: snapshot.hasActiveConvoy)
+            createState = .failed(snapshot.hasActiveConvoy ? .alreadyInConvoy : .noInvitees)
+        case .failed:
+            createState = .failed(.generic)
         }
     }
 }
