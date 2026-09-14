@@ -5,7 +5,9 @@ import XCTest
 final class ConvoyCreateCoordinatorTests: XCTestCase {
     private final class FakeRepository: ConvoyCreateRepository, @unchecked Sendable {
         private let lock = NSLock()
-        var listResult: ConvoyCreateListResult = .loaded(.init(hasActiveConvoy: false))
+        var listResult: ConvoyCreateListResult = .loaded(
+            .init(hasActiveConvoy: false, isExhaustive: true)
+        )
         var listResults: [ConvoyCreateListResult] = []
         var createResult: ConvoyCreateResult = .created(
             .init(convoyId: "c1", invited: ["friend-1"], skippedCount: 0)
@@ -30,7 +32,7 @@ final class ConvoyCreateCoordinatorTests: XCTestCase {
     @MainActor
     func testLoadPublishesActiveConvoyPreflight() async {
         let repository = FakeRepository()
-        repository.listResult = .loaded(.init(hasActiveConvoy: true))
+        repository.listResult = .loaded(.init(hasActiveConvoy: true, isExhaustive: true))
         let coordinator = ConvoyCreateCoordinator(repository: repository)
 
         await coordinator.load()
@@ -70,7 +72,7 @@ final class ConvoyCreateCoordinatorTests: XCTestCase {
     @MainActor
     func testActiveConvoyFailsLocallyWithoutCallingBackend() async {
         let repository = FakeRepository()
-        repository.listResult = .loaded(.init(hasActiveConvoy: true))
+        repository.listResult = .loaded(.init(hasActiveConvoy: true, isExhaustive: true))
         let coordinator = ConvoyCreateCoordinator(repository: repository)
         await coordinator.load()
 
@@ -97,8 +99,8 @@ final class ConvoyCreateCoordinatorTests: XCTestCase {
         let repository = FakeRepository()
         repository.createResult = .failed(.unresolvedPrecondition)
         repository.listResults = [
-            .loaded(.init(hasActiveConvoy: false)),
-            .loaded(.init(hasActiveConvoy: true))
+            .loaded(.init(hasActiveConvoy: false, isExhaustive: true)),
+            .loaded(.init(hasActiveConvoy: true, isExhaustive: true))
         ]
         let coordinator = ConvoyCreateCoordinator(repository: repository)
         await coordinator.load()
@@ -119,6 +121,22 @@ final class ConvoyCreateCoordinatorTests: XCTestCase {
         await coordinator.create(inviteeUids: ["friend-1"], vehicleId: nil)
 
         XCTAssertEqual(coordinator.createState, .failed(.noInvitees))
+    }
+
+    @MainActor
+    func testFailedPreconditionWithTruncatedListUsesGenericError() async {
+        let repository = FakeRepository()
+        repository.createResult = .failed(.unresolvedPrecondition)
+        repository.listResults = [
+            .loaded(.init(hasActiveConvoy: false, isExhaustive: true)),
+            .loaded(.init(hasActiveConvoy: false, isExhaustive: false))
+        ]
+        let coordinator = ConvoyCreateCoordinator(repository: repository)
+        await coordinator.load()
+
+        await coordinator.create(inviteeUids: ["friend-1"], vehicleId: nil)
+
+        XCTAssertEqual(coordinator.createState, .failed(.generic))
     }
 
     @MainActor

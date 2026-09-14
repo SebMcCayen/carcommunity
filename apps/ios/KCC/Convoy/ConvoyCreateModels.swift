@@ -48,6 +48,9 @@ enum ConvoyCreateStrings {
 
 struct ConvoyCreateSnapshot: Equatable, Sendable {
     let hasActiveConvoy: Bool
+    /// `convoy-list` returns at most 200 rows. Fewer rows proves the active
+    /// membership scan was complete; exactly 200 cannot rule out an older row.
+    let isExhaustive: Bool
 }
 
 enum ConvoyCreateListResult: Equatable, Sendable {
@@ -67,6 +70,8 @@ enum ConvoyCreateResult: Equatable, Sendable {
 }
 
 enum ConvoyCreateResponseParser {
+    static let listLimit = 200
+
     static func parseList(_ data: [String: Any]?) -> ConvoyCreateSnapshot {
         let convoys = data?["convoys"] as? [Any] ?? []
         let hasActive = convoys.contains { raw in
@@ -77,7 +82,10 @@ enum ConvoyCreateResponseParser {
             else { return false }
             return (viewer["inviteStatus"] as? String) == "accepted"
         }
-        return ConvoyCreateSnapshot(hasActiveConvoy: hasActive)
+        return ConvoyCreateSnapshot(
+            hasActiveConvoy: hasActive,
+            isExhaustive: convoys.count < listLimit
+        )
     }
 
     static func parseCreate(_ data: [String: Any]?) -> ConvoyCreateResult {

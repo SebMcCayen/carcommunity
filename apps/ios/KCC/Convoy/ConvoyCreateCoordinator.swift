@@ -87,7 +87,11 @@ final class ConvoyCreateCoordinator {
         switch await repository.list() {
         case .loaded(let snapshot):
             availability = .ready(hasActiveConvoy: snapshot.hasActiveConvoy)
-            createState = .failed(snapshot.hasActiveConvoy ? .alreadyInConvoy : .noInvitees)
+            if snapshot.hasActiveConvoy {
+                createState = .failed(.alreadyInConvoy)
+            } else {
+                createState = .failed(snapshot.isExhaustive ? .noInvitees : .generic)
+            }
         case .failed:
             createState = .failed(.generic)
         }

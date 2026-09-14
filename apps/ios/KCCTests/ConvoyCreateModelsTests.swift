@@ -26,6 +26,7 @@ final class ConvoyCreateModelsTests: XCTestCase {
         ])
 
         XCTAssertFalse(snapshot.hasActiveConvoy)
+        XCTAssertTrue(snapshot.isExhaustive)
     }
 
     func testPendingInviteDoesNotCountAsActiveParticipation() {
@@ -38,6 +39,19 @@ final class ConvoyCreateModelsTests: XCTestCase {
         ])
 
         XCTAssertFalse(snapshot.hasActiveConvoy)
+    }
+
+    func testFullListCannotProveThatNoOlderActiveConvoyExists() {
+        let pending = [
+            "status": "active",
+            "viewer": ["inviteStatus": "invited"]
+        ] as [String: Any]
+        let snapshot = ConvoyCreateResponseParser.parseList([
+            "convoys": Array(repeating: pending, count: ConvoyCreateResponseParser.listLimit)
+        ])
+
+        XCTAssertFalse(snapshot.hasActiveConvoy)
+        XCTAssertFalse(snapshot.isExhaustive)
     }
 
     func testCreateParsesCreatedConvoyAndInviteOutcomes() {

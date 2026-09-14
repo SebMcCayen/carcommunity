@@ -692,6 +692,7 @@
     "friendsRetry": "Försök igen",
     "noFriends": "Lägg till några vänner först för att bjuda in dem till en konvoj.",
     "createSubmit": "Skapa konvoj",
+    "createInviteLimit": "Du kan bjuda in upp till 50 vänner.",
     "membersTitle": "Medlemmar",
     "start": "Starta konvoj",
     "end": "Avsluta konvoj",

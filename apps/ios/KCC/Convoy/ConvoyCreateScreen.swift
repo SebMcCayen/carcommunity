@@ -23,6 +23,13 @@ struct ConvoyCreateScreen: View {
                 }
             }
 
+            if selectedUids.count == Self.maxInvitees {
+                Section {
+                    Text("convoy.createInviteLimit")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section {
                 Button {
                     Task {
@@ -122,7 +129,7 @@ struct ConvoyCreateScreen: View {
         return Button {
             if selected {
                 selectedUids.remove(friend.uid)
-            } else {
+            } else if selectedUids.count < Self.maxInvitees {
                 selectedUids.insert(friend.uid)
             }
         } label: {
@@ -138,7 +145,7 @@ struct ConvoyCreateScreen: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(isHandingOff)
+        .disabled(isHandingOff || (!selected && selectedUids.count >= Self.maxInvitees))
         .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 
@@ -162,4 +169,6 @@ struct ConvoyCreateScreen: View {
         else { return String(localized: "friends.unknownMember") }
         return name
     }
+
+    private static let maxInvitees = 50
 }
