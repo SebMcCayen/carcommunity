@@ -42,6 +42,8 @@ struct ShellView: View {
     @State private var liveLocationCoordinator: LiveLocationCoordinator?
     @State private var locationPermissionCoordinator: LocationPermissionCoordinator?
     @State private var startDrivingGarage: GarageCoordinator?
+    @State private var convoyCreateCoordinator: ConvoyCreateCoordinator?
+    @State private var convoyCreateVehicleId: String?
     @State private var friendsRepository: FriendsRepository?
     @State private var conversationsRepository: ConversationsRepository?
     @State private var dmTarget: DmRouteTarget?
@@ -122,7 +124,8 @@ struct ShellView: View {
                 StartDrivingSheet(
                     garage: startDrivingGarage,
                     isStarting: liveLocationCoordinator?.actionStatus == .working,
-                    onStart: requestSingleSessionStart
+                    onStart: requestSingleSessionStart,
+                    onConvoy: openConvoyCreate
                 )
             }
         }
@@ -352,6 +355,29 @@ struct ShellView: View {
                     onViewProfile: nil
                 )
             }
+        case .convoys:
+            if let convoyCreateCoordinator {
+                NavigationStack {
+                    ConvoyCreateScreen(
+                        coordinator: convoyCreateCoordinator,
+                        friendsCoordinator: friendsCoordinator,
+                        vehicleId: convoyCreateVehicleId,
+                        onCreated: completeConvoyCreation
+                    )
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button {
+                                closeConvoyCreate()
+                            } label: {
+                                Label("shell.back", systemImage: "chevron.backward")
+                            }
+                        }
+                    }
+                }
+                .background(.background, ignoresSafeAreaEdges: .all)
+            } else {
+                unavailableRoute
+            }
         case .conversations:
             routeNavigation {
                 ConversationsScreen(
@@ -492,15 +518,63 @@ struct ShellView: View {
         }
     }
 
+    private func openConvoyCreate(vehicleId: String?) {
+        guard pendingSessionCommand == nil else { return }
+        convoyCreateVehicleId = vehicleId
+        convoyCreateCoordinator = ConvoyCreateCoordinator(
+            repository: FirebaseConvoyCreateRepository.createIfAvailable()
+        )
+        routes = routes.opening(.convoys)
+    }
+
+    private func closeConvoyCreate() {
+        if routes.current == .convoys { routes = routes.poppingOne() }
+        convoyCreateCoordinator = nil
+        convoyCreateVehicleId = nil
+    }
+
+    private func completeConvoyCreation(_ created: ConvoyCreated) {
+        guard !created.convoyId.isEmpty else { return }
+        closeConvoyCreate()
+        selectedTab = .map
+        retainConvoySessionStartUntilObserved()
+    }
+
+    private func retainConvoySessionStartUntilObserved() {
+        guard pendingSessionCommand == nil, let liveLocationCoordinator else { return }
+        let identity = signedInUid
+        if SingleSessionCommand.starting.isReconciled(isSharing: liveLocationCoordinator.isSharing) {
+            return
+        }
+        pendingSessionCommand = .starting
+        sessionCommandTask = Task {
+            do {
+                try await Task.sleep(for: .seconds(15))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled,
+                  identity == signedInUid,
+                  liveLocationCoordinator === self.liveLocationCoordinator,
+                  pendingSessionCommand == .starting
+            else { return }
+            pendingSessionCommand = nil
+            sessionCommandTask = nil
+            sessionActionError = true
+        }
+    }
+
     private func tabTitle(_ tab: ShellTab) -> LocalizedStringKey {
-        if tab == .create, liveLocationCoordinator?.isSharing == true {
+        if tab == .create,
+           (liveLocationCoordinator?.isSharing == true || pendingSessionCommand == .starting) {
             return "liveLocation.stop"
         }
         return tab.title
     }
 
     private func tabSystemImage(_ tab: ShellTab) -> String {
-        if tab == .create, liveLocationCoordinator?.isSharing == true {
+        if tab == .create,
+           (liveLocationCoordinator?.isSharing == true || pendingSessionCommand == .starting) {
             return "stop.circle.fill"
         }
         return tab.systemImage
@@ -662,6 +736,9 @@ struct ShellView: View {
         }
         dmTarget = nil
         dmCoordinator = nil
+        if routes.current == .convoys { routes = routes.poppingOne() }
+        convoyCreateCoordinator = nil
+        convoyCreateVehicleId = nil
         liveLocationCoordinator = nil
         startDrivingGarage = nil
         crownHuntComposition = nil

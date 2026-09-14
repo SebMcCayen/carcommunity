@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// The iOS Single-session slice of Android's Create chooser. It observes the
+/// The iOS port of Android's Create chooser. It observes the
 /// owner's garage only while presented, preselects the main/first vehicle,
-/// and returns the selected id to the shell. Starting with no vehicle remains
-/// valid: the backend then renders the generic live marker.
+/// and returns the selected id to either the Single-session or Convoy flow.
+/// Starting with no vehicle remains valid: the backend then uses its fallback.
 struct StartDrivingSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var garage: GarageCoordinator
@@ -11,16 +11,19 @@ struct StartDrivingSheet: View {
 
     let isStarting: Bool
     let onStart: (String?) -> Void
+    let onConvoy: (String?) -> Void
 
     init(
         garage: GarageCoordinator,
         isStarting: Bool,
-        onStart: @escaping (String?) -> Void
+        onStart: @escaping (String?) -> Void,
+        onConvoy: @escaping (String?) -> Void
     ) {
         _garage = State(initialValue: garage)
         _selectedVehicleId = State(initialValue: nil)
         self.isStarting = isStarting
         self.onStart = onStart
+        self.onConvoy = onConvoy
     }
 
     var body: some View {
@@ -34,10 +37,7 @@ struct StartDrivingSheet: View {
                     vehiclePicker
 
                     Button {
-                        let chosen = StartDrivingSelection.effectiveVehicleId(
-                            selected: selectedVehicleId,
-                            vehicles: vehicles
-                        )
+                        let chosen = effectiveVehicleId
                         dismiss()
                         onStart(chosen)
                     } label: {
@@ -54,6 +54,26 @@ struct StartDrivingSheet: View {
                         .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
                     }
                     .buttonStyle(.borderedProminent)
+                    .disabled(isStarting)
+
+                    Button {
+                        let chosen = effectiveVehicleId
+                        dismiss()
+                        onConvoy(chosen)
+                    } label: {
+                        HStack(spacing: KccSpacing.s3) {
+                            Image(systemName: "person.3.fill")
+                            VStack(alignment: .leading, spacing: KccSpacing.s1) {
+                                Text("shell.createChooserConvoy")
+                                    .font(.system(size: KccTypeScale.titleMd, weight: .semibold))
+                                Text("shell.createChooserConvoyBody")
+                                    .font(.system(size: KccTypeScale.bodySm))
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+                    }
+                    .buttonStyle(.bordered)
                     .disabled(isStarting)
                 }
                 .padding(KccSpacing.s6)
@@ -152,5 +172,12 @@ struct StartDrivingSheet: View {
     private var vehicles: [Vehicle] {
         if case .loaded(let vehicles) = garage.state { return vehicles }
         return []
+    }
+
+    private var effectiveVehicleId: String? {
+        StartDrivingSelection.effectiveVehicleId(
+            selected: selectedVehicleId,
+            vehicles: vehicles
+        )
     }
 }
