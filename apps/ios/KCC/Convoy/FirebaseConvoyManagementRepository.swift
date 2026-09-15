@@ -26,6 +26,36 @@ final class FirebaseConvoyManagementRepository: ConvoyManagementRepository, @unc
         }
     }
 
+    func lifecycle(
+        convoyId: String,
+        action: ConvoyLifecycleAction
+    ) async -> ConvoyLifecycleResult {
+        switch await call(
+            "convoy-\(action.rawValue)",
+            payload: ["convoyId": convoyId]
+        ) {
+        case .success(let data): return ConvoyManagementParser.parseLifecycle(data, action: action)
+        case .failure(let error):
+            return .failed(
+                ConvoyManagementErrorMapper.mapLifecycle(error.code, action: action)
+            )
+        }
+    }
+
+    func invite(
+        convoyId: String,
+        inviteeUids: [String]
+    ) async -> ConvoyInviteMutationResult {
+        switch await call(
+            "convoy-invite",
+            payload: ["convoyId": convoyId, "inviteeUids": inviteeUids]
+        ) {
+        case .success(let data): return ConvoyManagementParser.parseInvite(data)
+        case .failure(let error):
+            return .failed(ConvoyManagementErrorMapper.mapInvite(error.code))
+        }
+    }
+
     private func call(
         _ name: String,
         payload: [String: Any]

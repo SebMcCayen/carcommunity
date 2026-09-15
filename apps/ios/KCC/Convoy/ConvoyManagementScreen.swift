@@ -4,6 +4,7 @@ struct ConvoyManagementScreen: View {
     @Bindable var coordinator: ConvoyManagementCoordinator
     let onCreate: () -> Void
     let onJoined: (ConvoyItem) -> Void
+    let onOpen: (ConvoyItem) -> Void
 
     var body: some View {
         content
@@ -77,7 +78,10 @@ struct ConvoyManagementScreen: View {
                 if snapshot.myConvoys.isEmpty {
                     Text("convoy.emptyMine").foregroundStyle(.secondary)
                 } else {
-                    ForEach(snapshot.myConvoys) { convoyRow($0) }
+                    ForEach(snapshot.myConvoys) { convoy in
+                        Button { onOpen(convoy) } label: { convoyRow(convoy) }
+                            .buttonStyle(.plain)
+                    }
                 }
             }
         }

@@ -16,6 +16,16 @@ final class ConvoyManagementCoordinator {
     private(set) var state: ConvoyManagementState = .loading
     private(set) var busyConvoyIds = Set<String>()
     private(set) var actionError: ConvoyActionError?
+    private(set) var lastInviteResult: ConvoyInviteResult?
+
+    var snapshot: ConvoyManagementSnapshot? {
+        guard case .loaded(let snapshot) = state else { return nil }
+        return snapshot
+    }
+
+    var activeConvoy: ConvoyItem? {
+        snapshot.flatMap(ConvoyBarLogic.activeConvoy(in:))
+    }
 
     init(repository: ConvoyManagementRepository?) {
         self.repository = repository
@@ -72,6 +82,82 @@ final class ConvoyManagementCoordinator {
 
     func clearActionError() {
         actionError = nil
+    }
+
+    /// Refreshes without replacing a rendered list/bar with a loading spinner.
+    /// Used by the map surface while a convoy is active.
+    func refresh() async {
+        guard let repository else { return }
+        switch await repository.list() {
+        case .loaded(let snapshot):
+            guard !Task.isCancelled else { return }
+            state = .loaded(snapshot)
+        case .failed:
+            // A background refresh must not tear down known-good driving UI.
+            // Explicit list loads still surface their failure through `load()`.
+            return
+        }
+    }
+
+    @discardableResult
+    func runLifecycle(
+        convoyId: String,
+        action: ConvoyLifecycleAction
+    ) async -> Bool {
+        guard !convoyId.isEmpty,
+              !busyConvoyIds.contains(convoyId),
+              let repository
+        else { return false }
+
+        actionError = nil
+        busyConvoyIds.insert(convoyId)
+        defer { busyConvoyIds.remove(convoyId) }
+        switch await repository.lifecycle(convoyId: convoyId, action: action) {
+        case .updated, .left:
+            guard !Task.isCancelled else { return false }
+            await refreshAfterMutation(using: repository)
+            return true
+        case .failed(let error):
+            guard !Task.isCancelled else { return false }
+            actionError = error
+            if error == .notFound || error == .alreadyEnded || error == .leaveFailed {
+                await refreshAfterMutation(using: repository)
+            }
+            return false
+        }
+    }
+
+    @discardableResult
+    func invite(convoyId: String, inviteeUids: [String]) async -> Bool {
+        let unique = Array(Set(inviteeUids.filter { !$0.isEmpty })).sorted()
+        guard !convoyId.isEmpty,
+              !unique.isEmpty,
+              !busyConvoyIds.contains(convoyId),
+              let repository
+        else {
+            if unique.isEmpty { actionError = .noInvitees }
+            return false
+        }
+
+        actionError = nil
+        lastInviteResult = nil
+        busyConvoyIds.insert(convoyId)
+        defer { busyConvoyIds.remove(convoyId) }
+        switch await repository.invite(convoyId: convoyId, inviteeUids: unique) {
+        case .completed(let result):
+            guard !Task.isCancelled else { return false }
+            lastInviteResult = result
+            await refreshAfterMutation(using: repository)
+            return true
+        case .failed(let error):
+            guard !Task.isCancelled else { return false }
+            actionError = error
+            return false
+        }
+    }
+
+    func clearInviteResult() {
+        lastInviteResult = nil
     }
 
     private func refreshAfterMutation(using repository: ConvoyManagementRepository) async {

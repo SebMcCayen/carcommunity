@@ -7,14 +7,22 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
         private let lock = NSLock()
         var listResults: [ConvoyManagementListResult]
         var respondResult: ConvoyRespondResult
+        var lifecycleResult: ConvoyLifecycleResult
+        var inviteResult: ConvoyInviteMutationResult
         private(set) var respondCalls: [(String, ConvoyAction)] = []
+        private(set) var lifecycleCalls: [(String, ConvoyLifecycleAction)] = []
+        private(set) var inviteCalls: [(String, [String])] = []
 
         init(
             listResults: [ConvoyManagementListResult],
-            respondResult: ConvoyRespondResult = .failed(.generic)
+            respondResult: ConvoyRespondResult = .failed(.generic),
+            lifecycleResult: ConvoyLifecycleResult = .failed(.generic),
+            inviteResult: ConvoyInviteMutationResult = .failed(.generic)
         ) {
             self.listResults = listResults
             self.respondResult = respondResult
+            self.lifecycleResult = lifecycleResult
+            self.inviteResult = inviteResult
         }
 
         func list() async -> ConvoyManagementListResult {
@@ -27,6 +35,26 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
             lock.withLock {
                 respondCalls.append((convoyId, action))
                 return respondResult
+            }
+        }
+
+        func lifecycle(
+            convoyId: String,
+            action: ConvoyLifecycleAction
+        ) async -> ConvoyLifecycleResult {
+            lock.withLock {
+                lifecycleCalls.append((convoyId, action))
+                return lifecycleResult
+            }
+        }
+
+        func invite(
+            convoyId: String,
+            inviteeUids: [String]
+        ) async -> ConvoyInviteMutationResult {
+            lock.withLock {
+                inviteCalls.append((convoyId, inviteeUids))
+                return inviteResult
             }
         }
     }
@@ -150,6 +178,48 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.state, .unavailable)
     }
 
+    @MainActor
+    func testLifecycleMutationRefreshesSnapshot() async {
+        let active = item(id: "convoy", viewer: .accepted)
+        let ended = item(id: "convoy", status: .ended, viewer: .accepted)
+        let repository = FakeRepository(
+            listResults: [.loaded(snapshot(convoys: [active])), .loaded(snapshot(convoys: [ended]))],
+            lifecycleResult: .updated(ended)
+        )
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        await coordinator.load()
+
+        let succeeded = await coordinator.runLifecycle(convoyId: "convoy", action: .end)
+
+        XCTAssertTrue(succeeded)
+        XCTAssertEqual(coordinator.state, .loaded(snapshot(convoys: [ended])))
+        XCTAssertEqual(repository.lifecycleCalls.first?.1, .end)
+        XCTAssertTrue(coordinator.busyConvoyIds.isEmpty)
+    }
+
+    @MainActor
+    func testInviteDeduplicatesAndRefreshes() async {
+        let active = item(id: "convoy", viewer: .accepted)
+        let repository = FakeRepository(
+            listResults: [.loaded(snapshot(convoys: [active])), .loaded(snapshot(convoys: [active]))],
+            inviteResult: .completed(ConvoyInviteResult(invitedCount: 2, skippedCount: 0))
+        )
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        await coordinator.load()
+
+        let succeeded = await coordinator.invite(
+            convoyId: "convoy",
+            inviteeUids: ["b", "a", "b", ""]
+        )
+
+        XCTAssertTrue(succeeded)
+        XCTAssertEqual(repository.inviteCalls.first?.1, ["a", "b"])
+        XCTAssertEqual(
+            coordinator.lastInviteResult,
+            ConvoyInviteResult(invitedCount: 2, skippedCount: 0)
+        )
+    }
+
     private func snapshot(
         convoys: [ConvoyItem] = [],
         pending: [ConvoyItem] = []
@@ -157,11 +227,15 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
         ConvoyManagementSnapshot(convoys: convoys, pendingInvites: pending, isExhaustive: true)
     }
 
-    private func item(id: String, viewer: ConvoyInviteStatus) -> ConvoyItem {
+    private func item(
+        id: String,
+        status: ConvoyStatus = .active,
+        viewer: ConvoyInviteStatus
+    ) -> ConvoyItem {
         ConvoyItem(
             convoyId: id,
             title: nil,
-            status: .active,
+            status: status,
             members: [],
             viewer: ConvoyViewer(inviteStatus: viewer),
             createdAt: nil

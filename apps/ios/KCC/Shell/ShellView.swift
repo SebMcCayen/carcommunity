@@ -46,6 +46,7 @@ struct ShellView: View {
     @State private var convoyCreateCoordinator: ConvoyCreateCoordinator?
     @State private var convoyCreateVehicleId: String?
     @State private var convoyCreateReturnsToList = false
+    @State private var selectedConvoyId: String?
     @State private var friendsRepository: FriendsRepository?
     @State private var conversationsRepository: ConversationsRepository?
     @State private var dmTarget: DmRouteTarget?
@@ -200,6 +201,18 @@ struct ShellView: View {
                 .overlay(alignment: .bottomTrailing) {
                     if case .signedIn = session.state {
                         mapCommunicationControls
+                    }
+                }
+                .overlay(alignment: .top) {
+                    if let coordinator = convoyManagementCoordinator,
+                       let convoy = coordinator.activeConvoy {
+                        ConvoyStatusBar(
+                            coordinator: coordinator,
+                            convoy: convoy,
+                            friendsCoordinator: friendsCoordinator
+                        )
+                        .padding(.horizontal, KccSpacing.s4)
+                        .padding(.top, KccSpacing.s12 + KccSpacing.s3)
                     }
                 }
                 .overlay {
@@ -375,11 +388,20 @@ struct ShellView: View {
                                 vehicleId: convoyCreateVehicleId,
                                 onCreated: completeConvoyCreation
                             )
+                        } else if let selectedConvoyId,
+                                  let convoy = convoyManagementCoordinator.snapshot?.convoys
+                                      .first(where: { $0.convoyId == selectedConvoyId }) {
+                            ConvoyDetailScreen(
+                                coordinator: convoyManagementCoordinator,
+                                convoy: convoy,
+                                friendsCoordinator: friendsCoordinator
+                            )
                         } else {
                             ConvoyManagementScreen(
                                 coordinator: convoyManagementCoordinator,
                                 onCreate: openConvoyCreateFromList,
-                                onJoined: completeConvoyJoin
+                                onJoined: completeConvoyJoin,
+                                onOpen: { selectedConvoyId = $0.convoyId }
                             )
                         }
                     }
@@ -600,6 +622,8 @@ struct ShellView: View {
         guard !convoyCreationIsWorking else { return }
         if convoyCreateCoordinator != nil, convoyCreateReturnsToList {
             closeConvoyCreate()
+        } else if selectedConvoyId != nil {
+            selectedConvoyId = nil
         } else {
             closeConvoyCreate()
             if routes.current == .convoys { routes = routes.poppingOne() }
@@ -608,6 +632,7 @@ struct ShellView: View {
 
     private func openConvoyManagement() {
         closeConvoyCreate()
+        selectedConvoyId = nil
         routes = routes.opening(.convoys)
     }
 
@@ -635,6 +660,7 @@ struct ShellView: View {
         closeConvoyCreate()
         if routes.current == .convoys { routes = routes.poppingOne() }
         selectedTab = .map
+        Task { await convoyManagementCoordinator?.load() }
         retainConvoySessionStartUntilObserved()
     }
 
@@ -643,6 +669,7 @@ struct ShellView: View {
         closeConvoyCreate()
         if routes.current == .convoys { routes = routes.poppingOne() }
         selectedTab = .map
+        Task { await convoyManagementCoordinator?.load() }
         if convoy.status == .active { retainConvoySessionStartUntilObserved() }
     }
 
@@ -856,6 +883,7 @@ struct ShellView: View {
         convoyCreateCoordinator = nil
         convoyCreateVehicleId = nil
         convoyCreateReturnsToList = false
+        selectedConvoyId = nil
         liveLocationCoordinator = nil
         startDrivingGarage = nil
         crownHuntComposition = nil
@@ -897,9 +925,10 @@ struct ShellView: View {
             communityRepository: FirebaseCommunityChatRepository.createIfAvailable(),
             convoyRepository: FirebaseConvoyChatRepository.createIfAvailable()
         )
-        convoyManagementCoordinator = ConvoyManagementCoordinator(
+        let convoyManagement = ConvoyManagementCoordinator(
             repository: FirebaseConvoyManagementRepository.createIfAvailable()
         )
+        convoyManagementCoordinator = convoyManagement
 
         let crownHunt = await CrownHuntComposition.live(
             uid: uid,
@@ -926,6 +955,10 @@ struct ShellView: View {
             pendingCreateIntent = nil
             presentSingleSessionAction(using: liveLocation)
         }
+
+        // Convoy discovery is independent of the map's live-session wiring.
+        // Load it last so a slow callable cannot delay location controls.
+        await convoyManagement.load()
     }
 
     private var signedInDisplayName: String? {

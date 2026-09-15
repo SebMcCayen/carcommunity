@@ -61,6 +61,54 @@ final class ConvoyManagementModelsTests: XCTestCase {
         XCTAssertEqual(ConvoyManagementErrorMapper.mapList(.permissionDenied), .notMember)
     }
 
+    func testBarSelectsActiveConvoyAndDerivesExitChoices() {
+        let forming = ConvoyManagementParser.parseList([
+            "convoys": [convoy(id: "forming", status: "forming", viewer: "accepted")],
+            "pendingInvites": []
+        ]).convoys[0]
+        let active = ConvoyManagementParser.parseList([
+            "convoys": [convoy(id: "active", viewer: "accepted")],
+            "pendingInvites": []
+        ]).convoys[0]
+        let snapshot = ConvoyManagementSnapshot(
+            convoys: [forming, active], pendingInvites: [], isExhaustive: true
+        )
+
+        XCTAssertEqual(ConvoyBarLogic.activeConvoy(in: snapshot)?.convoyId, "active")
+        XCTAssertEqual(
+            ConvoyBarLogic.exitChoice(viewerIsOwner: true, acceptedMemberCount: 3),
+            .leaveOrEnd
+        )
+        XCTAssertEqual(
+            ConvoyBarLogic.exitChoice(viewerIsOwner: true, acceptedMemberCount: 2),
+            .endOnly
+        )
+        XCTAssertEqual(
+            ConvoyBarLogic.exitChoice(viewerIsOwner: false, acceptedMemberCount: 2),
+            .leaveEndsConvoy
+        )
+    }
+
+    func testParsesViewerRoleAndLifecycleResults() {
+        let payload = convoy(id: "convoy", viewer: "accepted")
+        let snapshot = ConvoyManagementParser.parseList([
+            "convoys": [payload], "pendingInvites": []
+        ])
+        XCTAssertTrue(snapshot.convoys[0].viewerIsOwner)
+        XCTAssertEqual(
+            ConvoyManagementParser.parseLifecycle(
+                ["convoy": payload], action: .end
+            ),
+            .updated(snapshot.convoys[0])
+        )
+        XCTAssertEqual(
+            ConvoyManagementParser.parseLifecycle(
+                ["outcome": "left_and_ended", "newLeaderUid": NSNull()], action: .leave
+            ),
+            .left(ConvoyLeaveResult(outcome: .leftAndEnded, newLeaderUid: nil))
+        )
+    }
+
     private func convoy(
         id: String,
         status: String = "active",
@@ -69,7 +117,7 @@ final class ConvoyManagementModelsTests: XCTestCase {
         [
             "convoyId": id,
             "status": status,
-            "viewer": ["inviteStatus": viewer],
+            "viewer": ["role": "owner", "inviteStatus": viewer],
             "members": [[
                 "uid": "owner",
                 "role": "owner",
