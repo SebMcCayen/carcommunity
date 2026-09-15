@@ -7,13 +7,15 @@ import SwiftUI
 
 /// The Social hub panel. Android's Social hub lists Events / Crown Hunt /
 /// Leaderboard / Partners (label-sorted, unavailable entries omitted). iOS
-/// currently has the first three feature slices, so those are the entries this
-/// panel exposes; Partners remains absent until its repository and screen land.
+/// currently has Events, Convoys, Crown Hunt, and Leaderboard, so those are the
+/// entries this panel exposes; Partners remains absent until its repository and
+/// screen land.
 struct SocialHubPanel: View {
     @Environment(\.locale) private var locale
 
     let crownHuntEnabled: Bool
     let onOpenEvents: () -> Void
+    let onOpenConvoys: () -> Void
     let onOpenCrownHunt: () -> Void
     let onOpenLeaderboard: () -> Void
 
@@ -33,6 +35,13 @@ struct SocialHubPanel: View {
 
     private var entries: [SocialHubEntry] {
         var entries = [
+            SocialHubEntry(
+                id: .convoys,
+                label: "convoy.title",
+                localizedLabel: String(localized: "convoy.title", locale: locale),
+                icon: "person.3",
+                action: onOpenConvoys
+            ),
             SocialHubEntry(
                 id: .events,
                 label: "shell.socialEvents",
@@ -89,6 +98,7 @@ struct SocialHubPanel: View {
 private struct SocialHubEntry: Identifiable {
     enum ID: Hashable {
         case events
+        case convoys
         case crownHunt
         case leaderboard
     }
@@ -125,6 +135,7 @@ struct ComingSoonPanel: View {
     SocialHubPanel(
         crownHuntEnabled: true,
         onOpenEvents: {},
+        onOpenConvoys: {},
         onOpenCrownHunt: {},
         onOpenLeaderboard: {}
     )

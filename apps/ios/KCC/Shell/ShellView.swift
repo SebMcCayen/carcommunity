@@ -42,8 +42,10 @@ struct ShellView: View {
     @State private var liveLocationCoordinator: LiveLocationCoordinator?
     @State private var locationPermissionCoordinator: LocationPermissionCoordinator?
     @State private var startDrivingGarage: GarageCoordinator?
+    @State private var convoyManagementCoordinator: ConvoyManagementCoordinator?
     @State private var convoyCreateCoordinator: ConvoyCreateCoordinator?
     @State private var convoyCreateVehicleId: String?
+    @State private var convoyCreateReturnsToList = false
     @State private var friendsRepository: FriendsRepository?
     @State private var conversationsRepository: ConversationsRepository?
     @State private var dmTarget: DmRouteTarget?
@@ -215,6 +217,7 @@ struct ShellView: View {
                 SocialHubPanel(
                     crownHuntEnabled: crownHuntComposition?.flags.crownHuntEnabled == true,
                     onOpenEvents: { routes = routes.opening(.events) },
+                    onOpenConvoys: openConvoyManagement,
                     onOpenCrownHunt: { routes = routes.opening(.crownHunt) },
                     onOpenLeaderboard: { routes = routes.opening(.leaderboard) }
                 )
@@ -362,22 +365,32 @@ struct ShellView: View {
                 )
             }
         case .convoys:
-            if let convoyCreateCoordinator {
+            if let convoyManagementCoordinator {
                 NavigationStack {
-                    ConvoyCreateScreen(
-                        coordinator: convoyCreateCoordinator,
-                        friendsCoordinator: friendsCoordinator,
-                        vehicleId: convoyCreateVehicleId,
-                        onCreated: completeConvoyCreation
-                    )
+                    Group {
+                        if let convoyCreateCoordinator {
+                            ConvoyCreateScreen(
+                                coordinator: convoyCreateCoordinator,
+                                friendsCoordinator: friendsCoordinator,
+                                vehicleId: convoyCreateVehicleId,
+                                onCreated: completeConvoyCreation
+                            )
+                        } else {
+                            ConvoyManagementScreen(
+                                coordinator: convoyManagementCoordinator,
+                                onCreate: openConvoyCreateFromList,
+                                onJoined: completeConvoyJoin
+                            )
+                        }
+                    }
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
                             Button {
-                                closeConvoyCreate()
+                                closeConvoyScreen()
                             } label: {
                                 Label("shell.back", systemImage: "chevron.backward")
                             }
-                            .disabled(convoyCreationIsWorking)
+                            .disabled(convoyActionIsWorking)
                         }
                     }
                 }
@@ -568,6 +581,7 @@ struct ShellView: View {
     }
 
     private func openConvoyCreate(vehicleId: String?) {
+        convoyCreateReturnsToList = false
         convoyCreateVehicleId = vehicleId
         convoyCreateCoordinator = ConvoyCreateCoordinator(
             repository: FirebaseConvoyCreateRepository.createIfAvailable()
@@ -577,9 +591,32 @@ struct ShellView: View {
 
     private func closeConvoyCreate() {
         guard !convoyCreationIsWorking else { return }
-        if routes.current == .convoys { routes = routes.poppingOne() }
         convoyCreateCoordinator = nil
         convoyCreateVehicleId = nil
+        convoyCreateReturnsToList = false
+    }
+
+    private func closeConvoyScreen() {
+        guard !convoyCreationIsWorking else { return }
+        if convoyCreateCoordinator != nil, convoyCreateReturnsToList {
+            closeConvoyCreate()
+        } else {
+            closeConvoyCreate()
+            if routes.current == .convoys { routes = routes.poppingOne() }
+        }
+    }
+
+    private func openConvoyManagement() {
+        closeConvoyCreate()
+        routes = routes.opening(.convoys)
+    }
+
+    private func openConvoyCreateFromList() {
+        convoyCreateReturnsToList = true
+        convoyCreateVehicleId = nil
+        convoyCreateCoordinator = ConvoyCreateCoordinator(
+            repository: FirebaseConvoyCreateRepository.createIfAvailable()
+        )
     }
 
     private var convoyCreationIsWorking: Bool {
@@ -588,11 +625,25 @@ struct ShellView: View {
         return false
     }
 
+    private var convoyActionIsWorking: Bool {
+        convoyCreationIsWorking
+            || !(convoyManagementCoordinator?.busyConvoyIds.isEmpty ?? true)
+    }
+
     private func completeConvoyCreation(_ created: ConvoyCreated) {
         guard !created.convoyId.isEmpty else { return }
         closeConvoyCreate()
+        if routes.current == .convoys { routes = routes.poppingOne() }
         selectedTab = .map
         retainConvoySessionStartUntilObserved()
+    }
+
+    private func completeConvoyJoin(_ convoy: ConvoyItem) {
+        guard !convoy.convoyId.isEmpty else { return }
+        closeConvoyCreate()
+        if routes.current == .convoys { routes = routes.poppingOne() }
+        selectedTab = .map
+        if convoy.status == .active { retainConvoySessionStartUntilObserved() }
     }
 
     private func retainConvoySessionStartUntilObserved() {
@@ -801,8 +852,10 @@ struct ShellView: View {
         dmTarget = nil
         dmCoordinator = nil
         if routes.current == .convoys { routes = routes.poppingOne() }
+        convoyManagementCoordinator = nil
         convoyCreateCoordinator = nil
         convoyCreateVehicleId = nil
+        convoyCreateReturnsToList = false
         liveLocationCoordinator = nil
         startDrivingGarage = nil
         crownHuntComposition = nil
@@ -843,6 +896,9 @@ struct ShellView: View {
         chatHubCoordinator = ChatHubCoordinator(
             communityRepository: FirebaseCommunityChatRepository.createIfAvailable(),
             convoyRepository: FirebaseConvoyChatRepository.createIfAvailable()
+        )
+        convoyManagementCoordinator = ConvoyManagementCoordinator(
+            repository: FirebaseConvoyManagementRepository.createIfAvailable()
         )
 
         let crownHunt = await CrownHuntComposition.live(
