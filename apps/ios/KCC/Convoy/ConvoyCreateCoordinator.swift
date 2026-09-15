@@ -36,7 +36,7 @@ final class ConvoyCreateCoordinator {
         availability = .loading
         switch await repository.list() {
         case .loaded(let snapshot):
-            availability = .ready(hasActiveConvoy: snapshot.hasActiveConvoy)
+            availability = Self.availability(for: snapshot)
         case .failed(let error):
             availability = .failed(error)
         }
@@ -86,7 +86,7 @@ final class ConvoyCreateCoordinator {
     private func resolveCreatePrecondition(using repository: ConvoyCreateRepository) async {
         switch await repository.list() {
         case .loaded(let snapshot):
-            availability = .ready(hasActiveConvoy: snapshot.hasActiveConvoy)
+            availability = Self.availability(for: snapshot)
             if snapshot.hasActiveConvoy {
                 createState = .failed(.alreadyInConvoy)
             } else {
@@ -95,6 +95,18 @@ final class ConvoyCreateCoordinator {
         case .failed:
             createState = .failed(.generic)
         }
+    }
+
+    /// A full 200-row response is truncated by the callable. When none of those
+    /// rows proves active membership, creation must remain blocked because an
+    /// older active convoy may still exist outside the response window.
+    private static func availability(
+        for snapshot: ConvoyCreateSnapshot
+    ) -> ConvoyCreateAvailability {
+        guard snapshot.hasActiveConvoy || snapshot.isExhaustive else {
+            return .failed(.generic)
+        }
+        return .ready(hasActiveConvoy: snapshot.hasActiveConvoy)
     }
 }
 

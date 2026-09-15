@@ -12,6 +12,23 @@ enum StartDrivingSelection {
         }
         return vehicles.first(where: \.isMainCar)?.id ?? vehicles.first?.id
     }
+
+    /// The chooser stays available while Firebase is wired because convoy
+    /// creation is independent of the LIVE_LOCATION feature flag. Only the
+    /// single-session action and location preflight depend on that flag.
+    static func actions(wired: Bool, canShareLive: Bool) -> StartDrivingActions {
+        StartDrivingActions(
+            showChooser: wired,
+            canStartSingleSession: wired && canShareLive,
+            convoyRequiresLocation: wired && canShareLive
+        )
+    }
+}
+
+struct StartDrivingActions: Equatable, Sendable {
+    let showChooser: Bool
+    let canStartSingleSession: Bool
+    let convoyRequiresLocation: Bool
 }
 
 /// Optimistic command state retained until the RTDB own-session listener

@@ -61,6 +61,36 @@ final class StartDrivingSelectionTests: XCTestCase {
         XCTAssertFalse(intent.belongs(to: nil))
     }
 
+    func testLiveFlagOnlyGatesSingleSessionAndConvoyLocationPreflight() {
+        XCTAssertEqual(
+            StartDrivingSelection.actions(wired: true, canShareLive: false),
+            StartDrivingActions(
+                showChooser: true,
+                canStartSingleSession: false,
+                convoyRequiresLocation: false
+            )
+        )
+        XCTAssertEqual(
+            StartDrivingSelection.actions(wired: true, canShareLive: true),
+            StartDrivingActions(
+                showChooser: true,
+                canStartSingleSession: true,
+                convoyRequiresLocation: true
+            )
+        )
+    }
+
+    func testConfiglessBuildDoesNotOpenStartDrivingChooser() {
+        XCTAssertEqual(
+            StartDrivingSelection.actions(wired: false, canShareLive: true),
+            StartDrivingActions(
+                showChooser: false,
+                canStartSingleSession: false,
+                convoyRequiresLocation: false
+            )
+        )
+    }
+
     private func vehicle(id: String, isMain: Bool = false) -> Vehicle {
         Vehicle(
             id: id,

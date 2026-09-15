@@ -56,8 +56,9 @@ struct ConvoyCreateScreen: View {
         }
         .navigationTitle("convoy.createTitle")
         .task {
-            await coordinator.load()
-            await friendsCoordinator?.load()
+            async let convoyLoad: Void = coordinator.load()
+            async let friendsLoad: Void? = friendsCoordinator?.load()
+            _ = await (convoyLoad, friendsLoad)
         }
         .onChange(of: coordinator.createState) { _, state in
             guard case .created(let created) = state else { return }
