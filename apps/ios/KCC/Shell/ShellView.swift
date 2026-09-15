@@ -179,6 +179,11 @@ struct ShellView: View {
         } message: {
             Text("liveLocation.error")
         }
+        .alert(convoyLeaveResultMessage, isPresented: convoyLeaveResultIsPresented) {
+            Button("convoy.close", role: .cancel) {
+                convoyManagementCoordinator?.clearLeaveResult()
+            }
+        }
         .task(id: signedInUid) { await wireFeatures() }
     }
 
@@ -657,6 +662,25 @@ struct ShellView: View {
     private var convoyActionIsWorking: Bool {
         convoyCreationIsWorking
             || !(convoyManagementCoordinator?.busyConvoyIds.isEmpty ?? true)
+    }
+
+    private var convoyLeaveResultIsPresented: Binding<Bool> {
+        Binding(
+            get: { convoyManagementCoordinator?.lastLeaveResult != nil },
+            set: { if !$0 { convoyManagementCoordinator?.clearLeaveResult() } }
+        )
+    }
+
+    private var convoyLeaveResultMessage: LocalizedStringKey {
+        guard let result = convoyManagementCoordinator?.lastLeaveResult else {
+            return "convoy.leftConvoyToast"
+        }
+        if result.outcome == .leftAndEnded {
+            return "convoy.leftAndEndedToast"
+        }
+        return result.newLeaderUid?.isEmpty == false
+            ? "convoy.leftAsLeaderToast"
+            : "convoy.leftConvoyToast"
     }
 
     private func completeConvoyCreation(_ created: ConvoyCreated) {

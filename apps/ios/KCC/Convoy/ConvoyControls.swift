@@ -1,5 +1,16 @@
 import SwiftUI
 
+private struct ConvoyExitTarget {
+    let convoyId: String
+    let choice: ConvoyExitChoice
+}
+
+private struct ConvoyActionTarget {
+    let convoyId: String
+    let action: ConvoyLifecycleAction
+    let exitChoice: ConvoyExitChoice
+}
+
 struct ConvoyStatusBar: View {
     @Bindable var coordinator: ConvoyManagementCoordinator
     let convoy: ConvoyItem
@@ -7,7 +18,7 @@ struct ConvoyStatusBar: View {
 
     @State private var showMembers = false
     @State private var showInvite = false
-    @State private var showExit = false
+    @State private var exitTarget: ConvoyExitTarget?
 
     private var working: Bool {
         coordinator.busyConvoyIds.contains(convoy.convoyId)
@@ -30,7 +41,9 @@ struct ConvoyStatusBar: View {
                 .disabled(working || friendsCoordinator == nil)
                 .accessibilityLabel(Text("convoy.barInvite"))
 
-                Button { showExit = true } label: {
+                Button {
+                    exitTarget = ConvoyExitTarget(convoyId: convoy.convoyId, choice: exitChoice)
+                } label: {
                     if working {
                         ProgressView().controlSize(.small)
                     } else {
@@ -67,10 +80,13 @@ struct ConvoyStatusBar: View {
         }
         .confirmationDialog(
             Text(exitTitle),
-            isPresented: $showExit,
+            isPresented: Binding(
+                get: { exitTarget != nil },
+                set: { if !$0 { exitTarget = nil } }
+            ),
             titleVisibility: .visible
         ) {
-            switch exitChoice {
+            switch exitTarget?.choice ?? exitChoice {
             case .leaveOrEnd:
                 Button("convoy.barExitChoiceLeave") { run(.leave) }
                 Button("convoy.barExitChoiceEnd", role: .destructive) { run(.end) }
@@ -81,7 +97,7 @@ struct ConvoyStatusBar: View {
             case .leaveEndsConvoy:
                 Button("convoy.barLeaveEndsConfirmAction", role: .destructive) { run(.leave) }
             }
-            Button("convoy.barConfirmCancel", role: .cancel) {}
+            Button("convoy.barConfirmCancel", role: .cancel) { exitTarget = nil }
         } message: {
             Text(exitBody)
         }
@@ -125,7 +141,7 @@ struct ConvoyStatusBar: View {
     }
 
     private var exitTitle: LocalizedStringKey {
-        switch exitChoice {
+        switch exitTarget?.choice ?? exitChoice {
         case .leaveOrEnd: "convoy.barExitChoiceTitle"
         case .endOnly: "convoy.barEndConfirmTitle"
         case .leaveOnly: "convoy.barLeaveConfirmTitle"
@@ -134,7 +150,7 @@ struct ConvoyStatusBar: View {
     }
 
     private var exitBody: LocalizedStringKey {
-        switch exitChoice {
+        switch exitTarget?.choice ?? exitChoice {
         case .leaveOrEnd: "convoy.barExitChoiceBody"
         case .endOnly: "convoy.barEndConfirmBody"
         case .leaveOnly: "convoy.barLeaveConfirmBody"
@@ -143,7 +159,9 @@ struct ConvoyStatusBar: View {
     }
 
     private func run(_ action: ConvoyLifecycleAction) {
-        Task { await coordinator.runLifecycle(convoyId: convoy.convoyId, action: action) }
+        guard let target = exitTarget else { return }
+        exitTarget = nil
+        Task { await coordinator.runLifecycle(convoyId: target.convoyId, action: action) }
     }
 }
 
@@ -207,9 +225,9 @@ struct ConvoyInviteSheet: View {
                 switch friendsCoordinator.status {
                 case .loading:
                     ProgressView().frame(maxWidth: .infinity)
-                case .error:
+                case .error(let error):
                     VStack(spacing: KccSpacing.s3) {
-                        Text("convoy.errorGeneric").foregroundStyle(.secondary)
+                        Text(FriendsScreenStrings.statusErrorKey(error)).foregroundStyle(.secondary)
                         Button("convoy.friendsRetry") {
                             Task { await friendsCoordinator.load() }
                         }
@@ -318,7 +336,7 @@ struct ConvoyDetailScreen: View {
     let friendsCoordinator: FriendsCoordinator?
 
     @State private var showInvite = false
-    @State private var confirmation: ConvoyLifecycleAction?
+    @State private var confirmation: ConvoyActionTarget?
 
     private var working: Bool { coordinator.busyConvoyIds.contains(convoy.convoyId) }
 
@@ -358,15 +376,15 @@ struct ConvoyDetailScreen: View {
                     Button("convoy.barInvite") { showInvite = true }
                         .disabled(working || friendsCoordinator == nil)
                     if convoy.viewerIsOwner && convoy.status == .forming {
-                        Button("convoy.start") { confirmation = .start }
+                        Button("convoy.start") { confirm(.start) }
                             .disabled(working)
                     }
                     if canLeave {
-                        Button(leaveLabel, role: .destructive) { confirmation = .leave }
+                        Button(leaveLabel, role: .destructive) { confirm(.leave) }
                             .disabled(working)
                     }
                     if convoy.viewerIsOwner && convoy.status == .active {
-                        Button("convoy.end", role: .destructive) { confirmation = .end }
+                        Button("convoy.end", role: .destructive) { confirm(.end) }
                             .disabled(working)
                     }
                 }
@@ -391,13 +409,22 @@ struct ConvoyDetailScreen: View {
             titleVisibility: .visible
         ) {
             if let confirmation {
-                Button(confirmationActionLabel, role: confirmation == .start ? nil : .destructive) {
-                    let action = confirmation
+                Button(confirmationActionLabel, role: confirmation.action == .start ? nil : .destructive) {
+                    let target = confirmation
                     self.confirmation = nil
-                    Task { await coordinator.runLifecycle(convoyId: convoy.convoyId, action: action) }
+                    Task {
+                        await coordinator.runLifecycle(
+                            convoyId: target.convoyId,
+                            action: target.action
+                        )
+                    }
                 }
             }
             Button("convoy.barConfirmCancel", role: .cancel) { confirmation = nil }
+        } message: {
+            if let confirmationBody {
+                Text(confirmationBody)
+            }
         }
     }
 
@@ -426,25 +453,44 @@ struct ConvoyDetailScreen: View {
         }
     }
     private var confirmationTitle: LocalizedStringKey {
-        switch confirmation {
+        switch confirmation?.action {
         case .start: "convoy.start"
         case .end: "convoy.barEndConfirmTitle"
         case .leave:
-            exitChoice == .leaveEndsConvoy
+            confirmation?.exitChoice == .leaveEndsConvoy
                 ? "convoy.barLeaveEndsConfirmTitle"
                 : "convoy.barLeaveConfirmTitle"
         case nil: "convoy.title"
         }
     }
     private var confirmationActionLabel: LocalizedStringKey {
-        switch confirmation {
+        switch confirmation?.action {
         case .start: "convoy.start"
         case .end: "convoy.barEndConfirmAction"
         case .leave:
-            exitChoice == .leaveEndsConvoy
+            confirmation?.exitChoice == .leaveEndsConvoy
                 ? "convoy.barLeaveEndsConfirmAction"
                 : "convoy.barLeaveConfirmAction"
         case nil: "convoy.close"
         }
+    }
+
+    private var confirmationBody: LocalizedStringKey? {
+        switch confirmation?.action {
+        case .start, nil: nil
+        case .end: "convoy.barEndConfirmBody"
+        case .leave:
+            confirmation?.exitChoice == .leaveEndsConvoy
+                ? "convoy.barLeaveEndsConfirmBody"
+                : "convoy.barLeaveConfirmBody"
+        }
+    }
+
+    private func confirm(_ action: ConvoyLifecycleAction) {
+        confirmation = ConvoyActionTarget(
+            convoyId: convoy.convoyId,
+            action: action,
+            exitChoice: exitChoice
+        )
     }
 }

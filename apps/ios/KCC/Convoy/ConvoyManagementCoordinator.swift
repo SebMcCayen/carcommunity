@@ -18,6 +18,7 @@ final class ConvoyManagementCoordinator {
     private(set) var busyConvoyIds = Set<String>()
     private(set) var actionError: ConvoyActionError?
     private(set) var lastInviteResult: ConvoyInviteResult?
+    private(set) var lastLeaveResult: ConvoyLeaveResult?
 
     var snapshot: ConvoyManagementSnapshot? {
         guard case .loaded(let snapshot) = state else { return nil }
@@ -115,18 +116,28 @@ final class ConvoyManagementCoordinator {
         else { return false }
 
         actionError = nil
+        lastLeaveResult = nil
         supersedeListRequests()
         busyConvoyIds.insert(convoyId)
         defer { busyConvoyIds.remove(convoyId) }
         switch await repository.lifecycle(convoyId: convoyId, action: action) {
-        case .updated, .left:
+        case .updated:
             guard !Task.isCancelled else { return false }
+            await refreshAfterMutation(using: repository)
+            return true
+        case .left(let result):
+            guard !Task.isCancelled else { return false }
+            lastLeaveResult = result
             await refreshAfterMutation(using: repository)
             return true
         case .failed(let error):
             guard !Task.isCancelled else { return false }
             actionError = error
-            if error == .notFound || error == .alreadyEnded || error == .leaveFailed {
+            if error == .notFound
+                || error == .alreadyEnded
+                || error == .leaveFailed
+                || error == .cannotStart
+            {
                 await refreshAfterMutation(using: repository)
             }
             return false
@@ -161,12 +172,19 @@ final class ConvoyManagementCoordinator {
         case .failed(let error):
             guard !Task.isCancelled else { return false }
             actionError = error
+            if error == .notFound || error == .unresolvedPrecondition {
+                await refreshAfterMutation(using: repository)
+            }
             return false
         }
     }
 
     func clearInviteResult() {
         lastInviteResult = nil
+    }
+
+    func clearLeaveResult() {
+        lastLeaveResult = nil
     }
 
     private func refreshAfterMutation(using repository: ConvoyManagementRepository) async {
@@ -177,7 +195,7 @@ final class ConvoyManagementCoordinator {
             state = .loaded(snapshot)
         case .failed(let error):
             guard requestIsCurrent(generation) else { return }
-            state = .failed(error)
+            if snapshot == nil { state = .failed(error) }
         }
     }
 

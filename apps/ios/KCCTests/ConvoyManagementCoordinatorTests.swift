@@ -211,6 +211,62 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testLeavePublishesAndClearsResult() async {
+        let active = item(id: "convoy", viewer: .accepted)
+        let leaveResult = ConvoyLeaveResult(outcome: .left, newLeaderUid: "next-leader")
+        let repository = FakeRepository(
+            listResults: [.loaded(snapshot(convoys: [active])), .loaded(snapshot())],
+            lifecycleResult: .left(leaveResult)
+        )
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        await coordinator.load()
+
+        let succeeded = await coordinator.runLifecycle(convoyId: "convoy", action: .leave)
+
+        XCTAssertTrue(succeeded)
+        XCTAssertEqual(coordinator.lastLeaveResult, leaveResult)
+        coordinator.clearLeaveResult()
+        XCTAssertNil(coordinator.lastLeaveResult)
+    }
+
+    @MainActor
+    func testMutationRefreshFailurePreservesLoadedSnapshot() async {
+        let active = item(id: "convoy", viewer: .accepted)
+        let repository = FakeRepository(
+            listResults: [.loaded(snapshot(convoys: [active])), .failed(.generic)],
+            lifecycleResult: .updated(active)
+        )
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        await coordinator.load()
+
+        let succeeded = await coordinator.runLifecycle(convoyId: "convoy", action: .end)
+
+        XCTAssertTrue(succeeded)
+        XCTAssertEqual(coordinator.state, .loaded(snapshot(convoys: [active])))
+    }
+
+    @MainActor
+    func testCannotStartRefreshesStaleSnapshot() async {
+        let forming = item(id: "convoy", status: .forming, viewer: .accepted)
+        let active = item(id: "convoy", viewer: .accepted)
+        let repository = FakeRepository(
+            listResults: [
+                .loaded(snapshot(convoys: [forming])),
+                .loaded(snapshot(convoys: [active]))
+            ],
+            lifecycleResult: .failed(.cannotStart)
+        )
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        await coordinator.load()
+
+        let succeeded = await coordinator.runLifecycle(convoyId: "convoy", action: .start)
+
+        XCTAssertFalse(succeeded)
+        XCTAssertEqual(coordinator.actionError, .cannotStart)
+        XCTAssertEqual(coordinator.state, .loaded(snapshot(convoys: [active])))
+    }
+
+    @MainActor
     func testInviteDeduplicatesAndRefreshes() async {
         let active = item(id: "convoy", viewer: .accepted)
         let repository = FakeRepository(
@@ -273,6 +329,27 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
         XCTAssertFalse(succeeded)
         XCTAssertEqual(coordinator.actionError, .invalid)
         XCTAssertTrue(repository.inviteCalls.isEmpty)
+    }
+
+    @MainActor
+    func testInviteStaleFailureRefreshesSnapshot() async {
+        let active = item(id: "convoy", viewer: .accepted)
+        let ended = item(id: "convoy", status: .ended, viewer: .accepted)
+        let repository = FakeRepository(
+            listResults: [
+                .loaded(snapshot(convoys: [active])),
+                .loaded(snapshot(convoys: [ended]))
+            ],
+            inviteResult: .failed(.unresolvedPrecondition)
+        )
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        await coordinator.load()
+
+        let succeeded = await coordinator.invite(convoyId: "convoy", inviteeUids: ["friend"])
+
+        XCTAssertFalse(succeeded)
+        XCTAssertEqual(coordinator.actionError, .unresolvedPrecondition)
+        XCTAssertEqual(coordinator.state, .loaded(snapshot(convoys: [ended])))
     }
 
     private func snapshot(
