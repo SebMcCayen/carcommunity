@@ -61,8 +61,88 @@ final class ConvoyManagementModelsTests: XCTestCase {
         XCTAssertEqual(ConvoyManagementErrorMapper.mapList(.permissionDenied), .notMember)
         XCTAssertEqual(
             ConvoyManagementErrorMapper.mapInvite(.failedPrecondition),
-            .unresolvedPrecondition
+            .noInvitees
         )
+    }
+
+    func testInviteParserRequiresConvoyAndCountArrays() {
+        let payload = convoy(id: "convoy", viewer: "accepted")
+
+        XCTAssertEqual(
+            ConvoyManagementParser.parseInvite([
+                "convoy": payload,
+                "invited": [["uid": "one"], ["uid": "two"]],
+                "skipped": [["uid": "three"]]
+            ]),
+            .completed(ConvoyInviteResult(invitedCount: 2, skippedCount: 1))
+        )
+        XCTAssertEqual(
+            ConvoyManagementParser.parseInvite(["invited": [], "skipped": []]),
+            .failed(.generic)
+        )
+        XCTAssertEqual(
+            ConvoyManagementParser.parseInvite([
+                "convoy": ["convoyId": "missing-status"],
+                "invited": [],
+                "skipped": []
+            ]),
+            .failed(.generic)
+        )
+        XCTAssertEqual(
+            ConvoyManagementParser.parseInvite([
+                "convoy": payload,
+                "invited": "not-an-array",
+                "skipped": []
+            ]),
+            .failed(.generic)
+        )
+    }
+
+    func testParsesEndedSummaryAndBuildsRecap() {
+        var payload = convoy(id: "ended", status: "ended", viewer: "accepted")
+        payload["summary"] = [
+            "durationSeconds": 3_725,
+            "participantUids": ["owner", "missing-member"],
+            "participantCount": 1,
+            "distanceMeters": 1_234.5
+        ]
+
+        let item = ConvoyManagementParser.parseList([
+            "convoys": [payload], "pendingInvites": []
+        ]).convoys[0]
+
+        XCTAssertEqual(
+            item.summary,
+            ConvoySummaryStats(
+                durationSeconds: 3_725,
+                participantUids: ["owner", "missing-member"],
+                participantCount: 2,
+                distanceMeters: 1_234.5
+            )
+        )
+        XCTAssertEqual(item.recap?.participants.map(\.uid), ["owner"])
+        XCTAssertEqual(item.recap?.participantCount, 2)
+    }
+
+    func testInviteSelectionHonorsRemainingConvoyCapacity() {
+        let members = (0..<24).map {
+            ConvoyMember(
+                uid: "member-\($0)",
+                displayName: nil,
+                role: $0 == 0 ? .owner : .member,
+                inviteStatus: .accepted
+            )
+        }
+        let convoy = ConvoyItem(
+            convoyId: "convoy",
+            title: nil,
+            status: .active,
+            members: members,
+            viewer: ConvoyViewer(inviteStatus: .accepted, role: .owner),
+            createdAt: nil
+        )
+
+        XCTAssertEqual(ConvoyBarLogic.maximumInviteSelection(for: convoy), 1)
     }
 
     func testBarSelectsActiveConvoyAndDerivesExitChoices() {

@@ -712,6 +712,7 @@
     "untitled": "Convoy",
     "unknownMember": "Member",
     "close": "Close",
+    "inviteFull": "This convoy is full. No more people can be invited.",
     "errorSignedOut": "Please sign in to manage convoys.",
     "errorNotMember": "Your account cannot access convoys right now.",
     "errorInvalid": "That request wasn't valid.",

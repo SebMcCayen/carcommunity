@@ -697,7 +697,6 @@ struct ShellView: View {
         closeConvoyCreate()
         if routes.current == .convoys { routes = routes.poppingOne() }
         selectedTab = .map
-        Task { await convoyManagementCoordinator?.load() }
         if convoy.status == .active { retainConvoySessionStartUntilObserved() }
     }
 

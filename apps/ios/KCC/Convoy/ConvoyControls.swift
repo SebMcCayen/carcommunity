@@ -16,8 +16,8 @@ struct ConvoyStatusBar: View {
     let convoy: ConvoyItem
     let friendsCoordinator: FriendsCoordinator?
 
-    @State private var showMembers = false
-    @State private var showInvite = false
+    @State private var memberTarget: ConvoyItem?
+    @State private var inviteTarget: ConvoyItem?
     @State private var exitTarget: ConvoyExitTarget?
 
     private var working: Bool {
@@ -27,7 +27,7 @@ struct ConvoyStatusBar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s2) {
             HStack(spacing: KccSpacing.s2) {
-                Button { showMembers = true } label: {
+                Button { memberTarget = convoy } label: {
                     Label(memberCount, systemImage: "person.3.fill")
                         .lineLimit(1)
                 }
@@ -35,7 +35,7 @@ struct ConvoyStatusBar: View {
 
                 Spacer(minLength: KccSpacing.s2)
 
-                Button { showInvite = true } label: {
+                Button { inviteTarget = convoy } label: {
                     Image(systemName: "person.badge.plus")
                 }
                 .disabled(working || friendsCoordinator == nil)
@@ -66,13 +66,13 @@ struct ConvoyStatusBar: View {
         .padding(.vertical, KccSpacing.s3)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: KccRadius.md))
         .shadow(color: .black.opacity(0.14), radius: 8, y: 3)
-        .sheet(isPresented: $showMembers) {
-            ConvoyMembersSheet(convoy: convoy)
+        .sheet(item: $memberTarget) { target in
+            ConvoyMembersSheet(convoy: target)
         }
-        .sheet(isPresented: $showInvite) {
+        .sheet(item: $inviteTarget) { target in
             if let friendsCoordinator {
                 ConvoyInviteSheet(
-                    convoy: convoy,
+                    convoy: target,
                     friendsCoordinator: friendsCoordinator,
                     coordinator: coordinator
                 )
@@ -237,6 +237,8 @@ struct ConvoyInviteSheet: View {
                     let available = friends.filter { !memberIds.contains($0.uid) }
                     if friends.isEmpty {
                         Text("convoy.noFriends").foregroundStyle(.secondary)
+                    } else if selectionLimit == 0 {
+                        Text("convoy.inviteFull").foregroundStyle(.secondary)
                     } else if available.isEmpty {
                         Text("convoy.inviteNoInvitable").foregroundStyle(.secondary)
                     } else {
@@ -245,7 +247,7 @@ struct ConvoyInviteSheet: View {
                             Button {
                                 if isSelected {
                                     selected.remove(friend.uid)
-                                } else if selected.count < ConvoyBarLogic.maximumInviteBatchSize {
+                                } else if selected.count < selectionLimit {
                                     selected.insert(friend.uid)
                                 }
                             } label: {
@@ -260,7 +262,7 @@ struct ConvoyInviteSheet: View {
                             .buttonStyle(.plain)
                             .disabled(
                                 working || (!isSelected
-                                    && selected.count >= ConvoyBarLogic.maximumInviteBatchSize)
+                                    && selected.count >= selectionLimit)
                             )
                             .accessibilityAddTraits(isSelected ? [.isSelected] : [])
                         }
@@ -278,6 +280,7 @@ struct ConvoyInviteSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("convoy.inviteCancel") { dismiss() }
+                        .disabled(working)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("convoy.inviteSubmit") {
@@ -310,6 +313,7 @@ struct ConvoyInviteSheet: View {
 
     private var memberIds: Set<String> { Set(convoy.members.map(\.uid)) }
     private var working: Bool { coordinator.busyConvoyIds.contains(convoy.convoyId) }
+    private var selectionLimit: Int { ConvoyBarLogic.maximumInviteSelection(for: convoy) }
 
     private var inviteResultMessage: String {
         guard let result = coordinator.lastInviteResult else { return "" }
@@ -335,7 +339,7 @@ struct ConvoyDetailScreen: View {
     let convoy: ConvoyItem
     let friendsCoordinator: FriendsCoordinator?
 
-    @State private var showInvite = false
+    @State private var inviteTarget: ConvoyItem?
     @State private var confirmation: ConvoyActionTarget?
 
     private var working: Bool { coordinator.busyConvoyIds.contains(convoy.convoyId) }
@@ -371,9 +375,37 @@ struct ConvoyDetailScreen: View {
                 }
             }
 
+            if let recap = convoy.recap {
+                Section("convoy.summaryTitle") {
+                    LabeledContent(
+                        "convoy.summaryDuration",
+                        value: ConvoySummaryFormat.duration(recap.durationSeconds)
+                    )
+                    LabeledContent(
+                        "convoy.summaryParticipants",
+                        value: String(recap.participantCount)
+                    )
+                    LabeledContent(
+                        "convoy.summaryDistance",
+                        value: recap.distanceMeters.map(ConvoySummaryFormat.distance)
+                            ?? String(localized: "convoy.summaryDistanceUnavailable")
+                    )
+                    if !recap.participants.isEmpty {
+                        Text("convoy.summaryWho")
+                            .font(.headline)
+                        ForEach(recap.participants) { member in
+                            Label(
+                                member.displayName ?? String(localized: "convoy.unknownMember"),
+                                systemImage: "person.crop.circle.fill"
+                            )
+                        }
+                    }
+                }
+            }
+
             if convoy.status != .ended, convoy.viewer?.inviteStatus == .accepted {
                 Section {
-                    Button("convoy.barInvite") { showInvite = true }
+                    Button("convoy.barInvite") { inviteTarget = convoy }
                         .disabled(working || friendsCoordinator == nil)
                     if convoy.viewerIsOwner && convoy.status == .forming {
                         Button("convoy.start") { confirm(.start) }
@@ -391,10 +423,10 @@ struct ConvoyDetailScreen: View {
             }
         }
         .navigationTitle("convoy.title")
-        .sheet(isPresented: $showInvite) {
+        .sheet(item: $inviteTarget) { target in
             if let friendsCoordinator {
                 ConvoyInviteSheet(
-                    convoy: convoy,
+                    convoy: target,
                     friendsCoordinator: friendsCoordinator,
                     coordinator: coordinator
                 )
@@ -492,5 +524,25 @@ struct ConvoyDetailScreen: View {
             action: action,
             exitChoice: exitChoice
         )
+    }
+}
+
+private enum ConvoySummaryFormat {
+    static func duration(_ totalSeconds: Int) -> String {
+        let seconds = max(totalSeconds, 0)
+        let hours = seconds / 3_600
+        let minutes = (seconds % 3_600) / 60
+        let remainder = seconds % 60
+        if hours > 0 { return String(format: "%dh %02dm", hours, minutes) }
+        if minutes > 0 { return String(format: "%dm %02ds", minutes, remainder) }
+        return "\(remainder)s"
+    }
+
+    static func distance(_ meters: Double) -> String {
+        let meters = max(meters, 0)
+        if meters >= 1_000 {
+            return String(format: "%.1f km", (meters / 1_000 * 10).rounded() / 10)
+        }
+        return "\(Int(meters.rounded())) m"
     }
 }

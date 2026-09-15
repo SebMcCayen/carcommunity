@@ -340,7 +340,7 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
                 .loaded(snapshot(convoys: [active])),
                 .loaded(snapshot(convoys: [ended]))
             ],
-            inviteResult: .failed(.unresolvedPrecondition)
+            inviteResult: .failed(.noInvitees)
         )
         let coordinator = ConvoyManagementCoordinator(repository: repository)
         await coordinator.load()
@@ -348,7 +348,7 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
         let succeeded = await coordinator.invite(convoyId: "convoy", inviteeUids: ["friend"])
 
         XCTAssertFalse(succeeded)
-        XCTAssertEqual(coordinator.actionError, .unresolvedPrecondition)
+        XCTAssertEqual(coordinator.actionError, .noInvitees)
         XCTAssertEqual(coordinator.state, .loaded(snapshot(convoys: [ended])))
     }
 

@@ -712,6 +712,7 @@
     "untitled": "Konvoj",
     "unknownMember": "Medlem",
     "close": "Stäng",
+    "inviteFull": "Konvojen är full. Det går inte att bjuda in fler.",
     "errorSignedOut": "Logga in för att hantera konvojer.",
     "errorNotMember": "Ditt konto kan inte använda konvojer just nu.",
     "errorInvalid": "Förfrågan var inte giltig.",

@@ -37,6 +37,20 @@ struct ConvoyViewer: Equatable, Sendable {
     }
 }
 
+struct ConvoySummaryStats: Equatable, Sendable {
+    let durationSeconds: Int
+    let participantUids: [String]
+    let participantCount: Int
+    let distanceMeters: Double?
+}
+
+struct ConvoyRecapState: Equatable, Sendable {
+    let durationSeconds: Int
+    let participants: [ConvoyMember]
+    let participantCount: Int
+    let distanceMeters: Double?
+}
+
 struct ConvoyItem: Equatable, Sendable, Identifiable {
     let convoyId: String
     let title: String?
@@ -44,6 +58,25 @@ struct ConvoyItem: Equatable, Sendable, Identifiable {
     let members: [ConvoyMember]
     let viewer: ConvoyViewer?
     let createdAt: Date?
+    let summary: ConvoySummaryStats?
+
+    init(
+        convoyId: String,
+        title: String?,
+        status: ConvoyStatus,
+        members: [ConvoyMember],
+        viewer: ConvoyViewer?,
+        createdAt: Date?,
+        summary: ConvoySummaryStats? = nil
+    ) {
+        self.convoyId = convoyId
+        self.title = title
+        self.status = status
+        self.members = members
+        self.viewer = viewer
+        self.createdAt = createdAt
+        self.summary = summary
+    }
 
     var id: String { convoyId }
 
@@ -63,6 +96,20 @@ struct ConvoyItem: Equatable, Sendable, Identifiable {
 
     var pendingMembers: [ConvoyMember] {
         members.filter { $0.inviteStatus == .invited }
+    }
+
+    var recap: ConvoyRecapState? {
+        guard status == .ended, let summary else { return nil }
+        let membersByUid = members.reduce(into: [String: ConvoyMember]()) { result, member in
+            result[member.uid] = member
+        }
+        let participants = summary.participantUids.compactMap { membersByUid[$0] }
+        return ConvoyRecapState(
+            durationSeconds: summary.durationSeconds,
+            participants: participants,
+            participantCount: max(summary.participantCount, summary.participantUids.count),
+            distanceMeters: summary.distanceMeters
+        )
     }
 }
 
@@ -149,7 +196,12 @@ enum ConvoyExitChoice: Equatable, Sendable {
 
 enum ConvoyBarLogic {
     static let minimumRemainingMembers = 2
+    static let maximumConvoySize = 25
     static let maximumInviteBatchSize = 25
+
+    static func maximumInviteSelection(for convoy: ConvoyItem) -> Int {
+        min(maximumInviteBatchSize, max(maximumConvoySize - convoy.members.count, 0))
+    }
 
     static func activeConvoy(in snapshot: ConvoyManagementSnapshot) -> ConvoyItem? {
         let joined = snapshot.convoys.filter {
@@ -219,11 +271,14 @@ enum ConvoyManagementParser {
     }
 
     static func parseInvite(_ data: [String: Any]?) -> ConvoyInviteMutationResult {
-        guard parseItem(data?["convoy"]) != nil else { return .failed(.generic) }
+        guard parseItem(data?["convoy"]) != nil,
+              let invited = data?["invited"] as? [Any],
+              let skipped = data?["skipped"] as? [Any]
+        else { return .failed(.generic) }
         return .completed(
             ConvoyInviteResult(
-                invitedCount: (data?["invited"] as? [Any] ?? []).count,
-                skippedCount: (data?["skipped"] as? [Any] ?? []).count
+                invitedCount: invited.count,
+                skippedCount: skipped.count
             )
         )
     }
@@ -268,7 +323,26 @@ enum ConvoyManagementParser {
             status: status,
             members: members,
             viewer: viewer,
-            createdAt: ChannelTime.parseIso(data["createdAt"] as? String)
+            createdAt: ChannelTime.parseIso(data["createdAt"] as? String),
+            summary: parseSummary(data["summary"])
+        )
+    }
+
+    private static func parseSummary(_ raw: Any?) -> ConvoySummaryStats? {
+        guard let data = raw as? [String: Any] else { return nil }
+        let participantUids = (data["participantUids"] as? [Any] ?? [])
+            .compactMap { clean($0 as? String) }
+        let durationSeconds = max((data["durationSeconds"] as? NSNumber)?.intValue ?? 0, 0)
+        let participantCount = max(
+            (data["participantCount"] as? NSNumber)?.intValue ?? participantUids.count,
+            participantUids.count
+        )
+        let distanceMeters = (data["distanceMeters"] as? NSNumber).map { max($0.doubleValue, 0) }
+        return ConvoySummaryStats(
+            durationSeconds: durationSeconds,
+            participantUids: participantUids,
+            participantCount: participantCount,
+            distanceMeters: distanceMeters
         )
     }
 
@@ -295,7 +369,7 @@ enum ConvoyManagementErrorMapper {
         case .permissionDenied: .notMember
         case .invalidArgument: .invalid
         case .notFound: .notFound
-        case .failedPrecondition: .unresolvedPrecondition
+        case .failedPrecondition: .noInvitees
         default: .generic
         }
     }

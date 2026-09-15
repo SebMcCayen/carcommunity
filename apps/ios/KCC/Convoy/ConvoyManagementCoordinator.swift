@@ -172,7 +172,7 @@ final class ConvoyManagementCoordinator {
         case .failed(let error):
             guard !Task.isCancelled else { return false }
             actionError = error
-            if error == .notFound || error == .unresolvedPrecondition {
+            if error == .notFound || error == .noInvitees {
                 await refreshAfterMutation(using: repository)
             }
             return false
