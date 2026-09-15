@@ -232,9 +232,10 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
     @MainActor
     func testMutationRefreshFailurePreservesLoadedSnapshot() async {
         let active = item(id: "convoy", viewer: .accepted)
+        let ended = item(id: "convoy", status: .ended, viewer: .accepted)
         let repository = FakeRepository(
             listResults: [.loaded(snapshot(convoys: [active])), .failed(.generic)],
-            lifecycleResult: .updated(active)
+            lifecycleResult: .updated(ended)
         )
         let coordinator = ConvoyManagementCoordinator(repository: repository)
         await coordinator.load()
@@ -242,7 +243,26 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
         let succeeded = await coordinator.runLifecycle(convoyId: "convoy", action: .end)
 
         XCTAssertTrue(succeeded)
-        XCTAssertEqual(coordinator.state, .loaded(snapshot(convoys: [active])))
+        XCTAssertEqual(coordinator.state, .loaded(snapshot(convoys: [ended])))
+        XCTAssertNil(coordinator.activeConvoy)
+    }
+
+    @MainActor
+    func testLeaveRefreshFailureRemovesConvoyLocally() async {
+        let active = item(id: "convoy", viewer: .accepted)
+        let leaveResult = ConvoyLeaveResult(outcome: .left, newLeaderUid: "next-leader")
+        let repository = FakeRepository(
+            listResults: [.loaded(snapshot(convoys: [active])), .failed(.generic)],
+            lifecycleResult: .left(leaveResult)
+        )
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        await coordinator.load()
+
+        let succeeded = await coordinator.runLifecycle(convoyId: "convoy", action: .leave)
+
+        XCTAssertTrue(succeeded)
+        XCTAssertEqual(coordinator.state, .loaded(snapshot()))
+        XCTAssertNil(coordinator.convoy(id: "convoy"))
     }
 
     @MainActor

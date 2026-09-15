@@ -894,14 +894,37 @@ export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListConvoysRe
   // orderBy createdAt desc BEFORE limit so a hit cap keeps the NEWEST convoys.
   // Needs the composite index [memberUids CONTAINS, createdAt DESC]
   // (firebase/firestore.indexes.json).
-  const snap = await db
+  const newestQuery = db
     .collection('convoys')
     .where('memberUids', 'array-contains', actor.uid)
     .orderBy('createdAt', 'desc')
-    .limit(MAX_CONVOYS_RETURNED)
-    .get();
+    .limit(MAX_CONVOYS_RETURNED);
 
-  const convoys = snap.docs.map((doc) => toConvoySummary(doc.id, doc.data(), actor.uid, toIso));
+  // A member's accepted live convoy must not disappear behind 200 ended
+  // history rows. The companion query uses the existing
+  // [memberUids ARRAY_CONTAINS, status] index and is bounded independently;
+  // only accepted live memberships are folded into the public 200-row result.
+  const liveMembershipQuery = db
+    .collection('convoys')
+    .where('memberUids', 'array-contains', actor.uid)
+    .where('status', 'in', [...ACTIVE_CONVOY_STATUSES])
+    .limit(MAX_CONVOYS_RETURNED);
+
+  const [newestSnap, liveMembershipSnap] = await Promise.all([
+    newestQuery.get(),
+    liveMembershipQuery.get(),
+  ]);
+  const newestIds = new Set(newestSnap.docs.map((doc) => doc.id));
+  const missingLiveMemberships = liveMembershipSnap.docs.filter(
+    (doc) => !newestIds.has(doc.id) && isActiveConvoyParticipant(doc.data(), actor.uid),
+  );
+  const docs = [...missingLiveMemberships, ...newestSnap.docs].slice(0, MAX_CONVOYS_RETURNED);
+  docs.sort(
+    (left, right) =>
+      (toMillis(right.data().createdAt) ?? 0) - (toMillis(left.data().createdAt) ?? 0),
+  );
+
+  const convoys = docs.map((doc) => toConvoySummary(doc.id, doc.data(), actor.uid, toIso));
   const pendingInvites = convoys.filter(
     (c) => c.status !== 'ended' && c.viewer?.inviteStatus === 'invited',
   );

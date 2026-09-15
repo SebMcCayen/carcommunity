@@ -655,6 +655,7 @@
     <string name="convoy_untitled">Konvoj</string>
     <string name="convoy_unknownMember">Medlem</string>
     <string name="convoy_close">Stäng</string>
+    <string name="convoy_inviteFull">Konvojen är full. Det går inte att bjuda in fler.</string>
     <string name="convoy_errorSignedOut">Logga in för att hantera konvojer.</string>
     <string name="convoy_errorNotMember">Ditt konto kan inte använda konvojer just nu.</string>
     <string name="convoy_errorInvalid">Förfrågan var inte giltig.</string>

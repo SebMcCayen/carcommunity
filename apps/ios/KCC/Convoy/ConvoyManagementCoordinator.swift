@@ -29,6 +29,10 @@ final class ConvoyManagementCoordinator {
         snapshot.flatMap(ConvoyBarLogic.activeConvoy(in:))
     }
 
+    func convoy(id: String) -> ConvoyItem? {
+        snapshot?.convoys.first { $0.convoyId == id }
+    }
+
     init(repository: ConvoyManagementRepository?) {
         self.repository = repository
         if repository == nil { state = .unavailable }
@@ -121,13 +125,15 @@ final class ConvoyManagementCoordinator {
         busyConvoyIds.insert(convoyId)
         defer { busyConvoyIds.remove(convoyId) }
         switch await repository.lifecycle(convoyId: convoyId, action: action) {
-        case .updated:
+        case .updated(let convoy):
             guard !Task.isCancelled else { return false }
+            applyUpdatedConvoy(convoy)
             await refreshAfterMutation(using: repository)
             return true
         case .left(let result):
             guard !Task.isCancelled else { return false }
             lastLeaveResult = result
+            removeConvoy(id: convoyId)
             await refreshAfterMutation(using: repository)
             return true
         case .failed(let error):
@@ -197,6 +203,34 @@ final class ConvoyManagementCoordinator {
             guard requestIsCurrent(generation) else { return }
             if snapshot == nil { state = .failed(error) }
         }
+    }
+
+    private func applyUpdatedConvoy(_ convoy: ConvoyItem) {
+        guard let snapshot else { return }
+        var convoys = snapshot.convoys
+        if let index = convoys.firstIndex(where: { $0.convoyId == convoy.convoyId }) {
+            convoys[index] = convoy
+        } else {
+            convoys.insert(convoy, at: 0)
+        }
+        state = .loaded(
+            ConvoyManagementSnapshot(
+                convoys: convoys,
+                pendingInvites: snapshot.pendingInvites.filter { $0.convoyId != convoy.convoyId },
+                isExhaustive: snapshot.isExhaustive
+            )
+        )
+    }
+
+    private func removeConvoy(id: String) {
+        guard let snapshot else { return }
+        state = .loaded(
+            ConvoyManagementSnapshot(
+                convoys: snapshot.convoys.filter { $0.convoyId != id },
+                pendingInvites: snapshot.pendingInvites.filter { $0.convoyId != id },
+                isExhaustive: snapshot.isExhaustive
+            )
+        )
     }
 
     private func resolvePrecondition(

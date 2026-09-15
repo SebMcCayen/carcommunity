@@ -11,13 +11,23 @@ private struct ConvoyActionTarget {
     let exitChoice: ConvoyExitChoice
 }
 
+private struct ConvoySheetTarget: Identifiable {
+    let id: String
+    let initial: ConvoyItem
+
+    init(_ convoy: ConvoyItem) {
+        id = convoy.convoyId
+        initial = convoy
+    }
+}
+
 struct ConvoyStatusBar: View {
     @Bindable var coordinator: ConvoyManagementCoordinator
     let convoy: ConvoyItem
     let friendsCoordinator: FriendsCoordinator?
 
-    @State private var memberTarget: ConvoyItem?
-    @State private var inviteTarget: ConvoyItem?
+    @State private var memberTarget: ConvoySheetTarget?
+    @State private var inviteTarget: ConvoySheetTarget?
     @State private var exitTarget: ConvoyExitTarget?
 
     private var working: Bool {
@@ -27,7 +37,7 @@ struct ConvoyStatusBar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s2) {
             HStack(spacing: KccSpacing.s2) {
-                Button { memberTarget = convoy } label: {
+                Button { memberTarget = ConvoySheetTarget(convoy) } label: {
                     Label(memberCount, systemImage: "person.3.fill")
                         .lineLimit(1)
                 }
@@ -35,7 +45,7 @@ struct ConvoyStatusBar: View {
 
                 Spacer(minLength: KccSpacing.s2)
 
-                Button { inviteTarget = convoy } label: {
+                Button { inviteTarget = ConvoySheetTarget(convoy) } label: {
                     Image(systemName: "person.badge.plus")
                 }
                 .disabled(working || friendsCoordinator == nil)
@@ -67,12 +77,12 @@ struct ConvoyStatusBar: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: KccRadius.md))
         .shadow(color: .black.opacity(0.14), radius: 8, y: 3)
         .sheet(item: $memberTarget) { target in
-            ConvoyMembersSheet(convoy: target)
+            LiveConvoyMembersSheet(coordinator: coordinator, target: target)
         }
         .sheet(item: $inviteTarget) { target in
             if let friendsCoordinator {
-                ConvoyInviteSheet(
-                    convoy: target,
+                LiveConvoyInviteSheet(
+                    target: target,
                     friendsCoordinator: friendsCoordinator,
                     coordinator: coordinator
                 )
@@ -210,6 +220,29 @@ struct ConvoyMembersSheet: View {
     }
 }
 
+private struct LiveConvoyMembersSheet: View {
+    @Bindable var coordinator: ConvoyManagementCoordinator
+    let target: ConvoySheetTarget
+
+    var body: some View {
+        ConvoyMembersSheet(convoy: coordinator.convoy(id: target.id) ?? target.initial)
+    }
+}
+
+private struct LiveConvoyInviteSheet: View {
+    let target: ConvoySheetTarget
+    let friendsCoordinator: FriendsCoordinator
+    @Bindable var coordinator: ConvoyManagementCoordinator
+
+    var body: some View {
+        ConvoyInviteSheet(
+            convoy: coordinator.convoy(id: target.id) ?? target.initial,
+            friendsCoordinator: friendsCoordinator,
+            coordinator: coordinator
+        )
+    }
+}
+
 struct ConvoyInviteSheet: View {
     @Environment(\.dismiss) private var dismiss
     let convoy: ConvoyItem
@@ -339,7 +372,7 @@ struct ConvoyDetailScreen: View {
     let convoy: ConvoyItem
     let friendsCoordinator: FriendsCoordinator?
 
-    @State private var inviteTarget: ConvoyItem?
+    @State private var inviteTarget: ConvoySheetTarget?
     @State private var confirmation: ConvoyActionTarget?
 
     private var working: Bool { coordinator.busyConvoyIds.contains(convoy.convoyId) }
@@ -405,7 +438,7 @@ struct ConvoyDetailScreen: View {
 
             if convoy.status != .ended, convoy.viewer?.inviteStatus == .accepted {
                 Section {
-                    Button("convoy.barInvite") { inviteTarget = convoy }
+                    Button("convoy.barInvite") { inviteTarget = ConvoySheetTarget(convoy) }
                         .disabled(working || friendsCoordinator == nil)
                     if convoy.viewerIsOwner && convoy.status == .forming {
                         Button("convoy.start") { confirm(.start) }
@@ -425,8 +458,8 @@ struct ConvoyDetailScreen: View {
         .navigationTitle("convoy.title")
         .sheet(item: $inviteTarget) { target in
             if let friendsCoordinator {
-                ConvoyInviteSheet(
-                    convoy: target,
+                LiveConvoyInviteSheet(
+                    target: target,
                     friendsCoordinator: friendsCoordinator,
                     coordinator: coordinator
                 )
