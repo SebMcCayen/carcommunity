@@ -42,6 +42,8 @@ struct ShellView: View {
     @State private var liveLocationCoordinator: LiveLocationCoordinator?
     @State private var locationPermissionCoordinator: LocationPermissionCoordinator?
     @State private var startDrivingGarage: GarageCoordinator?
+    @State private var convoyCreateCoordinator: ConvoyCreateCoordinator?
+    @State private var convoyCreateVehicleId: String?
     @State private var friendsRepository: FriendsRepository?
     @State private var conversationsRepository: ConversationsRepository?
     @State private var dmTarget: DmRouteTarget?
@@ -51,6 +53,8 @@ struct ShellView: View {
     @State private var showStopConfirmation = false
     @State private var pendingSingleSessionStart = false
     @State private var pendingStartVehicleId: String?
+    @State private var pendingConvoyCreate = false
+    @State private var pendingConvoyVehicleId: String?
     @State private var pendingCreateIntent: SingleSessionCreateIntent?
     @State private var pendingSessionCommand: SingleSessionCommand?
     @State private var sessionCommandTask: Task<Void, Never>?
@@ -108,7 +112,10 @@ struct ShellView: View {
             }
         }
         .onChange(of: locationPermissionCoordinator?.state) { _, state in
-            if state == .granted { startSingleSessionAfterPermissionGrant() }
+            if state == .granted {
+                startSingleSessionAfterPermissionGrant()
+                openConvoyCreateAfterPermissionGrant()
+            }
         }
         .onChange(of: liveLocationCoordinator?.isSharing) { _, sharing in
             guard let sharing,
@@ -122,7 +129,8 @@ struct ShellView: View {
                 StartDrivingSheet(
                     garage: startDrivingGarage,
                     isStarting: liveLocationCoordinator?.actionStatus == .working,
-                    onStart: requestSingleSessionStart
+                    onStart: requestSingleSessionStart,
+                    onConvoy: requestConvoyCreation
                 )
             }
         }
@@ -139,7 +147,7 @@ struct ShellView: View {
         .alert(Text("map.locationNeededTitle"), isPresented: permissionPromptIsPresented) {
             if locationPermissionCoordinator?.state == .rationale {
                 Button("map.locationDismiss", role: .cancel) {
-                    cancelPendingSingleSessionStart()
+                    cancelPendingCreateAction()
                     locationPermissionCoordinator?.dismissRationale()
                 }
                 Button("map.locationAllow") {
@@ -147,13 +155,13 @@ struct ShellView: View {
                 }
             } else {
                 Button("map.locationDismiss", role: .cancel) {
-                    cancelPendingSingleSessionStart()
+                    cancelPendingCreateAction()
                     locationPermissionCoordinator?.dismissSettingsHint()
                 }
                 Button("map.locationOpenSettings") {
                     locationPermissionCoordinator?.dismissSettingsHint()
                     guard let url = URL(string: UIApplication.openSettingsURLString) else {
-                        cancelPendingSingleSessionStart()
+                        cancelPendingCreateAction()
                         return
                     }
                     openURL(url)
@@ -352,6 +360,30 @@ struct ShellView: View {
                     onViewProfile: nil
                 )
             }
+        case .convoys:
+            if let convoyCreateCoordinator {
+                NavigationStack {
+                    ConvoyCreateScreen(
+                        coordinator: convoyCreateCoordinator,
+                        friendsCoordinator: friendsCoordinator,
+                        vehicleId: convoyCreateVehicleId,
+                        onCreated: completeConvoyCreation
+                    )
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button {
+                                closeConvoyCreate()
+                            } label: {
+                                Label("shell.back", systemImage: "chevron.backward")
+                            }
+                            .disabled(convoyCreationIsWorking)
+                        }
+                    }
+                }
+                .background(.background, ignoresSafeAreaEdges: .all)
+            } else {
+                unavailableRoute
+            }
         case .conversations:
             routeNavigation {
                 ConversationsScreen(
@@ -492,15 +524,96 @@ struct ShellView: View {
         }
     }
 
+    private func requestConvoyCreation(vehicleId: String?) {
+        sessionActionError = false
+        guard pendingSessionCommand == nil,
+              let liveLocationCoordinator,
+              liveLocationCoordinator.canShare,
+              liveLocationCoordinator.wired
+        else {
+            routes = routes.opening(.liveLocation)
+            return
+        }
+        guard let locationPermissionCoordinator else {
+            routes = routes.opening(.liveLocation)
+            return
+        }
+        pendingConvoyCreate = true
+        pendingConvoyVehicleId = vehicleId
+        locationPermissionCoordinator.requestAccess()
+        if locationPermissionCoordinator.state == .granted {
+            openConvoyCreateAfterPermissionGrant()
+        }
+    }
+
+    private func openConvoyCreateAfterPermissionGrant() {
+        guard pendingConvoyCreate else { return }
+        let vehicleId = pendingConvoyVehicleId
+        pendingConvoyCreate = false
+        pendingConvoyVehicleId = nil
+        guard pendingSessionCommand == nil else { return }
+        convoyCreateVehicleId = vehicleId
+        convoyCreateCoordinator = ConvoyCreateCoordinator(
+            repository: FirebaseConvoyCreateRepository.createIfAvailable()
+        )
+        routes = routes.opening(.convoys)
+    }
+
+    private func closeConvoyCreate() {
+        guard !convoyCreationIsWorking else { return }
+        if routes.current == .convoys { routes = routes.poppingOne() }
+        convoyCreateCoordinator = nil
+        convoyCreateVehicleId = nil
+    }
+
+    private var convoyCreationIsWorking: Bool {
+        guard let convoyCreateCoordinator else { return false }
+        if case .working = convoyCreateCoordinator.createState { return true }
+        return false
+    }
+
+    private func completeConvoyCreation(_ created: ConvoyCreated) {
+        guard !created.convoyId.isEmpty else { return }
+        closeConvoyCreate()
+        selectedTab = .map
+        retainConvoySessionStartUntilObserved()
+    }
+
+    private func retainConvoySessionStartUntilObserved() {
+        guard pendingSessionCommand == nil, let liveLocationCoordinator else { return }
+        let identity = signedInUid
+        if SingleSessionCommand.starting.isReconciled(isSharing: liveLocationCoordinator.isSharing) {
+            return
+        }
+        pendingSessionCommand = .starting
+        sessionCommandTask = Task {
+            do {
+                try await Task.sleep(for: .seconds(15))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled,
+                  identity == signedInUid,
+                  liveLocationCoordinator === self.liveLocationCoordinator,
+                  pendingSessionCommand == .starting
+            else { return }
+            pendingSessionCommand = nil
+            sessionCommandTask = nil
+            sessionActionError = true
+        }
+    }
+
     private func tabTitle(_ tab: ShellTab) -> LocalizedStringKey {
-        if tab == .create, liveLocationCoordinator?.isSharing == true {
+        if tab == .create,
+           (liveLocationCoordinator?.isSharing == true || pendingSessionCommand == .starting) {
             return "liveLocation.stop"
         }
         return tab.title
     }
 
     private func tabSystemImage(_ tab: ShellTab) -> String {
-        if tab == .create, liveLocationCoordinator?.isSharing == true {
+        if tab == .create,
+           (liveLocationCoordinator?.isSharing == true || pendingSessionCommand == .starting) {
             return "stop.circle.fill"
         }
         return tab.systemImage
@@ -619,6 +732,12 @@ struct ShellView: View {
         pendingStartVehicleId = nil
     }
 
+    private func cancelPendingCreateAction() {
+        cancelPendingSingleSessionStart()
+        pendingConvoyCreate = false
+        pendingConvoyVehicleId = nil
+    }
+
     private func clearSessionCommand() {
         sessionCommandTask?.cancel()
         sessionCommandTask = nil
@@ -632,7 +751,7 @@ struct ShellView: View {
     private var permissionPromptIsPresented: Binding<Bool> {
         Binding(
             get: {
-                pendingSingleSessionStart
+                (pendingSingleSessionStart || pendingConvoyCreate)
                     && (locationPermissionCoordinator?.state == .rationale
                         || locationPermissionCoordinator?.state == .deniedNeedsSettings)
             },
@@ -650,7 +769,7 @@ struct ShellView: View {
 
         showStartDriving = false
         showStopConfirmation = false
-        cancelPendingSingleSessionStart()
+        cancelPendingCreateAction()
         clearSessionCommand()
         sessionActionError = false
 
@@ -662,6 +781,9 @@ struct ShellView: View {
         }
         dmTarget = nil
         dmCoordinator = nil
+        if routes.current == .convoys { routes = routes.poppingOne() }
+        convoyCreateCoordinator = nil
+        convoyCreateVehicleId = nil
         liveLocationCoordinator = nil
         startDrivingGarage = nil
         crownHuntComposition = nil

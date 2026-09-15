@@ -6648,6 +6648,23 @@
         }
       }
     },
+    "convoy.createInviteLimit": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du kan bjuda in upp till 50 vänner."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can invite up to 50 friends."
+          }
+        }
+      }
+    },
     "convoy.createSubmit": {
       "extractionState": "manual",
       "localizations": {

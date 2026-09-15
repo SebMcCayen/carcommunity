@@ -635,6 +635,7 @@
     <string name="convoy_friendsRetry">Try again</string>
     <string name="convoy_noFriends">Add some friends first to invite them to a convoy.</string>
     <string name="convoy_createSubmit">Create convoy</string>
+    <string name="convoy_createInviteLimit">You can invite up to 50 friends.</string>
     <string name="convoy_membersTitle">Members</string>
     <string name="convoy_start">Start convoy</string>
     <string name="convoy_end">End convoy</string>

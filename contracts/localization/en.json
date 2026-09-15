@@ -692,6 +692,7 @@
     "friendsRetry": "Try again",
     "noFriends": "Add some friends first to invite them to a convoy.",
     "createSubmit": "Create convoy",
+    "createInviteLimit": "You can invite up to 50 friends.",
     "membersTitle": "Members",
     "start": "Start convoy",
     "end": "End convoy",
