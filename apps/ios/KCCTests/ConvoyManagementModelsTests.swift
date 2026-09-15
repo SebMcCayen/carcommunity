@@ -59,6 +59,10 @@ final class ConvoyManagementModelsTests: XCTestCase {
             .unresolvedPrecondition
         )
         XCTAssertEqual(ConvoyManagementErrorMapper.mapList(.permissionDenied), .notMember)
+        XCTAssertEqual(
+            ConvoyManagementErrorMapper.mapInvite(.failedPrecondition),
+            .unresolvedPrecondition
+        )
     }
 
     func testBarSelectsActiveConvoyAndDerivesExitChoices() {

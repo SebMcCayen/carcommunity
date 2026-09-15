@@ -149,6 +149,7 @@ enum ConvoyExitChoice: Equatable, Sendable {
 
 enum ConvoyBarLogic {
     static let minimumRemainingMembers = 2
+    static let maximumInviteBatchSize = 25
 
     static func activeConvoy(in snapshot: ConvoyManagementSnapshot) -> ConvoyItem? {
         let joined = snapshot.convoys.filter {
@@ -323,7 +324,7 @@ enum ConvoyManagementErrorMapper {
         case .permissionDenied: .notMember
         case .invalidArgument: .invalid
         case .notFound: .notFound
-        case .failedPrecondition: .noInvitees
+        case .failedPrecondition: .unresolvedPrecondition
         default: .generic
         }
     }

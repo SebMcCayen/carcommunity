@@ -12,6 +12,7 @@ enum ConvoyManagementState: Equatable, Sendable {
 @Observable
 final class ConvoyManagementCoordinator {
     private let repository: ConvoyManagementRepository?
+    private var listRequestGeneration = 0
 
     private(set) var state: ConvoyManagementState = .loading
     private(set) var busyConvoyIds = Set<String>()
@@ -38,12 +39,13 @@ final class ConvoyManagementCoordinator {
             return
         }
         state = .loading
+        let generation = beginListRequest()
         switch await repository.list() {
         case .loaded(let snapshot):
-            guard !Task.isCancelled else { return }
+            guard requestIsCurrent(generation) else { return }
             state = .loaded(snapshot)
         case .failed(let error):
-            guard !Task.isCancelled else { return }
+            guard requestIsCurrent(generation) else { return }
             state = .failed(error)
         }
     }
@@ -62,6 +64,7 @@ final class ConvoyManagementCoordinator {
             return nil
         }
 
+        supersedeListRequests()
         busyConvoyIds.insert(convoyId)
         defer { busyConvoyIds.remove(convoyId) }
         switch await repository.respond(convoyId: convoyId, action: action) {
@@ -86,16 +89,18 @@ final class ConvoyManagementCoordinator {
 
     /// Refreshes without replacing a rendered list/bar with a loading spinner.
     /// Used by the map surface while a convoy is active.
-    func refresh() async {
-        guard let repository else { return }
+    func refresh() async -> Bool {
+        guard let repository else { return false }
+        let generation = beginListRequest()
         switch await repository.list() {
         case .loaded(let snapshot):
-            guard !Task.isCancelled else { return }
+            guard requestIsCurrent(generation) else { return false }
             state = .loaded(snapshot)
+            return true
         case .failed:
             // A background refresh must not tear down known-good driving UI.
             // Explicit list loads still surface their failure through `load()`.
-            return
+            return false
         }
     }
 
@@ -110,6 +115,7 @@ final class ConvoyManagementCoordinator {
         else { return false }
 
         actionError = nil
+        supersedeListRequests()
         busyConvoyIds.insert(convoyId)
         defer { busyConvoyIds.remove(convoyId) }
         switch await repository.lifecycle(convoyId: convoyId, action: action) {
@@ -132,15 +138,18 @@ final class ConvoyManagementCoordinator {
         let unique = Array(Set(inviteeUids.filter { !$0.isEmpty })).sorted()
         guard !convoyId.isEmpty,
               !unique.isEmpty,
+              unique.count <= ConvoyBarLogic.maximumInviteBatchSize,
               !busyConvoyIds.contains(convoyId),
               let repository
         else {
             if unique.isEmpty { actionError = .noInvitees }
+            else if unique.count > ConvoyBarLogic.maximumInviteBatchSize { actionError = .invalid }
             return false
         }
 
         actionError = nil
         lastInviteResult = nil
+        supersedeListRequests()
         busyConvoyIds.insert(convoyId)
         defer { busyConvoyIds.remove(convoyId) }
         switch await repository.invite(convoyId: convoyId, inviteeUids: unique) {
@@ -161,12 +170,13 @@ final class ConvoyManagementCoordinator {
     }
 
     private func refreshAfterMutation(using repository: ConvoyManagementRepository) async {
+        let generation = beginListRequest()
         switch await repository.list() {
         case .loaded(let snapshot):
-            guard !Task.isCancelled else { return }
+            guard requestIsCurrent(generation) else { return }
             state = .loaded(snapshot)
         case .failed(let error):
-            guard !Task.isCancelled else { return }
+            guard requestIsCurrent(generation) else { return }
             state = .failed(error)
         }
     }
@@ -175,16 +185,30 @@ final class ConvoyManagementCoordinator {
         action: ConvoyAction,
         using repository: ConvoyManagementRepository
     ) async {
+        let generation = beginListRequest()
         switch await repository.list() {
         case .loaded(let snapshot):
-            guard !Task.isCancelled else { return }
+            guard requestIsCurrent(generation) else { return }
             state = .loaded(snapshot)
             actionError = action == .accept && snapshot.hasActiveConvoy
                 ? .alreadyInConvoy
                 : .inviteGone
         case .failed:
-            guard !Task.isCancelled else { return }
+            guard requestIsCurrent(generation) else { return }
             actionError = .generic
         }
+    }
+
+    private func beginListRequest() -> Int {
+        listRequestGeneration += 1
+        return listRequestGeneration
+    }
+
+    private func supersedeListRequests() {
+        listRequestGeneration += 1
+    }
+
+    private func requestIsCurrent(_ generation: Int) -> Bool {
+        !Task.isCancelled && generation == listRequestGeneration
     }
 }

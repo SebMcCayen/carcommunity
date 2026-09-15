@@ -622,9 +622,13 @@ struct ShellView: View {
         guard !convoyCreationIsWorking else { return }
         if convoyCreateCoordinator != nil, convoyCreateReturnsToList {
             closeConvoyCreate()
-        } else if selectedConvoyId != nil {
+        } else if let selectedId = selectedConvoyId,
+                  convoyManagementCoordinator?.snapshot?.convoys.contains(
+                      where: { $0.convoyId == selectedId }
+                  ) == true {
             selectedConvoyId = nil
         } else {
+            selectedConvoyId = nil
             closeConvoyCreate()
             if routes.current == .convoys { routes = routes.poppingOne() }
         }

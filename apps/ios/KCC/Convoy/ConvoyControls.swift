@@ -89,9 +89,15 @@ struct ConvoyStatusBar: View {
         // disappears because the convoy ended or the user left, this task is
         // cancelled with it and the polling stops.
         .task(id: convoy.convoyId) {
+            var refreshDelaySeconds = 60
             while !Task.isCancelled {
-                do { try await Task.sleep(for: .seconds(15)) } catch { return }
-                await coordinator.refresh()
+                do {
+                    try await Task.sleep(for: .seconds(refreshDelaySeconds))
+                } catch {
+                    return
+                }
+                let refreshed = await coordinator.refresh()
+                refreshDelaySeconds = refreshed ? 60 : min(refreshDelaySeconds * 2, 300)
             }
         }
     }
@@ -193,6 +199,7 @@ struct ConvoyInviteSheet: View {
     @Bindable var coordinator: ConvoyManagementCoordinator
 
     @State private var selected = Set<String>()
+    @State private var showInviteResult = false
 
     var body: some View {
         NavigationStack {
@@ -210,27 +217,42 @@ struct ConvoyInviteSheet: View {
                     .frame(maxWidth: .infinity)
                 case .loaded(let friends, _, _, _):
                     let available = friends.filter { !memberIds.contains($0.uid) }
-                    if available.isEmpty {
+                    if friends.isEmpty {
+                        Text("convoy.noFriends").foregroundStyle(.secondary)
+                    } else if available.isEmpty {
                         Text("convoy.inviteNoInvitable").foregroundStyle(.secondary)
                     } else {
                         ForEach(available) { friend in
+                            let isSelected = selected.contains(friend.uid)
                             Button {
-                                if selected.contains(friend.uid) {
+                                if isSelected {
                                     selected.remove(friend.uid)
-                                } else {
+                                } else if selected.count < ConvoyBarLogic.maximumInviteBatchSize {
                                     selected.insert(friend.uid)
                                 }
                             } label: {
                                 HStack {
                                     Text(friend.displayName ?? String(localized: "convoy.unknownMember"))
                                     Spacer()
-                                    if selected.contains(friend.uid) {
+                                    if isSelected {
                                         Image(systemName: "checkmark.circle.fill")
                                     }
                                 }
                             }
                             .buttonStyle(.plain)
+                            .disabled(
+                                working || (!isSelected
+                                    && selected.count >= ConvoyBarLogic.maximumInviteBatchSize)
+                            )
+                            .accessibilityAddTraits(isSelected ? [.isSelected] : [])
                         }
+                    }
+                }
+
+                if let error = coordinator.actionError {
+                    Section {
+                        Text(ConvoyManagementStrings.errorKey(error))
+                            .foregroundStyle(KccPalette.errorRed)
                     }
                 }
             }
@@ -246,20 +268,48 @@ struct ConvoyInviteSheet: View {
                                 convoyId: convoy.convoyId,
                                 inviteeUids: Array(selected)
                             ) {
-                                dismiss()
+                                showInviteResult = true
                             }
                         }
                     }
                     .disabled(selected.isEmpty || working)
                 }
             }
-            .task { await friendsCoordinator.load() }
+            .task {
+                coordinator.clearActionError()
+                coordinator.clearInviteResult()
+                await friendsCoordinator.load()
+            }
         }
         .interactiveDismissDisabled(working)
+        .alert(inviteResultMessage, isPresented: $showInviteResult) {
+            Button("convoy.close") {
+                coordinator.clearInviteResult()
+                dismiss()
+            }
+        }
     }
 
     private var memberIds: Set<String> { Set(convoy.members.map(\.uid)) }
     private var working: Bool { coordinator.busyConvoyIds.contains(convoy.convoyId) }
+
+    private var inviteResultMessage: String {
+        guard let result = coordinator.lastInviteResult else { return "" }
+        if result.invitedCount == 0 {
+            return String(localized: "convoy.inviteConfirmNoneAdded")
+        }
+        if result.skippedCount == 0 {
+            return String.localizedStringWithFormat(
+                NSLocalizedString("convoy.inviteConfirmInvited", comment: "Convoy invitation result"),
+                result.invitedCount
+            )
+        }
+        return String.localizedStringWithFormat(
+            NSLocalizedString("convoy.inviteConfirmMixed", comment: "Convoy invitation result"),
+            result.invitedCount,
+            result.skippedCount
+        )
+    }
 }
 
 struct ConvoyDetailScreen: View {
@@ -303,7 +353,7 @@ struct ConvoyDetailScreen: View {
                 }
             }
 
-            if convoy.status != .ended {
+            if convoy.status != .ended, convoy.viewer?.inviteStatus == .accepted {
                 Section {
                     Button("convoy.barInvite") { showInvite = true }
                         .disabled(working || friendsCoordinator == nil)

@@ -6,6 +6,8 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
     private final class FakeRepository: ConvoyManagementRepository, @unchecked Sendable {
         private let lock = NSLock()
         var listResults: [ConvoyManagementListResult]
+        var listDelaysMilliseconds: [Int]
+        private var listCallCount = 0
         var respondResult: ConvoyRespondResult
         var lifecycleResult: ConvoyLifecycleResult
         var inviteResult: ConvoyInviteMutationResult
@@ -15,20 +17,31 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
 
         init(
             listResults: [ConvoyManagementListResult],
+            listDelaysMilliseconds: [Int] = [],
             respondResult: ConvoyRespondResult = .failed(.generic),
             lifecycleResult: ConvoyLifecycleResult = .failed(.generic),
             inviteResult: ConvoyInviteMutationResult = .failed(.generic)
         ) {
             self.listResults = listResults
+            self.listDelaysMilliseconds = listDelaysMilliseconds
             self.respondResult = respondResult
             self.lifecycleResult = lifecycleResult
             self.inviteResult = inviteResult
         }
 
         func list() async -> ConvoyManagementListResult {
-            lock.withLock {
-                listResults.isEmpty ? .failed(.generic) : listResults.removeFirst()
+            let (result, delay) = lock.withLock {
+                listCallCount += 1
+                let result = listResults.isEmpty ? .failed(.generic) : listResults.removeFirst()
+                let delay = listDelaysMilliseconds.isEmpty ? 0 : listDelaysMilliseconds.removeFirst()
+                return (result, delay)
             }
+            if delay > 0 { try? await Task.sleep(for: .milliseconds(delay)) }
+            return result
+        }
+
+        func recordedListCallCount() -> Int {
+            lock.withLock { listCallCount }
         }
 
         func respond(convoyId: String, action: ConvoyAction) async -> ConvoyRespondResult {
@@ -218,6 +231,48 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
             coordinator.lastInviteResult,
             ConvoyInviteResult(invitedCount: 2, skippedCount: 0)
         )
+    }
+
+    @MainActor
+    func testMutationRefreshSupersedesAnOlderPollingResponse() async {
+        let active = item(id: "convoy", viewer: .accepted)
+        let ended = item(id: "convoy", status: .ended, viewer: .accepted)
+        let repository = FakeRepository(
+            listResults: [
+                .loaded(snapshot(convoys: [active])),
+                .loaded(snapshot(convoys: [active])),
+                .loaded(snapshot(convoys: [ended]))
+            ],
+            listDelaysMilliseconds: [0, 200, 0],
+            lifecycleResult: .updated(ended)
+        )
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        await coordinator.load()
+
+        let staleRefresh = Task { await coordinator.refresh() }
+        while repository.recordedListCallCount() < 2 { await Task.yield() }
+        let lifecycleSucceeded = await coordinator.runLifecycle(convoyId: "convoy", action: .end)
+        XCTAssertTrue(lifecycleSucceeded)
+        _ = await staleRefresh.value
+
+        XCTAssertEqual(coordinator.state, .loaded(snapshot(convoys: [ended])))
+    }
+
+    @MainActor
+    func testInviteRejectsMoreThanCallableBatchLimit() async {
+        let active = item(id: "convoy", viewer: .accepted)
+        let repository = FakeRepository(listResults: [.loaded(snapshot(convoys: [active]))])
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        await coordinator.load()
+
+        let succeeded = await coordinator.invite(
+            convoyId: "convoy",
+            inviteeUids: (0...ConvoyBarLogic.maximumInviteBatchSize).map { "friend-\($0)" }
+        )
+
+        XCTAssertFalse(succeeded)
+        XCTAssertEqual(coordinator.actionError, .invalid)
+        XCTAssertTrue(repository.inviteCalls.isEmpty)
     }
 
     private func snapshot(
