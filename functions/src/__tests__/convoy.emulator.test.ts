@@ -445,6 +445,55 @@ describe('convoy lifecycle: respond / start / end / list', () => {
     const pending = guestList.pendingInvites.find((c) => c.convoyId === created.convoy.convoyId)!;
     expect(pending.viewer).toEqual({ role: 'member', inviteStatus: 'invited' });
   });
+
+  it('keeps an accepted live convoy behind the 200-row history cap', async () => {
+    const owner = await newMember('CappedHistoryOwnerC');
+    const liveConvoyId = `capped-live-${owner.uid}`;
+    const joinedAt = Timestamp.fromMillis(1_000);
+    const member = {
+      uid: owner.uid,
+      role: 'owner',
+      inviteStatus: 'accepted',
+      joinedAt,
+    };
+    const memberProfiles = {
+      [owner.uid]: { displayName: 'CappedHistoryOwnerC', avatarPath: null },
+    };
+    const batch = adminDb.batch();
+    batch.set(adminDb.collection('convoys').doc(liveConvoyId), {
+      ownerUid: owner.uid,
+      title: 'Still driving',
+      status: 'active',
+      members: { [owner.uid]: member },
+      memberProfiles,
+      memberUids: [owner.uid],
+      createdAt: Timestamp.fromMillis(1_000),
+      startedAt: Timestamp.fromMillis(1_000),
+    });
+    for (let index = 0; index <= 200; index += 1) {
+      batch.set(adminDb.collection('convoys').doc(`capped-ended-${owner.uid}-${index}`), {
+        ownerUid: owner.uid,
+        title: null,
+        status: 'ended',
+        members: { [owner.uid]: member },
+        memberProfiles,
+        memberUids: [owner.uid],
+        createdAt: Timestamp.fromMillis(2_000 + index),
+        startedAt: Timestamp.fromMillis(2_000 + index),
+        endedAt: Timestamp.fromMillis(2_000 + index),
+      });
+    }
+    await batch.commit();
+
+    await signInAs(owner);
+    const result = (await call('convoy-list', {})).data as { convoys: ConvoySummary[] };
+
+    expect(result.convoys).toHaveLength(200);
+    expect(result.convoys.some((convoy) => convoy.convoyId === liveConvoyId)).toBe(true);
+    expect(result.convoys.find((convoy) => convoy.convoyId === liveConvoyId)?.status).toBe(
+      'active',
+    );
+  }, 60_000);
 });
 
 describe('convoys Firestore rules', () => {
