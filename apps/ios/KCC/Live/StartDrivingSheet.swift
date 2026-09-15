@@ -10,18 +10,21 @@ struct StartDrivingSheet: View {
     @State private var selectedVehicleId: String?
 
     let isStarting: Bool
+    let canStartSingleSession: Bool
     let onStart: (String?) -> Void
     let onConvoy: (String?) -> Void
 
     init(
         garage: GarageCoordinator,
         isStarting: Bool,
+        canStartSingleSession: Bool,
         onStart: @escaping (String?) -> Void,
         onConvoy: @escaping (String?) -> Void
     ) {
         _garage = State(initialValue: garage)
         _selectedVehicleId = State(initialValue: nil)
         self.isStarting = isStarting
+        self.canStartSingleSession = canStartSingleSession
         self.onStart = onStart
         self.onConvoy = onConvoy
     }
@@ -54,7 +57,7 @@ struct StartDrivingSheet: View {
                         .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(isStarting)
+                    .disabled(isStarting || !canStartSingleSession)
 
                     Button {
                         let chosen = effectiveVehicleId

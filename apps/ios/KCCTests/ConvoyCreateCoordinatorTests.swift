@@ -41,6 +41,20 @@ final class ConvoyCreateCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testLoadBlocksCreationWhenActiveMembershipScanIsTruncated() async {
+        let repository = FakeRepository()
+        repository.listResult = .loaded(.init(hasActiveConvoy: false, isExhaustive: false))
+        let coordinator = ConvoyCreateCoordinator(repository: repository)
+
+        await coordinator.load()
+        await coordinator.create(inviteeUids: ["friend-1"], vehicleId: nil)
+
+        XCTAssertEqual(coordinator.availability, .failed(.generic))
+        XCTAssertEqual(coordinator.createState, .failed(.generic))
+        XCTAssertTrue(repository.createCalls.isEmpty)
+    }
+
+    @MainActor
     func testCreateTrimsDeduplicatesAndForwardsVehicle() async {
         let repository = FakeRepository()
         let coordinator = ConvoyCreateCoordinator(repository: repository)

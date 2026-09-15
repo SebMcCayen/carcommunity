@@ -129,6 +129,7 @@ struct ShellView: View {
                 StartDrivingSheet(
                     garage: startDrivingGarage,
                     isStarting: liveLocationCoordinator?.actionStatus == .working,
+                    canStartSingleSession: liveLocationCoordinator?.canShare == true,
                     onStart: requestSingleSessionStart,
                     onConvoy: requestConvoyCreation
                 )
@@ -511,9 +512,13 @@ struct ShellView: View {
 
     private func presentSingleSessionAction(using coordinator: LiveLocationCoordinator) {
         guard coordinator.actionStatus != .working else { return }
+        let actions = StartDrivingSelection.actions(
+            wired: coordinator.wired,
+            canShareLive: coordinator.canShare
+        )
         if coordinator.isSharing {
             showStopConfirmation = true
-        } else if coordinator.canShare && coordinator.wired {
+        } else if actions.showChooser {
             startDrivingGarage = GarageCoordinator(
                 repository: FirebaseVehiclesRepository.createIfAvailable(),
                 uid: signedInUid
@@ -528,10 +533,17 @@ struct ShellView: View {
         sessionActionError = false
         guard pendingSessionCommand == nil,
               let liveLocationCoordinator,
-              liveLocationCoordinator.canShare,
               liveLocationCoordinator.wired
         else {
             routes = routes.opening(.liveLocation)
+            return
+        }
+        let actions = StartDrivingSelection.actions(
+            wired: liveLocationCoordinator.wired,
+            canShareLive: liveLocationCoordinator.canShare
+        )
+        guard actions.convoyRequiresLocation else {
+            openConvoyCreate(vehicleId: vehicleId)
             return
         }
         guard let locationPermissionCoordinator else {
@@ -552,6 +564,10 @@ struct ShellView: View {
         pendingConvoyCreate = false
         pendingConvoyVehicleId = nil
         guard pendingSessionCommand == nil else { return }
+        openConvoyCreate(vehicleId: vehicleId)
+    }
+
+    private func openConvoyCreate(vehicleId: String?) {
         convoyCreateVehicleId = vehicleId
         convoyCreateCoordinator = ConvoyCreateCoordinator(
             repository: FirebaseConvoyCreateRepository.createIfAvailable()
@@ -580,7 +596,10 @@ struct ShellView: View {
     }
 
     private func retainConvoySessionStartUntilObserved() {
-        guard pendingSessionCommand == nil, let liveLocationCoordinator else { return }
+        guard pendingSessionCommand == nil,
+              let liveLocationCoordinator,
+              liveLocationCoordinator.canShare
+        else { return }
         let identity = signedInUid
         if SingleSessionCommand.starting.isReconciled(isSharing: liveLocationCoordinator.isSharing) {
             return
