@@ -17,6 +17,7 @@ final class ConvoyManagementCoordinator {
     private(set) var state: ConvoyManagementState = .loading
     private(set) var busyConvoyIds = Set<String>()
     private(set) var actionError: ConvoyActionError?
+    private(set) var actionErrorConvoyId: String?
     private(set) var lastInviteResult: ConvoyInviteResult?
     private(set) var lastLeaveResult: ConvoyLeaveResult?
 
@@ -31,6 +32,10 @@ final class ConvoyManagementCoordinator {
 
     func convoy(id: String) -> ConvoyItem? {
         snapshot?.convoys.first { $0.convoyId == id }
+    }
+
+    func actionError(for convoyId: String) -> ConvoyActionError? {
+        actionErrorConvoyId == convoyId ? actionError : nil
     }
 
     init(repository: ConvoyManagementRepository?) {
@@ -63,9 +68,9 @@ final class ConvoyManagementCoordinator {
               case .loaded(let snapshot) = state
         else { return nil }
 
-        actionError = nil
+        clearActionError()
         if action == .accept, !snapshot.canJoinAnotherConvoy {
-            actionError = snapshot.hasActiveConvoy ? .alreadyInConvoy : .generic
+            setActionError(snapshot.hasActiveConvoy ? .alreadyInConvoy : .generic, convoyId: convoyId)
             return nil
         }
 
@@ -79,17 +84,18 @@ final class ConvoyManagementCoordinator {
             return action == .accept ? convoy : nil
         case .failed(.unresolvedPrecondition):
             guard !Task.isCancelled else { return nil }
-            await resolvePrecondition(action: action, using: repository)
+            await resolvePrecondition(action: action, convoyId: convoyId, using: repository)
             return nil
         case .failed(let error):
             guard !Task.isCancelled else { return nil }
-            actionError = error
+            setActionError(error, convoyId: convoyId)
             return nil
         }
     }
 
     func clearActionError() {
         actionError = nil
+        actionErrorConvoyId = nil
     }
 
     /// Refreshes without replacing a rendered list/bar with a loading spinner.
@@ -109,6 +115,18 @@ final class ConvoyManagementCoordinator {
         }
     }
 
+    func observeConvoy(id convoyId: String) async {
+        guard let repository else { return }
+        for await convoy in repository.observeConvoy(convoyId: convoyId) {
+            guard !Task.isCancelled else { return }
+            if let convoy {
+                applyUpdatedConvoy(convoy)
+            } else {
+                removeConvoy(id: convoyId)
+            }
+        }
+    }
+
     @discardableResult
     func runLifecycle(
         convoyId: String,
@@ -119,7 +137,7 @@ final class ConvoyManagementCoordinator {
               let repository
         else { return false }
 
-        actionError = nil
+        clearActionError()
         lastLeaveResult = nil
         supersedeListRequests()
         busyConvoyIds.insert(convoyId)
@@ -138,7 +156,7 @@ final class ConvoyManagementCoordinator {
             return true
         case .failed(let error):
             guard !Task.isCancelled else { return false }
-            actionError = error
+            setActionError(error, convoyId: convoyId)
             if error == .notFound
                 || error == .alreadyEnded
                 || error == .leaveFailed
@@ -159,12 +177,14 @@ final class ConvoyManagementCoordinator {
               !busyConvoyIds.contains(convoyId),
               let repository
         else {
-            if unique.isEmpty { actionError = .noInvitees }
-            else if unique.count > ConvoyBarLogic.maximumInviteBatchSize { actionError = .invalid }
+            if unique.isEmpty { setActionError(.noInvitees, convoyId: convoyId) }
+            else if unique.count > ConvoyBarLogic.maximumInviteBatchSize {
+                setActionError(.invalid, convoyId: convoyId)
+            }
             return false
         }
 
-        actionError = nil
+        clearActionError()
         lastInviteResult = nil
         supersedeListRequests()
         busyConvoyIds.insert(convoyId)
@@ -177,7 +197,7 @@ final class ConvoyManagementCoordinator {
             return true
         case .failed(let error):
             guard !Task.isCancelled else { return false }
-            actionError = error
+            setActionError(error, convoyId: convoyId)
             if error == .notFound || error == .noInvitees {
                 await refreshAfterMutation(using: repository)
             }
@@ -235,6 +255,7 @@ final class ConvoyManagementCoordinator {
 
     private func resolvePrecondition(
         action: ConvoyAction,
+        convoyId: String,
         using repository: ConvoyManagementRepository
     ) async {
         let generation = beginListRequest()
@@ -242,13 +263,19 @@ final class ConvoyManagementCoordinator {
         case .loaded(let snapshot):
             guard requestIsCurrent(generation) else { return }
             state = .loaded(snapshot)
-            actionError = action == .accept && snapshot.hasActiveConvoy
-                ? .alreadyInConvoy
-                : .inviteGone
+            setActionError(
+                action == .accept && snapshot.hasActiveConvoy ? .alreadyInConvoy : .inviteGone,
+                convoyId: convoyId
+            )
         case .failed:
             guard requestIsCurrent(generation) else { return }
-            actionError = .generic
+            setActionError(.generic, convoyId: convoyId)
         }
+    }
+
+    private func setActionError(_ error: ConvoyActionError, convoyId: String) {
+        actionError = error
+        actionErrorConvoyId = convoyId
     }
 
     private func beginListRequest() -> Int {

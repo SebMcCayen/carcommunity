@@ -11,6 +11,7 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
         var respondResult: ConvoyRespondResult
         var lifecycleResult: ConvoyLifecycleResult
         var inviteResult: ConvoyInviteMutationResult
+        var observedConvoys: [ConvoyItem?]
         private(set) var respondCalls: [(String, ConvoyAction)] = []
         private(set) var lifecycleCalls: [(String, ConvoyLifecycleAction)] = []
         private(set) var inviteCalls: [(String, [String])] = []
@@ -20,13 +21,23 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
             listDelaysMilliseconds: [Int] = [],
             respondResult: ConvoyRespondResult = .failed(.generic),
             lifecycleResult: ConvoyLifecycleResult = .failed(.generic),
-            inviteResult: ConvoyInviteMutationResult = .failed(.generic)
+            inviteResult: ConvoyInviteMutationResult = .failed(.generic),
+            observedConvoys: [ConvoyItem?] = []
         ) {
             self.listResults = listResults
             self.listDelaysMilliseconds = listDelaysMilliseconds
             self.respondResult = respondResult
             self.lifecycleResult = lifecycleResult
             self.inviteResult = inviteResult
+            self.observedConvoys = observedConvoys
+        }
+
+        func observeConvoy(convoyId: String) -> AsyncStream<ConvoyItem?> {
+            let values = lock.withLock { observedConvoys }
+            return AsyncStream { continuation in
+                values.forEach { continuation.yield($0) }
+                continuation.finish()
+            }
         }
 
         func list() async -> ConvoyManagementListResult {
@@ -211,6 +222,23 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testSingleConvoyObservationMergesFreshDocumentState() async {
+        let active = item(id: "convoy", viewer: .accepted)
+        let ended = item(id: "convoy", status: .ended, viewer: .accepted)
+        let repository = FakeRepository(
+            listResults: [.loaded(snapshot(convoys: [active]))],
+            observedConvoys: [ended]
+        )
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        await coordinator.load()
+
+        await coordinator.observeConvoy(id: "convoy")
+
+        XCTAssertEqual(coordinator.convoy(id: "convoy"), ended)
+        XCTAssertNil(coordinator.activeConvoy)
+    }
+
+    @MainActor
     func testLeavePublishesAndClearsResult() async {
         let active = item(id: "convoy", viewer: .accepted)
         let leaveResult = ConvoyLeaveResult(outcome: .left, newLeaderUid: "next-leader")
@@ -283,6 +311,8 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
 
         XCTAssertFalse(succeeded)
         XCTAssertEqual(coordinator.actionError, .cannotStart)
+        XCTAssertEqual(coordinator.actionError(for: "convoy"), .cannotStart)
+        XCTAssertNil(coordinator.actionError(for: "another"))
         XCTAssertEqual(coordinator.state, .loaded(snapshot(convoys: [active])))
     }
 

@@ -1,10 +1,33 @@
 import Foundation
+import FirebaseAuth
+import FirebaseFirestore
 
 final class FirebaseConvoyManagementRepository: ConvoyManagementRepository, @unchecked Sendable {
     private let client: KccFunctionsClient
+    private let firestore: Firestore
 
-    private init(client: KccFunctionsClient) {
+    private init(client: KccFunctionsClient, firestore: Firestore) {
         self.client = client
+        self.firestore = firestore
+    }
+
+    func observeConvoy(convoyId: String) -> AsyncStream<ConvoyItem?> {
+        guard let viewerUid = Auth.auth().currentUser?.uid else {
+            return AsyncStream { $0.finish() }
+        }
+        let document = firestore.collection("convoys").document(convoyId)
+        return AsyncStream { continuation in
+            let registration = document.addSnapshotListener { snapshot, error in
+                guard error == nil else { return }
+                guard let snapshot, snapshot.exists, let data = snapshot.data() else {
+                    continuation.yield(nil)
+                    return
+                }
+                continuation.yield(Self.parseDocument(data, id: snapshot.documentID, viewerUid: viewerUid))
+            }
+            let box = ConvoyListenerBox(registration: registration)
+            continuation.onTermination = { _ in box.registration.remove() }
+        }
     }
 
     func list() async -> ConvoyManagementListResult {
@@ -73,6 +96,49 @@ final class FirebaseConvoyManagementRepository: ConvoyManagementRepository, @unc
     }
 
     static func createIfAvailable() -> ConvoyManagementRepository? {
-        KccFunctionsClient.createIfAvailable().map(Self.init(client:))
+        KccFunctionsClient.createIfAvailable().map {
+            Self(client: $0, firestore: Firestore.firestore())
+        }
     }
+
+    private static func parseDocument(
+        _ document: [String: Any],
+        id: String,
+        viewerUid: String
+    ) -> ConvoyItem? {
+        let storedMembers = document["members"] as? [String: Any] ?? [:]
+        let profiles = document["memberProfiles"] as? [String: Any] ?? [:]
+        let members: [[String: Any]] = storedMembers.compactMap { uid, raw in
+            guard var member = raw as? [String: Any] else { return nil }
+            member["uid"] = uid
+            if let profile = profiles[uid] as? [String: Any] {
+                member["displayName"] = profile["displayName"]
+            }
+            return member
+        }
+        var wire = document
+        wire["convoyId"] = id
+        wire["members"] = members
+        if let viewer = storedMembers[viewerUid] as? [String: Any],
+           let role = viewer["role"] as? String,
+           let inviteStatus = viewer["inviteStatus"] as? String
+        {
+            wire["viewer"] = [
+                "role": role,
+                "inviteStatus": inviteStatus
+            ]
+        } else {
+            wire["viewer"] = NSNull()
+        }
+        if let createdAt = document["createdAt"] as? Timestamp {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            wire["createdAt"] = formatter.string(from: createdAt.dateValue())
+        }
+        return ConvoyManagementParser.parseItem(wire)
+    }
+}
+
+private struct ConvoyListenerBox: @unchecked Sendable {
+    let registration: ListenerRegistration
 }

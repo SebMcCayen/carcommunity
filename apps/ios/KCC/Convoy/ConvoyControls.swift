@@ -22,6 +22,7 @@ private struct ConvoySheetTarget: Identifiable {
 }
 
 struct ConvoyStatusBar: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Bindable var coordinator: ConvoyManagementCoordinator
     let convoy: ConvoyItem
     let friendsCoordinator: FriendsCoordinator?
@@ -64,11 +65,21 @@ struct ConvoyStatusBar: View {
                 .accessibilityLabel(Text(exitLabel))
             }
 
-            if let error = coordinator.actionError {
-                Text(ConvoyManagementStrings.errorKey(error))
-                    .font(.system(size: KccTypeScale.caption))
-                    .foregroundStyle(KccPalette.errorRed)
-                    .lineLimit(2)
+            if let error = coordinator.actionError(for: convoy.convoyId) {
+                HStack {
+                    Text(ConvoyManagementStrings.errorKey(error))
+                        .font(.system(size: KccTypeScale.caption))
+                        .foregroundStyle(KccPalette.errorRed)
+                        .lineLimit(2)
+                    Spacer(minLength: KccSpacing.s2)
+                    Button {
+                        coordinator.clearActionError()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text("convoy.close"))
+                }
             }
         }
         .font(.system(size: KccTypeScale.bodySm, weight: .semibold))
@@ -111,20 +122,12 @@ struct ConvoyStatusBar: View {
         } message: {
             Text(exitBody)
         }
-        // The active driving surface owns the refresh lifetime. When the bar
-        // disappears because the convoy ended or the user left, this task is
-        // cancelled with it and the polling stops.
-        .task(id: convoy.convoyId) {
-            var refreshDelaySeconds = 60
-            while !Task.isCancelled {
-                do {
-                    try await Task.sleep(for: .seconds(refreshDelaySeconds))
-                } catch {
-                    return
-                }
-                let refreshed = await coordinator.refresh()
-                refreshDelaySeconds = refreshed ? 60 : min(refreshDelaySeconds * 2, 300)
-            }
+        // Observe only this convoy document while the app is foregrounded.
+        // Changing convoy or scene phase cancels the stream and removes its
+        // Firestore listener through AsyncStream termination.
+        .task(id: "\(convoy.convoyId)-\(String(describing: scenePhase))") {
+            guard scenePhase == .active else { return }
+            await coordinator.observeConvoy(id: convoy.convoyId)
         }
     }
 
@@ -302,7 +305,7 @@ struct ConvoyInviteSheet: View {
                     }
                 }
 
-                if let error = coordinator.actionError {
+                if let error = coordinator.actionError(for: convoy.convoyId) {
                     Section {
                         Text(ConvoyManagementStrings.errorKey(error))
                             .foregroundStyle(KccPalette.errorRed)
@@ -390,10 +393,20 @@ struct ConvoyDetailScreen: View {
                 }
             }
 
-            if let error = coordinator.actionError {
+            if let error = coordinator.actionError(for: convoy.convoyId) {
                 Section {
-                    Text(ConvoyManagementStrings.errorKey(error))
-                        .foregroundStyle(KccPalette.errorRed)
+                    HStack {
+                        Text(ConvoyManagementStrings.errorKey(error))
+                            .foregroundStyle(KccPalette.errorRed)
+                        Spacer()
+                        Button {
+                            coordinator.clearActionError()
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(Text("convoy.close"))
+                    }
                 }
             }
 
@@ -420,7 +433,7 @@ struct ConvoyDetailScreen: View {
                     )
                     LabeledContent(
                         "convoy.summaryDistance",
-                        value: recap.distanceMeters.map(ConvoySummaryFormat.distance)
+                        value: recap.distanceMeters.map { DriveFormatters.formatDistance($0) }
                             ?? String(localized: "convoy.summaryDistanceUnavailable")
                     )
                     if !recap.participants.isEmpty {
@@ -571,11 +584,4 @@ private enum ConvoySummaryFormat {
         return "\(remainder)s"
     }
 
-    static func distance(_ meters: Double) -> String {
-        let meters = max(meters, 0)
-        if meters >= 1_000 {
-            return String(format: "%.1f km", (meters / 1_000 * 10).rounded() / 10)
-        }
-        return "\(Int(meters.rounded())) m"
-    }
 }

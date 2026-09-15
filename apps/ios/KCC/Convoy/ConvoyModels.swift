@@ -287,7 +287,7 @@ enum ConvoyManagementParser {
         (raw as? [Any] ?? []).compactMap(parseItem)
     }
 
-    private static func parseItem(_ raw: Any?) -> ConvoyItem? {
+    static func parseItem(_ raw: Any?) -> ConvoyItem? {
         guard let data = raw as? [String: Any],
               let convoyId = clean(data["convoyId"] as? String),
               let statusRaw = data["status"] as? String,
