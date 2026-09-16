@@ -320,16 +320,22 @@ struct ConvoyInviteSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("convoy.inviteSubmit") {
+                        guard !validSelection.isEmpty,
+                              validSelection.count == selected.count,
+                              selected.count <= selectionLimit
+                        else { return }
+                        let inviteeUids = Array(validSelection)
                         Task {
                             if await coordinator.invite(
                                 convoyId: convoy.convoyId,
-                                inviteeUids: Array(selected)
+                                inviteeUids: inviteeUids
                             ) {
                                 showInviteResult = true
                             }
                         }
                     }
-                    .disabled(selected.isEmpty || working)
+                    .disabled(validSelection.isEmpty || validSelection.count != selected.count
+                              || selected.count > selectionLimit || working)
                 }
             }
             .task {
@@ -337,6 +343,8 @@ struct ConvoyInviteSheet: View {
                 coordinator.clearInviteResult()
                 await friendsCoordinator.load()
             }
+            .onChange(of: memberIds) { _, _ in trimSelection() }
+            .onChange(of: selectionLimit) { _, _ in trimSelection() }
         }
         .interactiveDismissDisabled(working)
         .alert(inviteResultMessage, isPresented: $showInviteResult) {
@@ -350,6 +358,11 @@ struct ConvoyInviteSheet: View {
     private var memberIds: Set<String> { Set(convoy.members.map(\.uid)) }
     private var working: Bool { coordinator.busyConvoyIds.contains(convoy.convoyId) }
     private var selectionLimit: Int { ConvoyBarLogic.maximumInviteSelection(for: convoy) }
+    private var validSelection: Set<String> { selected.subtracting(memberIds) }
+
+    private func trimSelection() {
+        selected = Set(validSelection.sorted().prefix(selectionLimit))
+    }
 
     private var inviteResultMessage: String {
         guard let result = coordinator.lastInviteResult else { return "" }
@@ -425,7 +438,7 @@ struct ConvoyDetailScreen: View {
                 Section("convoy.summaryTitle") {
                     LabeledContent(
                         "convoy.summaryDuration",
-                        value: ConvoySummaryFormat.duration(recap.durationSeconds)
+                        value: DriveFormatters.formatDuration(recap.durationSeconds)
                     )
                     LabeledContent(
                         "convoy.summaryParticipants",
@@ -461,7 +474,7 @@ struct ConvoyDetailScreen: View {
                         Button(leaveLabel, role: .destructive) { confirm(.leave) }
                             .disabled(working)
                     }
-                    if convoy.viewerIsOwner && convoy.status == .active {
+                    if convoy.viewerIsOwner {
                         Button("convoy.end", role: .destructive) { confirm(.end) }
                             .disabled(working)
                     }
@@ -571,17 +584,4 @@ struct ConvoyDetailScreen: View {
             exitChoice: exitChoice
         )
     }
-}
-
-private enum ConvoySummaryFormat {
-    static func duration(_ totalSeconds: Int) -> String {
-        let seconds = max(totalSeconds, 0)
-        let hours = seconds / 3_600
-        let minutes = (seconds % 3_600) / 60
-        let remainder = seconds % 60
-        if hours > 0 { return String(format: "%dh %02dm", hours, minutes) }
-        if minutes > 0 { return String(format: "%dm %02ds", minutes, remainder) }
-        return "\(remainder)s"
-    }
-
 }

@@ -125,6 +125,7 @@ final class ConvoyManagementCoordinator {
                 removeConvoy(id: convoyId)
             }
         }
+        if !Task.isCancelled { _ = await refresh() }
     }
 
     @discardableResult
@@ -198,7 +199,7 @@ final class ConvoyManagementCoordinator {
         case .failed(let error):
             guard !Task.isCancelled else { return false }
             setActionError(error, convoyId: convoyId)
-            if error == .notFound || error == .noInvitees {
+            if error == .notFound || error == .unresolvedPrecondition {
                 await refreshAfterMutation(using: repository)
             }
             return false

@@ -900,24 +900,26 @@ export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListConvoysRe
     .orderBy('createdAt', 'desc')
     .limit(MAX_CONVOYS_RETURNED);
 
-  // A member's accepted live convoy must not disappear behind 200 ended
-  // history rows. The companion query uses the existing
-  // [memberUids ARRAY_CONTAINS, status] index and is bounded independently;
-  // only accepted live memberships are folded into the public 200-row result.
+  // Pending/declined invites also occupy memberUids. Page through live rows
+  // until the accepted convoy is found; a fixed limit before that check can
+  // conceal it behind an arbitrarily large set of invitations.
   const liveMembershipQuery = db
     .collection('convoys')
     .where('memberUids', 'array-contains', actor.uid)
     .where('status', 'in', [...ACTIVE_CONVOY_STATUSES])
     .limit(MAX_CONVOYS_RETURNED);
 
-  const [newestSnap, liveMembershipSnap] = await Promise.all([
-    newestQuery.get(),
-    liveMembershipQuery.get(),
-  ]);
+  const newestSnap = await newestQuery.get();
+  let livePage = await liveMembershipQuery.get();
+  let acceptedLive = livePage.docs.find((doc) => isActiveConvoyParticipant(doc.data(), actor.uid));
+  while (!acceptedLive && livePage.docs.length === MAX_CONVOYS_RETURNED) {
+    livePage = await liveMembershipQuery.startAfter(livePage.docs[livePage.docs.length - 1]).get();
+    acceptedLive = livePage.docs.find((doc) => isActiveConvoyParticipant(doc.data(), actor.uid));
+  }
   const newestIds = new Set(newestSnap.docs.map((doc) => doc.id));
-  const missingLiveMemberships = liveMembershipSnap.docs.filter(
-    (doc) => !newestIds.has(doc.id) && isActiveConvoyParticipant(doc.data(), actor.uid),
-  );
+  const missingLiveMemberships = acceptedLive && !newestIds.has(acceptedLive.id)
+    ? [acceptedLive]
+    : [];
   const docs = [...missingLiveMemberships, ...newestSnap.docs].slice(0, MAX_CONVOYS_RETURNED);
   docs.sort(
     (left, right) =>

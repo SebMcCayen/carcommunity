@@ -398,7 +398,7 @@ enum ConvoyManagementErrorMapper {
         case .permissionDenied: .notMember
         case .invalidArgument: .invalid
         case .notFound: .notFound
-        case .failedPrecondition: .noInvitees
+        case .failedPrecondition: .unresolvedPrecondition
         default: .generic
         }
     }

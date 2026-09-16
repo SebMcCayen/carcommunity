@@ -61,7 +61,7 @@ final class ConvoyManagementModelsTests: XCTestCase {
         XCTAssertEqual(ConvoyManagementErrorMapper.mapList(.permissionDenied), .notMember)
         XCTAssertEqual(
             ConvoyManagementErrorMapper.mapInvite(.failedPrecondition),
-            .noInvitees
+            .unresolvedPrecondition
         )
     }
 

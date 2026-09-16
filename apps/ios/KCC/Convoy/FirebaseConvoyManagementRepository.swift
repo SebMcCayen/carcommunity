@@ -18,7 +18,10 @@ final class FirebaseConvoyManagementRepository: ConvoyManagementRepository, @unc
         let document = firestore.collection("convoys").document(convoyId)
         return AsyncStream { continuation in
             let registration = document.addSnapshotListener { snapshot, error in
-                guard error == nil else { return }
+                guard error == nil else {
+                    continuation.finish()
+                    return
+                }
                 guard let snapshot, snapshot.exists, let data = snapshot.data() else {
                     continuation.yield(nil)
                     return
@@ -115,6 +118,13 @@ final class FirebaseConvoyManagementRepository: ConvoyManagementRepository, @unc
                 member["displayName"] = profile["displayName"]
             }
             return member
+        }.sorted { left, right in
+            let leftUid = left["uid"] as? String ?? ""
+            let rightUid = right["uid"] as? String ?? ""
+            let ownerUid = document["ownerUid"] as? String
+            if leftUid == ownerUid { return true }
+            if rightUid == ownerUid { return false }
+            return leftUid < rightUid
         }
         var wire = document
         wire["convoyId"] = id

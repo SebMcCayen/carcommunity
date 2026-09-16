@@ -494,6 +494,39 @@ describe('convoy lifecycle: respond / start / end / list', () => {
       'active',
     );
   }, 60_000);
+
+  it('finds an accepted live convoy beyond 200 pending live invitations', async () => {
+    const user = await newMember('CappedPendingMemberC');
+    const invited = { uid: user.uid, role: 'member', inviteStatus: 'invited' };
+    const accepted = { uid: user.uid, role: 'owner', inviteStatus: 'accepted' };
+    const profiles = { [user.uid]: { displayName: 'CappedPendingMemberC', avatarPath: null } };
+    const batch = adminDb.batch();
+    for (let index = 0; index < 201; index += 1) {
+      batch.set(adminDb.collection('convoys').doc(`a-pending-${user.uid}-${index}`), {
+        ownerUid: `other-${index}`,
+        status: 'active',
+        members: { [user.uid]: invited },
+        memberProfiles: profiles,
+        memberUids: [user.uid],
+        createdAt: Timestamp.fromMillis(2_000 + index),
+      });
+    }
+    const liveId = `z-accepted-${user.uid}`;
+    batch.set(adminDb.collection('convoys').doc(liveId), {
+      ownerUid: user.uid,
+      status: 'active',
+      members: { [user.uid]: accepted },
+      memberProfiles: profiles,
+      memberUids: [user.uid],
+      createdAt: Timestamp.fromMillis(1_000),
+    });
+    await batch.commit();
+
+    await signInAs(user);
+    const result = (await call('convoy-list', {})).data as { convoys: ConvoySummary[] };
+    expect(result.convoys).toHaveLength(200);
+    expect(result.convoys.some((convoy) => convoy.convoyId === liveId)).toBe(true);
+  }, 60_000);
 });
 
 describe('convoys Firestore rules', () => {
