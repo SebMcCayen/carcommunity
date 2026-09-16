@@ -80,6 +80,7 @@ final class ConvoyManagementCoordinator {
         switch await repository.respond(convoyId: convoyId, action: action) {
         case .updated(let convoy):
             guard !Task.isCancelled else { return nil }
+            applyUpdatedConvoy(convoy)
             await refreshAfterMutation(using: repository)
             return action == .accept ? convoy : nil
         case .failed(.unresolvedPrecondition):
@@ -117,15 +118,23 @@ final class ConvoyManagementCoordinator {
 
     func observeConvoy(id convoyId: String) async {
         guard let repository else { return }
-        for await convoy in repository.observeConvoy(convoyId: convoyId) {
-            guard !Task.isCancelled else { return }
-            if let convoy {
-                applyUpdatedConvoy(convoy)
-            } else {
-                removeConvoy(id: convoyId)
+        while !Task.isCancelled {
+            do {
+                for try await convoy in repository.observeConvoy(convoyId: convoyId) {
+                    guard !Task.isCancelled else { return }
+                    if let convoy {
+                        applyUpdatedConvoy(convoy)
+                    } else {
+                        removeConvoy(id: convoyId)
+                    }
+                }
+                return
+            } catch {
+                guard !Task.isCancelled else { return }
+                _ = await refresh()
+                try? await Task.sleep(for: .seconds(3))
             }
         }
-        if !Task.isCancelled { _ = await refresh() }
     }
 
     @discardableResult
@@ -194,6 +203,7 @@ final class ConvoyManagementCoordinator {
         case .completed(let result):
             guard !Task.isCancelled else { return false }
             lastInviteResult = result
+            applyUpdatedConvoy(result.convoy)
             await refreshAfterMutation(using: repository)
             return true
         case .failed(let error):
@@ -228,6 +238,7 @@ final class ConvoyManagementCoordinator {
 
     private func applyUpdatedConvoy(_ convoy: ConvoyItem) {
         guard let snapshot else { return }
+        supersedeListRequests()
         var convoys = snapshot.convoys
         if let index = convoys.firstIndex(where: { $0.convoyId == convoy.convoyId }) {
             convoys[index] = convoy
@@ -245,6 +256,7 @@ final class ConvoyManagementCoordinator {
 
     private func removeConvoy(id: String) {
         guard let snapshot else { return }
+        supersedeListRequests()
         state = .loaded(
             ConvoyManagementSnapshot(
                 convoys: snapshot.convoys.filter { $0.convoyId != id },

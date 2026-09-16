@@ -74,7 +74,11 @@ final class ConvoyManagementModelsTests: XCTestCase {
                 "invited": [["uid": "one"], ["uid": "two"]],
                 "skipped": [["uid": "three"]]
             ]),
-            .completed(ConvoyInviteResult(invitedCount: 2, skippedCount: 1))
+            .completed(ConvoyInviteResult(
+                convoy: ConvoyManagementParser.parseItem(payload)!,
+                invitedCount: 2,
+                skippedCount: 1
+            ))
         )
         XCTAssertEqual(
             ConvoyManagementParser.parseInvite(["invited": [], "skipped": []]),

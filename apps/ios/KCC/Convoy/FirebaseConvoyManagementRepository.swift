@@ -11,15 +11,15 @@ final class FirebaseConvoyManagementRepository: ConvoyManagementRepository, @unc
         self.firestore = firestore
     }
 
-    func observeConvoy(convoyId: String) -> AsyncStream<ConvoyItem?> {
+    func observeConvoy(convoyId: String) -> AsyncThrowingStream<ConvoyItem?, Error> {
         guard let viewerUid = Auth.auth().currentUser?.uid else {
-            return AsyncStream { $0.finish() }
+            return AsyncThrowingStream { $0.finish() }
         }
         let document = firestore.collection("convoys").document(convoyId)
-        return AsyncStream { continuation in
+        return AsyncThrowingStream { continuation in
             let registration = document.addSnapshotListener { snapshot, error in
                 guard error == nil else {
-                    continuation.finish()
+                    continuation.finish(throwing: ConvoyListenerFailure.stopped)
                     return
                 }
                 guard let snapshot, snapshot.exists, let data = snapshot.data() else {
@@ -100,7 +100,13 @@ final class FirebaseConvoyManagementRepository: ConvoyManagementRepository, @unc
 
     static func createIfAvailable() -> ConvoyManagementRepository? {
         KccFunctionsClient.createIfAvailable().map {
-            Self(client: $0, firestore: Firestore.firestore())
+            let firestore = Firestore.firestore()
+            if let emulator = FirebaseEmulatorHost.parse(
+                ProcessInfo.processInfo.environment["FIREBASE_FIRESTORE_EMULATOR_HOST"]
+            ), firestore.settings.host != "\(emulator.host):\(emulator.port)" {
+                firestore.useEmulator(withHost: emulator.host, port: emulator.port)
+            }
+            return Self(client: $0, firestore: firestore)
         }
     }
 
@@ -151,4 +157,8 @@ final class FirebaseConvoyManagementRepository: ConvoyManagementRepository, @unc
 
 private struct ConvoyListenerBox: @unchecked Sendable {
     let registration: ListenerRegistration
+}
+
+private enum ConvoyListenerFailure: Error {
+    case stopped
 }

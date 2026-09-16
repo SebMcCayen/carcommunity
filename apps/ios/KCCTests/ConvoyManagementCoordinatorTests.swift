@@ -32,9 +32,9 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
             self.observedConvoys = observedConvoys
         }
 
-        func observeConvoy(convoyId: String) -> AsyncStream<ConvoyItem?> {
+        func observeConvoy(convoyId: String) -> AsyncThrowingStream<ConvoyItem?, Error> {
             let values = lock.withLock { observedConvoys }
-            return AsyncStream { continuation in
+            return AsyncThrowingStream { continuation in
                 values.forEach { continuation.yield($0) }
                 continuation.finish()
             }
@@ -114,6 +114,27 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.state, .loaded(after))
         XCTAssertEqual(repository.respondCalls.count, 1)
         XCTAssertTrue(coordinator.busyConvoyIds.isEmpty)
+    }
+
+    @MainActor
+    func testAcceptKeepsCallableStateWhenListRefreshFails() async {
+        let invite = item(id: "invite", viewer: .invited)
+        let joined = item(id: "invite", viewer: .accepted)
+        let repository = FakeRepository(
+            listResults: [
+                .loaded(snapshot(convoys: [invite], pending: [invite])),
+                .failed(.generic)
+            ],
+            respondResult: .updated(joined)
+        )
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        await coordinator.load()
+
+        await coordinator.respond(convoyId: "invite", action: .accept)
+
+        XCTAssertEqual(coordinator.convoy(id: "invite"), joined)
+        XCTAssertEqual(coordinator.activeConvoy, joined)
+        XCTAssertEqual(coordinator.snapshot?.pendingInvites, [])
     }
 
     @MainActor
@@ -239,6 +260,27 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testLiveObservationSupersedesInFlightListRefresh() async {
+        let active = item(id: "convoy", viewer: .accepted)
+        let ended = item(id: "convoy", status: .ended, viewer: .accepted)
+        let repository = FakeRepository(
+            listResults: [.loaded(snapshot(convoys: [active])), .loaded(snapshot(convoys: [active]))],
+            listDelaysMilliseconds: [0, 200],
+            observedConvoys: [ended]
+        )
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        await coordinator.load()
+
+        let staleRefresh = Task { await coordinator.refresh() }
+        while repository.recordedListCallCount() < 2 { await Task.yield() }
+        await coordinator.observeConvoy(id: "convoy")
+        let refreshSucceeded = await staleRefresh.value
+        XCTAssertFalse(refreshSucceeded)
+
+        XCTAssertEqual(coordinator.convoy(id: "convoy"), ended)
+    }
+
+    @MainActor
     func testLeavePublishesAndClearsResult() async {
         let active = item(id: "convoy", viewer: .accepted)
         let leaveResult = ConvoyLeaveResult(outcome: .left, newLeaderUid: "next-leader")
@@ -321,7 +363,11 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
         let active = item(id: "convoy", viewer: .accepted)
         let repository = FakeRepository(
             listResults: [.loaded(snapshot(convoys: [active])), .loaded(snapshot(convoys: [active]))],
-            inviteResult: .completed(ConvoyInviteResult(invitedCount: 2, skippedCount: 0))
+            inviteResult: .completed(ConvoyInviteResult(
+                convoy: active,
+                invitedCount: 2,
+                skippedCount: 0
+            ))
         )
         let coordinator = ConvoyManagementCoordinator(repository: repository)
         await coordinator.load()
@@ -335,8 +381,32 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
         XCTAssertEqual(repository.inviteCalls.first?.1, ["a", "b"])
         XCTAssertEqual(
             coordinator.lastInviteResult,
-            ConvoyInviteResult(invitedCount: 2, skippedCount: 0)
+            ConvoyInviteResult(convoy: active, invitedCount: 2, skippedCount: 0)
         )
+    }
+
+    @MainActor
+    func testInviteKeepsCallableRosterWhenListRefreshFails() async {
+        let active = item(id: "convoy", viewer: .accepted)
+        let invited = ConvoyMember(
+            uid: "friend", displayName: "Friend", role: .member, inviteStatus: .invited
+        )
+        let updated = ConvoyItem(
+            convoyId: "convoy", title: nil, status: .active,
+            members: [invited], viewer: active.viewer, createdAt: nil
+        )
+        let repository = FakeRepository(
+            listResults: [.loaded(snapshot(convoys: [active])), .failed(.generic)],
+            inviteResult: .completed(ConvoyInviteResult(
+                convoy: updated, invitedCount: 1, skippedCount: 0
+            ))
+        )
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        await coordinator.load()
+
+        let succeeded = await coordinator.invite(convoyId: "convoy", inviteeUids: ["friend"])
+        XCTAssertTrue(succeeded)
+        XCTAssertEqual(coordinator.convoy(id: "convoy"), updated)
     }
 
     @MainActor

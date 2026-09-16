@@ -172,6 +172,7 @@ struct ConvoyLeaveResult: Equatable, Sendable {
 }
 
 struct ConvoyInviteResult: Equatable, Sendable {
+    let convoy: ConvoyItem
     let invitedCount: Int
     let skippedCount: Int
 }
@@ -271,12 +272,13 @@ enum ConvoyManagementParser {
     }
 
     static func parseInvite(_ data: [String: Any]?) -> ConvoyInviteMutationResult {
-        guard parseItem(data?["convoy"]) != nil,
+        guard let convoy = parseItem(data?["convoy"]),
               let invited = data?["invited"] as? [Any],
               let skipped = data?["skipped"] as? [Any]
         else { return .failed(.generic) }
         return .completed(
             ConvoyInviteResult(
+                convoy: convoy,
                 invitedCount: invited.count,
                 skippedCount: skipped.count
             )
