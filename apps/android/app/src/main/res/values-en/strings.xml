@@ -655,6 +655,7 @@
     <string name="convoy_untitled">Convoy</string>
     <string name="convoy_unknownMember">Member</string>
     <string name="convoy_close">Close</string>
+    <string name="convoy_inviteFull">This convoy is full. No more people can be invited.</string>
     <string name="convoy_errorSignedOut">Please sign in to manage convoys.</string>
     <string name="convoy_errorNotMember">Your account cannot access convoys right now.</string>
     <string name="convoy_errorInvalid">That request wasn\'t valid.</string>
@@ -669,6 +670,7 @@
     <string name="convoy_errorAlreadyInConvoy">You\'re already in a convoy. Leave or end it before joining another.</string>
     <string name="convoy_alreadyInConvoyCreateHint">You\'re already in a convoy — leave or end it to start a new one.</string>
     <string name="convoy_alreadyInConvoyAcceptHint">You\'re already in a convoy — leave or end it before joining another.</string>
+    <string name="convoy_membershipUncertainHint">We can\'t verify your current convoy. Refresh and try again.</string>
     <string name="convoy_barMembers">%1$d in convoy</string>
     <string name="convoy_barMemberListTitle">In this convoy</string>
     <string name="convoy_barMemberUnnamed">Member</string>

@@ -26,7 +26,7 @@ final class ConvoyCreateModelsTests: XCTestCase {
         ])
 
         XCTAssertFalse(snapshot.hasActiveConvoy)
-        XCTAssertTrue(snapshot.isExhaustive)
+        XCTAssertFalse(snapshot.isExhaustive)
     }
 
     func testPendingInviteDoesNotCountAsActiveParticipation() {
@@ -71,6 +71,22 @@ final class ConvoyCreateModelsTests: XCTestCase {
                 )
             )
         )
+    }
+
+    func testCreateCarriesReturnedConvoyIntoManagementState() {
+        let result = ConvoyCreateResponseParser.parseCreate([
+            "convoy": [
+                "convoyId": "new", "status": "forming", "ownerUid": "owner",
+                "viewer": ["role": "owner", "inviteStatus": "accepted"]
+            ],
+            "invited": [], "skipped": []
+        ])
+
+        guard case .created(let created) = result else {
+            return XCTFail("Expected a created convoy")
+        }
+        XCTAssertEqual(created.convoy?.convoyId, "new")
+        XCTAssertEqual(created.convoy?.viewer?.inviteStatus, .accepted)
     }
 
     func testCreateRejectsAMalformedSuccessPayload() {

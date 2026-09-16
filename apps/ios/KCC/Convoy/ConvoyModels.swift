@@ -28,7 +28,27 @@ struct ConvoyMember: Equatable, Sendable, Identifiable {
 }
 
 struct ConvoyViewer: Equatable, Sendable {
+    let role: ConvoyRole?
     let inviteStatus: ConvoyInviteStatus
+
+    init(inviteStatus: ConvoyInviteStatus, role: ConvoyRole? = nil) {
+        self.role = role
+        self.inviteStatus = inviteStatus
+    }
+}
+
+struct ConvoySummaryStats: Equatable, Sendable {
+    let durationSeconds: Int
+    let participantUids: [String]
+    let participantCount: Int
+    let distanceMeters: Double?
+}
+
+struct ConvoyRecapState: Equatable, Sendable {
+    let durationSeconds: Int
+    let participants: [ConvoyMember]
+    let participantCount: Int
+    let distanceMeters: Double?
 }
 
 struct ConvoyItem: Equatable, Sendable, Identifiable {
@@ -38,6 +58,25 @@ struct ConvoyItem: Equatable, Sendable, Identifiable {
     let members: [ConvoyMember]
     let viewer: ConvoyViewer?
     let createdAt: Date?
+    let summary: ConvoySummaryStats?
+
+    init(
+        convoyId: String,
+        title: String?,
+        status: ConvoyStatus,
+        members: [ConvoyMember],
+        viewer: ConvoyViewer?,
+        createdAt: Date?,
+        summary: ConvoySummaryStats? = nil
+    ) {
+        self.convoyId = convoyId
+        self.title = title
+        self.status = status
+        self.members = members
+        self.viewer = viewer
+        self.createdAt = createdAt
+        self.summary = summary
+    }
 
     var id: String { convoyId }
 
@@ -47,6 +86,56 @@ struct ConvoyItem: Equatable, Sendable, Identifiable {
 
     var acceptedMemberCount: Int {
         members.filter { $0.inviteStatus == .accepted }.count
+    }
+
+    var viewerIsOwner: Bool { viewer?.role == .owner }
+
+    var acceptedMembers: [ConvoyMember] {
+        members.filter { $0.inviteStatus == .accepted }
+    }
+
+    var pendingMembers: [ConvoyMember] {
+        members.filter { $0.inviteStatus == .invited }
+    }
+
+    var recap: ConvoyRecapState? {
+        guard status == .ended, let summary else { return nil }
+        let membersByUid = members.reduce(into: [String: ConvoyMember]()) { result, member in
+            result[member.uid] = member
+        }
+        let participants = summary.participantUids.map { uid in
+            membersByUid[uid] ?? ConvoyMember(
+                uid: uid, displayName: nil, role: .member, inviteStatus: .accepted
+            )
+        }
+        return ConvoyRecapState(
+            durationSeconds: summary.durationSeconds,
+            participants: participants,
+            participantCount: max(summary.participantCount, summary.participantUids.count),
+            distanceMeters: summary.distanceMeters
+        )
+    }
+}
+
+enum ConvoyProfileHydration {
+    static func apply(_ convoy: ConvoyItem, names: [String: String]) -> ConvoyItem {
+        guard !names.isEmpty else { return convoy }
+        return ConvoyItem(
+            convoyId: convoy.convoyId,
+            title: convoy.title,
+            status: convoy.status,
+            members: convoy.members.map { member in
+                ConvoyMember(
+                    uid: member.uid,
+                    displayName: names[member.uid] ?? member.displayName,
+                    role: member.role,
+                    inviteStatus: member.inviteStatus
+                )
+            },
+            viewer: convoy.viewer,
+            createdAt: convoy.createdAt,
+            summary: convoy.summary
+        )
     }
 }
 
@@ -66,9 +155,21 @@ struct ConvoyManagementSnapshot: Equatable, Sendable {
         }
     }
 
-    /// False means the capped list cannot prove that an older active
-    /// membership does not exist, so joining another convoy must stay blocked.
+    /// False means a capped list or incomplete live-membership scan cannot
+    /// rule out an older active membership, so joining must stay blocked.
     var canJoinAnotherConvoy: Bool { !hasActiveConvoy && isExhaustive }
+
+    func preservingKnownActive(from previous: ConvoyManagementSnapshot?) -> Self {
+        guard !isExhaustive, let previous,
+              let active = ConvoyBarLogic.activeConvoy(in: previous),
+              !convoys.contains(where: { $0.convoyId == active.convoyId })
+        else { return self }
+        return Self(
+            convoys: [active] + convoys,
+            pendingInvites: pendingInvites,
+            isExhaustive: false
+        )
+    }
 }
 
 enum ConvoyAction: String, Equatable, Sendable {
@@ -83,8 +184,82 @@ enum ConvoyActionError: Equatable, Sendable {
     case notFound
     case inviteGone
     case alreadyInConvoy
+    case membershipUncertain
     case unresolvedPrecondition
+    case notLeader
+    case cannotStart
+    case alreadyEnded
+    case leaveFailed
+    case noInvitees
     case generic
+}
+
+enum ConvoyLifecycleAction: String, Equatable, Sendable {
+    case start
+    case end
+    case leave
+}
+
+enum ConvoyLeaveOutcome: String, Equatable, Sendable {
+    case left
+    case leftAndEnded = "left_and_ended"
+}
+
+struct ConvoyLeaveResult: Equatable, Sendable {
+    let outcome: ConvoyLeaveOutcome
+    let newLeaderUid: String?
+}
+
+struct ConvoyInviteResult: Equatable, Sendable {
+    let convoy: ConvoyItem
+    let invitedCount: Int
+    let skippedCount: Int
+}
+
+enum ConvoyLifecycleResult: Equatable, Sendable {
+    case updated(ConvoyItem)
+    case left(ConvoyLeaveResult)
+    case failed(ConvoyActionError)
+}
+
+enum ConvoyInviteMutationResult: Equatable, Sendable {
+    case completed(ConvoyInviteResult)
+    case failed(ConvoyActionError)
+}
+
+enum ConvoyExitChoice: Equatable, Sendable {
+    case leaveOrEnd
+    case endOnly
+    case leaveOnly
+    case leaveEndsConvoy
+}
+
+enum ConvoyBarLogic {
+    static let minimumRemainingMembers = 2
+    static let maximumConvoySize = 25
+    static let maximumInviteBatchSize = 25
+
+    static func maximumInviteSelection(for convoy: ConvoyItem) -> Int {
+        min(maximumInviteBatchSize, max(maximumConvoySize - convoy.members.count, 0))
+    }
+
+    static func activeConvoy(in snapshot: ConvoyManagementSnapshot) -> ConvoyItem? {
+        let joined = snapshot.convoys.filter {
+            $0.status != .ended && $0.viewer?.inviteStatus == .accepted
+        }
+        return joined.first(where: { $0.status == .active }) ?? joined.first
+    }
+
+    static func exitChoice(viewerIsOwner: Bool, acceptedMemberCount: Int) -> ConvoyExitChoice {
+        let remaining = max(acceptedMemberCount - 1, 0)
+        let survives = remaining >= minimumRemainingMembers
+        switch (viewerIsOwner, survives) {
+        case (true, true): return .leaveOrEnd
+        case (true, false): return .endOnly
+        case (false, true): return .leaveOnly
+        case (false, false): return .leaveEndsConvoy
+        }
+    }
 }
 
 enum ConvoyManagementListResult: Equatable, Sendable {
@@ -101,13 +276,19 @@ enum ConvoyManagementParser {
     static let listLimit = 200
 
     static func parseList(_ data: [String: Any]?) -> ConvoyManagementSnapshot {
+        let rawConvoys = data?["convoys"] as? [Any]
+        let rawPending = data?["pendingInvites"] as? [Any]
         let convoys = parseItems(data?["convoys"])
         let pendingInvites = parseItems(data?["pendingInvites"])
             .filter { $0.status != .ended && $0.viewer?.inviteStatus == .invited }
+        let validPayload = rawConvoys != nil && rawPending != nil
+            && convoys.count == (rawConvoys?.count ?? -1)
+            && pendingInvites.count == (rawPending?.count ?? -1)
         return ConvoyManagementSnapshot(
             convoys: convoys,
             pendingInvites: pendingInvites,
-            isExhaustive: (data?["convoys"] as? [Any] ?? []).count < listLimit
+            isExhaustive: validPayload &&
+                ((data?["isExhaustive"] as? Bool) ?? ((rawConvoys?.count ?? listLimit) < listLimit))
         )
     }
 
@@ -116,11 +297,44 @@ enum ConvoyManagementParser {
         return .updated(convoy)
     }
 
+    static func parseLifecycle(
+        _ data: [String: Any]?,
+        action: ConvoyLifecycleAction
+    ) -> ConvoyLifecycleResult {
+        if action == .leave {
+            guard let outcomeRaw = data?["outcome"] as? String,
+                  let outcome = ConvoyLeaveOutcome(rawValue: outcomeRaw)
+            else { return .failed(.generic) }
+            return .left(
+                ConvoyLeaveResult(
+                    outcome: outcome,
+                    newLeaderUid: clean(data?["newLeaderUid"] as? String)
+                )
+            )
+        }
+        guard let convoy = parseItem(data?["convoy"]) else { return .failed(.generic) }
+        return .updated(convoy)
+    }
+
+    static func parseInvite(_ data: [String: Any]?) -> ConvoyInviteMutationResult {
+        guard let convoy = parseItem(data?["convoy"]),
+              let invited = data?["invited"] as? [Any],
+              let skipped = data?["skipped"] as? [Any]
+        else { return .failed(.generic) }
+        return .completed(
+            ConvoyInviteResult(
+                convoy: convoy,
+                invitedCount: invited.count,
+                skippedCount: skipped.count
+            )
+        )
+    }
+
     private static func parseItems(_ raw: Any?) -> [ConvoyItem] {
         (raw as? [Any] ?? []).compactMap(parseItem)
     }
 
-    private static func parseItem(_ raw: Any?) -> ConvoyItem? {
+    static func parseItem(_ raw: Any?) -> ConvoyItem? {
         guard let data = raw as? [String: Any],
               let convoyId = clean(data["convoyId"] as? String),
               let statusRaw = data["status"] as? String,
@@ -147,7 +361,8 @@ enum ConvoyManagementParser {
                   let value = raw["inviteStatus"] as? String,
                   let status = ConvoyInviteStatus(rawValue: value)
             else { return nil }
-            return ConvoyViewer(inviteStatus: status)
+            let role = (raw["role"] as? String).flatMap(ConvoyRole.init(rawValue:))
+            return ConvoyViewer(inviteStatus: status, role: role)
         }()
         return ConvoyItem(
             convoyId: convoyId,
@@ -155,7 +370,26 @@ enum ConvoyManagementParser {
             status: status,
             members: members,
             viewer: viewer,
-            createdAt: ChannelTime.parseIso(data["createdAt"] as? String)
+            createdAt: ChannelTime.parseIso(data["createdAt"] as? String),
+            summary: parseSummary(data["summary"])
+        )
+    }
+
+    private static func parseSummary(_ raw: Any?) -> ConvoySummaryStats? {
+        guard let data = raw as? [String: Any] else { return nil }
+        let participantUids = (data["participantUids"] as? [Any] ?? [])
+            .compactMap { clean($0 as? String) }
+        let durationSeconds = max((data["durationSeconds"] as? NSNumber)?.intValue ?? 0, 0)
+        let participantCount = max(
+            (data["participantCount"] as? NSNumber)?.intValue ?? participantUids.count,
+            participantUids.count
+        )
+        let distanceMeters = (data["distanceMeters"] as? NSNumber).map { max($0.doubleValue, 0) }
+        return ConvoySummaryStats(
+            durationSeconds: durationSeconds,
+            participantUids: participantUids,
+            participantCount: participantCount,
+            distanceMeters: distanceMeters
         )
     }
 
@@ -186,6 +420,36 @@ enum ConvoyManagementErrorMapper {
         default: .generic
         }
     }
+    static func mapLifecycle(
+        _ code: KccFunctionsErrorCode,
+        action: ConvoyLifecycleAction
+    ) -> ConvoyActionError {
+        switch code {
+        case .unauthenticated: .signedOut
+        case .permissionDenied: action == .end ? .notLeader : .notMember
+        case .invalidArgument: .invalid
+        case .notFound: .notFound
+        case .failedPrecondition:
+            switch action {
+            case .start: .cannotStart
+            case .end: .alreadyEnded
+            case .leave: .leaveFailed
+            }
+        default: .generic
+        }
+    }
+
+    static func mapInvite(_ error: KccFunctionsError) -> ConvoyActionError {
+        switch error.code {
+        case .unauthenticated: .signedOut
+        case .permissionDenied: .notMember
+        case .invalidArgument: .invalid
+        case .notFound: .notFound
+        case .failedPrecondition:
+            error.reason == .noValidConvoyInvitees ? .noInvitees : .unresolvedPrecondition
+        default: .generic
+        }
+    }
 }
 
 enum ConvoyManagementStrings {
@@ -197,7 +461,13 @@ enum ConvoyManagementStrings {
         case .notFound: "convoy.errorNotFound"
         case .inviteGone: "convoy.errorInviteGone"
         case .alreadyInConvoy: "convoy.errorAlreadyInConvoy"
+        case .membershipUncertain: "convoy.membershipUncertainHint"
         case .unresolvedPrecondition, .generic: "convoy.errorGeneric"
+        case .notLeader: "convoy.errorNotLeader"
+        case .cannotStart: "convoy.errorCannotStart"
+        case .alreadyEnded: "convoy.errorAlreadyEnded"
+        case .leaveFailed: "convoy.errorLeaveFailed"
+        case .noInvitees: "convoy.errorNoInvitees"
         }
     }
 }

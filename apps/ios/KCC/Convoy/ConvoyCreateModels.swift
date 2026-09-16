@@ -7,6 +7,7 @@ enum ConvoyCreateError: Equatable, Sendable {
     case invalid
     case noInvitees
     case alreadyInConvoy
+    case membershipUncertain
     /// The callable overloads failed-precondition; the coordinator resolves it
     /// with a fresh list before selecting a user-facing reason.
     case unresolvedPrecondition
@@ -41,6 +42,7 @@ enum ConvoyCreateStrings {
         case .invalid: "convoy.errorInvalid"
         case .noInvitees: "convoy.errorNoInvitees"
         case .alreadyInConvoy: "convoy.errorAlreadyInConvoy"
+        case .membershipUncertain: "convoy.membershipUncertainHint"
         case .unresolvedPrecondition, .generic: "convoy.errorGeneric"
         }
     }
@@ -62,6 +64,14 @@ struct ConvoyCreated: Equatable, Sendable {
     let convoyId: String
     let invited: [String]
     let skippedCount: Int
+    let convoy: ConvoyItem?
+
+    init(convoyId: String, invited: [String], skippedCount: Int, convoy: ConvoyItem? = nil) {
+        self.convoyId = convoyId
+        self.invited = invited
+        self.skippedCount = skippedCount
+        self.convoy = convoy
+    }
 }
 
 enum ConvoyCreateResult: Equatable, Sendable {
@@ -73,7 +83,8 @@ enum ConvoyCreateResponseParser {
     static let listLimit = 200
 
     static func parseList(_ data: [String: Any]?) -> ConvoyCreateSnapshot {
-        let convoys = data?["convoys"] as? [Any] ?? []
+        let rawConvoys = data?["convoys"] as? [Any]
+        let convoys = rawConvoys ?? []
         let hasActive = convoys.contains { raw in
             guard let convoy = raw as? [String: Any],
                   let status = convoy["status"] as? String,
@@ -84,7 +95,12 @@ enum ConvoyCreateResponseParser {
         }
         return ConvoyCreateSnapshot(
             hasActiveConvoy: hasActive,
-            isExhaustive: convoys.count < listLimit
+            isExhaustive: rawConvoys != nil && convoys.allSatisfy { raw in
+                guard let row = raw as? [String: Any],
+                      let status = row["status"] as? String
+                else { return false }
+                return ["forming", "active", "ended"].contains(status)
+            } && ((data?["isExhaustive"] as? Bool) ?? (convoys.count < listLimit))
         )
     }
 
@@ -98,7 +114,12 @@ enum ConvoyCreateResponseParser {
         }
         let skippedCount = (data?["skipped"] as? [Any] ?? []).count
         return .created(
-            ConvoyCreated(convoyId: convoyId, invited: invited, skippedCount: skippedCount)
+            ConvoyCreated(
+                convoyId: convoyId,
+                invited: invited,
+                skippedCount: skippedCount,
+                convoy: ConvoyManagementParser.parseItem(convoy)
+            )
         )
     }
 }

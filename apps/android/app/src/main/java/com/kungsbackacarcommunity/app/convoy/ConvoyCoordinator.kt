@@ -20,6 +20,7 @@ sealed interface ConvoyListStatus {
         val convoys: List<ConvoySummary>,
         /** The subset the caller has a still-open invite to (Accept/Decline). */
         val pendingInvites: List<ConvoySummary>,
+        val isExhaustive: Boolean = true,
     ) : ConvoyListStatus {
         private val pendingIds: Set<String> = pendingInvites.mapTo(HashSet()) { it.convoyId }
 
@@ -174,6 +175,8 @@ class ConvoyCoordinator(
 ) {
     private val statusState = MutableStateFlow<ConvoyListStatus>(ConvoyListStatus.Loading)
     val status: StateFlow<ConvoyListStatus> = statusState.asStateFlow()
+    private val refreshErrorState = MutableStateFlow<ConvoyActionError?>(null)
+    val refreshError: StateFlow<ConvoyActionError?> = refreshErrorState.asStateFlow()
 
     private val createStateFlow = MutableStateFlow<CreateConvoyState>(CreateConvoyState.Idle)
     val createState: StateFlow<CreateConvoyState> = createStateFlow.asStateFlow()
@@ -279,6 +282,14 @@ class ConvoyCoordinator(
         try {
             when (val result = repository.list()) {
                 is ConvoyListResult.Loaded -> {
+                    refreshErrorState.value = null
+                    val knownActive = ConvoyBar.activeConvoy(statusState.value)
+                    val convoys = result.convoys.toMutableList()
+                    if (!result.isExhaustive && knownActive != null &&
+                        convoys.none { it.convoyId == knownActive.convoyId }
+                    ) {
+                        convoys.add(0, knownActive)
+                    }
                     // Publish the stored snapshot FIRST, then refresh the profiles
                     // onto it. The list must not wait on a second round-trip for a
                     // cosmetic overlay: gating it would add a profile RTT to every
@@ -291,8 +302,9 @@ class ConvoyCoordinator(
                     // touching the network and both publishes land in the same tick.
                     statusState.value =
                         ConvoyListStatus.Loaded(
-                            convoys = result.convoys,
+                            convoys = convoys,
                             pendingInvites = result.pendingInvites,
+                            isExhaustive = result.isExhaustive,
                         )
 
                     // ONE batched read for both lists. Pending invites go FIRST so
@@ -309,25 +321,34 @@ class ConvoyCoordinator(
                     val live =
                         runCatchingCancellable {
                             liveProfiles.loadProfiles(
-                                convoyProfileUids(result.pendingInvites + result.convoys),
+                                convoyProfileUids(result.pendingInvites + convoys),
                             )
                         }
                             .getOrDefault(emptyMap())
                     if (live.isNotEmpty()) {
                         statusState.value =
                             ConvoyListStatus.Loaded(
-                                convoys = result.convoys.map { hydrateConvoy(it, live) },
+                                convoys = convoys.map { hydrateConvoy(it, live) },
                                 pendingInvites =
                                     result.pendingInvites.map { hydrateConvoy(it, live) },
+                                isExhaustive = result.isExhaustive,
                             )
                     }
                 }
-                is ConvoyListResult.Failed -> statusState.value = ConvoyListStatus.Error(result.error)
+                is ConvoyListResult.Failed -> showListFailure(result.error)
             }
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (_: Exception) {
-            statusState.value = ConvoyListStatus.Error(ConvoyActionError.Generic)
+            showListFailure(ConvoyActionError.Generic)
+        }
+    }
+
+    private fun showListFailure(error: ConvoyActionError) {
+        if (statusState.value is ConvoyListStatus.Loaded) {
+            refreshErrorState.value = error
+        } else {
+            statusState.value = ConvoyListStatus.Error(error)
         }
     }
 
@@ -340,6 +361,10 @@ class ConvoyCoordinator(
         // The backend transaction remains the authoritative gate.
         if (ConvoyBar.activeConvoy(statusState.value) != null) {
             createStateFlow.value = CreateConvoyState.Error(ConvoyActionError.AlreadyInConvoy)
+            return
+        }
+        if ((statusState.value as? ConvoyListStatus.Loaded)?.isExhaustive != true) {
+            createStateFlow.value = CreateConvoyState.Error(ConvoyActionError.MembershipUncertain)
             return
         }
         val invitees = inviteeUids.filter { it.isNotBlank() }.distinct()
@@ -379,6 +404,10 @@ class ConvoyCoordinator(
         // invite). Declining stays available. Backend re-checks authoritatively.
         if (ConvoyBar.activeConvoy(statusState.value) != null) {
             rowError.value = ConvoyActionError.AlreadyInConvoy
+            return
+        }
+        if ((statusState.value as? ConvoyListStatus.Loaded)?.isExhaustive != true) {
+            rowError.value = ConvoyActionError.MembershipUncertain
             return
         }
         respond(convoyId, accept = true)

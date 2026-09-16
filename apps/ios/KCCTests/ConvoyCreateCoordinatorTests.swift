@@ -49,8 +49,8 @@ final class ConvoyCreateCoordinatorTests: XCTestCase {
         await coordinator.load()
         await coordinator.create(inviteeUids: ["friend-1"], vehicleId: nil)
 
-        XCTAssertEqual(coordinator.availability, .failed(.generic))
-        XCTAssertEqual(coordinator.createState, .failed(.generic))
+        XCTAssertEqual(coordinator.availability, .failed(.membershipUncertain))
+        XCTAssertEqual(coordinator.createState, .failed(.membershipUncertain))
         XCTAssertTrue(repository.createCalls.isEmpty)
     }
 
@@ -138,7 +138,7 @@ final class ConvoyCreateCoordinatorTests: XCTestCase {
     }
 
     @MainActor
-    func testFailedPreconditionWithTruncatedListUsesGenericError() async {
+    func testFailedPreconditionWithTruncatedListExplainsUncertainty() async {
         let repository = FakeRepository()
         repository.createResult = .failed(.unresolvedPrecondition)
         repository.listResults = [
@@ -150,7 +150,7 @@ final class ConvoyCreateCoordinatorTests: XCTestCase {
 
         await coordinator.create(inviteeUids: ["friend-1"], vehicleId: nil)
 
-        XCTAssertEqual(coordinator.createState, .failed(.generic))
+        XCTAssertEqual(coordinator.createState, .failed(.membershipUncertain))
     }
 
     @MainActor

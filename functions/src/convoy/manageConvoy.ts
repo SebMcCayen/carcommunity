@@ -879,6 +879,8 @@ export interface ListConvoysResult {
   convoys: ConvoySummary[];
   /** Subset the caller still has a pending invite for (green-dot pending list). */
   pendingInvites: ConvoySummary[];
+  /** False when the history cap or live membership scan leaves uncertainty. */
+  isExhaustive: boolean;
 }
 
 export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListConvoysResult> => {
@@ -894,19 +896,62 @@ export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListConvoysRe
   // orderBy createdAt desc BEFORE limit so a hit cap keeps the NEWEST convoys.
   // Needs the composite index [memberUids CONTAINS, createdAt DESC]
   // (firebase/firestore.indexes.json).
-  const snap = await db
+  const newestQuery = db
     .collection('convoys')
     .where('memberUids', 'array-contains', actor.uid)
     .orderBy('createdAt', 'desc')
-    .limit(MAX_CONVOYS_RETURNED)
-    .get();
+    .limit(MAX_CONVOYS_RETURNED);
 
-  const convoys = snap.docs.map((doc) => toConvoySummary(doc.id, doc.data(), actor.uid, toIso));
+  // Pending/declined invites also occupy memberUids. Inspect at most two
+  // bounded pages for the accepted convoy. If it is still hidden, the newest
+  // 200-row response remains non-exhaustive, so clients must conservatively
+  // block joining another convoy rather than assume the caller has none.
+  const liveMembershipQuery = db
+    .collection('convoys')
+    .where('memberUids', 'array-contains', actor.uid)
+    .where('status', 'in', [...ACTIVE_CONVOY_STATUSES])
+    .limit(MAX_CONVOYS_RETURNED);
+
+  const newestSnap = await newestQuery.get();
+  let acceptedLive = newestSnap.docs.find((doc) => isActiveConvoyParticipant(doc.data(), actor.uid));
+  let liveScanIncomplete = false;
+  // An uncapped newest response is already the caller's complete history.
+  // If the accepted live convoy is in the capped newest page, it also needs
+  // no second lookup.
+  if (newestSnap.docs.length === MAX_CONVOYS_RETURNED && !acceptedLive) {
+    let livePage = await liveMembershipQuery.get();
+    let livePagesRead = 1;
+    acceptedLive = livePage.docs.find((doc) => isActiveConvoyParticipant(doc.data(), actor.uid));
+    while (!acceptedLive && livePage.docs.length === MAX_CONVOYS_RETURNED && livePagesRead < 2) {
+      livePage = await liveMembershipQuery.startAfter(livePage.docs[livePage.docs.length - 1]).get();
+      livePagesRead += 1;
+      acceptedLive = livePage.docs.find((doc) => isActiveConvoyParticipant(doc.data(), actor.uid));
+    }
+    liveScanIncomplete = !acceptedLive && livePage.docs.length === MAX_CONVOYS_RETURNED;
+  }
+  const newestIds = new Set(newestSnap.docs.map((doc) => doc.id));
+  const missingLiveMemberships = acceptedLive && !newestIds.has(acceptedLive.id)
+    ? [acceptedLive]
+    : [];
+  const docs = [
+    ...missingLiveMemberships,
+    ...newestSnap.docs.slice(0, MAX_CONVOYS_RETURNED - missingLiveMemberships.length),
+  ];
+  docs.sort(
+    (left, right) =>
+      (toMillis(right.data().createdAt) ?? 0) - (toMillis(left.data().createdAt) ?? 0),
+  );
+
+  const convoys = docs.map((doc) => toConvoySummary(doc.id, doc.data(), actor.uid, toIso));
   const pendingInvites = convoys.filter(
     (c) => c.status !== 'ended' && c.viewer?.inviteStatus === 'invited',
   );
 
-  return { convoys, pendingInvites };
+  return {
+    convoys,
+    pendingInvites,
+    isExhaustive: newestSnap.docs.length < MAX_CONVOYS_RETURNED && !liveScanIncomplete,
+  };
 });
 
 // ---------------------------------------------------------------------------
@@ -1277,7 +1322,9 @@ export const invite = onCall(CALLABLE_OPTS, async (request): Promise<InviteToCon
   );
   if (invited.length === 0) {
     if (!alreadyMember) {
-      throw new HttpsError('failed-precondition', NO_VALID_INVITEES_MESSAGE);
+      throw new HttpsError('failed-precondition', NO_VALID_INVITEES_MESSAGE, {
+        reason: 'no_valid_convoy_invitees',
+      });
     }
     // Served from preSnap — the snapshot that PASSED the member / accepted /
     // not-ended gate above — rather than a second `ref.get()`. A re-fetch would
