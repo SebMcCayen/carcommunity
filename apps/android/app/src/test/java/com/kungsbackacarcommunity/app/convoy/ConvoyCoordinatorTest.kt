@@ -201,6 +201,29 @@ class ConvoyCoordinatorTest {
     }
 
     @Test
+    fun `unloaded or failed list blocks create and accept but allows decline`() = runTest {
+        val repo = FakeRepo().apply {
+            listResult = ConvoyListResult.Failed(ConvoyActionError.Generic)
+        }
+        val coordinator = ConvoyCoordinator(repo)
+
+        coordinator.create(listOf("friend"), null)
+        coordinator.accept("p1")
+        assertEquals(0, repo.createCalls)
+        assertEquals(0, repo.respondCalls)
+
+        coordinator.load()
+        assertTrue(coordinator.status.value is ConvoyListStatus.Error)
+        coordinator.create(listOf("friend"), null)
+        coordinator.accept("p1")
+        assertEquals(0, repo.createCalls)
+        assertEquals(0, repo.respondCalls)
+
+        coordinator.decline("p1")
+        assertEquals(listOf(false), repo.respondAccepts)
+    }
+
+    @Test
     fun `a failing profile overlay cannot turn a loaded list into an error`() = runTest {
         // load() publishes the stored snapshot BEFORE hydrating, and the whole
         // body sits inside a catch-all that maps any throw to
@@ -240,6 +263,7 @@ class ConvoyCoordinatorTest {
     fun `create with no invitees is rejected without calling the backend`() = runTest {
         val repo = FakeRepo()
         val coordinator = ConvoyCoordinator(repo)
+        coordinator.load()
         coordinator.create(inviteeUids = listOf("", "  "), title = null)
         assertEquals(CreateConvoyState.Error(ConvoyActionError.NoInvitees), coordinator.createState.value)
         assertEquals(0, repo.createCalls)
@@ -249,6 +273,7 @@ class ConvoyCoordinatorTest {
     fun `create dedupes invitees, trims a blank title, reports Created and reloads`() = runTest {
         val repo = FakeRepo()
         val coordinator = ConvoyCoordinator(repo)
+        coordinator.load()
         coordinator.create(inviteeUids = listOf("a", "a", "b"), title = "   ")
         val state = coordinator.createState.value
         assertTrue(state is CreateConvoyState.Created)
@@ -256,13 +281,14 @@ class ConvoyCoordinatorTest {
         assertEquals(listOf("a", "b"), repo.lastInvitees)
         assertNull(repo.lastTitle)
         assertNull(repo.lastVehicleId) // no car picked → server falls back to main
-        assertEquals(1, repo.listCalls) // reloaded after create
+        assertEquals(2, repo.listCalls) // initial load and reload after create
     }
 
     @Test
     fun `create forwards the owner's picked car, and drops a blank one`() = runTest {
         val repo = FakeRepo()
         val coordinator = ConvoyCoordinator(repo)
+        coordinator.load()
         coordinator.create(inviteeUids = listOf("a"), title = null, vehicleId = "veh-42")
         assertEquals("veh-42", repo.lastVehicleId)
 
@@ -285,6 +311,7 @@ class ConvoyCoordinatorTest {
                     )
             }
         val coordinator = ConvoyCoordinator(repo)
+        coordinator.load()
         coordinator.create(listOf("a", "x"), null)
         val state = coordinator.createState.value as CreateConvoyState.Created
         assertEquals(listOf(ConvoySkipReason.NotFriend), state.skipped.map { it.reason })
@@ -492,8 +519,9 @@ class ConvoyCoordinatorTest {
     fun `accept re-fetches the snapshot`() = runTest {
         val repo = FakeRepo()
         val coordinator = ConvoyCoordinator(repo)
+        coordinator.load()
         coordinator.accept("p1")
-        assertEquals(1, repo.listCalls)
+        assertEquals(2, repo.listCalls)
         assertNull(coordinator.actionError.value)
     }
 
@@ -512,6 +540,7 @@ class ConvoyCoordinatorTest {
             val gate = CompletableDeferred<Unit>()
             val repo = FakeRepo().apply { respondGate = gate }
             val coordinator = ConvoyCoordinator(repo)
+            coordinator.load()
 
             val inFlight = backgroundScope.launch { coordinator.accept("p1") }
             advanceUntilIdle()
@@ -535,6 +564,7 @@ class ConvoyCoordinatorTest {
             val gate = CompletableDeferred<Unit>()
             val repo = FakeRepo().apply { respondGate = gate }
             val coordinator = ConvoyCoordinator(repo)
+            coordinator.load()
 
             val inFlight = backgroundScope.launch { coordinator.accept("p1") }
             advanceUntilIdle()

@@ -22,11 +22,20 @@ final class FirebaseConvoyManagementRepository: ConvoyManagementRepository, @unc
                     continuation.finish(throwing: ConvoyListenerFailure.stopped)
                     return
                 }
-                guard let snapshot, snapshot.exists, let data = snapshot.data() else {
+                guard let snapshot else { return }
+                guard snapshot.exists else {
+                    // An initial cache miss is not evidence that the server
+                    // deleted a convoy already present in the callable list.
+                    guard !snapshot.metadata.isFromCache else { return }
                     continuation.yield(nil)
                     return
                 }
-                continuation.yield(Self.parseDocument(data, id: snapshot.documentID, viewerUid: viewerUid))
+                guard let data = snapshot.data(),
+                      let convoy = Self.parseDocument(
+                        data, id: snapshot.documentID, viewerUid: viewerUid
+                      )
+                else { return }
+                continuation.yield(convoy)
             }
             let box = ConvoyListenerBox(registration: registration)
             continuation.onTermination = { _ in box.registration.remove() }

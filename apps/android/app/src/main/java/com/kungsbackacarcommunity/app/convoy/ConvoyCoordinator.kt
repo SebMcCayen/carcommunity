@@ -345,7 +345,7 @@ class ConvoyCoordinator(
             createStateFlow.value = CreateConvoyState.Error(ConvoyActionError.AlreadyInConvoy)
             return
         }
-        if ((statusState.value as? ConvoyListStatus.Loaded)?.isExhaustive == false) {
+        if ((statusState.value as? ConvoyListStatus.Loaded)?.isExhaustive != true) {
             createStateFlow.value = CreateConvoyState.Error(ConvoyActionError.Generic)
             return
         }
@@ -388,7 +388,7 @@ class ConvoyCoordinator(
             rowError.value = ConvoyActionError.AlreadyInConvoy
             return
         }
-        if ((statusState.value as? ConvoyListStatus.Loaded)?.isExhaustive == false) {
+        if ((statusState.value as? ConvoyListStatus.Loaded)?.isExhaustive != true) {
             rowError.value = ConvoyActionError.Generic
             return
         }

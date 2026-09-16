@@ -105,7 +105,7 @@ fun ConvoyListScreen(
     // create OR accept into a second one. The affordances are disabled with an
     // explanation so they are TOLD, rather than hitting a raw failed-precondition.
     val alreadyInConvoy = ConvoyBar.activeConvoy(status) != null
-    val membershipUncertain = (status as? ConvoyListStatus.Loaded)?.isExhaustive == false
+    val membershipUncertain = (status as? ConvoyListStatus.Loaded)?.isExhaustive != true
     AeroLazyPage(modifier = modifier) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),

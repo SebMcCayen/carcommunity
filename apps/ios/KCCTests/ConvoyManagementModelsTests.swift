@@ -159,6 +159,14 @@ final class ConvoyManagementModelsTests: XCTestCase {
         XCTAssertFalse(parsed.canJoinAnotherConvoy)
     }
 
+    func testMemberViewerNeverReceivesOwnerRole() {
+        let payload = convoy(id: "member", viewer: "accepted", viewerRole: "member")
+        let item = ConvoyManagementParser.parseItem(payload)
+
+        XCTAssertEqual(item?.viewer?.role, .member)
+        XCTAssertFalse(item?.viewerIsOwner ?? true)
+    }
+
     func testInviteSelectionHonorsRemainingConvoyCapacity() {
         let members = (0..<24).map {
             ConvoyMember(
@@ -231,12 +239,13 @@ final class ConvoyManagementModelsTests: XCTestCase {
     private func convoy(
         id: String,
         status: String = "active",
-        viewer: String
+        viewer: String,
+        viewerRole: String = "owner"
     ) -> [String: Any] {
         [
             "convoyId": id,
             "status": status,
-            "viewer": ["role": "owner", "inviteStatus": viewer],
+            "viewer": ["role": viewerRole, "inviteStatus": viewer],
             "members": [[
                 "uid": "owner",
                 "role": "owner",
