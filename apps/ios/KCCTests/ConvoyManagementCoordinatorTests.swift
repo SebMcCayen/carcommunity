@@ -199,6 +199,27 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testFailedPreconditionWithIncompleteRefreshStaysUnresolved() async {
+        let invite = item(id: "invite", viewer: .invited)
+        let incomplete = ConvoyManagementSnapshot(
+            convoys: [invite], pendingInvites: [invite], isExhaustive: false
+        )
+        let repository = FakeRepository(
+            listResults: [
+                .loaded(snapshot(convoys: [invite], pending: [invite])),
+                .loaded(incomplete)
+            ],
+            respondResult: .failed(.unresolvedPrecondition)
+        )
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        await coordinator.load()
+
+        await coordinator.respond(convoyId: "invite", action: .accept)
+
+        XCTAssertEqual(coordinator.actionError, .unresolvedPrecondition)
+    }
+
+    @MainActor
     func testCappedListBlocksAcceptWithoutCallingRepository() async {
         let invite = item(id: "invite", viewer: .invited)
         let capped = ConvoyManagementSnapshot(

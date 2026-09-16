@@ -46,4 +46,13 @@ final class KccFunctionsErrorTests: XCTestCase {
         XCTAssertEqual(KccFunctionsErrorCode.fromWire("cancelled"), .unknown)
         XCTAssertEqual(KccFunctionsErrorCode.fromWire("unknown"), .unknown)
     }
+
+    func testOnlyAllowlistedCallableReasonsAreRetained() {
+        XCTAssertEqual(
+            KccFunctionsFailureReason.fromDetails(["reason": "no_valid_convoy_invitees"]),
+            .noValidConvoyInvitees
+        )
+        XCTAssertNil(KccFunctionsFailureReason.fromDetails(["reason": "private-user-data"]))
+        XCTAssertNil(KccFunctionsFailureReason.fromDetails(["message": "not a reason"]))
+    }
 }

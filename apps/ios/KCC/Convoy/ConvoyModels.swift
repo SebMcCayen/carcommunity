@@ -117,6 +117,28 @@ struct ConvoyItem: Equatable, Sendable, Identifiable {
     }
 }
 
+enum ConvoyProfileHydration {
+    static func apply(_ convoy: ConvoyItem, names: [String: String]) -> ConvoyItem {
+        guard !names.isEmpty else { return convoy }
+        return ConvoyItem(
+            convoyId: convoy.convoyId,
+            title: convoy.title,
+            status: convoy.status,
+            members: convoy.members.map { member in
+                ConvoyMember(
+                    uid: member.uid,
+                    displayName: names[member.uid] ?? member.displayName,
+                    role: member.role,
+                    inviteStatus: member.inviteStatus
+                )
+            },
+            viewer: convoy.viewer,
+            createdAt: convoy.createdAt,
+            summary: convoy.summary
+        )
+    }
+}
+
 struct ConvoyManagementSnapshot: Equatable, Sendable {
     let convoys: [ConvoyItem]
     let pendingInvites: [ConvoyItem]
@@ -399,13 +421,14 @@ enum ConvoyManagementErrorMapper {
         }
     }
 
-    static func mapInvite(_ code: KccFunctionsErrorCode) -> ConvoyActionError {
-        switch code {
+    static func mapInvite(_ error: KccFunctionsError) -> ConvoyActionError {
+        switch error.code {
         case .unauthenticated: .signedOut
         case .permissionDenied: .notMember
         case .invalidArgument: .invalid
         case .notFound: .notFound
-        case .failedPrecondition: .unresolvedPrecondition
+        case .failedPrecondition:
+            error.reason == .noValidConvoyInvitees ? .noInvitees : .unresolvedPrecondition
         default: .generic
         }
     }

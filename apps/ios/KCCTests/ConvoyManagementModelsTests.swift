@@ -60,8 +60,16 @@ final class ConvoyManagementModelsTests: XCTestCase {
         )
         XCTAssertEqual(ConvoyManagementErrorMapper.mapList(.permissionDenied), .notMember)
         XCTAssertEqual(
-            ConvoyManagementErrorMapper.mapInvite(.failedPrecondition),
+            ConvoyManagementErrorMapper.mapInvite(
+                KccFunctionsError(code: .failedPrecondition)
+            ),
             .unresolvedPrecondition
+        )
+        XCTAssertEqual(
+            ConvoyManagementErrorMapper.mapInvite(KccFunctionsError(
+                code: .failedPrecondition, reason: .noValidConvoyInvitees
+            )),
+            .noInvitees
         )
     }
 
@@ -127,6 +135,18 @@ final class ConvoyManagementModelsTests: XCTestCase {
         XCTAssertEqual(item.recap?.participants.map(\.uid), ["owner", "missing-member"])
         XCTAssertNil(item.recap?.participants.last?.displayName)
         XCTAssertEqual(item.recap?.participantCount, 2)
+    }
+
+    func testProfileHydrationRefreshesNameWithoutChangingMembership() {
+        let item = ConvoyManagementParser.parseItem(
+            convoy(id: "convoy", viewer: "accepted")
+        )!
+
+        let hydrated = ConvoyProfileHydration.apply(item, names: ["owner": "Current name"])
+
+        XCTAssertEqual(hydrated.members.first?.displayName, "Current name")
+        XCTAssertEqual(hydrated.members.first?.inviteStatus, item.members.first?.inviteStatus)
+        XCTAssertEqual(hydrated.viewer, item.viewer)
     }
 
     func testListHonorsExplicitIncompleteMembershipScan() {

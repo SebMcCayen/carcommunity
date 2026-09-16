@@ -1312,7 +1312,9 @@ export const invite = onCall(CALLABLE_OPTS, async (request): Promise<InviteToCon
   );
   if (invited.length === 0) {
     if (!alreadyMember) {
-      throw new HttpsError('failed-precondition', NO_VALID_INVITEES_MESSAGE);
+      throw new HttpsError('failed-precondition', NO_VALID_INVITEES_MESSAGE, {
+        reason: 'no_valid_convoy_invitees',
+      });
     }
     // Served from preSnap — the snapshot that PASSED the member / accepted /
     // not-ended gate above — rather than a second `ref.get()`. A re-fetch would

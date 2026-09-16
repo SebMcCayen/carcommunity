@@ -123,7 +123,9 @@ final class ConvoyManagementCoordinator {
                 for try await convoy in repository.observeConvoy(convoyId: convoyId) {
                     guard !Task.isCancelled else { return }
                     if let convoy {
-                        applyUpdatedConvoy(convoy)
+                        let hydrated = await repository.hydrate(convoy)
+                        guard !Task.isCancelled else { return }
+                        applyUpdatedConvoy(hydrated)
                     } else {
                         removeConvoy(id: convoyId)
                     }
@@ -276,7 +278,8 @@ final class ConvoyManagementCoordinator {
             guard requestIsCurrent(generation) else { return }
             state = .loaded(snapshot)
             setActionError(
-                action == .accept && snapshot.hasActiveConvoy ? .alreadyInConvoy : .inviteGone,
+                action == .accept && snapshot.hasActiveConvoy ? .alreadyInConvoy
+                    : (snapshot.isExhaustive ? .inviteGone : .unresolvedPrecondition),
                 convoyId: convoyId
             )
         case .failed:
