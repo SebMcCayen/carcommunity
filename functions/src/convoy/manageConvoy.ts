@@ -900,9 +900,10 @@ export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListConvoysRe
     .orderBy('createdAt', 'desc')
     .limit(MAX_CONVOYS_RETURNED);
 
-  // Pending/declined invites also occupy memberUids. Page through live rows
-  // until the accepted convoy is found; a fixed limit before that check can
-  // conceal it behind an arbitrarily large set of invitations.
+  // Pending/declined invites also occupy memberUids. Inspect at most two
+  // bounded pages for the accepted convoy. If it is still hidden, the newest
+  // 200-row response remains non-exhaustive, so clients must conservatively
+  // block joining another convoy rather than assume the caller has none.
   const liveMembershipQuery = db
     .collection('convoys')
     .where('memberUids', 'array-contains', actor.uid)
@@ -911,9 +912,11 @@ export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListConvoysRe
 
   const newestSnap = await newestQuery.get();
   let livePage = await liveMembershipQuery.get();
+  let livePagesRead = 1;
   let acceptedLive = livePage.docs.find((doc) => isActiveConvoyParticipant(doc.data(), actor.uid));
-  while (!acceptedLive && livePage.docs.length === MAX_CONVOYS_RETURNED) {
+  while (!acceptedLive && livePage.docs.length === MAX_CONVOYS_RETURNED && livePagesRead < 2) {
     livePage = await liveMembershipQuery.startAfter(livePage.docs[livePage.docs.length - 1]).get();
+    livePagesRead += 1;
     acceptedLive = livePage.docs.find((doc) => isActiveConvoyParticipant(doc.data(), actor.uid));
   }
   const newestIds = new Set(newestSnap.docs.map((doc) => doc.id));
