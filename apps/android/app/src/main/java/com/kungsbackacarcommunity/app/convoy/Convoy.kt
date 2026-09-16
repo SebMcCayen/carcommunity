@@ -228,6 +228,7 @@ sealed interface ConvoyListResult {
     data class Loaded(
         val convoys: List<ConvoySummary>,
         val pendingInvites: List<ConvoySummary>,
+        val isExhaustive: Boolean = true,
     ) : ConvoyListResult
 
     data class Failed(val error: ConvoyActionError) : ConvoyListResult
@@ -488,6 +489,8 @@ object ConvoyResponseParser {
             convoys = (data["convoys"] as? List<*>).orEmpty().mapNotNull { parseConvoy(it) },
             pendingInvites =
                 (data["pendingInvites"] as? List<*>).orEmpty().mapNotNull { parseConvoy(it) },
+            isExhaustive = (data["isExhaustive"] as? Boolean)
+                ?: (((data["convoys"] as? List<*>)?.size ?: 0) < 200),
         )
     }
 

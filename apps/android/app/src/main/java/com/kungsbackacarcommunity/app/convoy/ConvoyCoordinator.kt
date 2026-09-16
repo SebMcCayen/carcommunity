@@ -20,6 +20,7 @@ sealed interface ConvoyListStatus {
         val convoys: List<ConvoySummary>,
         /** The subset the caller has a still-open invite to (Accept/Decline). */
         val pendingInvites: List<ConvoySummary>,
+        val isExhaustive: Boolean = true,
     ) : ConvoyListStatus {
         private val pendingIds: Set<String> = pendingInvites.mapTo(HashSet()) { it.convoyId }
 
@@ -293,6 +294,7 @@ class ConvoyCoordinator(
                         ConvoyListStatus.Loaded(
                             convoys = result.convoys,
                             pendingInvites = result.pendingInvites,
+                            isExhaustive = result.isExhaustive,
                         )
 
                     // ONE batched read for both lists. Pending invites go FIRST so
@@ -319,6 +321,7 @@ class ConvoyCoordinator(
                                 convoys = result.convoys.map { hydrateConvoy(it, live) },
                                 pendingInvites =
                                     result.pendingInvites.map { hydrateConvoy(it, live) },
+                                isExhaustive = result.isExhaustive,
                             )
                     }
                 }
@@ -340,6 +343,10 @@ class ConvoyCoordinator(
         // The backend transaction remains the authoritative gate.
         if (ConvoyBar.activeConvoy(statusState.value) != null) {
             createStateFlow.value = CreateConvoyState.Error(ConvoyActionError.AlreadyInConvoy)
+            return
+        }
+        if ((statusState.value as? ConvoyListStatus.Loaded)?.isExhaustive == false) {
+            createStateFlow.value = CreateConvoyState.Error(ConvoyActionError.Generic)
             return
         }
         val invitees = inviteeUids.filter { it.isNotBlank() }.distinct()
@@ -379,6 +386,10 @@ class ConvoyCoordinator(
         // invite). Declining stays available. Backend re-checks authoritatively.
         if (ConvoyBar.activeConvoy(statusState.value) != null) {
             rowError.value = ConvoyActionError.AlreadyInConvoy
+            return
+        }
+        if ((statusState.value as? ConvoyListStatus.Loaded)?.isExhaustive == false) {
+            rowError.value = ConvoyActionError.Generic
             return
         }
         respond(convoyId, accept = true)

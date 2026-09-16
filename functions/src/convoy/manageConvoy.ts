@@ -913,20 +913,30 @@ export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListConvoysRe
     .limit(MAX_CONVOYS_RETURNED);
 
   const newestSnap = await newestQuery.get();
-  let livePage = await liveMembershipQuery.get();
-  let livePagesRead = 1;
-  let acceptedLive = livePage.docs.find((doc) => isActiveConvoyParticipant(doc.data(), actor.uid));
-  while (!acceptedLive && livePage.docs.length === MAX_CONVOYS_RETURNED && livePagesRead < 2) {
-    livePage = await liveMembershipQuery.startAfter(livePage.docs[livePage.docs.length - 1]).get();
-    livePagesRead += 1;
+  let acceptedLive = newestSnap.docs.find((doc) => isActiveConvoyParticipant(doc.data(), actor.uid));
+  let liveScanIncomplete = false;
+  // An uncapped newest response is already the caller's complete history.
+  // If the accepted live convoy is in the capped newest page, it also needs
+  // no second lookup.
+  if (newestSnap.docs.length === MAX_CONVOYS_RETURNED && !acceptedLive) {
+    let livePage = await liveMembershipQuery.get();
+    let livePagesRead = 1;
     acceptedLive = livePage.docs.find((doc) => isActiveConvoyParticipant(doc.data(), actor.uid));
+    while (!acceptedLive && livePage.docs.length === MAX_CONVOYS_RETURNED && livePagesRead < 2) {
+      livePage = await liveMembershipQuery.startAfter(livePage.docs[livePage.docs.length - 1]).get();
+      livePagesRead += 1;
+      acceptedLive = livePage.docs.find((doc) => isActiveConvoyParticipant(doc.data(), actor.uid));
+    }
+    liveScanIncomplete = !acceptedLive && livePage.docs.length === MAX_CONVOYS_RETURNED;
   }
-  const liveScanIncomplete = !acceptedLive && livePage.docs.length === MAX_CONVOYS_RETURNED;
   const newestIds = new Set(newestSnap.docs.map((doc) => doc.id));
   const missingLiveMemberships = acceptedLive && !newestIds.has(acceptedLive.id)
     ? [acceptedLive]
     : [];
-  const docs = [...missingLiveMemberships, ...newestSnap.docs].slice(0, MAX_CONVOYS_RETURNED);
+  const docs = [
+    ...missingLiveMemberships,
+    ...newestSnap.docs.slice(0, MAX_CONVOYS_RETURNED - missingLiveMemberships.length),
+  ];
   docs.sort(
     (left, right) =>
       (toMillis(right.data().createdAt) ?? 0) - (toMillis(left.data().createdAt) ?? 0),

@@ -670,6 +670,7 @@
     <string name="convoy_errorAlreadyInConvoy">You\'re already in a convoy. Leave or end it before joining another.</string>
     <string name="convoy_alreadyInConvoyCreateHint">You\'re already in a convoy — leave or end it to start a new one.</string>
     <string name="convoy_alreadyInConvoyAcceptHint">You\'re already in a convoy — leave or end it before joining another.</string>
+    <string name="convoy_membershipUncertainHint">We can\'t verify your current convoy. Refresh and try again.</string>
     <string name="convoy_barMembers">%1$d in convoy</string>
     <string name="convoy_barMemberListTitle">In this convoy</string>
     <string name="convoy_barMemberUnnamed">Member</string>

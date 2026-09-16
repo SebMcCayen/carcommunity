@@ -727,6 +727,7 @@
     "errorAlreadyInConvoy": "Du är redan med i en konvoj. Lämna eller avsluta den innan du går med i en annan.",
     "alreadyInConvoyCreateHint": "Du är redan med i en konvoj – lämna eller avsluta den för att starta en ny.",
     "alreadyInConvoyAcceptHint": "Du är redan med i en konvoj – lämna eller avsluta den innan du går med i en annan.",
+    "membershipUncertainHint": "Vi kan inte kontrollera din aktuella konvoj. Uppdatera och försök igen.",
     "barMembers": "%1$d i konvojen",
     "barMemberListTitle": "I den här konvojen",
     "barMemberUnnamed": "Medlem",

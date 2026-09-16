@@ -670,6 +670,7 @@
     <string name="convoy_errorAlreadyInConvoy">Du är redan med i en konvoj. Lämna eller avsluta den innan du går med i en annan.</string>
     <string name="convoy_alreadyInConvoyCreateHint">Du är redan med i en konvoj – lämna eller avsluta den för att starta en ny.</string>
     <string name="convoy_alreadyInConvoyAcceptHint">Du är redan med i en konvoj – lämna eller avsluta den innan du går med i en annan.</string>
+    <string name="convoy_membershipUncertainHint">Vi kan inte kontrollera din aktuella konvoj. Uppdatera och försök igen.</string>
     <string name="convoy_barMembers">%1$d i konvojen</string>
     <string name="convoy_barMemberListTitle">I den här konvojen</string>
     <string name="convoy_barMemberUnnamed">Medlem</string>

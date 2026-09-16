@@ -181,6 +181,26 @@ class ConvoyCoordinatorTest {
     }
 
     @Test
+    fun `incomplete list blocks create and accept without a callable`() = runTest {
+        val pending = convoy("p1", viewerInvite = ConvoyInviteStatus.Invited, viewerRole = ConvoyRole.Member)
+        val repo = FakeRepo().apply {
+            listResult = ConvoyListResult.Loaded(
+                convoys = listOf(pending), pendingInvites = listOf(pending), isExhaustive = false,
+            )
+        }
+        val coordinator = ConvoyCoordinator(repo)
+        coordinator.load()
+
+        assertEquals(false, (coordinator.status.value as ConvoyListStatus.Loaded).isExhaustive)
+        coordinator.create(listOf("friend"), null)
+        coordinator.accept("p1")
+
+        assertEquals(0, repo.createCalls)
+        assertEquals(0, repo.respondCalls)
+        assertEquals(ConvoyActionError.Generic, coordinator.actionError.value)
+    }
+
+    @Test
     fun `a failing profile overlay cannot turn a loaded list into an error`() = runTest {
         // load() publishes the stored snapshot BEFORE hydrating, and the whole
         // body sits inside a catch-all that maps any throw to

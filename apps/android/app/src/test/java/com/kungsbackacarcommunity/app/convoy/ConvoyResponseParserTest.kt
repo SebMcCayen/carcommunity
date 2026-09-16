@@ -73,6 +73,14 @@ class ConvoyResponseParserTest {
     }
 
     @Test
+    fun `parseList keeps explicit incomplete membership state`() {
+        val result = ConvoyResponseParser.parseList(
+            mapOf("convoys" to listOf(convoyMap(id = "c1")), "isExhaustive" to false),
+        )
+        assertEquals(false, result.isExhaustive)
+    }
+
+    @Test
     fun `member rows without a uid are dropped rather than crashing`() {
         val data =
             mapOf(
