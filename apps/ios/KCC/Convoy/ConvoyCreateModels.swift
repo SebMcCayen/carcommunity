@@ -64,6 +64,14 @@ struct ConvoyCreated: Equatable, Sendable {
     let convoyId: String
     let invited: [String]
     let skippedCount: Int
+    let convoy: ConvoyItem?
+
+    init(convoyId: String, invited: [String], skippedCount: Int, convoy: ConvoyItem? = nil) {
+        self.convoyId = convoyId
+        self.invited = invited
+        self.skippedCount = skippedCount
+        self.convoy = convoy
+    }
 }
 
 enum ConvoyCreateResult: Equatable, Sendable {
@@ -100,7 +108,12 @@ enum ConvoyCreateResponseParser {
         }
         let skippedCount = (data?["skipped"] as? [Any] ?? []).count
         return .created(
-            ConvoyCreated(convoyId: convoyId, invited: invited, skippedCount: skippedCount)
+            ConvoyCreated(
+                convoyId: convoyId,
+                invited: invited,
+                skippedCount: skippedCount,
+                convoy: ConvoyManagementParser.parseItem(convoy)
+            )
         )
     }
 }

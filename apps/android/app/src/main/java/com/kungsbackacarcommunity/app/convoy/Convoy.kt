@@ -209,6 +209,7 @@ enum class ConvoyActionError {
      * from "no invitees"/"invite gone").
      */
     AlreadyInConvoy,
+    MembershipUncertain,
 
     /**
      * The caller is a member of the convoy but NOT its leader, and tried to end it
@@ -339,20 +340,16 @@ object ConvoyErrorMapper {
             else -> ConvoyActionError.Generic
         }
 
-    /**
-     * For `convoy-invite`. A non-member / unknown convoy is `not-found` (a convoy
-     * must not be probeable); the only precondition failure is a convoy that has
-     * ended, is not the caller's to invite into, or where nobody could be added —
-     * all surfaced as "no one could be added" ([NoInvitees]), the same neutral
-     * outcome `convoy-create` uses for its precondition failure.
-     */
-    fun mapInvite(code: ConvoyErrorCode): ConvoyActionError =
+    /** Only the allowlisted backend reason means no invitee could be added. */
+    fun mapInvite(code: ConvoyErrorCode, reason: String? = null): ConvoyActionError =
         when (code) {
             ConvoyErrorCode.Unauthenticated -> ConvoyActionError.SignedOut
             ConvoyErrorCode.PermissionDenied -> ConvoyActionError.NotMember
             ConvoyErrorCode.InvalidArgument -> ConvoyActionError.Invalid
             ConvoyErrorCode.NotFound -> ConvoyActionError.NotFound
-            ConvoyErrorCode.FailedPrecondition -> ConvoyActionError.NoInvitees
+            ConvoyErrorCode.FailedPrecondition ->
+                if (reason == "no_valid_convoy_invitees") ConvoyActionError.NoInvitees
+                else ConvoyActionError.Generic
             else -> ConvoyActionError.Generic
         }
 

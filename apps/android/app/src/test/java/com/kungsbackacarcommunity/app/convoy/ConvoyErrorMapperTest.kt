@@ -28,6 +28,24 @@ class ConvoyErrorMapperTest {
     }
 
     @Test
+    fun `invite precondition needs the allowlisted no valid invitees reason`() {
+        assertEquals(
+            ConvoyActionError.NoInvitees,
+            ConvoyErrorMapper.mapInvite(
+                ConvoyErrorCode.FailedPrecondition, "no_valid_convoy_invitees",
+            ),
+        )
+        assertEquals(
+            ConvoyActionError.Generic,
+            ConvoyErrorMapper.mapInvite(ConvoyErrorCode.FailedPrecondition),
+        )
+        assertEquals(
+            ConvoyActionError.Generic,
+            ConvoyErrorMapper.mapInvite(ConvoyErrorCode.FailedPrecondition, "unknown"),
+        )
+    }
+
+    @Test
     fun `respond not-found and precondition both collapse to invite gone`() {
         assertEquals(ConvoyActionError.InviteGone, ConvoyErrorMapper.mapRespond(ConvoyErrorCode.NotFound))
         assertEquals(ConvoyActionError.InviteGone, ConvoyErrorMapper.mapRespond(ConvoyErrorCode.FailedPrecondition))

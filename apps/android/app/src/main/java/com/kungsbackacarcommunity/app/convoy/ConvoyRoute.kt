@@ -337,6 +337,7 @@ fun ConvoyRoute(
                         !inviteNoticeDismissed && ConvoyInviteDeepLink.needsNotice(it)
                     },
                 onDismissInviteDeepLinkNotice = { inviteNoticeDismissed = true },
+                onRefresh = { scope.launch { coordinator.load() } },
                 onCreate = {
                     // Fresh form each time the picker opens; the friends snapshot
                     // is (re)loaded by the LaunchedEffect(view) once view == Create.

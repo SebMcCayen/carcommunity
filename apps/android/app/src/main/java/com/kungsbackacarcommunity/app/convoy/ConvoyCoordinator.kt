@@ -353,7 +353,7 @@ class ConvoyCoordinator(
             return
         }
         if ((statusState.value as? ConvoyListStatus.Loaded)?.isExhaustive != true) {
-            createStateFlow.value = CreateConvoyState.Error(ConvoyActionError.Generic)
+            createStateFlow.value = CreateConvoyState.Error(ConvoyActionError.MembershipUncertain)
             return
         }
         val invitees = inviteeUids.filter { it.isNotBlank() }.distinct()
@@ -396,7 +396,7 @@ class ConvoyCoordinator(
             return
         }
         if ((statusState.value as? ConvoyListStatus.Loaded)?.isExhaustive != true) {
-            rowError.value = ConvoyActionError.Generic
+            rowError.value = ConvoyActionError.MembershipUncertain
             return
         }
         respond(convoyId, accept = true)

@@ -1230,9 +1230,12 @@ describe('convoy-invite', () => {
 
     // ...but a request naming NOBODY who is already in still fails: the caller
     // asked for something that genuinely did not happen.
-    expect(
-      await callableErrorCode(call('convoy-invite', { convoyId, inviteeUids: [stranger.uid] })),
-    ).toBe('functions/failed-precondition');
+    await expect(
+      call('convoy-invite', { convoyId, inviteeUids: [stranger.uid] }),
+    ).rejects.toMatchObject({
+      code: 'functions/failed-precondition',
+      details: { reason: 'no_valid_convoy_invitees' },
+    });
 
     // ...and it stays idempotent on a FULL convoy. The cap rejects GROWTH, so
     // a re-invite of someone already aboard must not be answered with "convoy

@@ -135,6 +135,18 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testCreatedConvoySurvivesFailedRefresh() async {
+        let created = item(id: "new", status: .forming, viewer: .accepted)
+        let repository = FakeRepository(listResults: [.failed(.generic)])
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+
+        coordinator.recordCreatedConvoy(created)
+        let refreshed = await coordinator.refresh()
+        XCTAssertFalse(refreshed)
+        XCTAssertEqual(coordinator.activeConvoy, created)
+    }
+
+    @MainActor
     func testAcceptRefreshesAndReturnsJoinedConvoy() async {
         let invite = item(id: "invite", viewer: .invited)
         let before = snapshot(convoys: [invite], pending: [invite])

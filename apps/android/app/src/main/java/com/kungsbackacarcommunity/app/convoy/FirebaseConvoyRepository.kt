@@ -112,7 +112,11 @@ class FirebaseConvoyRepository private constructor(
         ).fold(
             // Same `{ convoy, invited, skipped }` shape as create — reuse its parser.
             onSuccess = { ConvoyResponseParser.parseCreate(it) },
-            onFailure = { CreateConvoyResult.Failed(ConvoyErrorMapper.mapInvite(it.toErrorCode())) },
+            onFailure = {
+                val reason = ((it as? FirebaseFunctionsException)?.details as? Map<*, *>)
+                    ?.get("reason") as? String
+                CreateConvoyResult.Failed(ConvoyErrorMapper.mapInvite(it.toErrorCode(), reason))
+            },
         )
 
     override suspend fun leave(convoyId: String): LeaveConvoyResult =

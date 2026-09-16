@@ -685,10 +685,13 @@ struct ShellView: View {
 
     private func completeConvoyCreation(_ created: ConvoyCreated) {
         guard !created.convoyId.isEmpty else { return }
+        if let convoy = created.convoy {
+            convoyManagementCoordinator?.recordCreatedConvoy(convoy)
+        }
         closeConvoyCreate()
         if routes.current == .convoys { routes = routes.poppingOne() }
         selectedTab = .map
-        Task { await convoyManagementCoordinator?.load() }
+        Task { _ = await convoyManagementCoordinator?.refresh() }
         retainConvoySessionStartUntilObserved()
     }
 

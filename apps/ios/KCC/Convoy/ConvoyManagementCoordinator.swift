@@ -281,7 +281,8 @@ final class ConvoyManagementCoordinator {
             state = .loaded(resolved)
             setActionError(
                 action == .accept && resolved.hasActiveConvoy ? .alreadyInConvoy
-                    : (resolved.isExhaustive ? .inviteGone : .membershipUncertain),
+                    : (action == .decline || resolved.isExhaustive
+                        ? .inviteGone : .membershipUncertain),
                 convoyId: convoyId
             )
             await publish(resolved, generation: generation, using: repository)
@@ -294,6 +295,19 @@ final class ConvoyManagementCoordinator {
     private func setActionError(_ error: ConvoyActionError, convoyId: String) {
         actionError = error
         actionErrorConvoyId = convoyId
+    }
+
+    func recordCreatedConvoy(_ convoy: ConvoyItem) {
+        supersedeListRequests()
+        let previous = snapshot
+        let convoys = [convoy] + (previous?.convoys ?? []).filter {
+            $0.convoyId != convoy.convoyId
+        }
+        state = .loaded(ConvoyManagementSnapshot(
+            convoys: convoys,
+            pendingInvites: previous?.pendingInvites ?? [],
+            isExhaustive: previous?.isExhaustive ?? false
+        ))
     }
 
     private func publish(

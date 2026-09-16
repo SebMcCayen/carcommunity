@@ -197,7 +197,11 @@ class ConvoyCoordinatorTest {
 
         assertEquals(0, repo.createCalls)
         assertEquals(0, repo.respondCalls)
-        assertEquals(ConvoyActionError.Generic, coordinator.actionError.value)
+        assertEquals(
+            CreateConvoyState.Error(ConvoyActionError.MembershipUncertain),
+            coordinator.createState.value,
+        )
+        assertEquals(ConvoyActionError.MembershipUncertain, coordinator.actionError.value)
     }
 
     @Test

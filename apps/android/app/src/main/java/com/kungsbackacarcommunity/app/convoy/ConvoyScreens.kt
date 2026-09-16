@@ -88,6 +88,7 @@ fun ConvoyListScreen(
     onAccept: (String) -> Unit,
     onDecline: (String) -> Unit,
     onClearActionError: () -> Unit,
+    onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
     // The convoy a tapped invite notification was about, if that is why we are
     // here: its invite is pulled to the top of the section so a member with
@@ -131,6 +132,11 @@ fun ConvoyListScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+                if (status is ConvoyListStatus.Loaded && !status.isExhaustive) {
+                    TextButton(onClick = onRefresh) {
+                        Text(stringResource(R.string.convoy_friendsRetry))
+                    }
                 }
             }
 
@@ -1152,5 +1158,6 @@ internal fun ConvoyActionError.messageRes(): Int =
         ConvoyActionError.NotAllowed -> R.string.convoy_errorNotAllowed
         ConvoyActionError.NotLeader -> R.string.convoy_errorNotLeader
         ConvoyActionError.AlreadyInConvoy -> R.string.convoy_errorAlreadyInConvoy
+        ConvoyActionError.MembershipUncertain -> R.string.convoy_membershipUncertainHint
         ConvoyActionError.Generic -> R.string.convoy_errorGeneric
     }
