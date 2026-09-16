@@ -486,9 +486,13 @@ describe('convoy lifecycle: respond / start / end / list', () => {
     await batch.commit();
 
     await signInAs(owner);
-    const result = (await call('convoy-list', {})).data as { convoys: ConvoySummary[] };
+    const result = (await call('convoy-list', {})).data as {
+      convoys: ConvoySummary[];
+      isExhaustive: boolean;
+    };
 
     expect(result.convoys).toHaveLength(200);
+    expect(result.isExhaustive).toBe(false);
     expect(result.convoys.some((convoy) => convoy.convoyId === liveConvoyId)).toBe(true);
     expect(result.convoys.find((convoy) => convoy.convoyId === liveConvoyId)?.status).toBe(
       'active',
@@ -526,6 +530,41 @@ describe('convoy lifecycle: respond / start / end / list', () => {
     const result = (await call('convoy-list', {})).data as { convoys: ConvoySummary[] };
     expect(result.convoys).toHaveLength(200);
     expect(result.convoys.some((convoy) => convoy.convoyId === liveId)).toBe(true);
+  }, 60_000);
+
+  it('marks a budget-limited live scan incomplete', async () => {
+    const user = await newMember('BudgetLimitedMemberC');
+    const invited = { uid: user.uid, role: 'member', inviteStatus: 'invited' };
+    const accepted = { uid: user.uid, role: 'owner', inviteStatus: 'accepted' };
+    const profiles = { [user.uid]: { displayName: 'BudgetLimitedMemberC', avatarPath: null } };
+    const batch = adminDb.batch();
+    for (let index = 0; index < 401; index += 1) {
+      batch.set(adminDb.collection('convoys').doc(`a-budget-pending-${user.uid}-${index}`), {
+        ownerUid: `other-${index}`,
+        status: 'active',
+        members: { [user.uid]: invited },
+        memberProfiles: profiles,
+        memberUids: [user.uid],
+        createdAt: Timestamp.fromMillis(2_000 + index),
+      });
+    }
+    batch.set(adminDb.collection('convoys').doc(`z-budget-accepted-${user.uid}`), {
+      ownerUid: user.uid,
+      status: 'active',
+      members: { [user.uid]: accepted },
+      memberProfiles: profiles,
+      memberUids: [user.uid],
+      createdAt: Timestamp.fromMillis(1_000),
+    });
+    await batch.commit();
+
+    await signInAs(user);
+    const result = (await call('convoy-list', {})).data as {
+      convoys: ConvoySummary[];
+      isExhaustive: boolean;
+    };
+    expect(result.convoys).toHaveLength(200);
+    expect(result.isExhaustive).toBe(false);
   }, 60_000);
 });
 

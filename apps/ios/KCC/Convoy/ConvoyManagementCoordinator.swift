@@ -238,13 +238,12 @@ final class ConvoyManagementCoordinator {
 
     private func applyUpdatedConvoy(_ convoy: ConvoyItem) {
         guard let snapshot else { return }
-        supersedeListRequests()
         var convoys = snapshot.convoys
-        if let index = convoys.firstIndex(where: { $0.convoyId == convoy.convoyId }) {
-            convoys[index] = convoy
-        } else {
-            convoys.insert(convoy, at: 0)
+        guard let index = convoys.firstIndex(where: { $0.convoyId == convoy.convoyId }) else {
+            return
         }
+        supersedeListRequests()
+        convoys[index] = convoy
         state = .loaded(
             ConvoyManagementSnapshot(
                 convoys: convoys,

@@ -124,8 +124,19 @@ final class ConvoyManagementModelsTests: XCTestCase {
                 distanceMeters: 1_234.5
             )
         )
-        XCTAssertEqual(item.recap?.participants.map(\.uid), ["owner"])
+        XCTAssertEqual(item.recap?.participants.map(\.uid), ["owner", "missing-member"])
+        XCTAssertNil(item.recap?.participants.last?.displayName)
         XCTAssertEqual(item.recap?.participantCount, 2)
+    }
+
+    func testListHonorsExplicitIncompleteMembershipScan() {
+        let payload = convoy(id: "active", viewer: "invited")
+        let parsed = ConvoyManagementParser.parseList([
+            "convoys": [payload], "pendingInvites": [payload], "isExhaustive": false
+        ])
+
+        XCTAssertFalse(parsed.isExhaustive)
+        XCTAssertFalse(parsed.canJoinAnotherConvoy)
     }
 
     func testInviteSelectionHonorsRemainingConvoyCapacity() {

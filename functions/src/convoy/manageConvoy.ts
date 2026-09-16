@@ -879,6 +879,8 @@ export interface ListConvoysResult {
   convoys: ConvoySummary[];
   /** Subset the caller still has a pending invite for (green-dot pending list). */
   pendingInvites: ConvoySummary[];
+  /** False when the history cap or live membership scan leaves uncertainty. */
+  isExhaustive: boolean;
 }
 
 export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListConvoysResult> => {
@@ -919,6 +921,7 @@ export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListConvoysRe
     livePagesRead += 1;
     acceptedLive = livePage.docs.find((doc) => isActiveConvoyParticipant(doc.data(), actor.uid));
   }
+  const liveScanIncomplete = !acceptedLive && livePage.docs.length === MAX_CONVOYS_RETURNED;
   const newestIds = new Set(newestSnap.docs.map((doc) => doc.id));
   const missingLiveMemberships = acceptedLive && !newestIds.has(acceptedLive.id)
     ? [acceptedLive]
@@ -934,7 +937,11 @@ export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListConvoysRe
     (c) => c.status !== 'ended' && c.viewer?.inviteStatus === 'invited',
   );
 
-  return { convoys, pendingInvites };
+  return {
+    convoys,
+    pendingInvites,
+    isExhaustive: newestSnap.docs.length < MAX_CONVOYS_RETURNED && !liveScanIncomplete,
+  };
 });
 
 // ---------------------------------------------------------------------------

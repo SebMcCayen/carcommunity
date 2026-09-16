@@ -336,6 +336,24 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testLateListenerSnapshotDoesNotReinsertDepartedConvoy() async {
+        let active = item(id: "convoy", viewer: .accepted)
+        let repository = FakeRepository(
+            listResults: [.loaded(snapshot(convoys: [active])), .failed(.generic)],
+            lifecycleResult: .left(ConvoyLeaveResult(outcome: .left, newLeaderUid: nil)),
+            observedConvoys: [active]
+        )
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        await coordinator.load()
+
+        let succeeded = await coordinator.runLifecycle(convoyId: "convoy", action: .leave)
+        await coordinator.observeConvoy(id: "convoy")
+
+        XCTAssertTrue(succeeded)
+        XCTAssertNil(coordinator.convoy(id: "convoy"))
+    }
+
+    @MainActor
     func testCannotStartRefreshesStaleSnapshot() async {
         let forming = item(id: "convoy", status: .forming, viewer: .accepted)
         let active = item(id: "convoy", viewer: .accepted)

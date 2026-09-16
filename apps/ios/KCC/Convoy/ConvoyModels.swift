@@ -103,7 +103,11 @@ struct ConvoyItem: Equatable, Sendable, Identifiable {
         let membersByUid = members.reduce(into: [String: ConvoyMember]()) { result, member in
             result[member.uid] = member
         }
-        let participants = summary.participantUids.compactMap { membersByUid[$0] }
+        let participants = summary.participantUids.map { uid in
+            membersByUid[uid] ?? ConvoyMember(
+                uid: uid, displayName: nil, role: .member, inviteStatus: .accepted
+            )
+        }
         return ConvoyRecapState(
             durationSeconds: summary.durationSeconds,
             participants: participants,
@@ -129,8 +133,8 @@ struct ConvoyManagementSnapshot: Equatable, Sendable {
         }
     }
 
-    /// False means the capped list cannot prove that an older active
-    /// membership does not exist, so joining another convoy must stay blocked.
+    /// False means a capped list or incomplete live-membership scan cannot
+    /// rule out an older active membership, so joining must stay blocked.
     var canJoinAnotherConvoy: Bool { !hasActiveConvoy && isExhaustive }
 }
 
@@ -243,7 +247,8 @@ enum ConvoyManagementParser {
         return ConvoyManagementSnapshot(
             convoys: convoys,
             pendingInvites: pendingInvites,
-            isExhaustive: (data?["convoys"] as? [Any] ?? []).count < listLimit
+            isExhaustive: (data?["isExhaustive"] as? Bool)
+                ?? ((data?["convoys"] as? [Any] ?? []).count < listLimit)
         )
     }
 
