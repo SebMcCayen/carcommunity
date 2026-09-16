@@ -481,13 +481,18 @@ object ConvoyErrorMapper {
  */
 object ConvoyResponseParser {
     fun parseList(data: Map<String, Any?>?): ConvoyListResult.Loaded {
-        if (data == null) return ConvoyListResult.Loaded(emptyList(), emptyList())
+        val rawConvoys = data?.get("convoys") as? List<*>
+        val rawPending = data?.get("pendingInvites") as? List<*>
+        val convoys = rawConvoys.orEmpty().mapNotNull { parseConvoy(it) }
+        val pending = rawPending.orEmpty().mapNotNull { parseConvoy(it) }
+        // Malformed or absent arrays cannot prove the caller has no live convoy.
+        val validPayload = rawConvoys != null && rawPending != null &&
+            convoys.size == rawConvoys.size && pending.size == rawPending.size
         return ConvoyListResult.Loaded(
-            convoys = (data["convoys"] as? List<*>).orEmpty().mapNotNull { parseConvoy(it) },
-            pendingInvites =
-                (data["pendingInvites"] as? List<*>).orEmpty().mapNotNull { parseConvoy(it) },
-            isExhaustive = (data["isExhaustive"] as? Boolean)
-                ?: (((data["convoys"] as? List<*>)?.size ?: 0) < 200),
+            convoys = convoys,
+            pendingInvites = pending,
+            isExhaustive = validPayload &&
+                ((data?.get("isExhaustive") as? Boolean) ?: ((rawConvoys?.size ?: 200) < 200)),
         )
     }
 

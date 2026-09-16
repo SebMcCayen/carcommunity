@@ -172,6 +172,7 @@ final class ConvoyManagementCoordinator {
             guard !Task.isCancelled else { return false }
             setActionError(error, convoyId: convoyId)
             if error == .notFound
+                || error == .notLeader
                 || error == .alreadyEnded
                 || error == .leaveFailed
                 || error == .cannotStart

@@ -29,6 +29,15 @@ final class ConvoyManagementModelsTests: XCTestCase {
         XCTAssertEqual(snapshot.pendingInvites.first?.ownerName, "Owner")
     }
 
+    func testMalformedListCannotProveMembershipIsExhaustive() {
+        let snapshot = ConvoyManagementParser.parseList([
+            "convoys": ["bad"], "pendingInvites": [], "isExhaustive": true
+        ])
+        XCTAssertFalse(snapshot.isExhaustive)
+        XCTAssertFalse(snapshot.canJoinAnotherConvoy)
+        XCTAssertFalse(ConvoyManagementParser.parseList(nil).isExhaustive)
+    }
+
     func testCappedListBlocksJoiningWhenNoActiveMembershipWasFound() {
         let ended = convoy(id: "ended", status: "ended", viewer: "accepted")
         let snapshot = ConvoyManagementParser.parseList([

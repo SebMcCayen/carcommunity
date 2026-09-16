@@ -70,6 +70,22 @@ class ConvoyResponseParserTest {
         val result = ConvoyResponseParser.parseList(null)
         assertTrue(result.convoys.isEmpty())
         assertTrue(result.pendingInvites.isEmpty())
+        assertEquals(false, result.isExhaustive)
+    }
+
+    @Test
+    fun `missing or malformed lists cannot prove membership is exhaustive`() {
+        val missing = ConvoyResponseParser.parseList(mapOf("isExhaustive" to true))
+        assertEquals(false, missing.isExhaustive)
+
+        val malformed = ConvoyResponseParser.parseList(
+            mapOf(
+                "convoys" to listOf(mapOf("convoyId" to "invalid")),
+                "pendingInvites" to emptyList<Any>(),
+                "isExhaustive" to true,
+            ),
+        )
+        assertEquals(false, malformed.isExhaustive)
     }
 
     @Test

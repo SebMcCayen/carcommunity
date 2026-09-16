@@ -175,6 +175,8 @@ class ConvoyCoordinator(
 ) {
     private val statusState = MutableStateFlow<ConvoyListStatus>(ConvoyListStatus.Loading)
     val status: StateFlow<ConvoyListStatus> = statusState.asStateFlow()
+    private val refreshErrorState = MutableStateFlow<ConvoyActionError?>(null)
+    val refreshError: StateFlow<ConvoyActionError?> = refreshErrorState.asStateFlow()
 
     private val createStateFlow = MutableStateFlow<CreateConvoyState>(CreateConvoyState.Idle)
     val createState: StateFlow<CreateConvoyState> = createStateFlow.asStateFlow()
@@ -280,6 +282,7 @@ class ConvoyCoordinator(
         try {
             when (val result = repository.list()) {
                 is ConvoyListResult.Loaded -> {
+                    refreshErrorState.value = null
                     val knownActive = ConvoyBar.activeConvoy(statusState.value)
                     val convoys = result.convoys.toMutableList()
                     if (!result.isExhaustive && knownActive != null &&
@@ -332,12 +335,20 @@ class ConvoyCoordinator(
                             )
                     }
                 }
-                is ConvoyListResult.Failed -> statusState.value = ConvoyListStatus.Error(result.error)
+                is ConvoyListResult.Failed -> showListFailure(result.error)
             }
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (_: Exception) {
-            statusState.value = ConvoyListStatus.Error(ConvoyActionError.Generic)
+            showListFailure(ConvoyActionError.Generic)
+        }
+    }
+
+    private fun showListFailure(error: ConvoyActionError) {
+        if (statusState.value is ConvoyListStatus.Loaded) {
+            refreshErrorState.value = error
+        } else {
+            statusState.value = ConvoyListStatus.Error(error)
         }
     }
 

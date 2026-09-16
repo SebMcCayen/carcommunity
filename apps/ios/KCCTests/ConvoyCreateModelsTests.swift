@@ -26,7 +26,7 @@ final class ConvoyCreateModelsTests: XCTestCase {
         ])
 
         XCTAssertFalse(snapshot.hasActiveConvoy)
-        XCTAssertTrue(snapshot.isExhaustive)
+        XCTAssertFalse(snapshot.isExhaustive)
     }
 
     func testPendingInviteDoesNotCountAsActiveParticipation() {

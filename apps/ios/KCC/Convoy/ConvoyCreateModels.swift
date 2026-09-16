@@ -83,7 +83,8 @@ enum ConvoyCreateResponseParser {
     static let listLimit = 200
 
     static func parseList(_ data: [String: Any]?) -> ConvoyCreateSnapshot {
-        let convoys = data?["convoys"] as? [Any] ?? []
+        let rawConvoys = data?["convoys"] as? [Any]
+        let convoys = rawConvoys ?? []
         let hasActive = convoys.contains { raw in
             guard let convoy = raw as? [String: Any],
                   let status = convoy["status"] as? String,
@@ -94,7 +95,12 @@ enum ConvoyCreateResponseParser {
         }
         return ConvoyCreateSnapshot(
             hasActiveConvoy: hasActive,
-            isExhaustive: convoys.count < listLimit
+            isExhaustive: rawConvoys != nil && convoys.allSatisfy { raw in
+                guard let row = raw as? [String: Any],
+                      let status = row["status"] as? String
+                else { return false }
+                return ["forming", "active", "ended"].contains(status)
+            } && ((data?["isExhaustive"] as? Bool) ?? (convoys.count < listLimit))
         )
     }
 

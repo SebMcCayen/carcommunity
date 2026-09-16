@@ -123,6 +123,7 @@ fun ConvoyRoute(
             ConvoyCoordinator(repository, liveProfiles = liveProfiles)
         }
     val status by coordinator.status.collectAsState()
+    val refreshError by coordinator.refreshError.collectAsState()
     val actionError by coordinator.actionError.collectAsState()
     val busyConvoys by coordinator.busyConvoys.collectAsState()
     val createState by coordinator.createState.collectAsState()
@@ -329,6 +330,7 @@ fun ConvoyRoute(
                 // other two on the plain, un-layered draw path they had before.
                 modifier = Modifier.alpha(handoffAlpha),
                 status = status,
+                refreshError = refreshError,
                 actionError = actionError,
                 busyConvoys = busyConvoys,
                 inviteDeepLinkConvoyId = inviteLinkConvoyId,

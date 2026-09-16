@@ -283,6 +283,26 @@ class ConvoyCoordinatorTest {
     }
 
     @Test
+    fun `refresh failure preserves a loaded active convoy and exposes retry error`() = runTest {
+        val active = convoy("live", status = ConvoyStatus.Active)
+        val repo = FakeRepo().apply {
+            listResult = ConvoyListResult.Loaded(listOf(active), emptyList())
+        }
+        val coordinator = ConvoyCoordinator(repo)
+        coordinator.load()
+
+        repo.listResult = ConvoyListResult.Failed(ConvoyActionError.Generic)
+        coordinator.load()
+        assertEquals("live", ConvoyBar.activeConvoy(coordinator.status.value)?.convoyId)
+        assertEquals(ConvoyActionError.Generic, coordinator.refreshError.value)
+
+        repo.listResult = ConvoyListResult.Loaded(emptyList(), emptyList())
+        coordinator.load()
+        assertEquals(null, coordinator.refreshError.value)
+        assertNull(ConvoyBar.activeConvoy(coordinator.status.value))
+    }
+
+    @Test
     fun `create with no invitees is rejected without calling the backend`() = runTest {
         val repo = FakeRepo()
         val coordinator = ConvoyCoordinator(repo)

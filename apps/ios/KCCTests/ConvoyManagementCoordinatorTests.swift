@@ -390,6 +390,24 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testNotLeaderFailureRefreshesStaleConvoy() async {
+        let active = item(id: "convoy", viewer: .accepted)
+        let ended = item(id: "convoy", status: .ended, viewer: .accepted)
+        let repository = FakeRepository(
+            listResults: [.loaded(snapshot(convoys: [active])), .loaded(snapshot(convoys: [ended]))],
+            lifecycleResult: .failed(.notLeader)
+        )
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        await coordinator.load()
+
+        let succeeded = await coordinator.runLifecycle(convoyId: "convoy", action: .end)
+        XCTAssertFalse(succeeded)
+        XCTAssertEqual(coordinator.actionError, .notLeader)
+        XCTAssertEqual(coordinator.convoy(id: "convoy"), ended)
+        XCTAssertNil(coordinator.activeConvoy)
+    }
+
+    @MainActor
     func testLeaveRefreshFailureRemovesConvoyLocally() async {
         let active = item(id: "convoy", viewer: .accepted)
         let leaveResult = ConvoyLeaveResult(outcome: .left, newLeaderUid: "next-leader")

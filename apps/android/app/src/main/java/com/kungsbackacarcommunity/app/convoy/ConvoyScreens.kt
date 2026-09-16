@@ -81,6 +81,7 @@ const val CONVOY_DETAIL_END_TAG = "convoy-detail-end"
 @Composable
 fun ConvoyListScreen(
     status: ConvoyListStatus,
+    refreshError: ConvoyActionError?,
     actionError: ConvoyActionError?,
     busyConvoys: Set<String>,
     onCreate: () -> Unit,
@@ -146,6 +147,17 @@ fun ConvoyListScreen(
                 }
             }
 
+            refreshError?.let { error ->
+                item(key = "refresh-error") {
+                    Column {
+                        InfoNoticeCard(text = stringResource(error.messageRes()))
+                        TextButton(onClick = onRefresh) {
+                            Text(stringResource(R.string.convoy_friendsRetry))
+                        }
+                    }
+                }
+            }
+
             // Why the invite you tapped isn't here. Shown rather than silently
             // omitted: the member acted, and an action that produces no visible
             // consequence is the bug this originally fixed.
@@ -171,7 +183,12 @@ fun ConvoyListScreen(
 
                 is ConvoyListStatus.Error ->
                     item(key = "load-error") {
-                        InfoNoticeCard(text = stringResource(status.error.messageRes()))
+                        Column {
+                            InfoNoticeCard(text = stringResource(status.error.messageRes()))
+                            TextButton(onClick = onRefresh) {
+                                Text(stringResource(R.string.convoy_friendsRetry))
+                            }
+                        }
                     }
 
                 is ConvoyListStatus.Loaded -> {

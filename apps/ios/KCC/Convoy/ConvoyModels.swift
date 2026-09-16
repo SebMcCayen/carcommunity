@@ -276,14 +276,19 @@ enum ConvoyManagementParser {
     static let listLimit = 200
 
     static func parseList(_ data: [String: Any]?) -> ConvoyManagementSnapshot {
+        let rawConvoys = data?["convoys"] as? [Any]
+        let rawPending = data?["pendingInvites"] as? [Any]
         let convoys = parseItems(data?["convoys"])
         let pendingInvites = parseItems(data?["pendingInvites"])
             .filter { $0.status != .ended && $0.viewer?.inviteStatus == .invited }
+        let validPayload = rawConvoys != nil && rawPending != nil
+            && convoys.count == (rawConvoys?.count ?? -1)
+            && pendingInvites.count == (rawPending?.count ?? -1)
         return ConvoyManagementSnapshot(
             convoys: convoys,
             pendingInvites: pendingInvites,
-            isExhaustive: (data?["isExhaustive"] as? Bool)
-                ?? ((data?["convoys"] as? [Any] ?? []).count < listLimit)
+            isExhaustive: validPayload &&
+                ((data?["isExhaustive"] as? Bool) ?? ((rawConvoys?.count ?? listLimit) < listLimit))
         )
     }
 
