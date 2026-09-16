@@ -280,6 +280,13 @@ class ConvoyCoordinator(
         try {
             when (val result = repository.list()) {
                 is ConvoyListResult.Loaded -> {
+                    val knownActive = ConvoyBar.activeConvoy(statusState.value)
+                    val convoys = result.convoys.toMutableList()
+                    if (!result.isExhaustive && knownActive != null &&
+                        convoys.none { it.convoyId == knownActive.convoyId }
+                    ) {
+                        convoys.add(0, knownActive)
+                    }
                     // Publish the stored snapshot FIRST, then refresh the profiles
                     // onto it. The list must not wait on a second round-trip for a
                     // cosmetic overlay: gating it would add a profile RTT to every
@@ -292,7 +299,7 @@ class ConvoyCoordinator(
                     // touching the network and both publishes land in the same tick.
                     statusState.value =
                         ConvoyListStatus.Loaded(
-                            convoys = result.convoys,
+                            convoys = convoys,
                             pendingInvites = result.pendingInvites,
                             isExhaustive = result.isExhaustive,
                         )
@@ -311,14 +318,14 @@ class ConvoyCoordinator(
                     val live =
                         runCatchingCancellable {
                             liveProfiles.loadProfiles(
-                                convoyProfileUids(result.pendingInvites + result.convoys),
+                                convoyProfileUids(result.pendingInvites + convoys),
                             )
                         }
                             .getOrDefault(emptyMap())
                     if (live.isNotEmpty()) {
                         statusState.value =
                             ConvoyListStatus.Loaded(
-                                convoys = result.convoys.map { hydrateConvoy(it, live) },
+                                convoys = convoys.map { hydrateConvoy(it, live) },
                                 pendingInvites =
                                     result.pendingInvites.map { hydrateConvoy(it, live) },
                                 isExhaustive = result.isExhaustive,

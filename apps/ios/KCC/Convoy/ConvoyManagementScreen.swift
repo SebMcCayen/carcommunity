@@ -44,7 +44,7 @@ struct ConvoyManagementScreen: View {
                 if snapshot.hasActiveConvoy {
                     Text("convoy.alreadyInConvoyCreateHint").foregroundStyle(.secondary)
                 } else if !snapshot.isExhaustive {
-                    Text("convoy.errorGeneric").foregroundStyle(.secondary)
+                    Text("convoy.membershipUncertainHint").foregroundStyle(.secondary)
                     Button("convoy.friendsRetry") { Task { await coordinator.load() } }
                 }
             }
@@ -127,7 +127,7 @@ struct ConvoyManagementScreen: View {
                     .font(.system(size: KccTypeScale.bodySm))
                     .foregroundStyle(.secondary)
             } else if !snapshot.isExhaustive {
-                Text("convoy.errorGeneric")
+                Text("convoy.membershipUncertainHint")
                     .font(.system(size: KccTypeScale.bodySm))
                     .foregroundStyle(.secondary)
             }

@@ -201,6 +201,25 @@ class ConvoyCoordinatorTest {
     }
 
     @Test
+    fun `incomplete refresh keeps the previously known live convoy`() = runTest {
+        val active = convoy("live", status = ConvoyStatus.Active)
+        val repo = FakeRepo().apply {
+            listResult = ConvoyListResult.Loaded(listOf(active), emptyList())
+        }
+        val coordinator = ConvoyCoordinator(repo)
+        coordinator.load()
+
+        repo.listResult = ConvoyListResult.Loaded(emptyList(), emptyList(), isExhaustive = false)
+        coordinator.load()
+        assertEquals("live", ConvoyBar.activeConvoy(coordinator.status.value)?.convoyId)
+        assertEquals(false, (coordinator.status.value as ConvoyListStatus.Loaded).isExhaustive)
+
+        repo.listResult = ConvoyListResult.Loaded(emptyList(), emptyList(), isExhaustive = true)
+        coordinator.load()
+        assertNull(ConvoyBar.activeConvoy(coordinator.status.value))
+    }
+
+    @Test
     fun `unloaded or failed list blocks create and accept but allows decline`() = runTest {
         val repo = FakeRepo().apply {
             listResult = ConvoyListResult.Failed(ConvoyActionError.Generic)

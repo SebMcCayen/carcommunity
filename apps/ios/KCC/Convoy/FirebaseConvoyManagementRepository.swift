@@ -45,7 +45,7 @@ final class FirebaseConvoyManagementRepository: ConvoyManagementRepository, @unc
     func list() async -> ConvoyManagementListResult {
         switch await call("convoy-list", payload: [:]) {
         case .success(let data):
-            return .loaded(await hydrateSnapshot(ConvoyManagementParser.parseList(data)))
+            return .loaded(ConvoyManagementParser.parseList(data))
         case .failure(let error):
             return .failed(ConvoyManagementErrorMapper.mapList(error.code))
         }
@@ -132,7 +132,7 @@ final class FirebaseConvoyManagementRepository: ConvoyManagementRepository, @unc
         return ConvoyProfileHydration.apply(convoy, names: names)
     }
 
-    private func hydrateSnapshot(_ snapshot: ConvoyManagementSnapshot) async -> ConvoyManagementSnapshot {
+    func hydrateSnapshot(_ snapshot: ConvoyManagementSnapshot) async -> ConvoyManagementSnapshot {
         let prioritized = snapshot.pendingInvites
             + snapshot.convoys.filter { $0.status != .ended }
             + snapshot.convoys.filter { $0.status == .ended }
@@ -159,6 +159,7 @@ final class FirebaseConvoyManagementRepository: ConvoyManagementRepository, @unc
         guard !uids.isEmpty else { return [:] }
         var names: [String: String] = [:]
         for start in stride(from: 0, to: uids.count, by: 30) {
+            guard !Task.isCancelled else { return names }
             let batch = Array(uids[start..<min(start + 30, uids.count)])
             do {
                 let snapshot = try await firestore.collection("users")
@@ -171,6 +172,7 @@ final class FirebaseConvoyManagementRepository: ConvoyManagementRepository, @unc
                     }
                 }
             } catch {
+                if error is CancellationError || Task.isCancelled { return names }
                 // A profile read is cosmetic; keep the stored convoy name.
                 continue
             }

@@ -158,6 +158,18 @@ struct ConvoyManagementSnapshot: Equatable, Sendable {
     /// False means a capped list or incomplete live-membership scan cannot
     /// rule out an older active membership, so joining must stay blocked.
     var canJoinAnotherConvoy: Bool { !hasActiveConvoy && isExhaustive }
+
+    func preservingKnownActive(from previous: ConvoyManagementSnapshot?) -> Self {
+        guard !isExhaustive, let previous,
+              let active = ConvoyBarLogic.activeConvoy(in: previous),
+              !convoys.contains(where: { $0.convoyId == active.convoyId })
+        else { return self }
+        return Self(
+            convoys: [active] + convoys,
+            pendingInvites: pendingInvites,
+            isExhaustive: false
+        )
+    }
 }
 
 enum ConvoyAction: String, Equatable, Sendable {
@@ -172,6 +184,7 @@ enum ConvoyActionError: Equatable, Sendable {
     case notFound
     case inviteGone
     case alreadyInConvoy
+    case membershipUncertain
     case unresolvedPrecondition
     case notLeader
     case cannotStart
@@ -443,6 +456,7 @@ enum ConvoyManagementStrings {
         case .notFound: "convoy.errorNotFound"
         case .inviteGone: "convoy.errorInviteGone"
         case .alreadyInConvoy: "convoy.errorAlreadyInConvoy"
+        case .membershipUncertain: "convoy.membershipUncertainHint"
         case .unresolvedPrecondition, .generic: "convoy.errorGeneric"
         case .notLeader: "convoy.errorNotLeader"
         case .cannotStart: "convoy.errorCannotStart"

@@ -96,6 +96,45 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testIncompleteRefreshPreservesKnownActiveUntilExhaustive() async {
+        let active = item(id: "live", viewer: .accepted)
+        let incomplete = ConvoyManagementSnapshot(
+            convoys: [], pendingInvites: [], isExhaustive: false
+        )
+        let repository = FakeRepository(listResults: [
+            .loaded(snapshot(convoys: [active])), .loaded(incomplete), .loaded(snapshot())
+        ])
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        await coordinator.load()
+
+        _ = await coordinator.refresh()
+        XCTAssertEqual(coordinator.activeConvoy, active)
+        XCTAssertEqual(coordinator.snapshot?.isExhaustive, false)
+
+        _ = await coordinator.refresh()
+        XCTAssertNil(coordinator.activeConvoy)
+    }
+
+    @MainActor
+    func testIncompleteMutationRefreshPreservesUpdatedConvoy() async {
+        let forming = item(id: "live", status: .forming, viewer: .accepted)
+        let active = item(id: "live", viewer: .accepted)
+        let incomplete = ConvoyManagementSnapshot(
+            convoys: [], pendingInvites: [], isExhaustive: false
+        )
+        let repository = FakeRepository(
+            listResults: [.loaded(snapshot(convoys: [forming])), .loaded(incomplete)],
+            lifecycleResult: .updated(active)
+        )
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        await coordinator.load()
+
+        let succeeded = await coordinator.runLifecycle(convoyId: "live", action: .start)
+        XCTAssertTrue(succeeded)
+        XCTAssertEqual(coordinator.activeConvoy, active)
+    }
+
+    @MainActor
     func testAcceptRefreshesAndReturnsJoinedConvoy() async {
         let invite = item(id: "invite", viewer: .invited)
         let before = snapshot(convoys: [invite], pending: [invite])
@@ -216,7 +255,7 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
 
         await coordinator.respond(convoyId: "invite", action: .accept)
 
-        XCTAssertEqual(coordinator.actionError, .unresolvedPrecondition)
+        XCTAssertEqual(coordinator.actionError, .membershipUncertain)
     }
 
     @MainActor
@@ -233,7 +272,7 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
 
         await coordinator.respond(convoyId: "invite", action: .accept)
 
-        XCTAssertEqual(coordinator.actionError, .generic)
+        XCTAssertEqual(coordinator.actionError, .membershipUncertain)
         XCTAssertTrue(repository.respondCalls.isEmpty)
     }
 

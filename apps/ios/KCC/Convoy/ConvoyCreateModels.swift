@@ -7,6 +7,7 @@ enum ConvoyCreateError: Equatable, Sendable {
     case invalid
     case noInvitees
     case alreadyInConvoy
+    case membershipUncertain
     /// The callable overloads failed-precondition; the coordinator resolves it
     /// with a fresh list before selecting a user-facing reason.
     case unresolvedPrecondition
@@ -41,6 +42,7 @@ enum ConvoyCreateStrings {
         case .invalid: "convoy.errorInvalid"
         case .noInvitees: "convoy.errorNoInvitees"
         case .alreadyInConvoy: "convoy.errorAlreadyInConvoy"
+        case .membershipUncertain: "convoy.membershipUncertainHint"
         case .unresolvedPrecondition, .generic: "convoy.errorGeneric"
         }
     }

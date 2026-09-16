@@ -48,12 +48,11 @@ final class ConvoyManagementCoordinator {
             state = .unavailable
             return
         }
-        state = .loading
+        if snapshot == nil { state = .loading }
         let generation = beginListRequest()
         switch await repository.list() {
         case .loaded(let snapshot):
-            guard requestIsCurrent(generation) else { return }
-            state = .loaded(snapshot)
+            await publish(snapshot, generation: generation, using: repository)
         case .failed(let error):
             guard requestIsCurrent(generation) else { return }
             state = .failed(error)
@@ -70,7 +69,10 @@ final class ConvoyManagementCoordinator {
 
         clearActionError()
         if action == .accept, !snapshot.canJoinAnotherConvoy {
-            setActionError(snapshot.hasActiveConvoy ? .alreadyInConvoy : .generic, convoyId: convoyId)
+            setActionError(
+                snapshot.hasActiveConvoy ? .alreadyInConvoy : .membershipUncertain,
+                convoyId: convoyId
+            )
             return nil
         }
 
@@ -107,7 +109,7 @@ final class ConvoyManagementCoordinator {
         switch await repository.list() {
         case .loaded(let snapshot):
             guard requestIsCurrent(generation) else { return false }
-            state = .loaded(snapshot)
+            await publish(snapshot, generation: generation, using: repository)
             return true
         case .failed:
             // A background refresh must not tear down known-good driving UI.
@@ -230,8 +232,7 @@ final class ConvoyManagementCoordinator {
         let generation = beginListRequest()
         switch await repository.list() {
         case .loaded(let snapshot):
-            guard requestIsCurrent(generation) else { return }
-            state = .loaded(snapshot)
+            await publish(snapshot, generation: generation, using: repository)
         case .failed(let error):
             guard requestIsCurrent(generation) else { return }
             if snapshot == nil { state = .failed(error) }
@@ -276,12 +277,14 @@ final class ConvoyManagementCoordinator {
         switch await repository.list() {
         case .loaded(let snapshot):
             guard requestIsCurrent(generation) else { return }
-            state = .loaded(snapshot)
+            let resolved = snapshot.preservingKnownActive(from: self.snapshot)
+            state = .loaded(resolved)
             setActionError(
-                action == .accept && snapshot.hasActiveConvoy ? .alreadyInConvoy
-                    : (snapshot.isExhaustive ? .inviteGone : .unresolvedPrecondition),
+                action == .accept && resolved.hasActiveConvoy ? .alreadyInConvoy
+                    : (resolved.isExhaustive ? .inviteGone : .membershipUncertain),
                 convoyId: convoyId
             )
+            await publish(resolved, generation: generation, using: repository)
         case .failed:
             guard requestIsCurrent(generation) else { return }
             setActionError(.generic, convoyId: convoyId)
@@ -291,6 +294,20 @@ final class ConvoyManagementCoordinator {
     private func setActionError(_ error: ConvoyActionError, convoyId: String) {
         actionError = error
         actionErrorConvoyId = convoyId
+    }
+
+    private func publish(
+        _ incoming: ConvoyManagementSnapshot,
+        generation: Int,
+        using repository: ConvoyManagementRepository
+    ) async {
+        guard requestIsCurrent(generation) else { return }
+        let merged = incoming.preservingKnownActive(from: snapshot)
+        // The callable snapshot drives the bar immediately; profiles are cosmetic.
+        state = .loaded(merged)
+        let hydrated = await repository.hydrateSnapshot(merged)
+        guard requestIsCurrent(generation) else { return }
+        state = .loaded(hydrated)
     }
 
     private func beginListRequest() -> Int {
