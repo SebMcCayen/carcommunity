@@ -16,7 +16,7 @@
     "build": "npm run build --workspaces --if-present"
   },
   "devDependencies": {
-    "prettier": "^3.9.6"
+    "prettier": "^3.9.8"
   },
   "overrides": {
     "jest-mock": "30.4.1",
