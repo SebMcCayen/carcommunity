@@ -81,6 +81,7 @@ const val CONVOY_DETAIL_END_TAG = "convoy-detail-end"
 @Composable
 fun ConvoyListScreen(
     status: ConvoyListStatus,
+    refreshError: ConvoyActionError?,
     actionError: ConvoyActionError?,
     busyConvoys: Set<String>,
     onCreate: () -> Unit,
@@ -88,6 +89,7 @@ fun ConvoyListScreen(
     onAccept: (String) -> Unit,
     onDecline: (String) -> Unit,
     onClearActionError: () -> Unit,
+    onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
     // The convoy a tapped invite notification was about, if that is why we are
     // here: its invite is pulled to the top of the section so a member with
@@ -105,6 +107,7 @@ fun ConvoyListScreen(
     // create OR accept into a second one. The affordances are disabled with an
     // explanation so they are TOLD, rather than hitting a raw failed-precondition.
     val alreadyInConvoy = ConvoyBar.activeConvoy(status) != null
+    val membershipUncertain = (status as? ConvoyListStatus.Loaded)?.isExhaustive != true
     AeroLazyPage(modifier = modifier) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -116,23 +119,42 @@ fun ConvoyListScreen(
             item(key = "create") {
                 Button(
                     onClick = onCreate,
-                    enabled = !alreadyInConvoy,
+                    enabled = !alreadyInConvoy && !membershipUncertain,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(stringResource(R.string.convoy_createAction))
                 }
-                if (alreadyInConvoy) {
+                if (alreadyInConvoy || membershipUncertain) {
                     Text(
-                        text = stringResource(R.string.convoy_alreadyInConvoyCreateHint),
+                        text = stringResource(
+                            if (alreadyInConvoy) R.string.convoy_alreadyInConvoyCreateHint
+                            else R.string.convoy_membershipUncertainHint,
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+                if (status is ConvoyListStatus.Loaded && !status.isExhaustive) {
+                    TextButton(onClick = onRefresh) {
+                        Text(stringResource(R.string.convoy_friendsRetry))
+                    }
                 }
             }
 
             actionError?.let { error ->
                 item(key = "action-error") {
                     ErrorBanner(text = stringResource(error.messageRes()), onDismiss = onClearActionError)
+                }
+            }
+
+            refreshError?.let { error ->
+                item(key = "refresh-error") {
+                    Column {
+                        InfoNoticeCard(text = stringResource(error.messageRes()))
+                        TextButton(onClick = onRefresh) {
+                            Text(stringResource(R.string.convoy_friendsRetry))
+                        }
+                    }
                 }
             }
 
@@ -161,7 +183,12 @@ fun ConvoyListScreen(
 
                 is ConvoyListStatus.Error ->
                     item(key = "load-error") {
-                        InfoNoticeCard(text = stringResource(status.error.messageRes()))
+                        Column {
+                            InfoNoticeCard(text = stringResource(status.error.messageRes()))
+                            TextButton(onClick = onRefresh) {
+                                Text(stringResource(R.string.convoy_friendsRetry))
+                            }
+                        }
                     }
 
                 is ConvoyListStatus.Loaded -> {
@@ -181,7 +208,12 @@ fun ConvoyListScreen(
                                 // Accepting joins a SECOND convoy — blocked while
                                 // already in one. Declining stays available (it
                                 // commits to nothing).
-                                acceptBlocked = alreadyInConvoy,
+                                acceptBlocked = alreadyInConvoy || membershipUncertain,
+                                acceptBlockedHint = if (alreadyInConvoy) {
+                                    R.string.convoy_alreadyInConvoyAcceptHint
+                                } else {
+                                    R.string.convoy_membershipUncertainHint
+                                },
                                 onAccept = { onAccept(convoy.convoyId) },
                                 onDecline = { onDecline(convoy.convoyId) },
                             )
@@ -291,6 +323,7 @@ private fun PendingInviteRow(
     convoy: ConvoySummary,
     working: Boolean,
     acceptBlocked: Boolean,
+    acceptBlockedHint: Int,
     onAccept: () -> Unit,
     onDecline: () -> Unit,
 ) {
@@ -319,7 +352,7 @@ private fun PendingInviteRow(
             }
             if (acceptBlocked) {
                 Text(
-                    text = stringResource(R.string.convoy_alreadyInConvoyAcceptHint),
+                    text = stringResource(acceptBlockedHint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1142,5 +1175,6 @@ internal fun ConvoyActionError.messageRes(): Int =
         ConvoyActionError.NotAllowed -> R.string.convoy_errorNotAllowed
         ConvoyActionError.NotLeader -> R.string.convoy_errorNotLeader
         ConvoyActionError.AlreadyInConvoy -> R.string.convoy_errorAlreadyInConvoy
+        ConvoyActionError.MembershipUncertain -> R.string.convoy_membershipUncertainHint
         ConvoyActionError.Generic -> R.string.convoy_errorGeneric
     }

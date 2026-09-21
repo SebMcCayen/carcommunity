@@ -209,6 +209,7 @@ enum class ConvoyActionError {
      * from "no invitees"/"invite gone").
      */
     AlreadyInConvoy,
+    MembershipUncertain,
 
     /**
      * The caller is a member of the convoy but NOT its leader, and tried to end it
@@ -228,6 +229,7 @@ sealed interface ConvoyListResult {
     data class Loaded(
         val convoys: List<ConvoySummary>,
         val pendingInvites: List<ConvoySummary>,
+        val isExhaustive: Boolean = true,
     ) : ConvoyListResult
 
     data class Failed(val error: ConvoyActionError) : ConvoyListResult
@@ -338,20 +340,16 @@ object ConvoyErrorMapper {
             else -> ConvoyActionError.Generic
         }
 
-    /**
-     * For `convoy-invite`. A non-member / unknown convoy is `not-found` (a convoy
-     * must not be probeable); the only precondition failure is a convoy that has
-     * ended, is not the caller's to invite into, or where nobody could be added —
-     * all surfaced as "no one could be added" ([NoInvitees]), the same neutral
-     * outcome `convoy-create` uses for its precondition failure.
-     */
-    fun mapInvite(code: ConvoyErrorCode): ConvoyActionError =
+    /** Only the allowlisted backend reason means no invitee could be added. */
+    fun mapInvite(code: ConvoyErrorCode, reason: String? = null): ConvoyActionError =
         when (code) {
             ConvoyErrorCode.Unauthenticated -> ConvoyActionError.SignedOut
             ConvoyErrorCode.PermissionDenied -> ConvoyActionError.NotMember
             ConvoyErrorCode.InvalidArgument -> ConvoyActionError.Invalid
             ConvoyErrorCode.NotFound -> ConvoyActionError.NotFound
-            ConvoyErrorCode.FailedPrecondition -> ConvoyActionError.NoInvitees
+            ConvoyErrorCode.FailedPrecondition ->
+                if (reason == "no_valid_convoy_invitees") ConvoyActionError.NoInvitees
+                else ConvoyActionError.Generic
             else -> ConvoyActionError.Generic
         }
 
@@ -483,11 +481,18 @@ object ConvoyErrorMapper {
  */
 object ConvoyResponseParser {
     fun parseList(data: Map<String, Any?>?): ConvoyListResult.Loaded {
-        if (data == null) return ConvoyListResult.Loaded(emptyList(), emptyList())
+        val rawConvoys = data?.get("convoys") as? List<*>
+        val rawPending = data?.get("pendingInvites") as? List<*>
+        val convoys = rawConvoys.orEmpty().mapNotNull { parseConvoy(it) }
+        val pending = rawPending.orEmpty().mapNotNull { parseConvoy(it) }
+        // Malformed or absent arrays cannot prove the caller has no live convoy.
+        val validPayload = rawConvoys != null && rawPending != null &&
+            convoys.size == rawConvoys.size && pending.size == rawPending.size
         return ConvoyListResult.Loaded(
-            convoys = (data["convoys"] as? List<*>).orEmpty().mapNotNull { parseConvoy(it) },
-            pendingInvites =
-                (data["pendingInvites"] as? List<*>).orEmpty().mapNotNull { parseConvoy(it) },
+            convoys = convoys,
+            pendingInvites = pending,
+            isExhaustive = validPayload &&
+                ((data?.get("isExhaustive") as? Boolean) ?: ((rawConvoys?.size ?: 200) < 200)),
         )
     }
 

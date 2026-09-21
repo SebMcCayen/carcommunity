@@ -46,6 +46,7 @@ struct ShellView: View {
     @State private var convoyCreateCoordinator: ConvoyCreateCoordinator?
     @State private var convoyCreateVehicleId: String?
     @State private var convoyCreateReturnsToList = false
+    @State private var selectedConvoyId: String?
     @State private var friendsRepository: FriendsRepository?
     @State private var conversationsRepository: ConversationsRepository?
     @State private var dmTarget: DmRouteTarget?
@@ -178,6 +179,11 @@ struct ShellView: View {
         } message: {
             Text("liveLocation.error")
         }
+        .alert(convoyLeaveResultMessage, isPresented: convoyLeaveResultIsPresented) {
+            Button("convoy.close", role: .cancel) {
+                convoyManagementCoordinator?.clearLeaveResult()
+            }
+        }
         .task(id: signedInUid) { await wireFeatures() }
     }
 
@@ -200,6 +206,18 @@ struct ShellView: View {
                 .overlay(alignment: .bottomTrailing) {
                     if case .signedIn = session.state {
                         mapCommunicationControls
+                    }
+                }
+                .overlay(alignment: .top) {
+                    if let coordinator = convoyManagementCoordinator,
+                       let convoy = coordinator.activeConvoy {
+                        ConvoyStatusBar(
+                            coordinator: coordinator,
+                            convoy: convoy,
+                            friendsCoordinator: friendsCoordinator
+                        )
+                        .padding(.horizontal, KccSpacing.s4)
+                        .padding(.top, KccSpacing.s12 + KccSpacing.s3)
                     }
                 }
                 .overlay {
@@ -375,11 +393,20 @@ struct ShellView: View {
                                 vehicleId: convoyCreateVehicleId,
                                 onCreated: completeConvoyCreation
                             )
+                        } else if let selectedConvoyId,
+                                  let convoy = convoyManagementCoordinator.snapshot?.convoys
+                                      .first(where: { $0.convoyId == selectedConvoyId }) {
+                            ConvoyDetailScreen(
+                                coordinator: convoyManagementCoordinator,
+                                convoy: convoy,
+                                friendsCoordinator: friendsCoordinator
+                            )
                         } else {
                             ConvoyManagementScreen(
                                 coordinator: convoyManagementCoordinator,
                                 onCreate: openConvoyCreateFromList,
-                                onJoined: completeConvoyJoin
+                                onJoined: completeConvoyJoin,
+                                onOpen: { selectedConvoyId = $0.convoyId }
                             )
                         }
                     }
@@ -600,7 +627,13 @@ struct ShellView: View {
         guard !convoyCreationIsWorking else { return }
         if convoyCreateCoordinator != nil, convoyCreateReturnsToList {
             closeConvoyCreate()
+        } else if let selectedId = selectedConvoyId,
+                  convoyManagementCoordinator?.snapshot?.convoys.contains(
+                      where: { $0.convoyId == selectedId }
+                  ) == true {
+            selectedConvoyId = nil
         } else {
+            selectedConvoyId = nil
             closeConvoyCreate()
             if routes.current == .convoys { routes = routes.poppingOne() }
         }
@@ -608,6 +641,7 @@ struct ShellView: View {
 
     private func openConvoyManagement() {
         closeConvoyCreate()
+        selectedConvoyId = nil
         routes = routes.opening(.convoys)
     }
 
@@ -630,11 +664,34 @@ struct ShellView: View {
             || !(convoyManagementCoordinator?.busyConvoyIds.isEmpty ?? true)
     }
 
+    private var convoyLeaveResultIsPresented: Binding<Bool> {
+        Binding(
+            get: { convoyManagementCoordinator?.lastLeaveResult != nil },
+            set: { if !$0 { convoyManagementCoordinator?.clearLeaveResult() } }
+        )
+    }
+
+    private var convoyLeaveResultMessage: LocalizedStringKey {
+        guard let result = convoyManagementCoordinator?.lastLeaveResult else {
+            return "convoy.leftConvoyToast"
+        }
+        if result.outcome == .leftAndEnded {
+            return "convoy.leftAndEndedToast"
+        }
+        return result.newLeaderUid?.isEmpty == false
+            ? "convoy.leftAsLeaderToast"
+            : "convoy.leftConvoyToast"
+    }
+
     private func completeConvoyCreation(_ created: ConvoyCreated) {
         guard !created.convoyId.isEmpty else { return }
+        if let convoy = created.convoy {
+            convoyManagementCoordinator?.recordCreatedConvoy(convoy)
+        }
         closeConvoyCreate()
         if routes.current == .convoys { routes = routes.poppingOne() }
         selectedTab = .map
+        Task { _ = await convoyManagementCoordinator?.refresh() }
         retainConvoySessionStartUntilObserved()
     }
 
@@ -856,6 +913,7 @@ struct ShellView: View {
         convoyCreateCoordinator = nil
         convoyCreateVehicleId = nil
         convoyCreateReturnsToList = false
+        selectedConvoyId = nil
         liveLocationCoordinator = nil
         startDrivingGarage = nil
         crownHuntComposition = nil
@@ -897,9 +955,10 @@ struct ShellView: View {
             communityRepository: FirebaseCommunityChatRepository.createIfAvailable(),
             convoyRepository: FirebaseConvoyChatRepository.createIfAvailable()
         )
-        convoyManagementCoordinator = ConvoyManagementCoordinator(
+        let convoyManagement = ConvoyManagementCoordinator(
             repository: FirebaseConvoyManagementRepository.createIfAvailable()
         )
+        convoyManagementCoordinator = convoyManagement
 
         let crownHunt = await CrownHuntComposition.live(
             uid: uid,
@@ -926,6 +985,10 @@ struct ShellView: View {
             pendingCreateIntent = nil
             presentSingleSessionAction(using: liveLocation)
         }
+
+        // Convoy discovery is independent of the map's live-session wiring.
+        // Load it last so a slow callable cannot delay location controls.
+        await convoyManagement.load()
     }
 
     private var signedInDisplayName: String? {

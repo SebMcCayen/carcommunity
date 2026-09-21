@@ -206,6 +206,7 @@ fun mergeConvoyUpdate(
         convoys = status.convoys.map { if (it.convoyId == fresh.convoyId) fresh else it },
         pendingInvites =
             status.pendingInvites.map { if (it.convoyId == fresh.convoyId) fresh else it },
+        isExhaustive = status.isExhaustive,
     )
 }
 
@@ -239,6 +240,7 @@ fun endConvoyLocally(
     return ConvoyListStatus.Loaded(
         convoys = status.convoys.map(::end),
         pendingInvites = status.pendingInvites.map(::end),
+        isExhaustive = status.isExhaustive,
     )
 }
 

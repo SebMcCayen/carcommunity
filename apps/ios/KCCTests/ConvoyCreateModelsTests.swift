@@ -26,7 +26,24 @@ final class ConvoyCreateModelsTests: XCTestCase {
         ])
 
         XCTAssertFalse(snapshot.hasActiveConvoy)
-        XCTAssertTrue(snapshot.isExhaustive)
+        XCTAssertFalse(snapshot.isExhaustive)
+    }
+
+    func testValidStatusWithoutIdentityOrViewerCannotBeExhaustive() {
+        let missingIdentity = ConvoyCreateResponseParser.parseList([
+            "convoys": [[
+                "status": "active",
+                "viewer": ["inviteStatus": "accepted"]
+            ]],
+            "isExhaustive": true
+        ])
+        let missingViewer = ConvoyCreateResponseParser.parseList([
+            "convoys": [["convoyId": "c1", "status": "active"]],
+            "isExhaustive": true
+        ])
+
+        XCTAssertFalse(missingIdentity.isExhaustive)
+        XCTAssertFalse(missingViewer.isExhaustive)
     }
 
     func testPendingInviteDoesNotCountAsActiveParticipation() {
@@ -43,6 +60,7 @@ final class ConvoyCreateModelsTests: XCTestCase {
 
     func testFullListCannotProveThatNoOlderActiveConvoyExists() {
         let pending = [
+            "convoyId": "pending",
             "status": "active",
             "viewer": ["inviteStatus": "invited"]
         ] as [String: Any]
@@ -71,6 +89,22 @@ final class ConvoyCreateModelsTests: XCTestCase {
                 )
             )
         )
+    }
+
+    func testCreateCarriesReturnedConvoyIntoManagementState() {
+        let result = ConvoyCreateResponseParser.parseCreate([
+            "convoy": [
+                "convoyId": "new", "status": "forming", "ownerUid": "owner",
+                "viewer": ["role": "owner", "inviteStatus": "accepted"]
+            ],
+            "invited": [], "skipped": []
+        ])
+
+        guard case .created(let created) = result else {
+            return XCTFail("Expected a created convoy")
+        }
+        XCTAssertEqual(created.convoy?.convoyId, "new")
+        XCTAssertEqual(created.convoy?.viewer?.inviteStatus, .accepted)
     }
 
     func testCreateRejectsAMalformedSuccessPayload() {
