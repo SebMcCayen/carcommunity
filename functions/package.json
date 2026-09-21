@@ -31,19 +31,19 @@
   },
   "dependencies": {
     "firebase-admin": "^13.0.0",
-    "firebase-functions": "^7.3.2",
-    "google-auth-library": "^11.0.2",
+    "firebase-functions": "^7.4.0",
+    "google-auth-library": "^11.1.0",
     "h3-js": "^4.2.1",
     "zod": "^4.6.2"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.2",
-    "@types/node": "^24.13.4",
+    "@types/node": "^24.13.5",
     "eslint": "^10.10.0",
     "firebase": "^12.19.0",
-    "firebase-tools": "^15.30.0",
+    "firebase-tools": "^15.30.2",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.69.0",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.1"
   }
 }
