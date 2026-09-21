@@ -48,7 +48,11 @@ final class ConvoyCreateCoordinator {
         case .idle, .failed: break
         }
         guard case .ready(let hasActiveConvoy) = availability else {
-            createState = .failed(.generic)
+            if case .failed(let error) = availability {
+                createState = .failed(error)
+            } else {
+                createState = .failed(.generic)
+            }
             return
         }
         guard !hasActiveConvoy else {
@@ -90,7 +94,7 @@ final class ConvoyCreateCoordinator {
             if snapshot.hasActiveConvoy {
                 createState = .failed(.alreadyInConvoy)
             } else {
-                createState = .failed(snapshot.isExhaustive ? .noInvitees : .generic)
+                createState = .failed(snapshot.isExhaustive ? .noInvitees : .membershipUncertain)
             }
         case .failed:
             createState = .failed(.generic)
@@ -104,7 +108,7 @@ final class ConvoyCreateCoordinator {
         for snapshot: ConvoyCreateSnapshot
     ) -> ConvoyCreateAvailability {
         guard snapshot.hasActiveConvoy || snapshot.isExhaustive else {
-            return .failed(.generic)
+            return .failed(.membershipUncertain)
         }
         return .ready(hasActiveConvoy: snapshot.hasActiveConvoy)
     }

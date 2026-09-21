@@ -7158,6 +7158,23 @@
         }
       }
     },
+    "convoy.inviteFull": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konvojen är full. Det går inte att bjuda in fler."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This convoy is full. No more people can be invited."
+          }
+        }
+      }
+    },
     "convoy.inviteInvited": {
       "extractionState": "manual",
       "localizations": {
@@ -7392,6 +7409,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Members"
+          }
+        }
+      }
+    },
+    "convoy.membershipUncertainHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vi kan inte kontrollera din aktuella konvoj. Uppdatera och försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "We can't verify your current convoy. Refresh and try again."
           }
         }
       }

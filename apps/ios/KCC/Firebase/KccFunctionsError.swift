@@ -50,14 +50,32 @@ enum KccFunctionsErrorCode: String, Equatable, Sendable, CaseIterable {
     }
 }
 
-/// A callable failure carrying ONLY the contract error code.
+/// A callable failure carrying the contract code and an allowlisted reason.
 ///
-/// PII-SAFE BY CONSTRUCTION: the code is the whole diagnosis. The Firebase
-/// error's message (which can embed request payloads, uids, or project
-/// details) is deliberately NOT carried, logged, or shipped off-device —
+/// PII-SAFE BY CONSTRUCTION: backend messages (which can embed request
+/// payloads, uids, or project details) are never carried. Only known
+/// machine-readable reasons are accepted from error details —
 /// the same rule Android's `firestoreCode()` and the auth slice's
 /// `SignInFailureDetails` follow.
 struct KccFunctionsError: Error, Equatable, Sendable {
     /// The contract error code the caller branches on.
     let code: KccFunctionsErrorCode
+    /// Allowlisted machine reason; never a backend message or payload.
+    let reason: KccFunctionsFailureReason?
+
+    init(code: KccFunctionsErrorCode, reason: KccFunctionsFailureReason? = nil) {
+        self.code = code
+        self.reason = reason
+    }
+}
+
+enum KccFunctionsFailureReason: String, Equatable, Sendable {
+    case noValidConvoyInvitees = "no_valid_convoy_invitees"
+
+    static func fromDetails(_ raw: Any?) -> Self? {
+        guard let details = raw as? [String: Any],
+              let reason = details["reason"] as? String
+        else { return nil }
+        return Self(rawValue: reason)
+    }
 }

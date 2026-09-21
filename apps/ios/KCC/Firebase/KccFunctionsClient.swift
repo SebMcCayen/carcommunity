@@ -10,7 +10,7 @@ import Foundation
 /// (functions/src — grouped exports like `events-checkIn`), so the region is
 /// pinned here once; a repository that needs a callable takes this client
 /// rather than talking to the SDK directly, and the thrown error is always a
-/// ``KccFunctionsError`` carrying only a contract error code
+/// ``KccFunctionsError`` carrying a contract code and allowlisted reason
 /// (contracts/errors/errors.json) — never the SDK message.
 ///
 /// Construction is guarded like ``FirebaseBootstrap``'s other consumers:
@@ -39,7 +39,9 @@ final class KccFunctionsClient: @unchecked Sendable {
             let result = try await functions.httpsCallable(name).call(payload)
             return result.data
         } catch {
-            throw KccFunctionsError(code: Self.contractCode(from: error))
+            let details = (error as NSError).userInfo[FunctionsErrorDetailsKey]
+            let reason = KccFunctionsFailureReason.fromDetails(details)
+            throw KccFunctionsError(code: Self.contractCode(from: error), reason: reason)
         }
     }
 
