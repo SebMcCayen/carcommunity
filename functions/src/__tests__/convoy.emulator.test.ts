@@ -492,11 +492,22 @@ describe('convoy lifecycle: respond / start / end / list', () => {
     };
 
     expect(result.convoys).toHaveLength(200);
-    expect(result.isExhaustive).toBe(false);
+    expect(result.isExhaustive).toBe(true);
     expect(result.convoys.some((convoy) => convoy.convoyId === liveConvoyId)).toBe(true);
     expect(result.convoys.find((convoy) => convoy.convoyId === liveConvoyId)?.status).toBe(
       'active',
     );
+
+    // Capped ended history does not make current membership uncertain. Once the
+    // live-status scan completes with no accepted convoy, joining is safe even
+    // though older ended rows remain outside the 200-row history response.
+    await adminDb.collection('convoys').doc(liveConvoyId).delete();
+    const endedOnly = (await call('convoy-list', {})).data as {
+      convoys: ConvoySummary[];
+      isExhaustive: boolean;
+    };
+    expect(endedOnly.convoys).toHaveLength(200);
+    expect(endedOnly.isExhaustive).toBe(true);
   }, 60_000);
 
   it('finds an accepted live convoy beyond 200 pending live invitations', async () => {

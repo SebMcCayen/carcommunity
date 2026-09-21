@@ -879,7 +879,7 @@ export interface ListConvoysResult {
   convoys: ConvoySummary[];
   /** Subset the caller still has a pending invite for (green-dot pending list). */
   pendingInvites: ConvoySummary[];
-  /** False when the history cap or live membership scan leaves uncertainty. */
+  /** False only when the bounded live-membership scan cannot rule out an accepted live convoy. */
   isExhaustive: boolean;
 }
 
@@ -903,8 +903,8 @@ export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListConvoysRe
     .limit(MAX_CONVOYS_RETURNED);
 
   // Pending/declined invites also occupy memberUids. Inspect at most two
-  // bounded pages for the accepted convoy. If it is still hidden, the newest
-  // 200-row response remains non-exhaustive, so clients must conservatively
+  // bounded pages for the accepted convoy. If it is still hidden, membership
+  // remains non-exhaustive, so clients must conservatively
   // block joining another convoy rather than assume the caller has none.
   const liveMembershipQuery = db
     .collection('convoys')
@@ -950,7 +950,10 @@ export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListConvoysRe
   return {
     convoys,
     pendingInvites,
-    isExhaustive: newestSnap.docs.length < MAX_CONVOYS_RETURNED && !liveScanIncomplete,
+    // This flag describes MEMBERSHIP certainty, not whether all ended history
+    // was returned. A capped history is safe for create/accept once the separate
+    // active-status scan finishes and proves there is no accepted live convoy.
+    isExhaustive: !liveScanIncomplete,
   };
 });
 

@@ -155,8 +155,9 @@ struct ConvoyManagementSnapshot: Equatable, Sendable {
         }
     }
 
-    /// False means a capped list or incomplete live-membership scan cannot
-    /// rule out an older active membership, so joining must stay blocked.
+    /// False means the bounded live-membership scan could not rule out an older
+    /// active membership, so joining must stay blocked. Ended history may still
+    /// be capped when this is true.
     var canJoinAnotherConvoy: Bool { !hasActiveConvoy && isExhaustive }
 
     func preservingKnownActive(from previous: ConvoyManagementSnapshot?) -> Self {

@@ -50,8 +50,8 @@ enum ConvoyCreateStrings {
 
 struct ConvoyCreateSnapshot: Equatable, Sendable {
     let hasActiveConvoy: Bool
-    /// `convoy-list` returns at most 200 rows. Fewer rows proves the active
-    /// membership scan was complete; exactly 200 cannot rule out an older row.
+    /// Whether the backend's bounded live-membership scan ruled out an older
+    /// accepted convoy. This is independent of capped ended history.
     let isExhaustive: Bool
 }
 
