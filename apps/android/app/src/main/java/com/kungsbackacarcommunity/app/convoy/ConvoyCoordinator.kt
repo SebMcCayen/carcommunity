@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.convoy
 
 import com.kungsbackacarcommunity.app.navigation.runCatchingCancellable
 import com.kungsbackacarcommunity.app.profile.LiveProfileRepository
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -177,6 +178,7 @@ class ConvoyCoordinator(
     val status: StateFlow<ConvoyListStatus> = statusState.asStateFlow()
     private val refreshErrorState = MutableStateFlow<ConvoyActionError?>(null)
     val refreshError: StateFlow<ConvoyActionError?> = refreshErrorState.asStateFlow()
+    private val listRequestGeneration = AtomicInteger(0)
 
     private val createStateFlow = MutableStateFlow<CreateConvoyState>(CreateConvoyState.Idle)
     val createState: StateFlow<CreateConvoyState> = createStateFlow.asStateFlow()
@@ -251,6 +253,7 @@ class ConvoyCoordinator(
                         // whose lambda re-runs on CAS contention, so a suspending
                         // read left inside it would be re-issued on every retry.
                         val refreshed = hydrated(fresh)
+                        listRequestGeneration.incrementAndGet()
                         statusState.update { mergeConvoyUpdate(it, refreshed) }
                     }
                 }
@@ -279,9 +282,11 @@ class ConvoyCoordinator(
             .getOrDefault(convoy)
 
     suspend fun load() {
+        val generation = listRequestGeneration.incrementAndGet()
         try {
             when (val result = repository.list()) {
                 is ConvoyListResult.Loaded -> {
+                    if (generation != listRequestGeneration.get()) return
                     refreshErrorState.value = null
                     val knownActive = ConvoyBar.activeConvoy(statusState.value)
                     val convoys = result.convoys.toMutableList()
@@ -325,6 +330,7 @@ class ConvoyCoordinator(
                             )
                         }
                             .getOrDefault(emptyMap())
+                    if (generation != listRequestGeneration.get()) return
                     if (live.isNotEmpty()) {
                         statusState.value =
                             ConvoyListStatus.Loaded(
@@ -335,12 +341,16 @@ class ConvoyCoordinator(
                             )
                     }
                 }
-                is ConvoyListResult.Failed -> showListFailure(result.error)
+                is ConvoyListResult.Failed -> {
+                    if (generation == listRequestGeneration.get()) showListFailure(result.error)
+                }
             }
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (_: Exception) {
-            showListFailure(ConvoyActionError.Generic)
+            if (generation == listRequestGeneration.get()) {
+                showListFailure(ConvoyActionError.Generic)
+            }
         }
     }
 
@@ -373,27 +383,44 @@ class ConvoyCoordinator(
             return
         }
         createStateFlow.value = CreateConvoyState.Working
+        // Any list started before this mutation is stale by definition.
+        listRequestGeneration.incrementAndGet()
         try {
-            createStateFlow.value =
-                when (
-                    val result =
-                        repository.create(
-                            invitees,
-                            title?.trim()?.takeIf { it.isNotEmpty() },
-                            vehicleId?.takeIf { it.isNotBlank() },
-                        )
-                ) {
-                    is CreateConvoyResult.Created ->
-                        CreateConvoyState.Created(result.convoy.convoyId, result.skipped)
-                    is CreateConvoyResult.Failed -> CreateConvoyState.Error(result.error)
-                }
+            val result = repository.create(
+                invitees,
+                title?.trim()?.takeIf { it.isNotEmpty() },
+                vehicleId?.takeIf { it.isNotBlank() },
+            )
+            createStateFlow.value = when (result) {
+                is CreateConvoyResult.Created ->
+                    CreateConvoyState.Created(result.convoy.convoyId, result.skipped)
+                is CreateConvoyResult.Failed -> CreateConvoyState.Error(result.error)
+            }
             // A created convoy changes the snapshot — refresh so it shows up.
-            if (createStateFlow.value is CreateConvoyState.Created) load()
+            if (createStateFlow.value is CreateConvoyState.Created) {
+                load()
+            } else if (result is CreateConvoyResult.Failed &&
+                result.error == ConvoyActionError.NoInvitees
+            ) {
+                resolveCreatePrecondition()
+            }
         } catch (cancellation: CancellationException) {
             createStateFlow.value = CreateConvoyState.Idle
             throw cancellation
         } catch (_: Exception) {
             createStateFlow.value = CreateConvoyState.Error(ConvoyActionError.Generic)
+        }
+    }
+
+    private suspend fun resolveCreatePrecondition() {
+        load()
+        createStateFlow.value = when {
+            refreshErrorState.value != null -> CreateConvoyState.Error(ConvoyActionError.Generic)
+            ConvoyBar.activeConvoy(statusState.value) != null ->
+                CreateConvoyState.Error(ConvoyActionError.AlreadyInConvoy)
+            (statusState.value as? ConvoyListStatus.Loaded)?.isExhaustive != true ->
+                CreateConvoyState.Error(ConvoyActionError.MembershipUncertain)
+            else -> CreateConvoyState.Error(ConvoyActionError.NoInvitees)
         }
     }
 
@@ -501,6 +528,7 @@ class ConvoyCoordinator(
             return
         }
         inviteStateFlow.value = InviteConvoyState.Working
+        listRequestGeneration.incrementAndGet()
         try {
             inviteStateFlow.value =
                 when (val result = repository.invite(convoyId, invitees)) {
@@ -567,6 +595,9 @@ class ConvoyCoordinator(
         if (convoyId in inFlight.value) return
         inFlight.update { it + convoyId }
         rowError.value = null
+        // Prevent an older foreground/pull refresh from publishing after this
+        // mutation and overwriting its authoritative resync.
+        listRequestGeneration.incrementAndGet()
         try {
             val error = action()
             if (error != null) rowError.value = error

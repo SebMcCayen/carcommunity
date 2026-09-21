@@ -97,9 +97,13 @@ enum ConvoyCreateResponseParser {
             hasActiveConvoy: hasActive,
             isExhaustive: rawConvoys != nil && convoys.allSatisfy { raw in
                 guard let row = raw as? [String: Any],
-                      let status = row["status"] as? String
+                      (row["convoyId"] as? String)?.trimmedNonBlank != nil,
+                      let status = row["status"] as? String,
+                      let viewer = row["viewer"] as? [String: Any],
+                      let inviteStatus = viewer["inviteStatus"] as? String
                 else { return false }
                 return ["forming", "active", "ended"].contains(status)
+                    && ["invited", "accepted", "declined"].contains(inviteStatus)
             } && ((data?["isExhaustive"] as? Bool) ?? (convoys.count < listLimit))
         )
     }

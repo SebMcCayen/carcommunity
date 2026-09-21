@@ -29,6 +29,23 @@ final class ConvoyCreateModelsTests: XCTestCase {
         XCTAssertFalse(snapshot.isExhaustive)
     }
 
+    func testValidStatusWithoutIdentityOrViewerCannotBeExhaustive() {
+        let missingIdentity = ConvoyCreateResponseParser.parseList([
+            "convoys": [[
+                "status": "active",
+                "viewer": ["inviteStatus": "accepted"]
+            ]],
+            "isExhaustive": true
+        ])
+        let missingViewer = ConvoyCreateResponseParser.parseList([
+            "convoys": [["convoyId": "c1", "status": "active"]],
+            "isExhaustive": true
+        ])
+
+        XCTAssertFalse(missingIdentity.isExhaustive)
+        XCTAssertFalse(missingViewer.isExhaustive)
+    }
+
     func testPendingInviteDoesNotCountAsActiveParticipation() {
         let snapshot = ConvoyCreateResponseParser.parseList([
             "convoys": [[
@@ -43,6 +60,7 @@ final class ConvoyCreateModelsTests: XCTestCase {
 
     func testFullListCannotProveThatNoOlderActiveConvoyExists() {
         let pending = [
+            "convoyId": "pending",
             "status": "active",
             "viewer": ["inviteStatus": "invited"]
         ] as [String: Any]

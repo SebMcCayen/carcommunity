@@ -59,6 +59,7 @@ class ConvoyCoordinatorTest {
         var endResult: ConvoyMutationResult = respondResult
 
         var listCalls = 0
+        var listGate: CompletableDeferred<Unit>? = null
         var lastInvitees: List<String>? = null
         var lastTitle: String? = null
         var createCalls = 0
@@ -77,7 +78,9 @@ class ConvoyCoordinatorTest {
 
         override suspend fun list(): ConvoyListResult {
             listCalls++
-            return listResult
+            val captured = listResult
+            listGate?.await()
+            return captured
         }
 
         var lastVehicleId: String? = null
@@ -283,6 +286,28 @@ class ConvoyCoordinatorTest {
     }
 
     @Test
+    fun `a superseded load cannot overwrite a newer snapshot`() = runTest {
+        val old = convoy("old", status = ConvoyStatus.Active)
+        val fresh = convoy("fresh", status = ConvoyStatus.Active)
+        val gate = CompletableDeferred<Unit>()
+        val repo = FakeRepo().apply {
+            listResult = ConvoyListResult.Loaded(listOf(old), emptyList())
+            listGate = gate
+        }
+        val coordinator = ConvoyCoordinator(repo)
+
+        val staleLoad = backgroundScope.launch { coordinator.load() }
+        advanceUntilIdle()
+        repo.listResult = ConvoyListResult.Loaded(listOf(fresh), emptyList())
+        repo.listGate = null
+        coordinator.load()
+        gate.complete(Unit)
+        staleLoad.join()
+
+        assertEquals("fresh", ConvoyBar.activeConvoy(coordinator.status.value)?.convoyId)
+    }
+
+    @Test
     fun `refresh failure preserves a loaded active convoy and exposes retry error`() = runTest {
         val active = convoy("live", status = ConvoyStatus.Active)
         val repo = FakeRepo().apply {
@@ -358,6 +383,26 @@ class ConvoyCoordinatorTest {
         coordinator.create(listOf("a", "x"), null)
         val state = coordinator.createState.value as CreateConvoyState.Created
         assertEquals(listOf(ConvoySkipReason.NotFriend), state.skipped.map { it.reason })
+    }
+
+    @Test
+    fun `create precondition refresh detects membership accepted on another device`() = runTest {
+        val repo = FakeRepo().apply {
+            createResult = CreateConvoyResult.Failed(ConvoyActionError.NoInvitees)
+        }
+        val coordinator = ConvoyCoordinator(repo)
+        coordinator.load()
+        repo.listResult = ConvoyListResult.Loaded(
+            listOf(convoy("other", status = ConvoyStatus.Active)), emptyList(),
+        )
+
+        coordinator.create(listOf("friend"), null)
+
+        assertEquals(
+            CreateConvoyState.Error(ConvoyActionError.AlreadyInConvoy),
+            coordinator.createState.value,
+        )
+        assertEquals("other", ConvoyBar.activeConvoy(coordinator.status.value)?.convoyId)
     }
 
     @Test
