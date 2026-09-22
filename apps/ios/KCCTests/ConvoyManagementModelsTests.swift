@@ -281,6 +281,16 @@ final class ConvoyManagementModelsTests: XCTestCase {
         XCTAssertEqual(item.livePositionUids, ["owner", "member"])
     }
 
+    func testImageLookupPolicyCachesFailuresUntilCooldownExpires() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        XCTAssertTrue(ConvoyImageLookupPolicy.shouldAttempt(lastAttempt: nil, now: now))
+        XCTAssertFalse(ConvoyImageLookupPolicy.shouldAttempt(lastAttempt: now, now: now))
+        XCTAssertTrue(ConvoyImageLookupPolicy.shouldAttempt(
+            lastAttempt: now,
+            now: now.addingTimeInterval(ConvoyImageLookupPolicy.retryAfter)
+        ))
+    }
+
     func testAwarenessPlannerSeparatesOnScreenAndOffScreenMembers() {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let visible = ConvoyMemberPosition(

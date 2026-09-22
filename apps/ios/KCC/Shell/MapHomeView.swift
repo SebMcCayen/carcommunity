@@ -16,11 +16,36 @@ enum MapHomeConvoyViewportPolicy {
     }
 
     static let fitComputationPitch: CGFloat = 0
+    static let minimumFitZoom: CGFloat = 8
+    static let maximumFitZoom: CGFloat = 16
 
     static func plan(points: [MapPoint]?, focusEnabled: Bool) -> Plan {
         guard focusEnabled else { return .restoreBrowsing }
         guard let points, points.count >= 2 else { return .keepCurrentViewport }
         return .fitConvoy
+    }
+
+    static func fitZoom(_ rawZoom: CGFloat?, fallback: CGFloat) -> CGFloat {
+        let zoom = rawZoom.map { $0.isFinite ? $0 : fallback } ?? fallback
+        return min(max(zoom, minimumFitZoom), maximumFitZoom)
+    }
+}
+
+@MainActor
+private final class ConvoyViewportInteractionObserver: @preconcurrency ViewportStatusObserver {
+    weak var surface: StubMapSurface?
+
+    init(surface: StubMapSurface) {
+        self.surface = surface
+    }
+
+    func viewportStatusDidChange(
+        from fromStatus: ViewportStatus,
+        to toStatus: ViewportStatus,
+        reason: ViewportStatusChangeReason
+    ) {
+        guard reason == .userInteraction else { return }
+        surface?.suspendConvoyFitForInteraction()
     }
 }
 
@@ -102,6 +127,7 @@ private struct MapboxStandardMap: View {
         pitch: 45
     )
     @State private var cameraBeforeConvoy: MapCameraSnapshot?
+    @State private var interactionObserver: ConvoyViewportInteractionObserver
 
     init(
         accessToken: String,
@@ -111,6 +137,7 @@ private struct MapboxStandardMap: View {
         MapboxOptions.accessToken = accessToken
         self.surface = surface
         self.onLoaded = onLoaded
+        _interactionObserver = State(initialValue: ConvoyViewportInteractionObserver(surface: surface))
     }
 
     var body: some View {
@@ -129,13 +156,17 @@ private struct MapboxStandardMap: View {
                 ))
             }
             .onAppear {
+                proxy.viewport?.addStatusObserver(interactionObserver)
                 installRenderer(
                     proxy.map,
                     viewport: $viewport,
                     cameraBeforeConvoy: $cameraBeforeConvoy
                 )
             }
-            .onDisappear { surface.removeRenderer() }
+            .onDisappear {
+                proxy.viewport?.removeStatusObserver(interactionObserver)
+                surface.removeRenderer()
+            }
             .ignoresSafeArea()
         }
     }
@@ -206,7 +237,7 @@ private struct MapboxStandardMap: View {
                         pitch: MapHomeConvoyViewportPolicy.fitComputationPitch
                     ),
                     coordinatesPadding: UIEdgeInsets(top: 110, left: 60, bottom: 150, right: 60),
-                    maxZoom: 16,
+                    maxZoom: MapHomeConvoyViewportPolicy.maximumFitZoom,
                     offset: nil
                 ) else { return }
                 withViewportAnimation(.easeInOut(duration: 0.9)) {
@@ -215,7 +246,9 @@ private struct MapboxStandardMap: View {
                     // the user's current 2D/3D framing.
                     viewport.wrappedValue = .camera(
                         center: camera.center ?? state.center,
-                        zoom: camera.zoom ?? state.zoom,
+                        zoom: MapHomeConvoyViewportPolicy.fitZoom(
+                            camera.zoom, fallback: state.zoom
+                        ),
                         bearing: state.bearing,
                         pitch: state.pitch
                     )

@@ -515,5 +515,34 @@ final class MapSurfaceTests: XCTestCase {
 
     func testMapHomeConvoyViewportPolicyComputesFitsOnAFlatCamera() {
         XCTAssertEqual(MapHomeConvoyViewportPolicy.fitComputationPitch, 0)
+        XCTAssertEqual(MapHomeConvoyViewportPolicy.fitZoom(2, fallback: 12), 8)
+        XCTAssertEqual(MapHomeConvoyViewportPolicy.fitZoom(20, fallback: 12), 16)
+        XCTAssertEqual(MapHomeConvoyViewportPolicy.fitZoom(.nan, fallback: 12), 12)
+    }
+
+    func testManualCenterSuspendsRefitsUntilFocusIsExplicitlyReselected() {
+        let surface = StubMapSurface(autoLoad: false)
+        var fits = 0
+        surface.installRenderer(
+            projection: { _, _ in nil },
+            convoyFit: { _, enabled, _ in if enabled { fits += 1 } },
+            center: { _ in }
+        )
+        let initial = [
+            MapPoint(longitude: 12, latitude: 57),
+            MapPoint(longitude: 13, latitude: 58)
+        ]
+        surface.setConvoyFit(points: initial, focusEnabled: true, userPoint: nil)
+        surface.centerOn(initial[0])
+        surface.setConvoyFit(
+            points: initial + [MapPoint(longitude: 14, latitude: 59)],
+            focusEnabled: true,
+            userPoint: nil
+        )
+        XCTAssertEqual(fits, 1)
+
+        surface.setConvoyFit(points: nil, focusEnabled: false, userPoint: nil)
+        surface.setConvoyFit(points: initial, focusEnabled: true, userPoint: nil)
+        XCTAssertEqual(fits, 2)
     }
 }

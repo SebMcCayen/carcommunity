@@ -318,6 +318,15 @@ enum ConvoyFocusMode: Equatable, Sendable {
     case convoy
 }
 
+enum ConvoyImageLookupPolicy {
+    static let retryAfter: TimeInterval = 5 * 60
+
+    static func shouldAttempt(lastAttempt: Date?, now: Date = Date()) -> Bool {
+        guard let lastAttempt else { return true }
+        return now.timeIntervalSince(lastAttempt) >= retryAfter
+    }
+}
+
 struct ConvoyOnScreenPlacement: Equatable, Sendable, Identifiable {
     let member: ConvoyMemberPosition
     let point: MapScreenPoint
@@ -452,6 +461,7 @@ final class ConvoyAwarenessCoordinator {
     @ObservationIgnored private var subscriptionKey = ""
     @ObservationIgnored private var activeConvoyId: String?
     @ObservationIgnored private var ownUid: String?
+    @ObservationIgnored private var imageLookupAttempts: [String: Date] = [:]
     @ObservationIgnored nonisolated(unsafe) private var tasks: [Task<Void, Never>] = []
 
     func sync(convoy: ConvoyItem?, repository: LiveLocationRepository?, currentUid: String?) {
@@ -468,6 +478,7 @@ final class ConvoyAwarenessCoordinator {
         ownUid = currentUid
         positions = [:]
         imageURLs = [:]
+        imageLookupAttempts = [:]
         guard let repository, convoy != nil else { return }
         for uid in Set(uids) {
             tasks.append(Task { [weak self, repository] in
@@ -476,9 +487,16 @@ final class ConvoyAwarenessCoordinator {
                     if let marker {
                         self.positions[uid] = ConvoyMemberPosition(marker: marker)
                         if let path = marker.imagePath, self.imageURLs[path] == nil,
-                           let url = await repository.imageDownloadURL(for: path),
-                           !Task.isCancelled {
-                            self.imageURLs[path] = url
+                           ConvoyImageLookupPolicy.shouldAttempt(
+                               lastAttempt: self.imageLookupAttempts[path]
+                           ) {
+                            // Record before awaiting so concurrent member
+                            // updates cannot duplicate the same Storage call.
+                            self.imageLookupAttempts[path] = Date()
+                            if let url = await repository.imageDownloadURL(for: path),
+                               !Task.isCancelled {
+                                self.imageURLs[path] = url
+                            }
                         }
                     } else {
                         self.positions.removeValue(forKey: uid)
@@ -624,6 +642,17 @@ enum ConvoyManagementParser {
             let role = (raw["role"] as? String).flatMap(ConvoyRole.init(rawValue:))
             return ConvoyViewer(inviteStatus: status, role: role)
         }()
+        let livePositionUids: [String]
+        if let explicit = data["livePositionUids"] as? [Any] {
+            livePositionUids = explicit.compactMap { clean($0 as? String) }
+        } else {
+            // Firestore snapshots store the member map but not the callable's
+            // derived livePositionUids field. Preserve listeners across that
+            // snapshot by deriving the accepted roster locally.
+            livePositionUids = members
+                .filter { $0.inviteStatus == .accepted }
+                .map(\.uid)
+        }
         return ConvoyItem(
             convoyId: convoyId,
             title: clean(data["title"] as? String),
@@ -631,20 +660,9 @@ enum ConvoyManagementParser {
             members: members,
             viewer: viewer,
             createdAt: ChannelTime.parseIso(data["createdAt"] as? String),
-            livePositionUids: parseLivePositionUids(data["livePositionUids"], members: members),
+            livePositionUids: livePositionUids,
             summary: parseSummary(data["summary"])
         )
-    }
-
-    private static func parseLivePositionUids(
-        _ raw: Any?,
-        members: [ConvoyMember]
-    ) -> [String] {
-        let explicit = (raw as? [Any] ?? []).compactMap { clean($0 as? String) }
-        if !explicit.isEmpty { return explicit }
-        return members
-            .filter { $0.inviteStatus == .accepted }
-            .map(\.uid)
     }
 
     private static func parseSummary(_ raw: Any?) -> ConvoySummaryStats? {

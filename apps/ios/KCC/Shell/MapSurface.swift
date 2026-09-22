@@ -1002,6 +1002,8 @@ final class StubMapSurface: MapSurface {
     @ObservationIgnored
     private var appliedConvoyFit: [MapPoint]?
     @ObservationIgnored
+    private var convoyFitSuspended = false
+    @ObservationIgnored
     private var lastConvoyFitAt: TimeInterval?
     @ObservationIgnored
     private var convoyFitClock: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
@@ -1118,6 +1120,7 @@ final class StubMapSurface: MapSurface {
         convoyFit = points
         convoyFocusEnabled = focusEnabled
         convoyUserPoint = userPoint
+        if focusChanged { convoyFitSuspended = false }
         if !focusEnabled {
             appliedConvoyFit = nil
             lastConvoyFitAt = nil
@@ -1133,7 +1136,8 @@ final class StubMapSurface: MapSurface {
     }
 
     private func applyConvoyFitToRenderer(force: Bool) {
-        guard let points = convoyFit, convoyFocusEnabled, points.count >= 2,
+        guard !convoyFitSuspended,
+              let points = convoyFit, convoyFocusEnabled, points.count >= 2,
               let rendererConvoyFit
         else { return }
         let now = convoyFitClock()
@@ -1156,7 +1160,13 @@ final class StubMapSurface: MapSurface {
         // No camera on the stub — just record the request so the "Go to
         // location" wiring can be asserted off-device.
         centeredOn = point
+        suspendConvoyFitForInteraction()
         rendererCenter?(point)
+    }
+
+    func suspendConvoyFitForInteraction() {
+        guard convoyFocusEnabled else { return }
+        convoyFitSuspended = true
     }
 
     func recenter() {
