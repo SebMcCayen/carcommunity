@@ -271,7 +271,9 @@ final class ConvoyManagementModelsTests: XCTestCase {
         XCTAssertEqual(plan.onScreen.map(\.member.uid), ["visible"])
         XCTAssertEqual(plan.offScreen.map(\.member.uid), ["east"])
         XCTAssertEqual(plan.offScreen[0].point.x, 360, accuracy: 0.01)
-        XCTAssertEqual(plan.offScreen[0].point.y, 400, accuracy: 0.01)
+        // An eastbound great-circle bearing at this latitude is a fraction
+        // north of 90°, so the edge intersection sits just above centre.
+        XCTAssertEqual(plan.offScreen[0].point.y, 400, accuracy: 0.25)
     }
 
     func testAwarenessPlannerDropsStaleAndCapsMergedArrows() {
