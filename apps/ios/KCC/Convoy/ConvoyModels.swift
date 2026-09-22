@@ -327,6 +327,64 @@ enum ConvoyImageLookupPolicy {
     }
 }
 
+enum ConvoyPositionQuality {
+    static let trustedAccuracyMeters = 50.0
+    static let maximumUsableAccuracyMeters = 200.0
+    static let corroborationTriggerMeters = 500.0
+    static let corroborationRadiusMeters = 250.0
+    static let maximumPlausibleSpeedMetersPerSecond = 55.6
+
+    enum Verdict: Equatable {
+        case accept
+        case hold
+        case reject
+    }
+
+    static func judge(
+        _ candidate: ConvoyMemberPosition,
+        previous: ConvoyMemberPosition?,
+        pending: ConvoyMemberPosition?
+    ) -> Verdict {
+        guard candidate.latitude.isFinite, candidate.longitude.isFinite,
+              abs(candidate.latitude) <= 90, abs(candidate.longitude) <= 180 else {
+            return .reject
+        }
+        let accuracy = candidate.accuracyMeters.flatMap {
+            $0.isFinite && $0 >= 0 ? $0 : nil
+        }
+        if let accuracy, accuracy > maximumUsableAccuracyMeters { return .reject }
+        guard let previous else { return .accept }
+
+        let interval = candidate.updatedAt.flatMap { candidateDate in
+            previous.updatedAt.map { candidateDate.timeIntervalSince($0) }
+        }
+        if let interval, interval <= 0 { return .reject }
+        let distance = LiveShareCadence.distanceMeters(
+            lat1: previous.latitude, lon1: previous.longitude,
+            lat2: candidate.latitude, lon2: candidate.longitude
+        )
+        guard distance.isFinite else { return .reject }
+        if let interval, distance / interval > maximumPlausibleSpeedMetersPerSecond {
+            return .reject
+        }
+        if distance <= corroborationTriggerMeters
+            || (accuracy.map { $0 <= trustedAccuracyMeters } ?? false) {
+            return .accept
+        }
+        if let pending {
+            let corroborationDistance = LiveShareCadence.distanceMeters(
+                lat1: pending.latitude, lon1: pending.longitude,
+                lat2: candidate.latitude, lon2: candidate.longitude
+            )
+            if corroborationDistance.isFinite,
+               corroborationDistance <= corroborationRadiusMeters {
+                return .accept
+            }
+        }
+        return .hold
+    }
+}
+
 struct ConvoyOnScreenPlacement: Equatable, Sendable, Identifiable {
     let member: ConvoyMemberPosition
     let point: MapScreenPoint
@@ -393,9 +451,13 @@ enum ConvoyArrowPlanner {
             Int(floor((candidate.1 + sectorDegrees / 2) / sectorDegrees)) % Int(360 / sectorDegrees)
         }
         var merged = sectors.values.compactMap { group -> (ConvoyMemberPosition, Double, Double, Int)? in
-            guard let nearest = group.min(by: { $0.2 < $1.2 }) else { return nil }
+            guard let nearest = group.min(by: {
+                $0.2 == $1.2 ? $0.0.uid < $1.0.uid : $0.2 < $1.2
+            }) else { return nil }
             return (nearest.0, nearest.1, nearest.2, group.count - 1)
-        }.sorted { $0.2 < $1.2 }
+        }.sorted {
+            $0.2 == $1.2 ? $0.0.uid < $1.0.uid : $0.2 < $1.2
+        }
         if merged.count > maximumArrows {
             let dropped = merged.dropFirst(maximumArrows).reduce(0) { $0 + $1.3 + 1 }
             merged = Array(merged.prefix(maximumArrows))
@@ -462,6 +524,7 @@ final class ConvoyAwarenessCoordinator {
     @ObservationIgnored private var activeConvoyId: String?
     @ObservationIgnored private var ownUid: String?
     @ObservationIgnored private var imageLookupAttempts: [String: Date] = [:]
+    @ObservationIgnored private var pendingPositions: [String: ConvoyMemberPosition] = [:]
     @ObservationIgnored nonisolated(unsafe) private var tasks: [Task<Void, Never>] = []
 
     func sync(convoy: ConvoyItem?, repository: LiveLocationRepository?, currentUid: String?) {
@@ -477,6 +540,7 @@ final class ConvoyAwarenessCoordinator {
         subscriptionKey = key
         ownUid = currentUid
         positions = [:]
+        pendingPositions = [:]
         imageURLs = [:]
         imageLookupAttempts = [:]
         guard let repository, convoy != nil else { return }
@@ -485,7 +549,22 @@ final class ConvoyAwarenessCoordinator {
                 for await marker in repository.latestUpdates(uid: uid) {
                     guard !Task.isCancelled, let self else { return }
                     if let marker {
-                        self.positions[uid] = ConvoyMemberPosition(marker: marker)
+                        let position = ConvoyMemberPosition(marker: marker)
+                        switch ConvoyPositionQuality.judge(
+                            position,
+                            previous: self.positions[uid],
+                            pending: self.pendingPositions[uid]
+                        ) {
+                        case .accept:
+                            self.positions[uid] = position
+                            self.pendingPositions.removeValue(forKey: uid)
+                        case .hold:
+                            self.pendingPositions[uid] = position
+                            continue
+                        case .reject:
+                            self.pendingPositions.removeValue(forKey: uid)
+                            continue
+                        }
                         if let path = marker.imagePath, self.imageURLs[path] == nil,
                            ConvoyImageLookupPolicy.shouldAttempt(
                                lastAttempt: self.imageLookupAttempts[path]
@@ -500,6 +579,7 @@ final class ConvoyAwarenessCoordinator {
                         }
                     } else {
                         self.positions.removeValue(forKey: uid)
+                        self.pendingPositions.removeValue(forKey: uid)
                     }
                 }
             })
@@ -530,6 +610,7 @@ final class ConvoyAwarenessCoordinator {
     ) {
         self.positions = positions
         self.ownUid = ownUid
+        pendingPositions = [:]
     }
 
     func cancelSubscriptions() {

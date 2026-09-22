@@ -295,6 +295,7 @@ struct ConvoyMapAwarenessOverlay: View {
                             .position(x: placement.point.x, y: placement.point.y)
                     }
                 }
+                .animation(.linear(duration: 1.2), value: members)
             }
         }
         .allowsHitTesting(false)

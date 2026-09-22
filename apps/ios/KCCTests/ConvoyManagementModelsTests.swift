@@ -343,6 +343,72 @@ final class ConvoyManagementModelsTests: XCTestCase {
         XCTAssertEqual(plan.offScreen.reduce(0) { $0 + $1.extraCount + 1 }, fresh.count)
     }
 
+    func testAwarenessPlannerBreaksEqualDistanceTiesByUid() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let camera = MapCameraSnapshot.of(
+            latitude: 0, longitude: 0, zoom: 12, bearing: 0, pitch: 0
+        )
+        let plan = ConvoyArrowPlanner.plan(
+            members: [
+                ConvoyMemberPosition(uid: "zulu", latitude: 0, longitude: 1, updatedAt: now),
+                ConvoyMemberPosition(uid: "alpha", latitude: 0, longitude: 1, updatedAt: now)
+            ],
+            camera: camera,
+            viewportWidth: 400,
+            viewportHeight: 800,
+            edgeInset: 40,
+            now: now,
+            project: { _ in nil }
+        )
+
+        XCTAssertEqual(plan.offScreen.map(\.member.uid), ["alpha"])
+        XCTAssertEqual(plan.offScreen.first?.extraCount, 1)
+    }
+
+    func testPositionQualityRejectsPoorAndImplausibleFixes() {
+        let start = Date(timeIntervalSince1970: 2_000_000_000)
+        let previous = ConvoyMemberPosition(
+            uid: "member", latitude: 57, longitude: 12, updatedAt: start, accuracyMeters: 5
+        )
+        let poor = ConvoyMemberPosition(
+            uid: "member", latitude: 57, longitude: 12.001,
+            updatedAt: start.addingTimeInterval(5), accuracyMeters: 250
+        )
+        let teleport = ConvoyMemberPosition(
+            uid: "member", latitude: 58, longitude: 13,
+            updatedAt: start.addingTimeInterval(5), accuracyMeters: 5
+        )
+
+        XCTAssertEqual(ConvoyPositionQuality.judge(poor, previous: previous, pending: nil), .reject)
+        XCTAssertEqual(ConvoyPositionQuality.judge(teleport, previous: previous, pending: nil), .reject)
+    }
+
+    func testPositionQualityHoldsAndCorroboratesUnknownAccuracyJump() {
+        let start = Date(timeIntervalSince1970: 2_000_000_000)
+        let previous = ConvoyMemberPosition(
+            uid: "member", latitude: 57, longitude: 12, updatedAt: start
+        )
+        let firstJump = ConvoyMemberPosition(
+            uid: "member", latitude: 57.01, longitude: 12,
+            updatedAt: start.addingTimeInterval(180)
+        )
+        let corroborating = ConvoyMemberPosition(
+            uid: "member", latitude: 57.0105, longitude: 12,
+            updatedAt: start.addingTimeInterval(190)
+        )
+
+        XCTAssertEqual(
+            ConvoyPositionQuality.judge(firstJump, previous: previous, pending: nil),
+            .hold
+        )
+        XCTAssertEqual(
+            ConvoyPositionQuality.judge(
+                corroborating, previous: previous, pending: firstJump
+            ),
+            .accept
+        )
+    }
+
     @MainActor
     func testAwarenessFocusResetsOnlyWhenActiveConvoyIdentityChanges() throws {
         var firstPayload = convoy(id: "first", viewer: "accepted")
