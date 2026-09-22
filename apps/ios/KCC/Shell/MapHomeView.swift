@@ -144,7 +144,15 @@ private struct MapboxStandardMap: View {
         MapReader { proxy in
             MapboxMaps.Map(viewport: $viewport)
             .mapStyle(.standard)
-            .onMapLoaded { _ in onLoaded() }
+            .onMapLoaded { _ in
+                onLoaded()
+                proxy.viewport?.addStatusObserver(interactionObserver)
+                installRenderer(
+                    proxy.map,
+                    viewport: $viewport,
+                    cameraBeforeConvoy: $cameraBeforeConvoy
+                )
+            }
             .onCameraChanged { context in
                 let state = context.cameraState
                 surface.updateCameraSnapshot(.of(
@@ -154,14 +162,6 @@ private struct MapboxStandardMap: View {
                     bearing: state.bearing,
                     pitch: state.pitch
                 ))
-            }
-            .onAppear {
-                proxy.viewport?.addStatusObserver(interactionObserver)
-                installRenderer(
-                    proxy.map,
-                    viewport: $viewport,
-                    cameraBeforeConvoy: $cameraBeforeConvoy
-                )
             }
             .onDisappear {
                 proxy.viewport?.removeStatusObserver(interactionObserver)
