@@ -184,6 +184,9 @@ private struct MapboxStandardMap: View {
                     offset: nil
                 ) else { return }
                 withViewportAnimation(.easeInOut(duration: 0.9)) {
+                    // The fit is solved on a flat camera, but the final viewport
+                    // keeps the LIVE pitch so convoy focus does not silently drop
+                    // the user's current 2D/3D framing.
                     viewport.wrappedValue = .camera(
                         center: camera.center ?? state.center,
                         zoom: camera.zoom ?? state.zoom,
