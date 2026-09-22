@@ -211,11 +211,13 @@ struct ShellView: View {
                     }
                 }
                 .overlay {
-                    ConvoyMapAwarenessOverlay(
-                        members: convoyAwareness.visibleMembers,
-                        imageURLs: convoyAwareness.imageURLs,
-                        projection: mapSurface
-                    )
+                    if liveLocationFeatureEnabled {
+                        ConvoyMapAwarenessOverlay(
+                            members: convoyAwareness.visibleMembers,
+                            imageURLs: convoyAwareness.imageURLs,
+                            projection: mapSurface
+                        )
+                    }
                 }
                 .overlay(alignment: .top) {
                     if let coordinator = convoyManagementCoordinator,
@@ -225,7 +227,8 @@ struct ShellView: View {
                             convoy: convoy,
                             friendsCoordinator: friendsCoordinator,
                             awareness: convoyAwareness,
-                            mapSurface: mapSurface
+                            mapSurface: mapSurface,
+                            liveLocationEnabled: liveLocationFeatureEnabled
                         )
                         .padding(.horizontal, KccSpacing.s4)
                         .padding(.top, KccSpacing.s12 + KccSpacing.s3)

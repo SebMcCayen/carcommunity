@@ -524,6 +524,7 @@ final class ConvoyAwarenessCoordinator {
     @ObservationIgnored private var activeConvoyId: String?
     @ObservationIgnored private var ownUid: String?
     @ObservationIgnored private var imageLookupAttempts: [String: Date] = [:]
+    @ObservationIgnored private var imageTasks: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private var pendingPositions: [String: ConvoyMemberPosition] = [:]
     @ObservationIgnored nonisolated(unsafe) private var tasks: [Task<Void, Never>] = []
 
@@ -569,13 +570,11 @@ final class ConvoyAwarenessCoordinator {
                            ConvoyImageLookupPolicy.shouldAttempt(
                                lastAttempt: self.imageLookupAttempts[path]
                            ) {
-                            // Record before awaiting so concurrent member
-                            // updates cannot duplicate the same Storage call.
-                            self.imageLookupAttempts[path] = Date()
-                            if let url = await repository.imageDownloadURL(for: path),
-                               !Task.isCancelled {
-                                self.imageURLs[path] = url
-                            }
+                            self.resolveImageURL(
+                                path: path,
+                                repository: repository,
+                                subscriptionKey: key
+                            )
                         }
                     } else {
                         self.positions.removeValue(forKey: uid)
@@ -613,12 +612,34 @@ final class ConvoyAwarenessCoordinator {
         pendingPositions = [:]
     }
 
+    private func resolveImageURL(
+        path: String,
+        repository: LiveLocationRepository,
+        subscriptionKey expectedKey: String
+    ) {
+        // Record and detach before awaiting Storage so a slow image lookup never
+        // blocks the latest-position stream for this member.
+        imageLookupAttempts[path] = Date()
+        imageTasks[path] = Task { [weak self, repository] in
+            let url = await repository.imageDownloadURL(for: path)
+            guard let self else { return }
+            defer { self.imageTasks.removeValue(forKey: path) }
+            guard !Task.isCancelled, self.subscriptionKey == expectedKey, let url else { return }
+            self.imageURLs[path] = url
+        }
+    }
+
     func cancelSubscriptions() {
         tasks.forEach { $0.cancel() }
         tasks.removeAll()
+        imageTasks.values.forEach { $0.cancel() }
+        imageTasks.removeAll()
     }
 
-    deinit { tasks.forEach { $0.cancel() } }
+    deinit {
+        tasks.forEach { $0.cancel() }
+        imageTasks.values.forEach { $0.cancel() }
+    }
 }
 
 enum ConvoyManagementListResult: Equatable, Sendable {

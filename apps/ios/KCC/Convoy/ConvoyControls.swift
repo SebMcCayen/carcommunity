@@ -28,6 +28,7 @@ struct ConvoyStatusBar: View {
     let friendsCoordinator: FriendsCoordinator?
     @Bindable var awareness: ConvoyAwarenessCoordinator
     let mapSurface: StubMapSurface
+    let liveLocationEnabled: Bool
 
     @State private var memberTarget: ConvoySheetTarget?
     @State private var inviteTarget: ConvoySheetTarget?
@@ -48,14 +49,16 @@ struct ConvoyStatusBar: View {
 
                 Spacer(minLength: KccSpacing.s2)
 
-                Button {
-                    awareness.focusMode = awareness.focusMode == .me ? .convoy : .me
-                } label: {
-                    Image(systemName: awareness.focusMode == .convoy ? "person.3.fill" : "person.3")
+                if liveLocationEnabled {
+                    Button {
+                        awareness.focusMode = awareness.focusMode == .me ? .convoy : .me
+                    } label: {
+                        Image(systemName: awareness.focusMode == .convoy ? "person.3.fill" : "person.3")
+                    }
+                    .accessibilityLabel(Text(
+                        awareness.focusMode == .convoy ? "convoy.barFocusConvoy" : "convoy.barFocusMe"
+                    ))
                 }
-                .accessibilityLabel(Text(
-                    awareness.focusMode == .convoy ? "convoy.barFocusConvoy" : "convoy.barFocusMe"
-                ))
 
                 Button { inviteTarget = ConvoySheetTarget(convoy) } label: {
                     Image(systemName: "person.badge.plus")
