@@ -869,8 +869,8 @@ final class StubMapSurface: MapSurface {
     private(set) var mapMode: MapMode = .day
     private(set) var is3D: Bool = true
 
-    /// The stub has no rotatable camera: bearing is a constant north-up 0.
-    let bearing: Double = 0
+    /// Renderer-fed camera bearing; remains north-up in config-less builds.
+    private(set) var bearing: Double = 0
 
     private(set) var routeOverlay: MapRouteOverlay?
     private(set) var incidentMarkers: [MapIncidentMarker] = []
@@ -948,6 +948,13 @@ final class StubMapSurface: MapSurface {
     @ObservationIgnored
     private var projectionForTest: ((Double, Double) -> MapScreenPoint?)?
 
+    @ObservationIgnored
+    private var rendererProjection: ((Double, Double) -> MapScreenPoint?)?
+    @ObservationIgnored
+    private var rendererConvoyFit: (([MapPoint]?, Bool) -> Void)?
+    @ObservationIgnored
+    private var rendererCenter: ((MapPoint) -> Void)?
+
     // The fixed visible radius the stub reports (metres). The stub has no
     // camera to measure, so it returns a sane constant rather than nil,
     // keeping the config-less / CI build's incident query deterministic.
@@ -1005,6 +1012,33 @@ final class StubMapSurface: MapSurface {
     /// off-device.
     func setCameraSnapshotForTest(_ snapshot: MapCameraSnapshot?) {
         cameraSnapshot = snapshot
+        bearing = snapshot?.bearing ?? 0
+    }
+
+    /// Renderer bridge installed by the one native map host. Keeping these
+    /// callbacks on the existing surface preserves one camera command path.
+    func installRenderer(
+        projection: @escaping (Double, Double) -> MapScreenPoint?,
+        convoyFit: @escaping ([MapPoint]?, Bool) -> Void,
+        center: @escaping (MapPoint) -> Void
+    ) {
+        rendererProjection = projection
+        rendererConvoyFit = convoyFit
+        rendererCenter = center
+    }
+
+    func removeRenderer() {
+        rendererProjection = nil
+        rendererConvoyFit = nil
+        rendererCenter = nil
+        cameraSnapshot = nil
+        bearing = 0
+    }
+
+    func updateCameraSnapshot(_ snapshot: MapCameraSnapshot) {
+        guard cameraSnapshot != snapshot else { return }
+        cameraSnapshot = snapshot
+        bearing = snapshot.bearing
     }
 
     /// Test hook: stand in for the renderer's coordinate→pixel projection,
@@ -1018,7 +1052,7 @@ final class StubMapSurface: MapSurface {
     /// installed a projection via ``setProjectionForTest(_:)``. A non-finite
     /// projection returns nil, per the ``MapProjection`` contract.
     func screenPositionFor(latitude: Double, longitude: Double) -> MapScreenPoint? {
-        guard let point = projectionForTest?(latitude, longitude),
+        guard let point = (projectionForTest ?? rendererProjection)?(latitude, longitude),
               point.x.isFinite, point.y.isFinite
         else { return nil }
         return point
@@ -1027,12 +1061,14 @@ final class StubMapSurface: MapSurface {
     func setConvoyFit(points: [MapPoint]?, focusEnabled: Bool) {
         convoyFit = points
         convoyFocusEnabled = focusEnabled
+        rendererConvoyFit?(points, focusEnabled)
     }
 
     func centerOn(_ point: MapPoint) {
         // No camera on the stub — just record the request so the "Go to
         // location" wiring can be asserted off-device.
         centeredOn = point
+        rendererCenter?(point)
     }
 
     func recenter() {

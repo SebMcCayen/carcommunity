@@ -49,6 +49,14 @@ protocol LiveLocationRepository: AnyObject, Sendable {
     /// terminating the stream detaches the listener.
     func ownSessionUpdates(uid: String) -> AsyncStream<LiveSessionInfo?>
 
+    /// Live view of one authorized sharer's latest marker. Callers subscribe
+    /// only to backend-provided convoy member uids; collection scans are never
+    /// attempted. A missing, malformed or denied value emits nil.
+    func latestUpdates(uid: String) -> AsyncStream<LiveMarker?>
+
+    /// Resolves a Storage path carried by a live marker for map identity.
+    func imageDownloadURL(for imagePath: String) async -> URL?
+
     /// The signed-in user's uid, or nil with no session. Answered by the
     /// repository — which already owns the Firebase seam — so the live
     /// feature stays self-contained, exactly like ``EventsRepository``.
@@ -61,4 +69,12 @@ extension LiveLocationRepository {
     func startSession(duration: LiveSessionDuration) async throws {
         try await startSession(duration: duration, vehicleId: nil)
     }
+
+    /// Keeps existing focused fakes source-compatible; viewer tests can
+    /// override this with a scripted stream.
+    func latestUpdates(uid: String) -> AsyncStream<LiveMarker?> {
+        AsyncStream { $0.finish() }
+    }
+
+    func imageDownloadURL(for imagePath: String) async -> URL? { nil }
 }

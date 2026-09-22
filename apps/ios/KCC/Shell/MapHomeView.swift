@@ -1,5 +1,7 @@
 import SwiftUI
 import MapboxMaps
+import CoreLocation
+import UIKit
 
 /// Hosts the shell's single Mapbox Standard map. Config-less builds keep the
 /// deterministic placeholder, while a valid public token swaps in the native
@@ -21,7 +23,7 @@ struct MapHomeView: View {
     var body: some View {
         ZStack {
             if let accessToken {
-                MapboxStandardMap(accessToken: accessToken) {
+                MapboxStandardMap(accessToken: accessToken, surface: surface) {
                     surface.markLoaded()
                 }
             } else {
@@ -71,24 +73,82 @@ struct MapHomeView: View {
 /// opens over Kungsbacka and the Standard style matches Android's default.
 private struct MapboxStandardMap: View {
     let onLoaded: @MainActor () -> Void
+    let surface: StubMapSurface
 
-    init(accessToken: String, onLoaded: @escaping @MainActor () -> Void) {
+    init(
+        accessToken: String,
+        surface: StubMapSurface,
+        onLoaded: @escaping @MainActor () -> Void
+    ) {
         MapboxOptions.accessToken = accessToken
+        self.surface = surface
         self.onLoaded = onLoaded
     }
 
     var body: some View {
-        MapboxMaps.Map(
-            initialViewport: .camera(
-                center: .init(latitude: 57.4872, longitude: 12.0761),
-                zoom: StubMapSurface.defaultBrowsingZoom,
-                bearing: 0,
-                pitch: 45
+        MapReader { proxy in
+            MapboxMaps.Map(
+                initialViewport: .camera(
+                    center: .init(latitude: 57.4872, longitude: 12.0761),
+                    zoom: StubMapSurface.defaultBrowsingZoom,
+                    bearing: 0,
+                    pitch: 45
+                )
             )
+            .mapStyle(.standard)
+            .onMapLoaded { _ in onLoaded() }
+            .onCameraChanged { context in
+                let state = context.cameraState
+                surface.updateCameraSnapshot(.of(
+                    latitude: state.center.latitude,
+                    longitude: state.center.longitude,
+                    zoom: state.zoom,
+                    bearing: state.bearing,
+                    pitch: state.pitch
+                ))
+            }
+            .onAppear { installRenderer(proxy.map) }
+            .onDisappear { surface.removeRenderer() }
+            .ignoresSafeArea()
+        }
+    }
+
+    private func installRenderer(_ map: MapboxMap?) {
+        guard let map else { return }
+        surface.installRenderer(
+            projection: { latitude, longitude in
+                let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+                let point = map.point(for: coordinate)
+                guard point.x.isFinite, point.y.isFinite, point.x >= 0, point.y >= 0 else {
+                    return nil
+                }
+                let roundTrip = map.coordinate(for: point)
+                let mismatch = LiveShareCadence.distanceMeters(
+                    lat1: latitude, lon1: longitude,
+                    lat2: roundTrip.latitude, lon2: roundTrip.longitude
+                )
+                return MapScreenPoint(x: point.x, y: point.y, trustworthy: mismatch < 100)
+            },
+            convoyFit: { points, enabled in
+                guard enabled, let points, points.count >= 2 else { return }
+                let coordinates = points.map {
+                    CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
+                }
+                guard let camera = try? map.camera(
+                    for: coordinates,
+                    camera: CameraOptions(pitch: 0),
+                    coordinatesPadding: UIEdgeInsets(top: 110, left: 60, bottom: 150, right: 60),
+                    maxZoom: 16,
+                    offset: nil
+                ) else { return }
+                map.setCamera(to: camera)
+            },
+            center: { point in
+                map.setCamera(to: CameraOptions(
+                    center: CLLocationCoordinate2D(latitude: point.latitude, longitude: point.longitude)
+                ))
+            }
         )
-        .mapStyle(.standard)
-        .onMapLoaded { _ in onLoaded() }
-        .ignoresSafeArea()
     }
 }
 

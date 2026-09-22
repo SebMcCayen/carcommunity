@@ -245,6 +245,63 @@ final class ConvoyManagementModelsTests: XCTestCase {
         )
     }
 
+    func testParsesOnlyCleanLivePositionUids() throws {
+        var payload = convoy(id: "convoy", viewer: "accepted")
+        payload["livePositionUids"] = ["owner", " ", NSNull(), "member"]
+        let item = try XCTUnwrap(ConvoyManagementParser.parseItem(payload))
+        XCTAssertEqual(item.livePositionUids, ["owner", "member"])
+    }
+
+    func testAwarenessPlannerSeparatesOnScreenAndOffScreenMembers() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let visible = ConvoyMemberPosition(
+            uid: "visible", latitude: 57.49, longitude: 12.08, updatedAt: now
+        )
+        let east = ConvoyMemberPosition(
+            uid: "east", latitude: 57.49, longitude: 12.18, updatedAt: now
+        )
+        let camera = MapCameraSnapshot.of(
+            latitude: 57.49, longitude: 12.08, zoom: 14, bearing: 0, pitch: 45
+        )
+        let plan = ConvoyArrowPlanner.plan(
+            members: [visible, east], camera: camera,
+            viewportWidth: 400, viewportHeight: 800, edgeInset: 40, now: now,
+            project: { $0.uid == "visible" ? MapScreenPoint(x: 200, y: 400) : nil }
+        )
+        XCTAssertEqual(plan.onScreen.map(\.member.uid), ["visible"])
+        XCTAssertEqual(plan.offScreen.map(\.member.uid), ["east"])
+        XCTAssertEqual(plan.offScreen[0].point.x, 360, accuracy: 0.01)
+        XCTAssertEqual(plan.offScreen[0].point.y, 400, accuracy: 0.01)
+    }
+
+    func testAwarenessPlannerDropsStaleAndCapsMergedArrows() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let stale = ConvoyMemberPosition(
+            uid: "stale", latitude: 58, longitude: 12,
+            updatedAt: now.addingTimeInterval(-ConvoyArrowPlanner.staleAfter - 1)
+        )
+        let fresh = (0..<8).map { index in
+            let angle = Double(index) * 45 * .pi / 180
+            return ConvoyMemberPosition(
+                uid: "member-\(index)",
+                latitude: 57.49 + cos(angle) * 0.1,
+                longitude: 12.08 + sin(angle) * 0.1,
+                updatedAt: now
+            )
+        }
+        let camera = MapCameraSnapshot.of(
+            latitude: 57.49, longitude: 12.08, zoom: 12, bearing: 0, pitch: 45
+        )
+        let plan = ConvoyArrowPlanner.plan(
+            members: [stale] + fresh, camera: camera,
+            viewportWidth: 400, viewportHeight: 800, edgeInset: 40, now: now,
+            project: { _ in nil }
+        )
+        XCTAssertEqual(plan.offScreen.count, ConvoyArrowPlanner.maximumArrows)
+        XCTAssertFalse(plan.offScreen.contains { $0.member.uid == "stale" })
+        XCTAssertEqual(plan.offScreen.reduce(0) { $0 + $1.extraCount + 1 }, fresh.count)
+    }
+
     private func convoy(
         id: String,
         status: String = "active",

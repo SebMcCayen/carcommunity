@@ -1,6 +1,7 @@
 import FirebaseAuth
 import FirebaseCore
 import FirebaseDatabase
+import FirebaseStorage
 import Foundation
 
 /// ``LiveLocationRepository`` backed by the `live.*` callables and a Realtime
@@ -23,10 +24,12 @@ import Foundation
 final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked Sendable {
     private let functions: KccFunctionsClient
     private let database: Database
+    private let storage: Storage
 
-    private init(functions: KccFunctionsClient, database: Database) {
+    private init(functions: KccFunctionsClient, database: Database, storage: Storage) {
         self.functions = functions
         self.database = database
+        self.storage = storage
     }
 
     // MARK: - Callables (writes)
@@ -88,6 +91,28 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
         }
     }
 
+    func latestUpdates(uid: String) -> AsyncStream<LiveMarker?> {
+        let ref = database.reference(withPath: "liveLocation/\(uid)/latest")
+        return AsyncStream { continuation in
+            let handle = ref.observe(
+                .value,
+                with: { snapshot in
+                    let map = snapshot.value as? [String: Any]
+                    continuation.yield(map.flatMap { LiveMarker.fromMap(uid: uid, $0) })
+                },
+                withCancel: { _ in continuation.yield(nil) }
+            )
+            let box = ObserverBox(reference: ref, handle: handle)
+            continuation.onTermination = { _ in
+                box.reference.removeObserver(withHandle: box.handle)
+            }
+        }
+    }
+
+    func imageDownloadURL(for imagePath: String) async -> URL? {
+        try? await storage.reference(withPath: imagePath).downloadURL()
+    }
+
     func currentUserId() -> String? {
         Auth.auth().currentUser?.uid
     }
@@ -113,7 +138,8 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
     /// convention: `FIREBASE_DATABASE_EMULATOR_HOST` (port 9000 per
     /// firebase.json) points the Realtime Database SDK at the emulator
     /// before first use; the callables ride ``KccFunctionsClient``'s own
-    /// `FIREBASE_FUNCTIONS_EMULATOR_HOST` seam.
+    /// `FIREBASE_FUNCTIONS_EMULATOR_HOST` seam, while
+    /// `FIREBASE_STORAGE_EMULATOR_HOST` resolves convoy car photos.
     static func createIfAvailable() -> LiveLocationRepository? {
         guard FirebaseApp.app() != nil else { return nil }
         cachedLock.lock()
@@ -131,7 +157,17 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
         } else {
             database = Database.database()
         }
-        let repository = FirebaseLiveLocationRepository(functions: functions, database: database)
+        let storage = Storage.storage()
+        if let emulator = FirebaseEmulatorHost.parse(
+            ProcessInfo.processInfo.environment["FIREBASE_STORAGE_EMULATOR_HOST"]
+        ) {
+            storage.useEmulator(withHost: emulator.host, port: emulator.port)
+        }
+        let repository = FirebaseLiveLocationRepository(
+            functions: functions,
+            database: database,
+            storage: storage
+        )
         cached = repository
         return repository
     }

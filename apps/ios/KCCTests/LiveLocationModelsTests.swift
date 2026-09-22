@@ -250,4 +250,26 @@ final class LiveLocationModelsTests: XCTestCase {
         XCTAssertNil(LiveSessionInfo.fromMap(["id": "session-9"]))
         XCTAssertNil(LiveSessionInfo.fromMap(["id": "session-9", "status": "unheard-of"]))
     }
+
+    func testLiveMarkerParsesViewerFieldsAndMainCarPhoto() throws {
+        let marker = try XCTUnwrap(LiveMarker.fromMap(uid: "member-1", [
+            "latitude": NSNumber(value: 57.49),
+            "longitude": NSNumber(value: 12.08),
+            "displayName": " Driver ",
+            "mainCar": ["imagePath": "garage/member-1/car.jpg"],
+            "recordedAt": "2026-08-30T12:00:00.000Z",
+            "accuracyMeters": NSNumber(value: 8.5),
+        ]))
+        XCTAssertEqual(marker.uid, "member-1")
+        XCTAssertEqual(marker.displayName, "Driver")
+        XCTAssertEqual(marker.imagePath, "garage/member-1/car.jpg")
+        XCTAssertEqual(marker.accuracyMeters, 8.5)
+        XCTAssertEqual(marker.recordedAt, Date(timeIntervalSince1970: 1_788_091_200))
+    }
+
+    func testLiveMarkerRejectsMissingOrOutOfRangeCoordinates() {
+        XCTAssertNil(LiveMarker.fromMap(uid: "member", ["longitude": 12.0]))
+        XCTAssertNil(LiveMarker.fromMap(uid: "member", ["latitude": 91.0, "longitude": 12.0]))
+        XCTAssertNil(LiveMarker.fromMap(uid: "", ["latitude": 57.0, "longitude": 12.0]))
+    }
 }

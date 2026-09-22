@@ -43,6 +43,8 @@ struct ShellView: View {
     @State private var locationPermissionCoordinator: LocationPermissionCoordinator?
     @State private var startDrivingGarage: GarageCoordinator?
     @State private var convoyManagementCoordinator: ConvoyManagementCoordinator?
+    @State private var convoyAwareness = ConvoyAwarenessCoordinator()
+    @State private var liveLocationRepository: LiveLocationRepository?
     @State private var convoyCreateCoordinator: ConvoyCreateCoordinator?
     @State private var convoyCreateVehicleId: String?
     @State private var convoyCreateReturnsToList = false
@@ -208,18 +210,37 @@ struct ShellView: View {
                         mapCommunicationControls
                     }
                 }
+                .overlay {
+                    ConvoyMapAwarenessOverlay(
+                        members: convoyAwareness.visibleMembers,
+                        imageURLs: convoyAwareness.imageURLs,
+                        projection: mapSurface
+                    )
+                }
                 .overlay(alignment: .top) {
                     if let coordinator = convoyManagementCoordinator,
                        let convoy = coordinator.activeConvoy {
                         ConvoyStatusBar(
                             coordinator: coordinator,
                             convoy: convoy,
-                            friendsCoordinator: friendsCoordinator
+                            friendsCoordinator: friendsCoordinator,
+                            awareness: convoyAwareness,
+                            mapSurface: mapSurface
                         )
                         .padding(.horizontal, KccSpacing.s4)
                         .padding(.top, KccSpacing.s12 + KccSpacing.s3)
                     }
                 }
+                .task(id: convoyAwarenessSubscriptionKey) {
+                    convoyAwareness.sync(
+                        convoy: convoyManagementCoordinator?.activeConvoy,
+                        repository: liveLocationRepository,
+                        currentUid: signedInUid
+                    )
+                    applyConvoyFocus()
+                }
+                .onChange(of: convoyAwareness.focusMode) { _, _ in applyConvoyFocus() }
+                .onChange(of: convoyAwareness.positions) { _, _ in applyConvoyFocus() }
                 .overlay {
                     if routes.current == .chatHub {
                         chatHubOverlay
@@ -910,6 +931,8 @@ struct ShellView: View {
         dmCoordinator = nil
         if routes.current == .convoys { routes = routes.poppingOne() }
         convoyManagementCoordinator = nil
+        convoyAwareness.sync(convoy: nil, repository: nil, currentUid: nil)
+        liveLocationRepository = nil
         convoyCreateCoordinator = nil
         convoyCreateVehicleId = nil
         convoyCreateReturnsToList = false
@@ -970,7 +993,10 @@ struct ShellView: View {
         // overwrite the new session's coordinators after its await returns.
         guard !Task.isCancelled, uid == signedInUid else { return }
 
-        let liveLocation = LiveLocationCoordinator.live(
+        let liveRepository = FirebaseLiveLocationRepository.createIfAvailable()
+        liveLocationRepository = liveRepository
+        let liveLocation = LiveLocationCoordinator(
+            repository: liveRepository,
             provider: locationProvider,
             canShare: crownHunt.flags.liveLocationEnabled
         )
@@ -1001,6 +1027,18 @@ struct ShellView: View {
     private var signedInUid: String? {
         if case .signedIn(let uid, _) = session.state { return uid }
         return nil
+    }
+
+    private var convoyAwarenessSubscriptionKey: String {
+        guard let convoy = convoyManagementCoordinator?.activeConvoy else { return "none" }
+        return "\(convoy.convoyId)|\(convoy.livePositionUids.sorted().joined(separator: ","))|\(signedInUid ?? "")"
+    }
+
+    private func applyConvoyFocus() {
+        mapSurface.setConvoyFit(
+            points: convoyAwareness.fitPoints(),
+            focusEnabled: convoyAwareness.focusMode == .convoy
+        )
     }
 }
 

@@ -391,4 +391,30 @@ final class MapSurfaceTests: XCTestCase {
         )
         XCTAssertNil(overlay.bottomInsetPx)
     }
+
+    func testRendererBridgeFeedsProjectionCameraAndCommands() {
+        let surface = StubMapSurface(autoLoad: false)
+        var fitted: [MapPoint]?
+        var focusEnabled = false
+        var centered: MapPoint?
+        surface.installRenderer(
+            projection: { _, _ in MapScreenPoint(x: 20, y: 30) },
+            convoyFit: { fitted = $0; focusEnabled = $1 },
+            center: { centered = $0 }
+        )
+        let snapshot = MapCameraSnapshot.of(
+            latitude: 57, longitude: 12, zoom: 14, bearing: 90, pitch: 45
+        )
+        surface.updateCameraSnapshot(snapshot)
+        let points = [MapPoint(longitude: 12, latitude: 57), MapPoint(longitude: 13, latitude: 58)]
+        surface.setConvoyFit(points: points, focusEnabled: true)
+        surface.centerOn(points[1])
+
+        XCTAssertEqual(surface.screenPositionFor(latitude: 0, longitude: 0), MapScreenPoint(x: 20, y: 30))
+        XCTAssertEqual(surface.cameraSnapshot, snapshot)
+        XCTAssertEqual(surface.bearing, 90)
+        XCTAssertEqual(fitted, points)
+        XCTAssertTrue(focusEnabled)
+        XCTAssertEqual(centered, points[1])
+    }
 }
