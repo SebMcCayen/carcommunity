@@ -227,7 +227,10 @@ struct ConvoyMembersSheet: View {
     }
 
     private func memberRow(_ member: ConvoyMember, waiting: Bool, now: Date) -> some View {
-        HStack(spacing: KccSpacing.s3) {
+        let availablePosition = positions[member.uid].flatMap {
+            $0.isFresh(at: now) ? $0 : nil
+        }
+        return HStack(spacing: KccSpacing.s3) {
             Image(systemName: member.role == .owner ? "crown.fill" : "person.crop.circle.fill")
                 .foregroundStyle(member.role == .owner ? KccPalette.crownGold : .secondary)
             VStack(alignment: .leading, spacing: KccSpacing.s1) {
@@ -243,16 +246,27 @@ struct ConvoyMembersSheet: View {
                 }
             }
             Spacer()
-            if let position = positions[member.uid], position.isFresh(at: now),
-               !waiting, let onCenter {
-                Button {
-                    onCenter(MapPoint(longitude: position.longitude, latitude: position.latitude))
-                    dismiss()
-                } label: {
-                    Image(systemName: "scope")
+            if !waiting, let onCenter {
+                VStack(alignment: .trailing, spacing: KccSpacing.s1) {
+                    Button {
+                        guard let availablePosition else { return }
+                        onCenter(MapPoint(
+                            longitude: availablePosition.longitude,
+                            latitude: availablePosition.latitude
+                        ))
+                        dismiss()
+                    } label: {
+                        Image(systemName: "scope")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(availablePosition == nil)
+                    .accessibilityLabel(Text("convoy.barMemberMenuGoToLocation"))
+                    if availablePosition == nil {
+                        Text("convoy.barMemberLocationUnavailable")
+                            .font(.system(size: KccTypeScale.caption))
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                .buttonStyle(.borderless)
-                .accessibilityLabel(Text("convoy.barMemberMenuGoToLocation"))
             }
         }
     }
