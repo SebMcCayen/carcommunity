@@ -3,6 +3,11 @@ import MapboxMaps
 import CoreLocation
 import UIKit
 
+/// Mirrors the convoy-camera ownership rules Android already applies in
+/// `MapboxMapSurface.setConvoyFit/applyConvoyFit`: turning focus OFF restores
+/// normal Me framing, a temporary lack of fittable points while focus stays ON
+/// leaves the current camera alone, and the fit itself is computed on a flat
+/// camera before re-applying the live pitch.
 enum MapHomeConvoyViewportPolicy {
     enum Plan: Equatable {
         case restoreBrowsing
