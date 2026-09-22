@@ -304,6 +304,48 @@ final class ConvoyManagementModelsTests: XCTestCase {
         XCTAssertEqual(plan.offScreen.reduce(0) { $0 + $1.extraCount + 1 }, fresh.count)
     }
 
+    @MainActor
+    func testAwarenessFocusResetsOnlyWhenActiveConvoyIdentityChanges() throws {
+        var firstPayload = convoy(id: "first", viewer: "accepted")
+        firstPayload["livePositionUids"] = ["owner"]
+        let first = try XCTUnwrap(ConvoyManagementParser.parseItem(firstPayload))
+        let coordinator = ConvoyAwarenessCoordinator()
+
+        coordinator.sync(convoy: first, repository: nil, currentUid: "owner")
+        coordinator.focusMode = .convoy
+
+        firstPayload["livePositionUids"] = ["owner", "friend"]
+        let refreshedFirst = try XCTUnwrap(ConvoyManagementParser.parseItem(firstPayload))
+        coordinator.sync(convoy: refreshedFirst, repository: nil, currentUid: "owner")
+        XCTAssertEqual(coordinator.focusMode, .convoy)
+
+        let second = try XCTUnwrap(ConvoyManagementParser.parseItem(
+            convoy(id: "second", viewer: "accepted")
+        ))
+        coordinator.sync(convoy: second, repository: nil, currentUid: "owner")
+        XCTAssertEqual(coordinator.focusMode, .me)
+    }
+
+    @MainActor
+    func testAwarenessFitDropsPositionsAsTheyBecomeStale() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let coordinator = ConvoyAwarenessCoordinator()
+        coordinator.focusMode = .convoy
+        coordinator.setPositionsForTest([
+            "me": ConvoyMemberPosition(
+                uid: "me", latitude: 57, longitude: 12, updatedAt: now
+            ),
+            "friend": ConvoyMemberPosition(
+                uid: "friend", latitude: 58, longitude: 13, updatedAt: now
+            )
+        ], ownUid: "me")
+
+        XCTAssertNotNil(coordinator.fitPoints(now: now))
+        XCTAssertNil(coordinator.fitPoints(
+            now: now.addingTimeInterval(ConvoyArrowPlanner.staleAfter + 1)
+        ))
+    }
+
     private func convoy(
         id: String,
         status: String = "active",

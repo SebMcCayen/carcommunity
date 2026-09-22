@@ -117,6 +117,47 @@ struct MapPoint: Equatable, Sendable {
     let latitude: Double
 }
 
+/// Decides when a moving convoy has changed enough to justify another camera
+/// transition. Small GPS jitter is ignored and ordinary movement is sampled at
+/// a bounded cadence, while membership changes remain immediate.
+enum ConvoyFitPolicy {
+    static let coordinateEpsilon = 0.0002
+    static let minimumRefitInterval: TimeInterval = 1.5
+
+    static func shouldRefit(
+        previous: [MapPoint]?,
+        next: [MapPoint],
+        lastFitAt: TimeInterval?,
+        now: TimeInterval
+    ) -> Bool {
+        guard !next.isEmpty else { return false }
+        guard let previous, let lastFitAt else { return true }
+        guard !previous.isEmpty else { return true }
+        if previous.count != next.count { return true }
+        guard now - lastFitAt >= minimumRefitInterval else { return false }
+        let old = bounds(of: previous)
+        let new = bounds(of: next)
+        return abs(old.minLongitude - new.minLongitude) >= coordinateEpsilon
+            || abs(old.maxLongitude - new.maxLongitude) >= coordinateEpsilon
+            || abs(old.minLatitude - new.minLatitude) >= coordinateEpsilon
+            || abs(old.maxLatitude - new.maxLatitude) >= coordinateEpsilon
+    }
+
+    private static func bounds(of points: [MapPoint]) -> (
+        minLongitude: Double, maxLongitude: Double,
+        minLatitude: Double, maxLatitude: Double
+    ) {
+        points.dropFirst().reduce(
+            (points[0].longitude, points[0].longitude, points[0].latitude, points[0].latitude)
+        ) { result, point in
+            (
+                min(result.0, point.longitude), max(result.1, point.longitude),
+                min(result.2, point.latitude), max(result.3, point.latitude)
+            )
+        }
+    }
+}
+
 /// A destination + the route line to draw for it. Owned by the shell (kept
 /// free of the navigation feature's types) so the ``MapSurface`` seam stays
 /// self-contained; the host maps a resolved route onto this. An empty ``path``
@@ -954,6 +995,12 @@ final class StubMapSurface: MapSurface {
     private var rendererConvoyFit: (([MapPoint]?, Bool) -> Void)?
     @ObservationIgnored
     private var rendererCenter: ((MapPoint) -> Void)?
+    @ObservationIgnored
+    private var appliedConvoyFit: [MapPoint]?
+    @ObservationIgnored
+    private var lastConvoyFitAt: TimeInterval?
+    @ObservationIgnored
+    private var convoyFitClock: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
 
     // The fixed visible radius the stub reports (metres). The stub has no
     // camera to measure, so it returns a sane constant rather than nil,
@@ -1025,6 +1072,9 @@ final class StubMapSurface: MapSurface {
         rendererProjection = projection
         rendererConvoyFit = convoyFit
         rendererCenter = center
+        if convoyFocusEnabled || self.convoyFit != nil {
+            applyConvoyFitToRenderer(force: true)
+        }
     }
 
     func removeRenderer() {
@@ -1059,9 +1109,39 @@ final class StubMapSurface: MapSurface {
     }
 
     func setConvoyFit(points: [MapPoint]?, focusEnabled: Bool) {
+        let previousPoints = convoyFit
+        let focusChanged = convoyFocusEnabled != focusEnabled
         convoyFit = points
         convoyFocusEnabled = focusEnabled
-        rendererConvoyFit?(points, focusEnabled)
+        if points == nil || !focusEnabled {
+            appliedConvoyFit = nil
+            lastConvoyFitAt = nil
+            if previousPoints != nil || focusChanged {
+                rendererConvoyFit?(points, focusEnabled)
+            }
+            return
+        }
+        applyConvoyFitToRenderer(force: focusChanged)
+    }
+
+    private func applyConvoyFitToRenderer(force: Bool) {
+        guard let points = convoyFit, convoyFocusEnabled, points.count >= 2,
+              let rendererConvoyFit
+        else { return }
+        let now = convoyFitClock()
+        guard force || ConvoyFitPolicy.shouldRefit(
+            previous: appliedConvoyFit,
+            next: points,
+            lastFitAt: lastConvoyFitAt,
+            now: now
+        ) else { return }
+        rendererConvoyFit(points, true)
+        appliedConvoyFit = points
+        lastConvoyFitAt = now
+    }
+
+    func setConvoyFitClockForTest(_ clock: @escaping () -> TimeInterval) {
+        convoyFitClock = clock
     }
 
     func centerOn(_ point: MapPoint) {

@@ -74,6 +74,12 @@ struct MapHomeView: View {
 private struct MapboxStandardMap: View {
     let onLoaded: @MainActor () -> Void
     let surface: StubMapSurface
+    @State private var viewport: Viewport = .camera(
+        center: .init(latitude: 57.4872, longitude: 12.0761),
+        zoom: StubMapSurface.defaultBrowsingZoom,
+        bearing: 0,
+        pitch: 45
+    )
 
     init(
         accessToken: String,
@@ -87,14 +93,7 @@ private struct MapboxStandardMap: View {
 
     var body: some View {
         MapReader { proxy in
-            MapboxMaps.Map(
-                initialViewport: .camera(
-                    center: .init(latitude: 57.4872, longitude: 12.0761),
-                    zoom: StubMapSurface.defaultBrowsingZoom,
-                    bearing: 0,
-                    pitch: 45
-                )
-            )
+            MapboxMaps.Map(viewport: $viewport)
             .mapStyle(.standard)
             .onMapLoaded { _ in onLoaded() }
             .onCameraChanged { context in
@@ -107,13 +106,13 @@ private struct MapboxStandardMap: View {
                     pitch: state.pitch
                 ))
             }
-            .onAppear { installRenderer(proxy.map) }
+            .onAppear { installRenderer(proxy.map, viewport: $viewport) }
             .onDisappear { surface.removeRenderer() }
             .ignoresSafeArea()
         }
     }
 
-    private func installRenderer(_ map: MapboxMap?) {
+    private func installRenderer(_ map: MapboxMap?, viewport: Binding<Viewport>) {
         guard let map else { return }
         surface.installRenderer(
             projection: { latitude, longitude in
@@ -130,23 +129,49 @@ private struct MapboxStandardMap: View {
                 return MapScreenPoint(x: point.x, y: point.y, trustworthy: mismatch < 100)
             },
             convoyFit: { points, enabled in
-                guard enabled, let points, points.count >= 2 else { return }
+                guard enabled, let points, points.count >= 2 else {
+                    let state = map.cameraState
+                    withViewportAnimation(.easeInOut(duration: 0.9)) {
+                        viewport.wrappedValue = .followPuck(
+                            zoom: StubMapSurface.defaultBrowsingZoom,
+                            bearing: surface.compassMode == .courseUp ? .course : .constant(0),
+                            pitch: state.pitch
+                        )
+                    }
+                    return
+                }
                 let coordinates = points.map {
                     CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
                 }
+                let state = map.cameraState
                 guard let camera = try? map.camera(
                     for: coordinates,
-                    camera: CameraOptions(pitch: 0),
+                    camera: CameraOptions(bearing: state.bearing, pitch: state.pitch),
                     coordinatesPadding: UIEdgeInsets(top: 110, left: 60, bottom: 150, right: 60),
                     maxZoom: 16,
                     offset: nil
                 ) else { return }
-                map.setCamera(to: camera)
+                withViewportAnimation(.easeInOut(duration: 0.9)) {
+                    viewport.wrappedValue = .camera(
+                        center: camera.center ?? state.center,
+                        zoom: camera.zoom ?? state.zoom,
+                        bearing: state.bearing,
+                        pitch: state.pitch
+                    )
+                }
             },
             center: { point in
-                map.setCamera(to: CameraOptions(
-                    center: CLLocationCoordinate2D(latitude: point.latitude, longitude: point.longitude)
-                ))
+                let state = map.cameraState
+                withViewportAnimation(.easeInOut(duration: 0.9)) {
+                    viewport.wrappedValue = .camera(
+                        center: CLLocationCoordinate2D(
+                            latitude: point.latitude, longitude: point.longitude
+                        ),
+                        zoom: state.zoom,
+                        bearing: state.bearing,
+                        pitch: state.pitch
+                    )
+                }
             }
         )
     }

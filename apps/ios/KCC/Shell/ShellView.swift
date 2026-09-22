@@ -241,6 +241,19 @@ struct ShellView: View {
                 }
                 .onChange(of: convoyAwareness.focusMode) { _, _ in applyConvoyFocus() }
                 .onChange(of: convoyAwareness.positions) { _, _ in applyConvoyFocus() }
+                .task(id: convoyAwareness.focusMode) {
+                    guard convoyAwareness.focusMode == .convoy else { return }
+                    while !Task.isCancelled {
+                        do {
+                            try await Task.sleep(
+                                for: .seconds(ConvoyArrowPlanner.staleAfter / 4)
+                            )
+                        } catch {
+                            return
+                        }
+                        applyConvoyFocus()
+                    }
+                }
                 .overlay {
                     if routes.current == .chatHub {
                         chatHubOverlay

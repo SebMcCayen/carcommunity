@@ -446,19 +446,24 @@ final class ConvoyAwarenessCoordinator {
     var focusMode: ConvoyFocusMode = .me
 
     @ObservationIgnored private var subscriptionKey = ""
+    @ObservationIgnored private var activeConvoyId: String?
     @ObservationIgnored private var ownUid: String?
     @ObservationIgnored nonisolated(unsafe) private var tasks: [Task<Void, Never>] = []
 
     func sync(convoy: ConvoyItem?, repository: LiveLocationRepository?, currentUid: String?) {
+        let convoyId = convoy?.convoyId
+        if convoyId != activeConvoyId {
+            focusMode = .me
+            activeConvoyId = convoyId
+        }
         let uids = convoy?.livePositionUids.filter { !$0.isEmpty } ?? []
-        let key = "\(convoy?.convoyId ?? "")|\(currentUid ?? "")|\(uids.sorted().joined(separator: ","))"
+        let key = "\(convoyId ?? "")|\(currentUid ?? "")|\(uids.sorted().joined(separator: ","))"
         guard key != subscriptionKey else { return }
         cancelSubscriptions()
         subscriptionKey = key
         ownUid = currentUid
         positions = [:]
         imageURLs = [:]
-        if convoy == nil { focusMode = .me }
         guard let repository, convoy != nil else { return }
         for uid in Set(uids) {
             tasks.append(Task { [weak self, repository] in
@@ -490,6 +495,14 @@ final class ConvoyAwarenessCoordinator {
         }
         guard fresh.contains(where: { $0.uid != ownUid }), fresh.count >= 2 else { return nil }
         return fresh.map { MapPoint(longitude: $0.longitude, latitude: $0.latitude) }
+    }
+
+    func setPositionsForTest(
+        _ positions: [String: ConvoyMemberPosition],
+        ownUid: String?
+    ) {
+        self.positions = positions
+        self.ownUid = ownUid
     }
 
     func cancelSubscriptions() {

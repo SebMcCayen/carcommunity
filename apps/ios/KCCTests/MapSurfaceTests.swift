@@ -417,4 +417,65 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertTrue(focusEnabled)
         XCTAssertEqual(centered, points[1])
     }
+
+    func testConvoyFitPolicyThrottlesJitterAndFrequentMovement() {
+        let previous = [
+            MapPoint(longitude: 12, latitude: 57),
+            MapPoint(longitude: 13, latitude: 58)
+        ]
+        let jitter = [
+            MapPoint(longitude: 12.00001, latitude: 57.00001),
+            MapPoint(longitude: 13.00001, latitude: 58.00001)
+        ]
+        let moved = [
+            MapPoint(longitude: 12.01, latitude: 57),
+            MapPoint(longitude: 13.01, latitude: 58)
+        ]
+
+        XCTAssertFalse(ConvoyFitPolicy.shouldRefit(
+            previous: previous, next: jitter, lastFitAt: 10, now: 12
+        ))
+        XCTAssertFalse(ConvoyFitPolicy.shouldRefit(
+            previous: previous, next: moved, lastFitAt: 10, now: 11
+        ))
+        XCTAssertTrue(ConvoyFitPolicy.shouldRefit(
+            previous: previous, next: moved, lastFitAt: 10, now: 12
+        ))
+        XCTAssertTrue(ConvoyFitPolicy.shouldRefit(
+            previous: previous,
+            next: moved + [MapPoint(longitude: 14, latitude: 59)],
+            lastFitAt: 10,
+            now: 10.1
+        ))
+    }
+
+    func testRendererBridgeThrottlesConvoyFitsButRestoresWhenFitClears() {
+        let surface = StubMapSurface(autoLoad: false)
+        var now = 10.0
+        var fits: [([MapPoint]?, Bool)] = []
+        surface.setConvoyFitClockForTest { now }
+        surface.installRenderer(
+            projection: { _, _ in nil },
+            convoyFit: { fits.append(($0, $1)) },
+            center: { _ in }
+        )
+        let initial = [
+            MapPoint(longitude: 12, latitude: 57),
+            MapPoint(longitude: 13, latitude: 58)
+        ]
+        surface.setConvoyFit(points: initial, focusEnabled: true)
+        now = 10.5
+        surface.setConvoyFit(
+            points: initial.map { MapPoint(longitude: $0.longitude + 0.01, latitude: $0.latitude) },
+            focusEnabled: true
+        )
+        surface.setConvoyFit(points: nil, focusEnabled: true)
+        surface.setConvoyFit(points: nil, focusEnabled: true)
+
+        XCTAssertEqual(fits.count, 2)
+        XCTAssertEqual(fits[0].0, initial)
+        XCTAssertTrue(fits[0].1)
+        XCTAssertNil(fits[1].0)
+        XCTAssertTrue(fits[1].1)
+    }
 }
