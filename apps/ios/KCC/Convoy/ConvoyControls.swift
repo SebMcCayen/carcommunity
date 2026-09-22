@@ -202,13 +202,18 @@ struct ConvoyMembersSheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section("convoy.membersTitle") {
-                    ForEach(convoy.acceptedMembers) { member in
-                        memberRow(member, waiting: false)
-                    }
-                    ForEach(convoy.pendingMembers) { member in
-                        memberRow(member, waiting: true)
+            TimelineView(.periodic(
+                from: .now,
+                by: ConvoyArrowPlanner.staleAfter / 4
+            )) { context in
+                List {
+                    Section("convoy.membersTitle") {
+                        ForEach(convoy.acceptedMembers) { member in
+                            memberRow(member, waiting: false, now: context.date)
+                        }
+                        ForEach(convoy.pendingMembers) { member in
+                            memberRow(member, waiting: true, now: context.date)
+                        }
                     }
                 }
             }
@@ -221,7 +226,7 @@ struct ConvoyMembersSheet: View {
         }
     }
 
-    private func memberRow(_ member: ConvoyMember, waiting: Bool) -> some View {
+    private func memberRow(_ member: ConvoyMember, waiting: Bool, now: Date) -> some View {
         HStack(spacing: KccSpacing.s3) {
             Image(systemName: member.role == .owner ? "crown.fill" : "person.crop.circle.fill")
                 .foregroundStyle(member.role == .owner ? KccPalette.crownGold : .secondary)
@@ -238,7 +243,8 @@ struct ConvoyMembersSheet: View {
                 }
             }
             Spacer()
-            if let position = positions[member.uid], !waiting, let onCenter {
+            if let position = positions[member.uid], position.isFresh(at: now),
+               !waiting, let onCenter {
                 Button {
                     onCenter(MapPoint(longitude: position.longitude, latitude: position.latitude))
                     dismiss()

@@ -101,6 +101,7 @@ private struct MapboxStandardMap: View {
         bearing: 0,
         pitch: 45
     )
+    @State private var cameraBeforeConvoy: MapCameraSnapshot?
 
     init(
         accessToken: String,
@@ -114,28 +115,36 @@ private struct MapboxStandardMap: View {
 
     var body: some View {
         MapReader { proxy in
-            MapboxMaps.Map(viewport: $viewport) {
-                Puck2D()
+            MapboxMaps.Map(viewport: $viewport)
+            .mapStyle(.standard)
+            .onMapLoaded { _ in onLoaded() }
+            .onCameraChanged { context in
+                let state = context.cameraState
+                surface.updateCameraSnapshot(.of(
+                    latitude: state.center.latitude,
+                    longitude: state.center.longitude,
+                    zoom: state.zoom,
+                    bearing: state.bearing,
+                    pitch: state.pitch
+                ))
             }
-                .mapStyle(.standard)
-                .onMapLoaded { _ in onLoaded() }
-                .onCameraChanged { context in
-                    let state = context.cameraState
-                    surface.updateCameraSnapshot(.of(
-                        latitude: state.center.latitude,
-                        longitude: state.center.longitude,
-                        zoom: state.zoom,
-                        bearing: state.bearing,
-                        pitch: state.pitch
-                    ))
-                }
-                .onAppear { installRenderer(proxy.map, viewport: $viewport) }
-                .onDisappear { surface.removeRenderer() }
-                .ignoresSafeArea()
+            .onAppear {
+                installRenderer(
+                    proxy.map,
+                    viewport: $viewport,
+                    cameraBeforeConvoy: $cameraBeforeConvoy
+                )
+            }
+            .onDisappear { surface.removeRenderer() }
+            .ignoresSafeArea()
         }
     }
 
-    private func installRenderer(_ map: MapboxMap?, viewport: Binding<Viewport>) {
+    private func installRenderer(
+        _ map: MapboxMap?,
+        viewport: Binding<Viewport>,
+        cameraBeforeConvoy: Binding<MapCameraSnapshot?>
+    ) {
         guard let map else { return }
         surface.installRenderer(
             projection: { latitude, longitude in
@@ -151,16 +160,25 @@ private struct MapboxStandardMap: View {
                 )
                 return MapScreenPoint(x: point.x, y: point.y, trustworthy: mismatch < 100)
             },
-            convoyFit: { points, enabled in
+            convoyFit: { points, enabled, userPoint in
+                let state = map.cameraState
                 switch MapHomeConvoyViewportPolicy.plan(points: points, focusEnabled: enabled) {
                 case .keepCurrentViewport:
                     return
                 case .restoreBrowsing:
-                    let state = map.cameraState
+                    let fallback = cameraBeforeConvoy.wrappedValue
+                    cameraBeforeConvoy.wrappedValue = nil
                     withViewportAnimation(.easeInOut(duration: 0.9)) {
-                        viewport.wrappedValue = .followPuck(
-                            zoom: StubMapSurface.defaultBrowsingZoom,
-                            bearing: surface.compassMode == .courseUp ? .course : .constant(0),
+                        viewport.wrappedValue = .camera(
+                            center: userPoint.map {
+                                CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
+                            } ?? fallback.map {
+                                CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
+                            } ?? state.center,
+                            zoom: userPoint == nil
+                                ? (fallback?.zoom ?? state.zoom)
+                                : StubMapSurface.defaultBrowsingZoom,
+                            bearing: state.bearing,
                             pitch: state.pitch
                         )
                     }
@@ -168,11 +186,19 @@ private struct MapboxStandardMap: View {
                 case .fitConvoy:
                     break
                 }
-                guard let points else { return }
+                guard let points, points.count >= 2 else { return }
+                if cameraBeforeConvoy.wrappedValue == nil {
+                    cameraBeforeConvoy.wrappedValue = .of(
+                        latitude: state.center.latitude,
+                        longitude: state.center.longitude,
+                        zoom: state.zoom,
+                        bearing: state.bearing,
+                        pitch: state.pitch
+                    )
+                }
                 let coordinates = points.map {
                     CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
                 }
-                let state = map.cameraState
                 guard let camera = try? map.camera(
                     for: coordinates,
                     camera: CameraOptions(

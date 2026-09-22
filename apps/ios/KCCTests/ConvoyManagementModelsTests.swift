@@ -341,7 +341,14 @@ final class ConvoyManagementModelsTests: XCTestCase {
         ], ownUid: "me")
 
         XCTAssertNotNil(coordinator.fitPoints(now: now))
+        XCTAssertEqual(
+            coordinator.ownPoint(now: now),
+            MapPoint(longitude: 12, latitude: 57)
+        )
         XCTAssertNil(coordinator.fitPoints(
+            now: now.addingTimeInterval(ConvoyArrowPlanner.staleAfter + 1)
+        ))
+        XCTAssertNil(coordinator.ownPoint(
             now: now.addingTimeInterval(ConvoyArrowPlanner.staleAfter + 1)
         ))
     }

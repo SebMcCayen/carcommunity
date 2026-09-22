@@ -1050,7 +1050,8 @@ struct ShellView: View {
     private func applyConvoyFocus() {
         mapSurface.setConvoyFit(
             points: convoyAwareness.fitPoints(),
-            focusEnabled: convoyAwareness.focusMode == .convoy
+            focusEnabled: convoyAwareness.focusMode == .convoy,
+            userPoint: convoyAwareness.ownPoint()
         )
     }
 }

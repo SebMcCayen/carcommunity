@@ -280,6 +280,10 @@ struct ConvoyMemberPosition: Equatable, Sendable, Identifiable {
 
     var id: String { uid }
 
+    func isFresh(at now: Date = Date()) -> Bool {
+        updatedAt.map { now.timeIntervalSince($0) <= ConvoyArrowPlanner.staleAfter } ?? true
+    }
+
     init(
         uid: String,
         latitude: Double,
@@ -490,11 +494,16 @@ final class ConvoyAwarenessCoordinator {
 
     func fitPoints(now: Date = Date()) -> [MapPoint]? {
         guard focusMode == .convoy else { return nil }
-        let fresh = positions.values.filter {
-            $0.updatedAt.map { now.timeIntervalSince($0) <= ConvoyArrowPlanner.staleAfter } ?? true
-        }
+        let fresh = positions.values.filter { $0.isFresh(at: now) }
         guard fresh.contains(where: { $0.uid != ownUid }), fresh.count >= 2 else { return nil }
         return fresh.map { MapPoint(longitude: $0.longitude, latitude: $0.latitude) }
+    }
+
+    func ownPoint(now: Date = Date()) -> MapPoint? {
+        guard let ownUid, let position = positions[ownUid], position.isFresh(at: now) else {
+            return nil
+        }
+        return MapPoint(longitude: position.longitude, latitude: position.latitude)
     }
 
     func setPositionsForTest(

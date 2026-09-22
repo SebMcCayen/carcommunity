@@ -234,12 +234,12 @@ final class MapSurfaceTests: XCTestCase {
     func testConvoyFitRecordsPointsAndFocusIndependently() {
         let surface = StubMapSurface(autoLoad: false)
         let points = [MapPoint(longitude: 1, latitude: 2), MapPoint(longitude: 3, latitude: 4)]
-        surface.setConvoyFit(points: points, focusEnabled: true)
+        surface.setConvoyFit(points: points, focusEnabled: true, userPoint: nil)
         XCTAssertEqual(surface.convoyFit, points)
         XCTAssertTrue(surface.convoyFocusEnabled)
         // Focus can stay ON while the fittable points transiently vanish —
         // the nil points must not read as "the user toggled focus off".
-        surface.setConvoyFit(points: nil, focusEnabled: true)
+        surface.setConvoyFit(points: nil, focusEnabled: true, userPoint: nil)
         XCTAssertNil(surface.convoyFit)
         XCTAssertTrue(surface.convoyFocusEnabled)
     }
@@ -399,7 +399,7 @@ final class MapSurfaceTests: XCTestCase {
         var centered: MapPoint?
         surface.installRenderer(
             projection: { _, _ in MapScreenPoint(x: 20, y: 30) },
-            convoyFit: { fitted = $0; focusEnabled = $1 },
+            convoyFit: { fitted = $0; focusEnabled = $1; _ = $2 },
             center: { centered = $0 }
         )
         let snapshot = MapCameraSnapshot.of(
@@ -407,7 +407,7 @@ final class MapSurfaceTests: XCTestCase {
         )
         surface.updateCameraSnapshot(snapshot)
         let points = [MapPoint(longitude: 12, latitude: 57), MapPoint(longitude: 13, latitude: 58)]
-        surface.setConvoyFit(points: points, focusEnabled: true)
+        surface.setConvoyFit(points: points, focusEnabled: true, userPoint: nil)
         surface.centerOn(points[1])
 
         XCTAssertEqual(surface.screenPositionFor(latitude: 0, longitude: 0), MapScreenPoint(x: 20, y: 30))
@@ -449,34 +449,37 @@ final class MapSurfaceTests: XCTestCase {
         ))
     }
 
-    func testRendererBridgeThrottlesConvoyFitsButRestoresWhenFitClears() {
+    func testRendererBridgeThrottlesFitsAndRestoresOnlyWhenFocusTurnsOff() {
         let surface = StubMapSurface(autoLoad: false)
         var now = 10.0
-        var fits: [([MapPoint]?, Bool)] = []
+        var fits: [([MapPoint]?, Bool, MapPoint?)] = []
         surface.setConvoyFitClockForTest { now }
         surface.installRenderer(
             projection: { _, _ in nil },
-            convoyFit: { fits.append(($0, $1)) },
+            convoyFit: { fits.append(($0, $1, $2)) },
             center: { _ in }
         )
         let initial = [
             MapPoint(longitude: 12, latitude: 57),
             MapPoint(longitude: 13, latitude: 58)
         ]
-        surface.setConvoyFit(points: initial, focusEnabled: true)
+        surface.setConvoyFit(points: initial, focusEnabled: true, userPoint: nil)
         now = 10.5
         surface.setConvoyFit(
             points: initial.map { MapPoint(longitude: $0.longitude + 0.01, latitude: $0.latitude) },
-            focusEnabled: true
+            focusEnabled: true,
+            userPoint: nil
         )
-        surface.setConvoyFit(points: nil, focusEnabled: true)
-        surface.setConvoyFit(points: nil, focusEnabled: true)
+        surface.setConvoyFit(points: nil, focusEnabled: true, userPoint: nil)
+        let me = MapPoint(longitude: 11, latitude: 56)
+        surface.setConvoyFit(points: nil, focusEnabled: false, userPoint: me)
 
         XCTAssertEqual(fits.count, 2)
         XCTAssertEqual(fits[0].0, initial)
         XCTAssertTrue(fits[0].1)
         XCTAssertNil(fits[1].0)
-        XCTAssertTrue(fits[1].1)
+        XCTAssertFalse(fits[1].1)
+        XCTAssertEqual(fits[1].2, me)
     }
 
     func testMapHomeConvoyViewportPolicyRestoresBrowsingOnlyWhenFocusTurnsOff() {
