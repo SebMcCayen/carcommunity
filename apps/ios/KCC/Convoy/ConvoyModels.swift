@@ -631,10 +631,20 @@ enum ConvoyManagementParser {
             members: members,
             viewer: viewer,
             createdAt: ChannelTime.parseIso(data["createdAt"] as? String),
-            livePositionUids: (data["livePositionUids"] as? [Any] ?? [])
-                .compactMap { clean($0 as? String) },
+            livePositionUids: parseLivePositionUids(data["livePositionUids"], members: members),
             summary: parseSummary(data["summary"])
         )
+    }
+
+    private static func parseLivePositionUids(
+        _ raw: Any?,
+        members: [ConvoyMember]
+    ) -> [String] {
+        let explicit = (raw as? [Any] ?? []).compactMap { clean($0 as? String) }
+        if !explicit.isEmpty { return explicit }
+        return members
+            .filter { $0.inviteStatus == .accepted }
+            .map(\.uid)
     }
 
     private static func parseSummary(_ raw: Any?) -> ConvoySummaryStats? {

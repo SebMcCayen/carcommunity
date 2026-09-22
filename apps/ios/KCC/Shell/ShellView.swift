@@ -233,7 +233,7 @@ struct ShellView: View {
                 }
                 .task(id: convoyAwarenessSubscriptionKey) {
                     convoyAwareness.sync(
-                        convoy: convoyManagementCoordinator?.activeConvoy,
+                        convoy: convoyAwarenessTargetConvoy,
                         repository: liveLocationRepository,
                         currentUid: signedInUid
                     )
@@ -1042,9 +1042,20 @@ struct ShellView: View {
         return nil
     }
 
+    private var liveLocationFeatureEnabled: Bool {
+        crownHuntComposition?.flags.liveLocationEnabled == true
+    }
+
+    private var convoyAwarenessTargetConvoy: ConvoyItem? {
+        guard liveLocationFeatureEnabled else { return nil }
+        return convoyManagementCoordinator?.activeConvoy
+    }
+
     private var convoyAwarenessSubscriptionKey: String {
-        guard let convoy = convoyManagementCoordinator?.activeConvoy else { return "none" }
-        return "\(convoy.convoyId)|\(convoy.livePositionUids.sorted().joined(separator: ","))|\(signedInUid ?? "")"
+        guard let convoy = convoyAwarenessTargetConvoy else {
+            return "disabled|\(signedInUid ?? "")"
+        }
+        return "enabled|\(convoy.convoyId)|\(convoy.livePositionUids.sorted().joined(separator: ","))|\(signedInUid ?? "")"
     }
 
     private func applyConvoyFocus() {

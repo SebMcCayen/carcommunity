@@ -252,6 +252,35 @@ final class ConvoyManagementModelsTests: XCTestCase {
         XCTAssertEqual(item.livePositionUids, ["owner", "member"])
     }
 
+    func testMissingLivePositionUidsFallsBackToAcceptedMembers() throws {
+        var payload = convoy(id: "convoy", viewer: "accepted")
+        payload["members"] = [
+            [
+                "uid": "owner",
+                "role": "owner",
+                "inviteStatus": "accepted",
+                "displayName": "Owner"
+            ],
+            [
+                "uid": "member",
+                "role": "member",
+                "inviteStatus": "accepted",
+                "displayName": "Member"
+            ],
+            [
+                "uid": "invited",
+                "role": "member",
+                "inviteStatus": "invited",
+                "displayName": "Invited"
+            ]
+        ]
+        payload.removeValue(forKey: "livePositionUids")
+
+        let item = try XCTUnwrap(ConvoyManagementParser.parseItem(payload))
+
+        XCTAssertEqual(item.livePositionUids, ["owner", "member"])
+    }
+
     func testAwarenessPlannerSeparatesOnScreenAndOffScreenMembers() {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let visible = ConvoyMemberPosition(
@@ -351,6 +380,26 @@ final class ConvoyManagementModelsTests: XCTestCase {
         XCTAssertNil(coordinator.ownPoint(
             now: now.addingTimeInterval(ConvoyArrowPlanner.staleAfter + 1)
         ))
+    }
+
+    @MainActor
+    func testAwarenessClearsSubscriptionsWhenFeatureGateTurnsOff() throws {
+        var payload = convoy(id: "convoy", viewer: "accepted")
+        payload["livePositionUids"] = ["owner", "friend"]
+        let active = try XCTUnwrap(ConvoyManagementParser.parseItem(payload))
+        let coordinator = ConvoyAwarenessCoordinator()
+        coordinator.sync(convoy: active, repository: nil, currentUid: "owner")
+        coordinator.focusMode = .convoy
+        coordinator.setPositionsForTest([
+            "owner": ConvoyMemberPosition(uid: "owner", latitude: 57, longitude: 12, updatedAt: Date()),
+            "friend": ConvoyMemberPosition(uid: "friend", latitude: 58, longitude: 13, updatedAt: Date())
+        ], ownUid: "owner")
+
+        coordinator.sync(convoy: nil, repository: nil, currentUid: "owner")
+
+        XCTAssertEqual(coordinator.focusMode, .me)
+        XCTAssertTrue(coordinator.positions.isEmpty)
+        XCTAssertTrue(coordinator.imageURLs.isEmpty)
     }
 
     private func convoy(
