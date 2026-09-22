@@ -478,4 +478,39 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertNil(fits[1].0)
         XCTAssertTrue(fits[1].1)
     }
+
+    func testMapHomeConvoyViewportPolicyRestoresBrowsingOnlyWhenFocusTurnsOff() {
+        XCTAssertEqual(
+            MapHomeConvoyViewportPolicy.plan(points: nil, focusEnabled: false),
+            .restoreBrowsing
+        )
+        XCTAssertEqual(
+            MapHomeConvoyViewportPolicy.plan(points: nil, focusEnabled: true),
+            .keepCurrentViewport
+        )
+        XCTAssertEqual(
+            MapHomeConvoyViewportPolicy.plan(
+                points: [MapPoint(longitude: 12, latitude: 57)],
+                focusEnabled: true
+            ),
+            .keepCurrentViewport
+        )
+    }
+
+    func testMapHomeConvoyViewportPolicyFitsOnlyWhenTwoFreshPointsExist() {
+        XCTAssertEqual(
+            MapHomeConvoyViewportPolicy.plan(
+                points: [
+                    MapPoint(longitude: 12, latitude: 57),
+                    MapPoint(longitude: 13, latitude: 58)
+                ],
+                focusEnabled: true
+            ),
+            .fitConvoy
+        )
+    }
+
+    func testMapHomeConvoyViewportPolicyComputesFitsOnAFlatCamera() {
+        XCTAssertEqual(MapHomeConvoyViewportPolicy.fitComputationPitch, 0)
+    }
 }

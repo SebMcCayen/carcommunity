@@ -3,6 +3,22 @@ import MapboxMaps
 import CoreLocation
 import UIKit
 
+enum MapHomeConvoyViewportPolicy {
+    enum Plan: Equatable {
+        case restoreBrowsing
+        case keepCurrentViewport
+        case fitConvoy
+    }
+
+    static let fitComputationPitch: CGFloat = 0
+
+    static func plan(points: [MapPoint]?, focusEnabled: Bool) -> Plan {
+        guard focusEnabled else { return .restoreBrowsing }
+        guard let points, points.count >= 2 else { return .keepCurrentViewport }
+        return .fitConvoy
+    }
+}
+
 /// Hosts the shell's single Mapbox Standard map. Config-less builds keep the
 /// deterministic placeholder, while a valid public token swaps in the native
 /// renderer without changing the shell-facing ``MapSurface`` seam.
@@ -93,22 +109,24 @@ private struct MapboxStandardMap: View {
 
     var body: some View {
         MapReader { proxy in
-            MapboxMaps.Map(viewport: $viewport)
-            .mapStyle(.standard)
-            .onMapLoaded { _ in onLoaded() }
-            .onCameraChanged { context in
-                let state = context.cameraState
-                surface.updateCameraSnapshot(.of(
-                    latitude: state.center.latitude,
-                    longitude: state.center.longitude,
-                    zoom: state.zoom,
-                    bearing: state.bearing,
-                    pitch: state.pitch
-                ))
+            MapboxMaps.Map(viewport: $viewport) {
+                Puck2D()
             }
-            .onAppear { installRenderer(proxy.map, viewport: $viewport) }
-            .onDisappear { surface.removeRenderer() }
-            .ignoresSafeArea()
+                .mapStyle(.standard)
+                .onMapLoaded { _ in onLoaded() }
+                .onCameraChanged { context in
+                    let state = context.cameraState
+                    surface.updateCameraSnapshot(.of(
+                        latitude: state.center.latitude,
+                        longitude: state.center.longitude,
+                        zoom: state.zoom,
+                        bearing: state.bearing,
+                        pitch: state.pitch
+                    ))
+                }
+                .onAppear { installRenderer(proxy.map, viewport: $viewport) }
+                .onDisappear { surface.removeRenderer() }
+                .ignoresSafeArea()
         }
     }
 
@@ -129,7 +147,10 @@ private struct MapboxStandardMap: View {
                 return MapScreenPoint(x: point.x, y: point.y, trustworthy: mismatch < 100)
             },
             convoyFit: { points, enabled in
-                guard enabled, let points, points.count >= 2 else {
+                switch MapHomeConvoyViewportPolicy.plan(points: points, focusEnabled: enabled) {
+                case .keepCurrentViewport:
+                    return
+                case .restoreBrowsing:
                     let state = map.cameraState
                     withViewportAnimation(.easeInOut(duration: 0.9)) {
                         viewport.wrappedValue = .followPuck(
@@ -139,14 +160,20 @@ private struct MapboxStandardMap: View {
                         )
                     }
                     return
+                case .fitConvoy:
+                    break
                 }
+                guard let points else { return }
                 let coordinates = points.map {
                     CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
                 }
                 let state = map.cameraState
                 guard let camera = try? map.camera(
                     for: coordinates,
-                    camera: CameraOptions(bearing: state.bearing, pitch: state.pitch),
+                    camera: CameraOptions(
+                        bearing: state.bearing,
+                        pitch: MapHomeConvoyViewportPolicy.fitComputationPitch
+                    ),
                     coordinatesPadding: UIEdgeInsets(top: 110, left: 60, bottom: 150, right: 60),
                     maxZoom: 16,
                     offset: nil
