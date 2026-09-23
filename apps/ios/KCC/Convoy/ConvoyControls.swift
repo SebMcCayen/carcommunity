@@ -104,8 +104,8 @@ struct ConvoyStatusBar: View {
         .sheet(item: $memberTarget) { target in
             LiveConvoyMembersSheet(
                 coordinator: coordinator,
+                awareness: awareness,
                 target: target,
-                positions: awareness.positions,
                 onCenter: mapSurface.centerOn
             )
         }
@@ -277,14 +277,14 @@ struct ConvoyMembersSheet: View {
 
 private struct LiveConvoyMembersSheet: View {
     @Bindable var coordinator: ConvoyManagementCoordinator
+    @Bindable var awareness: ConvoyAwarenessCoordinator
     let target: ConvoySheetTarget
-    let positions: [String: ConvoyMemberPosition]
     let onCenter: (MapPoint) -> Void
 
     var body: some View {
         ConvoyMembersSheet(
             convoy: coordinator.convoy(id: target.id) ?? target.initial,
-            positions: positions,
+            positions: awareness.positions,
             onCenter: onCenter
         )
     }
