@@ -330,12 +330,20 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertEqual(surface.visibleRadiusMeters(), 500)
     }
 
-    func testProjectionTrustIsAlwaysAcceptedOnFlatCamera() {
-        XCTAssertTrue(MapHomeProjectionTrustPolicy.isTrustworthy(
+    func testProjectionTrustStillRejectsLargeRoundTripMismatchOnFlatCamera() {
+        XCTAssertFalse(MapHomeProjectionTrustPolicy.isTrustworthy(
             latitude: 57.48,
             longitude: 12.07,
             unprojectedLatitude: 58.48,
             unprojectedLongitude: 13.07,
+            zoom: 15,
+            pitch: 0
+        ))
+        XCTAssertTrue(MapHomeProjectionTrustPolicy.isTrustworthy(
+            latitude: 57.48,
+            longitude: 12.07,
+            unprojectedLatitude: 57.48001,
+            unprojectedLongitude: 12.07001,
             zoom: 15,
             pitch: 0
         ))

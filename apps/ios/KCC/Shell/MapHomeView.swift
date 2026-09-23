@@ -165,7 +165,6 @@ enum MapHomeMeFollowPolicy {
 
 enum MapHomeProjectionTrustPolicy {
     private static let maximumMercatorLatitude = 85.05112878
-    static let maximumFlatPitchDegrees: CGFloat = 1
     static let roundTripTolerancePixels = 4.0
     static let minimumRoundTripToleranceMeters = 2.0
 
@@ -181,7 +180,6 @@ enum MapHomeProjectionTrustPolicy {
               unprojectedLatitude.isFinite, unprojectedLongitude.isFinite else {
             return false
         }
-        if pitch <= maximumFlatPitchDegrees { return true }
         let tolerance = max(
             metersPerPixel(latitude: latitude, zoom: zoom) * roundTripTolerancePixels,
             minimumRoundTripToleranceMeters
