@@ -3,6 +3,39 @@ import XCTest
 @testable import KCC
 
 final class ConvoyManagementModelsTests: XCTestCase {
+    private final class RetryLatestRepository: LiveLocationRepository, @unchecked Sendable {
+        private(set) var latestSubscriptionCount = 0
+        let marker: LiveMarker
+
+        init(marker: LiveMarker) {
+            self.marker = marker
+        }
+
+        func startSession(duration: LiveSessionDuration, vehicleId: String?) async throws {}
+        func updatePosition(_ coordinate: LiveCoordinate) async throws {}
+        func stopSession() async throws {}
+        func hideMeNow() async throws {}
+        func ownSessionUpdates(uid: String) -> AsyncStream<LiveSessionInfo?> {
+            AsyncStream { _ in }
+        }
+
+        func latestUpdates(uid: String) -> AsyncStream<LiveMarker?> {
+            latestSubscriptionCount += 1
+            let attempt = latestSubscriptionCount
+            return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+                if attempt == 1 {
+                    continuation.yield(nil)
+                    continuation.finish()
+                    return
+                }
+                continuation.yield(marker)
+            }
+        }
+
+        func imageDownloadURL(for imagePath: String) async -> URL? { nil }
+        func currentUserId() -> String? { marker.uid }
+    }
+
     func testListSeparatesPendingInvitesFromOwnedAndAcceptedConvoys() {
         let data: [String: Any] = [
             "convoys": [convoy(id: "mine", viewer: "accepted"), convoy(id: "invite", viewer: "invited")],
@@ -476,6 +509,37 @@ final class ConvoyManagementModelsTests: XCTestCase {
         XCTAssertEqual(coordinator.focusMode, .me)
         XCTAssertTrue(coordinator.positions.isEmpty)
         XCTAssertTrue(coordinator.imageURLs.isEmpty)
+    }
+
+    @MainActor
+    func testAwarenessResubscribesAfterLatestStreamCancellation() async throws {
+        var payload = convoy(id: "convoy", viewer: "accepted")
+        payload["livePositionUids"] = ["owner", "friend"]
+        let active = try XCTUnwrap(ConvoyManagementParser.parseItem(payload))
+        let marker = LiveMarker(
+            uid: "friend",
+            latitude: 57.61,
+            longitude: 12.03,
+            displayName: "Friend",
+            imagePath: nil,
+            recordedAt: Date(),
+            accuracyMeters: 10
+        )
+        let repository = RetryLatestRepository(marker: marker)
+        let coordinator = ConvoyAwarenessCoordinator()
+
+        coordinator.sync(convoy: active, repository: repository, currentUid: "owner")
+
+        let start = Date()
+        while coordinator.positions["friend"] == nil,
+              Date().timeIntervalSince(start) < 2 {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+
+        XCTAssertGreaterThanOrEqual(repository.latestSubscriptionCount, 2)
+        XCTAssertEqual(coordinator.positions["friend"]?.uid, "friend")
+        XCTAssertEqual(coordinator.positions["friend"]?.latitude, marker.latitude, accuracy: 1e-9)
+        XCTAssertEqual(coordinator.positions["friend"]?.longitude, marker.longitude, accuracy: 1e-9)
     }
 
     private func convoy(

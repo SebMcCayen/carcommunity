@@ -94,17 +94,24 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
     func latestUpdates(uid: String) -> AsyncStream<LiveMarker?> {
         let ref = database.reference(withPath: "liveLocation/\(uid)/latest")
         return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
-            let handle = ref.observe(
+            var handle: DatabaseHandle?
+            handle = ref.observe(
                 .value,
                 with: { snapshot in
                     let map = snapshot.value as? [String: Any]
                     continuation.yield(map.flatMap { LiveMarker.fromMap(uid: uid, $0) })
                 },
-                withCancel: { _ in continuation.yield(nil) }
+                withCancel: { _ in
+                    if let handle { ref.removeObserver(withHandle: handle) }
+                    continuation.yield(nil)
+                    continuation.finish()
+                }
             )
             let box = ObserverBox(reference: ref, handle: handle)
             continuation.onTermination = { _ in
-                box.reference.removeObserver(withHandle: box.handle)
+                if let handle = box.handle {
+                    box.reference.removeObserver(withHandle: handle)
+                }
             }
         }
     }
@@ -179,5 +186,5 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
 /// Firestore `ListenerBox`es).
 private struct ObserverBox: @unchecked Sendable {
     let reference: DatabaseReference
-    let handle: DatabaseHandle
+    let handle: DatabaseHandle?
 }

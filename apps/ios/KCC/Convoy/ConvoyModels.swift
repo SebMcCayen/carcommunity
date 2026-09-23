@@ -516,6 +516,8 @@ enum ConvoyArrowPlanner {
 @MainActor
 @Observable
 final class ConvoyAwarenessCoordinator {
+    private static let subscriptionRetryDelay: Duration = .seconds(1)
+
     private(set) var positions: [String: ConvoyMemberPosition] = [:]
     private(set) var imageURLs: [String: URL] = [:]
     var focusMode: ConvoyFocusMode = .me
@@ -547,40 +549,11 @@ final class ConvoyAwarenessCoordinator {
         guard let repository, convoy != nil else { return }
         for uid in Set(uids) {
             tasks.append(Task { [weak self, repository] in
-                for await marker in repository.latestUpdates(uid: uid) {
-                    guard !Task.isCancelled, let self else { return }
-                    if let marker {
-                        let position = ConvoyMemberPosition(marker: marker)
-                        switch ConvoyPositionQuality.judge(
-                            position,
-                            previous: self.positions[uid],
-                            pending: self.pendingPositions[uid]
-                        ) {
-                        case .accept:
-                            self.positions[uid] = position
-                            self.pendingPositions.removeValue(forKey: uid)
-                        case .hold:
-                            self.pendingPositions[uid] = position
-                            continue
-                        case .reject:
-                            self.pendingPositions.removeValue(forKey: uid)
-                            continue
-                        }
-                        if let path = marker.imagePath, self.imageURLs[path] == nil,
-                           ConvoyImageLookupPolicy.shouldAttempt(
-                               lastAttempt: self.imageLookupAttempts[path]
-                           ) {
-                            self.resolveImageURL(
-                                path: path,
-                                repository: repository,
-                                subscriptionKey: key
-                            )
-                        }
-                    } else {
-                        self.positions.removeValue(forKey: uid)
-                        self.pendingPositions.removeValue(forKey: uid)
-                    }
-                }
+                await self?.observeLatestUpdates(
+                    uid: uid,
+                    repository: repository,
+                    subscriptionKey: key
+                )
             })
         }
     }
@@ -626,6 +599,53 @@ final class ConvoyAwarenessCoordinator {
             defer { self.imageTasks.removeValue(forKey: path) }
             guard !Task.isCancelled, self.subscriptionKey == expectedKey, let url else { return }
             self.imageURLs[path] = url
+        }
+    }
+
+    private func observeLatestUpdates(
+        uid: String,
+        repository: LiveLocationRepository,
+        subscriptionKey expectedKey: String
+    ) async {
+        while !Task.isCancelled, subscriptionKey == expectedKey {
+            var sawEvent = false
+            for await marker in repository.latestUpdates(uid: uid) {
+                guard !Task.isCancelled, subscriptionKey == expectedKey else { return }
+                sawEvent = true
+                if let marker {
+                    let position = ConvoyMemberPosition(marker: marker)
+                    switch ConvoyPositionQuality.judge(
+                        position,
+                        previous: positions[uid],
+                        pending: pendingPositions[uid]
+                    ) {
+                    case .accept:
+                        positions[uid] = position
+                        pendingPositions.removeValue(forKey: uid)
+                    case .hold:
+                        pendingPositions[uid] = position
+                        continue
+                    case .reject:
+                        pendingPositions.removeValue(forKey: uid)
+                        continue
+                    }
+                    if let path = marker.imagePath, imageURLs[path] == nil,
+                       ConvoyImageLookupPolicy.shouldAttempt(
+                           lastAttempt: imageLookupAttempts[path]
+                       ) {
+                        resolveImageURL(
+                            path: path,
+                            repository: repository,
+                            subscriptionKey: expectedKey
+                        )
+                    }
+                } else {
+                    positions.removeValue(forKey: uid)
+                    pendingPositions.removeValue(forKey: uid)
+                }
+            }
+            guard sawEvent, !Task.isCancelled, subscriptionKey == expectedKey else { return }
+            try? await Task.sleep(for: Self.subscriptionRetryDelay)
         }
     }
 

@@ -330,6 +330,67 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertEqual(surface.visibleRadiusMeters(), 500)
     }
 
+    func testProjectionTrustIsAlwaysAcceptedOnFlatCamera() {
+        XCTAssertTrue(MapHomeProjectionTrustPolicy.isTrustworthy(
+            latitude: 57.48,
+            longitude: 12.07,
+            unprojectedLatitude: 58.48,
+            unprojectedLongitude: 13.07,
+            zoom: 15,
+            pitch: 0
+        ))
+    }
+
+    func testProjectionTrustToleranceScalesWithZoom() {
+        let latitude = 57.48
+        let longitude = 12.07
+        let lowZoomToleranceMeters = MapHomeProjectionTrustPolicy.metersPerPixel(
+            latitude: latitude,
+            zoom: 8
+        ) * MapHomeProjectionTrustPolicy.roundTripTolerancePixels
+        let highZoomToleranceMeters = MapHomeProjectionTrustPolicy.metersPerPixel(
+            latitude: latitude,
+            zoom: 16
+        ) * MapHomeProjectionTrustPolicy.roundTripTolerancePixels
+
+        XCTAssertTrue(lowZoomToleranceMeters > highZoomToleranceMeters)
+
+        let lowZoomRoundTripLatitude = latitude + (lowZoomToleranceMeters * 0.9) / 111_320.0
+        let highZoomRoundTripLatitude = latitude + (lowZoomToleranceMeters * 0.9) / 111_320.0
+
+        XCTAssertTrue(MapHomeProjectionTrustPolicy.isTrustworthy(
+            latitude: latitude,
+            longitude: longitude,
+            unprojectedLatitude: lowZoomRoundTripLatitude,
+            unprojectedLongitude: longitude,
+            zoom: 8,
+            pitch: 45
+        ))
+        XCTAssertFalse(MapHomeProjectionTrustPolicy.isTrustworthy(
+            latitude: latitude,
+            longitude: longitude,
+            unprojectedLatitude: highZoomRoundTripLatitude,
+            unprojectedLongitude: longitude,
+            zoom: 16,
+            pitch: 45
+        ))
+    }
+
+    func testProjectionTrustHasAMinimumMeterFloorAtHighZoom() {
+        let latitude = 57.48
+        let longitude = 12.07
+        let oneMeterNorth = latitude + 1.0 / 111_320.0
+
+        XCTAssertTrue(MapHomeProjectionTrustPolicy.isTrustworthy(
+            latitude: latitude,
+            longitude: longitude,
+            unprojectedLatitude: oneMeterNorth,
+            unprojectedLongitude: longitude,
+            zoom: 20,
+            pitch: 45
+        ))
+    }
+
     func testCameraSnapshotIsPinnableForTests() {
         let surface = StubMapSurface(autoLoad: false)
         let snapshot = MapCameraSnapshot.of(

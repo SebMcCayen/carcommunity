@@ -160,6 +160,41 @@ enum MapHomeMeFollowPolicy {
             continuation.onTermination = { _ in task.cancel() }
         }
     }
+
+}
+
+enum MapHomeProjectionTrustPolicy {
+    static let maximumFlatPitchDegrees: CGFloat = 1
+    static let roundTripTolerancePixels = 4.0
+    static let minimumRoundTripToleranceMeters = 2.0
+
+    static func isTrustworthy(
+        latitude: Double,
+        longitude: Double,
+        unprojectedLatitude: Double,
+        unprojectedLongitude: Double,
+        zoom: Double,
+        pitch: CGFloat
+    ) -> Bool {
+        guard latitude.isFinite, longitude.isFinite,
+              unprojectedLatitude.isFinite, unprojectedLongitude.isFinite else {
+            return false
+        }
+        if pitch <= maximumFlatPitchDegrees { return true }
+        let tolerance = max(
+            metersPerPixel(latitude: latitude, zoom: zoom) * roundTripTolerancePixels,
+            minimumRoundTripToleranceMeters
+        )
+        let mismatch = LiveShareCadence.distanceMeters(
+            lat1: latitude, lon1: longitude,
+            lat2: unprojectedLatitude, lon2: unprojectedLongitude
+        )
+        return mismatch <= tolerance
+    }
+
+    static func metersPerPixel(latitude: Double, zoom: Double) -> Double {
+        156_543.03392 * cos(latitude * .pi / 180) / pow(2, zoom)
+    }
 }
 
 @MainActor
@@ -425,12 +460,17 @@ private struct MapboxStandardMap: View {
                 guard point.x.isFinite, point.y.isFinite, point.x >= 0, point.y >= 0 else {
                     return nil
                 }
+                let cameraState = map.cameraState
                 let roundTrip = map.coordinate(for: point)
-                let mismatch = LiveShareCadence.distanceMeters(
-                    lat1: latitude, lon1: longitude,
-                    lat2: roundTrip.latitude, lon2: roundTrip.longitude
+                let trustworthy = MapHomeProjectionTrustPolicy.isTrustworthy(
+                    latitude: latitude,
+                    longitude: longitude,
+                    unprojectedLatitude: roundTrip.latitude,
+                    unprojectedLongitude: roundTrip.longitude,
+                    zoom: cameraState.zoom,
+                    pitch: CGFloat(cameraState.pitch)
                 )
-                return MapScreenPoint(x: point.x, y: point.y, trustworthy: mismatch < 100)
+                return MapScreenPoint(x: point.x, y: point.y, trustworthy: trustworthy)
             },
             convoyFit: {
                 points,
