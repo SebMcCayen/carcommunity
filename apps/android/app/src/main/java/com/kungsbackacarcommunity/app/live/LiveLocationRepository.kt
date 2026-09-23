@@ -1,7 +1,12 @@
 package com.kungsbackacarcommunity.app.live
 
 import com.kungsbackacarcommunity.app.navigation.LatLng
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 
 /**
  * Default nearby-discovery radius (metres) — the same 15 km default the backend
@@ -155,3 +160,14 @@ interface LiveLocationRepository {
      */
     fun observeLatest(uid: String): Flow<LiveMarker?>
 }
+
+private const val OBSERVE_LATEST_RETRY_MILLIS = 1_000L
+
+fun LiveLocationRepository.observeLatestRecovering(uid: String): Flow<LiveMarker?> =
+    flow {
+        while (currentCoroutineContext().isActive) {
+            emitAll(observeLatest(uid))
+            if (!currentCoroutineContext().isActive) break
+            delay(OBSERVE_LATEST_RETRY_MILLIS)
+        }
+    }
