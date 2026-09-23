@@ -84,9 +84,10 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
                     continuation.yield(nil)
                 }
             )
-            let box = ObserverBox(reference: ref, handle: handle)
+            let box = ObserverBox(reference: ref)
+            box.setHandle(handle)
             continuation.onTermination = { _ in
-                box.reference.removeObserver(withHandle: box.handle)
+                box.removeObserverOnce()
             }
         }
     }
@@ -110,6 +111,7 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
         let ref = database.reference(withPath: "liveLocation/\(uid)/latest")
         return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
             var handle: DatabaseHandle?
+            let box = ObserverBox(reference: ref)
             handle = ref.observe(
                 .value,
                 with: { snapshot in
@@ -117,7 +119,7 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
                     continuation.yield(.value(map.flatMap { LiveMarker.fromMap(uid: uid, $0) }))
                 },
                 withCancel: { error in
-                    if let handle { ref.removeObserver(withHandle: handle) }
+                    box.removeObserverOnce()
                     continuation.yield(.value(nil))
                     if LiveRealtimeRetryPolicy.shouldRetry(error) {
                         continuation.yield(.retry)
@@ -125,11 +127,9 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
                     continuation.finish()
                 }
             )
-            let box = ObserverBox(reference: ref, handle: handle)
+            box.setHandle(handle)
             continuation.onTermination = { _ in
-                if let handle = box.handle {
-                    box.reference.removeObserver(withHandle: handle)
-                }
+                box.removeObserverOnce()
             }
         }
     }
@@ -202,9 +202,30 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
 /// closure, which must be Sendable — all it does is remove the observer,
 /// which the Database SDK documents as thread-safe (same pattern as the
 /// Firestore `ListenerBox`es).
-private struct ObserverBox: @unchecked Sendable {
+private final class ObserverBox: @unchecked Sendable {
     let reference: DatabaseReference
-    let handle: DatabaseHandle?
+    private let lock = NSLock()
+    private var handle: DatabaseHandle?
+
+    init(reference: DatabaseReference) {
+        self.reference = reference
+    }
+
+    func setHandle(_ handle: DatabaseHandle?) {
+        lock.lock()
+        self.handle = handle
+        lock.unlock()
+    }
+
+    func removeObserverOnce() {
+        lock.lock()
+        let handle = self.handle
+        self.handle = nil
+        lock.unlock()
+        if let handle {
+            reference.removeObserver(withHandle: handle)
+        }
+    }
 }
 
 private enum LiveRealtimeRetryPolicy {
