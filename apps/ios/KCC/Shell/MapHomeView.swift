@@ -243,6 +243,7 @@ private struct MapboxStandardMap: View {
     @State private var meFollowEnabled = false
     @State private var meFollowSuspended = false
     @State private var locationAuthorization: LocationAuthorization
+    @State private var surfaceActive: Bool
 
     init(
         accessToken: String,
@@ -256,6 +257,7 @@ private struct MapboxStandardMap: View {
         self.onLoaded = onLoaded
         _interactionObserver = State(initialValue: ConvoyViewportInteractionObserver(surface: surface))
         _locationAuthorization = State(initialValue: locationProvider.authorization)
+        _surfaceActive = State(initialValue: surface.isActive)
     }
 
     var body: some View {
@@ -295,16 +297,19 @@ private struct MapboxStandardMap: View {
                     surface.suspendSelfFollowForInteraction()
                 }
             }
+            .onChange(of: surface.isActive, initial: true) { _, active in
+                surfaceActive = active
+            }
             .ignoresSafeArea()
         }
         .task(id: MapHomeMeFollowPolicy.subscriptionKey(
-            surfaceActive: surface.isActive,
+            surfaceActive: surfaceActive,
             enabled: meFollowEnabled,
             authorization: locationAuthorization,
             locationProvider: locationProvider
         )) {
             guard MapHomeMeFollowPolicy.shouldConsumeFixes(
-                surfaceActive: surface.isActive,
+                surfaceActive: surfaceActive,
                 followEnabled: meFollowEnabled,
                 authorization: locationAuthorization
             ) else { return }
@@ -351,13 +356,20 @@ private struct MapboxStandardMap: View {
                 )
                 return MapScreenPoint(x: point.x, y: point.y, trustworthy: mismatch < 100)
             },
-            convoyFit: { points, enabled, userPoint, followSelfEnabled, resumeSelfFollow in
+            convoyFit: {
+                points,
+                enabled,
+                userPoint,
+                followSelfEnabled,
+                resumeSelfFollow,
+                restoreViewport in
                 let state = map.cameraState
                 meFollowEnabled.wrappedValue = !enabled && followSelfEnabled
                 switch MapHomeConvoyViewportPolicy.plan(points: points, focusEnabled: enabled) {
                 case .keepCurrentViewport:
                     return
                 case .restoreBrowsing:
+                    guard restoreViewport else { return }
                     let fallback = cameraBeforeConvoy.wrappedValue
                     cameraBeforeConvoy.wrappedValue = nil
                     let restoreState = MapHomeMeFollowPolicy.restoreState(

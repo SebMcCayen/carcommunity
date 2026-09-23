@@ -1006,7 +1006,7 @@ final class StubMapSurface: MapSurface {
     @ObservationIgnored
     private var rendererProjection: ((Double, Double) -> MapScreenPoint?)?
     @ObservationIgnored
-    private var rendererConvoyFit: (([MapPoint]?, Bool, MapPoint?, Bool, Bool) -> Void)?
+    private var rendererConvoyFit: (([MapPoint]?, Bool, MapPoint?, Bool, Bool, Bool) -> Void)?
     @ObservationIgnored
     private var rendererCenter: ((MapPoint) -> Void)?
     @ObservationIgnored
@@ -1088,7 +1088,7 @@ final class StubMapSurface: MapSurface {
     /// callbacks on the existing surface preserves one camera command path.
     func installRenderer(
         projection: @escaping (Double, Double) -> MapScreenPoint?,
-        convoyFit: @escaping ([MapPoint]?, Bool, MapPoint?, Bool, Bool) -> Void,
+        convoyFit: @escaping ([MapPoint]?, Bool, MapPoint?, Bool, Bool, Bool) -> Void,
         center: @escaping (MapPoint) -> Void
     ) {
         rendererProjection = projection
@@ -1098,7 +1098,7 @@ final class StubMapSurface: MapSurface {
             applyConvoyFitToRenderer(force: true)
         } else if convoySelfFollowEnabled && !convoySelfFollowSuspended {
             meRestoreArmed = true
-            rendererConvoyFit?(nil, false, convoyUserPoint, true, false)
+            rendererConvoyFit?(nil, false, convoyUserPoint, true, false, false)
         }
     }
 
@@ -1141,7 +1141,7 @@ final class StubMapSurface: MapSurface {
     ) {
         let previousPoints = convoyFit
         let focusChanged = convoyFocusEnabled != focusEnabled
-        let selfFollowChanged = convoySelfFollowEnabled != followSelfEnabled
+        let previousSelfFollowEnabled = convoySelfFollowEnabled
         convoyFit = points
         convoyFocusEnabled = focusEnabled
         convoyUserPoint = userPoint
@@ -1150,19 +1150,28 @@ final class StubMapSurface: MapSurface {
         if !focusEnabled {
             appliedConvoyFit = nil
             lastConvoyFitAt = nil
+            let selfFollowArmed = !previousSelfFollowEnabled && followSelfEnabled
             let shouldRestoreBrowsing = previousPoints != nil
                 || focusChanged
-                || selfFollowChanged
+                || selfFollowArmed
                 || (!meRestoreArmed && followSelfEnabled)
+            let shouldSyncSelfFollowDisable = previousSelfFollowEnabled && !followSelfEnabled
             let resumeSelfFollow = followSelfEnabled && (
-                focusChanged || selfFollowChanged || !meRestoreArmed
+                focusChanged || selfFollowArmed || !meRestoreArmed
             )
             if shouldRestoreBrowsing, resumeSelfFollow {
                 convoySelfFollowSuspended = false
             }
             meRestoreArmed = followSelfEnabled
-            if shouldRestoreBrowsing {
-                rendererConvoyFit?(nil, false, userPoint, followSelfEnabled, resumeSelfFollow)
+            if shouldRestoreBrowsing || shouldSyncSelfFollowDisable {
+                rendererConvoyFit?(
+                    nil,
+                    false,
+                    userPoint,
+                    followSelfEnabled,
+                    resumeSelfFollow,
+                    shouldRestoreBrowsing
+                )
             }
             return
         }
@@ -1185,7 +1194,7 @@ final class StubMapSurface: MapSurface {
             lastFitAt: lastConvoyFitAt,
             now: now
         ) else { return }
-        rendererConvoyFit(points, true, convoyUserPoint, convoySelfFollowEnabled, false)
+        rendererConvoyFit(points, true, convoyUserPoint, convoySelfFollowEnabled, false, true)
         appliedConvoyFit = points
         lastConvoyFitAt = now
     }
