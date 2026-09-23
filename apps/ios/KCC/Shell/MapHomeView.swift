@@ -557,6 +557,7 @@ private struct MapboxStandardMap: View {
         guard surfaceActive,
               meFollowEnabled,
               meFollowSuspended,
+              !surface.convoyFocusEnabled,
               pendingProgrammaticViewportTokens.isEmpty
         else {
             meFollowIdleTask = nil
@@ -579,6 +580,7 @@ private struct MapboxStandardMap: View {
                   surfaceActive,
                   meFollowEnabled,
                   meFollowSuspended,
+                  !surface.convoyFocusEnabled,
                   pendingProgrammaticViewportTokens.isEmpty
             else {
                 if meFollowIdleTaskToken == token {
