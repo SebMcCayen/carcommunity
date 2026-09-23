@@ -400,7 +400,7 @@ final class MapSurfaceTests: XCTestCase {
         var followSelfEnabled = false
         surface.installRenderer(
             projection: { _, _ in MapScreenPoint(x: 20, y: 30) },
-            convoyFit: { fitted = $0; focusEnabled = $1; _ = $2; followSelfEnabled = $3 },
+            convoyFit: { fitted = $0; focusEnabled = $1; _ = $2; followSelfEnabled = $3; _ = $4 },
             center: { centered = $0 }
         )
         let snapshot = MapCameraSnapshot.of(
@@ -458,7 +458,7 @@ final class MapSurfaceTests: XCTestCase {
         surface.setConvoyFitClockForTest { now }
         surface.installRenderer(
             projection: { _, _ in nil },
-            convoyFit: { points, enabled, userPoint, _ in fits.append((points, enabled, userPoint)) },
+            convoyFit: { points, enabled, userPoint, _, _ in fits.append((points, enabled, userPoint)) },
             center: { _ in }
         )
         let initial = [
@@ -530,7 +530,7 @@ final class MapSurfaceTests: XCTestCase {
         let resumed = MapHomeMeFollowPolicy.restoreState(
             latestOwnPoint: stale,
             userPoint: current,
-            followSelfEnabled: true,
+            resumeSelfFollow: true,
             suspended: true
         )
         XCTAssertEqual(resumed.latestOwnPoint, current)
@@ -539,7 +539,7 @@ final class MapSurfaceTests: XCTestCase {
         let preserved = MapHomeMeFollowPolicy.restoreState(
             latestOwnPoint: stale,
             userPoint: nil,
-            followSelfEnabled: false,
+            resumeSelfFollow: false,
             suspended: true
         )
         XCTAssertEqual(preserved.latestOwnPoint, stale)
@@ -595,34 +595,30 @@ final class MapSurfaceTests: XCTestCase {
         let initial = MapHomeMeFollowPolicy.subscriptionKey(
             surfaceActive: true,
             enabled: true,
-            suspended: false,
             authorization: .whileInUse,
             locationProvider: first
         )
         let providerSwap = MapHomeMeFollowPolicy.subscriptionKey(
             surfaceActive: true,
             enabled: true,
-            suspended: false,
             authorization: .whileInUse,
             locationProvider: second
         )
-        let suspended = MapHomeMeFollowPolicy.subscriptionKey(
+        let disabled = MapHomeMeFollowPolicy.subscriptionKey(
             surfaceActive: true,
-            enabled: true,
-            suspended: true,
+            enabled: false,
             authorization: .whileInUse,
             locationProvider: first
         )
         let unauthorized = MapHomeMeFollowPolicy.subscriptionKey(
             surfaceActive: true,
             enabled: true,
-            suspended: false,
             authorization: .denied,
             locationProvider: first
         )
 
         XCTAssertNotEqual(initial, providerSwap)
-        XCTAssertNotEqual(initial, suspended)
+        XCTAssertNotEqual(initial, disabled)
         XCTAssertNotEqual(initial, unauthorized)
     }
 
@@ -658,13 +654,11 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertFalse(MapHomeMeFollowPolicy.shouldConsumeFixes(
             surfaceActive: true,
             followEnabled: true,
-            suspended: false,
             authorization: .denied
         ))
         XCTAssertTrue(MapHomeMeFollowPolicy.shouldConsumeFixes(
             surfaceActive: true,
             followEnabled: true,
-            suspended: false,
             authorization: .whileInUse
         ))
     }
@@ -674,7 +668,7 @@ final class MapSurfaceTests: XCTestCase {
         var fits = 0
         surface.installRenderer(
             projection: { _, _ in nil },
-            convoyFit: { _, enabled, _, _ in if enabled { fits += 1 } },
+            convoyFit: { _, enabled, _, _, _ in if enabled { fits += 1 } },
             center: { _ in }
         )
         let initial = [
@@ -701,7 +695,7 @@ final class MapSurfaceTests: XCTestCase {
         var restores = 0
         surface.installRenderer(
             projection: { _, _ in nil },
-            convoyFit: { points, enabled, _, followSelfEnabled in
+            convoyFit: { points, enabled, _, followSelfEnabled, _ in
                 if points == nil, !enabled, followSelfEnabled { restores += 1 }
             },
             center: { _ in }
@@ -722,7 +716,7 @@ final class MapSurfaceTests: XCTestCase {
         var latestFollowSelfEnabled: Bool?
         surface.installRenderer(
             projection: { _, _ in nil },
-            convoyFit: { points, enabled, _, followSelfEnabled in
+            convoyFit: { points, enabled, _, followSelfEnabled, _ in
                 if points == nil, !enabled {
                     latestFollowSelfEnabled = followSelfEnabled
                 }
@@ -744,7 +738,7 @@ final class MapSurfaceTests: XCTestCase {
         surface.suspendSelfFollowForInteraction()
         surface.installRenderer(
             projection: { _, _ in nil },
-            convoyFit: { points, enabled, _, followSelfEnabled in
+            convoyFit: { points, enabled, _, followSelfEnabled, _ in
                 if points == nil, !enabled, followSelfEnabled { restores += 1 }
             },
             center: { _ in }

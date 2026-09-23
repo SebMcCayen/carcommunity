@@ -1063,7 +1063,11 @@ struct ShellView: View {
 
     private func applyConvoyFocus() {
         let hasConvoyContext = convoyAwarenessTargetConvoy != nil
-        guard hasConvoyContext || mapSurface.convoyFit != nil || mapSurface.convoyFocusEnabled else {
+        guard hasConvoyContext
+            || mapSurface.convoyFit != nil
+            || mapSurface.convoyFocusEnabled
+            || mapSurface.convoySelfFollowEnabled
+        else {
             return
         }
         mapSurface.setConvoyFit(

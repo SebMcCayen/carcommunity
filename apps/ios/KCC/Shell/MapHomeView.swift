@@ -35,7 +35,6 @@ enum MapHomeMeFollowPolicy {
     struct SubscriptionKey: Equatable {
         let surfaceActive: Bool
         let enabled: Bool
-        let suspended: Bool
         let authorization: LocationAuthorization
         let providerId: ObjectIdentifier
     }
@@ -60,14 +59,12 @@ enum MapHomeMeFollowPolicy {
     static func subscriptionKey(
         surfaceActive: Bool,
         enabled: Bool,
-        suspended: Bool,
         authorization: LocationAuthorization,
         locationProvider: any LocationProvider
     ) -> SubscriptionKey {
         SubscriptionKey(
             surfaceActive: surfaceActive,
             enabled: enabled,
-            suspended: suspended,
             authorization: authorization,
             providerId: ObjectIdentifier(locationProvider as AnyObject)
         )
@@ -76,12 +73,12 @@ enum MapHomeMeFollowPolicy {
     static func restoreState(
         latestOwnPoint: MapPoint?,
         userPoint: MapPoint?,
-        followSelfEnabled: Bool,
+        resumeSelfFollow: Bool,
         suspended: Bool
     ) -> RestoreState {
         RestoreState(
             latestOwnPoint: userPoint ?? latestOwnPoint,
-            suspended: followSelfEnabled ? false : suspended
+            suspended: resumeSelfFollow ? false : suspended
         )
     }
 
@@ -100,10 +97,9 @@ enum MapHomeMeFollowPolicy {
     static func shouldConsumeFixes(
         surfaceActive: Bool,
         followEnabled: Bool,
-        suspended: Bool,
         authorization: LocationAuthorization
     ) -> Bool {
-        surfaceActive && followEnabled && !suspended && authorization.isAuthorized
+        surfaceActive && followEnabled && authorization.isAuthorized
     }
 
     static func camera(
@@ -304,14 +300,12 @@ private struct MapboxStandardMap: View {
         .task(id: MapHomeMeFollowPolicy.subscriptionKey(
             surfaceActive: surface.isActive,
             enabled: meFollowEnabled,
-            suspended: meFollowSuspended,
             authorization: locationAuthorization,
             locationProvider: locationProvider
         )) {
             guard MapHomeMeFollowPolicy.shouldConsumeFixes(
                 surfaceActive: surface.isActive,
                 followEnabled: meFollowEnabled,
-                suspended: meFollowSuspended,
                 authorization: locationAuthorization
             ) else { return }
             for await fix in locationProvider.fixes() {
@@ -357,7 +351,7 @@ private struct MapboxStandardMap: View {
                 )
                 return MapScreenPoint(x: point.x, y: point.y, trustworthy: mismatch < 100)
             },
-            convoyFit: { points, enabled, userPoint, followSelfEnabled in
+            convoyFit: { points, enabled, userPoint, followSelfEnabled, resumeSelfFollow in
                 let state = map.cameraState
                 meFollowEnabled.wrappedValue = !enabled && followSelfEnabled
                 switch MapHomeConvoyViewportPolicy.plan(points: points, focusEnabled: enabled) {
@@ -369,7 +363,7 @@ private struct MapboxStandardMap: View {
                     let restoreState = MapHomeMeFollowPolicy.restoreState(
                         latestOwnPoint: latestOwnPoint.wrappedValue,
                         userPoint: userPoint,
-                        followSelfEnabled: followSelfEnabled,
+                        resumeSelfFollow: resumeSelfFollow,
                         suspended: meFollowSuspended.wrappedValue
                     )
                     latestOwnPoint.wrappedValue = restoreState.latestOwnPoint
