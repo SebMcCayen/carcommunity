@@ -32,6 +32,8 @@ enum MapHomeConvoyViewportPolicy {
 }
 
 enum MapHomeMeFollowPolicy {
+    static let idleReturnDelay: Duration = .seconds(10)
+
     struct SubscriptionKey: Equatable {
         let surfaceActive: Bool
         let enabled: Bool
@@ -275,6 +277,7 @@ private struct MapboxStandardMap: View {
     @State private var locationAuthorization: LocationAuthorization
     @State private var surfaceActive: Bool
     @State private var pendingProgrammaticViewportTokens: Set<UUID> = []
+    @State private var meFollowIdleTask: Task<Void, Never>?
 
     init(
         accessToken: String,
@@ -319,8 +322,14 @@ private struct MapboxStandardMap: View {
                     bearing: state.bearing,
                     pitch: state.pitch
                 ))
+                if meFollowEnabled, meFollowSuspended,
+                   pendingProgrammaticViewportTokens.isEmpty {
+                    armMeFollowIdleReturn(viewport: $viewport)
+                }
             }
             .onDisappear {
+                meFollowIdleTask?.cancel()
+                meFollowIdleTask = nil
                 proxy.viewport?.removeStatusObserver(interactionObserver)
                 surface.removeRenderer()
             }
@@ -329,6 +338,7 @@ private struct MapboxStandardMap: View {
                     guard meFollowEnabled, pendingProgrammaticViewportTokens.isEmpty else { return }
                     meFollowSuspended = true
                     surface.suspendSelfFollowForInteraction()
+                    armMeFollowIdleReturn(viewport: $viewport)
                 }
             }
             .onChange(of: surface.isActive, initial: true) { _, active in
@@ -375,6 +385,8 @@ private struct MapboxStandardMap: View {
             ) else { return }
             meFollowEnabled = false
             meFollowSuspended = false
+            meFollowIdleTask?.cancel()
+            meFollowIdleTask = nil
             latestOwnPoint = nil
             let fallback = cameraBeforeConvoy
             cameraBeforeConvoy = nil
@@ -426,6 +438,10 @@ private struct MapboxStandardMap: View {
                 restoreViewport in
                 let state = map.cameraState
                 meFollowEnabled.wrappedValue = !enabled && followSelfEnabled
+                if enabled || !followSelfEnabled {
+                    meFollowIdleTask?.cancel()
+                    meFollowIdleTask = nil
+                }
                 switch MapHomeConvoyViewportPolicy.plan(points: points, focusEnabled: enabled) {
                 case .keepCurrentViewport:
                     return
@@ -530,6 +546,28 @@ private struct MapboxStandardMap: View {
             pendingProgrammaticViewportTokens.remove(token)
         }
         change()
+    }
+
+    private func armMeFollowIdleReturn(viewport: Binding<Viewport>) {
+        meFollowIdleTask?.cancel()
+        guard surfaceActive, meFollowEnabled, meFollowSuspended else {
+            meFollowIdleTask = nil
+            return
+        }
+        meFollowIdleTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: MapHomeMeFollowPolicy.idleReturnDelay)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled,
+                  surfaceActive, meFollowEnabled, meFollowSuspended
+            else { return }
+            meFollowSuspended = false
+            surface.resumeSelfFollowAfterIdle()
+            applyMeFollow(latestOwnPoint, viewport: viewport)
+            meFollowIdleTask = nil
+        }
     }
 
     private func applyMeFollow(

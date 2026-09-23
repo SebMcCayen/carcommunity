@@ -824,6 +824,30 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertEqual(restores, 0)
     }
 
+    func testIdleReturnAllowsSelfFollowToResumeAcrossRendererReload() {
+        let surface = StubMapSurface(autoLoad: false)
+        surface.setConvoyFit(
+            points: nil,
+            focusEnabled: false,
+            userPoint: nil,
+            followSelfEnabled: true
+        )
+        surface.suspendSelfFollowForInteraction()
+        surface.resumeSelfFollowAfterIdle()
+
+        var restores = 0
+        surface.installRenderer(
+            projection: { _, _ in nil },
+            convoyFit: { points, enabled, _, followSelfEnabled, _, _ in
+                if points == nil, !enabled, followSelfEnabled { restores += 1 }
+            },
+            center: { _ in }
+        )
+
+        XCTAssertEqual(restores, 1)
+        XCTAssertEqual(MapHomeMeFollowPolicy.idleReturnDelay, .seconds(10))
+    }
+
     func testEnteringConvoyFocusWithoutFitPointsStopsSelfFollowWithoutRestoringViewport() {
         let surface = StubMapSurface(autoLoad: false)
         var transitions: [(enabled: Bool, followSelf: Bool, restoreViewport: Bool)] = []

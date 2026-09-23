@@ -1238,6 +1238,11 @@ final class StubMapSurface: MapSurface {
         convoySelfFollowSuspended = true
     }
 
+    func resumeSelfFollowAfterIdle() {
+        guard convoySelfFollowEnabled, !convoyFocusEnabled else { return }
+        convoySelfFollowSuspended = false
+    }
+
     func recenter() {
         recenterCount += 1
     }
