@@ -92,6 +92,21 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
     }
 
     func latestUpdates(uid: String) -> AsyncStream<LiveMarker?> {
+        let events = latestUpdateEvents(uid: uid)
+        return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+            let task = Task {
+                for await event in events {
+                    if Task.isCancelled { break }
+                    guard case let .value(marker) = event else { continue }
+                    continuation.yield(marker)
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    func latestUpdateEvents(uid: String) -> AsyncStream<LiveMarkerUpdateEvent> {
         let ref = database.reference(withPath: "liveLocation/\(uid)/latest")
         return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
             var handle: DatabaseHandle?
@@ -99,11 +114,14 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
                 .value,
                 with: { snapshot in
                     let map = snapshot.value as? [String: Any]
-                    continuation.yield(map.flatMap { LiveMarker.fromMap(uid: uid, $0) })
+                    continuation.yield(.value(map.flatMap { LiveMarker.fromMap(uid: uid, $0) }))
                 },
-                withCancel: { _ in
+                withCancel: { error in
                     if let handle { ref.removeObserver(withHandle: handle) }
-                    continuation.yield(nil)
+                    continuation.yield(.value(nil))
+                    if LiveRealtimeRetryPolicy.shouldRetry(error) {
+                        continuation.yield(.retry)
+                    }
                     continuation.finish()
                 }
             )
@@ -187,4 +205,14 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
 private struct ObserverBox: @unchecked Sendable {
     let reference: DatabaseReference
     let handle: DatabaseHandle?
+}
+
+private enum LiveRealtimeRetryPolicy {
+    private static let disconnectedCode = -4
+    private static let networkErrorCode = -24
+
+    static func shouldRetry(_ error: Error) -> Bool {
+        let code = (error as NSError).code
+        return code == disconnectedCode || code == networkErrorCode
+    }
 }

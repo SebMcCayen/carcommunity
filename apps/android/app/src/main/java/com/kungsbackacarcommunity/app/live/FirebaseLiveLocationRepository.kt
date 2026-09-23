@@ -127,7 +127,9 @@ class FirebaseLiveLocationRepository private constructor(
                             // one-shot observation as retryable so the repository can
                             // attach a fresh RTDB observer for the same uid.
                             trySend(LatestMarkerObservation.Value(null))
-                            trySend(LatestMarkerObservation.Retry)
+                            if (shouldRetryLatestObserve(error)) {
+                                trySend(LatestMarkerObservation.Retry)
+                            }
                             close()
                         }
                     }
@@ -183,6 +185,9 @@ internal fun <T> recoverLatestMarkerFlow(
             delay(retryDelayMillis)
         }
     }
+
+internal fun shouldRetryLatestObserve(error: DatabaseError): Boolean =
+    error.code == DatabaseError.DISCONNECTED || error.code == DatabaseError.NETWORK_ERROR
 
 /**
  * Maps the RTDB `latest` node to the Firebase-free [LiveMarker], or null when

@@ -20,15 +20,20 @@ final class ConvoyManagementModelsTests: XCTestCase {
         }
 
         func latestUpdates(uid: String) -> AsyncStream<LiveMarker?> {
+            AsyncStream { $0.finish() }
+        }
+
+        func latestUpdateEvents(uid: String) -> AsyncStream<LiveMarkerUpdateEvent> {
             latestSubscriptionCount += 1
             let attempt = latestSubscriptionCount
             return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
                 if attempt == 1 {
-                    continuation.yield(nil)
+                    continuation.yield(.value(nil))
+                    continuation.yield(.retry)
                     continuation.finish()
                     return
                 }
-                continuation.yield(marker)
+                continuation.yield(.value(marker))
             }
         }
 

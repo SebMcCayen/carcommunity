@@ -54,6 +54,10 @@ protocol LiveLocationRepository: AnyObject, Sendable {
     /// attempted. A missing, malformed or denied value emits nil.
     func latestUpdates(uid: String) -> AsyncStream<LiveMarker?>
 
+    /// Live marker stream plus retryable termination signals for per-uid
+    /// convoy awareness subscriptions.
+    func latestUpdateEvents(uid: String) -> AsyncStream<LiveMarkerUpdateEvent>
+
     /// Resolves a Storage path carried by a live marker for map identity.
     func imageDownloadURL(for imagePath: String) async -> URL?
 
@@ -76,5 +80,24 @@ extension LiveLocationRepository {
         AsyncStream { $0.finish() }
     }
 
+    func latestUpdateEvents(uid: String) -> AsyncStream<LiveMarkerUpdateEvent> {
+        let stream = latestUpdates(uid: uid)
+        return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+            let task = Task {
+                for await marker in stream {
+                    if Task.isCancelled { break }
+                    continuation.yield(.value(marker))
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
     func imageDownloadURL(for imagePath: String) async -> URL? { nil }
+}
+
+enum LiveMarkerUpdateEvent: Sendable {
+    case value(LiveMarker?)
+    case retry
 }
