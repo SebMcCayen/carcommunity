@@ -192,7 +192,7 @@ private struct MapboxStandardMap: View {
             }
             .ignoresSafeArea()
         }
-        .task(id: "\(surface.isActive)-\(meFollowEnabled)-\(meFollowSuspended)") {
+        .task(id: "\(surface.isActive)-\(meFollowEnabled)-\(meFollowSuspended)-\(ObjectIdentifier(locationProvider as AnyObject))") {
             guard surface.isActive, meFollowEnabled, !meFollowSuspended else { return }
             for await fix in locationProvider.fixes() {
                 if Task.isCancelled { return }
@@ -234,25 +234,26 @@ private struct MapboxStandardMap: View {
                 case .keepCurrentViewport:
                     return
                 case .restoreBrowsing:
-                    meFollowSuspended.wrappedValue = false
+                    if followSelfEnabled {
+                        meFollowSuspended.wrappedValue = false
+                    }
                     let fallback = cameraBeforeConvoy.wrappedValue
                     cameraBeforeConvoy.wrappedValue = nil
                     latestOwnPoint.wrappedValue = latestOwnPoint.wrappedValue ?? userPoint
                     let followPoint = latestOwnPoint.wrappedValue ?? userPoint
-                    withViewportAnimation(.easeInOut(duration: 0.9)) {
-                        viewport.wrappedValue = .camera(
-                            center: followPoint.map {
-                                CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
-                            } ?? fallback.map {
-                                CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
-                            } ?? state.center,
-                            zoom: followPoint == nil
-                                ? (fallback?.zoom ?? state.zoom)
-                                : StubMapSurface.defaultBrowsingZoom,
+                    applyMeFollow(
+                        followPoint,
+                        viewport: viewport,
+                        fallback: fallback,
+                        snapshot: .of(
+                            latitude: state.center.latitude,
+                            longitude: state.center.longitude,
+                            zoom: state.zoom,
                             bearing: state.bearing,
                             pitch: state.pitch
-                        )
-                    }
+                        ),
+                        restoringBrowsing: true
+                    )
                     return
                 case .fitConvoy:
                     break
@@ -310,16 +311,56 @@ private struct MapboxStandardMap: View {
         )
     }
 
-    private func applyMeFollow(_ point: MapPoint, viewport: Binding<Viewport>) {
-        let snapshot = surface.cameraSnapshot
+    private func applyMeFollow(
+        _ point: MapPoint?,
+        viewport: Binding<Viewport>,
+        fallback: MapCameraSnapshot? = nil,
+        snapshot: MapCameraSnapshot? = nil,
+        restoringBrowsing: Bool = false
+    ) {
+        guard let camera = meFollowCamera(
+            point,
+            fallback: fallback,
+            snapshot: snapshot ?? surface.cameraSnapshot,
+            restoringBrowsing: restoringBrowsing
+        ) else { return }
         withViewportAnimation(.easeInOut(duration: 0.9)) {
             viewport.wrappedValue = .camera(
-                center: CLLocationCoordinate2D(latitude: point.latitude, longitude: point.longitude),
-                zoom: snapshot?.zoom ?? StubMapSurface.defaultBrowsingZoom,
-                bearing: snapshot?.bearing ?? 0,
-                pitch: snapshot?.pitch ?? 45
+                center: camera.center,
+                zoom: camera.zoom,
+                bearing: camera.bearing,
+                pitch: camera.pitch
             )
         }
+    }
+
+    private func meFollowCamera(
+        _ point: MapPoint?,
+        fallback: MapCameraSnapshot?,
+        snapshot: MapCameraSnapshot?,
+        restoringBrowsing: Bool
+    ) -> (center: CLLocationCoordinate2D, zoom: CGFloat, bearing: CGFloat, pitch: CGFloat)? {
+        let current = snapshot ?? fallback
+        let center = point.map {
+            CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
+        } ?? fallback.map {
+            CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
+        } ?? current.map {
+            CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
+        }
+        guard let center else { return nil }
+        let zoom: CGFloat
+        if point != nil, restoringBrowsing {
+            zoom = StubMapSurface.defaultBrowsingZoom
+        } else {
+            zoom = CGFloat(current?.zoom ?? Double(StubMapSurface.defaultBrowsingZoom))
+        }
+        return (
+            center: center,
+            zoom: zoom,
+            bearing: CGFloat(current?.bearing ?? 0),
+            pitch: CGFloat(current?.pitch ?? 45)
+        )
     }
 }
 
