@@ -188,9 +188,25 @@ internal fun <T> recoverLatestMarkerFlow(
     }
 
 internal fun shouldRetryLatestObserve(error: DatabaseError): Boolean =
-    error.code == DatabaseError.DISCONNECTED ||
-        error.code == DatabaseError.NETWORK_ERROR ||
-        error.code == DatabaseError.OPERATION_FAILED
+    when (error.code) {
+        DatabaseError.DISCONNECTED, DatabaseError.NETWORK_ERROR -> true
+        DatabaseError.OPERATION_FAILED -> {
+            val detail =
+                buildString {
+                    append(error.message.lowercase())
+                    append(' ')
+                    append(error.details.lowercase())
+                }
+            listOf(
+                "permission_denied",
+                "permission denied",
+                "permission-denied",
+                "unauthorized",
+                "unauthorised",
+            ).none(detail::contains)
+        }
+        else -> false
+    }
 
 /**
  * Maps the RTDB `latest` node to the Firebase-free [LiveMarker], or null when
