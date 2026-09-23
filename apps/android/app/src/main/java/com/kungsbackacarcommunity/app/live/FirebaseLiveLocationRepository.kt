@@ -201,14 +201,7 @@ internal fun shouldRetryLatestObserve(error: DatabaseError): Boolean =
         } else {
             error.code == DatabaseError.DISCONNECTED ||
                 error.code == DatabaseError.NETWORK_ERROR ||
-                (
-                    error.code == DatabaseError.OPERATION_FAILED &&
-                        details.any { detail ->
-                            detail.contains("interrupt", ignoreCase = true) ||
-                                detail.contains("cancel", ignoreCase = true) ||
-                                detail.contains("disconnect", ignoreCase = true)
-                        }
-                    )
+                error.code == DatabaseError.OPERATION_FAILED
         }
     }
 
