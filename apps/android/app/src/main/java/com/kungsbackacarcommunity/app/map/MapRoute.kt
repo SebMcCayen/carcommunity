@@ -9,7 +9,6 @@ import androidx.compose.ui.res.stringResource
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.live.LiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveMarker
-import com.kungsbackacarcommunity.app.live.observeLatestRecovering
 import com.mapbox.common.MapboxOptions
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -63,11 +62,7 @@ fun MapRoute(
     // Own marker: per-uid read of the caller's own latest node.
     val ownFlow: Flow<LiveMarker?> =
         remember(repository, uid) {
-            if (repository != null && uid.isNotBlank()) {
-                repository.observeLatestRecovering(uid)
-            } else {
-                flowOf(null)
-            }
+            if (repository != null && uid.isNotBlank()) repository.observeLatest(uid) else flowOf(null)
         }
     val ownMarker by ownFlow.collectAsState(initial = null)
 
@@ -80,7 +75,7 @@ fun MapRoute(
             if (repository == null || otherKey.isEmpty()) {
                 flowOf(emptyList())
             } else {
-                combine(otherKey.map { memberUid -> repository.observeLatestRecovering(memberUid) }) {
+                combine(otherKey.map { memberUid -> repository.observeLatest(memberUid) }) {
                     it.toList()
                 }
             }

@@ -316,7 +316,6 @@ import com.kungsbackacarcommunity.app.live.NearbyLiveController
 import com.kungsbackacarcommunity.app.live.NearbyLiveOverlay
 import com.kungsbackacarcommunity.app.live.NearbyLiveSession
 import com.kungsbackacarcommunity.app.live.OptimisticLiveStart
-import com.kungsbackacarcommunity.app.live.observeLatestRecovering
 import com.kungsbackacarcommunity.app.location.BackgroundLocationController
 import com.kungsbackacarcommunity.app.location.DriveBatteryOptimizationPrompt
 import com.kungsbackacarcommunity.app.location.CurrentSpeed
@@ -5048,11 +5047,9 @@ fun AuthenticatedApp(
                         if (liveLocationRepository == null || convoyLiveUids.isEmpty()) {
                             flowOf(emptyList())
                         } else {
-                            combine(
-                                convoyLiveUids.map {
-                                    liveLocationRepository.observeLatestRecovering(it)
-                                },
-                            ) { it.toList() }
+                            combine(convoyLiveUids.map { liveLocationRepository.observeLatest(it) }) {
+                                it.toList()
+                            }
                         }
                     }
                 val convoyMarkers by convoyMarkersFlow.collectAsState(initial = emptyList())
@@ -5067,7 +5064,7 @@ fun AuthenticatedApp(
                 val ownLiveMarkerFlow: Flow<LiveMarker?> =
                     remember(uid, liveLocationRepository, activeConvoy?.convoyId) {
                         if (liveLocationRepository != null && uid.isNotBlank() && activeConvoy != null) {
-                            liveLocationRepository.observeLatestRecovering(uid)
+                            liveLocationRepository.observeLatest(uid)
                         } else {
                             flowOf(null)
                         }
@@ -5334,11 +5331,9 @@ fun AuthenticatedApp(
                         if (liveLocationRepository == null || nearbyUids.isEmpty()) {
                             flowOf(emptyList())
                         } else {
-                            combine(
-                                nearbyUids.map {
-                                    liveLocationRepository.observeLatestRecovering(it)
-                                },
-                            ) { it.toList() }
+                            combine(nearbyUids.map { liveLocationRepository.observeLatest(it) }) {
+                                it.toList()
+                            }
                         }
                     }
                 val nearbyMarkers by nearbyMarkersFlow.collectAsState(initial = emptyList())
@@ -5647,7 +5642,7 @@ fun AuthenticatedApp(
                             activeConvoy == null &&
                             uid.isNotBlank()
                         ) {
-                            liveLocationRepository.observeLatestRecovering(uid)
+                            liveLocationRepository.observeLatest(uid)
                         } else {
                             flowOf(null)
                         }
@@ -5879,7 +5874,7 @@ fun AuthenticatedApp(
                         if (perkMapActive) {
                             val ownPositionFlow: Flow<LiveMarker?> =
                                 if (liveLocationRepository != null && isSharing) {
-                                    liveLocationRepository.observeLatestRecovering(uid)
+                                    liveLocationRepository.observeLatest(uid)
                                 } else {
                                     flowOf(null)
                                 }

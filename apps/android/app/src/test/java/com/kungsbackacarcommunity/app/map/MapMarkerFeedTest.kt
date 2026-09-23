@@ -6,12 +6,9 @@ import com.kungsbackacarcommunity.app.live.LiveMarker
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 import com.kungsbackacarcommunity.app.live.LiveSessionInfo
 import com.kungsbackacarcommunity.app.live.NearbyLiveSession
-import com.kungsbackacarcommunity.app.live.observeLatestRecovering
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import kotlinx.coroutines.async
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -61,13 +58,13 @@ class MapMarkerFeedTest {
         uid: String,
         others: List<String>,
     ): Flow<List<MapMarker>> {
-        val ownFlow = repo.observeLatestRecovering(uid)
+        val ownFlow = repo.observeLatest(uid)
         val otherKey = others.filter { it.isNotBlank() && it != uid }.distinct()
         val othersFlow: Flow<List<LiveMarker?>> =
             if (otherKey.isEmpty()) {
                 flowOf(emptyList())
             } else {
-                combine(otherKey.map { repo.observeLatestRecovering(it) }) { it.toList() }
+                combine(otherKey.map { repo.observeLatest(it) }) { it.toList() }
             }
         return ownFlow.let { own ->
             combine(own, othersFlow) { o, others2 -> MapMarkers.markers(o, others2) }
@@ -138,39 +135,4 @@ class MapMarkerFeedTest {
         assertEquals(listOf(listOf("me"), listOf("me", "a")), emissions.await())
     }
 
-    @Test
-    fun `retries latest feed after upstream completion`() = runTest {
-        class RetryingRepo : LiveLocationRepository {
-            var calls = 0
-            val resumed = MutableSharedFlow<LiveMarker?>(replay = 1)
-
-            override suspend fun startSession(duration: LiveSessionDuration, vehicleId: String?) = Unit
-            override suspend fun updatePosition(coordinate: LiveCoordinate) = Unit
-            override suspend fun stopSession() = Unit
-            override suspend fun hideMeNow() = Unit
-            override fun observeOwnSession(uid: String): Flow<LiveSessionInfo?> = flowOf(null)
-            override suspend fun listNearby(center: LatLng, radiusMeters: Double) =
-                emptyList<NearbyLiveSession>()
-
-            override fun observeLatest(uid: String): Flow<LiveMarker?> {
-                calls += 1
-                return if (calls == 1) {
-                    flowOf()
-                } else {
-                    resumed
-                }
-            }
-        }
-
-        val repo = RetryingRepo()
-
-        val deferred = async { feed(repo, "me", emptyList()).first() }
-        runCurrent()
-        delay(1_050)
-        repo.resumed.tryEmit(marker("me", 12.0, 57.0))
-
-        val markers = deferred.await()
-        assertEquals(2, repo.calls)
-        assertEquals(listOf("me"), markers.map { it.uid })
-    }
 }
