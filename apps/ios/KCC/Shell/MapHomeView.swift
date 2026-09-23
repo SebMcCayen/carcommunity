@@ -269,7 +269,7 @@ private struct MapboxStandardMap: View {
     @State private var meFollowSuspended = false
     @State private var locationAuthorization: LocationAuthorization
     @State private var surfaceActive: Bool
-    @State private var pendingProgrammaticViewportChanges = 0
+    @State private var pendingProgrammaticViewportTokens: Set<UUID> = []
 
     init(
         accessToken: String,
@@ -304,8 +304,8 @@ private struct MapboxStandardMap: View {
             }
             .onCameraChanged { context in
                 let state = context.cameraState
-                if pendingProgrammaticViewportChanges > 0 {
-                    pendingProgrammaticViewportChanges -= 1
+                if let token = pendingProgrammaticViewportTokens.first {
+                    pendingProgrammaticViewportTokens.remove(token)
                 }
                 surface.updateCameraSnapshot(.of(
                     latitude: state.center.latitude,
@@ -321,7 +321,7 @@ private struct MapboxStandardMap: View {
             }
             .onAppear {
                 interactionObserver.onUserInteraction = {
-                    guard meFollowEnabled, pendingProgrammaticViewportChanges == 0 else { return }
+                    guard meFollowEnabled, pendingProgrammaticViewportTokens.isEmpty else { return }
                     meFollowSuspended = true
                     surface.suspendSelfFollowForInteraction()
                 }
@@ -368,7 +368,6 @@ private struct MapboxStandardMap: View {
                 current: newValue,
                 followEnabled: meFollowEnabled
             ) else { return }
-            let lastOwnPoint = latestOwnPoint
             meFollowEnabled = false
             meFollowSuspended = false
             latestOwnPoint = nil
@@ -377,11 +376,11 @@ private struct MapboxStandardMap: View {
             surface.setConvoyFit(
                 points: nil,
                 focusEnabled: false,
-                userPoint: lastOwnPoint,
+                userPoint: nil,
                 followSelfEnabled: false
             )
             applyMeFollow(
-                lastOwnPoint,
+                nil,
                 viewport: $viewport,
                 fallback: fallback,
                 snapshot: surface.cameraSnapshot,
@@ -512,7 +511,16 @@ private struct MapboxStandardMap: View {
     }
 
     private func performProgrammaticViewportChange(_ change: () -> Void) {
-        pendingProgrammaticViewportChanges += 1
+        let token = UUID()
+        pendingProgrammaticViewportTokens.insert(token)
+        Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(2))
+            } catch {
+                return
+            }
+            pendingProgrammaticViewportTokens.remove(token)
+        }
         change()
     }
 
