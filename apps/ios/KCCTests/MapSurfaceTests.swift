@@ -567,11 +567,15 @@ final class MapSurfaceTests: XCTestCase {
             fallback: fallback,
             restoringBrowsing: false
         )
-        XCTAssertEqual(camera?.center.latitude, current.latitude, accuracy: 1e-9)
-        XCTAssertEqual(camera?.center.longitude, current.longitude, accuracy: 1e-9)
-        XCTAssertEqual(camera?.zoom, CGFloat(current.zoom), accuracy: 1e-9)
-        XCTAssertEqual(camera?.bearing, CGFloat(current.bearing), accuracy: 1e-9)
-        XCTAssertEqual(camera?.pitch, CGFloat(current.pitch), accuracy: 1e-9)
+        guard let camera else {
+            XCTFail("Expected a camera from the current snapshot")
+            return
+        }
+        XCTAssertEqual(camera.center.latitude, current.latitude, accuracy: 1e-9)
+        XCTAssertEqual(camera.center.longitude, current.longitude, accuracy: 1e-9)
+        XCTAssertEqual(camera.zoom, CGFloat(current.zoom), accuracy: 1e-9)
+        XCTAssertEqual(camera.bearing, CGFloat(current.bearing), accuracy: 1e-9)
+        XCTAssertEqual(camera.pitch, CGFloat(current.pitch), accuracy: 1e-9)
     }
 
     func testMapHomeMeFollowPolicyRestoringBrowsingUsesFallbackCameraWithoutOwnPoint() {
@@ -588,11 +592,15 @@ final class MapSurfaceTests: XCTestCase {
             fallback: fallback,
             restoringBrowsing: true
         )
-        XCTAssertEqual(camera?.center.latitude, fallback.latitude, accuracy: 1e-9)
-        XCTAssertEqual(camera?.center.longitude, fallback.longitude, accuracy: 1e-9)
-        XCTAssertEqual(camera?.zoom, CGFloat(fallback.zoom), accuracy: 1e-9)
-        XCTAssertEqual(camera?.bearing, CGFloat(fallback.bearing), accuracy: 1e-9)
-        XCTAssertEqual(camera?.pitch, CGFloat(fallback.pitch), accuracy: 1e-9)
+        guard let camera else {
+            XCTFail("Expected a camera from the browsing fallback")
+            return
+        }
+        XCTAssertEqual(camera.center.latitude, fallback.latitude, accuracy: 1e-9)
+        XCTAssertEqual(camera.center.longitude, fallback.longitude, accuracy: 1e-9)
+        XCTAssertEqual(camera.zoom, CGFloat(fallback.zoom), accuracy: 1e-9)
+        XCTAssertEqual(camera.bearing, CGFloat(fallback.bearing), accuracy: 1e-9)
+        XCTAssertEqual(camera.pitch, CGFloat(fallback.pitch), accuracy: 1e-9)
     }
 
     func testMapHomeMeFollowPolicySubscriptionKeyTracksProviderIdentityAndFlags() {
@@ -675,9 +683,11 @@ final class MapSurfaceTests: XCTestCase {
         let stream = MapHomeMeFollowPolicy.authorizationStream(for: provider)
         var iterator = stream.makeAsyncIterator()
 
-        XCTAssertEqual(await iterator.next(), .denied)
+        let initial = await iterator.next()
+        XCTAssertEqual(initial, .denied)
         provider.setAuthorization(.whileInUse)
-        XCTAssertEqual(await iterator.next(), .whileInUse)
+        let updated = await iterator.next()
+        XCTAssertEqual(updated, .whileInUse)
     }
 
     func testMapHomeMeFollowPolicyRestoresBrowsingWhenAuthorizationIsLost() {

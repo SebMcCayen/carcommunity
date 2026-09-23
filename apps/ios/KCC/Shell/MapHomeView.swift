@@ -110,6 +110,7 @@ enum MapHomeMeFollowPolicy {
         followEnabled && previous.isAuthorized && !current.isAuthorized
     }
 
+    @MainActor
     static func camera(
         point: MapPoint?,
         snapshot: MapCameraSnapshot?,
