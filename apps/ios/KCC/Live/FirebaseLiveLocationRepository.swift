@@ -233,21 +233,9 @@ private enum LiveRealtimeRetryPolicy {
     private static let operationFailedCode = -2
     private static let disconnectedCode = -4
     private static let networkErrorCode = -24
-    private static let accessFragments = ["permission", "denied", "unauthor", "access"]
 
     static func shouldRetry(_ error: Error) -> Bool {
         let nsError = error as NSError
-        let details = [
-            nsError.localizedDescription,
-            nsError.localizedFailureReason,
-            nsError.userInfo[NSDebugDescriptionErrorKey] as? String
-        ]
-        .compactMap { $0?.lowercased() }
-        if details.contains(where: { detail in
-            accessFragments.contains { detail.contains($0) }
-        }) {
-            return false
-        }
         return nsError.code == disconnectedCode
             || nsError.code == networkErrorCode
             || nsError.code == operationFailedCode
