@@ -567,6 +567,27 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertEqual(camera?.pitch, CGFloat(current.pitch), accuracy: 1e-9)
     }
 
+    func testMapHomeMeFollowPolicyRestoringBrowsingUsesFallbackCameraWithoutOwnPoint() {
+        let current = MapCameraSnapshot.of(
+            latitude: 57.51, longitude: 12.11, zoom: 14, bearing: 35, pitch: 25
+        )
+        let fallback = MapCameraSnapshot.of(
+            latitude: 57.42, longitude: 12.02, zoom: 11, bearing: 8, pitch: 12
+        )
+
+        let camera = MapHomeMeFollowPolicy.camera(
+            point: nil,
+            snapshot: current,
+            fallback: fallback,
+            restoringBrowsing: true
+        )
+        XCTAssertEqual(camera?.center.latitude, fallback.latitude, accuracy: 1e-9)
+        XCTAssertEqual(camera?.center.longitude, fallback.longitude, accuracy: 1e-9)
+        XCTAssertEqual(camera?.zoom, CGFloat(fallback.zoom), accuracy: 1e-9)
+        XCTAssertEqual(camera?.bearing, CGFloat(fallback.bearing), accuracy: 1e-9)
+        XCTAssertEqual(camera?.pitch, CGFloat(fallback.pitch), accuracy: 1e-9)
+    }
+
     func testMapHomeMeFollowPolicySubscriptionKeyTracksProviderIdentityAndFlags() {
         let first = StubLocationProvider()
         let second = StubLocationProvider()

@@ -100,12 +100,10 @@ enum MapHomeMeFollowPolicy {
         fallback: MapCameraSnapshot?,
         restoringBrowsing: Bool
     ) -> Camera? {
-        let current = snapshot ?? fallback
+        let preferred = restoringBrowsing ? (fallback ?? snapshot) : (snapshot ?? fallback)
         let center = point.map {
             CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
-        } ?? snapshot.map {
-            CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
-        } ?? fallback.map {
+        } ?? preferred.map {
             CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
         }
         guard let center else { return nil }
@@ -113,13 +111,13 @@ enum MapHomeMeFollowPolicy {
         if point != nil, restoringBrowsing {
             zoom = StubMapSurface.defaultBrowsingZoom
         } else {
-            zoom = CGFloat(current?.zoom ?? Double(StubMapSurface.defaultBrowsingZoom))
+            zoom = CGFloat(preferred?.zoom ?? Double(StubMapSurface.defaultBrowsingZoom))
         }
         return Camera(
             center: center,
             zoom: zoom,
-            bearing: CGFloat(current?.bearing ?? 0),
-            pitch: CGFloat(current?.pitch ?? 45)
+            bearing: CGFloat(preferred?.bearing ?? 0),
+            pitch: CGFloat(preferred?.pitch ?? 45)
         )
     }
 }
@@ -300,7 +298,7 @@ private struct MapboxStandardMap: View {
                     suspended: meFollowSuspended
                 )
                 latestOwnPoint = update.latestOwnPoint
-                guard update.shouldApplyCamera else { return }
+                guard update.shouldApplyCamera else { continue }
                 applyMeFollow(update.latestOwnPoint, viewport: $viewport)
             }
         }
