@@ -596,23 +596,34 @@ final class MapSurfaceTests: XCTestCase {
             surfaceActive: true,
             enabled: true,
             suspended: false,
+            authorization: .whileInUse,
             locationProvider: first
         )
         let providerSwap = MapHomeMeFollowPolicy.subscriptionKey(
             surfaceActive: true,
             enabled: true,
             suspended: false,
+            authorization: .whileInUse,
             locationProvider: second
         )
         let suspended = MapHomeMeFollowPolicy.subscriptionKey(
             surfaceActive: true,
             enabled: true,
             suspended: true,
+            authorization: .whileInUse,
+            locationProvider: first
+        )
+        let unauthorized = MapHomeMeFollowPolicy.subscriptionKey(
+            surfaceActive: true,
+            enabled: true,
+            suspended: false,
+            authorization: .denied,
             locationProvider: first
         )
 
         XCTAssertNotEqual(initial, providerSwap)
         XCTAssertNotEqual(initial, suspended)
+        XCTAssertNotEqual(initial, unauthorized)
     }
 
     func testMapHomeMeFollowPolicyAppliesFixesOnlyWhileFollowRemainsUnsuspended() {

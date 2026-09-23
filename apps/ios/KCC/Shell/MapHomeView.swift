@@ -36,6 +36,7 @@ enum MapHomeMeFollowPolicy {
         let surfaceActive: Bool
         let enabled: Bool
         let suspended: Bool
+        let authorization: LocationAuthorization
         let providerId: ObjectIdentifier
     }
 
@@ -60,12 +61,14 @@ enum MapHomeMeFollowPolicy {
         surfaceActive: Bool,
         enabled: Bool,
         suspended: Bool,
+        authorization: LocationAuthorization,
         locationProvider: any LocationProvider
     ) -> SubscriptionKey {
         SubscriptionKey(
             surfaceActive: surfaceActive,
             enabled: enabled,
             suspended: suspended,
+            authorization: authorization,
             providerId: ObjectIdentifier(locationProvider as AnyObject)
         )
     }
@@ -234,6 +237,7 @@ private struct MapboxStandardMap: View {
     @State private var latestOwnPoint: MapPoint?
     @State private var meFollowEnabled = false
     @State private var meFollowSuspended = false
+    @State private var locationAuthorization: LocationAuthorization
 
     init(
         accessToken: String,
@@ -246,6 +250,7 @@ private struct MapboxStandardMap: View {
         self.locationProvider = locationProvider
         self.onLoaded = onLoaded
         _interactionObserver = State(initialValue: ConvoyViewportInteractionObserver(surface: surface))
+        _locationAuthorization = State(initialValue: locationProvider.authorization)
     }
 
     var body: some View {
@@ -287,9 +292,14 @@ private struct MapboxStandardMap: View {
             surfaceActive: surface.isActive,
             enabled: meFollowEnabled,
             suspended: meFollowSuspended,
+            authorization: locationAuthorization,
             locationProvider: locationProvider
         )) {
-            guard surface.isActive, meFollowEnabled, !meFollowSuspended else { return }
+            guard surface.isActive,
+                  meFollowEnabled,
+                  !meFollowSuspended,
+                  locationAuthorization.isAuthorized
+            else { return }
             for await fix in locationProvider.fixes() {
                 if Task.isCancelled { return }
                 let update = MapHomeMeFollowPolicy.ingestFix(
@@ -300,6 +310,12 @@ private struct MapboxStandardMap: View {
                 latestOwnPoint = update.latestOwnPoint
                 guard update.shouldApplyCamera else { continue }
                 applyMeFollow(update.latestOwnPoint, viewport: $viewport)
+            }
+        }
+        .task(id: ObjectIdentifier(locationProvider as AnyObject)) {
+            for await authorization in locationProvider.authorizationUpdates() {
+                if Task.isCancelled { return }
+                locationAuthorization = authorization
             }
         }
     }
