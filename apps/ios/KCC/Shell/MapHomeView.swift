@@ -164,6 +164,7 @@ enum MapHomeMeFollowPolicy {
 }
 
 enum MapHomeProjectionTrustPolicy {
+    private static let maximumMercatorLatitude = 85.05112878
     static let maximumFlatPitchDegrees: CGFloat = 1
     static let roundTripTolerancePixels = 4.0
     static let minimumRoundTripToleranceMeters = 2.0
@@ -194,7 +195,7 @@ enum MapHomeProjectionTrustPolicy {
 
     static func metersPerPixel(latitude: Double, zoom: Double) -> Double {
         guard latitude.isFinite, zoom.isFinite else { return 0 }
-        let clampedLatitude = min(max(latitude, -90), 90)
+        let clampedLatitude = min(max(latitude, -maximumMercatorLatitude), maximumMercatorLatitude)
         return 156_543.03392 * cos(clampedLatitude * .pi / 180) / pow(2, zoom)
     }
 }

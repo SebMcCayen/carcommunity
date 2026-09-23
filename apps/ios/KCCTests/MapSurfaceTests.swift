@@ -394,7 +394,7 @@ final class MapSurfaceTests: XCTestCase {
     func testProjectionTrustClampsInvalidLatitudeBeforeScalingTolerance() {
         XCTAssertEqual(
             MapHomeProjectionTrustPolicy.metersPerPixel(latitude: 120, zoom: 12),
-            MapHomeProjectionTrustPolicy.metersPerPixel(latitude: 90, zoom: 12),
+            MapHomeProjectionTrustPolicy.metersPerPixel(latitude: 85.05112878, zoom: 12),
             accuracy: 1e-9
         )
     }
