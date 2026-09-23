@@ -608,10 +608,8 @@ final class ConvoyAwarenessCoordinator {
         subscriptionKey expectedKey: String
     ) async {
         while !Task.isCancelled, subscriptionKey == expectedKey {
-            var sawEvent = false
             for await marker in repository.latestUpdates(uid: uid) {
                 guard !Task.isCancelled, subscriptionKey == expectedKey else { return }
-                sawEvent = true
                 if let marker {
                     let position = ConvoyMemberPosition(marker: marker)
                     switch ConvoyPositionQuality.judge(
@@ -644,7 +642,7 @@ final class ConvoyAwarenessCoordinator {
                     pendingPositions.removeValue(forKey: uid)
                 }
             }
-            guard sawEvent, !Task.isCancelled, subscriptionKey == expectedKey else { return }
+            guard !Task.isCancelled, subscriptionKey == expectedKey else { return }
             try? await Task.sleep(for: Self.subscriptionRetryDelay)
         }
     }
