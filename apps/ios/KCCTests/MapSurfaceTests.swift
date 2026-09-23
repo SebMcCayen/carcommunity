@@ -336,16 +336,14 @@ final class MapSurfaceTests: XCTestCase {
             longitude: 12.07,
             unprojectedLatitude: 58.48,
             unprojectedLongitude: 13.07,
-            zoom: 15,
-            pitch: 0
+            zoom: 15
         ))
         XCTAssertTrue(MapHomeProjectionTrustPolicy.isTrustworthy(
             latitude: 57.48,
             longitude: 12.07,
             unprojectedLatitude: 57.48001,
             unprojectedLongitude: 12.07001,
-            zoom: 15,
-            pitch: 0
+            zoom: 15
         ))
     }
 
@@ -371,16 +369,14 @@ final class MapSurfaceTests: XCTestCase {
             longitude: longitude,
             unprojectedLatitude: lowZoomRoundTripLatitude,
             unprojectedLongitude: longitude,
-            zoom: 8,
-            pitch: 45
+            zoom: 8
         ))
         XCTAssertFalse(MapHomeProjectionTrustPolicy.isTrustworthy(
             latitude: latitude,
             longitude: longitude,
             unprojectedLatitude: highZoomRoundTripLatitude,
             unprojectedLongitude: longitude,
-            zoom: 16,
-            pitch: 45
+            zoom: 16
         ))
     }
 
@@ -394,8 +390,7 @@ final class MapSurfaceTests: XCTestCase {
             longitude: longitude,
             unprojectedLatitude: oneMeterNorth,
             unprojectedLongitude: longitude,
-            zoom: 20,
-            pitch: 45
+            zoom: 20
         ))
     }
 

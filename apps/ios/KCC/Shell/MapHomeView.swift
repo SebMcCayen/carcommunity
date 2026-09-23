@@ -173,8 +173,7 @@ enum MapHomeProjectionTrustPolicy {
         longitude: Double,
         unprojectedLatitude: Double,
         unprojectedLongitude: Double,
-        zoom: Double,
-        pitch: CGFloat
+        zoom: Double
     ) -> Bool {
         guard latitude.isFinite, longitude.isFinite,
               unprojectedLatitude.isFinite, unprojectedLongitude.isFinite else {
@@ -468,8 +467,7 @@ private struct MapboxStandardMap: View {
                     longitude: longitude,
                     unprojectedLatitude: roundTrip.latitude,
                     unprojectedLongitude: roundTrip.longitude,
-                    zoom: cameraState.zoom,
-                    pitch: CGFloat(cameraState.pitch)
+                    zoom: cameraState.zoom
                 )
                 return MapScreenPoint(x: point.x, y: point.y, trustworthy: trustworthy)
             },
