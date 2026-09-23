@@ -208,11 +208,12 @@ private struct ObserverBox: @unchecked Sendable {
 }
 
 private enum LiveRealtimeRetryPolicy {
+    private static let operationFailedCode = -2
     private static let disconnectedCode = -4
     private static let networkErrorCode = -24
 
     static func shouldRetry(_ error: Error) -> Bool {
         let code = (error as NSError).code
-        return code == disconnectedCode || code == networkErrorCode
+        return code == operationFailedCode || code == disconnectedCode || code == networkErrorCode
     }
 }
