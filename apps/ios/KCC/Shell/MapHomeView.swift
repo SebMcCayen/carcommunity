@@ -269,6 +269,7 @@ private struct MapboxStandardMap: View {
     @State private var meFollowSuspended = false
     @State private var locationAuthorization: LocationAuthorization
     @State private var surfaceActive: Bool
+    @State private var ignoreViewportInteraction = false
 
     init(
         accessToken: String,
@@ -303,6 +304,9 @@ private struct MapboxStandardMap: View {
             }
             .onCameraChanged { context in
                 let state = context.cameraState
+                if ignoreViewportInteraction {
+                    ignoreViewportInteraction = false
+                }
                 surface.updateCameraSnapshot(.of(
                     latitude: state.center.latitude,
                     longitude: state.center.longitude,
@@ -317,7 +321,7 @@ private struct MapboxStandardMap: View {
             }
             .onAppear {
                 interactionObserver.onUserInteraction = {
-                    guard meFollowEnabled else { return }
+                    guard meFollowEnabled, !ignoreViewportInteraction else { return }
                     meFollowSuspended = true
                     surface.suspendSelfFollowForInteraction()
                 }
@@ -369,6 +373,12 @@ private struct MapboxStandardMap: View {
             latestOwnPoint = nil
             let fallback = cameraBeforeConvoy
             cameraBeforeConvoy = nil
+            surface.setConvoyFit(
+                points: nil,
+                focusEnabled: false,
+                userPoint: nil,
+                followSelfEnabled: false
+            )
             applyMeFollow(
                 nil,
                 viewport: $viewport,
@@ -466,34 +476,43 @@ private struct MapboxStandardMap: View {
                     maxZoom: MapHomeConvoyViewportPolicy.maximumFitZoom,
                     offset: nil
                 ) else { return }
-                withViewportAnimation(.easeInOut(duration: 0.9)) {
+                performProgrammaticViewportChange {
                     // The fit is solved on a flat camera, but the final viewport
                     // keeps the LIVE pitch so convoy focus does not silently drop
                     // the user's current 2D/3D framing.
-                    viewport.wrappedValue = .camera(
-                        center: camera.center ?? state.center,
-                        zoom: MapHomeConvoyViewportPolicy.fitZoom(
-                            camera.zoom, fallback: state.zoom
-                        ),
-                        bearing: state.bearing,
-                        pitch: state.pitch
-                    )
+                    withViewportAnimation(.easeInOut(duration: 0.9)) {
+                        viewport.wrappedValue = .camera(
+                            center: camera.center ?? state.center,
+                            zoom: MapHomeConvoyViewportPolicy.fitZoom(
+                                camera.zoom, fallback: state.zoom
+                            ),
+                            bearing: state.bearing,
+                            pitch: state.pitch
+                        )
+                    }
                 }
             },
             center: { point in
                 let state = map.cameraState
-                withViewportAnimation(.easeInOut(duration: 0.9)) {
-                    viewport.wrappedValue = .camera(
-                        center: CLLocationCoordinate2D(
-                            latitude: point.latitude, longitude: point.longitude
-                        ),
-                        zoom: state.zoom,
-                        bearing: state.bearing,
-                        pitch: state.pitch
-                    )
+                performProgrammaticViewportChange {
+                    withViewportAnimation(.easeInOut(duration: 0.9)) {
+                        viewport.wrappedValue = .camera(
+                            center: CLLocationCoordinate2D(
+                                latitude: point.latitude, longitude: point.longitude
+                            ),
+                            zoom: state.zoom,
+                            bearing: state.bearing,
+                            pitch: state.pitch
+                        )
+                    }
                 }
             }
         )
+    }
+
+    private func performProgrammaticViewportChange(_ change: () -> Void) {
+        ignoreViewportInteraction = true
+        change()
     }
 
     private func applyMeFollow(
@@ -509,13 +528,15 @@ private struct MapboxStandardMap: View {
             snapshot: snapshot ?? surface.cameraSnapshot,
             restoringBrowsing: restoringBrowsing
         ) else { return }
-        withViewportAnimation(.easeInOut(duration: 0.9)) {
-            viewport.wrappedValue = .camera(
-                center: camera.center,
-                zoom: camera.zoom,
-                bearing: camera.bearing,
-                pitch: camera.pitch
-            )
+        performProgrammaticViewportChange {
+            withViewportAnimation(.easeInOut(duration: 0.9)) {
+                viewport.wrappedValue = .camera(
+                    center: camera.center,
+                    zoom: camera.zoom,
+                    bearing: camera.bearing,
+                    pitch: camera.pitch
+                )
+            }
         }
     }
 
