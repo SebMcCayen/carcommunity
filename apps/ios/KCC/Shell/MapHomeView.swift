@@ -128,6 +128,23 @@ enum MapHomeMeFollowPolicy {
             pitch: CGFloat(preferred?.pitch ?? 45)
         )
     }
+
+    @MainActor
+    static func authorizationStream(
+        for locationProvider: any LocationProvider
+    ) -> AsyncStream<LocationAuthorization> {
+        AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+            continuation.yield(locationProvider.authorization)
+            let task = Task { @MainActor in
+                for await authorization in locationProvider.authorizationUpdates() {
+                    if Task.isCancelled { break }
+                    continuation.yield(authorization)
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
 }
 
 @MainActor
@@ -326,8 +343,9 @@ private struct MapboxStandardMap: View {
             }
         }
         .task(id: ObjectIdentifier(locationProvider as AnyObject)) {
-            locationAuthorization = locationProvider.authorization
-            for await authorization in locationProvider.authorizationUpdates() {
+            for await authorization in MapHomeMeFollowPolicy.authorizationStream(
+                for: locationProvider
+            ) {
                 if Task.isCancelled { return }
                 locationAuthorization = authorization
             }

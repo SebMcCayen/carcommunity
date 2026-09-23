@@ -670,6 +670,16 @@ final class MapSurfaceTests: XCTestCase {
         ))
     }
 
+    func testMapHomeMeFollowPolicyAuthorizationStreamSeedsAndUpdates() async {
+        let provider = StubLocationProvider(authorization: .denied)
+        let stream = MapHomeMeFollowPolicy.authorizationStream(for: provider)
+        var iterator = stream.makeAsyncIterator()
+
+        XCTAssertEqual(await iterator.next(), .denied)
+        provider.setAuthorization(.whileInUse)
+        XCTAssertEqual(await iterator.next(), .whileInUse)
+    }
+
     func testManualCenterSuspendsRefitsUntilFocusIsExplicitlyReselected() {
         let surface = StubMapSurface(autoLoad: false)
         var fits = 0
