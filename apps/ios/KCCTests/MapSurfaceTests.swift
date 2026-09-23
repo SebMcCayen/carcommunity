@@ -543,6 +543,15 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertEqual(resumed.latestOwnPoint, current)
         XCTAssertFalse(resumed.suspended)
 
+        let resumedWithoutFreshPoint = MapHomeMeFollowPolicy.restoreState(
+            latestOwnPoint: stale,
+            userPoint: nil,
+            resumeSelfFollow: true,
+            suspended: true
+        )
+        XCTAssertNil(resumedWithoutFreshPoint.latestOwnPoint)
+        XCTAssertFalse(resumedWithoutFreshPoint.suspended)
+
         let preserved = MapHomeMeFollowPolicy.restoreState(
             latestOwnPoint: stale,
             userPoint: nil,
@@ -791,5 +800,58 @@ final class MapSurfaceTests: XCTestCase {
         )
 
         XCTAssertEqual(restores, 0)
+    }
+
+    func testCenteringOnMemberSuspendsSelfFollowAcrossRendererReload() {
+        let surface = StubMapSurface(autoLoad: false)
+        surface.setConvoyFit(
+            points: nil,
+            focusEnabled: false,
+            userPoint: nil,
+            followSelfEnabled: true
+        )
+        surface.centerOn(MapPoint(longitude: 12.1, latitude: 57.5))
+
+        var restores = 0
+        surface.installRenderer(
+            projection: { _, _ in nil },
+            convoyFit: { points, enabled, _, followSelfEnabled, _, _ in
+                if points == nil, !enabled, followSelfEnabled { restores += 1 }
+            },
+            center: { _ in }
+        )
+
+        XCTAssertEqual(restores, 0)
+    }
+
+    func testEnteringConvoyFocusWithoutFitPointsStopsSelfFollowWithoutRestoringViewport() {
+        let surface = StubMapSurface(autoLoad: false)
+        var transitions: [(enabled: Bool, followSelf: Bool, restoreViewport: Bool)] = []
+        surface.installRenderer(
+            projection: { _, _ in nil },
+            convoyFit: { _, enabled, _, followSelfEnabled, _, restoreViewport in
+                transitions.append((enabled, followSelfEnabled, restoreViewport))
+            },
+            center: { _ in }
+        )
+        surface.setConvoyFit(
+            points: nil,
+            focusEnabled: false,
+            userPoint: nil,
+            followSelfEnabled: true
+        )
+        transitions.removeAll()
+
+        surface.setConvoyFit(
+            points: nil,
+            focusEnabled: true,
+            userPoint: nil,
+            followSelfEnabled: true
+        )
+
+        XCTAssertEqual(transitions.count, 1)
+        XCTAssertTrue(transitions[0].enabled)
+        XCTAssertTrue(transitions[0].followSelf)
+        XCTAssertFalse(transitions[0].restoreViewport)
     }
 }

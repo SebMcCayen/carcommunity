@@ -77,7 +77,11 @@ enum MapHomeMeFollowPolicy {
         suspended: Bool
     ) -> RestoreState {
         RestoreState(
-            latestOwnPoint: userPoint ?? latestOwnPoint,
+            // Resuming after convoy focus must not reuse a fix cached before
+            // the convoy owned the camera. Prefer the caller's fresh RTDB
+            // point; if it is unavailable, keep the browsing camera until
+            // the shared provider supplies its next device fix.
+            latestOwnPoint: userPoint ?? (resumeSelfFollow ? nil : latestOwnPoint),
             suspended: resumeSelfFollow ? false : suspended
         )
     }
@@ -494,6 +498,9 @@ private struct MapboxStandardMap: View {
                 }
             },
             center: { point in
+                if meFollowEnabled.wrappedValue {
+                    meFollowSuspended.wrappedValue = true
+                }
                 let state = map.cameraState
                 performProgrammaticViewportChange {
                     withViewportAnimation(.easeInOut(duration: 0.9)) {

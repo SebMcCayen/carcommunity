@@ -1180,8 +1180,21 @@ final class StubMapSurface: MapSurface {
         }
         meRestoreArmed = false
         // A missing fit while convoy focus remains selected is a data gap,
-        // not a request to move the camera or change focus mode.
-        guard points != nil else { return }
+        // not a request to move the camera. A transition into convoy focus
+        // still has to reach the renderer so an active Me-follow loop stops.
+        guard points != nil else {
+            if focusChanged {
+                rendererConvoyFit?(
+                    nil,
+                    true,
+                    userPoint,
+                    followSelfEnabled,
+                    false,
+                    false
+                )
+            }
+            return
+        }
         applyConvoyFitToRenderer(force: focusChanged)
     }
 
@@ -1211,6 +1224,7 @@ final class StubMapSurface: MapSurface {
         // location" wiring can be asserted off-device.
         centeredOn = point
         suspendConvoyFitForInteraction()
+        suspendSelfFollowForInteraction()
         rendererCenter?(point)
     }
 
