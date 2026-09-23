@@ -1021,6 +1021,8 @@ final class StubMapSurface: MapSurface {
     private var meRestoreArmed = false
     @ObservationIgnored
     private var convoySelfFollowEnabled = false
+    @ObservationIgnored
+    private var convoySelfFollowSuspended = false
 
     // The fixed visible radius the stub reports (metres). The stub has no
     // camera to measure, so it returns a sane constant rather than nil,
@@ -1094,7 +1096,7 @@ final class StubMapSurface: MapSurface {
         rendererCenter = center
         if convoyFocusEnabled || self.convoyFit != nil {
             applyConvoyFitToRenderer(force: true)
-        } else if convoySelfFollowEnabled {
+        } else if convoySelfFollowEnabled && !convoySelfFollowSuspended {
             meRestoreArmed = true
             rendererConvoyFit?(nil, false, convoyUserPoint, true)
         }
@@ -1152,6 +1154,9 @@ final class StubMapSurface: MapSurface {
                 || focusChanged
                 || selfFollowChanged
                 || (!meRestoreArmed && followSelfEnabled)
+            if shouldRestoreBrowsing, followSelfEnabled {
+                convoySelfFollowSuspended = false
+            }
             meRestoreArmed = followSelfEnabled
             if shouldRestoreBrowsing {
                 rendererConvoyFit?(nil, false, userPoint, followSelfEnabled)
@@ -1197,6 +1202,11 @@ final class StubMapSurface: MapSurface {
     func suspendConvoyFitForInteraction() {
         guard convoyFocusEnabled else { return }
         convoyFitSuspended = true
+    }
+
+    func suspendSelfFollowForInteraction() {
+        guard convoySelfFollowEnabled, !convoyFocusEnabled else { return }
+        convoySelfFollowSuspended = true
     }
 
     func recenter() {

@@ -654,6 +654,21 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertFalse(suspended.shouldApplyCamera)
     }
 
+    func testMapHomeMeFollowPolicyRequiresAuthorizationBeforeConsumingFixes() {
+        XCTAssertFalse(MapHomeMeFollowPolicy.shouldConsumeFixes(
+            surfaceActive: true,
+            followEnabled: true,
+            suspended: false,
+            authorization: .denied
+        ))
+        XCTAssertTrue(MapHomeMeFollowPolicy.shouldConsumeFixes(
+            surfaceActive: true,
+            followEnabled: true,
+            suspended: false,
+            authorization: .whileInUse
+        ))
+    }
+
     func testManualCenterSuspendsRefitsUntilFocusIsExplicitlyReselected() {
         let surface = StubMapSurface(autoLoad: false)
         var fits = 0
@@ -720,5 +735,21 @@ final class MapSurfaceTests: XCTestCase {
 
         surface.setConvoyFit(points: nil, focusEnabled: false, userPoint: nil, followSelfEnabled: false)
         XCTAssertEqual(latestFollowSelfEnabled, false)
+    }
+
+    func testSuspendedSelfFollowIsNotReplayedWhenRendererReattaches() {
+        let surface = StubMapSurface(autoLoad: false)
+        var restores = 0
+        surface.setConvoyFit(points: nil, focusEnabled: false, userPoint: nil, followSelfEnabled: true)
+        surface.suspendSelfFollowForInteraction()
+        surface.installRenderer(
+            projection: { _, _ in nil },
+            convoyFit: { points, enabled, _, followSelfEnabled in
+                if points == nil, !enabled, followSelfEnabled { restores += 1 }
+            },
+            center: { _ in }
+        )
+
+        XCTAssertEqual(restores, 0)
     }
 }

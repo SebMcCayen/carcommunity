@@ -97,6 +97,15 @@ enum MapHomeMeFollowPolicy {
         )
     }
 
+    static func shouldConsumeFixes(
+        surfaceActive: Bool,
+        followEnabled: Bool,
+        suspended: Bool,
+        authorization: LocationAuthorization
+    ) -> Bool {
+        surfaceActive && followEnabled && !suspended && authorization.isAuthorized
+    }
+
     static func camera(
         point: MapPoint?,
         snapshot: MapCameraSnapshot?,
@@ -284,7 +293,11 @@ private struct MapboxStandardMap: View {
                 surface.removeRenderer()
             }
             .onAppear {
-                interactionObserver.onUserInteraction = { meFollowSuspended = true }
+                interactionObserver.onUserInteraction = {
+                    guard meFollowEnabled else { return }
+                    meFollowSuspended = true
+                    surface.suspendSelfFollowForInteraction()
+                }
             }
             .ignoresSafeArea()
         }
@@ -295,11 +308,12 @@ private struct MapboxStandardMap: View {
             authorization: locationAuthorization,
             locationProvider: locationProvider
         )) {
-            guard surface.isActive,
-                  meFollowEnabled,
-                  !meFollowSuspended,
-                  locationAuthorization.isAuthorized
-            else { return }
+            guard MapHomeMeFollowPolicy.shouldConsumeFixes(
+                surfaceActive: surface.isActive,
+                followEnabled: meFollowEnabled,
+                suspended: meFollowSuspended,
+                authorization: locationAuthorization
+            ) else { return }
             for await fix in locationProvider.fixes() {
                 if Task.isCancelled { return }
                 let update = MapHomeMeFollowPolicy.ingestFix(
