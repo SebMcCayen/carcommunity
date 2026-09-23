@@ -649,7 +649,11 @@ final class ConvoyAwarenessCoordinator {
                 }
             }
             guard shouldRetry, !Task.isCancelled, subscriptionKey == expectedKey else { return }
-            try? await Task.sleep(for: Self.subscriptionRetryDelay)
+            do {
+                try await Task.sleep(for: Self.subscriptionRetryDelay)
+            } catch {
+                return
+            }
         }
     }
 
