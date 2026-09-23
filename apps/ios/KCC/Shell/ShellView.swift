@@ -81,7 +81,7 @@ struct ShellView: View {
         ZStack {
             // Exactly one native Mapbox view for the signed-in shell. Tabs and
             // routes cover it instead of recreating its Metal render surface.
-            MapHomeView(surface: mapSurface)
+            MapHomeView(surface: mapSurface, locationProvider: locationProvider)
 
             TabView(selection: tabSelection) {
                 ForEach(ShellTab.allCases, id: \.self) { tab in
@@ -1062,10 +1062,15 @@ struct ShellView: View {
     }
 
     private func applyConvoyFocus() {
+        let hasConvoyContext = convoyAwarenessTargetConvoy != nil
+        guard hasConvoyContext || mapSurface.convoyFit != nil || mapSurface.convoyFocusEnabled else {
+            return
+        }
         mapSurface.setConvoyFit(
             points: convoyAwareness.fitPoints(),
             focusEnabled: convoyAwareness.focusMode == .convoy,
-            userPoint: convoyAwareness.ownPoint()
+            userPoint: convoyAwareness.ownPoint(),
+            followSelfEnabled: hasConvoyContext
         )
     }
 }

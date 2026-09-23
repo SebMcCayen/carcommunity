@@ -69,7 +69,7 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
 
     func ownSessionUpdates(uid: String) -> AsyncStream<LiveSessionInfo?> {
         let ref = database.reference(withPath: "liveLocation/\(uid)/session")
-        return AsyncStream { continuation in
+        return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
             let handle = ref.observe(
                 .value,
                 with: { snapshot in
@@ -93,7 +93,7 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
 
     func latestUpdates(uid: String) -> AsyncStream<LiveMarker?> {
         let ref = database.reference(withPath: "liveLocation/\(uid)/latest")
-        return AsyncStream { continuation in
+        return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
             let handle = ref.observe(
                 .value,
                 with: { snapshot in

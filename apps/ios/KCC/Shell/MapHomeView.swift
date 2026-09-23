@@ -34,6 +34,7 @@ enum MapHomeConvoyViewportPolicy {
 @MainActor
 private final class ConvoyViewportInteractionObserver: @preconcurrency ViewportStatusObserver {
     weak var surface: StubMapSurface?
+    var onUserInteraction: @MainActor () -> Void = {}
 
     init(surface: StubMapSurface) {
         self.surface = surface
@@ -46,30 +47,39 @@ private final class ConvoyViewportInteractionObserver: @preconcurrency ViewportS
     ) {
         guard reason == .userInteraction else { return }
         surface?.suspendConvoyFitForInteraction()
+        onUserInteraction()
     }
 }
 
 /// Hosts the shell's single Mapbox Standard map. Config-less builds keep the
 /// deterministic placeholder, while a valid public token swaps in the native
 /// renderer without changing the shell-facing ``MapSurface`` seam.
+@MainActor
 struct MapHomeView: View {
     /// The shell's one surface instance, owned by ``ShellView`` — composed
     /// once for the whole signed-in shell and never disposed.
     let surface: StubMapSurface
+    let locationProvider: any LocationProvider
     private let accessToken: String?
 
     init(
         surface: StubMapSurface,
+        locationProvider: any LocationProvider,
         accessToken: String? = MapboxConfiguration.accessToken()
     ) {
         self.surface = surface
+        self.locationProvider = locationProvider
         self.accessToken = accessToken
     }
 
     var body: some View {
         ZStack {
             if let accessToken {
-                MapboxStandardMap(accessToken: accessToken, surface: surface) {
+                MapboxStandardMap(
+                    accessToken: accessToken,
+                    surface: surface,
+                    locationProvider: locationProvider
+                ) {
                     surface.markLoaded()
                 }
             } else {
@@ -117,9 +127,11 @@ struct MapHomeView: View {
 
 /// Mapbox-specific rendering stays confined to this file. The initial camera
 /// opens over Kungsbacka and the Standard style matches Android's default.
+@MainActor
 private struct MapboxStandardMap: View {
     let onLoaded: @MainActor () -> Void
     let surface: StubMapSurface
+    let locationProvider: any LocationProvider
     @State private var viewport: Viewport = .camera(
         center: .init(latitude: 57.4872, longitude: 12.0761),
         zoom: StubMapSurface.defaultBrowsingZoom,
@@ -128,14 +140,19 @@ private struct MapboxStandardMap: View {
     )
     @State private var cameraBeforeConvoy: MapCameraSnapshot?
     @State private var interactionObserver: ConvoyViewportInteractionObserver
+    @State private var latestOwnPoint: MapPoint?
+    @State private var meFollowEnabled = false
+    @State private var meFollowSuspended = false
 
     init(
         accessToken: String,
         surface: StubMapSurface,
+        locationProvider: any LocationProvider,
         onLoaded: @escaping @MainActor () -> Void
     ) {
         MapboxOptions.accessToken = accessToken
         self.surface = surface
+        self.locationProvider = locationProvider
         self.onLoaded = onLoaded
         _interactionObserver = State(initialValue: ConvoyViewportInteractionObserver(surface: surface))
     }
@@ -150,7 +167,10 @@ private struct MapboxStandardMap: View {
                 installRenderer(
                     proxy.map,
                     viewport: $viewport,
-                    cameraBeforeConvoy: $cameraBeforeConvoy
+                    cameraBeforeConvoy: $cameraBeforeConvoy,
+                    latestOwnPoint: $latestOwnPoint,
+                    meFollowEnabled: $meFollowEnabled,
+                    meFollowSuspended: $meFollowSuspended
                 )
             }
             .onCameraChanged { context in
@@ -167,14 +187,30 @@ private struct MapboxStandardMap: View {
                 proxy.viewport?.removeStatusObserver(interactionObserver)
                 surface.removeRenderer()
             }
+            .onAppear {
+                interactionObserver.onUserInteraction = { meFollowSuspended = true }
+            }
             .ignoresSafeArea()
+        }
+        .task(id: "\(surface.isActive)-\(meFollowEnabled)") {
+            guard surface.isActive, meFollowEnabled else { return }
+            for await fix in locationProvider.fixes() {
+                if Task.isCancelled { return }
+                let point = MapPoint(longitude: fix.longitude, latitude: fix.latitude)
+                latestOwnPoint = point
+                guard meFollowEnabled, !meFollowSuspended else { continue }
+                applyMeFollow(point, viewport: $viewport)
+            }
         }
     }
 
     private func installRenderer(
         _ map: MapboxMap?,
         viewport: Binding<Viewport>,
-        cameraBeforeConvoy: Binding<MapCameraSnapshot?>
+        cameraBeforeConvoy: Binding<MapCameraSnapshot?>,
+        latestOwnPoint: Binding<MapPoint?>,
+        meFollowEnabled: Binding<Bool>,
+        meFollowSuspended: Binding<Bool>
     ) {
         guard let map else { return }
         surface.installRenderer(
@@ -191,22 +227,26 @@ private struct MapboxStandardMap: View {
                 )
                 return MapScreenPoint(x: point.x, y: point.y, trustworthy: mismatch < 100)
             },
-            convoyFit: { points, enabled, userPoint in
+            convoyFit: { points, enabled, userPoint, followSelfEnabled in
                 let state = map.cameraState
+                meFollowEnabled.wrappedValue = !enabled && followSelfEnabled
                 switch MapHomeConvoyViewportPolicy.plan(points: points, focusEnabled: enabled) {
                 case .keepCurrentViewport:
                     return
                 case .restoreBrowsing:
+                    meFollowSuspended.wrappedValue = false
                     let fallback = cameraBeforeConvoy.wrappedValue
                     cameraBeforeConvoy.wrappedValue = nil
+                    latestOwnPoint.wrappedValue = latestOwnPoint.wrappedValue ?? userPoint
+                    let followPoint = latestOwnPoint.wrappedValue ?? userPoint
                     withViewportAnimation(.easeInOut(duration: 0.9)) {
                         viewport.wrappedValue = .camera(
-                            center: userPoint.map {
+                            center: followPoint.map {
                                 CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
                             } ?? fallback.map {
                                 CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
                             } ?? state.center,
-                            zoom: userPoint == nil
+                            zoom: followPoint == nil
                                 ? (fallback?.zoom ?? state.zoom)
                                 : StubMapSurface.defaultBrowsingZoom,
                             bearing: state.bearing,
@@ -269,12 +309,30 @@ private struct MapboxStandardMap: View {
             }
         )
     }
+
+    private func applyMeFollow(_ point: MapPoint, viewport: Binding<Viewport>) {
+        let snapshot = surface.cameraSnapshot
+        withViewportAnimation(.easeInOut(duration: 0.9)) {
+            viewport.wrappedValue = .camera(
+                center: CLLocationCoordinate2D(latitude: point.latitude, longitude: point.longitude),
+                zoom: snapshot?.zoom ?? StubMapSurface.defaultBrowsingZoom,
+                bearing: snapshot?.bearing ?? 0,
+                pitch: snapshot?.pitch ?? 45
+            )
+        }
+    }
 }
 
 #Preview("Loading") {
-    MapHomeView(surface: StubMapSurface(initialState: .loading, autoLoad: false))
+    MapHomeView(
+        surface: StubMapSurface(initialState: .loading, autoLoad: false),
+        locationProvider: StubLocationProvider()
+    )
 }
 
 #Preview("Loaded") {
-    MapHomeView(surface: StubMapSurface(initialState: .loaded, autoLoad: false))
+    MapHomeView(
+        surface: StubMapSurface(initialState: .loaded, autoLoad: false),
+        locationProvider: StubLocationProvider()
+    )
 }

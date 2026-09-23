@@ -234,12 +234,12 @@ final class MapSurfaceTests: XCTestCase {
     func testConvoyFitRecordsPointsAndFocusIndependently() {
         let surface = StubMapSurface(autoLoad: false)
         let points = [MapPoint(longitude: 1, latitude: 2), MapPoint(longitude: 3, latitude: 4)]
-        surface.setConvoyFit(points: points, focusEnabled: true, userPoint: nil)
+        surface.setConvoyFit(points: points, focusEnabled: true, userPoint: nil, followSelfEnabled: true)
         XCTAssertEqual(surface.convoyFit, points)
         XCTAssertTrue(surface.convoyFocusEnabled)
         // Focus can stay ON while the fittable points transiently vanish —
         // the nil points must not read as "the user toggled focus off".
-        surface.setConvoyFit(points: nil, focusEnabled: true, userPoint: nil)
+        surface.setConvoyFit(points: nil, focusEnabled: true, userPoint: nil, followSelfEnabled: true)
         XCTAssertNil(surface.convoyFit)
         XCTAssertTrue(surface.convoyFocusEnabled)
     }
@@ -397,9 +397,10 @@ final class MapSurfaceTests: XCTestCase {
         var fitted: [MapPoint]?
         var focusEnabled = false
         var centered: MapPoint?
+        var followSelfEnabled = false
         surface.installRenderer(
             projection: { _, _ in MapScreenPoint(x: 20, y: 30) },
-            convoyFit: { fitted = $0; focusEnabled = $1; _ = $2 },
+            convoyFit: { fitted = $0; focusEnabled = $1; _ = $2; followSelfEnabled = $3 },
             center: { centered = $0 }
         )
         let snapshot = MapCameraSnapshot.of(
@@ -407,7 +408,7 @@ final class MapSurfaceTests: XCTestCase {
         )
         surface.updateCameraSnapshot(snapshot)
         let points = [MapPoint(longitude: 12, latitude: 57), MapPoint(longitude: 13, latitude: 58)]
-        surface.setConvoyFit(points: points, focusEnabled: true, userPoint: nil)
+        surface.setConvoyFit(points: points, focusEnabled: true, userPoint: nil, followSelfEnabled: true)
         surface.centerOn(points[1])
 
         XCTAssertEqual(surface.screenPositionFor(latitude: 0, longitude: 0), MapScreenPoint(x: 20, y: 30))
@@ -415,6 +416,7 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertEqual(surface.bearing, 90)
         XCTAssertEqual(fitted, points)
         XCTAssertTrue(focusEnabled)
+        XCTAssertTrue(followSelfEnabled)
         XCTAssertEqual(centered, points[1])
     }
 
@@ -456,23 +458,24 @@ final class MapSurfaceTests: XCTestCase {
         surface.setConvoyFitClockForTest { now }
         surface.installRenderer(
             projection: { _, _ in nil },
-            convoyFit: { fits.append(($0, $1, $2)) },
+            convoyFit: { points, enabled, userPoint, _ in fits.append((points, enabled, userPoint)) },
             center: { _ in }
         )
         let initial = [
             MapPoint(longitude: 12, latitude: 57),
             MapPoint(longitude: 13, latitude: 58)
         ]
-        surface.setConvoyFit(points: initial, focusEnabled: true, userPoint: nil)
+        surface.setConvoyFit(points: initial, focusEnabled: true, userPoint: nil, followSelfEnabled: true)
         now = 10.5
         surface.setConvoyFit(
             points: initial.map { MapPoint(longitude: $0.longitude + 0.01, latitude: $0.latitude) },
             focusEnabled: true,
-            userPoint: nil
+            userPoint: nil,
+            followSelfEnabled: true
         )
-        surface.setConvoyFit(points: nil, focusEnabled: true, userPoint: nil)
+        surface.setConvoyFit(points: nil, focusEnabled: true, userPoint: nil, followSelfEnabled: true)
         let me = MapPoint(longitude: 11, latitude: 56)
-        surface.setConvoyFit(points: nil, focusEnabled: false, userPoint: me)
+        surface.setConvoyFit(points: nil, focusEnabled: false, userPoint: me, followSelfEnabled: true)
 
         XCTAssertEqual(fits.count, 2)
         XCTAssertEqual(fits[0].0, initial)
@@ -525,24 +528,66 @@ final class MapSurfaceTests: XCTestCase {
         var fits = 0
         surface.installRenderer(
             projection: { _, _ in nil },
-            convoyFit: { _, enabled, _ in if enabled { fits += 1 } },
+            convoyFit: { _, enabled, _, _ in if enabled { fits += 1 } },
             center: { _ in }
         )
         let initial = [
             MapPoint(longitude: 12, latitude: 57),
             MapPoint(longitude: 13, latitude: 58)
         ]
-        surface.setConvoyFit(points: initial, focusEnabled: true, userPoint: nil)
+        surface.setConvoyFit(points: initial, focusEnabled: true, userPoint: nil, followSelfEnabled: true)
         surface.centerOn(initial[0])
         surface.setConvoyFit(
             points: initial + [MapPoint(longitude: 14, latitude: 59)],
             focusEnabled: true,
-            userPoint: nil
+            userPoint: nil,
+            followSelfEnabled: true
         )
         XCTAssertEqual(fits, 1)
 
-        surface.setConvoyFit(points: nil, focusEnabled: false, userPoint: nil)
-        surface.setConvoyFit(points: initial, focusEnabled: true, userPoint: nil)
+        surface.setConvoyFit(points: nil, focusEnabled: false, userPoint: nil, followSelfEnabled: true)
+        surface.setConvoyFit(points: initial, focusEnabled: true, userPoint: nil, followSelfEnabled: true)
         XCTAssertEqual(fits, 2)
+    }
+
+    func testInitialMeRestoreIsForwardedOnlyWhenSelfFollowIsAvailable() {
+        let surface = StubMapSurface(autoLoad: false)
+        var restores = 0
+        surface.installRenderer(
+            projection: { _, _ in nil },
+            convoyFit: { points, enabled, _, followSelfEnabled in
+                if points == nil, !enabled, followSelfEnabled { restores += 1 }
+            },
+            center: { _ in }
+        )
+
+        surface.setConvoyFit(points: nil, focusEnabled: false, userPoint: nil, followSelfEnabled: false)
+        XCTAssertEqual(restores, 0)
+
+        surface.setConvoyFit(points: nil, focusEnabled: false, userPoint: nil, followSelfEnabled: true)
+        XCTAssertEqual(restores, 1)
+
+        surface.setConvoyFit(points: nil, focusEnabled: false, userPoint: nil, followSelfEnabled: true)
+        XCTAssertEqual(restores, 1)
+    }
+
+    func testDisablingSelfFollowForwardsOneBrowsingRestore() {
+        let surface = StubMapSurface(autoLoad: false)
+        var latestFollowSelfEnabled: Bool?
+        surface.installRenderer(
+            projection: { _, _ in nil },
+            convoyFit: { points, enabled, _, followSelfEnabled in
+                if points == nil, !enabled {
+                    latestFollowSelfEnabled = followSelfEnabled
+                }
+            },
+            center: { _ in }
+        )
+
+        surface.setConvoyFit(points: nil, focusEnabled: false, userPoint: nil, followSelfEnabled: true)
+        XCTAssertEqual(latestFollowSelfEnabled, true)
+
+        surface.setConvoyFit(points: nil, focusEnabled: false, userPoint: nil, followSelfEnabled: false)
+        XCTAssertEqual(latestFollowSelfEnabled, false)
     }
 }
