@@ -1150,6 +1150,9 @@ final class StubMapSurface: MapSurface {
         if !focusEnabled {
             appliedConvoyFit = nil
             lastConvoyFitAt = nil
+            if !followSelfEnabled {
+                convoySelfFollowSuspended = false
+            }
             let selfFollowArmed = !previousSelfFollowEnabled && followSelfEnabled
             let shouldRestoreBrowsing = previousPoints != nil
                 || focusChanged
