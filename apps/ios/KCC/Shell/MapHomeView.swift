@@ -278,6 +278,7 @@ private struct MapboxStandardMap: View {
     @State private var surfaceActive: Bool
     @State private var pendingProgrammaticViewportTokens: Set<UUID> = []
     @State private var meFollowIdleTask: Task<Void, Never>?
+    @State private var meFollowIdleTaskToken: UUID?
 
     init(
         accessToken: String,
@@ -330,6 +331,7 @@ private struct MapboxStandardMap: View {
             .onDisappear {
                 meFollowIdleTask?.cancel()
                 meFollowIdleTask = nil
+                meFollowIdleTaskToken = nil
                 proxy.viewport?.removeStatusObserver(interactionObserver)
                 surface.removeRenderer()
             }
@@ -387,6 +389,7 @@ private struct MapboxStandardMap: View {
             meFollowSuspended = false
             meFollowIdleTask?.cancel()
             meFollowIdleTask = nil
+            meFollowIdleTaskToken = nil
             latestOwnPoint = nil
             let fallback = cameraBeforeConvoy
             cameraBeforeConvoy = nil
@@ -441,6 +444,7 @@ private struct MapboxStandardMap: View {
                 if enabled || !followSelfEnabled {
                     meFollowIdleTask?.cancel()
                     meFollowIdleTask = nil
+                    meFollowIdleTaskToken = nil
                 }
                 switch MapHomeConvoyViewportPolicy.plan(points: points, focusEnabled: enabled) {
                 case .keepCurrentViewport:
@@ -552,21 +556,37 @@ private struct MapboxStandardMap: View {
         meFollowIdleTask?.cancel()
         guard surfaceActive, meFollowEnabled, meFollowSuspended else {
             meFollowIdleTask = nil
+            meFollowIdleTaskToken = nil
             return
         }
+        let token = UUID()
+        meFollowIdleTaskToken = token
         meFollowIdleTask = Task { @MainActor in
             do {
                 try await Task.sleep(for: MapHomeMeFollowPolicy.idleReturnDelay)
             } catch {
+                if meFollowIdleTaskToken == token {
+                    meFollowIdleTask = nil
+                    meFollowIdleTaskToken = nil
+                }
                 return
             }
             guard !Task.isCancelled,
                   surfaceActive, meFollowEnabled, meFollowSuspended
-            else { return }
+            else {
+                if meFollowIdleTaskToken == token {
+                    meFollowIdleTask = nil
+                    meFollowIdleTaskToken = nil
+                }
+                return
+            }
             meFollowSuspended = false
             surface.resumeSelfFollowAfterIdle()
             applyMeFollow(latestOwnPoint, viewport: viewport)
-            meFollowIdleTask = nil
+            if meFollowIdleTaskToken == token {
+                meFollowIdleTask = nil
+                meFollowIdleTaskToken = nil
+            }
         }
     }
 
