@@ -102,6 +102,14 @@ enum MapHomeMeFollowPolicy {
         surfaceActive && followEnabled && authorization.isAuthorized
     }
 
+    static func shouldRestoreBrowsingOnAuthorizationChange(
+        previous: LocationAuthorization,
+        current: LocationAuthorization,
+        followEnabled: Bool
+    ) -> Bool {
+        followEnabled && previous.isAuthorized && !current.isAuthorized
+    }
+
     static func camera(
         point: MapPoint?,
         snapshot: MapCameraSnapshot?,
@@ -349,6 +357,25 @@ private struct MapboxStandardMap: View {
                 if Task.isCancelled { return }
                 locationAuthorization = authorization
             }
+        }
+        .onChange(of: locationAuthorization) { oldValue, newValue in
+            guard MapHomeMeFollowPolicy.shouldRestoreBrowsingOnAuthorizationChange(
+                previous: oldValue,
+                current: newValue,
+                followEnabled: meFollowEnabled
+            ) else { return }
+            meFollowEnabled = false
+            meFollowSuspended = false
+            latestOwnPoint = nil
+            let fallback = cameraBeforeConvoy
+            cameraBeforeConvoy = nil
+            applyMeFollow(
+                nil,
+                viewport: $viewport,
+                fallback: fallback,
+                snapshot: surface.cameraSnapshot,
+                restoringBrowsing: true
+            )
         }
     }
 

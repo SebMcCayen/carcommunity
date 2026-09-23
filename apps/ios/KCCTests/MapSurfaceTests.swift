@@ -680,6 +680,24 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertEqual(await iterator.next(), .whileInUse)
     }
 
+    func testMapHomeMeFollowPolicyRestoresBrowsingWhenAuthorizationIsLost() {
+        XCTAssertTrue(MapHomeMeFollowPolicy.shouldRestoreBrowsingOnAuthorizationChange(
+            previous: .whileInUse,
+            current: .denied,
+            followEnabled: true
+        ))
+        XCTAssertFalse(MapHomeMeFollowPolicy.shouldRestoreBrowsingOnAuthorizationChange(
+            previous: .denied,
+            current: .whileInUse,
+            followEnabled: true
+        ))
+        XCTAssertFalse(MapHomeMeFollowPolicy.shouldRestoreBrowsingOnAuthorizationChange(
+            previous: .whileInUse,
+            current: .denied,
+            followEnabled: false
+        ))
+    }
+
     func testManualCenterSuspendsRefitsUntilFocusIsExplicitlyReselected() {
         let surface = StubMapSurface(autoLoad: false)
         var fits = 0
