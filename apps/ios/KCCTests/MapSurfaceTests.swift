@@ -523,6 +523,77 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertEqual(MapHomeConvoyViewportPolicy.fitZoom(.nan, fallback: 12), 12)
     }
 
+    func testMapHomeMeFollowPolicyRefreshesRestorePointAndSuspension() {
+        let stale = MapPoint(longitude: 12.0, latitude: 57.0)
+        let current = MapPoint(longitude: 12.2, latitude: 57.2)
+
+        let resumed = MapHomeMeFollowPolicy.restoreState(
+            latestOwnPoint: stale,
+            userPoint: current,
+            followSelfEnabled: true,
+            suspended: true
+        )
+        XCTAssertEqual(resumed.latestOwnPoint, current)
+        XCTAssertFalse(resumed.suspended)
+
+        let preserved = MapHomeMeFollowPolicy.restoreState(
+            latestOwnPoint: stale,
+            userPoint: nil,
+            followSelfEnabled: false,
+            suspended: true
+        )
+        XCTAssertEqual(preserved.latestOwnPoint, stale)
+        XCTAssertTrue(preserved.suspended)
+    }
+
+    func testMapHomeMeFollowPolicyPrefersCurrentSnapshotBeforeFallback() {
+        let current = MapCameraSnapshot.of(
+            latitude: 57.51, longitude: 12.11, zoom: 14, bearing: 35, pitch: 25
+        )
+        let fallback = MapCameraSnapshot.of(
+            latitude: 57.0, longitude: 12.0, zoom: 9, bearing: 10, pitch: 5
+        )
+
+        let camera = MapHomeMeFollowPolicy.camera(
+            point: nil,
+            snapshot: current,
+            fallback: fallback,
+            restoringBrowsing: false
+        )
+        XCTAssertEqual(camera?.center.latitude, current.latitude, accuracy: 1e-9)
+        XCTAssertEqual(camera?.center.longitude, current.longitude, accuracy: 1e-9)
+        XCTAssertEqual(camera?.zoom, CGFloat(current.zoom), accuracy: 1e-9)
+        XCTAssertEqual(camera?.bearing, CGFloat(current.bearing), accuracy: 1e-9)
+        XCTAssertEqual(camera?.pitch, CGFloat(current.pitch), accuracy: 1e-9)
+    }
+
+    func testMapHomeMeFollowPolicySubscriptionKeyTracksProviderIdentityAndFlags() {
+        let first = StubLocationProvider()
+        let second = StubLocationProvider()
+
+        let initial = MapHomeMeFollowPolicy.subscriptionKey(
+            surfaceActive: true,
+            enabled: true,
+            suspended: false,
+            locationProvider: first
+        )
+        let providerSwap = MapHomeMeFollowPolicy.subscriptionKey(
+            surfaceActive: true,
+            enabled: true,
+            suspended: false,
+            locationProvider: second
+        )
+        let suspended = MapHomeMeFollowPolicy.subscriptionKey(
+            surfaceActive: true,
+            enabled: true,
+            suspended: true,
+            locationProvider: first
+        )
+
+        XCTAssertNotEqual(initial, providerSwap)
+        XCTAssertNotEqual(initial, suspended)
+    }
+
     func testManualCenterSuspendsRefitsUntilFocusIsExplicitlyReselected() {
         let surface = StubMapSurface(autoLoad: false)
         var fits = 0
