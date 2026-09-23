@@ -554,7 +554,11 @@ private struct MapboxStandardMap: View {
 
     private func armMeFollowIdleReturn(viewport: Binding<Viewport>) {
         meFollowIdleTask?.cancel()
-        guard surfaceActive, meFollowEnabled, meFollowSuspended else {
+        guard surfaceActive,
+              meFollowEnabled,
+              meFollowSuspended,
+              pendingProgrammaticViewportTokens.isEmpty
+        else {
             meFollowIdleTask = nil
             meFollowIdleTaskToken = nil
             return
@@ -572,7 +576,10 @@ private struct MapboxStandardMap: View {
                 return
             }
             guard !Task.isCancelled,
-                  surfaceActive, meFollowEnabled, meFollowSuspended
+                  surfaceActive,
+                  meFollowEnabled,
+                  meFollowSuspended,
+                  pendingProgrammaticViewportTokens.isEmpty
             else {
                 if meFollowIdleTaskToken == token {
                     meFollowIdleTask = nil
