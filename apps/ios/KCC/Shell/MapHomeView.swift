@@ -51,6 +51,11 @@ enum MapHomeMeFollowPolicy {
         let pitch: CGFloat
     }
 
+    struct FixUpdate: Equatable {
+        let latestOwnPoint: MapPoint
+        let shouldApplyCamera: Bool
+    }
+
     static func subscriptionKey(
         surfaceActive: Bool,
         enabled: Bool,
@@ -74,6 +79,18 @@ enum MapHomeMeFollowPolicy {
         RestoreState(
             latestOwnPoint: userPoint ?? latestOwnPoint,
             suspended: followSelfEnabled ? false : suspended
+        )
+    }
+
+    static func ingestFix(
+        _ fix: LocationFix,
+        followEnabled: Bool,
+        suspended: Bool
+    ) -> FixUpdate {
+        let point = MapPoint(longitude: fix.longitude, latitude: fix.latitude)
+        return FixUpdate(
+            latestOwnPoint: point,
+            shouldApplyCamera: followEnabled && !suspended
         )
     }
 
@@ -277,10 +294,14 @@ private struct MapboxStandardMap: View {
             guard surface.isActive, meFollowEnabled, !meFollowSuspended else { return }
             for await fix in locationProvider.fixes() {
                 if Task.isCancelled { return }
-                let point = MapPoint(longitude: fix.longitude, latitude: fix.latitude)
-                latestOwnPoint = point
-                guard meFollowEnabled, !meFollowSuspended else { return }
-                applyMeFollow(point, viewport: $viewport)
+                let update = MapHomeMeFollowPolicy.ingestFix(
+                    fix,
+                    followEnabled: meFollowEnabled,
+                    suspended: meFollowSuspended
+                )
+                latestOwnPoint = update.latestOwnPoint
+                guard update.shouldApplyCamera else { return }
+                applyMeFollow(update.latestOwnPoint, viewport: $viewport)
             }
         }
     }

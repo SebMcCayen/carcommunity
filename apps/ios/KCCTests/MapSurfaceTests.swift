@@ -594,6 +594,34 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertNotEqual(initial, suspended)
     }
 
+    func testMapHomeMeFollowPolicyAppliesFixesOnlyWhileFollowRemainsUnsuspended() {
+        let fix = LocationFix.of(
+            latitude: 57.6,
+            longitude: 12.2,
+            timestamp: Date(),
+            accuracyMeters: 10
+        )!
+
+        let active = MapHomeMeFollowPolicy.ingestFix(
+            fix,
+            followEnabled: true,
+            suspended: false
+        )
+        XCTAssertEqual(
+            active.latestOwnPoint,
+            MapPoint(longitude: fix.longitude, latitude: fix.latitude)
+        )
+        XCTAssertTrue(active.shouldApplyCamera)
+
+        let suspended = MapHomeMeFollowPolicy.ingestFix(
+            fix,
+            followEnabled: true,
+            suspended: true
+        )
+        XCTAssertEqual(suspended.latestOwnPoint, active.latestOwnPoint)
+        XCTAssertFalse(suspended.shouldApplyCamera)
+    }
+
     func testManualCenterSuspendsRefitsUntilFocusIsExplicitlyReselected() {
         let surface = StubMapSurface(autoLoad: false)
         var fits = 0
