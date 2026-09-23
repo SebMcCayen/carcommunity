@@ -326,6 +326,7 @@ private struct MapboxStandardMap: View {
             }
         }
         .task(id: ObjectIdentifier(locationProvider as AnyObject)) {
+            locationAuthorization = locationProvider.authorization
             for await authorization in locationProvider.authorizationUpdates() {
                 if Task.isCancelled { return }
                 locationAuthorization = authorization
