@@ -120,9 +120,10 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
                 },
                 withCancel: { error in
                     box.removeObserverOnce()
-                    continuation.yield(.value(nil))
                     if LiveRealtimeRetryPolicy.shouldRetry(error) {
                         continuation.yield(.retry)
+                    } else {
+                        continuation.yield(.value(nil))
                     }
                     continuation.finish()
                 }

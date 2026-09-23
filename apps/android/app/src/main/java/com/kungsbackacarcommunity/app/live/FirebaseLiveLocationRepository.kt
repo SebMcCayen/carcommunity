@@ -126,9 +126,10 @@ class FirebaseLiveLocationRepository private constructor(
                             // If the listener itself was cancelled, mark the end of this
                             // one-shot observation as retryable so the repository can
                             // attach a fresh RTDB observer for the same uid.
-                            trySend(LatestMarkerObservation.Value(null))
                             if (shouldRetryLatestObserve(error)) {
                                 trySend(LatestMarkerObservation.Retry)
+                            } else {
+                                trySend(LatestMarkerObservation.Value(null))
                             }
                             close()
                         }
