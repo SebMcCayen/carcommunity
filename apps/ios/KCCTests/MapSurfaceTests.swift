@@ -402,6 +402,14 @@ final class MapSurfaceTests: XCTestCase {
         )
     }
 
+    func testProjectionTrustClampsNegativeZoomBeforeScalingTolerance() {
+        XCTAssertEqual(
+            MapHomeProjectionTrustPolicy.metersPerPixel(latitude: 57.48, zoom: -3),
+            MapHomeProjectionTrustPolicy.metersPerPixel(latitude: 57.48, zoom: 0),
+            accuracy: 1e-9
+        )
+    }
+
     func testCameraSnapshotIsPinnableForTests() {
         let surface = StubMapSurface(autoLoad: false)
         let snapshot = MapCameraSnapshot.of(

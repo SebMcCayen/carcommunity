@@ -193,7 +193,8 @@ enum MapHomeProjectionTrustPolicy {
     static func metersPerPixel(latitude: Double, zoom: Double) -> Double {
         guard latitude.isFinite, zoom.isFinite else { return 0 }
         let clampedLatitude = min(max(latitude, -maximumMercatorLatitude), maximumMercatorLatitude)
-        return 156_543.03392 * cos(clampedLatitude * .pi / 180) / pow(2, zoom)
+        let clampedZoom = max(zoom, 0)
+        return 156_543.03392 * cos(clampedLatitude * .pi / 180) / pow(2, clampedZoom)
     }
 }
 

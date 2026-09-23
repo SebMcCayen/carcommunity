@@ -190,6 +190,7 @@ internal fun <T> recoverLatestMarkerFlow(
 internal fun shouldRetryLatestObserve(error: DatabaseError): Boolean =
     when (error.code) {
         DatabaseError.DISCONNECTED, DatabaseError.NETWORK_ERROR -> true
+        DatabaseError.PERMISSION_DENIED -> false
         DatabaseError.OPERATION_FAILED -> {
             val detail =
                 buildString {
