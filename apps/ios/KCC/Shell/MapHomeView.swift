@@ -192,13 +192,13 @@ private struct MapboxStandardMap: View {
             }
             .ignoresSafeArea()
         }
-        .task(id: "\(surface.isActive)-\(meFollowEnabled)") {
-            guard surface.isActive, meFollowEnabled else { return }
+        .task(id: "\(surface.isActive)-\(meFollowEnabled)-\(meFollowSuspended)") {
+            guard surface.isActive, meFollowEnabled, !meFollowSuspended else { return }
             for await fix in locationProvider.fixes() {
                 if Task.isCancelled { return }
                 let point = MapPoint(longitude: fix.longitude, latitude: fix.latitude)
                 latestOwnPoint = point
-                guard meFollowEnabled, !meFollowSuspended else { continue }
+                guard meFollowEnabled, !meFollowSuspended else { return }
                 applyMeFollow(point, viewport: $viewport)
             }
         }
