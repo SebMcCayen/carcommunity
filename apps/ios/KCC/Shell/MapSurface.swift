@@ -115,6 +115,15 @@ struct MapUserMarker: Equatable, Sendable {
 struct MapPoint: Equatable, Sendable {
     let longitude: Double
     let latitude: Double
+    /// Stable identity for camera-fit membership comparisons. General map
+    /// points leave this nil; convoy fit points carry their member uid.
+    let fitIdentity: String?
+
+    init(longitude: Double, latitude: Double, fitIdentity: String? = nil) {
+        self.longitude = longitude
+        self.latitude = latitude
+        self.fitIdentity = fitIdentity
+    }
 }
 
 /// Decides when a moving convoy has changed enough to justify another camera
@@ -134,6 +143,7 @@ enum ConvoyFitPolicy {
         guard let previous, let lastFitAt else { return true }
         guard !previous.isEmpty else { return true }
         if previous.count != next.count { return true }
+        if memberSetChanged(previous: previous, next: next) { return true }
         guard now - lastFitAt >= minimumRefitInterval else { return false }
         let old = bounds(of: previous)
         let new = bounds(of: next)
@@ -141,6 +151,15 @@ enum ConvoyFitPolicy {
             || abs(old.maxLongitude - new.maxLongitude) >= coordinateEpsilon
             || abs(old.minLatitude - new.minLatitude) >= coordinateEpsilon
             || abs(old.maxLatitude - new.maxLatitude) >= coordinateEpsilon
+    }
+
+    private static func memberSetChanged(previous: [MapPoint], next: [MapPoint]) -> Bool {
+        let previousIds = previous.compactMap(\.fitIdentity)
+        let nextIds = next.compactMap(\.fitIdentity)
+        guard previousIds.count == previous.count, nextIds.count == next.count else {
+            return false
+        }
+        return Set(previousIds) != Set(nextIds)
     }
 
     private static func bounds(of points: [MapPoint]) -> (

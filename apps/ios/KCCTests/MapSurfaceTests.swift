@@ -536,6 +536,21 @@ final class MapSurfaceTests: XCTestCase {
             lastFitAt: 10,
             now: 10.1
         ))
+
+        let priorRoster = [
+            MapPoint(longitude: 12, latitude: 57, fitIdentity: "owner"),
+            MapPoint(longitude: 13, latitude: 58, fitIdentity: "departing")
+        ]
+        let replacementRoster = [
+            MapPoint(longitude: 12, latitude: 57, fitIdentity: "owner"),
+            MapPoint(longitude: 13, latitude: 58, fitIdentity: "joining")
+        ]
+        XCTAssertTrue(ConvoyFitPolicy.shouldRefit(
+            previous: priorRoster,
+            next: replacementRoster,
+            lastFitAt: 10,
+            now: 10.1
+        ))
     }
 
     func testRendererBridgeThrottlesFitsAndRestoresOnlyWhenFocusTurnsOff() {

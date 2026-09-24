@@ -566,7 +566,9 @@ final class ConvoyAwarenessCoordinator {
         guard focusMode == .convoy else { return nil }
         let fresh = positions.values.filter { $0.isFresh(at: now) }
         guard fresh.contains(where: { $0.uid != ownUid }), fresh.count >= 2 else { return nil }
-        return fresh.map { MapPoint(longitude: $0.longitude, latitude: $0.latitude) }
+        return fresh.map {
+            MapPoint(longitude: $0.longitude, latitude: $0.latitude, fitIdentity: $0.uid)
+        }
     }
 
     func ownPoint(now: Date = Date()) -> MapPoint? {
