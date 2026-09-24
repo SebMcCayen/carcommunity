@@ -315,6 +315,7 @@ private struct MapboxStandardMap: View {
     @State private var pendingProgrammaticViewportTokens: Set<UUID> = []
     @State private var meFollowIdleTask: Task<Void, Never>?
     @State private var meFollowIdleTaskToken: UUID?
+    @State private var rendererAttached = false
 
     init(
         accessToken: String,
@@ -337,7 +338,10 @@ private struct MapboxStandardMap: View {
             .mapStyle(.standard)
             .onMapLoaded { _ in
                 onLoaded()
-                proxy.viewport?.addStatusObserver(interactionObserver)
+                if !rendererAttached, let viewportController = proxy.viewport {
+                    viewportController.addStatusObserver(interactionObserver)
+                    rendererAttached = true
+                }
                 installRenderer(
                     proxy.map,
                     viewport: $viewport,
@@ -368,7 +372,10 @@ private struct MapboxStandardMap: View {
                 meFollowIdleTask?.cancel()
                 meFollowIdleTask = nil
                 meFollowIdleTaskToken = nil
-                proxy.viewport?.removeStatusObserver(interactionObserver)
+                if rendererAttached {
+                    proxy.viewport?.removeStatusObserver(interactionObserver)
+                    rendererAttached = false
+                }
                 surface.removeRenderer()
             }
             .onAppear {
@@ -379,6 +386,23 @@ private struct MapboxStandardMap: View {
                     meFollowSuspended = true
                     surface.suspendSelfFollowForInteraction()
                     armMeFollowIdleReturn(viewport: $viewport)
+                }
+                // onMapLoaded handles first readiness. A retained Mapbox view
+                // does not necessarily emit it again after disappearing, so
+                // reattach immediately when its map is already available.
+                if let map = proxy.map {
+                    if !rendererAttached, let viewportController = proxy.viewport {
+                        viewportController.addStatusObserver(interactionObserver)
+                        rendererAttached = true
+                    }
+                    installRenderer(
+                        map,
+                        viewport: $viewport,
+                        cameraBeforeConvoy: $cameraBeforeConvoy,
+                        latestOwnPoint: $latestOwnPoint,
+                        meFollowEnabled: $meFollowEnabled,
+                        meFollowSuspended: $meFollowSuspended
+                    )
                 }
             }
             .onChange(of: surface.isActive, initial: true) { _, active in

@@ -1098,7 +1098,7 @@ final class StubMapSurface: MapSurface {
             applyConvoyFitToRenderer(force: true)
         } else if convoySelfFollowEnabled && !convoySelfFollowSuspended {
             meRestoreArmed = true
-            rendererConvoyFit?(nil, false, convoyUserPoint, true, false, false)
+            rendererConvoyFit?(nil, false, convoyUserPoint, true, false, true)
         }
     }
 
@@ -1182,7 +1182,7 @@ final class StubMapSurface: MapSurface {
         // A missing fit while convoy focus remains selected is a data gap,
         // not a request to move the camera. A transition into convoy focus
         // still has to reach the renderer so an active Me-follow loop stops.
-        guard points != nil else {
+        guard let points, points.count >= 2 else {
             if focusChanged {
                 rendererConvoyFit?(
                     nil,

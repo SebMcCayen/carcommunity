@@ -915,16 +915,20 @@ final class MapSurfaceTests: XCTestCase {
         surface.suspendSelfFollowForInteraction()
         surface.resumeSelfFollowAfterIdle()
 
-        var restores = 0
+        var restores: [(resume: Bool, viewport: Bool)] = []
         surface.installRenderer(
             projection: { _, _ in nil },
-            convoyFit: { points, enabled, _, followSelfEnabled, _, _ in
-                if points == nil, !enabled, followSelfEnabled { restores += 1 }
+            convoyFit: { points, enabled, _, followSelfEnabled, resume, viewport in
+                if points == nil, !enabled, followSelfEnabled {
+                    restores.append((resume, viewport))
+                }
             },
             center: { _ in }
         )
 
-        XCTAssertEqual(restores, 1)
+        XCTAssertEqual(restores.count, 1)
+        XCTAssertFalse(restores[0].resume)
+        XCTAssertTrue(restores[0].viewport)
         XCTAssertEqual(MapHomeMeFollowPolicy.idleReturnDelay, .seconds(10))
     }
 
@@ -956,6 +960,36 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertEqual(transitions.count, 1)
         XCTAssertTrue(transitions[0].enabled)
         XCTAssertTrue(transitions[0].followSelf)
+        XCTAssertFalse(transitions[0].restoreViewport)
+    }
+
+    func testEnteringConvoyFocusWithOnePointStopsSelfFollowWithoutMovingViewport() {
+        let surface = StubMapSurface(autoLoad: false)
+        var transitions: [(enabled: Bool, restoreViewport: Bool)] = []
+        surface.installRenderer(
+            projection: { _, _ in nil },
+            convoyFit: { _, enabled, _, _, _, restoreViewport in
+                transitions.append((enabled, restoreViewport))
+            },
+            center: { _ in }
+        )
+        surface.setConvoyFit(
+            points: nil,
+            focusEnabled: false,
+            userPoint: nil,
+            followSelfEnabled: true
+        )
+        transitions.removeAll()
+
+        surface.setConvoyFit(
+            points: [MapPoint(longitude: 12.1, latitude: 57.5)],
+            focusEnabled: true,
+            userPoint: nil,
+            followSelfEnabled: true
+        )
+
+        XCTAssertEqual(transitions.count, 1)
+        XCTAssertTrue(transitions[0].enabled)
         XCTAssertFalse(transitions[0].restoreViewport)
     }
 }
