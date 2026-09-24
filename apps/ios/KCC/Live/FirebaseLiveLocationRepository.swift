@@ -4,16 +4,16 @@ import FirebaseDatabase
 import FirebaseStorage
 import Foundation
 
-/// ``LiveLocationRepository`` backed by the `live.*` callables and a Realtime
-/// Database listener on the caller's own session node — the iOS port of
-/// Android's `live/FirebaseLiveLocationRepository.kt` (own-session slice).
+/// ``LiveLocationRepository`` backed by the `live.*` callables, Realtime
+/// Database listeners, and Storage image resolution — the iOS port of
+/// Android's `live/FirebaseLiveLocationRepository.kt`.
 ///
 /// The split is Android's exactly: WRITES go through the callables
 /// (`live-startSession` / `live-updatePosition` / `live-stopSession` /
 /// `live-hideMeNow`, all in europe-west1 via ``KccFunctionsClient``); the
-/// RTDB `liveLocation/{uid}` nodes are backend-written, and this class only
-/// READS the owner's session node (owner-only read —
-/// firebase/database.rules.json).
+/// RTDB `liveLocation/{uid}` nodes are backend-written. This class reads the
+/// owner's session node plus explicit per-uid latest markers authorized by
+/// firebase/database.rules.json; it never scans the live-location collection.
 ///
 /// Callable failures surface as ``KccFunctionsError`` (contract code only —
 /// never the SDK message, which may reference the request payload; per the
@@ -65,7 +65,7 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
         _ = try await functions.call(Self.hideMeNowCallable, payload: [:])
     }
 
-    // MARK: - RTDB (own-session read)
+    // MARK: - RTDB reads
 
     func ownSessionUpdates(uid: String) -> AsyncStream<LiveSessionInfo?> {
         let ref = database.reference(withPath: "liveLocation/\(uid)/session")

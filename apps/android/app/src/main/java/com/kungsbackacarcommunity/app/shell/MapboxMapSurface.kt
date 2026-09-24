@@ -811,26 +811,29 @@ class MapboxMapSurface : MapSurface {
             // untrustworthy point; the convoy overlay treats it as OFF-SCREEN and
             // draws an edge arrow from the member's bearing (never from the pixel).
             val cameraState = mapboxMap.cameraState
-            val back = mapboxMap.coordinateForPixel(screen)
-            val metersPerPixel =
-                ConvoyEdgeGeometry.metersPerPixel(
-                    // The TARGET's latitude, not the camera centre's: the
-                    // tolerance measures pixel resolution at the point being
-                    // round-tripped, and web-mercator m/px varies with
-                    // latitude. Using the camera centre would skew the
-                    // tolerance for a target far north/south of it and could
-                    // misclassify the projection.
-                    latitude = latitude,
-                    zoom = cameraState.zoom,
-                )
             val trustworthy =
-                ConvoyEdgeGeometry.projectionRoundTrips(
-                    originalLatitude = latitude,
-                    originalLongitude = longitude,
-                    unprojectedLatitude = back.latitude(),
-                    unprojectedLongitude = back.longitude(),
-                    metersPerPixel = metersPerPixel,
-                )
+                if (cameraState.pitch <= ROUND_TRIP_MAX_FLAT_PITCH_DEGREES) {
+                    // A top-down camera cannot fold a point behind itself, so
+                    // avoid a native unprojection and distance calculation for
+                    // every marker in the common 2D browsing state.
+                    true
+                } else {
+                    val back = mapboxMap.coordinateForPixel(screen)
+                    val metersPerPixel =
+                        ConvoyEdgeGeometry.metersPerPixel(
+                            // The TARGET's latitude, not the camera centre's:
+                            // web-mercator metres per pixel varies with latitude.
+                            latitude = latitude,
+                            zoom = cameraState.zoom,
+                        )
+                    ConvoyEdgeGeometry.projectionRoundTrips(
+                        originalLatitude = latitude,
+                        originalLongitude = longitude,
+                        unprojectedLatitude = back.latitude(),
+                        unprojectedLongitude = back.longitude(),
+                        metersPerPixel = metersPerPixel,
+                    )
+                }
             MapScreenPoint(x = x, y = y, trustworthy = trustworthy)
         }.getOrNull()
     }
@@ -3095,6 +3098,9 @@ class MapboxMapSurface : MapSurface {
          */
         const val CONVOY_FIT_PAD_SIDE = 140.0
         const val CONVOY_FIT_PAD_TOP = 260.0
+
+        /** Flat cameras cannot fold points behind the camera during projection. */
+        const val ROUND_TRIP_MAX_FLAT_PITCH_DEGREES = 1.0
 
         /**
          * How far the convoy fit is allowed to zoom OUT. Beyond this the basemap

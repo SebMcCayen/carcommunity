@@ -1,9 +1,8 @@
 import Foundation
 
-/// Live-location session operations — the iOS port of Android's
-/// `live/LiveLocationRepository.kt`, restricted to the OWN-session slice.
-/// Firebase-free protocol so the coordinator and screen are unit-testable
-/// with fakes.
+/// Live-location session and authorized viewer operations — the iOS port of
+/// Android's `live/LiveLocationRepository.kt`. Firebase-free protocol so the
+/// coordinators and screens are unit-testable with fakes.
 ///
 /// The write/read split mirrors Android exactly: every WRITE flows through
 /// the `live.*` callables (functions/src/live/session.ts — grouped exports
@@ -15,11 +14,10 @@ import Foundation
 /// `liveLocation/{uid}` are backend-written and clients only ever READ them
 /// (firebase/database.rules.json grants no client write there at all).
 ///
-/// Session state is observed per-owner (``ownSessionUpdates(uid:)``). The
-/// viewer-side reads — `observeLatest` per-uid markers and the
-/// `live-listNearby` discovery — are deliberately absent: they belong to the
-/// map-layer slice that renders OTHER members, together with waves
-/// (`live.sendWave`) and presence. This slice is the sharer's own session.
+/// Session state is observed per-owner (``ownSessionUpdates(uid:)``). Map
+/// awareness also reads explicit, backend-authorized member markers one uid at
+/// a time and resolves their Storage image paths. Collection scans and nearby
+/// discovery remain outside this protocol.
 protocol LiveLocationRepository: AnyObject, Sendable {
     /// `live-startSession` — (re)starts the caller's session with a duration.
     ///
