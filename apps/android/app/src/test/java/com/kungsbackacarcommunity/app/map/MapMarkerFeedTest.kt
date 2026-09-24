@@ -168,6 +168,8 @@ class MapMarkerFeedTest {
         }
 
         val repo = RetryingRepo()
+        // The initial null marker intentionally produces an empty feed; recovery
+        // is proven only when the retried observer supplies a nonempty value.
         val deferred = async { feed(repo, "me", emptyList()).first { it.isNotEmpty() } }
 
         runCurrent()

@@ -373,6 +373,8 @@ private struct MapboxStandardMap: View {
             }
             .onAppear {
                 interactionObserver.onUserInteraction = {
+                    // A gesture can interrupt an in-flight programmatic animation.
+                    // Always suspend now; idle return waits for its token to clear.
                     guard meFollowEnabled else { return }
                     meFollowSuspended = true
                     surface.suspendSelfFollowForInteraction()
