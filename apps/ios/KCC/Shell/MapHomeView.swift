@@ -373,7 +373,7 @@ private struct MapboxStandardMap: View {
             }
             .onAppear {
                 interactionObserver.onUserInteraction = {
-                    guard meFollowEnabled, pendingProgrammaticViewportTokens.isEmpty else { return }
+                    guard meFollowEnabled else { return }
                     meFollowSuspended = true
                     surface.suspendSelfFollowForInteraction()
                     armMeFollowIdleReturn(viewport: $viewport)

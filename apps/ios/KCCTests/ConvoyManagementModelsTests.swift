@@ -542,9 +542,10 @@ final class ConvoyManagementModelsTests: XCTestCase {
         }
 
         XCTAssertGreaterThanOrEqual(repository.latestSubscriptionCount, 2)
-        XCTAssertEqual(coordinator.positions["friend"]?.uid, "friend")
-        XCTAssertEqual(coordinator.positions["friend"]?.latitude, marker.latitude, accuracy: 1e-9)
-        XCTAssertEqual(coordinator.positions["friend"]?.longitude, marker.longitude, accuracy: 1e-9)
+        let position = try XCTUnwrap(coordinator.positions["friend"])
+        XCTAssertEqual(position.uid, "friend")
+        XCTAssertEqual(position.latitude, marker.latitude, accuracy: 1e-9)
+        XCTAssertEqual(position.longitude, marker.longitude, accuracy: 1e-9)
     }
 
     private func convoy(
