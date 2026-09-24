@@ -813,23 +813,16 @@ class MapboxMapSurface : MapSurface {
             val cameraState = mapboxMap.cameraState
             val trustworthy =
                 if (cameraState.pitch <= ROUND_TRIP_MAX_FLAT_PITCH_DEGREES) {
-                    // A top-down (2D) camera cannot fold a point behind itself:
-                    // every finite pixel is an honest projection (a point genuinely
-                    // off to one side just projects far outside the viewport, which
-                    // the caller's rectangle test handles). So skip the round trip —
-                    // this is the common case (flat fits, north-up 2D browsing) and
-                    // the coordinateForPixel call is pure per-projection overhead there.
+                    // A top-down camera cannot fold a point behind itself, so
+                    // avoid a native unprojection and distance calculation for
+                    // every marker in the common 2D browsing state.
                     true
                 } else {
                     val back = mapboxMap.coordinateForPixel(screen)
                     val metersPerPixel =
                         ConvoyEdgeGeometry.metersPerPixel(
-                            // The TARGET's latitude, not the camera centre's: the
-                            // tolerance measures pixel resolution at the point being
-                            // round-tripped, and web-mercator m/px varies with
-                            // latitude. Using the camera centre would skew the
-                            // tolerance for a target far north/south of it and could
-                            // misclassify the projection.
+                            // The TARGET's latitude, not the camera centre's:
+                            // web-mercator metres per pixel varies with latitude.
                             latitude = latitude,
                             zoom = cameraState.zoom,
                         )
@@ -3106,6 +3099,9 @@ class MapboxMapSurface : MapSurface {
         const val CONVOY_FIT_PAD_SIDE = 140.0
         const val CONVOY_FIT_PAD_TOP = 260.0
 
+        /** Flat cameras cannot fold points behind the camera during projection. */
+        const val ROUND_TRIP_MAX_FLAT_PITCH_DEGREES = 1.0
+
         /**
          * How far the convoy fit is allowed to zoom OUT. Beyond this the basemap
          * has no road detail worth showing and the members are dots on a map of
@@ -3113,15 +3109,6 @@ class MapboxMapSurface : MapSurface {
          * possible, so a member who has driven to another city pins the zoom here
          * and simply falls off the edge (where the direction arrows pick them up).
          */
-        /**
-         * At or below this camera pitch the map is treated as flat (2D) for the
-         * projection round-trip in [screenPositionFor]: a top-down camera has no
-         * behind-camera fold, so the round trip is skipped. A degree of slack
-         * absorbs float noise around a nominally-0° flat fit without ever skipping
-         * the check on the tilted 3D map (~45°).
-         */
-        const val ROUND_TRIP_MAX_FLAT_PITCH_DEGREES = 1.0
-
         const val MIN_CONVOY_FIT_ZOOM = 8.0
 
         /**

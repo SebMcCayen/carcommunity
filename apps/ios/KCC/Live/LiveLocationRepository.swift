@@ -1,9 +1,8 @@
 import Foundation
 
-/// Live-location session operations — the iOS port of Android's
-/// `live/LiveLocationRepository.kt`, restricted to the OWN-session slice.
-/// Firebase-free protocol so the coordinator and screen are unit-testable
-/// with fakes.
+/// Live-location session and authorized viewer operations — the iOS port of
+/// Android's `live/LiveLocationRepository.kt`. Firebase-free protocol so the
+/// coordinators and screens are unit-testable with fakes.
 ///
 /// The write/read split mirrors Android exactly: every WRITE flows through
 /// the `live.*` callables (functions/src/live/session.ts — grouped exports
@@ -15,11 +14,10 @@ import Foundation
 /// `liveLocation/{uid}` are backend-written and clients only ever READ them
 /// (firebase/database.rules.json grants no client write there at all).
 ///
-/// Session state is observed per-owner (``ownSessionUpdates(uid:)``). The
-/// viewer-side reads — `observeLatest` per-uid markers and the
-/// `live-listNearby` discovery — are deliberately absent: they belong to the
-/// map-layer slice that renders OTHER members, together with waves
-/// (`live.sendWave`) and presence. This slice is the sharer's own session.
+/// Session state is observed per-owner (``ownSessionUpdates(uid:)``). Map
+/// awareness also reads explicit, backend-authorized member markers one uid at
+/// a time and resolves their Storage image paths. Collection scans and nearby
+/// discovery remain outside this protocol.
 protocol LiveLocationRepository: AnyObject, Sendable {
     /// `live-startSession` — (re)starts the caller's session with a duration.
     ///
@@ -49,6 +47,18 @@ protocol LiveLocationRepository: AnyObject, Sendable {
     /// terminating the stream detaches the listener.
     func ownSessionUpdates(uid: String) -> AsyncStream<LiveSessionInfo?>
 
+    /// Live view of one authorized sharer's latest marker. Callers subscribe
+    /// only to backend-provided convoy member uids; collection scans are never
+    /// attempted. A missing, malformed or denied value emits nil.
+    func latestUpdates(uid: String) -> AsyncStream<LiveMarker?>
+
+    /// Live marker stream plus retryable termination signals for per-uid
+    /// convoy awareness subscriptions.
+    func latestUpdateEvents(uid: String) -> AsyncStream<LiveMarkerUpdateEvent>
+
+    /// Resolves a Storage path carried by a live marker for map identity.
+    func imageDownloadURL(for imagePath: String) async -> URL?
+
     /// The signed-in user's uid, or nil with no session. Answered by the
     /// repository — which already owns the Firebase seam — so the live
     /// feature stays self-contained, exactly like ``EventsRepository``.
@@ -61,4 +71,31 @@ extension LiveLocationRepository {
     func startSession(duration: LiveSessionDuration) async throws {
         try await startSession(duration: duration, vehicleId: nil)
     }
+
+    /// Keeps existing focused fakes source-compatible; viewer tests can
+    /// override this with a scripted stream.
+    func latestUpdates(uid: String) -> AsyncStream<LiveMarker?> {
+        AsyncStream { $0.finish() }
+    }
+
+    func latestUpdateEvents(uid: String) -> AsyncStream<LiveMarkerUpdateEvent> {
+        let stream = latestUpdates(uid: uid)
+        return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+            let task = Task {
+                for await marker in stream {
+                    if Task.isCancelled { break }
+                    continuation.yield(.value(marker))
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    func imageDownloadURL(for imagePath: String) async -> URL? { nil }
+}
+
+enum LiveMarkerUpdateEvent: Sendable {
+    case value(LiveMarker?)
+    case retry
 }

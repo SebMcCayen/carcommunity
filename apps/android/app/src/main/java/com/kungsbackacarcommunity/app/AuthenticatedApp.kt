@@ -5047,9 +5047,9 @@ fun AuthenticatedApp(
                         if (liveLocationRepository == null || convoyLiveUids.isEmpty()) {
                             flowOf(emptyList())
                         } else {
-                            combine(
-                                convoyLiveUids.map { liveLocationRepository.observeLatest(it) },
-                            ) { it.toList() }
+                            combine(convoyLiveUids.map { liveLocationRepository.observeLatest(it) }) {
+                                it.toList()
+                            }
                         }
                     }
                 val convoyMarkers by convoyMarkersFlow.collectAsState(initial = emptyList())
@@ -5331,9 +5331,9 @@ fun AuthenticatedApp(
                         if (liveLocationRepository == null || nearbyUids.isEmpty()) {
                             flowOf(emptyList())
                         } else {
-                            combine(
-                                nearbyUids.map { liveLocationRepository.observeLatest(it) },
-                            ) { it.toList() }
+                            combine(nearbyUids.map { liveLocationRepository.observeLatest(it) }) {
+                                it.toList()
+                            }
                         }
                     }
                 val nearbyMarkers by nearbyMarkersFlow.collectAsState(initial = emptyList())

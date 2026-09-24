@@ -115,6 +115,66 @@ struct MapUserMarker: Equatable, Sendable {
 struct MapPoint: Equatable, Sendable {
     let longitude: Double
     let latitude: Double
+    /// Stable identity for camera-fit membership comparisons. General map
+    /// points leave this nil; convoy fit points carry their member uid.
+    let fitIdentity: String?
+
+    init(longitude: Double, latitude: Double, fitIdentity: String? = nil) {
+        self.longitude = longitude
+        self.latitude = latitude
+        self.fitIdentity = fitIdentity
+    }
+}
+
+/// Decides when a moving convoy has changed enough to justify another camera
+/// transition. Small GPS jitter is ignored and ordinary movement is sampled at
+/// a bounded cadence, while membership changes remain immediate.
+enum ConvoyFitPolicy {
+    static let coordinateEpsilon = 0.0002
+    static let minimumRefitInterval: TimeInterval = 1.5
+
+    static func shouldRefit(
+        previous: [MapPoint]?,
+        next: [MapPoint],
+        lastFitAt: TimeInterval?,
+        now: TimeInterval
+    ) -> Bool {
+        guard !next.isEmpty else { return false }
+        guard let previous, let lastFitAt else { return true }
+        guard !previous.isEmpty else { return true }
+        if previous.count != next.count { return true }
+        if memberSetChanged(previous: previous, next: next) { return true }
+        guard now - lastFitAt >= minimumRefitInterval else { return false }
+        let old = bounds(of: previous)
+        let new = bounds(of: next)
+        return abs(old.minLongitude - new.minLongitude) >= coordinateEpsilon
+            || abs(old.maxLongitude - new.maxLongitude) >= coordinateEpsilon
+            || abs(old.minLatitude - new.minLatitude) >= coordinateEpsilon
+            || abs(old.maxLatitude - new.maxLatitude) >= coordinateEpsilon
+    }
+
+    private static func memberSetChanged(previous: [MapPoint], next: [MapPoint]) -> Bool {
+        let previousIds = previous.compactMap(\.fitIdentity)
+        let nextIds = next.compactMap(\.fitIdentity)
+        guard previousIds.count == previous.count, nextIds.count == next.count else {
+            return false
+        }
+        return Set(previousIds) != Set(nextIds)
+    }
+
+    private static func bounds(of points: [MapPoint]) -> (
+        minLongitude: Double, maxLongitude: Double,
+        minLatitude: Double, maxLatitude: Double
+    ) {
+        points.dropFirst().reduce(
+            (points[0].longitude, points[0].longitude, points[0].latitude, points[0].latitude)
+        ) { result, point in
+            (
+                min(result.0, point.longitude), max(result.1, point.longitude),
+                min(result.2, point.latitude), max(result.3, point.latitude)
+            )
+        }
+    }
 }
 
 /// A destination + the route line to draw for it. Owned by the shell (kept
@@ -542,8 +602,9 @@ protocol MapSurface: MapProjection {
     /// the renderer's own camera.
     func visibleRadiusMeters() -> Double?
 
-    /// Frame `points` (with padding) instead of following the user, or pass
-    /// nil to go back to normal follow.
+    /// Frame `points` (with padding) instead of following the user. When
+    /// focus is turned off, `userPoint` is the fresh explicit coordinate to
+    /// restore; the renderer falls back to its pre-convoy camera if absent.
     ///
     /// This is how "keep the whole convoy in view" is expressed, and it is
     /// routed through the surface's EXISTING follow path rather than moving
@@ -552,9 +613,9 @@ protocol MapSurface: MapProjection {
     /// unchanged. Two camera owners fighting each other is the failure mode
     /// of this feature, so there is exactly one.
     ///
-    /// Clearing it (nil) restores the normal framing, including the zoom, so
-    /// a convoy that ends cannot leave the camera stuck zoomed out over the
-    /// group. A no-op beyond storing the value on the stub.
+    /// Turning focus off restores normal framing, including the zoom, so a
+    /// convoy that ends cannot leave the camera stuck zoomed out over the
+    /// group. Nil points while focus remains on are deliberately a no-op.
     ///
     /// `focusEnabled` is the USER'S CHOICE — whether convoy focus is switched
     /// on — and is deliberately separate from whether `points` happens to be
@@ -565,7 +626,17 @@ protocol MapSurface: MapProjection {
     /// and force-resume following, yanking the camera back from a user who
     /// had deliberately panned away. Only a change in `focusEnabled` counts
     /// as the deliberate act.
-    func setConvoyFit(points: [MapPoint]?, focusEnabled: Bool)
+    ///
+    /// `followSelfEnabled` tells the renderer whether the convoy bar's Me path
+    /// is actually AVAILABLE. When false (no active convoy / feature hidden),
+    /// the renderer must not keep a self-follow loop armed just because the
+    /// most recent camera restore happened to land in Me mode.
+    func setConvoyFit(
+        points: [MapPoint]?,
+        focusEnabled: Bool,
+        userPoint: MapPoint?,
+        followSelfEnabled: Bool
+    )
 
     /// Glide the camera ONCE to `point`, as a one-shot "show me this spot" —
     /// the convoy member-list's "Go to location" uses it to centre on the
@@ -574,7 +645,7 @@ protocol MapSurface: MapProjection {
     /// Deliberately NOT part of the convoy-fit / focus-mode machinery: it is
     /// a single ease modelled on a manual pan, so it goes through the SAME
     /// follow detach + idle-return path a real pan does. That keeps the
-    /// single camera-owner invariant ``setConvoyFit(points:focusEnabled:)``
+    /// single camera-owner invariant ``setConvoyFit(points:focusEnabled:userPoint:followSelfEnabled:)``
     /// documents: this never becomes a second owner fighting the follow path,
     /// it briefly borrows it. A no-op on the stub beyond recording the
     /// request for tests.
@@ -869,8 +940,8 @@ final class StubMapSurface: MapSurface {
     private(set) var mapMode: MapMode = .day
     private(set) var is3D: Bool = true
 
-    /// The stub has no rotatable camera: bearing is a constant north-up 0.
-    let bearing: Double = 0
+    /// Renderer-fed camera bearing; remains north-up in config-less builds.
+    private(set) var bearing: Double = 0
 
     private(set) var routeOverlay: MapRouteOverlay?
     private(set) var incidentMarkers: [MapIncidentMarker] = []
@@ -890,13 +961,16 @@ final class StubMapSurface: MapSurface {
     // `setCameraSnapshotForTest`.
     private(set) var cameraSnapshot: MapCameraSnapshot?
 
-    /// Last value passed to ``setConvoyFit(points:focusEnabled:)`` —
+    /// Last value passed to ``setConvoyFit(points:focusEnabled:userPoint:followSelfEnabled:)`` —
     /// observable so tests can assert the wiring.
     private(set) var convoyFit: [MapPoint]?
 
-    /// Last `focusEnabled` passed to ``setConvoyFit(points:focusEnabled:)`` —
+    /// Last `focusEnabled` passed to ``setConvoyFit(points:focusEnabled:userPoint:followSelfEnabled:)`` —
     /// observable for tests.
     private(set) var convoyFocusEnabled: Bool = false
+
+    /// Fresh caller position supplied for returning from convoy focus.
+    private(set) var convoyUserPoint: MapPoint?
 
     /// Last point passed to ``centerOn(_:)`` — observable so tests can assert
     /// the "Go to location" wiring.
@@ -947,6 +1021,27 @@ final class StubMapSurface: MapSurface {
     // Test hook: the projection the stub should report, or nil for "no map".
     @ObservationIgnored
     private var projectionForTest: ((Double, Double) -> MapScreenPoint?)?
+
+    @ObservationIgnored
+    private var rendererProjection: ((Double, Double) -> MapScreenPoint?)?
+    @ObservationIgnored
+    private var rendererConvoyFit: (([MapPoint]?, Bool, MapPoint?, Bool, Bool, Bool) -> Void)?
+    @ObservationIgnored
+    private var rendererCenter: ((MapPoint) -> Void)?
+    @ObservationIgnored
+    private var appliedConvoyFit: [MapPoint]?
+    @ObservationIgnored
+    private var convoyFitSuspended = false
+    @ObservationIgnored
+    private var lastConvoyFitAt: TimeInterval?
+    @ObservationIgnored
+    private var convoyFitClock: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+    @ObservationIgnored
+    private var meRestoreArmed = false
+    @ObservationIgnored
+    private(set) var convoySelfFollowEnabled = false
+    @ObservationIgnored
+    private var convoySelfFollowSuspended = false
 
     // The fixed visible radius the stub reports (metres). The stub has no
     // camera to measure, so it returns a sane constant rather than nil,
@@ -1005,6 +1100,39 @@ final class StubMapSurface: MapSurface {
     /// off-device.
     func setCameraSnapshotForTest(_ snapshot: MapCameraSnapshot?) {
         cameraSnapshot = snapshot
+        bearing = snapshot?.bearing ?? 0
+    }
+
+    /// Renderer bridge installed by the one native map host. Keeping these
+    /// callbacks on the existing surface preserves one camera command path.
+    func installRenderer(
+        projection: @escaping (Double, Double) -> MapScreenPoint?,
+        convoyFit: @escaping ([MapPoint]?, Bool, MapPoint?, Bool, Bool, Bool) -> Void,
+        center: @escaping (MapPoint) -> Void
+    ) {
+        rendererProjection = projection
+        rendererConvoyFit = convoyFit
+        rendererCenter = center
+        if convoyFocusEnabled || self.convoyFit != nil {
+            applyConvoyFitToRenderer(force: true)
+        } else if convoySelfFollowEnabled && !convoySelfFollowSuspended {
+            meRestoreArmed = true
+            rendererConvoyFit?(nil, false, convoyUserPoint, true, false, true)
+        }
+    }
+
+    func removeRenderer() {
+        rendererProjection = nil
+        rendererConvoyFit = nil
+        rendererCenter = nil
+        cameraSnapshot = nil
+        bearing = 0
+    }
+
+    func updateCameraSnapshot(_ snapshot: MapCameraSnapshot) {
+        guard cameraSnapshot != snapshot else { return }
+        cameraSnapshot = snapshot
+        bearing = snapshot.bearing
     }
 
     /// Test hook: stand in for the renderer's coordinate→pixel projection,
@@ -1018,21 +1146,120 @@ final class StubMapSurface: MapSurface {
     /// installed a projection via ``setProjectionForTest(_:)``. A non-finite
     /// projection returns nil, per the ``MapProjection`` contract.
     func screenPositionFor(latitude: Double, longitude: Double) -> MapScreenPoint? {
-        guard let point = projectionForTest?(latitude, longitude),
+        guard let point = (projectionForTest ?? rendererProjection)?(latitude, longitude),
               point.x.isFinite, point.y.isFinite
         else { return nil }
         return point
     }
 
-    func setConvoyFit(points: [MapPoint]?, focusEnabled: Bool) {
+    func setConvoyFit(
+        points: [MapPoint]?,
+        focusEnabled: Bool,
+        userPoint: MapPoint?,
+        followSelfEnabled: Bool
+    ) {
+        let previousPoints = convoyFit
+        let focusChanged = convoyFocusEnabled != focusEnabled
+        let previousSelfFollowEnabled = convoySelfFollowEnabled
         convoyFit = points
         convoyFocusEnabled = focusEnabled
+        convoyUserPoint = userPoint
+        convoySelfFollowEnabled = followSelfEnabled
+        if focusChanged { convoyFitSuspended = false }
+        if !focusEnabled {
+            appliedConvoyFit = nil
+            lastConvoyFitAt = nil
+            if !followSelfEnabled {
+                convoySelfFollowSuspended = false
+            }
+            let selfFollowArmed = !previousSelfFollowEnabled && followSelfEnabled
+            let shouldRestoreBrowsing = previousPoints != nil
+                || focusChanged
+                || selfFollowArmed
+                || (!meRestoreArmed && followSelfEnabled)
+            let shouldSyncSelfFollowDisable = previousSelfFollowEnabled && !followSelfEnabled
+            let resumeSelfFollow = followSelfEnabled && (
+                focusChanged || selfFollowArmed || !meRestoreArmed
+            )
+            if shouldRestoreBrowsing, resumeSelfFollow {
+                convoySelfFollowSuspended = false
+            }
+            meRestoreArmed = followSelfEnabled
+            if shouldRestoreBrowsing || shouldSyncSelfFollowDisable {
+                rendererConvoyFit?(
+                    nil,
+                    false,
+                    userPoint,
+                    followSelfEnabled,
+                    resumeSelfFollow,
+                    shouldRestoreBrowsing
+                )
+            }
+            return
+        }
+        meRestoreArmed = false
+        // A missing fit while convoy focus remains selected is a data gap,
+        // not a request to move the camera. A transition into convoy focus
+        // still has to reach the renderer so an active Me-follow loop stops.
+        guard let points, points.count >= 2 else {
+            if focusChanged {
+                rendererConvoyFit?(
+                    nil,
+                    true,
+                    userPoint,
+                    followSelfEnabled,
+                    false,
+                    false
+                )
+            }
+            return
+        }
+        applyConvoyFitToRenderer(force: focusChanged)
+    }
+
+    private func applyConvoyFitToRenderer(force: Bool) {
+        guard !convoyFitSuspended,
+              let points = convoyFit, convoyFocusEnabled, points.count >= 2,
+              let rendererConvoyFit
+        else { return }
+        let now = convoyFitClock()
+        guard force || ConvoyFitPolicy.shouldRefit(
+            previous: appliedConvoyFit,
+            next: points,
+            lastFitAt: lastConvoyFitAt,
+            now: now
+        ) else { return }
+        rendererConvoyFit(points, true, convoyUserPoint, convoySelfFollowEnabled, false, true)
+        appliedConvoyFit = points
+        lastConvoyFitAt = now
+    }
+
+    func setConvoyFitClockForTest(_ clock: @escaping () -> TimeInterval) {
+        convoyFitClock = clock
     }
 
     func centerOn(_ point: MapPoint) {
         // No camera on the stub — just record the request so the "Go to
         // location" wiring can be asserted off-device.
         centeredOn = point
+        suspendConvoyFitForInteraction()
+        suspendSelfFollowForInteraction()
+        rendererCenter?(point)
+    }
+
+    func suspendConvoyFitForInteraction() {
+        guard convoyFocusEnabled else { return }
+        convoyFitSuspended = true
+    }
+
+    func suspendSelfFollowForInteraction() {
+        guard convoySelfFollowEnabled, !convoyFocusEnabled else { return }
+        convoySelfFollowSuspended = true
+    }
+
+    func resumeSelfFollowAfterIdle() {
+        guard convoySelfFollowEnabled, !convoyFocusEnabled else { return }
+        convoySelfFollowSuspended = false
     }
 
     func recenter() {

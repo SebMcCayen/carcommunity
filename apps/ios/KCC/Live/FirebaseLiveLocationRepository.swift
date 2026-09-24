@@ -1,18 +1,19 @@
 import FirebaseAuth
 import FirebaseCore
 import FirebaseDatabase
+import FirebaseStorage
 import Foundation
 
-/// ``LiveLocationRepository`` backed by the `live.*` callables and a Realtime
-/// Database listener on the caller's own session node — the iOS port of
-/// Android's `live/FirebaseLiveLocationRepository.kt` (own-session slice).
+/// ``LiveLocationRepository`` backed by the `live.*` callables, Realtime
+/// Database listeners, and Storage image resolution — the iOS port of
+/// Android's `live/FirebaseLiveLocationRepository.kt`.
 ///
 /// The split is Android's exactly: WRITES go through the callables
 /// (`live-startSession` / `live-updatePosition` / `live-stopSession` /
 /// `live-hideMeNow`, all in europe-west1 via ``KccFunctionsClient``); the
-/// RTDB `liveLocation/{uid}` nodes are backend-written, and this class only
-/// READS the owner's session node (owner-only read —
-/// firebase/database.rules.json).
+/// RTDB `liveLocation/{uid}` nodes are backend-written. This class reads the
+/// owner's session node plus explicit per-uid latest markers authorized by
+/// firebase/database.rules.json; it never scans the live-location collection.
 ///
 /// Callable failures surface as ``KccFunctionsError`` (contract code only —
 /// never the SDK message, which may reference the request payload; per the
@@ -23,10 +24,12 @@ import Foundation
 final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked Sendable {
     private let functions: KccFunctionsClient
     private let database: Database
+    private let storage: Storage
 
-    private init(functions: KccFunctionsClient, database: Database) {
+    private init(functions: KccFunctionsClient, database: Database, storage: Storage) {
         self.functions = functions
         self.database = database
+        self.storage = storage
     }
 
     // MARK: - Callables (writes)
@@ -62,11 +65,11 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
         _ = try await functions.call(Self.hideMeNowCallable, payload: [:])
     }
 
-    // MARK: - RTDB (own-session read)
+    // MARK: - RTDB reads
 
     func ownSessionUpdates(uid: String) -> AsyncStream<LiveSessionInfo?> {
         let ref = database.reference(withPath: "liveLocation/\(uid)/session")
-        return AsyncStream { continuation in
+        return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
             let handle = ref.observe(
                 .value,
                 with: { snapshot in
@@ -81,11 +84,59 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
                     continuation.yield(nil)
                 }
             )
-            let box = ObserverBox(reference: ref, handle: handle)
+            let box = ObserverBox(reference: ref)
+            box.setHandle(handle)
             continuation.onTermination = { _ in
-                box.reference.removeObserver(withHandle: box.handle)
+                box.removeObserverOnce()
             }
         }
+    }
+
+    func latestUpdates(uid: String) -> AsyncStream<LiveMarker?> {
+        let events = latestUpdateEvents(uid: uid)
+        return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+            let task = Task {
+                for await event in events {
+                    if Task.isCancelled { break }
+                    guard case let .value(marker) = event else { continue }
+                    continuation.yield(marker)
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    func latestUpdateEvents(uid: String) -> AsyncStream<LiveMarkerUpdateEvent> {
+        let ref = database.reference(withPath: "liveLocation/\(uid)/latest")
+        return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+            var handle: DatabaseHandle?
+            let box = ObserverBox(reference: ref)
+            handle = ref.observe(
+                .value,
+                with: { snapshot in
+                    let map = snapshot.value as? [String: Any]
+                    continuation.yield(.value(map.flatMap { LiveMarker.fromMap(uid: uid, $0) }))
+                },
+                withCancel: { error in
+                    box.removeObserverOnce()
+                    if LiveRealtimeRetryPolicy.shouldRetry(error) {
+                        continuation.yield(.retry)
+                    } else {
+                        continuation.yield(.value(nil))
+                    }
+                    continuation.finish()
+                }
+            )
+            box.setHandle(handle)
+            continuation.onTermination = { _ in
+                box.removeObserverOnce()
+            }
+        }
+    }
+
+    func imageDownloadURL(for imagePath: String) async -> URL? {
+        try? await storage.reference(withPath: imagePath).downloadURL()
     }
 
     func currentUserId() -> String? {
@@ -113,7 +164,8 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
     /// convention: `FIREBASE_DATABASE_EMULATOR_HOST` (port 9000 per
     /// firebase.json) points the Realtime Database SDK at the emulator
     /// before first use; the callables ride ``KccFunctionsClient``'s own
-    /// `FIREBASE_FUNCTIONS_EMULATOR_HOST` seam.
+    /// `FIREBASE_FUNCTIONS_EMULATOR_HOST` seam, while
+    /// `FIREBASE_STORAGE_EMULATOR_HOST` resolves convoy car photos.
     static func createIfAvailable() -> LiveLocationRepository? {
         guard FirebaseApp.app() != nil else { return nil }
         cachedLock.lock()
@@ -131,7 +183,17 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
         } else {
             database = Database.database()
         }
-        let repository = FirebaseLiveLocationRepository(functions: functions, database: database)
+        let storage = Storage.storage()
+        if let emulator = FirebaseEmulatorHost.parse(
+            ProcessInfo.processInfo.environment["FIREBASE_STORAGE_EMULATOR_HOST"]
+        ) {
+            storage.useEmulator(withHost: emulator.host, port: emulator.port)
+        }
+        let repository = FirebaseLiveLocationRepository(
+            functions: functions,
+            database: database,
+            storage: storage
+        )
         cached = repository
         return repository
     }
@@ -141,7 +203,60 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
 /// closure, which must be Sendable — all it does is remove the observer,
 /// which the Database SDK documents as thread-safe (same pattern as the
 /// Firestore `ListenerBox`es).
-private struct ObserverBox: @unchecked Sendable {
+private final class ObserverBox: @unchecked Sendable {
     let reference: DatabaseReference
-    let handle: DatabaseHandle
+    private let lock = NSLock()
+    private var handle: DatabaseHandle?
+
+    init(reference: DatabaseReference) {
+        self.reference = reference
+    }
+
+    func setHandle(_ handle: DatabaseHandle?) {
+        lock.lock()
+        self.handle = handle
+        lock.unlock()
+    }
+
+    func removeObserverOnce() {
+        lock.lock()
+        let handle = self.handle
+        self.handle = nil
+        lock.unlock()
+        if let handle {
+            reference.removeObserver(withHandle: handle)
+        }
+    }
+}
+
+private enum LiveRealtimeRetryPolicy {
+    private static let operationFailedCode = -2
+    private static let disconnectedCode = -4
+    private static let networkErrorCode = -24
+    private static let authFailureFragments = [
+        "permission_denied",
+        "permission denied",
+        "permission-denied",
+        "unauthorized",
+        "unauthorised"
+    ]
+
+    static func shouldRetry(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        switch nsError.code {
+        case disconnectedCode, networkErrorCode:
+            return true
+        case operationFailedCode:
+            let detail = [
+                nsError.localizedDescription,
+                nsError.localizedFailureReason,
+                nsError.userInfo[NSDebugDescriptionErrorKey] as? String
+            ]
+            .compactMap { $0?.lowercased() }
+            .joined(separator: " ")
+            return authFailureFragments.allSatisfy { !detail.contains($0) }
+        default:
+            return false
+        }
+    }
 }

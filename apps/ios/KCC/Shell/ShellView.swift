@@ -43,6 +43,8 @@ struct ShellView: View {
     @State private var locationPermissionCoordinator: LocationPermissionCoordinator?
     @State private var startDrivingGarage: GarageCoordinator?
     @State private var convoyManagementCoordinator: ConvoyManagementCoordinator?
+    @State private var convoyAwareness = ConvoyAwarenessCoordinator()
+    @State private var liveLocationRepository: LiveLocationRepository?
     @State private var convoyCreateCoordinator: ConvoyCreateCoordinator?
     @State private var convoyCreateVehicleId: String?
     @State private var convoyCreateReturnsToList = false
@@ -79,7 +81,7 @@ struct ShellView: View {
         ZStack {
             // Exactly one native Mapbox view for the signed-in shell. Tabs and
             // routes cover it instead of recreating its Metal render surface.
-            MapHomeView(surface: mapSurface)
+            MapHomeView(surface: mapSurface, locationProvider: locationProvider)
 
             TabView(selection: tabSelection) {
                 ForEach(ShellTab.allCases, id: \.self) { tab in
@@ -208,16 +210,51 @@ struct ShellView: View {
                         mapCommunicationControls
                     }
                 }
+                .overlay {
+                    if liveLocationFeatureEnabled {
+                        ConvoyMapAwarenessOverlay(
+                            members: convoyAwareness.visibleMembers,
+                            imageURLs: convoyAwareness.imageURLs,
+                            projection: mapSurface
+                        )
+                    }
+                }
                 .overlay(alignment: .top) {
                     if let coordinator = convoyManagementCoordinator,
                        let convoy = coordinator.activeConvoy {
                         ConvoyStatusBar(
                             coordinator: coordinator,
                             convoy: convoy,
-                            friendsCoordinator: friendsCoordinator
+                            friendsCoordinator: friendsCoordinator,
+                            awareness: convoyAwareness,
+                            mapSurface: mapSurface,
+                            liveLocationEnabled: liveLocationFeatureEnabled
                         )
                         .padding(.horizontal, KccSpacing.s4)
                         .padding(.top, KccSpacing.s12 + KccSpacing.s3)
+                    }
+                }
+                .task(id: convoyAwarenessSubscriptionKey) {
+                    convoyAwareness.sync(
+                        convoy: convoyAwarenessTargetConvoy,
+                        repository: liveLocationRepository,
+                        currentUid: signedInUid
+                    )
+                    applyConvoyFocus()
+                }
+                .onChange(of: convoyAwareness.focusMode) { _, _ in applyConvoyFocus() }
+                .onChange(of: convoyAwareness.positions) { _, _ in applyConvoyFocus() }
+                .task(id: convoyAwareness.focusMode) {
+                    guard convoyAwareness.focusMode == .convoy else { return }
+                    while !Task.isCancelled {
+                        do {
+                            try await Task.sleep(
+                                for: .seconds(ConvoyArrowPlanner.staleAfter / 4)
+                            )
+                        } catch {
+                            return
+                        }
+                        applyConvoyFocus()
                     }
                 }
                 .overlay {
@@ -910,6 +947,8 @@ struct ShellView: View {
         dmCoordinator = nil
         if routes.current == .convoys { routes = routes.poppingOne() }
         convoyManagementCoordinator = nil
+        convoyAwareness.sync(convoy: nil, repository: nil, currentUid: nil)
+        liveLocationRepository = nil
         convoyCreateCoordinator = nil
         convoyCreateVehicleId = nil
         convoyCreateReturnsToList = false
@@ -970,7 +1009,10 @@ struct ShellView: View {
         // overwrite the new session's coordinators after its await returns.
         guard !Task.isCancelled, uid == signedInUid else { return }
 
-        let liveLocation = LiveLocationCoordinator.live(
+        let liveRepository = FirebaseLiveLocationRepository.createIfAvailable()
+        liveLocationRepository = liveRepository
+        let liveLocation = LiveLocationCoordinator(
+            repository: liveRepository,
             provider: locationProvider,
             canShare: crownHunt.flags.liveLocationEnabled
         )
@@ -1001,6 +1043,32 @@ struct ShellView: View {
     private var signedInUid: String? {
         if case .signedIn(let uid, _) = session.state { return uid }
         return nil
+    }
+
+    private var liveLocationFeatureEnabled: Bool {
+        crownHuntComposition?.flags.liveLocationEnabled == true
+    }
+
+    private var convoyAwarenessTargetConvoy: ConvoyItem? {
+        guard liveLocationFeatureEnabled else { return nil }
+        return convoyManagementCoordinator?.activeConvoy
+    }
+
+    private var convoyAwarenessSubscriptionKey: String {
+        guard let convoy = convoyAwarenessTargetConvoy else {
+            return "disabled|\(signedInUid ?? "")"
+        }
+        return "enabled|\(convoy.convoyId)|\(convoy.livePositionUids.sorted().joined(separator: ","))|\(signedInUid ?? "")"
+    }
+
+    private func applyConvoyFocus() {
+        let hasConvoyContext = convoyAwarenessTargetConvoy != nil
+        mapSurface.setConvoyFit(
+            points: convoyAwareness.fitPoints(),
+            focusEnabled: convoyAwareness.focusMode == .convoy,
+            userPoint: convoyAwareness.ownPoint(),
+            followSelfEnabled: hasConvoyContext
+        )
     }
 }
 

@@ -5,10 +5,14 @@ import com.kungsbackacarcommunity.app.live.LiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveMarker
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 import com.kungsbackacarcommunity.app.live.LiveSessionInfo
+import com.kungsbackacarcommunity.app.live.LatestMarkerObservation
 import com.kungsbackacarcommunity.app.live.NearbyLiveSession
+import com.kungsbackacarcommunity.app.live.recoverLatestMarkerFlow
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -133,5 +137,47 @@ class MapMarkerFeedTest {
         repo.flowFor("a").value = marker("a", 13.0, 58.0)
         // Before: only self. After "a" shares: self + a, from the same stream.
         assertEquals(listOf(listOf("me"), listOf("me", "a")), emissions.await())
+    }
+
+    @Test
+    fun `feed keeps working when observeLatest retries after cancellation`() = runTest {
+        class RetryingRepo : LiveLocationRepository {
+            var calls = 0
+            val resumed = MutableSharedFlow<LatestMarkerObservation<LiveMarker?>>(replay = 1)
+
+            override suspend fun startSession(duration: LiveSessionDuration, vehicleId: String?) = Unit
+            override suspend fun updatePosition(coordinate: LiveCoordinate) = Unit
+            override suspend fun stopSession() = Unit
+            override suspend fun hideMeNow() = Unit
+            override fun observeOwnSession(uid: String): Flow<LiveSessionInfo?> = flowOf(null)
+            override suspend fun listNearby(center: LatLng, radiusMeters: Double) =
+                emptyList<NearbyLiveSession>()
+
+            override fun observeLatest(uid: String): Flow<LiveMarker?> =
+                recoverLatestMarkerFlow {
+                    calls += 1
+                    if (calls == 1) {
+                        flowOf(
+                            LatestMarkerObservation.Value(null),
+                            LatestMarkerObservation.Retry,
+                        )
+                    } else {
+                        resumed
+                    }
+                }
+        }
+
+        val repo = RetryingRepo()
+        // The initial null marker intentionally produces an empty feed; recovery
+        // is proven only when the retried observer supplies a nonempty value.
+        val deferred = async { feed(repo, "me", emptyList()).first { it.isNotEmpty() } }
+
+        runCurrent()
+        delay(1_050)
+        repo.resumed.tryEmit(LatestMarkerObservation.Value(marker("me", 12.0, 57.0)))
+
+        val markers = deferred.await()
+        assertEquals(2, repo.calls)
+        assertEquals(listOf("me"), markers.map { it.uid })
     }
 }

@@ -113,6 +113,47 @@ struct LiveCoordinate: Equatable, Sendable {
     }
 }
 
+/// The latest backend-published marker for one live sharer. Viewer features
+/// read these one uid at a time; RTDB rules deliberately do not allow a scan.
+struct LiveMarker: Equatable, Sendable {
+    let uid: String
+    let latitude: Double
+    let longitude: Double
+    let displayName: String?
+    let imagePath: String?
+    let recordedAt: Date?
+    let accuracyMeters: Double?
+
+    static func fromMap(uid: String, _ map: [String: Any]) -> LiveMarker? {
+        guard !uid.isEmpty,
+              let latitude = number(map["latitude"]),
+              let longitude = number(map["longitude"]),
+              latitude.isFinite, longitude.isFinite,
+              (-90...90).contains(latitude), (-180...180).contains(longitude)
+        else { return nil }
+        let mainCar = map["mainCar"] as? [String: Any]
+        return LiveMarker(
+            uid: uid,
+            latitude: latitude,
+            longitude: longitude,
+            displayName: clean(map["displayName"] as? String),
+            imagePath: clean(mainCar?["imagePath"] as? String),
+            recordedAt: (map["recordedAt"] as? String).flatMap(LiveIsoInstant.parse),
+            accuracyMeters: number(map["accuracyMeters"]).flatMap { $0 >= 0 ? $0 : nil }
+        )
+    }
+
+    private static func number(_ value: Any?) -> Double? {
+        (value as? NSNumber)?.doubleValue
+    }
+
+    private static func clean(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else { return nil }
+        return value
+    }
+}
+
 /// Live-location domain rules — the iOS port of Android's `LiveLocation`
 /// object, mirroring the backend contract (functions/src/live/live-core.ts).
 enum LiveLocation {

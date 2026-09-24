@@ -3,6 +3,44 @@ import XCTest
 @testable import KCC
 
 final class ConvoyManagementModelsTests: XCTestCase {
+    private final class RetryLatestRepository: LiveLocationRepository, @unchecked Sendable {
+        private(set) var latestSubscriptionCount = 0
+        let marker: LiveMarker
+
+        init(marker: LiveMarker) {
+            self.marker = marker
+        }
+
+        func startSession(duration: LiveSessionDuration, vehicleId: String?) async throws {}
+        func updatePosition(_ coordinate: LiveCoordinate) async throws {}
+        func stopSession() async throws {}
+        func hideMeNow() async throws {}
+        func ownSessionUpdates(uid: String) -> AsyncStream<LiveSessionInfo?> {
+            AsyncStream { _ in }
+        }
+
+        func latestUpdates(uid: String) -> AsyncStream<LiveMarker?> {
+            AsyncStream { $0.finish() }
+        }
+
+        func latestUpdateEvents(uid: String) -> AsyncStream<LiveMarkerUpdateEvent> {
+            latestSubscriptionCount += 1
+            let attempt = latestSubscriptionCount
+            return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+                if attempt == 1 {
+                    continuation.yield(.value(nil))
+                    continuation.yield(.retry)
+                    continuation.finish()
+                    return
+                }
+                continuation.yield(.value(marker))
+            }
+        }
+
+        func imageDownloadURL(for imagePath: String) async -> URL? { nil }
+        func currentUserId() -> String? { marker.uid }
+    }
+
     func testListSeparatesPendingInvitesFromOwnedAndAcceptedConvoys() {
         let data: [String: Any] = [
             "convoys": [convoy(id: "mine", viewer: "accepted"), convoy(id: "invite", viewer: "invited")],
@@ -243,6 +281,271 @@ final class ConvoyManagementModelsTests: XCTestCase {
             ),
             .left(ConvoyLeaveResult(outcome: .leftAndEnded, newLeaderUid: nil))
         )
+    }
+
+    func testParsesOnlyCleanLivePositionUids() throws {
+        var payload = convoy(id: "convoy", viewer: "accepted")
+        payload["livePositionUids"] = ["owner", " ", NSNull(), "member"]
+        let item = try XCTUnwrap(ConvoyManagementParser.parseItem(payload))
+        XCTAssertEqual(item.livePositionUids, ["owner", "member"])
+    }
+
+    func testMissingLivePositionUidsFallsBackToAcceptedMembers() throws {
+        var payload = convoy(id: "convoy", viewer: "accepted")
+        payload["members"] = [
+            [
+                "uid": "owner",
+                "role": "owner",
+                "inviteStatus": "accepted",
+                "displayName": "Owner"
+            ],
+            [
+                "uid": "member",
+                "role": "member",
+                "inviteStatus": "accepted",
+                "displayName": "Member"
+            ],
+            [
+                "uid": "invited",
+                "role": "member",
+                "inviteStatus": "invited",
+                "displayName": "Invited"
+            ]
+        ]
+        payload.removeValue(forKey: "livePositionUids")
+
+        let item = try XCTUnwrap(ConvoyManagementParser.parseItem(payload))
+
+        XCTAssertEqual(item.livePositionUids, ["owner", "member"])
+    }
+
+    func testImageLookupPolicyCachesFailuresUntilCooldownExpires() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        XCTAssertTrue(ConvoyImageLookupPolicy.shouldAttempt(lastAttempt: nil, now: now))
+        XCTAssertFalse(ConvoyImageLookupPolicy.shouldAttempt(lastAttempt: now, now: now))
+        XCTAssertTrue(ConvoyImageLookupPolicy.shouldAttempt(
+            lastAttempt: now,
+            now: now.addingTimeInterval(ConvoyImageLookupPolicy.retryAfter)
+        ))
+    }
+
+    func testAwarenessPlannerSeparatesOnScreenAndOffScreenMembers() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let visible = ConvoyMemberPosition(
+            uid: "visible", latitude: 57.49, longitude: 12.08, updatedAt: now
+        )
+        let east = ConvoyMemberPosition(
+            uid: "east", latitude: 57.49, longitude: 12.18, updatedAt: now
+        )
+        let camera = MapCameraSnapshot.of(
+            latitude: 57.49, longitude: 12.08, zoom: 14, bearing: 0, pitch: 45
+        )
+        let plan = ConvoyArrowPlanner.plan(
+            members: [visible, east], camera: camera,
+            viewportWidth: 400, viewportHeight: 800, edgeInset: 40, now: now,
+            project: { $0.uid == "visible" ? MapScreenPoint(x: 200, y: 400) : nil }
+        )
+        XCTAssertEqual(plan.onScreen.map(\.member.uid), ["visible"])
+        XCTAssertEqual(plan.offScreen.map(\.member.uid), ["east"])
+        XCTAssertEqual(plan.offScreen[0].point.x, 360, accuracy: 0.01)
+        // An eastbound great-circle bearing at this latitude is a fraction
+        // north of 90°, so the edge intersection sits just above centre.
+        XCTAssertEqual(plan.offScreen[0].point.y, 400, accuracy: 0.25)
+    }
+
+    func testAwarenessPlannerDropsStaleAndCapsMergedArrows() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let stale = ConvoyMemberPosition(
+            uid: "stale", latitude: 58, longitude: 12,
+            updatedAt: now.addingTimeInterval(-ConvoyArrowPlanner.staleAfter - 1)
+        )
+        let fresh = (0..<8).map { index in
+            let angle = Double(index) * 45 * .pi / 180
+            return ConvoyMemberPosition(
+                uid: "member-\(index)",
+                latitude: 57.49 + cos(angle) * 0.1,
+                longitude: 12.08 + sin(angle) * 0.1,
+                updatedAt: now
+            )
+        }
+        let camera = MapCameraSnapshot.of(
+            latitude: 57.49, longitude: 12.08, zoom: 12, bearing: 0, pitch: 45
+        )
+        let plan = ConvoyArrowPlanner.plan(
+            members: [stale] + fresh, camera: camera,
+            viewportWidth: 400, viewportHeight: 800, edgeInset: 40, now: now,
+            project: { _ in nil }
+        )
+        XCTAssertEqual(plan.offScreen.count, ConvoyArrowPlanner.maximumArrows)
+        XCTAssertFalse(plan.offScreen.contains { $0.member.uid == "stale" })
+        XCTAssertEqual(plan.offScreen.reduce(0) { $0 + $1.extraCount + 1 }, fresh.count)
+    }
+
+    func testAwarenessPlannerBreaksEqualDistanceTiesByUid() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let camera = MapCameraSnapshot.of(
+            latitude: 0, longitude: 0, zoom: 12, bearing: 0, pitch: 0
+        )
+        let plan = ConvoyArrowPlanner.plan(
+            members: [
+                ConvoyMemberPosition(uid: "zulu", latitude: 0, longitude: 1, updatedAt: now),
+                ConvoyMemberPosition(uid: "alpha", latitude: 0, longitude: 1, updatedAt: now)
+            ],
+            camera: camera,
+            viewportWidth: 400,
+            viewportHeight: 800,
+            edgeInset: 40,
+            now: now,
+            project: { _ in nil }
+        )
+
+        XCTAssertEqual(plan.offScreen.map(\.member.uid), ["alpha"])
+        XCTAssertEqual(plan.offScreen.first?.extraCount, 1)
+    }
+
+    func testPositionQualityRejectsPoorAndImplausibleFixes() {
+        let start = Date(timeIntervalSince1970: 2_000_000_000)
+        let previous = ConvoyMemberPosition(
+            uid: "member", latitude: 57, longitude: 12, updatedAt: start, accuracyMeters: 5
+        )
+        let poor = ConvoyMemberPosition(
+            uid: "member", latitude: 57, longitude: 12.001,
+            updatedAt: start.addingTimeInterval(5), accuracyMeters: 250
+        )
+        let teleport = ConvoyMemberPosition(
+            uid: "member", latitude: 58, longitude: 13,
+            updatedAt: start.addingTimeInterval(5), accuracyMeters: 5
+        )
+
+        XCTAssertEqual(ConvoyPositionQuality.judge(poor, previous: previous, pending: nil), .reject)
+        XCTAssertEqual(ConvoyPositionQuality.judge(teleport, previous: previous, pending: nil), .reject)
+    }
+
+    func testPositionQualityHoldsAndCorroboratesUnknownAccuracyJump() {
+        let start = Date(timeIntervalSince1970: 2_000_000_000)
+        let previous = ConvoyMemberPosition(
+            uid: "member", latitude: 57, longitude: 12, updatedAt: start
+        )
+        let firstJump = ConvoyMemberPosition(
+            uid: "member", latitude: 57.01, longitude: 12,
+            updatedAt: start.addingTimeInterval(180)
+        )
+        let corroborating = ConvoyMemberPosition(
+            uid: "member", latitude: 57.0105, longitude: 12,
+            updatedAt: start.addingTimeInterval(190)
+        )
+
+        XCTAssertEqual(
+            ConvoyPositionQuality.judge(firstJump, previous: previous, pending: nil),
+            .hold
+        )
+        XCTAssertEqual(
+            ConvoyPositionQuality.judge(
+                corroborating, previous: previous, pending: firstJump
+            ),
+            .accept
+        )
+    }
+
+    @MainActor
+    func testAwarenessFocusResetsOnlyWhenActiveConvoyIdentityChanges() throws {
+        var firstPayload = convoy(id: "first", viewer: "accepted")
+        firstPayload["livePositionUids"] = ["owner"]
+        let first = try XCTUnwrap(ConvoyManagementParser.parseItem(firstPayload))
+        let coordinator = ConvoyAwarenessCoordinator()
+
+        coordinator.sync(convoy: first, repository: nil, currentUid: "owner")
+        coordinator.focusMode = .convoy
+
+        firstPayload["livePositionUids"] = ["owner", "friend"]
+        let refreshedFirst = try XCTUnwrap(ConvoyManagementParser.parseItem(firstPayload))
+        coordinator.sync(convoy: refreshedFirst, repository: nil, currentUid: "owner")
+        XCTAssertEqual(coordinator.focusMode, .convoy)
+
+        let second = try XCTUnwrap(ConvoyManagementParser.parseItem(
+            convoy(id: "second", viewer: "accepted")
+        ))
+        coordinator.sync(convoy: second, repository: nil, currentUid: "owner")
+        XCTAssertEqual(coordinator.focusMode, .me)
+    }
+
+    @MainActor
+    func testAwarenessFitDropsPositionsAsTheyBecomeStale() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let coordinator = ConvoyAwarenessCoordinator()
+        coordinator.focusMode = .convoy
+        coordinator.setPositionsForTest([
+            "me": ConvoyMemberPosition(
+                uid: "me", latitude: 57, longitude: 12, updatedAt: now
+            ),
+            "friend": ConvoyMemberPosition(
+                uid: "friend", latitude: 58, longitude: 13, updatedAt: now
+            )
+        ], ownUid: "me")
+
+        XCTAssertNotNil(coordinator.fitPoints(now: now))
+        XCTAssertEqual(
+            coordinator.ownPoint(now: now),
+            MapPoint(longitude: 12, latitude: 57)
+        )
+        XCTAssertNil(coordinator.fitPoints(
+            now: now.addingTimeInterval(ConvoyArrowPlanner.staleAfter + 1)
+        ))
+        XCTAssertNil(coordinator.ownPoint(
+            now: now.addingTimeInterval(ConvoyArrowPlanner.staleAfter + 1)
+        ))
+    }
+
+    @MainActor
+    func testAwarenessClearsSubscriptionsWhenFeatureGateTurnsOff() throws {
+        var payload = convoy(id: "convoy", viewer: "accepted")
+        payload["livePositionUids"] = ["owner", "friend"]
+        let active = try XCTUnwrap(ConvoyManagementParser.parseItem(payload))
+        let coordinator = ConvoyAwarenessCoordinator()
+        coordinator.sync(convoy: active, repository: nil, currentUid: "owner")
+        coordinator.focusMode = .convoy
+        coordinator.setPositionsForTest([
+            "owner": ConvoyMemberPosition(uid: "owner", latitude: 57, longitude: 12, updatedAt: Date()),
+            "friend": ConvoyMemberPosition(uid: "friend", latitude: 58, longitude: 13, updatedAt: Date())
+        ], ownUid: "owner")
+
+        coordinator.sync(convoy: nil, repository: nil, currentUid: "owner")
+
+        XCTAssertEqual(coordinator.focusMode, .me)
+        XCTAssertTrue(coordinator.positions.isEmpty)
+        XCTAssertTrue(coordinator.imageURLs.isEmpty)
+    }
+
+    @MainActor
+    func testAwarenessResubscribesAfterLatestStreamCancellation() async throws {
+        var payload = convoy(id: "convoy", viewer: "accepted")
+        payload["livePositionUids"] = ["owner", "friend"]
+        let active = try XCTUnwrap(ConvoyManagementParser.parseItem(payload))
+        let marker = LiveMarker(
+            uid: "friend",
+            latitude: 57.61,
+            longitude: 12.03,
+            displayName: "Friend",
+            imagePath: nil,
+            recordedAt: Date(),
+            accuracyMeters: 10
+        )
+        let repository = RetryLatestRepository(marker: marker)
+        let coordinator = ConvoyAwarenessCoordinator()
+
+        coordinator.sync(convoy: active, repository: repository, currentUid: "owner")
+
+        let start = Date()
+        while coordinator.positions["friend"] == nil,
+              Date().timeIntervalSince(start) < 2 {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+
+        XCTAssertGreaterThanOrEqual(repository.latestSubscriptionCount, 2)
+        let position = try XCTUnwrap(coordinator.positions["friend"])
+        XCTAssertEqual(position.uid, "friend")
+        XCTAssertEqual(position.latitude, marker.latitude, accuracy: 1e-9)
+        XCTAssertEqual(position.longitude, marker.longitude, accuracy: 1e-9)
     }
 
     private func convoy(

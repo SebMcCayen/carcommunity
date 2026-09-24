@@ -26,6 +26,9 @@ struct ConvoyStatusBar: View {
     @Bindable var coordinator: ConvoyManagementCoordinator
     let convoy: ConvoyItem
     let friendsCoordinator: FriendsCoordinator?
+    @Bindable var awareness: ConvoyAwarenessCoordinator
+    let mapSurface: StubMapSurface
+    let liveLocationEnabled: Bool
 
     @State private var memberTarget: ConvoySheetTarget?
     @State private var inviteTarget: ConvoySheetTarget?
@@ -45,6 +48,17 @@ struct ConvoyStatusBar: View {
                 .buttonStyle(.plain)
 
                 Spacer(minLength: KccSpacing.s2)
+
+                if liveLocationEnabled {
+                    Button {
+                        awareness.focusMode = awareness.focusMode == .me ? .convoy : .me
+                    } label: {
+                        Image(systemName: awareness.focusMode == .convoy ? "person.3.fill" : "person.3")
+                    }
+                    .accessibilityLabel(Text(
+                        awareness.focusMode == .convoy ? "convoy.barFocusConvoy" : "convoy.barFocusMe"
+                    ))
+                }
 
                 Button { inviteTarget = ConvoySheetTarget(convoy) } label: {
                     Image(systemName: "person.badge.plus")
@@ -88,7 +102,12 @@ struct ConvoyStatusBar: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: KccRadius.md))
         .shadow(color: .black.opacity(0.14), radius: 8, y: 3)
         .sheet(item: $memberTarget) { target in
-            LiveConvoyMembersSheet(coordinator: coordinator, target: target)
+            LiveConvoyMembersSheet(
+                coordinator: coordinator,
+                awareness: awareness,
+                target: target,
+                onCenter: mapSurface.centerOn
+            )
         }
         .sheet(item: $inviteTarget) { target in
             if let friendsCoordinator {
@@ -181,16 +200,23 @@ struct ConvoyStatusBar: View {
 struct ConvoyMembersSheet: View {
     @Environment(\.dismiss) private var dismiss
     let convoy: ConvoyItem
+    var positions: [String: ConvoyMemberPosition] = [:]
+    var onCenter: ((MapPoint) -> Void)?
 
     var body: some View {
         NavigationStack {
-            List {
-                Section("convoy.membersTitle") {
-                    ForEach(convoy.acceptedMembers) { member in
-                        memberRow(member, waiting: false)
-                    }
-                    ForEach(convoy.pendingMembers) { member in
-                        memberRow(member, waiting: true)
+            TimelineView(.periodic(
+                from: .now,
+                by: ConvoyArrowPlanner.staleAfter / 4
+            )) { context in
+                List {
+                    Section("convoy.membersTitle") {
+                        ForEach(convoy.acceptedMembers) { member in
+                            memberRow(member, waiting: false, now: context.date)
+                        }
+                        ForEach(convoy.pendingMembers) { member in
+                            memberRow(member, waiting: true, now: context.date)
+                        }
                     }
                 }
             }
@@ -203,8 +229,11 @@ struct ConvoyMembersSheet: View {
         }
     }
 
-    private func memberRow(_ member: ConvoyMember, waiting: Bool) -> some View {
-        HStack(spacing: KccSpacing.s3) {
+    private func memberRow(_ member: ConvoyMember, waiting: Bool, now: Date) -> some View {
+        let availablePosition = positions[member.uid].flatMap {
+            $0.isFresh(at: now) ? $0 : nil
+        }
+        return HStack(spacing: KccSpacing.s3) {
             Image(systemName: member.role == .owner ? "crown.fill" : "person.crop.circle.fill")
                 .foregroundStyle(member.role == .owner ? KccPalette.crownGold : .secondary)
             VStack(alignment: .leading, spacing: KccSpacing.s1) {
@@ -219,16 +248,189 @@ struct ConvoyMembersSheet: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            Spacer()
+            if !waiting, let onCenter {
+                VStack(alignment: .trailing, spacing: KccSpacing.s1) {
+                    Button {
+                        guard let availablePosition else { return }
+                        onCenter(MapPoint(
+                            longitude: availablePosition.longitude,
+                            latitude: availablePosition.latitude
+                        ))
+                        dismiss()
+                    } label: {
+                        Image(systemName: "scope")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(availablePosition == nil)
+                    .accessibilityLabel(Text("convoy.barMemberMenuGoToLocation"))
+                    if availablePosition == nil {
+                        Text("convoy.barMemberLocationUnavailable")
+                            .font(.system(size: KccTypeScale.caption))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
         }
     }
 }
 
 private struct LiveConvoyMembersSheet: View {
     @Bindable var coordinator: ConvoyManagementCoordinator
+    @Bindable var awareness: ConvoyAwarenessCoordinator
     let target: ConvoySheetTarget
+    let onCenter: (MapPoint) -> Void
 
     var body: some View {
-        ConvoyMembersSheet(convoy: coordinator.convoy(id: target.id) ?? target.initial)
+        ConvoyMembersSheet(
+            convoy: coordinator.convoy(id: target.id) ?? target.initial,
+            positions: awareness.positions,
+            onCenter: onCenter
+        )
+    }
+}
+
+/// SwiftUI awareness layer over the native map. Projection remains owned by
+/// Mapbox through ``MapProjection``; this view only decides marker vs edge
+/// arrow and draws lightweight, accessible chips.
+struct ConvoyMapAwarenessOverlay: View {
+    let members: [ConvoyMemberPosition]
+    let imageURLs: [String: URL]
+    let projection: MapProjection
+
+    var body: some View {
+        GeometryReader { geometry in
+            TimelineView(.periodic(from: .now, by: 30)) { context in
+                let placements = placements(size: geometry.size, now: context.date)
+                ZStack {
+                    ForEach(placements.onScreen) { placement in
+                        memberChip(placement.member)
+                            .position(x: placement.point.x, y: placement.point.y)
+                    }
+                    ForEach(placements.offScreen) { placement in
+                        edgeChip(placement)
+                            .position(x: placement.point.x, y: placement.point.y)
+                    }
+                }
+                .animation(.linear(duration: 1.2), value: members)
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func placements(size: CGSize, now: Date) -> ConvoyPlacements {
+        guard let camera = projection.cameraSnapshot else {
+            return ConvoyPlacements(onScreen: [], offScreen: [])
+        }
+        return ConvoyArrowPlanner.plan(
+            members: members,
+            camera: camera,
+            viewportWidth: size.width,
+            viewportHeight: size.height,
+            edgeInset: 38,
+            viewportMargin: 26,
+            now: now,
+            project: { member in
+                projection.screenPositionFor(
+                    latitude: member.latitude,
+                    longitude: member.longitude
+                )
+            }
+        )
+    }
+
+    private func memberChip(_ member: ConvoyMemberPosition) -> some View {
+        VStack(spacing: 2) {
+            memberPhoto(member)
+            Text(member.displayName ?? String(localized: "convoy.barMemberUnnamed"))
+                .font(.caption2.weight(.semibold))
+                .lineLimit(1)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(.regularMaterial, in: Capsule())
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String.localizedStringWithFormat(
+            NSLocalizedString("convoy.awarenessMemberOnMap", comment: "Convoy member on map"),
+            spokenName(member)
+        ))
+    }
+
+    private func edgeChip(_ placement: ConvoyOffScreenPlacement) -> some View {
+        ZStack(alignment: .topTrailing) {
+            Image(systemName: "location.north.fill")
+                .font(.system(size: 27, weight: .bold))
+                .foregroundStyle(KccPalette.successGreen)
+                .rotationEffect(.degrees(placement.angleDegrees))
+                .frame(width: 48, height: 48)
+                .background(.regularMaterial, in: Circle())
+            if placement.extraCount > 0 {
+                Text("+\(placement.extraCount)")
+                    .font(.caption2.bold())
+                    .foregroundStyle(.white)
+                    .padding(4)
+                    .background(KccPalette.successGreen, in: Capsule())
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(directionDescription(placement))
+    }
+
+    @ViewBuilder
+    private func memberPhoto(_ member: ConvoyMemberPosition) -> some View {
+        let url = member.imagePath.flatMap { imageURLs[$0] }
+        ZStack {
+            Circle().fill(KccPalette.successGreen)
+            if let url {
+                AsyncImage(url: url) { image in
+                    image.resizable().scaledToFill()
+                } placeholder: {
+                    Image(systemName: "car.side.fill").foregroundStyle(.white)
+                }
+            } else {
+                Image(systemName: "car.side.fill").foregroundStyle(.white)
+            }
+        }
+        .font(.system(size: 18, weight: .semibold))
+        .frame(width: 38, height: 38)
+        .clipShape(Circle())
+        .overlay(Circle().stroke(.white, lineWidth: 2))
+    }
+
+    private func spokenName(_ member: ConvoyMemberPosition) -> String {
+        member.displayName ?? String(localized: "convoy.barMemberUnnamed")
+    }
+
+    private func directionDescription(_ placement: ConvoyOffScreenPlacement) -> String {
+        let name = spokenName(placement.member)
+        let normalizedHour = (Int((placement.angleDegrees / 30).rounded()) % 12 + 12) % 12
+        let clock = Int64(normalizedHour == 0 ? 12 : normalizedHour)
+        let distance = distanceLabel(placement.distanceMeters)
+        if placement.extraCount > 0 {
+            return String.localizedStringWithFormat(
+                NSLocalizedString("convoy.awarenessArrowGroup", comment: "Grouped off-map convoy members"),
+                name, Int64(placement.extraCount), clock, distance
+            )
+        }
+        return String.localizedStringWithFormat(
+            NSLocalizedString("convoy.awarenessArrowSingle", comment: "Off-map convoy member"),
+            name, clock, distance
+        )
+    }
+
+    private func distanceLabel(_ meters: Double) -> String {
+        if meters >= 1_000 {
+            let value = String(format: "%.1f", locale: .current, meters / 1_000)
+            return String.localizedStringWithFormat(
+                NSLocalizedString("convoy.awarenessDistanceKm", comment: "Convoy distance in kilometres"),
+                value
+            )
+        }
+        return String.localizedStringWithFormat(
+            NSLocalizedString("convoy.awarenessDistanceMeters", comment: "Convoy distance in metres"),
+            Int64(meters.rounded())
+        )
     }
 }
 

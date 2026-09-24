@@ -58,6 +58,7 @@ struct ConvoyItem: Equatable, Sendable, Identifiable {
     let members: [ConvoyMember]
     let viewer: ConvoyViewer?
     let createdAt: Date?
+    let livePositionUids: [String]
     let summary: ConvoySummaryStats?
 
     init(
@@ -67,6 +68,7 @@ struct ConvoyItem: Equatable, Sendable, Identifiable {
         members: [ConvoyMember],
         viewer: ConvoyViewer?,
         createdAt: Date?,
+        livePositionUids: [String] = [],
         summary: ConvoySummaryStats? = nil
     ) {
         self.convoyId = convoyId
@@ -75,6 +77,7 @@ struct ConvoyItem: Equatable, Sendable, Identifiable {
         self.members = members
         self.viewer = viewer
         self.createdAt = createdAt
+        self.livePositionUids = livePositionUids
         self.summary = summary
     }
 
@@ -134,6 +137,7 @@ enum ConvoyProfileHydration {
             },
             viewer: convoy.viewer,
             createdAt: convoy.createdAt,
+            livePositionUids: convoy.livePositionUids,
             summary: convoy.summary
         )
     }
@@ -263,6 +267,411 @@ enum ConvoyBarLogic {
     }
 }
 
+// MARK: - Live map awareness
+
+struct ConvoyMemberPosition: Equatable, Sendable, Identifiable {
+    let uid: String
+    let latitude: Double
+    let longitude: Double
+    let displayName: String?
+    let imagePath: String?
+    let updatedAt: Date?
+    let accuracyMeters: Double?
+
+    var id: String { uid }
+
+    func isFresh(at now: Date = Date()) -> Bool {
+        updatedAt.map { now.timeIntervalSince($0) <= ConvoyArrowPlanner.staleAfter } ?? true
+    }
+
+    init(
+        uid: String,
+        latitude: Double,
+        longitude: Double,
+        displayName: String? = nil,
+        imagePath: String? = nil,
+        updatedAt: Date? = nil,
+        accuracyMeters: Double? = nil
+    ) {
+        self.uid = uid
+        self.latitude = latitude
+        self.longitude = longitude
+        self.displayName = displayName
+        self.imagePath = imagePath
+        self.updatedAt = updatedAt
+        self.accuracyMeters = accuracyMeters
+    }
+
+    init(marker: LiveMarker) {
+        uid = marker.uid
+        latitude = marker.latitude
+        longitude = marker.longitude
+        displayName = marker.displayName
+        imagePath = marker.imagePath
+        updatedAt = marker.recordedAt
+        accuracyMeters = marker.accuracyMeters
+    }
+}
+
+enum ConvoyFocusMode: Equatable, Sendable {
+    case me
+    case convoy
+}
+
+enum ConvoyImageLookupPolicy {
+    static let retryAfter: TimeInterval = 5 * 60
+
+    static func shouldAttempt(lastAttempt: Date?, now: Date = Date()) -> Bool {
+        guard let lastAttempt else { return true }
+        return now.timeIntervalSince(lastAttempt) >= retryAfter
+    }
+}
+
+enum ConvoyPositionQuality {
+    static let trustedAccuracyMeters = 50.0
+    static let maximumUsableAccuracyMeters = 200.0
+    static let corroborationTriggerMeters = 500.0
+    static let corroborationRadiusMeters = 250.0
+    static let maximumPlausibleSpeedMetersPerSecond = 55.6
+
+    enum Verdict: Equatable {
+        case accept
+        case hold
+        case reject
+    }
+
+    static func judge(
+        _ candidate: ConvoyMemberPosition,
+        previous: ConvoyMemberPosition?,
+        pending: ConvoyMemberPosition?
+    ) -> Verdict {
+        guard candidate.latitude.isFinite, candidate.longitude.isFinite,
+              abs(candidate.latitude) <= 90, abs(candidate.longitude) <= 180 else {
+            return .reject
+        }
+        let accuracy = candidate.accuracyMeters.flatMap {
+            $0.isFinite && $0 >= 0 ? $0 : nil
+        }
+        if let accuracy, accuracy > maximumUsableAccuracyMeters { return .reject }
+        guard let previous else { return .accept }
+
+        let interval = candidate.updatedAt.flatMap { candidateDate in
+            previous.updatedAt.map { candidateDate.timeIntervalSince($0) }
+        }
+        if let interval, interval <= 0 { return .reject }
+        let distance = LiveShareCadence.distanceMeters(
+            lat1: previous.latitude, lon1: previous.longitude,
+            lat2: candidate.latitude, lon2: candidate.longitude
+        )
+        guard distance.isFinite else { return .reject }
+        if let interval, distance / interval > maximumPlausibleSpeedMetersPerSecond {
+            return .reject
+        }
+        if distance <= corroborationTriggerMeters
+            || (accuracy.map { $0 <= trustedAccuracyMeters } ?? false) {
+            return .accept
+        }
+        if let pending {
+            let corroborationDistance = LiveShareCadence.distanceMeters(
+                lat1: pending.latitude, lon1: pending.longitude,
+                lat2: candidate.latitude, lon2: candidate.longitude
+            )
+            if corroborationDistance.isFinite,
+               corroborationDistance <= corroborationRadiusMeters {
+                return .accept
+            }
+        }
+        return .hold
+    }
+}
+
+struct ConvoyOnScreenPlacement: Equatable, Sendable, Identifiable {
+    let member: ConvoyMemberPosition
+    let point: MapScreenPoint
+    var id: String { member.uid }
+}
+
+struct ConvoyOffScreenPlacement: Equatable, Sendable, Identifiable {
+    let member: ConvoyMemberPosition
+    let point: MapScreenPoint
+    let angleDegrees: Double
+    let distanceMeters: Double
+    let extraCount: Int
+    var id: String { member.uid }
+}
+
+struct ConvoyPlacements: Equatable, Sendable {
+    let onScreen: [ConvoyOnScreenPlacement]
+    let offScreen: [ConvoyOffScreenPlacement]
+}
+
+enum ConvoyArrowPlanner {
+    static let staleAfter: TimeInterval = 4 * 60
+    static let maximumArrows = 4
+    static let sectorDegrees = 30.0
+    static let minimumArrowDistanceMeters = 5.0
+
+    static func plan(
+        members: [ConvoyMemberPosition],
+        camera: MapCameraSnapshot,
+        viewportWidth: Double,
+        viewportHeight: Double,
+        edgeInset: Double,
+        viewportMargin: Double = 24,
+        now: Date = Date(),
+        project: (ConvoyMemberPosition) -> MapScreenPoint?
+    ) -> ConvoyPlacements {
+        guard viewportWidth > 0, viewportHeight > 0 else {
+            return ConvoyPlacements(onScreen: [], offScreen: [])
+        }
+        var onScreen: [ConvoyOnScreenPlacement] = []
+        var candidates: [(ConvoyMemberPosition, Double, Double)] = []
+        for member in members where !isStale(member, now: now) {
+            let distance = LiveShareCadence.distanceMeters(
+                lat1: camera.latitude, lon1: camera.longitude,
+                lat2: member.latitude, lon2: member.longitude
+            )
+            let angle = normalized(
+                initialBearing(
+                    fromLatitude: camera.latitude, fromLongitude: camera.longitude,
+                    toLatitude: member.latitude, toLongitude: member.longitude
+                ) - camera.bearing
+            )
+            if let point = project(member), point.trustworthy,
+               point.x >= viewportMargin, point.y >= viewportMargin,
+               point.x <= viewportWidth - viewportMargin,
+               point.y <= viewportHeight - viewportMargin {
+                onScreen.append(ConvoyOnScreenPlacement(member: member, point: point))
+            } else if distance >= minimumArrowDistanceMeters {
+                candidates.append((member, angle, distance))
+            }
+        }
+
+        let sectors = Dictionary(grouping: candidates) { candidate in
+            Int(floor((candidate.1 + sectorDegrees / 2) / sectorDegrees)) % Int(360 / sectorDegrees)
+        }
+        var merged = sectors.values.compactMap { group -> (ConvoyMemberPosition, Double, Double, Int)? in
+            guard let nearest = group.min(by: {
+                $0.2 == $1.2 ? $0.0.uid < $1.0.uid : $0.2 < $1.2
+            }) else { return nil }
+            return (nearest.0, nearest.1, nearest.2, group.count - 1)
+        }.sorted {
+            $0.2 == $1.2 ? $0.0.uid < $1.0.uid : $0.2 < $1.2
+        }
+        if merged.count > maximumArrows {
+            let dropped = merged.dropFirst(maximumArrows).reduce(0) { $0 + $1.3 + 1 }
+            merged = Array(merged.prefix(maximumArrows))
+            if dropped > 0, !merged.isEmpty { merged[0].3 += dropped }
+        }
+        let offScreen = merged.map { member, angle, distance, extra in
+            ConvoyOffScreenPlacement(
+                member: member,
+                point: edgePoint(
+                    angleDegrees: angle, width: viewportWidth,
+                    height: viewportHeight, inset: edgeInset
+                ),
+                angleDegrees: angle,
+                distanceMeters: distance,
+                extraCount: extra
+            )
+        }
+        return ConvoyPlacements(onScreen: onScreen, offScreen: offScreen)
+    }
+
+    static func edgePoint(angleDegrees: Double, width: Double, height: Double, inset: Double) -> MapScreenPoint {
+        let centerX = width / 2, centerY = height / 2
+        let halfWidth = centerX - inset, halfHeight = centerY - inset
+        guard halfWidth > 0, halfHeight > 0 else { return MapScreenPoint(x: centerX, y: centerY) }
+        let radians = normalized(angleDegrees) * .pi / 180
+        let dx = sin(radians), dy = -cos(radians)
+        let vertical = abs(dx) < 0.000_001 ? Double.greatestFiniteMagnitude : halfWidth / abs(dx)
+        let horizontal = abs(dy) < 0.000_001 ? Double.greatestFiniteMagnitude : halfHeight / abs(dy)
+        let scale = min(vertical, horizontal)
+        return MapScreenPoint(x: centerX + dx * scale, y: centerY + dy * scale)
+    }
+
+    static func initialBearing(
+        fromLatitude: Double, fromLongitude: Double,
+        toLatitude: Double, toLongitude: Double
+    ) -> Double {
+        let fromLat = fromLatitude * .pi / 180
+        let toLat = toLatitude * .pi / 180
+        let delta = (toLongitude - fromLongitude) * .pi / 180
+        return normalized(atan2(
+            sin(delta) * cos(toLat),
+            cos(fromLat) * sin(toLat) - sin(fromLat) * cos(toLat) * cos(delta)
+        ) * 180 / .pi)
+    }
+
+    private static func isStale(_ member: ConvoyMemberPosition, now: Date) -> Bool {
+        member.updatedAt.map { now.timeIntervalSince($0) > staleAfter } ?? false
+    }
+
+    private static func normalized(_ degrees: Double) -> Double {
+        let result = degrees.truncatingRemainder(dividingBy: 360)
+        return result < 0 ? result + 360 : result
+    }
+}
+
+@MainActor
+@Observable
+final class ConvoyAwarenessCoordinator {
+    private static let subscriptionRetryDelay: Duration = .seconds(1)
+
+    private(set) var positions: [String: ConvoyMemberPosition] = [:]
+    private(set) var imageURLs: [String: URL] = [:]
+    var focusMode: ConvoyFocusMode = .me
+
+    @ObservationIgnored private var subscriptionKey = ""
+    @ObservationIgnored private var activeConvoyId: String?
+    @ObservationIgnored private var ownUid: String?
+    @ObservationIgnored private var imageLookupAttempts: [String: Date] = [:]
+    @ObservationIgnored private var imageTasks: [String: Task<Void, Never>] = [:]
+    @ObservationIgnored private var pendingPositions: [String: ConvoyMemberPosition] = [:]
+    @ObservationIgnored nonisolated(unsafe) private var tasks: [Task<Void, Never>] = []
+
+    func sync(convoy: ConvoyItem?, repository: LiveLocationRepository?, currentUid: String?) {
+        let convoyId = convoy?.convoyId
+        if convoyId != activeConvoyId {
+            focusMode = .me
+            activeConvoyId = convoyId
+        }
+        let uids = convoy?.livePositionUids.filter { !$0.isEmpty } ?? []
+        let key = "\(convoyId ?? "")|\(currentUid ?? "")|\(uids.sorted().joined(separator: ","))"
+        guard key != subscriptionKey else { return }
+        cancelSubscriptions()
+        subscriptionKey = key
+        ownUid = currentUid
+        positions = [:]
+        pendingPositions = [:]
+        imageURLs = [:]
+        imageLookupAttempts = [:]
+        guard let repository, convoy != nil else { return }
+        for uid in Set(uids) {
+            tasks.append(Task { [weak self, repository] in
+                await self?.observeLatestUpdates(
+                    uid: uid,
+                    repository: repository,
+                    subscriptionKey: key
+                )
+            })
+        }
+    }
+
+    var visibleMembers: [ConvoyMemberPosition] {
+        positions.values.filter { $0.uid != ownUid }
+    }
+
+    func fitPoints(now: Date = Date()) -> [MapPoint]? {
+        guard focusMode == .convoy else { return nil }
+        let fresh = positions.values.filter { $0.isFresh(at: now) }
+        guard fresh.contains(where: { $0.uid != ownUid }), fresh.count >= 2 else { return nil }
+        return fresh.map {
+            MapPoint(longitude: $0.longitude, latitude: $0.latitude, fitIdentity: $0.uid)
+        }
+    }
+
+    func ownPoint(now: Date = Date()) -> MapPoint? {
+        guard let ownUid, let position = positions[ownUid], position.isFresh(at: now) else {
+            return nil
+        }
+        return MapPoint(longitude: position.longitude, latitude: position.latitude)
+    }
+
+    func setPositionsForTest(
+        _ positions: [String: ConvoyMemberPosition],
+        ownUid: String?
+    ) {
+        self.positions = positions
+        self.ownUid = ownUid
+        pendingPositions = [:]
+    }
+
+    private func resolveImageURL(
+        path: String,
+        repository: LiveLocationRepository,
+        subscriptionKey expectedKey: String
+    ) {
+        // Record and detach before awaiting Storage so a slow image lookup never
+        // blocks the latest-position stream for this member.
+        imageLookupAttempts[path] = Date()
+        imageTasks[path] = Task { [weak self, repository] in
+            let url = await repository.imageDownloadURL(for: path)
+            guard let self else { return }
+            defer { self.imageTasks.removeValue(forKey: path) }
+            guard !Task.isCancelled, self.subscriptionKey == expectedKey, let url else { return }
+            self.imageURLs[path] = url
+        }
+    }
+
+    private func observeLatestUpdates(
+        uid: String,
+        repository: LiveLocationRepository,
+        subscriptionKey expectedKey: String
+    ) async {
+        while !Task.isCancelled, subscriptionKey == expectedKey {
+            var shouldRetry = false
+            for await event in repository.latestUpdateEvents(uid: uid) {
+                guard !Task.isCancelled, subscriptionKey == expectedKey else { return }
+                if case .retry = event {
+                    shouldRetry = true
+                    continue
+                }
+                guard case let .value(marker) = event else { continue }
+                if let marker {
+                    let position = ConvoyMemberPosition(marker: marker)
+                    switch ConvoyPositionQuality.judge(
+                        position,
+                        previous: positions[uid],
+                        pending: pendingPositions[uid]
+                    ) {
+                    case .accept:
+                        positions[uid] = position
+                        pendingPositions.removeValue(forKey: uid)
+                    case .hold:
+                        pendingPositions[uid] = position
+                        continue
+                    case .reject:
+                        pendingPositions.removeValue(forKey: uid)
+                        continue
+                    }
+                    if let path = marker.imagePath, imageURLs[path] == nil,
+                       ConvoyImageLookupPolicy.shouldAttempt(
+                           lastAttempt: imageLookupAttempts[path]
+                       ) {
+                        resolveImageURL(
+                            path: path,
+                            repository: repository,
+                            subscriptionKey: expectedKey
+                        )
+                    }
+                } else {
+                    positions.removeValue(forKey: uid)
+                    pendingPositions.removeValue(forKey: uid)
+                }
+            }
+            guard shouldRetry, !Task.isCancelled, subscriptionKey == expectedKey else { return }
+            do {
+                try await Task.sleep(for: Self.subscriptionRetryDelay)
+            } catch {
+                return
+            }
+        }
+    }
+
+    func cancelSubscriptions() {
+        tasks.forEach { $0.cancel() }
+        tasks.removeAll()
+        imageTasks.values.forEach { $0.cancel() }
+        imageTasks.removeAll()
+    }
+
+    deinit {
+        tasks.forEach { $0.cancel() }
+        imageTasks.values.forEach { $0.cancel() }
+    }
+}
+
 enum ConvoyManagementListResult: Equatable, Sendable {
     case loaded(ConvoyManagementSnapshot)
     case failed(ConvoyActionError)
@@ -365,6 +774,17 @@ enum ConvoyManagementParser {
             let role = (raw["role"] as? String).flatMap(ConvoyRole.init(rawValue:))
             return ConvoyViewer(inviteStatus: status, role: role)
         }()
+        let livePositionUids: [String]
+        if let explicit = data["livePositionUids"] as? [Any] {
+            livePositionUids = explicit.compactMap { clean($0 as? String) }
+        } else {
+            // Firestore snapshots store the member map but not the callable's
+            // derived livePositionUids field. Preserve listeners across that
+            // snapshot by deriving the accepted roster locally.
+            livePositionUids = members
+                .filter { $0.inviteStatus == .accepted }
+                .map(\.uid)
+        }
         return ConvoyItem(
             convoyId: convoyId,
             title: clean(data["title"] as? String),
@@ -372,6 +792,7 @@ enum ConvoyManagementParser {
             members: members,
             viewer: viewer,
             createdAt: ChannelTime.parseIso(data["createdAt"] as? String),
+            livePositionUids: livePositionUids,
             summary: parseSummary(data["summary"])
         )
     }

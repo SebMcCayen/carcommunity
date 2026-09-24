@@ -234,12 +234,12 @@ final class MapSurfaceTests: XCTestCase {
     func testConvoyFitRecordsPointsAndFocusIndependently() {
         let surface = StubMapSurface(autoLoad: false)
         let points = [MapPoint(longitude: 1, latitude: 2), MapPoint(longitude: 3, latitude: 4)]
-        surface.setConvoyFit(points: points, focusEnabled: true)
+        surface.setConvoyFit(points: points, focusEnabled: true, userPoint: nil, followSelfEnabled: true)
         XCTAssertEqual(surface.convoyFit, points)
         XCTAssertTrue(surface.convoyFocusEnabled)
         // Focus can stay ON while the fittable points transiently vanish —
         // the nil points must not read as "the user toggled focus off".
-        surface.setConvoyFit(points: nil, focusEnabled: true)
+        surface.setConvoyFit(points: nil, focusEnabled: true, userPoint: nil, followSelfEnabled: true)
         XCTAssertNil(surface.convoyFit)
         XCTAssertTrue(surface.convoyFocusEnabled)
     }
@@ -330,6 +330,100 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertEqual(surface.visibleRadiusMeters(), 500)
     }
 
+    func testProjectionTrustStillRejectsLargeRoundTripMismatchOnFlatCamera() {
+        XCTAssertFalse(MapHomeProjectionTrustPolicy.isTrustworthy(
+            latitude: 57.48,
+            longitude: 12.07,
+            unprojectedLatitude: 58.48,
+            unprojectedLongitude: 13.07,
+            zoom: 15
+        ))
+        XCTAssertTrue(MapHomeProjectionTrustPolicy.isTrustworthy(
+            latitude: 57.48,
+            longitude: 12.07,
+            unprojectedLatitude: 57.48001,
+            unprojectedLongitude: 12.07001,
+            zoom: 15
+        ))
+    }
+
+    func testProjectionTrustToleranceScalesWithZoom() {
+        let latitude = 57.48
+        let longitude = 12.07
+        let lowZoomToleranceMeters = MapHomeProjectionTrustPolicy.metersPerPixel(
+            latitude: latitude,
+            zoom: 8
+        ) * MapHomeProjectionTrustPolicy.roundTripTolerancePixels
+        let highZoomToleranceMeters = MapHomeProjectionTrustPolicy.metersPerPixel(
+            latitude: latitude,
+            zoom: 16
+        ) * MapHomeProjectionTrustPolicy.roundTripTolerancePixels
+
+        XCTAssertTrue(lowZoomToleranceMeters > highZoomToleranceMeters)
+
+        let lowZoomRoundTripLatitude = latitude + (lowZoomToleranceMeters * 0.9) / 111_320.0
+        let highZoomRoundTripLatitude = latitude + (lowZoomToleranceMeters * 0.9) / 111_320.0
+
+        XCTAssertTrue(MapHomeProjectionTrustPolicy.isTrustworthy(
+            latitude: latitude,
+            longitude: longitude,
+            unprojectedLatitude: lowZoomRoundTripLatitude,
+            unprojectedLongitude: longitude,
+            zoom: 8
+        ))
+        XCTAssertFalse(MapHomeProjectionTrustPolicy.isTrustworthy(
+            latitude: latitude,
+            longitude: longitude,
+            unprojectedLatitude: highZoomRoundTripLatitude,
+            unprojectedLongitude: longitude,
+            zoom: 16
+        ))
+    }
+
+    func testProjectionTrustHasAMinimumMeterFloorAtHighZoom() {
+        let latitude = 57.48
+        let longitude = 12.07
+        let oneMeterNorth = latitude + 1.0 / 111_320.0
+
+        XCTAssertTrue(MapHomeProjectionTrustPolicy.isTrustworthy(
+            latitude: latitude,
+            longitude: longitude,
+            unprojectedLatitude: oneMeterNorth,
+            unprojectedLongitude: longitude,
+            zoom: 20
+        ))
+    }
+
+    func testProjectionTrustClampsInvalidLatitudeBeforeScalingTolerance() {
+        XCTAssertEqual(
+            MapHomeProjectionTrustPolicy.metersPerPixel(latitude: 120, zoom: 12),
+            MapHomeProjectionTrustPolicy.metersPerPixel(latitude: 85.05112878, zoom: 12),
+            accuracy: 1e-9
+        )
+    }
+
+    func testProjectionTrustClampsNegativeZoomBeforeScalingTolerance() {
+        XCTAssertEqual(
+            MapHomeProjectionTrustPolicy.metersPerPixel(latitude: 57.48, zoom: -3),
+            MapHomeProjectionTrustPolicy.metersPerPixel(latitude: 57.48, zoom: 0),
+            accuracy: 1e-9
+        )
+    }
+
+    func testProjectionTrustKeepsFiniteOffscreenPixels() {
+        XCTAssertTrue(MapHomeProjectionTrustPolicy.hasFiniteScreenPosition(x: -24, y: 80))
+        XCTAssertTrue(MapHomeProjectionTrustPolicy.hasFiniteScreenPosition(x: 24, y: -80))
+        XCTAssertFalse(MapHomeProjectionTrustPolicy.hasFiniteScreenPosition(x: .nan, y: 80))
+        XCTAssertFalse(MapHomeProjectionTrustPolicy.hasFiniteScreenPosition(x: 24, y: .infinity))
+    }
+
+    func testProjectionTrustSkipsRoundTripOnlyForFlatCamera() {
+        XCTAssertFalse(MapHomeProjectionTrustPolicy.requiresRoundTrip(pitch: 0))
+        XCTAssertFalse(MapHomeProjectionTrustPolicy.requiresRoundTrip(pitch: 1))
+        XCTAssertTrue(MapHomeProjectionTrustPolicy.requiresRoundTrip(pitch: 1.01))
+        XCTAssertTrue(MapHomeProjectionTrustPolicy.requiresRoundTrip(pitch: .nan))
+    }
+
     func testCameraSnapshotIsPinnableForTests() {
         let surface = StubMapSurface(autoLoad: false)
         let snapshot = MapCameraSnapshot.of(
@@ -390,5 +484,541 @@ final class MapSurfaceTests: XCTestCase {
             destination: MapPoint(longitude: 1, latitude: 2), path: []
         )
         XCTAssertNil(overlay.bottomInsetPx)
+    }
+
+    func testRendererBridgeFeedsProjectionCameraAndCommands() {
+        let surface = StubMapSurface(autoLoad: false)
+        var fitted: [MapPoint]?
+        var focusEnabled = false
+        var centered: MapPoint?
+        var followSelfEnabled = false
+        surface.installRenderer(
+            projection: { _, _ in MapScreenPoint(x: 20, y: 30) },
+            convoyFit: {
+                fitted = $0
+                focusEnabled = $1
+                _ = $2
+                followSelfEnabled = $3
+                _ = $4
+                _ = $5
+            },
+            center: { centered = $0 }
+        )
+        let snapshot = MapCameraSnapshot.of(
+            latitude: 57, longitude: 12, zoom: 14, bearing: 90, pitch: 45
+        )
+        surface.updateCameraSnapshot(snapshot)
+        let points = [MapPoint(longitude: 12, latitude: 57), MapPoint(longitude: 13, latitude: 58)]
+        surface.setConvoyFit(points: points, focusEnabled: true, userPoint: nil, followSelfEnabled: true)
+        surface.centerOn(points[1])
+
+        XCTAssertEqual(surface.screenPositionFor(latitude: 0, longitude: 0), MapScreenPoint(x: 20, y: 30))
+        XCTAssertEqual(surface.cameraSnapshot, snapshot)
+        XCTAssertEqual(surface.bearing, 90)
+        XCTAssertEqual(fitted, points)
+        XCTAssertTrue(focusEnabled)
+        XCTAssertTrue(followSelfEnabled)
+        XCTAssertEqual(centered, points[1])
+    }
+
+    func testConvoyFitPolicyThrottlesJitterAndFrequentMovement() {
+        let previous = [
+            MapPoint(longitude: 12, latitude: 57),
+            MapPoint(longitude: 13, latitude: 58)
+        ]
+        let jitter = [
+            MapPoint(longitude: 12.00001, latitude: 57.00001),
+            MapPoint(longitude: 13.00001, latitude: 58.00001)
+        ]
+        let moved = [
+            MapPoint(longitude: 12.01, latitude: 57),
+            MapPoint(longitude: 13.01, latitude: 58)
+        ]
+
+        XCTAssertFalse(ConvoyFitPolicy.shouldRefit(
+            previous: previous, next: jitter, lastFitAt: 10, now: 12
+        ))
+        XCTAssertFalse(ConvoyFitPolicy.shouldRefit(
+            previous: previous, next: moved, lastFitAt: 10, now: 11
+        ))
+        XCTAssertTrue(ConvoyFitPolicy.shouldRefit(
+            previous: previous, next: moved, lastFitAt: 10, now: 12
+        ))
+        XCTAssertTrue(ConvoyFitPolicy.shouldRefit(
+            previous: previous,
+            next: moved + [MapPoint(longitude: 14, latitude: 59)],
+            lastFitAt: 10,
+            now: 10.1
+        ))
+
+        let priorRoster = [
+            MapPoint(longitude: 12, latitude: 57, fitIdentity: "owner"),
+            MapPoint(longitude: 13, latitude: 58, fitIdentity: "departing")
+        ]
+        let replacementRoster = [
+            MapPoint(longitude: 12, latitude: 57, fitIdentity: "owner"),
+            MapPoint(longitude: 13, latitude: 58, fitIdentity: "joining")
+        ]
+        XCTAssertTrue(ConvoyFitPolicy.shouldRefit(
+            previous: priorRoster,
+            next: replacementRoster,
+            lastFitAt: 10,
+            now: 10.1
+        ))
+    }
+
+    func testRendererBridgeThrottlesFitsAndRestoresOnlyWhenFocusTurnsOff() {
+        let surface = StubMapSurface(autoLoad: false)
+        var now = 10.0
+        var fits: [([MapPoint]?, Bool, MapPoint?)] = []
+        surface.setConvoyFitClockForTest { now }
+        surface.installRenderer(
+            projection: { _, _ in nil },
+            convoyFit: { points, enabled, userPoint, _, _, _ in fits.append((points, enabled, userPoint)) },
+            center: { _ in }
+        )
+        let initial = [
+            MapPoint(longitude: 12, latitude: 57),
+            MapPoint(longitude: 13, latitude: 58)
+        ]
+        surface.setConvoyFit(points: initial, focusEnabled: true, userPoint: nil, followSelfEnabled: true)
+        now = 10.5
+        surface.setConvoyFit(
+            points: initial.map { MapPoint(longitude: $0.longitude + 0.01, latitude: $0.latitude) },
+            focusEnabled: true,
+            userPoint: nil,
+            followSelfEnabled: true
+        )
+        surface.setConvoyFit(points: nil, focusEnabled: true, userPoint: nil, followSelfEnabled: true)
+        let me = MapPoint(longitude: 11, latitude: 56)
+        surface.setConvoyFit(points: nil, focusEnabled: false, userPoint: me, followSelfEnabled: true)
+
+        XCTAssertEqual(fits.count, 2)
+        XCTAssertEqual(fits[0].0, initial)
+        XCTAssertTrue(fits[0].1)
+        XCTAssertNil(fits[1].0)
+        XCTAssertFalse(fits[1].1)
+        XCTAssertEqual(fits[1].2, me)
+    }
+
+    func testMapHomeConvoyViewportPolicyRestoresBrowsingOnlyWhenFocusTurnsOff() {
+        XCTAssertEqual(
+            MapHomeConvoyViewportPolicy.plan(points: nil, focusEnabled: false),
+            .restoreBrowsing
+        )
+        XCTAssertEqual(
+            MapHomeConvoyViewportPolicy.plan(points: nil, focusEnabled: true),
+            .keepCurrentViewport
+        )
+        XCTAssertEqual(
+            MapHomeConvoyViewportPolicy.plan(
+                points: [MapPoint(longitude: 12, latitude: 57)],
+                focusEnabled: true
+            ),
+            .keepCurrentViewport
+        )
+    }
+
+    func testMapHomeConvoyViewportPolicyFitsOnlyWhenTwoFreshPointsExist() {
+        XCTAssertEqual(
+            MapHomeConvoyViewportPolicy.plan(
+                points: [
+                    MapPoint(longitude: 12, latitude: 57),
+                    MapPoint(longitude: 13, latitude: 58)
+                ],
+                focusEnabled: true
+            ),
+            .fitConvoy
+        )
+    }
+
+    func testMapHomeConvoyViewportPolicyComputesFitsOnAFlatCamera() {
+        XCTAssertEqual(MapHomeConvoyViewportPolicy.fitComputationPitch, 0)
+        XCTAssertEqual(MapHomeConvoyViewportPolicy.fitZoom(2, fallback: 12), 8)
+        XCTAssertEqual(MapHomeConvoyViewportPolicy.fitZoom(20, fallback: 12), 16)
+        XCTAssertEqual(MapHomeConvoyViewportPolicy.fitZoom(.nan, fallback: 12), 12)
+    }
+
+    func testMapHomeMeFollowPolicyRefreshesRestorePointAndSuspension() {
+        let stale = MapPoint(longitude: 12.0, latitude: 57.0)
+        let current = MapPoint(longitude: 12.2, latitude: 57.2)
+
+        let resumed = MapHomeMeFollowPolicy.restoreState(
+            latestOwnPoint: stale,
+            userPoint: current,
+            resumeSelfFollow: true,
+            suspended: true
+        )
+        XCTAssertEqual(resumed.latestOwnPoint, current)
+        XCTAssertFalse(resumed.suspended)
+
+        let resumedWithoutFreshPoint = MapHomeMeFollowPolicy.restoreState(
+            latestOwnPoint: stale,
+            userPoint: nil,
+            resumeSelfFollow: true,
+            suspended: true
+        )
+        XCTAssertNil(resumedWithoutFreshPoint.latestOwnPoint)
+        XCTAssertFalse(resumedWithoutFreshPoint.suspended)
+
+        let preserved = MapHomeMeFollowPolicy.restoreState(
+            latestOwnPoint: stale,
+            userPoint: nil,
+            resumeSelfFollow: false,
+            suspended: true
+        )
+        XCTAssertEqual(preserved.latestOwnPoint, stale)
+        XCTAssertTrue(preserved.suspended)
+    }
+
+    func testMapHomeMeFollowPolicyPrefersCurrentSnapshotBeforeFallback() {
+        let current = MapCameraSnapshot.of(
+            latitude: 57.51, longitude: 12.11, zoom: 14, bearing: 35, pitch: 25
+        )
+        let fallback = MapCameraSnapshot.of(
+            latitude: 57.0, longitude: 12.0, zoom: 9, bearing: 10, pitch: 5
+        )
+
+        let camera = MapHomeMeFollowPolicy.camera(
+            point: nil,
+            snapshot: current,
+            fallback: fallback,
+            restoringBrowsing: false
+        )
+        guard let camera else {
+            XCTFail("Expected a camera from the current snapshot")
+            return
+        }
+        XCTAssertEqual(camera.center.latitude, current.latitude, accuracy: 1e-9)
+        XCTAssertEqual(camera.center.longitude, current.longitude, accuracy: 1e-9)
+        XCTAssertEqual(camera.zoom, CGFloat(current.zoom), accuracy: 1e-9)
+        XCTAssertEqual(camera.bearing, CGFloat(current.bearing), accuracy: 1e-9)
+        XCTAssertEqual(camera.pitch, CGFloat(current.pitch), accuracy: 1e-9)
+    }
+
+    func testMapHomeMeFollowPolicyRestoringBrowsingUsesFallbackCameraWithoutOwnPoint() {
+        let current = MapCameraSnapshot.of(
+            latitude: 57.51, longitude: 12.11, zoom: 14, bearing: 35, pitch: 25
+        )
+        let fallback = MapCameraSnapshot.of(
+            latitude: 57.42, longitude: 12.02, zoom: 11, bearing: 8, pitch: 12
+        )
+
+        let camera = MapHomeMeFollowPolicy.camera(
+            point: nil,
+            snapshot: current,
+            fallback: fallback,
+            restoringBrowsing: true
+        )
+        guard let camera else {
+            XCTFail("Expected a camera from the browsing fallback")
+            return
+        }
+        XCTAssertEqual(camera.center.latitude, fallback.latitude, accuracy: 1e-9)
+        XCTAssertEqual(camera.center.longitude, fallback.longitude, accuracy: 1e-9)
+        XCTAssertEqual(camera.zoom, CGFloat(fallback.zoom), accuracy: 1e-9)
+        XCTAssertEqual(camera.bearing, CGFloat(fallback.bearing), accuracy: 1e-9)
+        XCTAssertEqual(camera.pitch, CGFloat(fallback.pitch), accuracy: 1e-9)
+    }
+
+    func testMapHomeMeFollowPolicySubscriptionKeyTracksProviderIdentityAndFlags() {
+        let first = StubLocationProvider()
+        let second = StubLocationProvider()
+
+        let initial = MapHomeMeFollowPolicy.subscriptionKey(
+            surfaceActive: true,
+            enabled: true,
+            authorization: .whileInUse,
+            locationProvider: first
+        )
+        let providerSwap = MapHomeMeFollowPolicy.subscriptionKey(
+            surfaceActive: true,
+            enabled: true,
+            authorization: .whileInUse,
+            locationProvider: second
+        )
+        let disabled = MapHomeMeFollowPolicy.subscriptionKey(
+            surfaceActive: true,
+            enabled: false,
+            authorization: .whileInUse,
+            locationProvider: first
+        )
+        let unauthorized = MapHomeMeFollowPolicy.subscriptionKey(
+            surfaceActive: true,
+            enabled: true,
+            authorization: .denied,
+            locationProvider: first
+        )
+
+        XCTAssertNotEqual(initial, providerSwap)
+        XCTAssertNotEqual(initial, disabled)
+        XCTAssertNotEqual(initial, unauthorized)
+    }
+
+    func testMapHomeMeFollowPolicyAppliesFixesOnlyWhileFollowRemainsUnsuspended() {
+        let fix = LocationFix.of(
+            latitude: 57.6,
+            longitude: 12.2,
+            timestamp: Date(),
+            accuracyMeters: 10
+        )!
+
+        let active = MapHomeMeFollowPolicy.ingestFix(
+            fix,
+            followEnabled: true,
+            suspended: false
+        )
+        XCTAssertEqual(
+            active.latestOwnPoint,
+            MapPoint(longitude: fix.longitude, latitude: fix.latitude)
+        )
+        XCTAssertTrue(active.shouldApplyCamera)
+
+        let suspended = MapHomeMeFollowPolicy.ingestFix(
+            fix,
+            followEnabled: true,
+            suspended: true
+        )
+        XCTAssertEqual(suspended.latestOwnPoint, active.latestOwnPoint)
+        XCTAssertFalse(suspended.shouldApplyCamera)
+    }
+
+    func testMapHomeMeFollowPolicyRequiresAuthorizationBeforeConsumingFixes() {
+        XCTAssertFalse(MapHomeMeFollowPolicy.shouldConsumeFixes(
+            surfaceActive: true,
+            followEnabled: true,
+            authorization: .denied
+        ))
+        XCTAssertTrue(MapHomeMeFollowPolicy.shouldConsumeFixes(
+            surfaceActive: true,
+            followEnabled: true,
+            authorization: .whileInUse
+        ))
+    }
+
+    func testMapHomeMeFollowPolicyAuthorizationStreamSeedsAndUpdates() async {
+        let provider = StubLocationProvider(authorization: .denied)
+        let stream = MapHomeMeFollowPolicy.authorizationStream(for: provider)
+        var iterator = stream.makeAsyncIterator()
+
+        let initial = await iterator.next()
+        XCTAssertEqual(initial, .denied)
+        provider.setAuthorization(.whileInUse)
+        let updated = await iterator.next()
+        XCTAssertEqual(updated, .whileInUse)
+    }
+
+    func testMapHomeMeFollowPolicyRestoresBrowsingWhenAuthorizationIsLost() {
+        XCTAssertTrue(MapHomeMeFollowPolicy.shouldRestoreBrowsingOnAuthorizationChange(
+            previous: .whileInUse,
+            current: .denied,
+            followEnabled: true
+        ))
+        XCTAssertFalse(MapHomeMeFollowPolicy.shouldRestoreBrowsingOnAuthorizationChange(
+            previous: .denied,
+            current: .whileInUse,
+            followEnabled: true
+        ))
+        XCTAssertFalse(MapHomeMeFollowPolicy.shouldRestoreBrowsingOnAuthorizationChange(
+            previous: .whileInUse,
+            current: .denied,
+            followEnabled: false
+        ))
+    }
+
+    func testManualCenterSuspendsRefitsUntilFocusIsExplicitlyReselected() {
+        let surface = StubMapSurface(autoLoad: false)
+        var fits = 0
+        surface.installRenderer(
+            projection: { _, _ in nil },
+            convoyFit: { _, enabled, _, _, _, _ in if enabled { fits += 1 } },
+            center: { _ in }
+        )
+        let initial = [
+            MapPoint(longitude: 12, latitude: 57),
+            MapPoint(longitude: 13, latitude: 58)
+        ]
+        surface.setConvoyFit(points: initial, focusEnabled: true, userPoint: nil, followSelfEnabled: true)
+        surface.centerOn(initial[0])
+        surface.setConvoyFit(
+            points: initial + [MapPoint(longitude: 14, latitude: 59)],
+            focusEnabled: true,
+            userPoint: nil,
+            followSelfEnabled: true
+        )
+        XCTAssertEqual(fits, 1)
+
+        surface.setConvoyFit(points: nil, focusEnabled: false, userPoint: nil, followSelfEnabled: true)
+        surface.setConvoyFit(points: initial, focusEnabled: true, userPoint: nil, followSelfEnabled: true)
+        XCTAssertEqual(fits, 2)
+    }
+
+    func testInitialMeRestoreIsForwardedOnlyWhenSelfFollowIsAvailable() {
+        let surface = StubMapSurface(autoLoad: false)
+        var restores = 0
+        surface.installRenderer(
+            projection: { _, _ in nil },
+            convoyFit: { points, enabled, _, followSelfEnabled, _, _ in
+                if points == nil, !enabled, followSelfEnabled { restores += 1 }
+            },
+            center: { _ in }
+        )
+
+        surface.setConvoyFit(points: nil, focusEnabled: false, userPoint: nil, followSelfEnabled: false)
+        XCTAssertEqual(restores, 0)
+
+        surface.setConvoyFit(points: nil, focusEnabled: false, userPoint: nil, followSelfEnabled: true)
+        XCTAssertEqual(restores, 1)
+
+        surface.setConvoyFit(points: nil, focusEnabled: false, userPoint: nil, followSelfEnabled: true)
+        XCTAssertEqual(restores, 1)
+    }
+
+    func testDisablingSelfFollowForwardsOneBrowsingRestore() {
+        let surface = StubMapSurface(autoLoad: false)
+        var latestFollowSelfEnabled: Bool?
+        surface.installRenderer(
+            projection: { _, _ in nil },
+            convoyFit: { points, enabled, _, followSelfEnabled, _, _ in
+                if points == nil, !enabled {
+                    latestFollowSelfEnabled = followSelfEnabled
+                }
+            },
+            center: { _ in }
+        )
+
+        surface.setConvoyFit(points: nil, focusEnabled: false, userPoint: nil, followSelfEnabled: true)
+        XCTAssertEqual(latestFollowSelfEnabled, true)
+
+        surface.setConvoyFit(points: nil, focusEnabled: false, userPoint: nil, followSelfEnabled: false)
+        XCTAssertEqual(latestFollowSelfEnabled, false)
+    }
+
+    func testSuspendedSelfFollowIsNotReplayedWhenRendererReattaches() {
+        let surface = StubMapSurface(autoLoad: false)
+        var restores = 0
+        surface.setConvoyFit(points: nil, focusEnabled: false, userPoint: nil, followSelfEnabled: true)
+        surface.suspendSelfFollowForInteraction()
+        surface.installRenderer(
+            projection: { _, _ in nil },
+            convoyFit: { points, enabled, _, followSelfEnabled, _, restoreViewport in
+                if points == nil, !enabled, followSelfEnabled { restores += 1 }
+                XCTAssertFalse(restoreViewport)
+            },
+            center: { _ in }
+        )
+
+        XCTAssertEqual(restores, 0)
+    }
+
+    func testCenteringOnMemberSuspendsSelfFollowAcrossRendererReload() {
+        let surface = StubMapSurface(autoLoad: false)
+        surface.setConvoyFit(
+            points: nil,
+            focusEnabled: false,
+            userPoint: nil,
+            followSelfEnabled: true
+        )
+        surface.centerOn(MapPoint(longitude: 12.1, latitude: 57.5))
+
+        var restores = 0
+        surface.installRenderer(
+            projection: { _, _ in nil },
+            convoyFit: { points, enabled, _, followSelfEnabled, _, _ in
+                if points == nil, !enabled, followSelfEnabled { restores += 1 }
+            },
+            center: { _ in }
+        )
+
+        XCTAssertEqual(restores, 0)
+    }
+
+    func testIdleReturnAllowsSelfFollowToResumeAcrossRendererReload() {
+        let surface = StubMapSurface(autoLoad: false)
+        surface.setConvoyFit(
+            points: nil,
+            focusEnabled: false,
+            userPoint: nil,
+            followSelfEnabled: true
+        )
+        surface.suspendSelfFollowForInteraction()
+        surface.resumeSelfFollowAfterIdle()
+
+        var restores: [(resume: Bool, viewport: Bool)] = []
+        surface.installRenderer(
+            projection: { _, _ in nil },
+            convoyFit: { points, enabled, _, followSelfEnabled, resume, viewport in
+                if points == nil, !enabled, followSelfEnabled {
+                    restores.append((resume, viewport))
+                }
+            },
+            center: { _ in }
+        )
+
+        XCTAssertEqual(restores.count, 1)
+        XCTAssertFalse(restores[0].resume)
+        XCTAssertTrue(restores[0].viewport)
+        XCTAssertEqual(MapHomeMeFollowPolicy.idleReturnDelay, .seconds(10))
+    }
+
+    func testEnteringConvoyFocusWithoutFitPointsStopsSelfFollowWithoutRestoringViewport() {
+        let surface = StubMapSurface(autoLoad: false)
+        var transitions: [(enabled: Bool, followSelf: Bool, restoreViewport: Bool)] = []
+        surface.installRenderer(
+            projection: { _, _ in nil },
+            convoyFit: { _, enabled, _, followSelfEnabled, _, restoreViewport in
+                transitions.append((enabled, followSelfEnabled, restoreViewport))
+            },
+            center: { _ in }
+        )
+        surface.setConvoyFit(
+            points: nil,
+            focusEnabled: false,
+            userPoint: nil,
+            followSelfEnabled: true
+        )
+        transitions.removeAll()
+
+        surface.setConvoyFit(
+            points: nil,
+            focusEnabled: true,
+            userPoint: nil,
+            followSelfEnabled: true
+        )
+
+        XCTAssertEqual(transitions.count, 1)
+        XCTAssertTrue(transitions[0].enabled)
+        XCTAssertTrue(transitions[0].followSelf)
+        XCTAssertFalse(transitions[0].restoreViewport)
+    }
+
+    func testEnteringConvoyFocusWithOnePointStopsSelfFollowWithoutMovingViewport() {
+        let surface = StubMapSurface(autoLoad: false)
+        var transitions: [(enabled: Bool, restoreViewport: Bool)] = []
+        surface.installRenderer(
+            projection: { _, _ in nil },
+            convoyFit: { _, enabled, _, _, _, restoreViewport in
+                transitions.append((enabled, restoreViewport))
+            },
+            center: { _ in }
+        )
+        surface.setConvoyFit(
+            points: nil,
+            focusEnabled: false,
+            userPoint: nil,
+            followSelfEnabled: true
+        )
+        transitions.removeAll()
+
+        surface.setConvoyFit(
+            points: [MapPoint(longitude: 12.1, latitude: 57.5)],
+            focusEnabled: true,
+            userPoint: nil,
+            followSelfEnabled: true
+        )
+
+        XCTAssertEqual(transitions.count, 1)
+        XCTAssertTrue(transitions[0].enabled)
+        XCTAssertFalse(transitions[0].restoreViewport)
     }
 }

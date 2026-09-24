@@ -12,9 +12,14 @@ import com.kungsbackacarcommunity.app.garage.VehicleValidation
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import java.time.Instant
 import java.time.Year
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.flow
 
 /**
  * [LiveLocationRepository] backed by the live.* callables (europe-west1) and a
@@ -103,26 +108,36 @@ class FirebaseLiveLocationRepository private constructor(
         awaitClose { ref.removeEventListener(listener) }
     }
 
-    override fun observeLatest(uid: String): Flow<LiveMarker?> = callbackFlow {
-        // Per-uid marker read only (liveLocation/{uid}/latest); never scans the
-        // collection. Mirrors observeOwnSession's callbackFlow/ValueEventListener.
-        val ref = database.getReference("liveLocation/$uid/latest")
-        val listener =
-            object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    trySend(snapshot.toLiveMarker(uid))
-                }
+    override fun observeLatest(uid: String): Flow<LiveMarker?> =
+        recoverLatestMarkerFlow {
+            callbackFlow {
+                // Per-uid marker read only (liveLocation/{uid}/latest); never scans the
+                // collection. Mirrors observeOwnSession's callbackFlow/ValueEventListener.
+                val ref = database.getReference("liveLocation/$uid/latest")
+                val listener =
+                    object : ValueEventListener {
+                        override fun onDataChange(snapshot: DataSnapshot) {
+                            trySend(LatestMarkerObservation.Value(snapshot.toLiveMarker(uid)))
+                        }
 
-                override fun onCancelled(error: DatabaseError) {
-                    // Read denied (not an active, non-suspended member) or
-                    // interrupted: emit null (no marker) rather than hanging; a
-                    // later successful read self-corrects.
-                    trySend(null)
-                }
+                        override fun onCancelled(error: DatabaseError) {
+                            // Read denied (not an active, non-suspended member) or
+                            // interrupted: emit null (no marker) rather than hanging.
+                            // If the listener itself was cancelled, mark the end of this
+                            // one-shot observation as retryable so the repository can
+                            // attach a fresh RTDB observer for the same uid.
+                            if (shouldRetryLatestObserve(error)) {
+                                trySend(LatestMarkerObservation.Retry)
+                            } else {
+                                trySend(LatestMarkerObservation.Value(null))
+                            }
+                            close()
+                        }
+                    }
+                ref.addValueEventListener(listener)
+                awaitClose { ref.removeEventListener(listener) }
             }
-        ref.addValueEventListener(listener)
-        awaitClose { ref.removeEventListener(listener) }
-    }
+        }
 
     private suspend fun call(name: String, data: Map<String, Any>) {
         functions.getHttpsCallable(name).call(data)
@@ -146,6 +161,53 @@ class FirebaseLiveLocationRepository private constructor(
         }
     }
 }
+
+internal sealed interface LatestMarkerObservation<out T> {
+    data class Value<T>(val value: T) : LatestMarkerObservation<T>
+    data object Retry : LatestMarkerObservation<Nothing>
+}
+
+private const val OBSERVE_LATEST_RETRY_MILLIS = 1_000L
+
+internal fun <T> recoverLatestMarkerFlow(
+    retryDelayMillis: Long = OBSERVE_LATEST_RETRY_MILLIS,
+    observeOnce: () -> Flow<LatestMarkerObservation<T>>,
+): Flow<T> =
+    flow {
+        while (currentCoroutineContext().isActive) {
+            var shouldRetry = false
+            observeOnce().collect { observation ->
+                when (observation) {
+                    is LatestMarkerObservation.Value -> emit(observation.value)
+                    LatestMarkerObservation.Retry -> shouldRetry = true
+                }
+            }
+            if (!shouldRetry || !currentCoroutineContext().isActive) break
+            delay(retryDelayMillis)
+        }
+    }
+
+internal fun shouldRetryLatestObserve(error: DatabaseError): Boolean =
+    when (error.code) {
+        DatabaseError.DISCONNECTED, DatabaseError.NETWORK_ERROR -> true
+        DatabaseError.PERMISSION_DENIED -> false
+        DatabaseError.OPERATION_FAILED -> {
+            val detail =
+                buildString {
+                    append(error.message.lowercase())
+                    append(' ')
+                    append(error.details.lowercase())
+                }
+            listOf(
+                "permission_denied",
+                "permission denied",
+                "permission-denied",
+                "unauthorized",
+                "unauthorised",
+            ).none(detail::contains)
+        }
+        else -> false
+    }
 
 /**
  * Maps the RTDB `latest` node to the Firebase-free [LiveMarker], or null when
