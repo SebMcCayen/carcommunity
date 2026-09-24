@@ -410,6 +410,20 @@ final class MapSurfaceTests: XCTestCase {
         )
     }
 
+    func testProjectionTrustKeepsFiniteOffscreenPixels() {
+        XCTAssertTrue(MapHomeProjectionTrustPolicy.hasFiniteScreenPosition(x: -24, y: 80))
+        XCTAssertTrue(MapHomeProjectionTrustPolicy.hasFiniteScreenPosition(x: 24, y: -80))
+        XCTAssertFalse(MapHomeProjectionTrustPolicy.hasFiniteScreenPosition(x: .nan, y: 80))
+        XCTAssertFalse(MapHomeProjectionTrustPolicy.hasFiniteScreenPosition(x: 24, y: .infinity))
+    }
+
+    func testProjectionTrustSkipsRoundTripOnlyForFlatCamera() {
+        XCTAssertFalse(MapHomeProjectionTrustPolicy.requiresRoundTrip(pitch: 0))
+        XCTAssertFalse(MapHomeProjectionTrustPolicy.requiresRoundTrip(pitch: 1))
+        XCTAssertTrue(MapHomeProjectionTrustPolicy.requiresRoundTrip(pitch: 1.01))
+        XCTAssertTrue(MapHomeProjectionTrustPolicy.requiresRoundTrip(pitch: .nan))
+    }
+
     func testCameraSnapshotIsPinnableForTests() {
         let surface = StubMapSurface(autoLoad: false)
         let snapshot = MapCameraSnapshot.of(

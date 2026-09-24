@@ -148,17 +148,11 @@ enum MapHomeMeFollowPolicy {
     static func authorizationStream(
         for locationProvider: any LocationProvider
     ) -> AsyncStream<LocationAuthorization> {
-        AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
-            continuation.yield(locationProvider.authorization)
-            let task = Task { @MainActor in
-                for await authorization in locationProvider.authorizationUpdates() {
-                    if Task.isCancelled { break }
-                    continuation.yield(authorization)
-                }
-                continuation.finish()
-            }
-            continuation.onTermination = { _ in task.cancel() }
-        }
+        // LocationProvider guarantees that this stream atomically seeds its
+        // current value before delivering changes. Adding a second seed here
+        // can race that subscription and replay a stale authorization after a
+        // newer value has already been set.
+        locationProvider.authorizationUpdates()
     }
 
 }
@@ -167,6 +161,15 @@ enum MapHomeProjectionTrustPolicy {
     private static let maximumMercatorLatitude = 85.05112878
     static let roundTripTolerancePixels = 4.0
     static let minimumRoundTripToleranceMeters = 2.0
+    static let maximumFlatPitchDegrees = 1.0
+
+    static func hasFiniteScreenPosition(x: Double, y: Double) -> Bool {
+        x.isFinite && y.isFinite
+    }
+
+    static func requiresRoundTrip(pitch: Double) -> Bool {
+        !pitch.isFinite || pitch > maximumFlatPitchDegrees
+    }
 
     static func isTrustworthy(
         latitude: Double,
@@ -316,6 +319,7 @@ private struct MapboxStandardMap: View {
     @State private var meFollowIdleTask: Task<Void, Never>?
     @State private var meFollowIdleTaskToken: UUID?
     @State private var rendererAttached = false
+    @State private var isVisible = false
 
     init(
         accessToken: String,
@@ -353,9 +357,6 @@ private struct MapboxStandardMap: View {
             }
             .onCameraChanged { context in
                 let state = context.cameraState
-                if let token = pendingProgrammaticViewportTokens.first {
-                    pendingProgrammaticViewportTokens.remove(token)
-                }
                 surface.updateCameraSnapshot(.of(
                     latitude: state.center.latitude,
                     longitude: state.center.longitude,
@@ -369,6 +370,7 @@ private struct MapboxStandardMap: View {
                 }
             }
             .onDisappear {
+                isVisible = false
                 meFollowIdleTask?.cancel()
                 meFollowIdleTask = nil
                 meFollowIdleTaskToken = nil
@@ -379,6 +381,7 @@ private struct MapboxStandardMap: View {
                 surface.removeRenderer()
             }
             .onAppear {
+                isVisible = true
                 interactionObserver.onUserInteraction = {
                     // A gesture can interrupt an in-flight programmatic animation.
                     // Always suspend now; idle return waits for its token to clear.
@@ -404,6 +407,7 @@ private struct MapboxStandardMap: View {
                         meFollowSuspended: $meFollowSuspended
                     )
                 }
+                armMeFollowIdleReturn(viewport: $viewport)
             }
             .onChange(of: surface.isActive, initial: true) { _, active in
                 surfaceActive = active
@@ -484,18 +488,29 @@ private struct MapboxStandardMap: View {
             projection: { latitude, longitude in
                 let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
                 let point = map.point(for: coordinate)
-                guard point.x.isFinite, point.y.isFinite, point.x >= 0, point.y >= 0 else {
+                guard MapHomeProjectionTrustPolicy.hasFiniteScreenPosition(
+                    x: point.x,
+                    y: point.y
+                ) else {
                     return nil
                 }
                 let cameraState = map.cameraState
-                let roundTrip = map.coordinate(for: point)
-                let trustworthy = MapHomeProjectionTrustPolicy.isTrustworthy(
-                    latitude: latitude,
-                    longitude: longitude,
-                    unprojectedLatitude: roundTrip.latitude,
-                    unprojectedLongitude: roundTrip.longitude,
-                    zoom: cameraState.zoom
-                )
+                let trustworthy: Bool
+                if MapHomeProjectionTrustPolicy.requiresRoundTrip(pitch: cameraState.pitch) {
+                    let roundTrip = map.coordinate(for: point)
+                    trustworthy = MapHomeProjectionTrustPolicy.isTrustworthy(
+                        latitude: latitude,
+                        longitude: longitude,
+                        unprojectedLatitude: roundTrip.latitude,
+                        unprojectedLongitude: roundTrip.longitude,
+                        zoom: cameraState.zoom
+                    )
+                } else {
+                    // A top-down camera cannot fold a point behind itself. Avoid
+                    // a native unprojection for every marker in the common 2D
+                    // browsing state, matching the Android surface.
+                    trustworthy = true
+                }
                 return MapScreenPoint(x: point.x, y: point.y, trustworthy: trustworthy)
             },
             convoyFit: {
@@ -614,13 +629,20 @@ private struct MapboxStandardMap: View {
                 return
             }
             pendingProgrammaticViewportTokens.remove(token)
+            if pendingProgrammaticViewportTokens.isEmpty,
+               isVisible,
+               meFollowEnabled,
+               meFollowSuspended {
+                armMeFollowIdleReturn(viewport: $viewport)
+            }
         }
         change()
     }
 
     private func armMeFollowIdleReturn(viewport: Binding<Viewport>) {
         meFollowIdleTask?.cancel()
-        guard surfaceActive,
+        guard isVisible,
+              surfaceActive,
               meFollowEnabled,
               meFollowSuspended,
               !surface.convoyFocusEnabled,
@@ -643,6 +665,7 @@ private struct MapboxStandardMap: View {
                 return
             }
             guard !Task.isCancelled,
+                  isVisible,
                   surfaceActive,
                   meFollowEnabled,
                   meFollowSuspended,
