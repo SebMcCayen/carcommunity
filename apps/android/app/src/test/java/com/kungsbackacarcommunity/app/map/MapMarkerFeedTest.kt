@@ -168,7 +168,7 @@ class MapMarkerFeedTest {
         }
 
         val repo = RetryingRepo()
-        val deferred = async { feed(repo, "me", emptyList()).first() }
+        val deferred = async { feed(repo, "me", emptyList()).first { it.isNotEmpty() } }
 
         runCurrent()
         delay(1_050)
