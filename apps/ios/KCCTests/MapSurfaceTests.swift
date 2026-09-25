@@ -521,6 +521,49 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertEqual(centered, points[1])
     }
 
+    func testRendererBridgeReplaysAndForwardsMapLayerPreferences() {
+        let surface = StubMapSurface(autoLoad: false)
+        surface.setTrafficEnabled(true)
+        surface.setMapMode(.night)
+        surface.set3DEnabled(false)
+        surface.setBrowsingZoom(17.4)
+
+        var trafficUpdates: [(Bool, MapMode)] = []
+        var modeUpdates: [MapMode] = []
+        var threeDUpdates: [Bool] = []
+        var zoomUpdates: [Double] = []
+        surface.installRenderer(
+            projection: { _, _ in nil },
+            convoyFit: { _, _, _, _, _, _ in },
+            center: { _ in },
+            traffic: { trafficUpdates.append(($0, $1)) },
+            mapMode: { modeUpdates.append($0) },
+            threeD: { threeDUpdates.append($0) },
+            browsingZoom: { zoomUpdates.append($0) }
+        )
+
+        XCTAssertEqual(trafficUpdates.count, 1)
+        XCTAssertEqual(trafficUpdates[0].0, true)
+        XCTAssertEqual(trafficUpdates[0].1, .night)
+        XCTAssertEqual(modeUpdates, [.night])
+        XCTAssertEqual(threeDUpdates, [false])
+        XCTAssertEqual(zoomUpdates, [17.5])
+
+        surface.setTrafficEnabled(false)
+        surface.setMapMode(.day)
+        surface.set3DEnabled(true)
+        surface.setBrowsingZoom(11)
+
+        XCTAssertEqual(trafficUpdates.count, 3)
+        XCTAssertEqual(trafficUpdates[1].0, false)
+        XCTAssertEqual(trafficUpdates[1].1, .night)
+        XCTAssertEqual(trafficUpdates[2].0, false)
+        XCTAssertEqual(trafficUpdates[2].1, .day)
+        XCTAssertEqual(modeUpdates, [.night, .day])
+        XCTAssertEqual(threeDUpdates, [false, true])
+        XCTAssertEqual(zoomUpdates, [17.5, 12])
+    }
+
     func testConvoyFitPolicyThrottlesJitterAndFrequentMovement() {
         let previous = [
             MapPoint(longitude: 12, latitude: 57),
