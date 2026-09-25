@@ -176,6 +176,10 @@ struct ShellView: View {
             MapLayersSheet(
                 preferences: mapLayerPreferences,
                 systemIsDark: colorScheme == .dark,
+                trafikverketDataShown: incidentMapCoordinator?.incidents.contains(where: \.isImported) == true,
+                onTrafficAlertsChanged: { enabled in
+                    incidentMapCoordinator?.setTrafficAlertsEnabled(enabled)
+                },
                 onTrafficChanged: mapSurface.setTrafficEnabled,
                 onMapModeChanged: mapSurface.setMapMode,
                 on3DChanged: mapSurface.set3DEnabled,
@@ -467,6 +471,7 @@ struct ShellView: View {
     }
 
     private func applyMapLayerPreferences() {
+        incidentMapCoordinator?.setTrafficAlertsEnabled(mapLayerPreferences.trafficAlertsEnabled)
         mapSurface.setTrafficEnabled(mapLayerPreferences.trafficEnabled)
         mapSurface.setMapMode(
             mapLayerPreferences.effectiveMapMode(systemIsDark: colorScheme == .dark)
@@ -1109,6 +1114,7 @@ struct ShellView: View {
             policeRepository: FirebasePoliceRepository.createIfAvailable(),
             currentUid: uid
         )
+        incidentMap.setTrafficAlertsEnabled(mapLayerPreferences.trafficAlertsEnabled)
         incidentMapCoordinator = incidentMap
         eventsCoordinator = FirebaseEventsRepository.createIfAvailable().map(EventsCoordinator.init(repository:))
         leaderboardCoordinator = LeaderboardCoordinator(
@@ -1145,9 +1151,7 @@ struct ShellView: View {
             ConvoyReactionCoordinator(
                 repository: repository,
                 onPoliceSent: { [weak incidentMap] in
-                    guard let fix = incidentMap?.latestFix else { return }
-                    _ = await incidentMap?.reportPolice(
-                        at: MapPoint(longitude: fix.longitude, latitude: fix.latitude),
+                    _ = await incidentMap?.reportPoliceAtCurrentLocation(
                         source: "convoy",
                         surfaceError: false
                     )

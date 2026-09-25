@@ -169,6 +169,14 @@ enum IncidentViewport {
     }
 }
 
+enum IncidentAttribution {
+    static func markerIsVisible(_ point: MapScreenPoint?, width: Double, height: Double) -> Bool {
+        guard let point, point.trustworthy else { return false }
+        return point.x >= -30 && point.y >= -30
+            && point.x <= width + 30 && point.y <= height + 30
+    }
+}
+
 enum PoliceProximity {
     static let alertRadiusMeters = 500.0
 

@@ -67,10 +67,12 @@ enum MapTrafficPalette {
 @MainActor
 final class MapLayerPreferences {
     static let trafficDefault = false
+    static let trafficAlertsDefault = true
     static let threeDDefault = true
 
     private enum Key {
         static let traffic = "map.layers.traffic"
+        static let trafficAlerts = "map.layers.trafficAlerts"
         static let mode = "map.layers.mode"
         static let threeD = "map.layers.3d"
         static let zoom = "map.layers.browsingZoom"
@@ -79,6 +81,7 @@ final class MapLayerPreferences {
     @ObservationIgnored private let defaults: UserDefaults
 
     private(set) var trafficEnabled: Bool
+    private(set) var trafficAlertsEnabled: Bool
     /// Nil means follow the current system/app appearance.
     private(set) var mapModeOverride: MapMode?
     private(set) var is3D: Bool
@@ -88,6 +91,8 @@ final class MapLayerPreferences {
         self.defaults = defaults
         trafficEnabled = defaults.object(forKey: Key.traffic) as? Bool
             ?? Self.trafficDefault
+        trafficAlertsEnabled = defaults.object(forKey: Key.trafficAlerts) as? Bool
+            ?? Self.trafficAlertsDefault
         mapModeOverride = Self.decodeMapMode(defaults.string(forKey: Key.mode))
         is3D = defaults.object(forKey: Key.threeD) as? Bool
             ?? Self.threeDDefault
@@ -104,6 +109,12 @@ final class MapLayerPreferences {
         guard enabled != trafficEnabled else { return }
         trafficEnabled = enabled
         defaults.set(enabled, forKey: Key.traffic)
+    }
+
+    func setTrafficAlertsEnabled(_ enabled: Bool) {
+        guard enabled != trafficAlertsEnabled else { return }
+        trafficAlertsEnabled = enabled
+        defaults.set(enabled, forKey: Key.trafficAlerts)
     }
 
     func setMapModeOverride(_ mode: MapMode?) {

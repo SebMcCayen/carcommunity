@@ -11,36 +11,65 @@ struct IncidentMapOverlay: View {
                     pins: coordinator.policeReports,
                     incidents: coordinator.incidents
                 )
-            ForEach(markers, id: \.id) { marker in
-                if let point = projection.screenPositionFor(
-                    latitude: marker.latitude, longitude: marker.longitude
-                ), point.trustworthy,
-                   point.x >= -30, point.y >= -30,
-                   point.x <= Double(geometry.size.width + 30),
-                   point.y <= Double(geometry.size.height + 30) {
-                    Button {
-                        coordinator.selectMarker(id: marker.id)
-                    } label: {
-                        ZStack {
-                            Circle()
-                                .fill(Color(argb: marker.colorArgb))
-                                .frame(width: 38, height: 38)
-                                .shadow(radius: 2, y: 1)
-                            Image(systemName: marker.iconName)
-                                .font(.system(size: 17, weight: .bold))
-                                .foregroundStyle(Color(argb: marker.glyphColorArgb))
-                            if marker.reportedCleared {
-                                Capsule().fill(Color.white.opacity(0.9))
-                                    .frame(width: 34, height: 3)
-                                    .rotationEffect(.degrees(-38))
+            let importedMarkerVisible = coordinator.incidents.contains { incident in
+                guard incident.isImported else { return false }
+                let point = projection.screenPositionFor(
+                        latitude: incident.latitude, longitude: incident.longitude
+                      )
+                return IncidentAttribution.markerIsVisible(
+                    point,
+                    width: Double(geometry.size.width),
+                    height: Double(geometry.size.height)
+                )
+            }
+            ZStack(alignment: .bottomLeading) {
+                ForEach(markers, id: \.id) { marker in
+                    if let point = projection.screenPositionFor(
+                        latitude: marker.latitude, longitude: marker.longitude
+                    ), point.trustworthy,
+                       point.x >= -30, point.y >= -30,
+                       point.x <= Double(geometry.size.width + 30),
+                       point.y <= Double(geometry.size.height + 30) {
+                        Button {
+                            coordinator.selectMarker(id: marker.id)
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(Color(argb: marker.colorArgb))
+                                    .frame(width: 38, height: 38)
+                                    .shadow(radius: 2, y: 1)
+                                Image(systemName: marker.iconName)
+                                    .font(.system(size: 17, weight: .bold))
+                                    .foregroundStyle(Color(argb: marker.glyphColorArgb))
+                                if marker.reportedCleared {
+                                    Capsule().fill(Color.white.opacity(0.9))
+                                        .frame(width: 34, height: 3)
+                                        .rotationEffect(.degrees(-38))
+                                }
                             }
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(Text("incidents.markerLabel"))
+                        .position(x: CGFloat(point.x), y: CGFloat(point.y))
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(Text("incidents.markerLabel"))
-                    .position(x: CGFloat(point.x), y: CGFloat(point.y))
+                }
+                if importedMarkerVisible {
+                    Text("incidents.sourceTrafikverket")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, KccSpacing.s3)
+                        .padding(.vertical, KccSpacing.s2)
+                        .background(.regularMaterial, in: Capsule())
+                        .padding(KccSpacing.s4)
+                        .accessibilityIdentifier("incident-trafikverket-attribution")
+                        .allowsHitTesting(false)
                 }
             }
+            .frame(
+                width: geometry.size.width,
+                height: geometry.size.height,
+                alignment: .bottomLeading
+            )
         }
         .allowsHitTesting(true)
     }

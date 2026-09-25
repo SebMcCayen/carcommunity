@@ -14,6 +14,8 @@ final class IncidentMapCoordinator {
     private let currentUid: String?
     private let now: @Sendable () -> Date
     private let pollInterval: Duration
+    private let maximumFixAge: TimeInterval
+    private let fixWaitTimeout: Duration
 
     private(set) var incidents: [RoadIncident] = []
     private(set) var policeReports: [PoliceReport] = []
@@ -21,6 +23,7 @@ final class IncidentMapCoordinator {
     private(set) var busy = false
     private(set) var feedback: IncidentFeedback?
     private(set) var proximityAlert: PoliceReport?
+    private(set) var trafficAlertsEnabled = true
     var selectedIncident: RoadIncident?
     var selectedPolice: PoliceReport?
     var reportSheetPresented = false
@@ -36,32 +39,42 @@ final class IncidentMapCoordinator {
     }
 
     @ObservationIgnored private weak var surface: (any MapSurface)?
+    @ObservationIgnored private weak var locationProvider: (any LocationProvider)?
     @ObservationIgnored nonisolated(unsafe) private var fixTask: Task<Void, Never>?
+    @ObservationIgnored nonisolated(unsafe) private var authorizationTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var pollTask: Task<Void, Never>?
     @ObservationIgnored private var alertedPoliceIds = Set<String>()
+    @ObservationIgnored private var mutationGeneration = 0
+    @ObservationIgnored private var refreshGeneration = 0
 
     init(
         incidentRepository: IncidentRepository?,
         policeRepository: PoliceRepository?,
         currentUid: String?,
         now: @escaping @Sendable () -> Date = { Date() },
-        pollInterval: Duration = .seconds(15)
+        pollInterval: Duration = .seconds(15),
+        maximumFixAge: TimeInterval = 30,
+        fixWaitTimeout: Duration = .seconds(3)
     ) {
         self.incidentRepository = incidentRepository
         self.policeRepository = policeRepository
         self.currentUid = currentUid
         self.now = now
         self.pollInterval = pollInterval
+        self.maximumFixAge = maximumFixAge
+        self.fixWaitTimeout = fixWaitTimeout
     }
 
     deinit {
         fixTask?.cancel()
+        authorizationTask?.cancel()
         pollTask?.cancel()
     }
 
     func start(surface: any MapSurface, provider: any LocationProvider) {
         stop(clearMarkers: false)
         self.surface = surface
+        locationProvider = provider
         guard available || policeRepository != nil else {
             updateMarkers()
             return
@@ -74,6 +87,36 @@ final class IncidentMapCoordinator {
                 evaluateProximity()
             }
         }
+        let authorizations = provider.authorizationUpdates()
+        authorizationTask = Task { [weak self] in
+            for await authorization in authorizations {
+                guard !Task.isCancelled, let self else { return }
+                if !authorization.isAuthorized { latestFix = nil }
+            }
+        }
+        startPollingIfNeeded()
+    }
+
+    func setTrafficAlertsEnabled(_ enabled: Bool) {
+        guard enabled != trafficAlertsEnabled else { return }
+        trafficAlertsEnabled = enabled
+        if enabled {
+            startPollingIfNeeded()
+        } else {
+            pollTask?.cancel()
+            pollTask = nil
+            incidents = []
+            policeReports = []
+            selectedIncident = nil
+            selectedPolice = nil
+            proximityAlert = nil
+            alertedPoliceIds.removeAll()
+            surface?.setIncidentMarkers([])
+        }
+    }
+
+    private func startPollingIfNeeded() {
+        guard trafficAlertsEnabled, pollTask == nil else { return }
         pollTask = Task { [weak self, weak surface] in
             guard let self else { return }
             while !Task.isCancelled {
@@ -85,14 +128,21 @@ final class IncidentMapCoordinator {
 
     func stop(clearMarkers: Bool = true) {
         fixTask?.cancel()
+        authorizationTask?.cancel()
         pollTask?.cancel()
         fixTask = nil
+        authorizationTask = nil
         pollTask = nil
         if clearMarkers { surface?.setIncidentMarkers([]) }
         surface = nil
+        locationProvider = nil
     }
 
     func refresh(surface: (any MapSurface)? = nil) async {
+        guard trafficAlertsEnabled, !busy else { return }
+        refreshGeneration += 1
+        let refresh = refreshGeneration
+        let mutations = mutationGeneration
         let targetSurface = surface ?? self.surface
         let center = targetSurface?.cameraSnapshot.map {
             MapPoint(longitude: $0.longitude, latitude: $0.latitude)
@@ -102,7 +152,8 @@ final class IncidentMapCoordinator {
 
         let newIncidents = await fetchIncidents(center: center, radius: radius)
         let newPolice = await fetchPolice(center: center, radius: radius)
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, !busy, refresh == refreshGeneration,
+              mutations == mutationGeneration, trafficAlertsEnabled else { return }
         if let newIncidents { incidents = newIncidents }
         if let newPolice { policeReports = newPolice.filter { $0.isLive(at: now()) } }
         reconcileSelections()
@@ -112,13 +163,21 @@ final class IncidentMapCoordinator {
 
     func report(_ type: IncidentType, at point: MapPoint?) async {
         guard !busy, let incidentRepository else { return }
-        let location = point ?? latestFix.map { MapPoint(longitude: $0.longitude, latitude: $0.latitude) }
+        busy = true
+        defer { busy = false }
+        let location: MapPoint?
+        if let point {
+            location = point
+        } else if let fix = await authorizedFreshFix(waitForFirst: true) {
+            location = MapPoint(longitude: fix.longitude, latitude: fix.latitude)
+        } else {
+            location = nil
+        }
         guard let location, Self.valid(location) else {
             feedback = .error("incidents.locationUnavailable")
             return
         }
-        busy = true
-        defer { busy = false }
+        beginMutation()
         do {
             let reported = try await incidentRepository.report(type: type, at: location, note: nil)
             upsert(reported)
@@ -134,15 +193,18 @@ final class IncidentMapCoordinator {
         }
     }
 
-    /// Shared seam for standalone reports and the convoy-reaction feature.
-    /// A future convoy call should pass `source: "convoy"` and its own fix.
+    /// Uploads an already-authorized location selected by another coordinator
+    /// path. Current-location callers must go through
+    /// ``reportPoliceAtCurrentLocation(source:surfaceError:)`` so permission
+    /// and freshness are checked immediately before the upload.
     @discardableResult
-    func reportPolice(
+    private func reportPolice(
         at point: MapPoint,
         source: String = "convoy",
         surfaceError: Bool = true
     ) async -> Bool {
         guard Self.valid(point), let policeRepository else { return false }
+        beginMutation()
         do {
             let pin = try await policeRepository.report(at: point, source: source)
             upsert(pin)
@@ -154,6 +216,22 @@ final class IncidentMapCoordinator {
             if surfaceError { feedback = .error("incidents.reportError") }
             return false
         }
+    }
+
+    @discardableResult
+    func reportPoliceAtCurrentLocation(
+        source: String = "convoy",
+        surfaceError: Bool = true
+    ) async -> Bool {
+        guard let fix = await authorizedFreshFix(waitForFirst: true) else {
+            if surfaceError { feedback = .error("incidents.locationUnavailable") }
+            return false
+        }
+        return await reportPolice(
+            at: MapPoint(longitude: fix.longitude, latitude: fix.latitude),
+            source: source,
+            surfaceError: surfaceError
+        )
     }
 
     func selectMarker(id: String) {
@@ -170,6 +248,7 @@ final class IncidentMapCoordinator {
     func confirmSelectedIncident() async {
         guard !busy, let repository = incidentRepository, let selectedIncident else { return }
         busy = true
+        beginMutation()
         defer { busy = false }
         do {
             let result = try await repository.confirm(incidentId: selectedIncident.id)
@@ -192,12 +271,13 @@ final class IncidentMapCoordinator {
             feedback = .error("incidents.clearedImportedExplanation")
             return
         }
-        guard let fix = latestFix else {
+        busy = true
+        defer { busy = false }
+        guard let fix = await authorizedFreshFix(waitForFirst: true) else {
             feedback = .error("incidents.clearedNoLocation")
             return
         }
-        busy = true
-        defer { busy = false }
+        beginMutation()
         do {
             let result = try await repository.reportCleared(incidentId: incident.id, fix: fix)
             if result.removed {
@@ -226,6 +306,7 @@ final class IncidentMapCoordinator {
     func removeSelectedIncident() async {
         guard !busy, let repository = incidentRepository, let incident = selectedIncident else { return }
         busy = true
+        beginMutation()
         defer { busy = false }
         do {
             try await repository.remove(incidentId: incident.id)
@@ -243,6 +324,7 @@ final class IncidentMapCoordinator {
     func verifySelectedPolice(confirm: Bool) async {
         guard !busy, let repository = policeRepository, let pin = selectedPolice else { return }
         busy = true
+        beginMutation()
         defer { busy = false }
         do {
             let result = try await (confirm
@@ -266,6 +348,7 @@ final class IncidentMapCoordinator {
     func removeSelectedPolice() async {
         guard !busy, let repository = policeRepository, let pin = selectedPolice else { return }
         busy = true
+        beginMutation()
         defer { busy = false }
         do {
             _ = try await repository.remove(policeReportId: pin.id)
@@ -281,7 +364,10 @@ final class IncidentMapCoordinator {
     }
 
     func clearFeedback() { feedback = nil }
-    func dismissProximityAlert() { proximityAlert = nil }
+    func dismissProximityAlert() {
+        proximityAlert = nil
+        evaluateProximity()
+    }
     func beginMapSelection(for type: IncidentType) { pendingMapReportType = type }
     func cancelMapSelection() { pendingMapReportType = nil }
 
@@ -298,16 +384,22 @@ final class IncidentMapCoordinator {
     }
 
     private func evaluateProximity() {
+        guard trafficAlertsEnabled, proximityAlert == nil else { return }
         let new = PoliceProximity.newAlerts(
             driver: latestFix, pins: policeReports,
             alreadyAlerted: alertedPoliceIds, now: now()
         )
         guard !new.isEmpty else { return }
-        alertedPoliceIds.formUnion(new.map(\.id))
-        if proximityAlert == nil { proximityAlert = new[0] }
+        let next = new[0]
+        alertedPoliceIds.insert(next.id)
+        proximityAlert = next
     }
 
     private func updateMarkers() {
+        guard trafficAlertsEnabled else {
+            surface?.setIncidentMarkers([])
+            return
+        }
         surface?.setIncidentMarkers(
             incidents.map(\.mapMarker) + PoliceMapMarker.markers(pins: policeReports, incidents: incidents)
         )
@@ -339,6 +431,36 @@ final class IncidentMapCoordinator {
         guard let index = policeReports.firstIndex(where: { $0.id == id }) else { return }
         update(&policeReports[index])
         selectedPolice = policeReports[index]
+    }
+
+    private func beginMutation() {
+        mutationGeneration &+= 1
+    }
+
+    private func authorizedFreshFix(waitForFirst: Bool) async -> LocationFix? {
+        guard let provider = locationProvider, provider.authorization.isAuthorized else {
+            latestFix = nil
+            return nil
+        }
+        if let latestFix, isFresh(latestFix) { return latestFix }
+        guard waitForFirst else { return nil }
+
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: fixWaitTimeout)
+        while clock.now < deadline {
+            guard provider.authorization.isAuthorized else {
+                latestFix = nil
+                return nil
+            }
+            if let latestFix, isFresh(latestFix) { return latestFix }
+            do { try await Task.sleep(for: .milliseconds(50)) } catch { return nil }
+        }
+        return nil
+    }
+
+    private func isFresh(_ fix: LocationFix) -> Bool {
+        let age = now().timeIntervalSince(fix.timestamp)
+        return age >= -5 && age <= maximumFixAge
     }
 
     private static func valid(_ point: MapPoint) -> Bool {

@@ -25,6 +25,8 @@ struct MapLayersSheet: View {
 
     let preferences: MapLayerPreferences
     let systemIsDark: Bool
+    let trafikverketDataShown: Bool
+    let onTrafficAlertsChanged: (Bool) -> Void
     let onTrafficChanged: (Bool) -> Void
     let onMapModeChanged: (MapMode) -> Void
     let on3DChanged: (Bool) -> Void
@@ -34,9 +36,16 @@ struct MapLayersSheet: View {
         NavigationStack {
             Form {
                 Section {
+                    Toggle("shell.layersIncidents", isOn: trafficAlertsBinding)
                     Toggle("shell.layersTraffic", isOn: trafficBinding)
                     Toggle("shell.layersNightMode", isOn: nightBinding)
                     Toggle("shell.layers3d", isOn: threeDBinding)
+                }
+
+                if preferences.trafficAlertsEnabled && trafikverketDataShown {
+                    Text("incidents.sourceTrafikverket")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section {
@@ -80,6 +89,16 @@ struct MapLayersSheet: View {
             set: { enabled in
                 preferences.setTrafficEnabled(enabled)
                 onTrafficChanged(enabled)
+            }
+        )
+    }
+
+    private var trafficAlertsBinding: Binding<Bool> {
+        Binding(
+            get: { preferences.trafficAlertsEnabled },
+            set: { enabled in
+                preferences.setTrafficAlertsEnabled(enabled)
+                onTrafficAlertsChanged(enabled)
             }
         )
     }

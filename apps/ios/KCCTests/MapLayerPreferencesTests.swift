@@ -24,6 +24,7 @@ final class MapLayerPreferencesTests: XCTestCase {
     func testDefaultsMatchExistingMapExperience() {
         let preferences = MapLayerPreferences(defaults: defaults)
         XCTAssertFalse(preferences.trafficEnabled)
+        XCTAssertTrue(preferences.trafficAlertsEnabled)
         XCTAssertNil(preferences.mapModeOverride)
         XCTAssertTrue(preferences.is3D)
         XCTAssertEqual(preferences.browsingZoom, 16, accuracy: 1e-9)
@@ -34,12 +35,14 @@ final class MapLayerPreferencesTests: XCTestCase {
     func testEveryChoiceSurvivesStoreRecreation() {
         let preferences = MapLayerPreferences(defaults: defaults)
         preferences.setTrafficEnabled(true)
+        preferences.setTrafficAlertsEnabled(false)
         preferences.setMapModeOverride(.night)
         preferences.set3DEnabled(false)
         preferences.setBrowsingZoom(13.7)
 
         let restored = MapLayerPreferences(defaults: defaults)
         XCTAssertTrue(restored.trafficEnabled)
+        XCTAssertFalse(restored.trafficAlertsEnabled)
         XCTAssertEqual(restored.mapModeOverride, .night)
         XCTAssertFalse(restored.is3D)
         XCTAssertEqual(restored.browsingZoom, 13.5, accuracy: 1e-9)
