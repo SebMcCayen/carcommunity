@@ -46,6 +46,7 @@ struct ShellView: View {
     @State private var convoyManagementCoordinator: ConvoyManagementCoordinator?
     @State private var convoyAwareness = ConvoyAwarenessCoordinator()
     @State private var convoyReactionCoordinator: ConvoyReactionCoordinator?
+    @State private var convoyFollowMeCoordinator: ConvoyFollowMeCoordinator?
     @State private var liveLocationRepository: LiveLocationRepository?
     @State private var convoyCreateCoordinator: ConvoyCreateCoordinator?
     @State private var convoyCreateVehicleId: String?
@@ -192,6 +193,9 @@ struct ShellView: View {
         .task(id: convoyReactionSubscriptionKey) {
             convoyReactionCoordinator?.sync(convoyId: convoyReactionTargetId)
         }
+        .task(id: convoyFollowMeSubscriptionKey) {
+            syncFollowMe()
+        }
     }
 
     /// Per-tab foreground content. The persistent map is owned by `body`, so
@@ -226,7 +230,10 @@ struct ShellView: View {
                 }
                 .overlay {
                     if convoyReactionTargetId != nil, let convoyReactionCoordinator {
-                        ConvoyReactionControls(coordinator: convoyReactionCoordinator)
+                        ConvoyReactionControls(
+                            coordinator: convoyReactionCoordinator,
+                            followMeCoordinator: convoyFollowMeCoordinator
+                        )
                     }
                 }
                 .overlay(alignment: .top) {
@@ -253,7 +260,10 @@ struct ShellView: View {
                     applyConvoyFocus()
                 }
                 .onChange(of: convoyAwareness.focusMode) { _, _ in applyConvoyFocus() }
-                .onChange(of: convoyAwareness.positions) { _, _ in applyConvoyFocus() }
+                .onChange(of: convoyAwareness.positions) { _, _ in
+                    applyConvoyFocus()
+                    syncFollowMe()
+                }
                 .task(id: convoyAwareness.focusMode) {
                     guard convoyAwareness.focusMode == .convoy else { return }
                     while !Task.isCancelled {
@@ -960,6 +970,8 @@ struct ShellView: View {
         convoyAwareness.sync(convoy: nil, repository: nil, currentUid: nil)
         convoyReactionCoordinator?.sync(convoyId: nil)
         convoyReactionCoordinator = nil
+        convoyFollowMeCoordinator?.stop()
+        convoyFollowMeCoordinator = nil
         liveLocationRepository = nil
         convoyCreateCoordinator = nil
         convoyCreateVehicleId = nil
@@ -1012,6 +1024,9 @@ struct ShellView: View {
         convoyManagementCoordinator = convoyManagement
         convoyReactionCoordinator = FirebaseConvoyReactionRepository.createIfAvailable().map {
             ConvoyReactionCoordinator(repository: $0)
+        }
+        convoyFollowMeCoordinator = FirebaseConvoyFollowMeRepository.createIfAvailable().map {
+            ConvoyFollowMeCoordinator(repository: $0)
         }
 
         let crownHunt = await CrownHuntComposition.live(
@@ -1088,6 +1103,21 @@ struct ShellView: View {
 
     private var convoyReactionSubscriptionKey: String {
         "\(convoyReactionCoordinator != nil)|\(convoyReactionTargetId ?? "")"
+    }
+
+    private var convoyFollowMeSubscriptionKey: String {
+        let convoy = convoyManagementCoordinator?.activeConvoy
+        let members = convoy?.acceptedMembers.map(\.uid).sorted().joined(separator: ",") ?? ""
+        return "\(convoyFollowMeCoordinator != nil)|\(convoy?.convoyId ?? "")|\(members)|\(signedInUid ?? "")"
+    }
+
+    private func syncFollowMe() {
+        convoyFollowMeCoordinator?.sync(
+            convoy: convoyManagementCoordinator?.activeConvoy,
+            currentUid: signedInUid,
+            positions: convoyAwareness.positions,
+            surface: mapSurface
+        )
     }
 
     private func applyConvoyFocus() {

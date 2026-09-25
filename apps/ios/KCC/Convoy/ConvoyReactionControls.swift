@@ -3,6 +3,15 @@ import SwiftUI
 /// Map overlay for the transient reaction controls and incoming reaction pop.
 struct ConvoyReactionControls: View {
     @Bindable var coordinator: ConvoyReactionCoordinator
+    let followMeCoordinator: ConvoyFollowMeCoordinator?
+
+    init(
+        coordinator: ConvoyReactionCoordinator,
+        followMeCoordinator: ConvoyFollowMeCoordinator? = nil
+    ) {
+        self.coordinator = coordinator
+        self.followMeCoordinator = followMeCoordinator
+    }
 
     var body: some View {
         ZStack {
@@ -34,22 +43,41 @@ struct ConvoyReactionControls: View {
             for: kind,
             nowMilliseconds: nowMilliseconds
         )
-        let ready = remaining == 0 && !coordinator.sendingKinds.contains(kind)
+        let persistentFollowMe = kind == .followMe ? followMeCoordinator : nil
+        let active = persistentFollowMe?.isLeading == true
+        let ready = persistentFollowMe.map { !$0.isToggling }
+            ?? (remaining == 0 && !coordinator.sendingKinds.contains(kind))
         let seconds = max(Int(ceil(Double(remaining) / 1_000)), 1)
 
         return VStack(spacing: KccSpacing.s1) {
             Button {
-                Task { await coordinator.send(kind) }
+                if let persistentFollowMe {
+                    let activate = !persistentFollowMe.isLeading
+                    Task { _ = await persistentFollowMe.setLeading(activate) }
+                    if activate { Task { await coordinator.send(.followMe) } }
+                } else {
+                    Task { await coordinator.send(kind) }
+                }
             } label: {
                 ZStack {
                     Circle()
-                        .fill(ready ? kind.color : Color(.secondarySystemFill))
+                        .fill(ready || active ? kind.color : Color(.secondarySystemFill))
                         .shadow(color: .black.opacity(ready ? 0.22 : 0), radius: 6, y: 3)
+                    if active {
+                        Circle()
+                            .stroke(.primary, lineWidth: 3)
+                            .padding(3)
+                    }
                     Image(systemName: kind.systemImage)
                         .font(.system(size: 27, weight: .semibold))
-                        .foregroundStyle(ready ? .white : .secondary)
-                        .opacity(ready ? 1 : 0.45)
-                    if remaining > 0 {
+                        .foregroundStyle(ready || active ? .white : .secondary)
+                        .opacity(ready || active ? 1 : 0.45)
+                    if persistentFollowMe?.isToggling == true {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.primary)
+                            .accessibilityHidden(true)
+                    } else if remaining > 0, persistentFollowMe == nil {
                         Text("\(seconds)")
                             .font(.caption.bold())
                             .foregroundStyle(.primary)
@@ -65,11 +93,15 @@ struct ConvoyReactionControls: View {
             }
             .buttonStyle(.plain)
             .disabled(!ready)
-            .accessibilityLabel(Text(kind.labelKey))
-            .accessibilityValue(remaining > 0 ? Text("\(seconds)") : Text(""))
+            .accessibilityLabel(Text(active ? "convoyFollowTrail.activeLabel" : kind.labelKey))
+            .accessibilityValue(
+                active
+                    ? Text("convoyFollowTrail.activeContentDescription")
+                    : (remaining > 0 && persistentFollowMe == nil ? Text("\(seconds)") : Text(""))
+            )
             .accessibilityIdentifier("convoy_reaction_\(kind.rawValue)")
 
-            Text(kind.labelKey)
+            Text(active ? "convoyFollowTrail.activeLabel" : kind.labelKey)
                 .font(.caption.weight(.medium))
                 .lineLimit(1)
         }

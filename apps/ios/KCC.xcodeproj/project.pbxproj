@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B10000000000000000000001 /* FollowMeTrail.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000001 /* FollowMeTrail.swift */; };
+		B10000000000000000000002 /* ConvoyFollowMeRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000002 /* ConvoyFollowMeRepository.swift */; };
+		B10000000000000000000003 /* FirebaseConvoyFollowMeRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000003 /* FirebaseConvoyFollowMeRepository.swift */; };
+		B10000000000000000000004 /* ConvoyFollowMeCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000004 /* ConvoyFollowMeCoordinator.swift */; };
+		B10000000000000000000005 /* FollowMeTrailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000005 /* FollowMeTrailTests.swift */; };
 		0229DB676C3D37323515FED8 /* ConvoyChatRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB923EB0F48961801B354686 /* ConvoyChatRepository.swift */; };
 		045B5F09E0E6E624FAB74B18 /* ConvoyChatScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC4A7A4AD67B47382B5BFD4 /* ConvoyChatScreen.swift */; };
 		062AE7034B90A9707143E724 /* ShellHubs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86B8BFD68C018AC836A606A7 /* ShellHubs.swift */; };
@@ -225,6 +230,11 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		A10000000000000000000001 /* FollowMeTrail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowMeTrail.swift; sourceTree = "<group>"; };
+		A10000000000000000000002 /* ConvoyFollowMeRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyFollowMeRepository.swift; sourceTree = "<group>"; };
+		A10000000000000000000003 /* FirebaseConvoyFollowMeRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseConvoyFollowMeRepository.swift; sourceTree = "<group>"; };
+		A10000000000000000000004 /* ConvoyFollowMeCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyFollowMeCoordinator.swift; sourceTree = "<group>"; };
+		A10000000000000000000005 /* FollowMeTrailTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowMeTrailTests.swift; sourceTree = "<group>"; };
 		00786BDC5D7D80DF3558096D /* ShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellView.swift; sourceTree = "<group>"; };
 		0227EC32DDAB2E0526F5604A /* CrownHuntModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrownHuntModelTests.swift; sourceTree = "<group>"; };
 		0323E8145E9403B744C5203A /* ConvoyManagementModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyManagementModelsTests.swift; sourceTree = "<group>"; };
@@ -542,8 +552,12 @@
 				16D1BA582D7E587733401A4B /* ConvoyReactionCoordinator.swift */,
 				F54A7FC1C9C3562639DE9AD8 /* ConvoyReactionModels.swift */,
 				60F52AD4DF4C1672F8671AD2 /* ConvoyReactionRepository.swift */,
+				A10000000000000000000004 /* ConvoyFollowMeCoordinator.swift */,
+				A10000000000000000000002 /* ConvoyFollowMeRepository.swift */,
+				A10000000000000000000001 /* FollowMeTrail.swift */,
 				46FAF37A9FD3D1525B551ABC /* FirebaseConvoyCreateRepository.swift */,
 				BC4A164A69D9F64DCD3E66E3 /* FirebaseConvoyManagementRepository.swift */,
+				A10000000000000000000003 /* FirebaseConvoyFollowMeRepository.swift */,
 				7D078D5979DD1ACCE12DB1B9 /* FirebaseConvoyReactionRepository.swift */,
 			);
 			path = Convoy;
@@ -789,6 +803,7 @@
 				0323E8145E9403B744C5203A /* ConvoyManagementModelsTests.swift */,
 				667567749288390662CCCFDE /* ConvoyReactionCoordinatorTests.swift */,
 				3EB71A805F62274D65250E5B /* ConvoyReactionModelsTests.swift */,
+				A10000000000000000000005 /* FollowMeTrailTests.swift */,
 				6A8A14E33FEF8557066A6A12 /* CrownHuntBoardTests.swift */,
 				42A78A419991AB5C1A5281B4 /* CrownHuntClaimsCoordinatorTests.swift */,
 				8762FA4089D8E6940ABB67D4 /* CrownHuntFeatureFlagsTests.swift */,
@@ -996,6 +1011,9 @@
 				C538E4A6CB86820D5A80E8C5 /* ConvoyReactionCoordinator.swift in Sources */,
 				281529946F7B9975D8B2981F /* ConvoyReactionModels.swift in Sources */,
 				4876B45F502490B4CD5F8D27 /* ConvoyReactionRepository.swift in Sources */,
+				B10000000000000000000004 /* ConvoyFollowMeCoordinator.swift in Sources */,
+				B10000000000000000000002 /* ConvoyFollowMeRepository.swift in Sources */,
+				B10000000000000000000001 /* FollowMeTrail.swift in Sources */,
 				8B3D0292A205E690A9358586 /* CoreLocationProvider.swift in Sources */,
 				5B5523E3A40EA2AB165EFB2D /* CrownHuntBoard.swift in Sources */,
 				8543A3000FAE5BB214C22DD2 /* CrownHuntClaimsCoordinator.swift in Sources */,
@@ -1030,6 +1048,7 @@
 				AC4D11BD0682A76D8402A9C7 /* FirebaseConvoyCreateRepository.swift in Sources */,
 				BE4460B9F2EF5CC3A6AD42B7 /* FirebaseConvoyManagementRepository.swift in Sources */,
 				13F4A99C1761787E34F42A45 /* FirebaseConvoyReactionRepository.swift in Sources */,
+				B10000000000000000000003 /* FirebaseConvoyFollowMeRepository.swift in Sources */,
 				C086004A49CCB0078CDA5DCB /* FirebaseCrownHuntClaimsRepository.swift in Sources */,
 				3C205F3408B57B377A4BF68E /* FirebaseCrownHuntFeatureFlagsRepository.swift in Sources */,
 				10CDC76AAF3BF2C23B7D532B /* FirebaseCrownHuntStatsRepository.swift in Sources */,
@@ -1121,6 +1140,7 @@
 				CB74AD40DF3D54FF1EEFDBC4 /* ConvoyManagementModelsTests.swift in Sources */,
 				3ABBC5529ADE35738A161AF8 /* ConvoyReactionCoordinatorTests.swift in Sources */,
 				100A24D3A90671D408A908B1 /* ConvoyReactionModelsTests.swift in Sources */,
+				B10000000000000000000005 /* FollowMeTrailTests.swift in Sources */,
 				D5EC10EC42AE496D9A3EFDAF /* CrownHuntBoardTests.swift in Sources */,
 				23A5B7BEE420A37586F8F53B /* CrownHuntClaimsCoordinatorTests.swift in Sources */,
 				1E9975E9B863634926D0BAC2 /* CrownHuntFeatureFlagsTests.swift in Sources */,

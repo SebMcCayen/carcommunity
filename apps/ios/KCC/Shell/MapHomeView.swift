@@ -338,7 +338,25 @@ private struct MapboxStandardMap: View {
 
     var body: some View {
         MapReader { proxy in
-            MapboxMaps.Map(viewport: $viewport)
+            MapboxMaps.Map(viewport: $viewport) {
+                if let trail = surface.followMeTrail, trail.count >= 2 {
+                    PolylineAnnotation(
+                        id: "convoy-follow-me-trail",
+                        lineCoordinates: trail.map {
+                            CLLocationCoordinate2D(
+                                latitude: $0.latitude,
+                                longitude: $0.longitude
+                            )
+                        }
+                    )
+                    .lineColor(UIColor.systemYellow)
+                    .lineBorderColor(UIColor.black.withAlphaComponent(0.65))
+                    .lineBorderWidth(2)
+                    .lineWidth(6)
+                    .lineOpacity(0.92)
+                    .lineJoin(.round)
+                }
+            }
             .mapStyle(.standard)
             .onMapLoaded { _ in
                 onLoaded()
