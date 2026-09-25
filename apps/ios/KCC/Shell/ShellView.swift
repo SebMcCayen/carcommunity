@@ -44,6 +44,7 @@ struct ShellView: View {
     @State private var startDrivingGarage: GarageCoordinator?
     @State private var convoyManagementCoordinator: ConvoyManagementCoordinator?
     @State private var convoyAwareness = ConvoyAwarenessCoordinator()
+    @State private var convoyReactionCoordinator: ConvoyReactionCoordinator?
     @State private var liveLocationRepository: LiveLocationRepository?
     @State private var convoyCreateCoordinator: ConvoyCreateCoordinator?
     @State private var convoyCreateVehicleId: String?
@@ -187,6 +188,9 @@ struct ShellView: View {
             }
         }
         .task(id: signedInUid) { await wireFeatures() }
+        .task(id: convoyReactionSubscriptionKey) {
+            convoyReactionCoordinator?.sync(convoyId: convoyReactionTargetId)
+        }
     }
 
     /// Per-tab foreground content. The persistent map is owned by `body`, so
@@ -217,6 +221,11 @@ struct ShellView: View {
                             imageURLs: convoyAwareness.imageURLs,
                             projection: mapSurface
                         )
+                    }
+                }
+                .overlay {
+                    if convoyReactionTargetId != nil, let convoyReactionCoordinator {
+                        ConvoyReactionControls(coordinator: convoyReactionCoordinator)
                     }
                 }
                 .overlay(alignment: .top) {
@@ -948,6 +957,8 @@ struct ShellView: View {
         if routes.current == .convoys { routes = routes.poppingOne() }
         convoyManagementCoordinator = nil
         convoyAwareness.sync(convoy: nil, repository: nil, currentUid: nil)
+        convoyReactionCoordinator?.sync(convoyId: nil)
+        convoyReactionCoordinator = nil
         liveLocationRepository = nil
         convoyCreateCoordinator = nil
         convoyCreateVehicleId = nil
@@ -998,6 +1009,9 @@ struct ShellView: View {
             repository: FirebaseConvoyManagementRepository.createIfAvailable()
         )
         convoyManagementCoordinator = convoyManagement
+        convoyReactionCoordinator = FirebaseConvoyReactionRepository.createIfAvailable().map {
+            ConvoyReactionCoordinator(repository: $0)
+        }
 
         let crownHunt = await CrownHuntComposition.live(
             uid: uid,
@@ -1059,6 +1073,17 @@ struct ShellView: View {
             return "disabled|\(signedInUid ?? "")"
         }
         return "enabled|\(convoy.convoyId)|\(convoy.livePositionUids.sorted().joined(separator: ","))|\(signedInUid ?? "")"
+    }
+
+    /// Reactions follow the same map-chrome gate as Android: listen only while
+    /// the map home is unobscured and an accepted, non-ended convoy owns the bar.
+    private var convoyReactionTargetId: String? {
+        guard case .none = mapCover else { return nil }
+        return convoyManagementCoordinator?.activeConvoy?.convoyId
+    }
+
+    private var convoyReactionSubscriptionKey: String {
+        "\(convoyReactionCoordinator != nil)|\(convoyReactionTargetId ?? "")"
     }
 
     private func applyConvoyFocus() {
