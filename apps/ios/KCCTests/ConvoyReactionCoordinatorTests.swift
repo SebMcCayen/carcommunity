@@ -73,11 +73,13 @@ final class ConvoyReactionCoordinatorTests: XCTestCase {
     func testSuccessfulSendStartsCooldownAndUsesIdempotencyKey() async {
         let clock = ReactionTestClock(milliseconds: 1_000)
         let repository = ConvoyReactionRepositoryFake()
+        let policeSuccess = PoliceSuccessRecorder()
         repository.nextSendResult = .sent
         let coordinator = ConvoyReactionCoordinator(
             repository: repository,
             nowMilliseconds: { clock.milliseconds },
-            makeClientId: { "client-id" }
+            makeClientId: { "client-id" },
+            onPoliceSent: { await policeSuccess.record() }
         )
         coordinator.sync(convoyId: "convoy-1")
 
@@ -96,14 +98,33 @@ final class ConvoyReactionCoordinatorTests: XCTestCase {
             coordinator.remainingMilliseconds(for: .police, nowMilliseconds: 1_000),
             0
         )
+        XCTAssertEqual(policeSuccess.count, 0)
+    }
+
+    func testSuccessfulPoliceSendInvokesSuccessCallbackExactlyOnce() async {
+        let repository = ConvoyReactionRepositoryFake()
+        let policeSuccess = PoliceSuccessRecorder()
+        let coordinator = ConvoyReactionCoordinator(
+            repository: repository,
+            nowMilliseconds: { 1_000 },
+            onPoliceSent: { await policeSuccess.record() }
+        )
+        coordinator.sync(convoyId: "convoy-1")
+
+        await coordinator.send(.police)
+        await coordinator.send(.police)
+
+        XCTAssertEqual(policeSuccess.count, 1)
     }
 
     func testFailedSendClearsOptimisticCooldownForRetry() async {
         let repository = ConvoyReactionRepositoryFake()
+        let policeSuccess = PoliceSuccessRecorder()
         repository.nextSendResult = .failed
         let coordinator = ConvoyReactionCoordinator(
             repository: repository,
-            nowMilliseconds: { 1_000 }
+            nowMilliseconds: { 1_000 },
+            onPoliceSent: { await policeSuccess.record() }
         )
         coordinator.sync(convoyId: "convoy-1")
 
@@ -113,15 +134,18 @@ final class ConvoyReactionCoordinatorTests: XCTestCase {
             coordinator.remainingMilliseconds(for: .police, nowMilliseconds: 1_000),
             0
         )
+        XCTAssertEqual(policeSuccess.count, 0)
     }
 
     func testServerRateLimitReplacesClientCooldown() async {
         let clock = ReactionTestClock(milliseconds: 1_000)
         let repository = ConvoyReactionRepositoryFake()
+        let policeSuccess = PoliceSuccessRecorder()
         repository.nextSendResult = .rateLimited(retryAfterMilliseconds: 4_000)
         let coordinator = ConvoyReactionCoordinator(
             repository: repository,
-            nowMilliseconds: { clock.milliseconds }
+            nowMilliseconds: { clock.milliseconds },
+            onPoliceSent: { await policeSuccess.record() }
         )
         coordinator.sync(convoyId: "convoy-1")
         clock.milliseconds = 2_000
@@ -132,6 +156,7 @@ final class ConvoyReactionCoordinatorTests: XCTestCase {
             coordinator.remainingMilliseconds(for: .police, nowMilliseconds: 2_000),
             4_000
         )
+        XCTAssertEqual(policeSuccess.count, 0)
     }
 
     func testStaleFailedCompletionCannotMutateReplacementSessionForSameConvoy() async {
@@ -251,6 +276,15 @@ private struct ReactionSend: Equatable {
 private final class ReactionTestClock: @unchecked Sendable {
     var milliseconds: Int64
     init(milliseconds: Int64) { self.milliseconds = milliseconds }
+}
+
+@MainActor
+private final class PoliceSuccessRecorder {
+    private(set) var count = 0
+
+    func record() async {
+        count += 1
+    }
 }
 
 private final class ConvoyReactionRepositoryFake: ConvoyReactionRepository, @unchecked Sendable {

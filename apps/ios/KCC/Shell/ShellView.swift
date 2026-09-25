@@ -1104,11 +1104,12 @@ struct ShellView: View {
         }
         friendsRepository = friends
         conversationsRepository = conversations
-        incidentMapCoordinator = IncidentMapCoordinator(
+        let incidentMap = IncidentMapCoordinator(
             incidentRepository: FirebaseIncidentRepository.createIfAvailable(),
             policeRepository: FirebasePoliceRepository.createIfAvailable(),
             currentUid: uid
         )
+        incidentMapCoordinator = incidentMap
         eventsCoordinator = FirebaseEventsRepository.createIfAvailable().map(EventsCoordinator.init(repository:))
         leaderboardCoordinator = LeaderboardCoordinator(
             repository: FirebaseLeaderboardRepository.createIfAvailable()
@@ -1140,8 +1141,18 @@ struct ShellView: View {
             repository: FirebaseConvoyManagementRepository.createIfAvailable()
         )
         convoyManagementCoordinator = convoyManagement
-        convoyReactionCoordinator = FirebaseConvoyReactionRepository.createIfAvailable().map {
-            ConvoyReactionCoordinator(repository: $0)
+        convoyReactionCoordinator = FirebaseConvoyReactionRepository.createIfAvailable().map { repository in
+            ConvoyReactionCoordinator(
+                repository: repository,
+                onPoliceSent: { [weak incidentMap] in
+                    guard let fix = incidentMap?.latestFix else { return }
+                    _ = await incidentMap?.reportPolice(
+                        at: MapPoint(longitude: fix.longitude, latitude: fix.latitude),
+                        source: "convoy",
+                        surfaceError: false
+                    )
+                }
+            )
         }
         convoyFollowMeCoordinator = FirebaseConvoyFollowMeRepository.createIfAvailable().map {
             ConvoyFollowMeCoordinator(repository: $0)
