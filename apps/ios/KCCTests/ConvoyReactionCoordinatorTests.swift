@@ -14,20 +14,20 @@ final class ConvoyReactionCoordinatorTests: XCTestCase {
         coordinator.sync(convoyId: "first")
         XCTAssertEqual(repository.observedConvoys, ["first"])
         repository.emit(event(id: "old"), to: "first")
-        await Task.yield()
+        await waitUntil { coordinator.incomingReaction?.id == "old" }
         XCTAssertEqual(coordinator.incomingReaction?.id, "old")
 
         coordinator.sync(convoyId: "second")
-        await Task.yield()
         XCTAssertNil(coordinator.incomingReaction)
         XCTAssertEqual(repository.observedConvoys, ["first", "second"])
+        await waitUntil { repository.terminationCount(for: "first") == 1 }
         XCTAssertEqual(repository.terminationCount(for: "first"), 1)
 
         repository.emit(event(id: "new"), to: "second")
-        await Task.yield()
+        await waitUntil { coordinator.incomingReaction?.id == "new" }
         XCTAssertEqual(coordinator.incomingReaction?.id, "new")
         coordinator.sync(convoyId: nil)
-        await Task.yield()
+        await waitUntil { repository.terminationCount(for: "second") == 1 }
         XCTAssertEqual(repository.terminationCount(for: "second"), 1)
     }
 
@@ -100,12 +100,27 @@ final class ConvoyReactionCoordinatorTests: XCTestCase {
         let coordinator = ConvoyReactionCoordinator(repository: repository)
         coordinator.sync(convoyId: "convoy-1")
         repository.emit(event(id: "one"), to: "convoy-1")
-        await Task.yield()
+        await waitUntil { coordinator.incomingReaction?.id == "one" }
 
         coordinator.dismissIncoming(id: "other")
         XCTAssertEqual(coordinator.incomingReaction?.id, "one")
         coordinator.dismissIncoming(id: "one")
         XCTAssertNil(coordinator.incomingReaction)
+    }
+
+    private func waitUntil(
+        timeout: TimeInterval = 2,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        _ predicate: () -> Bool
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if predicate() { return }
+            await Task.yield()
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        XCTFail("Timed out waiting for condition", file: file, line: line)
     }
 
     private func event(id: String) -> ConvoyReactionEvent {
