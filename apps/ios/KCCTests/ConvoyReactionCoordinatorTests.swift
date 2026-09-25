@@ -31,6 +31,27 @@ final class ConvoyReactionCoordinatorTests: XCTestCase {
         XCTAssertEqual(repository.terminationCount(for: "second"), 1)
     }
 
+    func testReleaseTerminatesActiveReactionStream() async {
+        let repository = ConvoyReactionRepositoryFake()
+        weak var releasedCoordinator: ConvoyReactionCoordinator?
+
+        do {
+            var coordinator: ConvoyReactionCoordinator? = ConvoyReactionCoordinator(
+                repository: repository
+            )
+            releasedCoordinator = coordinator
+            coordinator?.sync(convoyId: "convoy-1")
+            XCTAssertEqual(repository.observedConvoys, ["convoy-1"])
+            coordinator = nil
+        }
+
+        await waitUntil {
+            releasedCoordinator == nil && repository.terminationCount(for: "convoy-1") == 1
+        }
+        XCTAssertNil(releasedCoordinator)
+        XCTAssertEqual(repository.terminationCount(for: "convoy-1"), 1)
+    }
+
     func testSuccessfulSendStartsCooldownAndUsesIdempotencyKey() async {
         let clock = ReactionTestClock(milliseconds: 1_000)
         let repository = ConvoyReactionRepositoryFake()
@@ -95,6 +116,60 @@ final class ConvoyReactionCoordinatorTests: XCTestCase {
         )
     }
 
+    func testStaleFailedCompletionCannotMutateReplacementSessionForSameConvoy() async {
+        let gate = DeferredReactionSendGate()
+        let repository = ConvoyReactionRepositoryFake(sendGate: gate)
+        let coordinator = ConvoyReactionCoordinator(
+            repository: repository,
+            nowMilliseconds: { 1_000 }
+        )
+        coordinator.sync(convoyId: "convoy-1")
+
+        let staleSend = Task { await coordinator.send(.police) }
+        await waitUntil { await gate.pendingCount == 1 }
+        coordinator.sync(convoyId: nil)
+        coordinator.sync(convoyId: "convoy-1")
+        let currentSend = Task { await coordinator.send(.police) }
+        await waitUntil { await gate.pendingCount == 2 }
+
+        await gate.resumeNext(with: .failed)
+        await staleSend.value
+
+        XCTAssertEqual(coordinator.sendingKinds, [.police])
+        XCTAssertEqual(
+            coordinator.remainingMilliseconds(for: .police, nowMilliseconds: 1_000),
+            60_000
+        )
+
+        await gate.resumeNext(with: .sent)
+        await currentSend.value
+        XCTAssertTrue(coordinator.sendingKinds.isEmpty)
+    }
+
+    func testStaleRateLimitCannotApplyToLaterSessionForSameConvoy() async {
+        let gate = DeferredReactionSendGate()
+        let repository = ConvoyReactionRepositoryFake(sendGate: gate)
+        let coordinator = ConvoyReactionCoordinator(
+            repository: repository,
+            nowMilliseconds: { 1_000 }
+        )
+        coordinator.sync(convoyId: "convoy-1")
+
+        let staleSend = Task { await coordinator.send(.hello) }
+        await waitUntil { await gate.pendingCount == 1 }
+        coordinator.sync(convoyId: "convoy-2")
+        coordinator.sync(convoyId: "convoy-1")
+
+        await gate.resumeNext(with: .rateLimited(retryAfterMilliseconds: 90_000))
+        await staleSend.value
+
+        XCTAssertTrue(coordinator.sendingKinds.isEmpty)
+        XCTAssertEqual(
+            coordinator.remainingMilliseconds(for: .hello, nowMilliseconds: 1_000),
+            0
+        )
+    }
+
     func testUnknownOrRepeatedReactionIdCanBeDismissedSafely() async {
         let repository = ConvoyReactionRepositoryFake()
         let coordinator = ConvoyReactionCoordinator(repository: repository)
@@ -117,6 +192,21 @@ final class ConvoyReactionCoordinatorTests: XCTestCase {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if predicate() { return }
+            await Task.yield()
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        XCTFail("Timed out waiting for condition", file: file, line: line)
+    }
+
+    private func waitUntil(
+        timeout: TimeInterval = 2,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        _ predicate: () async -> Bool
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if await predicate() { return }
             await Task.yield()
             try? await Task.sleep(nanoseconds: 1_000_000)
         }
@@ -151,7 +241,12 @@ private final class ConvoyReactionRepositoryFake: ConvoyReactionRepository, @unc
     private var terminations: [String: Int] = [:]
     private var recordedConvoys: [String] = []
     private var recordedSends: [ReactionSend] = []
+    private let sendGate: DeferredReactionSendGate?
     var nextSendResult: ConvoyReactionSendResult = .sent
+
+    init(sendGate: DeferredReactionSendGate? = nil) {
+        self.sendGate = sendGate
+    }
 
     var observedConvoys: [String] { lock.withLock { recordedConvoys } }
     var sends: [ReactionSend] { lock.withLock { recordedSends } }
@@ -165,7 +260,7 @@ private final class ConvoyReactionRepositoryFake: ConvoyReactionRepository, @unc
         kind: ConvoyReactionKind,
         clientId: String
     ) async -> ConvoyReactionSendResult {
-        lock.withLock {
+        let immediateResult = lock.withLock {
             recordedSends.append(ReactionSend(
                 convoyId: convoyId,
                 kind: kind,
@@ -173,6 +268,10 @@ private final class ConvoyReactionRepositoryFake: ConvoyReactionRepository, @unc
             ))
             return nextSendResult
         }
+        if let sendGate {
+            return await sendGate.nextResult()
+        }
+        return immediateResult
     }
 
     func reactions(
@@ -196,5 +295,22 @@ private final class ConvoyReactionRepositoryFake: ConvoyReactionRepository, @unc
     func emit(_ event: ConvoyReactionEvent, to convoyId: String) {
         let continuation = lock.withLock { continuations[convoyId] }
         continuation?.yield(event)
+    }
+}
+
+private actor DeferredReactionSendGate {
+    private var continuations: [CheckedContinuation<ConvoyReactionSendResult, Never>] = []
+
+    var pendingCount: Int { continuations.count }
+
+    func nextResult() async -> ConvoyReactionSendResult {
+        await withCheckedContinuation { continuation in
+            continuations.append(continuation)
+        }
+    }
+
+    func resumeNext(with result: ConvoyReactionSendResult) {
+        precondition(!continuations.isEmpty, "No deferred reaction send is waiting")
+        continuations.removeFirst().resume(returning: result)
     }
 }

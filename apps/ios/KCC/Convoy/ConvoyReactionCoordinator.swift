@@ -13,8 +13,14 @@ final class ConvoyReactionCoordinator {
     @ObservationIgnored private let nowDate: @Sendable () -> Date
     @ObservationIgnored private let makeClientId: @Sendable () -> String
     @ObservationIgnored private var activeConvoyId: String?
-    @ObservationIgnored private var observationTask: Task<Void, Never>?
-    @ObservationIgnored private var dismissalTask: Task<Void, Never>?
+    @ObservationIgnored private var sessionGeneration: UInt64 = 0
+    // These tasks are only mutated on the main actor. Marking their storage
+    // nonisolated permits the nonisolated deinitializer to cancel them, matching
+    // the lifecycle pattern used by the other stream coordinators in the app.
+    @ObservationIgnored
+    nonisolated(unsafe) private var observationTask: Task<Void, Never>?
+    @ObservationIgnored
+    nonisolated(unsafe) private var dismissalTask: Task<Void, Never>?
 
     init(
         repository: ConvoyReactionRepository,
@@ -32,10 +38,16 @@ final class ConvoyReactionCoordinator {
         self.makeClientId = makeClientId
     }
 
+    deinit {
+        observationTask?.cancel()
+        dismissalTask?.cancel()
+    }
+
     /// Switches the one live listener to the convoy currently visible on the map.
     /// Passing nil tears down the listener and clears transient UI state.
     func sync(convoyId: String?) {
         guard convoyId != activeConvoyId else { return }
+        sessionGeneration &+= 1
         observationTask?.cancel()
         dismissalTask?.cancel()
         observationTask = nil
@@ -64,6 +76,7 @@ final class ConvoyReactionCoordinator {
 
     func send(_ kind: ConvoyReactionKind) async {
         guard let convoyId = activeConvoyId else { return }
+        let expectedGeneration = sessionGeneration
         let sentAt = nowMilliseconds()
         guard cooldown.isReady(kind, nowMilliseconds: sentAt),
               !sendingKinds.contains(kind)
@@ -78,7 +91,12 @@ final class ConvoyReactionCoordinator {
             kind: kind,
             clientId: makeClientId()
         )
-        guard activeConvoyId == convoyId else { return }
+        // The same convoy can become active again while this request is in
+        // flight (A -> nil/B -> A). Its id alone does not identify the session;
+        // never let an earlier completion mutate the replacement session.
+        guard activeConvoyId == convoyId,
+              sessionGeneration == expectedGeneration
+        else { return }
         sendingKinds.remove(kind)
         switch result {
         case .sent:
