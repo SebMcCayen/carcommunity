@@ -1033,9 +1033,7 @@ final class StubMapSurface: MapSurface {
     @ObservationIgnored
     private var rendererMapMode: ((MapMode) -> Void)?
     @ObservationIgnored
-    private var renderer3D: ((Bool) -> Void)?
-    @ObservationIgnored
-    private var rendererBrowsingZoom: ((Double) -> Void)?
+    private var rendererCameraPreferences: ((Bool, Double) -> Void)?
     @ObservationIgnored
     private var appliedConvoyFit: [MapPoint]?
     @ObservationIgnored
@@ -1119,22 +1117,22 @@ final class StubMapSurface: MapSurface {
         center: @escaping (MapPoint) -> Void,
         traffic: @escaping (Bool, MapMode) -> Void = { _, _ in },
         mapMode: @escaping (MapMode) -> Void = { _ in },
-        threeD: @escaping (Bool) -> Void = { _ in },
-        browsingZoom: @escaping (Double) -> Void = { _ in }
+        cameraPreferences: @escaping (Bool, Double) -> Void = { _, _ in }
     ) {
         rendererProjection = projection
         rendererConvoyFit = convoyFit
         rendererCenter = center
         rendererTraffic = traffic
         rendererMapMode = mapMode
-        renderer3D = threeD
-        rendererBrowsingZoom = browsingZoom
+        rendererCameraPreferences = cameraPreferences
         // Re-apply durable state after a style reload or when the retained map
         // returns from an opaque shell cover.
         rendererMapMode?(self.mapMode)
         rendererTraffic?(trafficEnabled, self.mapMode)
-        renderer3D?(is3D)
-        rendererBrowsingZoom?(self.browsingZoom)
+        // Pitch and resting zoom form one complete camera destination. Replay
+        // them together so renderer attachment cannot start two animations
+        // from the same stale camera snapshot.
+        rendererCameraPreferences?(is3D, self.browsingZoom)
         if convoyFocusEnabled || self.convoyFit != nil {
             applyConvoyFitToRenderer(force: true)
         } else if convoySelfFollowEnabled && !convoySelfFollowSuspended {
@@ -1149,8 +1147,7 @@ final class StubMapSurface: MapSurface {
         rendererCenter = nil
         rendererTraffic = nil
         rendererMapMode = nil
-        renderer3D = nil
-        rendererBrowsingZoom = nil
+        rendererCameraPreferences = nil
         cameraSnapshot = nil
         bearing = 0
     }
@@ -1394,21 +1391,21 @@ final class StubMapSurface: MapSurface {
 
     func set3DEnabled(_ enabled: Bool) {
         guard enabled != is3D else {
-            renderer3D?(enabled)
+            rendererCameraPreferences?(enabled, browsingZoom)
             return
         }
         is3D = enabled
-        renderer3D?(enabled)
+        rendererCameraPreferences?(enabled, browsingZoom)
     }
 
     func setBrowsingZoom(_ zoom: Double) {
         let snapped = MapBrowsingZoom.snap(zoom)
         guard snapped != browsingZoom else {
-            rendererBrowsingZoom?(snapped)
+            rendererCameraPreferences?(is3D, snapped)
             return
         }
         browsingZoom = snapped
-        rendererBrowsingZoom?(snapped)
+        rendererCameraPreferences?(is3D, snapped)
     }
 
     func setRouteOverlay(_ overlay: MapRouteOverlay?) {

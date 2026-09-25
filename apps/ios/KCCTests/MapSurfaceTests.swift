@@ -530,24 +530,23 @@ final class MapSurfaceTests: XCTestCase {
 
         var trafficUpdates: [(Bool, MapMode)] = []
         var modeUpdates: [MapMode] = []
-        var threeDUpdates: [Bool] = []
-        var zoomUpdates: [Double] = []
+        var cameraPreferenceUpdates: [(is3D: Bool, zoom: Double)] = []
         surface.installRenderer(
             projection: { _, _ in nil },
             convoyFit: { _, _, _, _, _, _ in },
             center: { _ in },
             traffic: { trafficUpdates.append(($0, $1)) },
             mapMode: { modeUpdates.append($0) },
-            threeD: { threeDUpdates.append($0) },
-            browsingZoom: { zoomUpdates.append($0) }
+            cameraPreferences: { cameraPreferenceUpdates.append(($0, $1)) }
         )
 
         XCTAssertEqual(trafficUpdates.count, 1)
         XCTAssertEqual(trafficUpdates[0].0, true)
         XCTAssertEqual(trafficUpdates[0].1, .night)
         XCTAssertEqual(modeUpdates, [.night])
-        XCTAssertEqual(threeDUpdates, [false])
-        XCTAssertEqual(zoomUpdates, [17.5])
+        XCTAssertEqual(cameraPreferenceUpdates.count, 1)
+        XCTAssertFalse(cameraPreferenceUpdates[0].is3D)
+        XCTAssertEqual(cameraPreferenceUpdates[0].zoom, 17.5)
 
         surface.setTrafficEnabled(false)
         surface.setMapMode(.day)
@@ -560,8 +559,51 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertEqual(trafficUpdates[2].0, false)
         XCTAssertEqual(trafficUpdates[2].1, .day)
         XCTAssertEqual(modeUpdates, [.night, .day])
-        XCTAssertEqual(threeDUpdates, [false, true])
-        XCTAssertEqual(zoomUpdates, [17.5, 12])
+        XCTAssertEqual(cameraPreferenceUpdates.count, 3)
+        XCTAssertTrue(cameraPreferenceUpdates[1].is3D)
+        XCTAssertEqual(cameraPreferenceUpdates[1].zoom, 17.5)
+        XCTAssertTrue(cameraPreferenceUpdates[2].is3D)
+        XCTAssertEqual(cameraPreferenceUpdates[2].zoom, 12)
+    }
+
+    func testCameraPreferenceReplayCombines2DAndNondefaultZoom() {
+        let target = MapHomeCameraTarget(
+            latitude: 57.48, longitude: 12.07, zoom: 16, bearing: 20, pitch: 45
+        ).applyingPreferences(is3D: false, browsingZoom: 13.5, browsingOwnsZoom: true)
+
+        XCTAssertEqual(target.zoom, 13.5)
+        XCTAssertEqual(target.pitch, 0)
+        XCTAssertEqual(target.bearing, 20)
+    }
+
+    func testLiveZoomChangeKeepsPendingPitchDestination() {
+        let pendingPitchTransition = MapHomeCameraTarget(
+            latitude: 57.48, longitude: 12.07, zoom: 16, bearing: 0, pitch: 0
+        )
+        let target = pendingPitchTransition.applyingPreferences(
+            is3D: false,
+            browsingZoom: 14,
+            browsingOwnsZoom: true
+        )
+
+        XCTAssertEqual(target.zoom, 14)
+        XCTAssertEqual(target.pitch, 0)
+    }
+
+    func testCameraPreferenceChangePreservesPendingConvoyFitZoom() {
+        let pendingConvoyFit = MapHomeCameraTarget(
+            latitude: 57.50, longitude: 12.10, zoom: 10, bearing: 12, pitch: 45
+        )
+        let target = pendingConvoyFit.applyingPreferences(
+            is3D: false,
+            browsingZoom: 17.5,
+            browsingOwnsZoom: false
+        )
+
+        XCTAssertEqual(target.latitude, pendingConvoyFit.latitude)
+        XCTAssertEqual(target.longitude, pendingConvoyFit.longitude)
+        XCTAssertEqual(target.zoom, 10)
+        XCTAssertEqual(target.pitch, 0)
     }
 
     func testConvoyFitPolicyThrottlesJitterAndFrequentMovement() {
