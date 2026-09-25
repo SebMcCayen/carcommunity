@@ -53,8 +53,11 @@ struct ConvoyReactionControls: View {
             Button {
                 if let persistentFollowMe {
                     let activate = !persistentFollowMe.isLeading
-                    Task { _ = await persistentFollowMe.setLeading(activate) }
-                    if activate { Task { await coordinator.send(.followMe) } }
+                    Task {
+                        _ = await persistentFollowMe.setLeading(activate) {
+                            await coordinator.send(.followMe)
+                        }
+                    }
                 } else {
                     Task { await coordinator.send(kind) }
                 }

@@ -113,12 +113,12 @@ final class ConvoyFollowMeCoordinatorTests: XCTestCase {
             polyline: FollowMeTrail.encode(points),
             updatedAt: clock.date
         ), convoyId: convoy.convoyId)
-        await Task.yield()
+        await waitUntil { surface.followMeTrail == points }
 
         XCTAssertEqual(surface.followMeTrail, points)
         XCTAssertFalse(coordinator.isLeading)
         coordinator.stop()
-        await Task.yield()
+        await waitUntil { repository.terminationCount == 1 }
         XCTAssertNil(surface.followMeTrail)
         XCTAssertEqual(repository.terminationCount, 1)
     }
@@ -136,7 +136,7 @@ final class ConvoyFollowMeCoordinatorTests: XCTestCase {
             polyline: "",
             updatedAt: clock.date
         ), convoyId: convoy.convoyId)
-        await Task.yield()
+        await waitUntil { coordinator.isLeading }
         coordinator.sync(
             convoy: convoy,
             currentUid: "me",
@@ -148,7 +148,7 @@ final class ConvoyFollowMeCoordinatorTests: XCTestCase {
             )],
             surface: surface
         )
-        await Task.yield()
+        await waitUntil { repository.writes.count == 1 }
 
         XCTAssertTrue(coordinator.isLeading)
         XCTAssertEqual(repository.writes.count, 1)
@@ -156,6 +156,89 @@ final class ConvoyFollowMeCoordinatorTests: XCTestCase {
         let leading = await coordinator.setLeading(false)
         XCTAssertEqual(leading, false)
         XCTAssertEqual(repository.toggles, [FollowMeToggle(convoyId: convoy.convoyId, active: false)])
+    }
+
+    func testActivationAnnouncesOnlyAfterServerSuccess() async {
+        let repository = ConvoyFollowMeRepositoryFake()
+        let coordinator = ConvoyFollowMeCoordinator(repository: repository)
+        let surface = StubMapSurface(initialState: .loaded, autoLoad: false)
+        let recorder = FollowMeActivationRecorder()
+        coordinator.sync(convoy: makeConvoy(), currentUid: "me", positions: [:], surface: surface)
+
+        repository.nextLeading = true
+        let activated = await coordinator.setLeading(true) { await recorder.record() }
+        XCTAssertEqual(activated, true)
+        XCTAssertEqual(recorder.count, 1)
+
+        repository.nextLeading = nil
+        let failed = await coordinator.setLeading(true) { await recorder.record() }
+        XCTAssertNil(failed)
+        XCTAssertEqual(recorder.count, 1, "a failed activation must not broadcast Follow Me")
+
+        repository.nextLeading = false
+        let rejected = await coordinator.setLeading(true) { await recorder.record() }
+        XCTAssertEqual(rejected, false)
+        XCTAssertEqual(recorder.count, 1, "a rejected activation must not broadcast Follow Me")
+    }
+
+    func testDeactivationStaysSilent() async {
+        let repository = ConvoyFollowMeRepositoryFake()
+        let coordinator = ConvoyFollowMeCoordinator(repository: repository)
+        let surface = StubMapSurface(initialState: .loaded, autoLoad: false)
+        let recorder = FollowMeActivationRecorder()
+        coordinator.sync(convoy: makeConvoy(), currentUid: "me", positions: [:], surface: surface)
+
+        repository.nextLeading = false
+        let deactivated = await coordinator.setLeading(false) { await recorder.record() }
+
+        XCTAssertEqual(deactivated, false)
+        XCTAssertEqual(recorder.count, 0)
+        XCTAssertEqual(repository.toggles, [FollowMeToggle(convoyId: "convoy", active: false)])
+    }
+
+    func testSessionChangeDuringActivationSuppressesStaleAnnouncement() async {
+        let repository = ConvoyFollowMeRepositoryFake()
+        repository.setLeadingDelay = .milliseconds(100)
+        let coordinator = ConvoyFollowMeCoordinator(repository: repository)
+        let surface = StubMapSurface(initialState: .loaded, autoLoad: false)
+        let recorder = FollowMeActivationRecorder()
+        let first = makeConvoy()
+        coordinator.sync(convoy: first, currentUid: "me", positions: [:], surface: surface)
+
+        let activation = Task {
+            await coordinator.setLeading(true) { await recorder.record() }
+        }
+        await waitUntil { repository.toggles.count == 1 }
+        let second = ConvoyItem(
+            convoyId: "other-convoy",
+            title: nil,
+            status: .active,
+            members: first.members,
+            viewer: first.viewer,
+            createdAt: nil
+        )
+        coordinator.sync(convoy: second, currentUid: "me", positions: [:], surface: surface)
+        coordinator.sync(convoy: first, currentUid: "me", positions: [:], surface: surface)
+
+        let result = await activation.value
+        XCTAssertNil(result)
+        XCTAssertEqual(recorder.count, 0)
+        XCTAssertFalse(coordinator.isToggling)
+    }
+
+    private func waitUntil(
+        timeout: TimeInterval = 2,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        _ predicate: () -> Bool
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if predicate() { return }
+            await Task.yield()
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        XCTFail("Timed out waiting for condition", file: file, line: line)
     }
 
     private func makeConvoy() -> ConvoyItem {
@@ -178,6 +261,12 @@ private final class FollowMeTestClock: @unchecked Sendable {
     init(date: Date) { self.date = date }
 }
 
+@MainActor
+private final class FollowMeActivationRecorder {
+    private(set) var count = 0
+    func record() async { count += 1 }
+}
+
 private struct FollowMeToggle: Equatable {
     let convoyId: String
     let active: Bool
@@ -195,12 +284,15 @@ private final class ConvoyFollowMeRepositoryFake: ConvoyFollowMeRepository, @unc
     private(set) var writes: [FollowMeWrite] = []
     private(set) var terminationCount = 0
     var nextLeading: Bool? = true
+    var setLeadingDelay: Duration?
 
     func setFollowMe(convoyId: String, active: Bool) async -> Bool? {
-        lock.withLock {
+        let result = lock.withLock {
             toggles.append(FollowMeToggle(convoyId: convoyId, active: active))
-            return nextLeading
+            return (nextLeading, setLeadingDelay)
         }
+        if let delay = result.1 { try? await Task.sleep(for: delay) }
+        return result.0
     }
 
     func writeTrail(convoyId: String, polyline: String) async -> Bool {

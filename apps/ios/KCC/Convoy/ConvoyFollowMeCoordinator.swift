@@ -4,6 +4,8 @@ import Observation
 @MainActor
 @Observable
 final class ConvoyFollowMeCoordinator {
+    typealias ActivationHandler = @MainActor @Sendable () async -> Void
+
     private(set) var state: ConvoyFollowMeState?
     private(set) var isLeading = false
     private(set) var isToggling = false
@@ -11,6 +13,7 @@ final class ConvoyFollowMeCoordinator {
     @ObservationIgnored private let repository: ConvoyFollowMeRepository
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private var activeConvoyId: String?
+    @ObservationIgnored private var sessionGeneration: UInt = 0
     @ObservationIgnored private var selfUid: String?
     @ObservationIgnored private var acceptedMemberUids: Set<String> = []
     @ObservationIgnored private var positions: [String: ConvoyMemberPosition] = [:]
@@ -46,6 +49,7 @@ final class ConvoyFollowMeCoordinator {
         }
 
         cancelTasks()
+        sessionGeneration &+= 1
         activeConvoyId = convoyId
         state = nil
         isLeading = false
@@ -63,18 +67,28 @@ final class ConvoyFollowMeCoordinator {
         }
     }
 
-    /// Returns the server's resulting leadership state, or nil on failure.
-    func setLeading(_ active: Bool) async -> Bool? {
+    /// Returns the server's resulting leadership state, or nil on failure or
+    /// when the visible convoy session changes during the request. An activation
+    /// announcement runs only after the server confirms this member leads.
+    func setLeading(
+        _ active: Bool,
+        onActivated: ActivationHandler? = nil
+    ) async -> Bool? {
         guard let convoyId = activeConvoyId, !isToggling else { return nil }
+        let requestGeneration = sessionGeneration
         isToggling = true
         let result = await repository.setFollowMe(convoyId: convoyId, active: active)
-        guard activeConvoyId == convoyId else { return result }
+        guard activeConvoyId == convoyId, sessionGeneration == requestGeneration else { return nil }
         isToggling = false
+        if active, result == true {
+            await onActivated?()
+        }
         return result
     }
 
     func stop() {
         cancelTasks()
+        sessionGeneration &+= 1
         activeConvoyId = nil
         selfUid = nil
         state = nil
