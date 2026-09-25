@@ -214,6 +214,125 @@ final class IncidentMapTests: XCTestCase {
     }
 
     @MainActor
+    func testRefreshStartedDuringPoliceReportCannotDropReturnedPin() async {
+        let reportGate = AsyncGate()
+        let listGate = AsyncGate()
+        let police = FakePoliceRepository(reportGate: reportGate, listGate: listGate)
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = IncidentMapCoordinator(
+            incidentRepository: FakeIncidentRepository(), policeRepository: police,
+            currentUid: "me", pollInterval: .seconds(60), fixWaitTimeout: .seconds(1)
+        )
+        // Let the initial polling pass observe no camera/fix and return before
+        // providing the location used by this explicitly controlled refresh.
+        let surface = StubMapSurface(initialState: .loaded, autoLoad: false)
+        coordinator.start(surface: surface, provider: provider)
+        defer { coordinator.stop() }
+        await Task.yield()
+        provider.emitFix(Self.fix())
+        await waitUntil { coordinator.latestFix != nil }
+
+        let reporting = Task { await coordinator.reportPoliceAtCurrentLocation() }
+        await reportGate.waitUntilEntered()
+
+        // The refresh snapshots the empty server response after the mutation
+        // has begun, then remains suspended until the report has committed.
+        let refresh = Task { await coordinator.refresh(surface: surface) }
+        await listGate.waitUntilEntered()
+        await reportGate.open()
+        let reported = await reporting.value
+        XCTAssertTrue(reported)
+        XCTAssertEqual(coordinator.policeReports.map(\.id), ["police"])
+
+        await listGate.open()
+        await refresh.value
+
+        XCTAssertEqual(coordinator.policeReports.map(\.id), ["police"])
+        XCTAssertEqual(surface.incidentMarkers.map(\.id), ["police:police"])
+    }
+
+    @MainActor
+    func testDisabledLayerUploadsReportsWithoutPresentingThem() async {
+        let incident = FakeIncidentRepository()
+        let police = FakePoliceRepository()
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = IncidentMapCoordinator(
+            incidentRepository: incident, policeRepository: police, currentUid: "me",
+            fixWaitTimeout: .seconds(1)
+        )
+        coordinator.setTrafficAlertsEnabled(false)
+        coordinator.start(
+            surface: StubMapSurface(initialState: .loaded, autoLoad: false),
+            provider: provider
+        )
+        defer { coordinator.stop() }
+        provider.emitFix(Self.fix())
+        await waitUntil { coordinator.latestFix != nil }
+
+        await coordinator.report(.hazard, at: MapPoint(longitude: 12.07, latitude: 57.48))
+        let policeReported = await coordinator.reportPoliceAtCurrentLocation()
+
+        XCTAssertEqual(incident.reportCalls, 1)
+        XCTAssertEqual(police.reportSources, ["convoy"])
+        XCTAssertTrue(policeReported)
+        XCTAssertTrue(coordinator.incidents.isEmpty)
+        XCTAssertTrue(coordinator.policeReports.isEmpty)
+    }
+
+    @MainActor
+    func testLayerToggleRoundTripDiscardsInFlightIncidentReport() async {
+        let reportGate = AsyncGate()
+        let repository = FakeIncidentRepository(reportGate: reportGate)
+        let coordinator = IncidentMapCoordinator(
+            incidentRepository: repository, policeRepository: nil, currentUid: "me"
+        )
+
+        let reporting = Task {
+            await coordinator.report(
+                .hazard, at: MapPoint(longitude: 12.07, latitude: 57.48)
+            )
+        }
+        await reportGate.waitUntilEntered()
+        coordinator.setTrafficAlertsEnabled(false)
+        coordinator.setTrafficAlertsEnabled(true)
+        await reportGate.open()
+        await reporting.value
+
+        XCTAssertEqual(repository.reportCalls, 1)
+        XCTAssertTrue(coordinator.incidents.isEmpty)
+        XCTAssertNil(coordinator.feedback)
+    }
+
+    @MainActor
+    func testDisablingLayerDiscardsInFlightPoliceReport() async {
+        let reportGate = AsyncGate()
+        let police = FakePoliceRepository(reportGate: reportGate)
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = IncidentMapCoordinator(
+            incidentRepository: FakeIncidentRepository(), policeRepository: police,
+            currentUid: "me", pollInterval: .seconds(60), fixWaitTimeout: .seconds(1)
+        )
+        let surface = StubMapSurface(initialState: .loaded, autoLoad: false)
+        coordinator.start(surface: surface, provider: provider)
+        defer { coordinator.stop() }
+        await Task.yield()
+        provider.emitFix(Self.fix())
+        await waitUntil { coordinator.latestFix != nil }
+
+        let reporting = Task { await coordinator.reportPoliceAtCurrentLocation() }
+        await reportGate.waitUntilEntered()
+        coordinator.setTrafficAlertsEnabled(false)
+        await reportGate.open()
+        let reported = await reporting.value
+
+        XCTAssertTrue(reported)
+        XCTAssertEqual(police.reportSources, ["convoy"])
+        XCTAssertTrue(coordinator.policeReports.isEmpty)
+        XCTAssertTrue(surface.incidentMarkers.isEmpty)
+        XCTAssertNil(coordinator.feedback)
+    }
+
+    @MainActor
     func testDisablingTrafficAlertsClearsMarkersAndSuppressesPolling() async {
         let repository = FakeIncidentRepository()
         repository.nearby = [Self.incident(id: "imported", type: .roadwork, source: "trafikverket")]
@@ -224,8 +343,11 @@ final class IncidentMapTests: XCTestCase {
         let surface = Self.surface()
         coordinator.start(surface: surface, provider: StubLocationProvider(authorization: .whileInUse))
         defer { coordinator.stop() }
-        await coordinator.refresh(surface: surface)
-        XCTAssertFalse(surface.incidentMarkers.isEmpty)
+        // start() owns the initial refresh. Launching a second refresh here
+        // races the latest-refresh-wins generation guard: the explicit call
+        // can correctly return after being superseded but before the polling
+        // refresh publishes its markers. Wait for that owned poll instead.
+        await waitUntil { !surface.incidentMarkers.isEmpty }
         let callsBeforeDisable = repository.listCalls
 
         coordinator.setTrafficAlertsEnabled(false)
@@ -248,6 +370,26 @@ final class IncidentMapTests: XCTestCase {
         XCTAssertFalse(IncidentAttribution.markerIsVisible(
             MapScreenPoint(x: 150, y: 75, trustworthy: true), width: 100, height: 100
         ))
+    }
+
+    func testDisabledLayerPresentationHidesMarkersAndAttributionDefensively() {
+        let imported = Self.incident(
+            id: "tv", type: .roadwork, source: "trafikverket"
+        )
+        let police = Self.police(id: "police")
+
+        XCTAssertTrue(IncidentLayerPresentation.markers(
+            enabled: false, incidents: [imported], policeReports: [police]
+        ).isEmpty)
+        XCTAssertTrue(IncidentLayerPresentation.importedIncidents(
+            enabled: false, incidents: [imported]
+        ).isEmpty)
+        XCTAssertEqual(IncidentLayerPresentation.markers(
+            enabled: true, incidents: [imported], policeReports: [police]
+        ).map(\.id), ["tv", "police:police"])
+        XCTAssertEqual(IncidentLayerPresentation.importedIncidents(
+            enabled: true, incidents: [imported]
+        ).map(\.id), ["tv"])
     }
 
     @MainActor
@@ -316,9 +458,15 @@ final class IncidentMapTests: XCTestCase {
         private(set) var listCalls = 0
         var nearby: [RoadIncident] = []
         var listDelay: Duration?
+        private let reportGate: AsyncGate?
+
+        init(reportGate: AsyncGate? = nil) {
+            self.reportGate = reportGate
+        }
 
         func report(type: IncidentType, at point: MapPoint, note: String?) async throws -> RoadIncident {
             lock.withLock { reportCalls += 1 }
+            if let reportGate { await reportGate.wait() }
             return IncidentMapTests.incident(
                 id: "incident", type: type, latitude: point.latitude, longitude: point.longitude
             )
@@ -349,14 +497,26 @@ final class IncidentMapTests: XCTestCase {
         private let lock = NSLock()
         private(set) var reportSources: [String] = []
         var nearby: [PoliceReport] = []
+        private let reportGate: AsyncGate?
+        private let listGate: AsyncGate?
+
+        init(reportGate: AsyncGate? = nil, listGate: AsyncGate? = nil) {
+            self.reportGate = reportGate
+            self.listGate = listGate
+        }
 
         func report(at point: MapPoint, source: String) async throws -> PoliceReport {
             lock.withLock { reportSources.append(source) }
+            if let reportGate { await reportGate.wait() }
             return IncidentMapTests.police(
                 id: "police", latitude: point.latitude, longitude: point.longitude
             )
         }
-        func listNearby(center: MapPoint, radiusMeters: Double) async throws -> [PoliceReport] { nearby }
+        func listNearby(center: MapPoint, radiusMeters: Double) async throws -> [PoliceReport] {
+            let snapshot = nearby
+            if let listGate { await listGate.wait() }
+            return snapshot
+        }
         func remove(policeReportId: String) async throws -> Bool { true }
         func confirm(policeReportId: String) async throws -> PoliceVerification {
             PoliceVerification(
@@ -369,6 +529,34 @@ final class IncidentMapTests: XCTestCase {
                 policeReportId: policeReportId, confirmationCount: 0,
                 disputeCount: 1, alreadyVoted: false, switched: false
             )
+        }
+    }
+
+    private actor AsyncGate {
+        private var entered = false
+        private var isOpen = false
+        private var gateContinuations: [CheckedContinuation<Void, Never>] = []
+        private var entryContinuations: [CheckedContinuation<Void, Never>] = []
+
+        func wait() async {
+            entered = true
+            let entryContinuations = self.entryContinuations
+            self.entryContinuations.removeAll()
+            entryContinuations.forEach { $0.resume() }
+            guard !isOpen else { return }
+            await withCheckedContinuation { gateContinuations.append($0) }
+        }
+
+        func waitUntilEntered() async {
+            guard !entered else { return }
+            await withCheckedContinuation { entryContinuations.append($0) }
+        }
+
+        func open() {
+            isOpen = true
+            let gateContinuations = self.gateContinuations
+            self.gateContinuations.removeAll()
+            gateContinuations.forEach { $0.resume() }
         }
     }
 }

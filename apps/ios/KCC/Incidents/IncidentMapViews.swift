@@ -6,13 +6,15 @@ struct IncidentMapOverlay: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let markers = coordinator.incidents.map(\.mapMarker)
-                + PoliceMapMarker.markers(
-                    pins: coordinator.policeReports,
-                    incidents: coordinator.incidents
-                )
-            let importedMarkerVisible = coordinator.incidents.contains { incident in
-                guard incident.isImported else { return false }
+            let markers = IncidentLayerPresentation.markers(
+                enabled: coordinator.trafficAlertsEnabled,
+                incidents: coordinator.incidents,
+                policeReports: coordinator.policeReports
+            )
+            let importedMarkerVisible = IncidentLayerPresentation.importedIncidents(
+                enabled: coordinator.trafficAlertsEnabled,
+                incidents: coordinator.incidents
+            ).contains { incident in
                 let point = projection.screenPositionFor(
                         latitude: incident.latitude, longitude: incident.longitude
                       )

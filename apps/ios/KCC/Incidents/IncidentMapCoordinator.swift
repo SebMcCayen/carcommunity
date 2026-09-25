@@ -46,6 +46,7 @@ final class IncidentMapCoordinator {
     @ObservationIgnored private var alertedPoliceIds = Set<String>()
     @ObservationIgnored private var mutationGeneration = 0
     @ObservationIgnored private var refreshGeneration = 0
+    @ObservationIgnored private var contextGeneration = 0
 
     init(
         incidentRepository: IncidentRepository?,
@@ -99,6 +100,7 @@ final class IncidentMapCoordinator {
 
     func setTrafficAlertsEnabled(_ enabled: Bool) {
         guard enabled != trafficAlertsEnabled else { return }
+        invalidateContext()
         trafficAlertsEnabled = enabled
         if enabled {
             startPollingIfNeeded()
@@ -127,6 +129,7 @@ final class IncidentMapCoordinator {
     }
 
     func stop(clearMarkers: Bool = true) {
+        invalidateContext()
         fixTask?.cancel()
         authorizationTask?.cancel()
         pollTask?.cancel()
@@ -163,6 +166,7 @@ final class IncidentMapCoordinator {
 
     func report(_ type: IncidentType, at point: MapPoint?) async {
         guard !busy, let incidentRepository else { return }
+        let context = contextGeneration
         busy = true
         defer { busy = false }
         let location: MapPoint?
@@ -174,22 +178,33 @@ final class IncidentMapCoordinator {
             location = nil
         }
         guard let location, Self.valid(location) else {
-            feedback = .error("incidents.locationUnavailable")
+            if contextIsCurrent(context) {
+                feedback = .error("incidents.locationUnavailable")
+            }
             return
         }
         beginMutation()
         do {
             let reported = try await incidentRepository.report(type: type, at: location, note: nil)
-            upsert(reported)
-            updateMarkers()
-            feedback = .success("incidents.reportSuccess")
+            if contextIsCurrent(context) {
+                upsert(reported)
+                updateMarkers()
+            }
             if type == .police {
-                _ = await reportPolice(at: location, source: "manual", surfaceError: false)
+                _ = await reportPolice(
+                    at: location,
+                    source: "manual",
+                    surfaceError: false,
+                    presentationContext: context
+                )
+            }
+            if contextIsCurrent(context) {
+                feedback = .success("incidents.reportSuccess")
             }
         } catch is CancellationError {
             return
         } catch {
-            feedback = .error("incidents.reportError")
+            if contextIsCurrent(context) { feedback = .error("incidents.reportError") }
         }
     }
 
@@ -201,19 +216,30 @@ final class IncidentMapCoordinator {
     private func reportPolice(
         at point: MapPoint,
         source: String = "convoy",
-        surfaceError: Bool = true
+        surfaceError: Bool = true,
+        presentationContext: Int? = nil
     ) async -> Bool {
         guard Self.valid(point), let policeRepository else { return false }
+        let context = presentationContext ?? contextGeneration
         beginMutation()
         do {
             let pin = try await policeRepository.report(at: point, source: source)
+            guard contextIsCurrent(context) else { return true }
+            // Police reports deliberately do not claim the coordinator-wide
+            // busy state: convoy reactions must not block unrelated incident
+            // actions while their upload is in flight. Advance the generation
+            // again at commit time so a refresh that started after the upload
+            // began cannot replace this returned pin with its older snapshot.
+            beginMutation()
             upsert(pin)
             updateMarkers()
             return true
         } catch is CancellationError {
             return false
         } catch {
-            if surfaceError { feedback = .error("incidents.reportError") }
+            if surfaceError, contextIsCurrent(context) {
+                feedback = .error("incidents.reportError")
+            }
             return false
         }
     }
@@ -223,18 +249,23 @@ final class IncidentMapCoordinator {
         source: String = "convoy",
         surfaceError: Bool = true
     ) async -> Bool {
+        let context = contextGeneration
         guard let fix = await authorizedFreshFix(waitForFirst: true) else {
-            if surfaceError { feedback = .error("incidents.locationUnavailable") }
+            if surfaceError, contextIsCurrent(context) {
+                feedback = .error("incidents.locationUnavailable")
+            }
             return false
         }
         return await reportPolice(
             at: MapPoint(longitude: fix.longitude, latitude: fix.latitude),
             source: source,
-            surfaceError: surfaceError
+            surfaceError: surfaceError,
+            presentationContext: context
         )
     }
 
     func selectMarker(id: String) {
+        guard trafficAlertsEnabled else { return }
         if id.hasPrefix(PoliceMapMarker.prefix) {
             let pinId = String(id.dropFirst(PoliceMapMarker.prefix.count))
             selectedPolice = policeReports.first { $0.id == pinId }
@@ -246,12 +277,15 @@ final class IncidentMapCoordinator {
     }
 
     func confirmSelectedIncident() async {
-        guard !busy, let repository = incidentRepository, let selectedIncident else { return }
+        guard trafficAlertsEnabled, !busy,
+              let repository = incidentRepository, let selectedIncident else { return }
+        let context = contextGeneration
         busy = true
         beginMutation()
         defer { busy = false }
         do {
             let result = try await repository.confirm(incidentId: selectedIncident.id)
+            guard contextIsCurrent(context) else { return }
             patchIncident(id: selectedIncident.id) {
                 $0.confirmationCount = result.confirmationCount
                 $0.clearedCount = result.clearedCount
@@ -261,12 +295,14 @@ final class IncidentMapCoordinator {
         } catch is CancellationError {
             return
         } catch {
-            feedback = .error("incidents.verifyError")
+            if contextIsCurrent(context) { feedback = .error("incidents.verifyError") }
         }
     }
 
     func clearSelectedIncident() async {
-        guard !busy, let repository = incidentRepository, let incident = selectedIncident else { return }
+        guard trafficAlertsEnabled, !busy,
+              let repository = incidentRepository, let incident = selectedIncident else { return }
+        let context = contextGeneration
         guard !incident.isImported else {
             feedback = .error("incidents.clearedImportedExplanation")
             return
@@ -274,12 +310,14 @@ final class IncidentMapCoordinator {
         busy = true
         defer { busy = false }
         guard let fix = await authorizedFreshFix(waitForFirst: true) else {
-            feedback = .error("incidents.clearedNoLocation")
+            if contextIsCurrent(context) { feedback = .error("incidents.clearedNoLocation") }
             return
         }
+        guard contextIsCurrent(context) else { return }
         beginMutation()
         do {
             let result = try await repository.reportCleared(incidentId: incident.id, fix: fix)
+            guard contextIsCurrent(context) else { return }
             if result.removed {
                 incidents.removeAll { $0.id == incident.id }
                 selectedIncident = nil
@@ -295,21 +333,28 @@ final class IncidentMapCoordinator {
                 : result.alreadyVoted ? "incidents.clearedAlready" : "incidents.clearedSuccess"
             feedback = .success(key)
         } catch let rejection as IncidentClearRejection {
-            feedback = .error(rejection == .outOfRange ? "incidents.clearedTooFar" : "incidents.clearedError")
+            if contextIsCurrent(context) {
+                feedback = .error(
+                    rejection == .outOfRange ? "incidents.clearedTooFar" : "incidents.clearedError"
+                )
+            }
         } catch is CancellationError {
             return
         } catch {
-            feedback = .error("incidents.clearedError")
+            if contextIsCurrent(context) { feedback = .error("incidents.clearedError") }
         }
     }
 
     func removeSelectedIncident() async {
-        guard !busy, let repository = incidentRepository, let incident = selectedIncident else { return }
+        guard trafficAlertsEnabled, !busy,
+              let repository = incidentRepository, let incident = selectedIncident else { return }
+        let context = contextGeneration
         busy = true
         beginMutation()
         defer { busy = false }
         do {
             try await repository.remove(incidentId: incident.id)
+            guard contextIsCurrent(context) else { return }
             incidents.removeAll { $0.id == incident.id }
             selectedIncident = nil
             updateMarkers()
@@ -317,12 +362,14 @@ final class IncidentMapCoordinator {
         } catch is CancellationError {
             return
         } catch {
-            feedback = .error("incidents.removeError")
+            if contextIsCurrent(context) { feedback = .error("incidents.removeError") }
         }
     }
 
     func verifySelectedPolice(confirm: Bool) async {
-        guard !busy, let repository = policeRepository, let pin = selectedPolice else { return }
+        guard trafficAlertsEnabled, !busy,
+              let repository = policeRepository, let pin = selectedPolice else { return }
+        let context = contextGeneration
         busy = true
         beginMutation()
         defer { busy = false }
@@ -330,6 +377,7 @@ final class IncidentMapCoordinator {
             let result = try await (confirm
                 ? repository.confirm(policeReportId: pin.id)
                 : repository.dispute(policeReportId: pin.id))
+            guard contextIsCurrent(context) else { return }
             patchPolice(id: pin.id) {
                 $0.confirmationCount = result.confirmationCount
                 $0.disputeCount = result.disputeCount
@@ -341,17 +389,20 @@ final class IncidentMapCoordinator {
         } catch is CancellationError {
             return
         } catch {
-            feedback = .error("police.verifyError")
+            if contextIsCurrent(context) { feedback = .error("police.verifyError") }
         }
     }
 
     func removeSelectedPolice() async {
-        guard !busy, let repository = policeRepository, let pin = selectedPolice else { return }
+        guard trafficAlertsEnabled, !busy,
+              let repository = policeRepository, let pin = selectedPolice else { return }
+        let context = contextGeneration
         busy = true
         beginMutation()
         defer { busy = false }
         do {
             _ = try await repository.remove(policeReportId: pin.id)
+            guard contextIsCurrent(context) else { return }
             policeReports.removeAll { $0.id == pin.id }
             selectedPolice = nil
             updateMarkers()
@@ -359,7 +410,7 @@ final class IncidentMapCoordinator {
         } catch is CancellationError {
             return
         } catch {
-            feedback = .error("police.removeError")
+            if contextIsCurrent(context) { feedback = .error("police.removeError") }
         }
     }
 
@@ -435,6 +486,16 @@ final class IncidentMapCoordinator {
 
     private func beginMutation() {
         mutationGeneration &+= 1
+    }
+
+    private func invalidateContext() {
+        contextGeneration &+= 1
+        mutationGeneration &+= 1
+        refreshGeneration &+= 1
+    }
+
+    private func contextIsCurrent(_ context: Int) -> Bool {
+        trafficAlertsEnabled && context == contextGeneration && !Task.isCancelled
     }
 
     private func authorizedFreshFix(waitForFirst: Bool) async -> LocationFix? {

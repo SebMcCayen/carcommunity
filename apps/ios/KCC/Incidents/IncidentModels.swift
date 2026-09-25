@@ -177,6 +177,26 @@ enum IncidentAttribution {
     }
 }
 
+enum IncidentLayerPresentation {
+    static func markers(
+        enabled: Bool,
+        incidents: [RoadIncident],
+        policeReports: [PoliceReport]
+    ) -> [MapIncidentMarker] {
+        guard enabled else { return [] }
+        return incidents.map(\.mapMarker)
+            + PoliceMapMarker.markers(pins: policeReports, incidents: incidents)
+    }
+
+    static func importedIncidents(
+        enabled: Bool,
+        incidents: [RoadIncident]
+    ) -> [RoadIncident] {
+        guard enabled else { return [] }
+        return incidents.filter(\.isImported)
+    }
+}
+
 enum PoliceProximity {
     static let alertRadiusMeters = 500.0
 
