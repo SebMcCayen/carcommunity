@@ -781,29 +781,30 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertEqual(camera.pitch, CGFloat(current.pitch), accuracy: 1e-9)
     }
 
-    func testMapHomeMeFollowPolicyRestoringBrowsingUsesFallbackCameraWithoutOwnPoint() {
-        let current = MapCameraSnapshot.of(
+    func testMapHomeMeFollowPolicyRestoresLatestZoomAfterConvoyEndsWithoutOwnPoint() {
+        let convoyFit = MapCameraSnapshot.of(
             latitude: 57.51, longitude: 12.11, zoom: 14, bearing: 35, pitch: 25
         )
-        let fallback = MapCameraSnapshot.of(
+        let preConvoyCamera = MapCameraSnapshot.of(
             latitude: 57.42, longitude: 12.02, zoom: 11, bearing: 8, pitch: 12
         )
 
         let camera = MapHomeMeFollowPolicy.camera(
             point: nil,
-            snapshot: current,
-            fallback: fallback,
-            restoringBrowsing: true
+            snapshot: convoyFit,
+            fallback: preConvoyCamera,
+            restoringBrowsing: true,
+            browsingZoom: 17.5
         )
         guard let camera else {
             XCTFail("Expected a camera from the browsing fallback")
             return
         }
-        XCTAssertEqual(camera.center.latitude, fallback.latitude, accuracy: 1e-9)
-        XCTAssertEqual(camera.center.longitude, fallback.longitude, accuracy: 1e-9)
-        XCTAssertEqual(camera.zoom, CGFloat(fallback.zoom), accuracy: 1e-9)
-        XCTAssertEqual(camera.bearing, CGFloat(fallback.bearing), accuracy: 1e-9)
-        XCTAssertEqual(camera.pitch, CGFloat(fallback.pitch), accuracy: 1e-9)
+        XCTAssertEqual(camera.center.latitude, preConvoyCamera.latitude, accuracy: 1e-9)
+        XCTAssertEqual(camera.center.longitude, preConvoyCamera.longitude, accuracy: 1e-9)
+        XCTAssertEqual(camera.zoom, 17.5, accuracy: 1e-9)
+        XCTAssertEqual(camera.bearing, CGFloat(preConvoyCamera.bearing), accuracy: 1e-9)
+        XCTAssertEqual(camera.pitch, CGFloat(preConvoyCamera.pitch), accuracy: 1e-9)
     }
 
     func testMapHomeMeFollowPolicySubscriptionKeyTracksProviderIdentityAndFlags() {

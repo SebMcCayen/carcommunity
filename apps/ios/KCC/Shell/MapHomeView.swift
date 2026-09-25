@@ -160,12 +160,13 @@ enum MapHomeMeFollowPolicy {
             CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
         }
         guard let center else { return nil }
-        let zoom: CGFloat
-        if point != nil, restoringBrowsing {
-            zoom = browsingZoom
-        } else {
-            zoom = CGFloat(preferred?.zoom ?? Double(StubMapSurface.defaultBrowsingZoom))
-        }
+        // A convoy/route camera may have owned zoom while the user changed the
+        // resting browsing preference. Once browsing ownership resumes, use
+        // that latest preference even if no fresh own-location point exists;
+        // the saved pre-owner camera still supplies center, bearing and pitch.
+        let zoom = restoringBrowsing
+            ? CGFloat(browsingZoom)
+            : CGFloat(preferred?.zoom ?? Double(StubMapSurface.defaultBrowsingZoom))
         return Camera(
             center: center,
             zoom: zoom,
