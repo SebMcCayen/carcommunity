@@ -7,10 +7,21 @@ final class EventManagementTests: XCTestCase {
         var createError: Error?
         var createCalls: [EventFormInput] = []
         var updateCalls: [(String, EventFormInput)] = []
+        var eventValue: EventSummary?
+        var attendeeDelay: Duration = .zero
+        var attendeeResult: EventAttendeesResult = .loaded([])
+        var cancelCalls = 0
+        var checkInCalls = 0
+        var checkInResult: EventCheckInResult = .recorded
 
         func publishedEvents() -> AsyncStream<EventsListSnapshot> { AsyncStream { $0.finish() } }
-        func event(withId eventId: String) -> AsyncStream<EventSummary?> { AsyncStream { $0.finish() } }
-        func eventDetail(eventId: String) -> AsyncStream<EventDetail?> { AsyncStream { $0.finish() } }
+        func event(withId eventId: String) -> AsyncStream<EventSummary?> {
+            AsyncStream { continuation in
+                if let eventValue { continuation.yield(eventValue) }
+                continuation.finish()
+            }
+        }
+        func eventDetail(eventId: String) -> AsyncStream<EventPrivateDetailSnapshot> { AsyncStream { $0.finish() } }
         func myRsvp(eventId: String, uid: String) -> AsyncStream<RsvpStatus?> { AsyncStream { $0.finish() } }
         func submitRsvp(eventId: String, uid: String, status: RsvpStatus) async throws {}
         func currentUserId() -> String? { "viewer" }
@@ -24,18 +35,35 @@ final class EventManagementTests: XCTestCase {
         func updateEvent(eventId: String, input: EventFormInput) async throws {
             updateCalls.append((eventId, input))
         }
+
+        func attendees(eventId: String) async -> EventAttendeesResult {
+            try? await Task.sleep(for: attendeeDelay)
+            return attendeeResult
+        }
+
+        func cancelEvent(eventId: String) async throws { cancelCalls += 1 }
+
+        func checkIn(eventId: String, fix: EventCheckInFix) async throws -> EventCheckInResult {
+            checkInCalls += 1
+            return checkInResult
+        }
     }
 
     private final class FakeSubscriptionRepository: SubscriptionStateRepository,
         @unchecked Sendable
     {
-        let value: StoredSubscription?
+        private var value: StoredSubscription?
+        private var continuations: [AsyncStream<StoredSubscription?>.Continuation] = []
         init(_ value: StoredSubscription?) { self.value = value }
         func subscription(uid: String) -> AsyncStream<StoredSubscription?> {
             AsyncStream { continuation in
                 continuation.yield(value)
-                continuation.finish()
+                continuations.append(continuation)
             }
+        }
+        func emit(_ value: StoredSubscription?) {
+            self.value = value
+            continuations.forEach { $0.yield(value) }
         }
     }
 
@@ -175,6 +203,125 @@ final class EventManagementTests: XCTestCase {
         coordinator.start()
         for _ in 0..<10 { await Task.yield() }
         XCTAssertFalse(coordinator.isPaidSubscriber)
+    }
+
+    @MainActor
+    func testOpenDetailTracksPaidEntitlementLiveAndFailsClosed() async {
+        let repository = FakeRepository()
+        repository.eventValue = positionedEvent()
+        let subscriptions = FakeSubscriptionRepository(nil)
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = EventDetailCoordinator(
+            repository: repository,
+            eventId: "e1",
+            locationProvider: provider,
+            subscriptionRepository: subscriptions
+        )
+
+        coordinator.start()
+        await waitFor { if case .loaded = coordinator.state { true } else { false } }
+        XCTAssertFalse(coordinator.isPaidSubscriber)
+
+        subscriptions.emit(activeSubscription(tier: "plus"))
+        await waitFor { coordinator.isPaidSubscriber }
+
+        subscriptions.emit(nil)
+        await waitFor { !coordinator.isPaidSubscriber }
+    }
+
+    @MainActor
+    func testManagementOperationsDoNotCancelEachOther() async {
+        let repository = FakeRepository()
+        repository.eventValue = positionedEvent(createdByUserId: "viewer")
+        repository.attendeeDelay = .milliseconds(50)
+        repository.attendeeResult = .loaded([
+            EventAttendee(id: "member", displayName: "Member", avatarPath: nil, status: .going)
+        ])
+        let coordinator = EventDetailCoordinator(repository: repository, eventId: "e1")
+
+        coordinator.start()
+        await waitFor { coordinator.canManage }
+        coordinator.loadAttendees()
+        coordinator.cancelEvent()
+
+        await waitFor { coordinator.manageState == .deleted }
+        await waitFor {
+            if case .loaded = coordinator.attendeesState { true } else { false }
+        }
+        XCTAssertEqual(repository.cancelCalls, 1)
+    }
+
+    @MainActor
+    func testCheckInWaitsForPermissionAndResumesAfterGrant() async {
+        let repository = FakeRepository()
+        repository.eventValue = positionedEvent()
+        let subscriptions = FakeSubscriptionRepository(activeSubscription(tier: "plus"))
+        let provider = StubLocationProvider(authorization: .notDetermined)
+        provider.scriptRequestOutcome(.whileInUse)
+        let permission = LocationPermissionCoordinator(provider: provider)
+        let coordinator = EventDetailCoordinator(
+            repository: repository,
+            eventId: "e1",
+            locationProvider: provider,
+            subscriptionRepository: subscriptions
+        )
+
+        permission.start()
+        coordinator.start()
+        await waitFor { coordinator.isPaidSubscriber && coordinator.canCheckIn(at: Date()) }
+        coordinator.requestCheckIn(using: permission)
+        XCTAssertTrue(coordinator.checkInPermissionPending)
+        XCTAssertEqual(permission.state, .rationale)
+        XCTAssertEqual(repository.checkInCalls, 0)
+
+        permission.proceedFromRationale()
+        await waitFor { permission.state == .granted && provider.activeFixStreamCount == 1 }
+        provider.emitFix(LocationFix.of(
+            latitude: 57.48,
+            longitude: 12.07,
+            timestamp: Date(),
+            accuracyMeters: 5,
+            isSimulatedBySoftware: false
+        )!)
+        await waitFor { repository.checkInCalls == 1 }
+        XCTAssertFalse(coordinator.checkInPermissionPending)
+    }
+
+    @MainActor
+    func testCheckInAvailabilityUsesTimelineDateAcrossOpeningBoundary() async {
+        let repository = FakeRepository()
+        let start = Date(timeIntervalSince1970: 2_000_000)
+        repository.eventValue = positionedEvent(startsAt: start)
+        let subscriptions = FakeSubscriptionRepository(activeSubscription(tier: "supporter"))
+        let coordinator = EventDetailCoordinator(
+            repository: repository,
+            eventId: "e1",
+            locationProvider: StubLocationProvider(authorization: .whileInUse),
+            subscriptionRepository: subscriptions
+        )
+
+        coordinator.start()
+        await waitFor { coordinator.isPaidSubscriber }
+        XCTAssertFalse(coordinator.canCheckIn(at: start.addingTimeInterval(-30 * 60 - 1)))
+        XCTAssertTrue(coordinator.canCheckIn(at: start.addingTimeInterval(-30 * 60)))
+    }
+
+    private func activeSubscription(tier: String) -> StoredSubscription {
+        StoredSubscription(
+            tier: tier, status: "active", entitlement: "member_monthly", userId: "viewer"
+        )
+    }
+
+    private func positionedEvent(
+        startsAt: Date = Date().addingTimeInterval(60),
+        createdByUserId: String? = nil
+    ) -> EventSummary {
+        EventSummary(
+            id: "e1", title: "Meet", summary: nil, startsAt: startsAt, endsAt: nil,
+            approximateArea: nil, locationName: nil, latitude: 57.48, longitude: 12.07,
+            isOfficial: false, status: .published, counts: .empty,
+            createdByUserId: createdByUserId
+        )
     }
 
     @MainActor

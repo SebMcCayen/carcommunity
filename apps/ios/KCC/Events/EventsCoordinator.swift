@@ -111,7 +111,7 @@ final class EventsCoordinator {
             eventId: eventId,
             eventChatRepository: eventChatRepository,
             locationProvider: locationProvider,
-            isPaidSubscriber: isPaidSubscriber
+            subscriptionRepository: subscriptionRepository
         )
     }
 

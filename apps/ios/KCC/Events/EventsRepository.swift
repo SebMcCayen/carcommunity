@@ -31,6 +31,14 @@ struct RsvpWriteError: Error, Equatable, Sendable {
     let code: String?
 }
 
+/// A successful private-detail read (including an honestly absent document)
+/// versus a listener failure. Nil alone cannot carry that distinction safely:
+/// creator edit must never treat a transient read error as blank fields.
+enum EventPrivateDetailSnapshot: Equatable, Sendable {
+    case loaded(EventDetail?)
+    case failed(code: String?)
+}
+
 /// Events read + RSVP operations — the iOS port of Android's
 /// `EventsRepository.kt`, covering list/detail, RSVP, management, roster and
 /// check-in operations.
@@ -58,9 +66,9 @@ protocol EventsRepository: AnyObject, Sendable {
     /// supplies the loading state before the first emission.
     func event(withId eventId: String) -> AsyncStream<EventSummary?>
 
-    /// Member-gated detail; emits nil when denied (non-member) or missing
-    /// (Android's `observeEventDetail`).
-    func eventDetail(eventId: String) -> AsyncStream<EventDetail?>
+    /// Member-gated detail. Successful absence and listener failure remain
+    /// distinct so creator editing is enabled only after a settled read.
+    func eventDetail(eventId: String) -> AsyncStream<EventPrivateDetailSnapshot>
 
     /// The caller's own RSVP answer; nil when they have not responded
     /// (Android's `observeMyRsvp`).

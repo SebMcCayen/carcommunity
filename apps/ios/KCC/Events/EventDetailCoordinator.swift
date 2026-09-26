@@ -47,7 +47,7 @@ final class EventDetailCoordinator {
     /// write.
     private let uid: String?
     private weak var locationProvider: (any LocationProvider)?
-    private let isPaidSubscriber: Bool
+    private let subscriptionRepository: SubscriptionStateRepository?
     /// Whether the viewer passes the member gate — mirrors Android's
     /// `passesMemberGate` parameter. While ``MemberGating/enabled`` is false
     /// every signed-in user passes; re-enabling the gate requires threading
@@ -69,6 +69,10 @@ final class EventDetailCoordinator {
     private(set) var attendeesState: EventAttendeesState = .idle
     private(set) var manageState: EventManageState = .idle
     private(set) var checkInState: EventCheckInState = .idle
+    private(set) var checkInPermissionPending = false
+    /// Unknown and missing entitlement both fail closed. The detail owns this
+    /// live observation so an already-open page reacts to upgrades/downgrades.
+    private(set) var isPaidSubscriber = false
     private(set) var attendanceStatus: EventAttendanceStatus?
     /// First accepted fix in this coordinator session. It fills the snapshot
     /// round-trip gap and is intentionally preserved across later failed taps.
@@ -86,7 +90,11 @@ final class EventDetailCoordinator {
     @ObservationIgnored
     nonisolated(unsafe) private var submission: Task<Void, Never>?
     @ObservationIgnored
-    nonisolated(unsafe) private var action: Task<Void, Never>?
+    nonisolated(unsafe) private var attendeesTask: Task<Void, Never>?
+    @ObservationIgnored
+    nonisolated(unsafe) private var manageTask: Task<Void, Never>?
+    @ObservationIgnored
+    nonisolated(unsafe) private var checkInTask: Task<Void, Never>?
     /// Whether the member-gated detail listener has been attached for the
     /// current subscription generation (see ``subscribeDetailIfNeeded(for:)``).
     @ObservationIgnored
@@ -97,7 +105,7 @@ final class EventDetailCoordinator {
         eventId: String,
         eventChatRepository: EventChatRepository? = nil,
         locationProvider: (any LocationProvider)? = nil,
-        isPaidSubscriber: Bool = false,
+        subscriptionRepository: SubscriptionStateRepository? = nil,
         passesMemberGate: Bool = MemberGating.allows(isActiveMember: false)
     ) {
         self.repository = repository
@@ -106,7 +114,7 @@ final class EventDetailCoordinator {
         self.eventChatRepository = eventChatRepository
         self.eventChatEnabled = eventChatRepository != nil
         self.locationProvider = locationProvider
-        self.isPaidSubscriber = isPaidSubscriber
+        self.subscriptionRepository = subscriptionRepository
         self.passesMemberGate = passesMemberGate
     }
 
@@ -115,7 +123,9 @@ final class EventDetailCoordinator {
             task.cancel()
         }
         submission?.cancel()
-        action?.cancel()
+        attendeesTask?.cancel()
+        manageTask?.cancel()
+        checkInTask?.cancel()
     }
 
     // MARK: - Derived gates
@@ -163,8 +173,12 @@ final class EventDetailCoordinator {
     }
 
     var canCheckIn: Bool {
+        canCheckIn(at: Date())
+    }
+
+    func canCheckIn(at now: Date) -> Bool {
         guard case .loaded(let event) = state else { return false }
-        return isPaidSubscriber && Events.canCheckIn(event) && locationProvider != nil
+        return isPaidSubscriber && Events.canCheckIn(event, now: now) && locationProvider != nil
     }
 
     var checkInPending: Bool {
@@ -193,8 +207,8 @@ final class EventDetailCoordinator {
     func loadAttendees() {
         guard attendeesState != .loading else { return }
         attendeesState = .loading
-        action?.cancel()
-        action = Task { [weak self, repository, eventId] in
+        attendeesTask?.cancel()
+        attendeesTask = Task { [weak self, repository, eventId] in
             let result = await repository.attendees(eventId: eventId)
             guard !Task.isCancelled, let self else { return }
             switch result {
@@ -209,8 +223,8 @@ final class EventDetailCoordinator {
     func cancelEvent() {
         guard canManage, manageState != .deleting else { return }
         manageState = .deleting
-        action?.cancel()
-        action = Task { [weak self, repository, eventId] in
+        manageTask?.cancel()
+        manageTask = Task { [weak self, repository, eventId] in
             do {
                 try await repository.cancelEvent(eventId: eventId)
                 guard !Task.isCancelled, let self else { return }
@@ -223,6 +237,25 @@ final class EventDetailCoordinator {
                 self.manageState = .failed(.unknown)
             }
         }
+    }
+
+    /// Starts the explicit permission flow from the user's check-in tap. The
+    /// actual check-in remains pending across the rationale, system dialog,
+    /// and a Settings round-trip, and resumes only after a real grant.
+    func requestCheckIn(using permission: LocationPermissionCoordinator) {
+        checkInPermissionPending = true
+        permission.requestAccess()
+        if permission.state == .granted { resumeCheckInAfterPermissionGrant() }
+    }
+
+    func resumeCheckInAfterPermissionGrant() {
+        guard checkInPermissionPending else { return }
+        checkInPermissionPending = false
+        checkIn()
+    }
+
+    func cancelPendingCheckIn() {
+        checkInPermissionPending = false
     }
 
     func checkIn() {
@@ -240,8 +273,8 @@ final class EventDetailCoordinator {
             return
         }
         checkInState = .working
-        action?.cancel()
-        action = Task { [weak self, repository, eventId] in
+        checkInTask?.cancel()
+        checkInTask = Task { [weak self, repository, eventId] in
             guard let self else { return }
             guard let fix = await self.freshFix(from: provider) else {
                 guard !Task.isCancelled else { return }
@@ -375,6 +408,16 @@ final class EventDetailCoordinator {
                     coordinator.firstCheckInFixAt = nil
                 }
             })
+            if let subscriptionRepository {
+                let tierStream = subscriptionRepository.subscription(uid: uid)
+                subscriptions.append(consume(tierStream) { coordinator, subscription in
+                    guard let tier = subscription?.effectiveTier else {
+                        coordinator.isPaidSubscriber = false
+                        return
+                    }
+                    coordinator.isPaidSubscriber = tier == .plus || tier == .supporter
+                })
+            }
         }
 
         if let eventChatRepository {
@@ -400,9 +443,16 @@ final class EventDetailCoordinator {
         else { return }
         detailSubscribed = true
         let detailStream = repository.eventDetail(eventId: eventId)
-        subscriptions.append(consume(detailStream) { coordinator, detail in
-            coordinator.detail = detail
-            coordinator.detailSettled = true
+        subscriptions.append(consume(detailStream) { coordinator, snapshot in
+            switch snapshot {
+            case .loaded(let detail):
+                coordinator.detail = detail
+                coordinator.detailSettled = true
+            case .failed:
+                // Preserve the last successful value. An initial failure stays
+                // unsettled, so editing cannot submit blank optional fields.
+                break
+            }
         })
     }
 
