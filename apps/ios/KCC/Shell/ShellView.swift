@@ -8,6 +8,7 @@ import UIKit
 /// outside SwiftUI.
 struct ShellView: View {
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
 
     /// The signed-in session, threaded from ``RootView``. The config-less /
     /// unavailable state renders the bare shell with no profile entry —
@@ -1078,8 +1079,11 @@ struct ShellView: View {
     /// Reactions follow the same map-chrome gate as Android: listen only while
     /// the map home is unobscured and an accepted, non-ended convoy owns the bar.
     private var convoyReactionTargetId: String? {
-        guard case .none = mapCover else { return nil }
-        return convoyManagementCoordinator?.activeConvoy?.convoyId
+        ConvoyReactionSubscription.targetConvoyId(
+            mapIsUncovered: mapCover == .none,
+            activeConvoyId: convoyManagementCoordinator?.activeConvoy?.convoyId,
+            appIsActive: scenePhase == .active
+        )
     }
 
     private var convoyReactionSubscriptionKey: String {

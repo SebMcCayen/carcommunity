@@ -1,5 +1,18 @@
 import Foundation
 
+enum ConvoyReactionSubscription {
+    /// Reactions are transient map chrome. Detach while the scene is inactive
+    /// so suspended-period events cannot be presented after resuming.
+    static func targetConvoyId(
+        mapIsUncovered: Bool,
+        activeConvoyId: String?,
+        appIsActive: Bool
+    ) -> String? {
+        guard mapIsUncovered, appIsActive else { return nil }
+        return activeConvoyId
+    }
+}
+
 /// The transient convoy reactions accepted by `convoy-sendReaction`.
 enum ConvoyReactionKind: String, CaseIterable, Hashable, Identifiable, Sendable {
     case police

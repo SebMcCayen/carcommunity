@@ -2,6 +2,71 @@ import XCTest
 @testable import KCC
 
 final class ConvoyReactionModelsTests: XCTestCase {
+    func testSubscriptionRequiresActiveUncoveredMapAndConvoy() {
+        XCTAssertEqual(
+            ConvoyReactionSubscription.targetConvoyId(
+                mapIsUncovered: true,
+                activeConvoyId: "convoy-1",
+                appIsActive: true
+            ),
+            "convoy-1"
+        )
+        XCTAssertNil(ConvoyReactionSubscription.targetConvoyId(
+            mapIsUncovered: true,
+            activeConvoyId: "convoy-1",
+            appIsActive: false
+        ))
+        XCTAssertNil(ConvoyReactionSubscription.targetConvoyId(
+            mapIsUncovered: false,
+            activeConvoyId: "convoy-1",
+            appIsActive: true
+        ))
+        XCTAssertNil(ConvoyReactionSubscription.targetConvoyId(
+            mapIsUncovered: true,
+            activeConvoyId: nil,
+            appIsActive: true
+        ))
+    }
+
+    func testSnapshotGateSuppressesInitialCacheAndServerSnapshots() {
+        let gate = ConvoyReactionSnapshotGate()
+
+        XCTAssertTrue(gate.acceptedDocumentIds(
+            allDocumentIds: ["cached"],
+            addedDocumentIds: ["cached"],
+            isFromCache: true
+        ).isEmpty)
+        XCTAssertTrue(gate.acceptedDocumentIds(
+            allDocumentIds: ["cached", "server-old"],
+            addedDocumentIds: ["server-old"],
+            isFromCache: false
+        ).isEmpty)
+        XCTAssertEqual(gate.acceptedDocumentIds(
+            allDocumentIds: ["cached", "server-old", "fresh"],
+            addedDocumentIds: ["fresh"],
+            isFromCache: false
+        ), ["fresh"])
+    }
+
+    func testSnapshotGateDoesNotReplaySeenDocumentsAfterReconnect() {
+        let gate = ConvoyReactionSnapshotGate()
+        _ = gate.acceptedDocumentIds(
+            allDocumentIds: ["old"],
+            addedDocumentIds: ["old"],
+            isFromCache: false
+        )
+        XCTAssertEqual(gate.acceptedDocumentIds(
+            allDocumentIds: ["old", "fresh"],
+            addedDocumentIds: ["fresh"],
+            isFromCache: false
+        ), ["fresh"])
+        XCTAssertTrue(gate.acceptedDocumentIds(
+            allDocumentIds: ["old", "fresh"],
+            addedDocumentIds: ["old", "fresh"],
+            isFromCache: false
+        ).isEmpty)
+    }
+
     func testKindsAndCooldownWindowsMatchBackendContract() {
         XCTAssertEqual(ConvoyReactionKind.police.rawValue, "police")
         XCTAssertEqual(ConvoyReactionKind.hello.rawValue, "hello")

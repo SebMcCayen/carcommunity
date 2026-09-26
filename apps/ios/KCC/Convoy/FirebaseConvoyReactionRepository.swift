@@ -33,23 +33,35 @@ final class FirebaseConvoyReactionRepository: ConvoyReactionRepository, @uncheck
         }
     }
 
-    func reactions(
-        convoyId: String,
-        since: Date
-    ) -> AsyncStream<ConvoyReactionEvent> {
+    func reactions(convoyId: String) -> AsyncStream<ConvoyReactionEvent> {
         let query = firestore
             .collection(Self.convoyChatsCollection)
             .document(convoyId)
             .collection(Self.reactionsCollection)
-            .whereField(Self.createdAtField, isGreaterThan: Timestamp(date: since))
             .order(by: Self.createdAtField, descending: false)
 
         return AsyncStream { continuation in
+            // Firestore reports every document in the initial snapshot as an
+            // `.added` change. Baseline through the first server-backed
+            // snapshot, including any cache snapshot that precedes it, so
+            // existing reactions are never replayed as fresh. Keeping seen ids
+            // for the listener lifetime also protects target reconnects from
+            // re-emitting an older document.
+            let gate = ConvoyReactionSnapshotGate()
             let registration = query.addSnapshotListener { snapshot, error in
                 guard error == nil, let snapshot else { return }
-                for change in snapshot.documentChanges where change.type == .added {
-                    guard !change.document.metadata.hasPendingWrites,
-                          let event = Self.event(from: change.document)
+                let addedDocuments = snapshot.documentChanges
+                    .filter { $0.type == .added }
+                    .map(\.document)
+                let acceptedIds = gate.acceptedDocumentIds(
+                    allDocumentIds: snapshot.documents.map(\.documentID),
+                    addedDocumentIds: addedDocuments.map(\.documentID),
+                    isFromCache: snapshot.metadata.isFromCache
+                )
+                guard !acceptedIds.isEmpty else { return }
+                for document in addedDocuments where acceptedIds.contains(document.documentID) {
+                    guard !document.metadata.hasPendingWrites,
+                          let event = Self.event(from: document)
                     else { continue }
                     continuation.yield(event)
                 }
@@ -126,4 +138,35 @@ final class FirebaseConvoyReactionRepository: ConvoyReactionRepository, @uncheck
 
 private struct ConvoyReactionListenerBox: @unchecked Sendable {
     let registration: ListenerRegistration
+}
+
+/// Thread-safe freshness gate for Firestore snapshot listeners.
+///
+/// A cache snapshot is not a sufficient baseline because the following server
+/// snapshot can contain older documents absent from cache and describe them as
+/// added. Listening begins only after a complete server snapshot establishes
+/// the baseline. IDs remain remembered across later target reconnects.
+final class ConvoyReactionSnapshotGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var hasServerBaseline = false
+    private var seenDocumentIds: Set<String> = []
+
+    func acceptedDocumentIds(
+        allDocumentIds: [String],
+        addedDocumentIds: [String],
+        isFromCache: Bool
+    ) -> Set<String> {
+        lock.withLock {
+            if !hasServerBaseline {
+                seenDocumentIds.formUnion(allDocumentIds)
+                guard !isFromCache else { return [] }
+                hasServerBaseline = true
+                return []
+            }
+
+            let unseenIds = Set(addedDocumentIds).subtracting(seenDocumentIds)
+            seenDocumentIds.formUnion(allDocumentIds)
+            return unseenIds
+        }
+    }
 }

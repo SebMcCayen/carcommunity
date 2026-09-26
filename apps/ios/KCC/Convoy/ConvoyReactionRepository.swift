@@ -7,9 +7,8 @@ protocol ConvoyReactionRepository: AnyObject, Sendable {
         clientId: String
     ) async -> ConvoyReactionSendResult
 
-    /// Emits only server-committed reactions created after the subscription starts.
-    func reactions(
-        convoyId: String,
-        since: Date
-    ) -> AsyncStream<ConvoyReactionEvent>
+    /// Emits only server-committed reactions observed after the subscription's
+    /// initial server snapshot. Repository implementations must not compare a
+    /// client clock with a server timestamp to decide freshness.
+    func reactions(convoyId: String) -> AsyncStream<ConvoyReactionEvent>
 }

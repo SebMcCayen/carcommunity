@@ -6,10 +6,7 @@ import XCTest
 final class ConvoyReactionCoordinatorTests: XCTestCase {
     func testSyncObservesCurrentConvoyAndCancelsPreviousListener() async {
         let repository = ConvoyReactionRepositoryFake()
-        let coordinator = ConvoyReactionCoordinator(
-            repository: repository,
-            nowDate: { Date(timeIntervalSince1970: 100) }
-        )
+        let coordinator = ConvoyReactionCoordinator(repository: repository)
 
         coordinator.sync(convoyId: "first")
         XCTAssertEqual(repository.observedConvoys, ["first"])
@@ -50,6 +47,27 @@ final class ConvoyReactionCoordinatorTests: XCTestCase {
         }
         XCTAssertNil(releasedCoordinator)
         XCTAssertEqual(repository.terminationCount(for: "convoy-1"), 1)
+    }
+
+    func testBackgroundDetachAndResumeStartsFreshSubscription() async {
+        let repository = ConvoyReactionRepositoryFake()
+        let coordinator = ConvoyReactionCoordinator(repository: repository)
+
+        coordinator.sync(convoyId: "convoy-1")
+        repository.emit(event(id: "foreground"), to: "convoy-1")
+        await waitUntil { coordinator.incomingReaction?.id == "foreground" }
+
+        coordinator.sync(convoyId: nil)
+        await waitUntil { repository.terminationCount(for: "convoy-1") == 1 }
+        XCTAssertNil(coordinator.incomingReaction)
+        repository.emit(event(id: "while-backgrounded"), to: "convoy-1")
+        XCTAssertNil(coordinator.incomingReaction)
+
+        coordinator.sync(convoyId: "convoy-1")
+        XCTAssertEqual(repository.observedConvoys, ["convoy-1", "convoy-1"])
+        repository.emit(event(id: "after-resume"), to: "convoy-1")
+        await waitUntil { coordinator.incomingReaction?.id == "after-resume" }
+        XCTAssertEqual(coordinator.incomingReaction?.id, "after-resume")
     }
 
     func testSuccessfulSendStartsCooldownAndUsesIdempotencyKey() async {
@@ -274,10 +292,7 @@ private final class ConvoyReactionRepositoryFake: ConvoyReactionRepository, @unc
         return immediateResult
     }
 
-    func reactions(
-        convoyId: String,
-        since: Date
-    ) -> AsyncStream<ConvoyReactionEvent> {
+    func reactions(convoyId: String) -> AsyncStream<ConvoyReactionEvent> {
         AsyncStream { continuation in
             lock.withLock {
                 recordedConvoys.append(convoyId)

@@ -10,7 +10,6 @@ final class ConvoyReactionCoordinator {
 
     @ObservationIgnored private let repository: ConvoyReactionRepository
     @ObservationIgnored private let nowMilliseconds: @Sendable () -> Int64
-    @ObservationIgnored private let nowDate: @Sendable () -> Date
     @ObservationIgnored private let makeClientId: @Sendable () -> String
     @ObservationIgnored private var activeConvoyId: String?
     @ObservationIgnored private var sessionGeneration: UInt64 = 0
@@ -27,14 +26,12 @@ final class ConvoyReactionCoordinator {
         nowMilliseconds: @escaping @Sendable () -> Int64 = {
             Int64(Date().timeIntervalSince1970 * 1_000)
         },
-        nowDate: @escaping @Sendable () -> Date = Date.init,
         makeClientId: @escaping @Sendable () -> String = {
             UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(32).lowercased()
         }
     ) {
         self.repository = repository
         self.nowMilliseconds = nowMilliseconds
-        self.nowDate = nowDate
         self.makeClientId = makeClientId
     }
 
@@ -58,7 +55,7 @@ final class ConvoyReactionCoordinator {
         sendingKinds = []
         guard let convoyId else { return }
 
-        let stream = repository.reactions(convoyId: convoyId, since: nowDate())
+        let stream = repository.reactions(convoyId: convoyId)
         observationTask = Task { [weak self] in
             for await event in stream {
                 guard !Task.isCancelled, let self, self.activeConvoyId == convoyId else { break }
