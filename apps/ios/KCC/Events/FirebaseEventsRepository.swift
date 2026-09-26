@@ -65,15 +65,27 @@ final class FirebaseEventsRepository: EventsRepository, @unchecked Sendable {
         )
     }
 
-    func eventDetail(eventId: String) -> AsyncStream<EventDetail?> {
-        documentStream(
-            firestore
-                .collection(Self.eventsCollection)
-                .document(eventId)
-                .collection(Self.detailsCollection)
-                .document(Self.privateDocument),
-            map: Self.eventDetail(from:)
-        )
+    func eventDetail(eventId: String) -> AsyncStream<EventPrivateDetailSnapshot> {
+        let reference = firestore
+            .collection(Self.eventsCollection)
+            .document(eventId)
+            .collection(Self.detailsCollection)
+            .document(Self.privateDocument)
+        return AsyncStream { continuation in
+            let registration = reference.addSnapshotListener { snapshot, error in
+                if let error {
+                    continuation.yield(.failed(code: Self.firestoreStatusName(error)))
+                    return
+                }
+                guard let snapshot else {
+                    continuation.yield(.failed(code: nil))
+                    return
+                }
+                continuation.yield(.loaded(Self.eventDetail(from: snapshot)))
+            }
+            let box = ListenerBox(registration: registration)
+            continuation.onTermination = { _ in box.registration.remove() }
+        }
     }
 
     func myRsvp(eventId: String, uid: String) -> AsyncStream<RsvpStatus?> {

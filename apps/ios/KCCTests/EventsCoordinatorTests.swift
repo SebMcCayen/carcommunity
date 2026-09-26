@@ -70,7 +70,7 @@ final class EventsCoordinatorTests: XCTestCase {
             AsyncStream { $0.finish() }
         }
 
-        func eventDetail(eventId: String) -> AsyncStream<EventDetail?> {
+        func eventDetail(eventId: String) -> AsyncStream<EventPrivateDetailSnapshot> {
             AsyncStream { $0.finish() }
         }
 

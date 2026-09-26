@@ -107,7 +107,7 @@ final class EventsCoordinator {
             repository: repository,
             eventId: eventId,
             locationProvider: locationProvider,
-            isPaidSubscriber: isPaidSubscriber
+            subscriptionRepository: subscriptionRepository
         )
     }
 
