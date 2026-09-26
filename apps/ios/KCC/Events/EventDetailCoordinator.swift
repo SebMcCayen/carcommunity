@@ -45,6 +45,8 @@ final class EventDetailCoordinator {
     /// session) hides the RSVP affordance — there is no owner document to
     /// write.
     private let uid: String?
+    private weak var locationProvider: (any LocationProvider)?
+    private let subscriptionRepository: SubscriptionStateRepository?
     /// Whether the viewer passes the member gate — mirrors Android's
     /// `passesMemberGate` parameter. While ``MemberGating/enabled`` is false
     /// every signed-in user passes; re-enabling the gate requires threading
@@ -55,10 +57,22 @@ final class EventDetailCoordinator {
     private(set) var state: EventDetailUiState = .loading
     /// The member-gated detail; nil while unsettled, denied, or absent.
     private(set) var detail: EventDetail?
+    private(set) var detailSettled = false
     /// The caller's own answer from the rsvps/{uid} listener; nil = not
     /// answered.
     private(set) var myRsvp: RsvpStatus?
     private(set) var rsvpState: RsvpSubmitState = .idle
+    private(set) var attendeesState: EventAttendeesState = .idle
+    private(set) var manageState: EventManageState = .idle
+    private(set) var checkInState: EventCheckInState = .idle
+    private(set) var checkInPermissionPending = false
+    /// Unknown and missing entitlement both fail closed. The detail owns this
+    /// live observation so an already-open page reacts to upgrades/downgrades.
+    private(set) var isPaidSubscriber = false
+    private(set) var attendanceStatus: EventAttendanceStatus?
+    /// First accepted fix in this coordinator session. It fills the snapshot
+    /// round-trip gap and is intentionally preserved across later failed taps.
+    private(set) var firstCheckInFixAt: Date?
 
     /// The live stream-consuming tasks. `nonisolated(unsafe)` so the
     /// nonisolated deinit can cancel them — every mutation happens on the
@@ -71,6 +85,12 @@ final class EventDetailCoordinator {
     /// same `nonisolated(unsafe)` reasoning as `subscriptions`).
     @ObservationIgnored
     nonisolated(unsafe) private var submission: Task<Void, Never>?
+    @ObservationIgnored
+    nonisolated(unsafe) private var attendeesTask: Task<Void, Never>?
+    @ObservationIgnored
+    nonisolated(unsafe) private var manageTask: Task<Void, Never>?
+    @ObservationIgnored
+    nonisolated(unsafe) private var checkInTask: Task<Void, Never>?
     /// Whether the member-gated detail listener has been attached for the
     /// current subscription generation (see ``subscribeDetailIfNeeded(for:)``).
     @ObservationIgnored
@@ -79,11 +99,15 @@ final class EventDetailCoordinator {
     init(
         repository: EventsRepository,
         eventId: String,
+        locationProvider: (any LocationProvider)? = nil,
+        subscriptionRepository: SubscriptionStateRepository? = nil,
         passesMemberGate: Bool = MemberGating.allows(isActiveMember: false)
     ) {
         self.repository = repository
         self.eventId = eventId
         self.uid = repository.currentUserId()
+        self.locationProvider = locationProvider
+        self.subscriptionRepository = subscriptionRepository
         self.passesMemberGate = passesMemberGate
     }
 
@@ -92,6 +116,9 @@ final class EventDetailCoordinator {
             task.cancel()
         }
         submission?.cancel()
+        attendeesTask?.cancel()
+        manageTask?.cancel()
+        checkInTask?.cancel()
     }
 
     // MARK: - Derived gates
@@ -109,6 +136,186 @@ final class EventDetailCoordinator {
     var canSeeDetails: Bool {
         guard case .loaded(let event) = state else { return false }
         return Events.canSeeDetails(passesMemberGate: passesMemberGate, status: event.status)
+    }
+
+    var canManage: Bool {
+        guard case .loaded(let event) = state else { return false }
+        return Events.canManage(event, uid: uid)
+    }
+
+    var canCheckIn: Bool {
+        canCheckIn(at: Date())
+    }
+
+    func canCheckIn(at now: Date) -> Bool {
+        guard case .loaded(let event) = state else { return false }
+        return isPaidSubscriber && Events.canCheckIn(event, now: now) && locationProvider != nil
+    }
+
+    var checkInPending: Bool {
+        guard attendanceStatus?.verified != true, checkInState != .verified else { return false }
+        return attendanceStatus?.checkedIn == true || firstCheckInFixAt != nil
+            || checkInState == .recorded
+    }
+
+    var checkInVerified: Bool {
+        attendanceStatus?.verified == true || checkInState == .verified
+    }
+
+    var checkInAnchor: Date? {
+        guard checkInPending else { return nil }
+        return Events.checkInAnchor(
+            sessionFirstFixAt: firstCheckInFixAt,
+            recordCreatedAt: attendanceStatus?.recordCreatedAt
+        )
+    }
+
+    func makeEditCoordinator() -> EventFormCoordinator? {
+        guard canManage, detailSettled else { return nil }
+        return EventFormCoordinator(repository: repository, mode: .edit(eventId: eventId))
+    }
+
+    func loadAttendees() {
+        guard attendeesState != .loading else { return }
+        attendeesState = .loading
+        attendeesTask?.cancel()
+        attendeesTask = Task { [weak self, repository, eventId] in
+            let result = await repository.attendees(eventId: eventId)
+            guard !Task.isCancelled, let self else { return }
+            switch result {
+            case .loaded(let rows): self.attendeesState = .loaded(rows)
+            case .requiresPaid: self.attendeesState = .requiresPaid
+            case .unavailable: self.attendeesState = .unavailable
+            case .failed: self.attendeesState = .failed
+            }
+        }
+    }
+
+    func cancelEvent() {
+        guard canManage, manageState != .deleting else { return }
+        manageState = .deleting
+        manageTask?.cancel()
+        manageTask = Task { [weak self, repository, eventId] in
+            do {
+                try await repository.cancelEvent(eventId: eventId)
+                guard !Task.isCancelled, let self else { return }
+                self.manageState = .deleted
+            } catch let error as ManageEventError {
+                guard !Task.isCancelled, let self else { return }
+                self.manageState = .failed(error.reason)
+            } catch {
+                guard !Task.isCancelled, let self else { return }
+                self.manageState = .failed(.unknown)
+            }
+        }
+    }
+
+    /// Starts the explicit permission flow from the user's check-in tap. The
+    /// actual check-in remains pending across the rationale, system dialog,
+    /// and a Settings round-trip, and resumes only after a real grant.
+    func requestCheckIn(using permission: LocationPermissionCoordinator) {
+        checkInPermissionPending = true
+        permission.requestAccess()
+        if permission.state == .granted { resumeCheckInAfterPermissionGrant() }
+    }
+
+    func resumeCheckInAfterPermissionGrant() {
+        guard checkInPermissionPending else { return }
+        checkInPermissionPending = false
+        checkIn()
+    }
+
+    func cancelPendingCheckIn() {
+        checkInPermissionPending = false
+    }
+
+    func checkIn() {
+        guard case .loaded(let event) = state,
+              isPaidSubscriber,
+              Events.canCheckIn(event),
+              checkInState != .working,
+              let provider = locationProvider,
+              provider.authorization.isAuthorized
+        else {
+            checkInState = .failed(
+                (state.event.map { !Events.canCheckIn($0) } ?? false)
+                    ? .windowClosed : .positionUnavailable
+            )
+            return
+        }
+        checkInState = .working
+        checkInTask?.cancel()
+        checkInTask = Task { [weak self, repository, eventId] in
+            guard let self else { return }
+            guard let fix = await self.freshFix(from: provider) else {
+                guard !Task.isCancelled else { return }
+                self.checkInState = .failed(.positionUnavailable)
+                return
+            }
+            if fix.isSimulatedBySoftware == true {
+                self.checkInState = .failed(.mockLocation)
+                return
+            }
+            do {
+                let result = try await repository.checkIn(
+                    eventId: eventId,
+                    fix: EventCheckInFix(
+                        latitude: fix.latitude,
+                        longitude: fix.longitude,
+                        accuracyMeters: fix.accuracyMeters,
+                        capturedAt: fix.timestamp,
+                        isMock: fix.isSimulatedBySoftware == true
+                    )
+                )
+                guard !Task.isCancelled else { return }
+                self.checkInState = Self.checkInState(for: result)
+                switch result {
+                case .recorded:
+                    if self.firstCheckInFixAt == nil { self.firstCheckInFixAt = fix.timestamp }
+                case .verified, .alreadyVerified:
+                    self.firstCheckInFixAt = nil
+                default:
+                    break
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.checkInState = .failed(.generic)
+            }
+        }
+    }
+
+    private func freshFix(from provider: any LocationProvider) async -> LocationFix? {
+        let stream = provider.fixes()
+        return await withTaskGroup(of: LocationFix?.self) { group in
+            group.addTask {
+                for await fix in stream {
+                    guard abs(Date().timeIntervalSince(fix.timestamp)) <= Events.maximumCheckInFixAge
+                    else { continue }
+                    return fix
+                }
+                return nil
+            }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(10))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+    }
+
+    private static func checkInState(for result: EventCheckInResult) -> EventCheckInState {
+        switch result {
+        case .verified, .alreadyVerified: .verified
+        case .recorded: .recorded
+        case .outsideGeofence: .failed(.outsideGeofence)
+        case .outsideWindow: .failed(.windowClosed)
+        case .positionTooOld: .failed(.positionUnavailable)
+        case .riskReview: .failed(.mockLocation)
+        case .eventNotCheckinable: .failed(.notCheckinable)
+        case .unknown: .failed(.generic)
+        }
     }
 
     // MARK: - Lifecycle
@@ -134,6 +341,7 @@ final class EventDetailCoordinator {
         subscriptions = []
         state = .loading
         detail = nil
+        detailSettled = false
         detailSubscribed = false
         myRsvp = nil
         // A (re)subscribe is a fresh page: cancel the in-flight RSVP write's
@@ -163,6 +371,24 @@ final class EventDetailCoordinator {
             subscriptions.append(consume(rsvpStream) { coordinator, answer in
                 coordinator.myRsvp = answer
             })
+            let attendanceStream = repository.myAttendance(eventId: eventId, uid: uid)
+            subscriptions.append(consume(attendanceStream) { coordinator, attendance in
+                coordinator.attendanceStatus = attendance
+                if attendance?.verified == true {
+                    coordinator.checkInState = .verified
+                    coordinator.firstCheckInFixAt = nil
+                }
+            })
+            if let subscriptionRepository {
+                let tierStream = subscriptionRepository.subscription(uid: uid)
+                subscriptions.append(consume(tierStream) { coordinator, subscription in
+                    guard let tier = subscription?.effectiveTier else {
+                        coordinator.isPaidSubscriber = false
+                        return
+                    }
+                    coordinator.isPaidSubscriber = tier == .plus || tier == .supporter
+                })
+            }
         }
     }
 
@@ -181,8 +407,16 @@ final class EventDetailCoordinator {
         else { return }
         detailSubscribed = true
         let detailStream = repository.eventDetail(eventId: eventId)
-        subscriptions.append(consume(detailStream) { coordinator, detail in
-            coordinator.detail = detail
+        subscriptions.append(consume(detailStream) { coordinator, snapshot in
+            switch snapshot {
+            case .loaded(let detail):
+                coordinator.detail = detail
+                coordinator.detailSettled = true
+            case .failed:
+                // Preserve the last successful value. An initial failure stays
+                // unsettled, so editing cannot submit blank optional fields.
+                break
+            }
         })
     }
 
@@ -232,5 +466,12 @@ final class EventDetailCoordinator {
         if case .failed = rsvpState {
             rsvpState = .idle
         }
+    }
+}
+
+private extension EventDetailUiState {
+    var event: EventSummary? {
+        guard case .loaded(let event) = self else { return nil }
+        return event
     }
 }

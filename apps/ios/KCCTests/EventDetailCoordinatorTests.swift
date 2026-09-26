@@ -63,7 +63,7 @@ final class EventDetailCoordinatorTests: XCTestCase {
         private let lock = NSLock()
 
         let teaser = StreamScript<EventSummary?>()
-        let detail = StreamScript<EventDetail?>()
+        let detail = StreamScript<EventPrivateDetailSnapshot>()
         let rsvp = StreamScript<RsvpStatus?>()
 
         private var uid: String?
@@ -119,7 +119,7 @@ final class EventDetailCoordinatorTests: XCTestCase {
             teaser.stream()
         }
 
-        func eventDetail(eventId: String) -> AsyncStream<EventDetail?> {
+        func eventDetail(eventId: String) -> AsyncStream<EventPrivateDetailSnapshot> {
             detail.stream()
         }
 
@@ -162,7 +162,8 @@ final class EventDetailCoordinatorTests: XCTestCase {
     private static func event(
         _ id: String = "e1",
         status: EventStatus = .published,
-        going: Int = 0
+        going: Int = 0,
+        createdByUserId: String? = nil
     ) -> EventSummary {
         EventSummary(
             id: id,
@@ -176,7 +177,8 @@ final class EventDetailCoordinatorTests: XCTestCase {
             longitude: nil,
             isOfficial: false,
             status: status,
-            counts: RsvpCounts(going: going, maybe: 0, notGoing: 0)
+            counts: RsvpCounts(going: going, maybe: 0, notGoing: 0),
+            createdByUserId: createdByUserId
         )
     }
 
@@ -296,7 +298,7 @@ final class EventDetailCoordinatorTests: XCTestCase {
         let repository = FakeEventsRepository()
         repository.teaser.script([Self.event()])
         let detail = EventDetail(description: "Bring your car.", address: "Storgatan 1")
-        repository.detail.script([detail])
+        repository.detail.script([.loaded(detail)])
         let coordinator = makeCoordinator(repository: repository)
 
         coordinator.start()
@@ -342,12 +344,38 @@ final class EventDetailCoordinatorTests: XCTestCase {
         let repository = FakeEventsRepository()
         let event = Self.event()
         repository.teaser.script([event])
-        repository.detail.script([nil])
+        repository.detail.script([.loaded(nil)])
         let coordinator = makeCoordinator(repository: repository)
 
         coordinator.start()
-        await waitFor { coordinator.state == .loaded(event) }
+        await waitFor { coordinator.state == .loaded(event) && coordinator.detailSettled }
         XCTAssertNil(coordinator.detail)
+        XCTAssertTrue(coordinator.detailSettled)
+    }
+
+    @MainActor
+    func testDetailFailureNeverEnablesEditOrClearsLastSuccessfulFields() async {
+        let repository = FakeEventsRepository()
+        repository.teaser.script([Self.event(createdByUserId: "uid-1")])
+        repository.detail.script([.failed(code: "UNAVAILABLE")])
+        let coordinator = makeCoordinator(repository: repository)
+
+        coordinator.start()
+        await waitFor { coordinator.state != .loading }
+        for _ in 0..<10 { await Task.yield() }
+        XCTAssertFalse(coordinator.detailSettled)
+        XCTAssertNil(coordinator.makeEditCoordinator())
+
+        let loaded = EventDetail(description: "Keep me", address: "Storgatan 1")
+        repository.detail.emit(.loaded(loaded))
+        await waitFor { coordinator.detailSettled }
+        XCTAssertEqual(coordinator.detail, loaded)
+        XCTAssertNotNil(coordinator.makeEditCoordinator())
+
+        repository.detail.emit(.failed(code: "UNAVAILABLE"))
+        for _ in 0..<10 { await Task.yield() }
+        XCTAssertEqual(coordinator.detail, loaded)
+        XCTAssertTrue(coordinator.detailSettled)
     }
 
     // MARK: - lifecycle gates

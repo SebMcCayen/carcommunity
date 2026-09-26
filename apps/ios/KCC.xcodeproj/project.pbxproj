@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		F10000000000000000000001 /* EventAttendeesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000001 /* EventAttendeesSheet.swift */; };
+		F10000000000000000000002 /* EventFormScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000002 /* EventFormScreen.swift */; };
+		F10000000000000000000003 /* EventManagementCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000003 /* EventManagementCoordinator.swift */; };
+		F10000000000000000000004 /* EventManagementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000004 /* EventManagementTests.swift */; };
 		B10000000000000000000001 /* FollowMeTrail.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000001 /* FollowMeTrail.swift */; };
 		B10000000000000000000002 /* ConvoyFollowMeRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000002 /* ConvoyFollowMeRepository.swift */; };
 		B10000000000000000000003 /* FirebaseConvoyFollowMeRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000003 /* FirebaseConvoyFollowMeRepository.swift */; };
@@ -238,6 +242,10 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		E10000000000000000000001 /* EventAttendeesSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventAttendeesSheet.swift; sourceTree = "<group>"; };
+		E10000000000000000000002 /* EventFormScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventFormScreen.swift; sourceTree = "<group>"; };
+		E10000000000000000000003 /* EventManagementCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventManagementCoordinator.swift; sourceTree = "<group>"; };
+		E10000000000000000000004 /* EventManagementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventManagementTests.swift; sourceTree = "<group>"; };
 		A10000000000000000000001 /* FollowMeTrail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowMeTrail.swift; sourceTree = "<group>"; };
 		A10000000000000000000002 /* ConvoyFollowMeRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyFollowMeRepository.swift; sourceTree = "<group>"; };
 		A10000000000000000000003 /* FirebaseConvoyFollowMeRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseConvoyFollowMeRepository.swift; sourceTree = "<group>"; };
@@ -675,8 +683,11 @@
 		5B6F5419639D89F3942A28C5 /* Events */ = {
 			isa = PBXGroup;
 			children = (
+				E10000000000000000000001 /* EventAttendeesSheet.swift */,
 				1FDCD5467CC28087B5AAECB1 /* EventDetailCoordinator.swift */,
 				8E9C5C7C20739CCEDF496488 /* EventDetailScreen.swift */,
+				E10000000000000000000002 /* EventFormScreen.swift */,
+				E10000000000000000000003 /* EventManagementCoordinator.swift */,
 				2D2BF1BAD556A8C3D22925AB /* EventsCoordinator.swift */,
 				CF465D5E8668C38571889BC0 /* EventsModels.swift */,
 				F17DE72EC857215D18C55F5F /* EventsRepository.swift */,
@@ -843,6 +854,7 @@
 				BF18AC13F907A6E509CBFF8A /* DrivesCoordinatorTests.swift */,
 				7659E12C9C9C1F2E57CF8117 /* DrivesModelTests.swift */,
 				44A7962A316651E6D91C1FA7 /* EventDetailCoordinatorTests.swift */,
+				E10000000000000000000004 /* EventManagementTests.swift */,
 				AF4AECA45E7B6366153A08BB /* EventsCoordinatorTests.swift */,
 				693946E5862A24E475BE6ED3 /* EventsModelTests.swift */,
 				08AEF6E96BF2AB0EDF375B5F /* FriendsCoordinatorTests.swift */,
@@ -1065,8 +1077,11 @@
 				71B6AC1FF6557F0CBC56648B /* DrivesModels.swift in Sources */,
 				6B8718A69B1E94DB1CD75A4A /* DrivesPanel.swift in Sources */,
 				31281EB1C5D3F342D688ED25 /* DrivesRepository.swift in Sources */,
+				F10000000000000000000001 /* EventAttendeesSheet.swift in Sources */,
 				07DE6309539882FE7B2EBC13 /* EventDetailCoordinator.swift in Sources */,
 				B65D3D7C670D81D62344F694 /* EventDetailScreen.swift in Sources */,
+				F10000000000000000000002 /* EventFormScreen.swift in Sources */,
+				F10000000000000000000003 /* EventManagementCoordinator.swift in Sources */,
 				38341C0532CB5C9152336422 /* EventsCoordinator.swift in Sources */,
 				DA04F6E3D0F1737A1F3C045D /* EventsModels.swift in Sources */,
 				4205D21D03B3C87AC978B782 /* EventsRepository.swift in Sources */,
@@ -1188,6 +1203,7 @@
 				B64A5453986FA2AFB5C0A305 /* DrivesCoordinatorTests.swift in Sources */,
 				DAE444AF31930E1E93E2E9CB /* DrivesModelTests.swift in Sources */,
 				2E2CE7745CDC1502CD28A236 /* EventDetailCoordinatorTests.swift in Sources */,
+				F10000000000000000000004 /* EventManagementTests.swift in Sources */,
 				1C2DA365BA8BE6F3314C2A25 /* EventsCoordinatorTests.swift in Sources */,
 				E0EFA24043EC79042A5890CE /* EventsModelTests.swift in Sources */,
 				29AEAC84B2A5D0D49A2F40C5 /* FriendsCoordinatorTests.swift in Sources */,
