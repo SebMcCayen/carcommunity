@@ -62,6 +62,13 @@ final class LiveLocationCoordinator {
     /// no session exists.
     private(set) var session: LiveSessionInfo?
 
+    /// Distinguishes the pre-listener cold-start nil from an authoritative
+    /// backend emission that says no session exists. The revision increments
+    /// for every emission, including nil→nil, so shell integrations can
+    /// reconcile crash journals after the first snapshot without guessing.
+    private(set) var sessionSnapshotRevision = 0
+    var hasReceivedSessionSnapshot: Bool { sessionSnapshotRevision > 0 }
+
     /// Status of the in-flight command, for button progress/error states.
     private(set) var actionStatus: LiveActionStatus = .idle
 
@@ -236,6 +243,7 @@ final class LiveLocationCoordinator {
 
     private func apply(_ session: LiveSessionInfo?) {
         self.session = session
+        sessionSnapshotRevision += 1
         reconcilePublishing()
     }
 

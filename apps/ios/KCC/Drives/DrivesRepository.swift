@@ -27,9 +27,8 @@ enum DrivesSnapshot: Equatable, Sendable {
 /// (firebase/firestore.rules `rides/{rideId}`: owner read WITHOUT the member
 /// gate, so drives saved during a previous membership stay listable). ALL
 /// writes go through the drives.* callables — `drives-save` computes stats
-/// server-side and `drives-delete` removes the Storage files with the doc —
-/// The recording write seam lives in `DriveRecordingRepository`; delete is a
-/// later slice.
+/// server-side and `drives-delete` removes the Storage files with the doc.
+/// The recording write seam lives in `DriveRecordingRepository`.
 protocol DrivesRepository: AnyObject, Sendable {
     /// The owner's saved drives, list-sorted. Each call returns a fresh
     /// stream backed by its own snapshot listener; terminating the stream
@@ -43,4 +42,9 @@ protocol DrivesRepository: AnyObject, Sendable {
     /// deleted, rules): the card then keeps its placeholder, because a
     /// missing picture is cosmetic, never an error state.
     func imageDownloadURL(for imagePath: String) async -> URL?
+
+    /// Permanently removes one owner drive and its route/preview prefix via
+    /// the server-authoritative callable. History is the deletion surface for
+    /// auto-kept live recordings, matching Android's current flow.
+    func deleteDrive(id: String) async throws
 }

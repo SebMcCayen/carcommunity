@@ -149,8 +149,8 @@ struct ShellView: View {
             else { return }
             clearSessionCommand()
         }
-        .onChange(of: liveLocationCoordinator?.session, initial: true) { _, session in
-            reconcileDriveRecording(session)
+        .onChange(of: liveLocationCoordinator?.sessionSnapshotRevision, initial: true) { _, _ in
+            reconcileDriveRecording()
         }
         .sheet(isPresented: $showStartDriving, onDismiss: releaseStartDrivingGarage) {
             if let startDrivingGarage {
@@ -1214,7 +1214,7 @@ struct ShellView: View {
         // Convoy discovery is independent of the map's live-session wiring.
         // Load it last so a slow callable cannot delay location controls.
         await convoyManagement.load()
-        reconcileDriveRecording(liveLocation.session)
+        reconcileDriveRecording()
     }
 
     private var driveSummaryIsPresented: Binding<Bool> {
@@ -1224,16 +1224,17 @@ struct ShellView: View {
         )
     }
 
-    private func reconcileDriveRecording(_ session: LiveSessionInfo?) {
-        guard let driveRecordingCoordinator else { return }
+    private func reconcileDriveRecording() {
+        guard let driveRecordingCoordinator, let liveLocationCoordinator,
+              liveLocationCoordinator.hasReceivedSessionSnapshot else { return }
+        let session = liveLocationCoordinator.session
         if let session {
             driveRecordingCoordinator.updateContext(driveRecordingContext(session))
         }
         guard LiveLocation.isSharing(session, at: Date()), let session else {
-            driveRecordingCoordinator.stop()
-            if let session {
-                driveRecordingCoordinator.restorePending(context: driveRecordingContext(session))
-            }
+            driveRecordingCoordinator.endSession(
+                context: session.map(driveRecordingContext)
+            )
             return
         }
         driveRecordingCoordinator.start(context: driveRecordingContext(session))
@@ -1255,7 +1256,8 @@ struct ShellView: View {
             sourceSessionId: session.sessionId,
             vehicleId: session.vehicleId,
             carImagePath: session.carImagePath,
-            convoyMembers: members
+            convoyMembers: members,
+            expiresAt: session.expiresAt
         )
     }
 

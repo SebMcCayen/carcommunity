@@ -28,6 +28,8 @@ final class DrivesCoordinatorTests: XCTestCase {
         private(set) var subscribeCount = 0
         private(set) var observedUids: [String] = []
         private(set) var imageResolveCount = 0
+        private(set) var deletedIds: [String] = []
+        var deleteError: Error?
 
         /// Snapshots replayed to each FUTURE subscription (the listener's
         /// initial snapshot). The stream then stays open, like a real
@@ -105,6 +107,11 @@ final class DrivesCoordinatorTests: XCTestCase {
                 }
             }
             return lookupImageURL(imagePath)
+        }
+
+        func deleteDrive(id: String) async throws {
+            if let deleteError { throw deleteError }
+            deletedIds.append(id)
         }
 
         private func beginImageResolve() -> Bool {
@@ -253,6 +260,39 @@ final class DrivesCoordinatorTests: XCTestCase {
     }
 
     // MARK: - start/reload semantics
+
+    @MainActor
+    func testDeleteUsesCallableRepositoryAndListenerRemainsAuthoritative() async {
+        let repository = FakeDrivesRepository()
+        let drive = Self.drive("a")
+        repository.script([.loaded([drive])])
+        let coordinator = DrivesCoordinator(repository: repository, uid: Self.uid)
+        coordinator.start()
+        await wait { coordinator.state == .loaded([drive]) }
+
+        await coordinator.deleteDrive(id: drive.id)
+
+        XCTAssertEqual(repository.deletedIds, [drive.id])
+        XCTAssertEqual(coordinator.state, .loaded([drive]))
+        repository.emit(.loaded([]))
+        await wait { coordinator.state == .empty }
+    }
+
+    @MainActor
+    func testDeleteFailureKeepsDriveAndExposesRetryableError() async {
+        let repository = FakeDrivesRepository()
+        repository.deleteError = KccFunctionsError(code: .unavailable)
+        let drive = Self.drive("a")
+        repository.script([.loaded([drive])])
+        let coordinator = DrivesCoordinator(repository: repository, uid: Self.uid)
+        coordinator.start()
+        await wait { coordinator.state == .loaded([drive]) }
+
+        await coordinator.deleteDrive(id: drive.id)
+
+        XCTAssertEqual(coordinator.deleteFailureDriveId, drive.id)
+        XCTAssertEqual(coordinator.state, .loaded([drive]))
+    }
 
     @MainActor
     func testStartIsIdempotent() async {

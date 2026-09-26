@@ -7,15 +7,15 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
     private final class FakeRepository: DriveRecordingRepository, @unchecked Sendable {
         var requests: [DriveSaveRequest] = []
         var uploads: [(String, [RecordedDrivePoint])] = []
-        var error: Error?
+        var failures: [Error] = []
 
         func save(_ request: DriveSaveRequest) async throws -> DriveSaveResult {
-            if let error { throw error }
             requests.append(request)
+            if !failures.isEmpty { throw failures.removeFirst() }
             return DriveSaveResult(
                 rideId: "ride-1",
                 routePath: "rideRoutes/u/ride-1/route.bin",
-                alreadySaved: false
+                alreadySaved: requests.count > 1
             )
         }
 
@@ -24,118 +24,177 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
         }
     }
 
-    func testSessionRecordsStopsAndExplicitSaveUploadsSamePoints() async {
+    func testLiveSessionEndAutoSavesKeepsAndUploadsWithoutPrompt() async {
         let start = Date(timeIntervalSince1970: 1_700_000_000)
         let clock = Clock(start)
         let provider = StubLocationProvider(authorization: .whileInUse)
         let repository = FakeRepository()
-        let coordinator = DriveRecordingCoordinator(
-            repository: repository,
-            provider: provider,
-            now: { clock.value }
-        )
+        let coordinator = makeCoordinator(repository, provider, clock)
         coordinator.start(context: context())
         await waitUntil { provider.activeFixStreamCount == 1 }
         provider.emitFix(fix(start, offset: 0))
         provider.emitFix(fix(start, offset: 3, latitude: 57.0001))
         await waitUntil { coordinator.state.summary?.pointCount == 2 }
+
         clock.value = start.addingTimeInterval(10)
-        coordinator.stop()
-        XCTAssertTrue(coordinator.state.presentsSummary)
-        await coordinator.save(title: "My drive")
-        guard case .saved(_, let rideId) = coordinator.state else {
-            return XCTFail("expected saved")
+        coordinator.endSession(context: context())
+
+        await waitUntil {
+            if case .kept(rideId: "ride-1") = coordinator.state { return true }
+            return false
         }
-        XCTAssertEqual(rideId, "ride-1")
-        XCTAssertEqual(repository.requests.first?.points.count, 2)
-        XCTAssertEqual(repository.uploads.first?.0, "rideRoutes/u/ride-1/route.bin")
+        XCTAssertFalse(coordinator.state.presentsSummary)
+        XCTAssertEqual(repository.requests.count, 1)
+        await waitUntil { repository.uploads.count == 1 }
         XCTAssertEqual(repository.uploads.first?.1, repository.requests.first?.points)
         await waitUntil { provider.activeFixStreamCount == 0 }
     }
 
-    func testDiscardMakesNoWriteAndReleasesExactRoute() async {
+    func testTransientAutoSaveRetriesThenFailureRetainsIdempotentDraft() async {
         let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let clock = Clock(start)
         let provider = StubLocationProvider(authorization: .whileInUse)
         let repository = FakeRepository()
-        let coordinator = DriveRecordingCoordinator(repository: repository, provider: provider)
+        repository.failures = Array(repeating: KccFunctionsError(code: .unavailable), count: 3)
+        let coordinator = makeCoordinator(repository, provider, clock)
         coordinator.start(context: context())
-        await waitUntil { provider.activeFixStreamCount == 1 }
-        provider.emitFix(fix(start, offset: 0))
-        await waitUntil { coordinator.state.summary?.pointCount == 1 }
-        coordinator.stop()
-        coordinator.discard()
-        XCTAssertEqual(coordinator.state, .discarded)
-        XCTAssertTrue(repository.requests.isEmpty)
-        coordinator.start(context: context(sessionId: "session-2"))
-        await waitUntil { provider.activeFixStreamCount == 1 }
-        XCTAssertEqual(coordinator.state.summary?.pointCount, 0)
-    }
+        clock.value = start.addingTimeInterval(10)
+        coordinator.endSession(context: context())
+        await waitUntil { coordinator.state.presentsSummary }
 
-    func testFailureRetainsDraftForIdempotentRetry() async {
-        let provider = StubLocationProvider(authorization: .whileInUse)
-        let repository = FakeRepository()
-        repository.error = KccFunctionsError(code: .unavailable)
-        let coordinator = DriveRecordingCoordinator(repository: repository, provider: provider)
-        coordinator.start(context: context())
-        coordinator.stop()
-        await coordinator.save(title: nil)
-        guard case .failed(_, let code) = coordinator.state else {
-            return XCTFail("expected failed")
+        XCTAssertEqual(repository.requests.count, 3)
+        XCTAssertEqual(Set(repository.requests.map(\.context.sourceSessionId)), ["session-1"])
+        XCTAssertEqual(Set(repository.requests.map(\.endedAt)), [repository.requests[0].endedAt])
+
+        coordinator.retry()
+        await waitUntil {
+            if case .kept = coordinator.state { return true }
+            return false
         }
-        XCTAssertEqual(code, .unavailable)
-        repository.error = nil
-        await coordinator.save(title: nil)
-        XCTAssertEqual(repository.requests.count, 1)
-        guard case .saved = coordinator.state else { return XCTFail("expected retry success") }
+        XCTAssertEqual(repository.requests.count, 4)
+        XCTAssertEqual(repository.requests.last?.context.sourceSessionId, "session-1")
     }
 
-    func testUnconfiguredAndUnauthorizedStartsStayIdle() {
+    func testPermissionGrantWhileActiveSessionStartsPendingRecording() async {
         let provider = StubLocationProvider(authorization: .denied)
-        let unavailable = DriveRecordingCoordinator(repository: nil, provider: provider)
-        unavailable.start(context: context())
-        XCTAssertEqual(unavailable.state, .idle)
+        let repository = FakeRepository()
+        let coordinator = DriveRecordingCoordinator(
+            repository: repository,
+            provider: provider,
+            retryWait: { _ in await Task.yield() }
+        )
+        coordinator.start(context: context())
+        XCTAssertEqual(coordinator.state, .idle)
+        XCTAssertEqual(provider.activeFixStreamCount, 0)
 
-        let configured = DriveRecordingCoordinator(repository: FakeRepository(), provider: provider)
-        configured.start(context: context())
-        XCTAssertEqual(configured.state, .idle)
+        provider.setAuthorization(.whileInUse)
+
+        await waitUntil {
+            if case .recording = coordinator.state { return true }
+            return false
+        }
+        XCTAssertEqual(provider.activeFixStreamCount, 1)
+    }
+
+    func testExpiryWatchdogStopsAndAutoSavesWithoutSessionEmission() async {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let clock = Clock(start)
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let repository = FakeRepository()
+        let coordinator = makeCoordinator(repository, provider, clock)
+        coordinator.start(context: context(expiresAt: start.addingTimeInterval(5)))
+        await waitUntil { provider.activeFixStreamCount == 1 }
+
+        clock.value = start.addingTimeInterval(6)
+
+        await waitUntil {
+            if case .kept = coordinator.state { return true }
+            return false
+        }
+        XCTAssertEqual(repository.requests.count, 1)
+        await waitUntil { provider.activeFixStreamCount == 0 }
+    }
+
+    func testColdStartJournalWaitsThenResumesWhenActiveSessionArrives() async {
+        let url = temporaryJournalURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let journal = FileDriveRecordingJournal(fileURL: url)
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        journal.begin(context: context(), startedAt: start)
+        journal.append(point(start, offset: 1))
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = DriveRecordingCoordinator(
+            repository: FakeRepository(), provider: provider, journal: journal
+        )
+
+        // The shell's pre-snapshot nil performs no reconciliation; the journal
+        // remains untouched until an authoritative active session arrives.
+        XCTAssertEqual(coordinator.state, .idle)
+        XCTAssertEqual(journal.restore(sessionId: "session-1")?.points.count, 1)
+        coordinator.start(context: context())
+
+        await waitUntil { coordinator.state.summary?.pointCount == 1 }
+        XCTAssertEqual(provider.activeFixStreamCount, 1)
+    }
+
+    func testAuthoritativeNilRestoresJournalAndAutoSaves() async {
+        let url = temporaryJournalURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let journal = FileDriveRecordingJournal(fileURL: url)
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        journal.begin(context: context(), startedAt: start)
+        journal.append(point(start, offset: 1))
+        let repository = FakeRepository()
+        let coordinator = DriveRecordingCoordinator(
+            repository: repository,
+            provider: StubLocationProvider(authorization: .denied),
+            journal: journal,
+            now: { start.addingTimeInterval(10) },
+            retryWait: { _ in await Task.yield() }
+        )
+
+        coordinator.endSession()
+
+        await waitUntil {
+            if case .kept = coordinator.state { return true }
+            return false
+        }
+        XCTAssertEqual(repository.requests.first?.points.count, 1)
+        XCTAssertNil(journal.restore(sessionId: nil))
+    }
+
+    func testUnconfiguredStartStaysIdle() {
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = DriveRecordingCoordinator(repository: nil, provider: provider)
+        coordinator.start(context: context())
+        XCTAssertEqual(coordinator.state, .idle)
         XCTAssertEqual(provider.activeFixStreamCount, 0)
     }
 
-    func testStoppedSessionRestoresJournalIntoForcedChoice() {
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("\(UUID().uuidString).routejournal")
-        defer { try? FileManager.default.removeItem(at: url) }
-        let journal = FileDriveRecordingJournal(fileURL: url)
-        let context = context()
-        let startedAt = Date(timeIntervalSince1970: 1_700_000_000)
-        journal.begin(context: context, startedAt: startedAt)
-        journal.append(
-            RecordedDrivePoint(
-                latitude: 57,
-                longitude: 12,
-                timestampMilliseconds: 1_700_000_001_000
-            )
+    private func makeCoordinator(
+        _ repository: FakeRepository,
+        _ provider: StubLocationProvider,
+        _ clock: Clock
+    ) -> DriveRecordingCoordinator {
+        DriveRecordingCoordinator(
+            repository: repository,
+            provider: provider,
+            now: { clock.value },
+            expiryTickWait: { await Task.yield() },
+            retryWait: { _ in await Task.yield() }
         )
-        let coordinator = DriveRecordingCoordinator(
-            repository: FakeRepository(),
-            provider: StubLocationProvider(authorization: .denied),
-            journal: journal,
-            now: { startedAt.addingTimeInterval(10) }
-        )
-        coordinator.restorePending(context: context)
-        guard case .prompt(let summary) = coordinator.state else {
-            return XCTFail("expected restored prompt")
-        }
-        XCTAssertEqual(summary.pointCount, 1)
-        XCTAssertEqual(summary.durationSeconds, 10)
     }
 
-    private func context(sessionId: String = "session-1") -> DriveRecordingContext {
+    private func context(
+        sessionId: String = "session-1",
+        expiresAt: Date? = nil
+    ) -> DriveRecordingContext {
         DriveRecordingContext(
             sourceSessionId: sessionId,
             vehicleId: "vehicle-1",
             carImagePath: "vehicleImages/u/vehicle-1/cover",
-            convoyMembers: []
+            convoyMembers: [],
+            expiresAt: expiresAt
         )
     }
 
@@ -147,9 +206,22 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
         )!
     }
 
+    private func point(_ start: Date, offset: TimeInterval) -> RecordedDrivePoint {
+        RecordedDrivePoint(
+            latitude: 57,
+            longitude: 12,
+            timestampMilliseconds: Int64(start.addingTimeInterval(offset).timeIntervalSince1970 * 1_000)
+        )
+    }
+
+    private func temporaryJournalURL() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(UUID().uuidString).routejournal")
+    }
+
     private func waitUntil(
         _ predicate: @escaping @MainActor () -> Bool,
-        attempts: Int = 100
+        attempts: Int = 2_000
     ) async {
         for _ in 0..<attempts {
             if predicate() { return }

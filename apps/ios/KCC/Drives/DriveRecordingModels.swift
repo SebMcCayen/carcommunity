@@ -36,6 +36,21 @@ struct DriveRecordingContext: Equatable, Sendable {
     let vehicleId: String?
     let carImagePath: String?
     let convoyMembers: [ConvoyDriveMember]
+    let expiresAt: Date?
+
+    init(
+        sourceSessionId: String,
+        vehicleId: String?,
+        carImagePath: String?,
+        convoyMembers: [ConvoyDriveMember],
+        expiresAt: Date? = nil
+    ) {
+        self.sourceSessionId = sourceSessionId
+        self.vehicleId = vehicleId
+        self.carImagePath = carImagePath
+        self.convoyMembers = convoyMembers
+        self.expiresAt = expiresAt
+    }
 }
 
 struct DriveSaveRequest: Equatable, Sendable {
@@ -97,8 +112,9 @@ struct DriveRecordingSummary: Equatable, Sendable {
     let averageSpeedMetersPerSecond: Double?
 }
 
-/// A bounded in-memory recorder. Exact coordinates remain only in memory until
-/// the member explicitly saves; discard releases them without a network write.
+/// A bounded in-memory recorder. Exact coordinates stay private in memory/the
+/// protected journal until live-session teardown auto-saves them to owner-only
+/// History; a definitive refusal releases them when the user closes the prompt.
 struct DriveRecorder: Sendable {
     static let maximumRoutePoints = 20_000
     static let minimumSampleInterval: TimeInterval = 2
@@ -127,7 +143,8 @@ struct DriveRecorder: Sendable {
             sourceSessionId: context.sourceSessionId,
             vehicleId: update.vehicleId ?? context.vehicleId,
             carImagePath: update.carImagePath ?? context.carImagePath,
-            convoyMembers: update.convoyMembers.isEmpty ? context.convoyMembers : update.convoyMembers
+            convoyMembers: update.convoyMembers.isEmpty ? context.convoyMembers : update.convoyMembers,
+            expiresAt: update.expiresAt ?? context.expiresAt
         )
     }
 

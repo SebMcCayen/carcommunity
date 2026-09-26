@@ -5,7 +5,7 @@ import Foundation
 /// server-side (the `drives-save` callable) and the client only reads
 /// owner-scoped `rides/{rideId}` documents
 /// (contracts/schemas/saved-drives.schema.json `ride`). Recording and save
-/// live beside this model; delete, share, and route replay remain later slices.
+/// live beside this model; share and route replay remain later slices.
 /// Pure Swift so it is unit-testable and Firebase-free.
 struct SavedDrive: Equatable, Sendable, Identifiable {
     /// The `rides/{rideId}` document id.

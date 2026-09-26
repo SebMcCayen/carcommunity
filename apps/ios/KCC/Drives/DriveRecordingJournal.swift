@@ -87,6 +87,9 @@ final class FileDriveRecordingJournal: DriveRecordingJournal {
                 carImagePath: header.carImagePath,
                 convoyMembers: header.convoyMembers.map {
                     ConvoyDriveMember(uid: $0.uid, displayName: $0.displayName, avatarPath: $0.avatarPath)
+                },
+                expiresAt: header.expiresAtMilliseconds.map {
+                    Date(timeIntervalSince1970: Double($0) / 1_000)
                 }
             ),
             points: points,
@@ -144,6 +147,9 @@ final class FileDriveRecordingJournal: DriveRecordingJournal {
             convoyMembers: context.convoyMembers.map {
                 Member(uid: $0.uid, displayName: $0.displayName, avatarPath: $0.avatarPath)
             },
+            expiresAtMilliseconds: context.expiresAt.map {
+                Int64(($0.timeIntervalSince1970 * 1_000).rounded())
+            },
             stoppedAtMilliseconds: stoppedAt.map {
                 Int64(($0.timeIntervalSince1970 * 1_000).rounded())
             }
@@ -186,6 +192,7 @@ final class FileDriveRecordingJournal: DriveRecordingJournal {
         let vehicleId: String?
         let carImagePath: String?
         let convoyMembers: [Member]
+        let expiresAtMilliseconds: Int64?
         let stoppedAtMilliseconds: Int64?
     }
 

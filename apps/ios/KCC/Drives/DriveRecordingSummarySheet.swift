@@ -1,81 +1,55 @@
 import SwiftUI
 
+/// Safety-net prompt for an auto-save that definitively failed. Normal live
+/// session teardown is silent: the drive is auto-saved and kept in History,
+/// where the owner can delete it. The sheet is deliberately non-dismissible so
+/// a transient failure cannot silently lose the private route kept for retry.
 struct DriveRecordingSummarySheet: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var title = ""
-    @State private var confirmsDiscard = false
-
     let coordinator: DriveRecordingCoordinator
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: KccSpacing.s4) {
-                    Text("savedDrives.promptBody")
-                        .foregroundStyle(.secondary)
                     if let summary = coordinator.state.summary {
                         summaryCard(summary)
                     }
-                    TextField("savedDrives.recordTitleLabel", text: $title)
-                        .textFieldStyle(.roundedBorder)
-                        .disabled(isWorking || isSaved)
-                    Label("savedDrives.promptPrivacyNote", systemImage: "lock.fill")
-                        .font(.system(size: KccTypeScale.bodySm))
-                        .foregroundStyle(.secondary)
-
-                    if case .failed(_, let code) = coordinator.state {
-                        Text(code == .permissionDenied
-                             ? "savedDrives.memberRequired"
-                             : "savedDrives.saveError")
-                            .foregroundStyle(KccPalette.errorRed)
-                    }
-
-                    if isSaved {
-                        Label("savedDrives.saveSuccess", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                        Button("savedDrives.closeButton") {
-                            coordinator.finishSummary()
-                            dismiss()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .frame(maxWidth: .infinity)
-                    } else {
-                        Button {
-                            Task { await coordinator.save(title: title) }
-                        } label: {
-                            HStack {
-                                if isWorking { ProgressView() }
-                                Text(isWorking ? "savedDrives.savingProgress" : "savedDrives.saveAction")
-                            }
+                    Text(errorKey)
+                        .foregroundStyle(KccPalette.errorRed)
+                    Button(action: primaryAction) {
+                        Text(primaryKey)
                             .frame(maxWidth: .infinity, minHeight: 44)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(isWorking)
-
-                        Button("savedDrives.discardAction", role: .destructive) {
-                            confirmsDiscard = true
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .disabled(isWorking)
                     }
+                    .buttonStyle(.borderedProminent)
                 }
                 .padding(KccSpacing.s6)
             }
-            .navigationTitle("savedDrives.promptTitle")
+            .navigationTitle("savedDrives.saveFailedTitle")
         }
         .interactiveDismissDisabled()
-        .confirmationDialog(
-            "savedDrives.discardConfirmTitle",
-            isPresented: $confirmsDiscard,
-            titleVisibility: .visible
-        ) {
-            Button("savedDrives.discardConfirmAction", role: .destructive) {
-                coordinator.discard()
-                dismiss()
-            }
-            Button("savedDrives.discardConfirmCancel", role: .cancel) {}
-        } message: {
-            Text("savedDrives.discardConfirmBody")
+    }
+
+    private var isPermanentRefusal: Bool {
+        if case .failed(_, let code) = coordinator.state { return code == .permissionDenied }
+        return false
+    }
+
+    private var errorKey: LocalizedStringKey {
+        isPermanentRefusal ? "savedDrives.memberRequired" : "savedDrives.saveError"
+    }
+
+    private var primaryKey: LocalizedStringKey {
+        isPermanentRefusal ? "savedDrives.closeButton" : "savedDrives.retryAction"
+    }
+
+    private func primaryAction() {
+        if isPermanentRefusal {
+            coordinator.discardFailed()
+            dismiss()
+        } else {
+            coordinator.retry()
+            dismiss()
         }
     }
 
@@ -97,15 +71,5 @@ struct DriveRecordingSummarySheet: View {
             Spacer()
             Text(value).fontWeight(.semibold)
         }
-    }
-
-    private var isWorking: Bool {
-        if case .saving = coordinator.state { return true }
-        return false
-    }
-
-    private var isSaved: Bool {
-        if case .saved = coordinator.state { return true }
-        return false
     }
 }
