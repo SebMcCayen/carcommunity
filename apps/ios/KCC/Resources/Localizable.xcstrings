@@ -25637,6 +25637,23 @@
         }
       }
     },
+    "savedDrives.filterAll": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alla"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All"
+          }
+        }
+      }
+    },
     "savedDrives.filterClear": {
       "extractionState": "manual",
       "localizations": {

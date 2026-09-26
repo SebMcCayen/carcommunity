@@ -5,7 +5,8 @@ import Foundation
 /// server-side (the `drives-save` callable) and the client only reads
 /// owner-scoped `rides/{rideId}` documents
 /// (contracts/schemas/saved-drives.schema.json `ride`). Recording and save
-/// live beside this model; share and route replay remain later slices.
+/// live beside this model; history, delete, privacy-safe share, and route replay
+/// are built on the server-authoritative history API.
 /// Pure Swift so it is unit-testable and Firebase-free.
 struct SavedDrive: Equatable, Sendable, Identifiable {
     /// The `rides/{rideId}` document id.
@@ -33,6 +34,10 @@ struct SavedDrive: Equatable, Sendable, Identifiable {
     /// (docs/gamification-system.md C1; Android `SavedDrive` carries the
     /// same rule).
     let maxSpeedMetersPerSecond: Double?
+    /// Privacy-safe, backend-derived encoded polyline used only for the small
+    /// history-card overview. It contains no timestamps and is not used for
+    /// full route replay or sharing.
+    let routeThumbnail: String?
     /// Storage path of the car this drive was driven in (the denormalized
     /// cover photo), so the History card can draw a round photo of the car
     /// with no extra vehicle read. Nil for drives saved before the field
@@ -44,6 +49,34 @@ struct SavedDrive: Equatable, Sendable, Identifiable {
     /// saved before the field existed (no backfill), and for the server-side
     /// convoy finalize baseline. The card shows the row only when non-empty.
     let convoyMembers: [ConvoyDriveMember]
+
+    init(
+        id: String,
+        title: String?,
+        distanceMeters: Double?,
+        durationSeconds: Int,
+        averageSpeedMetersPerSecond: Double?,
+        startedAt: Date?,
+        endedAt: Date?,
+        createdAt: Date?,
+        maxSpeedMetersPerSecond: Double?,
+        routeThumbnail: String? = nil,
+        carImagePath: String?,
+        convoyMembers: [ConvoyDriveMember]
+    ) {
+        self.id = id
+        self.title = title
+        self.distanceMeters = distanceMeters
+        self.durationSeconds = durationSeconds
+        self.averageSpeedMetersPerSecond = averageSpeedMetersPerSecond
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.createdAt = createdAt
+        self.maxSpeedMetersPerSecond = maxSpeedMetersPerSecond
+        self.routeThumbnail = routeThumbnail
+        self.carImagePath = carImagePath
+        self.convoyMembers = convoyMembers
+    }
 
     /// Decodes one `rides/{rideId}` document's fields, tolerantly: a doc
     /// without the required `durationSeconds` is dropped (Android's
@@ -77,6 +110,7 @@ struct SavedDrive: Equatable, Sendable, Identifiable {
             endedAt: date(map["endedAt"]),
             createdAt: date(map["createdAt"]),
             maxSpeedMetersPerSecond: (map["maxSpeedMetersPerSecond"] as? NSNumber)?.doubleValue,
+            routeThumbnail: map["routeThumbnail"] as? String,
             carImagePath: map["carImagePath"] as? String,
             convoyMembers: ConvoyDriveMembers.parse(map["convoyMembers"])
         )
@@ -244,5 +278,14 @@ enum DriveFormatters {
         let kmh = (metersPerSecond * 3.6).rounded()
         guard kmh <= 100_000 else { return missingValue }
         return "\(Int(kmh)) km/h"
+    }
+
+    static func effectiveAverageSpeed(
+        stored: Double?, distanceMeters: Double?, durationSeconds: Int
+    ) -> Double? {
+        if let stored, stored.isFinite, stored >= 0 { return stored }
+        guard let distanceMeters, distanceMeters.isFinite, distanceMeters >= 0,
+              durationSeconds > 0 else { return nil }
+        return distanceMeters / Double(durationSeconds)
     }
 }
