@@ -124,10 +124,105 @@ struct EventSummary: Equatable, Sendable, Identifiable {
     let isOfficial: Bool
     let status: EventStatus
     let counts: RsvpCounts
+    /// Creator attribution used only to expose edit/remove to that same user.
+    let createdByUserId: String?
+
+    init(
+        id: String, title: String, summary: String?, startsAt: Date?, endsAt: Date?,
+        approximateArea: String?, locationName: String?, latitude: Double?, longitude: Double?,
+        isOfficial: Bool, status: EventStatus, counts: RsvpCounts,
+        createdByUserId: String? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.summary = summary
+        self.startsAt = startsAt
+        self.endsAt = endsAt
+        self.approximateArea = approximateArea
+        self.locationName = locationName
+        self.latitude = latitude
+        self.longitude = longitude
+        self.isOfficial = isOfficial
+        self.status = status
+        self.counts = counts
+        self.createdByUserId = createdByUserId
+    }
+}
+
+/// Fields managed by the member create/edit form. Optional values are omitted
+/// on create and explicitly cleared on edit, matching events.create/update.
+struct EventFormInput: Equatable, Sendable {
+    var title: String
+    var startsAt: Date
+    var description: String?
+    var address: String?
+    var latitude: Double?
+    var longitude: Double?
+    var publicSiteEnabled: Bool
+}
+
+enum CreateEventFailure: Equatable, Sendable { case rateLimited, unknown }
+enum ManageEventFailure: Equatable, Sendable { case permissionDenied, immutable, unknown }
+struct CreateEventError: Error, Equatable, Sendable { let reason: CreateEventFailure }
+struct ManageEventError: Error, Equatable, Sendable { let reason: ManageEventFailure }
+
+struct EventAttendee: Equatable, Sendable, Identifiable {
+    let id: String
+    let displayName: String?
+    let avatarPath: String?
+    let status: RsvpStatus
+}
+
+enum EventAttendeesResult: Equatable, Sendable {
+    case loaded([EventAttendee])
+    case requiresPaid
+    case unavailable
+    case failed
+}
+
+struct EventCheckInFix: Equatable, Sendable {
+    let latitude: Double
+    let longitude: Double
+    let accuracyMeters: Double?
+    let capturedAt: Date
+    let isMock: Bool
+}
+
+/// Owner-readable progress from `eventAttendance/{eventId}__{uid}`. The raw
+/// location samples and risk signals deliberately never cross this model.
+struct EventAttendanceStatus: Equatable, Sendable {
+    let verified: Bool
+    let sampleCount: Int
+    let recordCreatedAt: Date?
+
+    var checkedIn: Bool { verified || sampleCount > 0 }
+}
+
+enum EventCheckInResult: String, Equatable, Sendable {
+    case recorded, verified
+    case alreadyVerified = "already_verified"
+    case outsideGeofence = "outside_geofence"
+    case outsideWindow = "outside_window"
+    case positionTooOld = "position_too_old"
+    case riskReview = "risk_review"
+    case eventNotCheckinable = "event_not_checkinable"
+    case unknown
+
+    var isVerified: Bool { self == .verified || self == .alreadyVerified }
 }
 
 /// Pure events-list logic shared by the repository, coordinator, and screen.
 enum Events {
+    static let titleMax = 200
+    static let descriptionMax = 10_000
+    static let addressMax = 400
+    static let checkInWindowBefore: TimeInterval = 30 * 60
+    static let checkInWindowAfter: TimeInterval = 30 * 60
+    static let defaultEventDuration: TimeInterval = 4 * 60 * 60
+    static let maximumCheckInFixAge: TimeInterval = 60
+    /// Mirrors the backend's minimum span between the first and confirming
+    /// in-geofence samples. The server remains authoritative.
+    static let requiredCheckInDwell: TimeInterval = 10 * 60
     /// Maximum published events the Firestore listener subscribes to
     /// (soonest start first, matching ``sortedForList(_:)``) — mirrors
     /// Android's `Events.PUBLISHED_EVENTS_QUERY_LIMIT`. Keeps the snapshot
@@ -150,6 +245,92 @@ enum Events {
     /// published event) and Android's `Events.canSeeDetails`.
     static func canSeeDetails(passesMemberGate: Bool, status: EventStatus) -> Bool {
         passesMemberGate && status == .published
+    }
+
+    static func valid(_ input: EventFormInput) -> Bool {
+        let title = input.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, title.count <= titleMax,
+              (input.description?.count ?? 0) <= descriptionMax,
+              (input.address?.count ?? 0) <= addressMax,
+              input.startsAt.timeIntervalSince1970.isFinite,
+              (input.latitude == nil) == (input.longitude == nil)
+        else { return false }
+        if let latitude = input.latitude, let longitude = input.longitude {
+            return latitude.isFinite && longitude.isFinite
+                && (-90...90).contains(latitude) && (-180...180).contains(longitude)
+        }
+        return true
+    }
+
+    static func canManage(_ event: EventSummary, uid: String?) -> Bool {
+        uid != nil && event.createdByUserId == uid
+            && (event.status == .draft || event.status == .published)
+    }
+
+    static func canCheckIn(_ event: EventSummary, now: Date = Date()) -> Bool {
+        guard event.status == .published || event.status == .completed,
+              event.latitude != nil, event.longitude != nil,
+              let start = event.startsAt
+        else { return false }
+        let end = event.endsAt ?? start.addingTimeInterval(defaultEventDuration)
+        return now >= start.addingTimeInterval(-checkInWindowBefore)
+            && now <= end.addingTimeInterval(checkInWindowAfter)
+    }
+
+    static func iso8601(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.string(from: date)
+    }
+
+    static func createPayload(_ input: EventFormInput) -> [String: Any] {
+        var payload: [String: Any] = [
+            "title": input.title.trimmingCharacters(in: .whitespacesAndNewlines),
+            "startsAt": iso8601(input.startsAt),
+            "publishNow": true,
+        ]
+        if let value = trimmed(input.description) { payload["description"] = value }
+        if let value = trimmed(input.address) { payload["address"] = value }
+        if let latitude = input.latitude, let longitude = input.longitude {
+            payload["latitude"] = latitude
+            payload["longitude"] = longitude
+        }
+        if input.publicSiteEnabled { payload["publicSiteEnabled"] = true }
+        return payload
+    }
+
+    static func updatePayload(eventId: String, input: EventFormInput) -> [String: Any] {
+        [
+            "eventId": eventId,
+            "title": input.title.trimmingCharacters(in: .whitespacesAndNewlines),
+            "startsAt": iso8601(input.startsAt),
+            "description": trimmed(input.description).map { $0 as Any } ?? NSNull(),
+            "address": trimmed(input.address).map { $0 as Any } ?? NSNull(),
+            "latitude": input.latitude.map { $0 as Any } ?? NSNull(),
+            "longitude": input.longitude.map { $0 as Any } ?? NSNull(),
+        ]
+    }
+
+    static func checkInAnchor(sessionFirstFixAt: Date?, recordCreatedAt: Date?) -> Date? {
+        switch (sessionFirstFixAt, recordCreatedAt) {
+        case let (session?, record?): min(session, record)
+        case let (session?, nil): session
+        case let (nil, record?): record
+        case (nil, nil): nil
+        }
+    }
+
+    static func checkInRemaining(from anchor: Date, now: Date) -> TimeInterval {
+        max(0, requiredCheckInDwell - max(0, now.timeIntervalSince(anchor)))
+    }
+
+    static func checkInProgress(from anchor: Date, now: Date) -> Double {
+        min(1, max(0, now.timeIntervalSince(anchor)) / requiredCheckInDwell)
+    }
+
+    private static func trimmed(_ value: String?) -> String? {
+        let result = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return result?.isEmpty == false ? result : nil
     }
 
     /// Published events sorted by soonest start first — nil start times last,

@@ -32,7 +32,8 @@ struct RsvpWriteError: Error, Equatable, Sendable {
 }
 
 /// Events read + RSVP operations — the iOS port of Android's
-/// `EventsRepository.kt`, restricted to the list and detail + RSVP slices.
+/// `EventsRepository.kt`, covering list/detail, RSVP, management, roster and
+/// check-in operations.
 /// Firebase-free protocol so the coordinators and screens are unit-testable
 /// with fakes.
 ///
@@ -42,9 +43,9 @@ struct RsvpWriteError: Error, Equatable, Sendable {
 /// `details/private` document is enforced by the Security Rules. Writing an
 /// RSVP is a direct owner write of exactly `{ status, updatedAt }`
 /// (rules-validated, `validRsvpDocument()`); the backend `events-onRsvpWrite`
-/// trigger maintains the public `rsvpCounts` tally. Create/check-in writes
-/// are deliberately absent — they arrive with later slices, through the
-/// ``KccFunctionsClient`` seam.
+/// trigger maintains the public `rsvpCounts` tally. Sensitive management,
+/// roster, and check-in operations use the ``KccFunctionsClient`` seam so
+/// ownership, paid access, geofencing and anti-fraud stay server-authoritative.
 protocol EventsRepository: AnyObject, Sendable {
     /// Published events, soonest first, bounded to
     /// ``Events/publishedEventsQueryLimit``. Each call returns a fresh stream
@@ -65,6 +66,10 @@ protocol EventsRepository: AnyObject, Sendable {
     /// (Android's `observeMyRsvp`).
     func myRsvp(eventId: String, uid: String) -> AsyncStream<RsvpStatus?>
 
+    /// The caller's backend-owned attendance progress. Errors emit nothing so
+    /// a transient listener failure cannot erase an already shown check-in.
+    func myAttendance(eventId: String, uid: String) -> AsyncStream<EventAttendanceStatus?>
+
     /// Writes/updates the caller's RSVP answer — a direct owner write of
     /// exactly `{ status, updatedAt: serverTimestamp }` (Android's `setRsvp`).
     /// - Throws: ``RsvpWriteError`` with the PII-safe status name.
@@ -75,4 +80,31 @@ protocol EventsRepository: AnyObject, Sendable {
     /// self-contained (the shell passes no identity), so the repository —
     /// which already owns the Firebase seam — answers it instead.
     func currentUserId() -> String?
+
+    func createEvent(_ input: EventFormInput) async throws -> String
+    func updateEvent(eventId: String, input: EventFormInput) async throws
+    func cancelEvent(eventId: String) async throws
+    func attendees(eventId: String) async -> EventAttendeesResult
+    func checkIn(eventId: String, fix: EventCheckInFix) async throws -> EventCheckInResult
+}
+
+/// Defaults keep existing fakes source-compatible while production supplies
+/// every operation. Calling an unsupported operation fails closed.
+extension EventsRepository {
+    func myAttendance(eventId: String, uid: String) -> AsyncStream<EventAttendanceStatus?> {
+        AsyncStream { $0.finish() }
+    }
+    func createEvent(_ input: EventFormInput) async throws -> String {
+        throw KccFunctionsError(code: .unavailable)
+    }
+    func updateEvent(eventId: String, input: EventFormInput) async throws {
+        throw KccFunctionsError(code: .unavailable)
+    }
+    func cancelEvent(eventId: String) async throws {
+        throw KccFunctionsError(code: .unavailable)
+    }
+    func attendees(eventId: String) async -> EventAttendeesResult { .failed }
+    func checkIn(eventId: String, fix: EventCheckInFix) async throws -> EventCheckInResult {
+        throw KccFunctionsError(code: .unavailable)
+    }
 }

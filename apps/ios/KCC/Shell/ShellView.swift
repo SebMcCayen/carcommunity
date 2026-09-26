@@ -507,7 +507,7 @@ struct ShellView: View {
             // NavigationStack hosts the screen's `navigationTitle`; Back pops
             // one level via the pure stack, like every route.
             NavigationStack {
-                EventsScreen(coordinator: eventsCoordinator)
+                EventsScreen(coordinator: eventsCoordinator, locationProvider: locationProvider)
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
                             Button {
@@ -1133,7 +1133,12 @@ struct ShellView: View {
         incidentMapCoordinator = incidentMap
         let eventChat = FirebaseEventChatRepository.createIfAvailable()
         eventsCoordinator = FirebaseEventsRepository.createIfAvailable().map {
-            EventsCoordinator(repository: $0, eventChatRepository: eventChat)
+            EventsCoordinator(
+                repository: $0,
+                eventChatRepository: eventChat,
+                locationProvider: locationProvider,
+                subscriptionRepository: FirebaseSubscriptionStateRepository.createIfAvailable()
+            )
         }
         leaderboardCoordinator = LeaderboardCoordinator(
             repository: FirebaseLeaderboardRepository.createIfAvailable()
