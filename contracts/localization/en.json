@@ -1947,6 +1947,7 @@
   },
   "police": {
     "sheetTitle": "Police",
+    "markerLabel": "Police report",
     "reportedByMember": "Reported by a member",
     "stillHereQuestion": "Is it still there?",
     "stillHereYes": "Yes, it's still there",
@@ -1985,6 +1986,7 @@
     "pickLocationMap": "Map for choosing the incident location",
     "pickLocationInvalid": "Pick a spot on the map first.",
     "markerLabel": "Incident",
+    "markerClearedFormat": "%1$s, possibly cleared",
     "sourceTrafikverket": "Source: Trafikverket",
     "close": "Close",
     "ageJustNow": "Just now",

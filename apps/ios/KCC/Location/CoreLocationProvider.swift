@@ -148,7 +148,8 @@ final class CoreLocationProvider: NSObject, LocationProvider {
             timestamp: location.timestamp,
             accuracyMeters: location.horizontalAccuracy,
             headingDegrees: location.course,
-            speedMetersPerSecond: location.speed
+            speedMetersPerSecond: location.speed,
+            isSimulatedBySoftware: location.sourceInformation?.isSimulatedBySoftware
         )
     }
 

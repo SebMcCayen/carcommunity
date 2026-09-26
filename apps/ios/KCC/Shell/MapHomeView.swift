@@ -31,6 +31,35 @@ enum MapHomeConvoyViewportPolicy {
     }
 }
 
+/// The complete camera destination currently owned by the renderer.
+///
+/// Mapbox reports the camera's in-flight value while an animation is running.
+/// Starting a second full-camera animation from that value can therefore
+/// resurrect an old pitch or zoom. Keeping the latest destination lets every
+/// subsequent command merge into the destination that is actually being
+/// approached instead of an intermediate frame.
+struct MapHomeCameraTarget: Equatable {
+    let latitude: Double
+    let longitude: Double
+    let zoom: Double
+    let bearing: Double
+    let pitch: Double
+
+    func applyingPreferences(
+        is3D: Bool,
+        browsingZoom: Double,
+        browsingOwnsZoom: Bool
+    ) -> MapHomeCameraTarget {
+        MapHomeCameraTarget(
+            latitude: latitude,
+            longitude: longitude,
+            zoom: browsingOwnsZoom ? browsingZoom : zoom,
+            bearing: bearing,
+            pitch: is3D ? 45 : 0
+        )
+    }
+}
+
 enum MapHomeMeFollowPolicy {
     static let idleReturnDelay: Duration = .seconds(10)
 
@@ -121,7 +150,8 @@ enum MapHomeMeFollowPolicy {
         point: MapPoint?,
         snapshot: MapCameraSnapshot?,
         fallback: MapCameraSnapshot?,
-        restoringBrowsing: Bool
+        restoringBrowsing: Bool,
+        browsingZoom: Double = StubMapSurface.defaultBrowsingZoom
     ) -> Camera? {
         let preferred = restoringBrowsing ? (fallback ?? snapshot) : (snapshot ?? fallback)
         let center = point.map {
@@ -130,12 +160,13 @@ enum MapHomeMeFollowPolicy {
             CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
         }
         guard let center else { return nil }
-        let zoom: CGFloat
-        if point != nil, restoringBrowsing {
-            zoom = StubMapSurface.defaultBrowsingZoom
-        } else {
-            zoom = CGFloat(preferred?.zoom ?? Double(StubMapSurface.defaultBrowsingZoom))
-        }
+        // A convoy/route camera may have owned zoom while the user changed the
+        // resting browsing preference. Once browsing ownership resumes, use
+        // that latest preference even if no fresh own-location point exists;
+        // the saved pre-owner camera still supplies center, bearing and pitch.
+        let zoom = restoringBrowsing
+            ? CGFloat(browsingZoom)
+            : CGFloat(preferred?.zoom ?? Double(StubMapSurface.defaultBrowsingZoom))
         return Camera(
             center: center,
             zoom: zoom,
@@ -198,6 +229,80 @@ enum MapHomeProjectionTrustPolicy {
         let clampedLatitude = min(max(latitude, -maximumMercatorLatitude), maximumMercatorLatitude)
         let clampedZoom = max(zoom, 0)
         return 156_543.03392 * cos(clampedLatitude * .pi / 180) / pow(2, clampedZoom)
+    }
+}
+
+private enum MapHomeStyleLayers {
+    static let standardImportId = "basemap"
+    static let lightPresetConfig = "lightPreset"
+    static let show3DObjectsConfig = "show3dObjects"
+    static let trafficSourceId = "kcc-traffic-source"
+    static let trafficLayerId = "kcc-traffic-layer"
+
+    static func applyMapMode(_ mode: MapMode, to map: MapboxMap) {
+        try? map.setStyleImportConfigProperty(
+            for: standardImportId,
+            config: lightPresetConfig,
+            value: mode == .night ? "night" : "day"
+        )
+    }
+
+    static func apply3D(_ enabled: Bool, to map: MapboxMap) {
+        try? map.setStyleImportConfigProperty(
+            for: standardImportId,
+            config: show3DObjectsConfig,
+            value: enabled
+        )
+    }
+
+    static func applyTraffic(_ visible: Bool, mode: MapMode, to map: MapboxMap) {
+        if !map.sourceExists(withId: trafficSourceId) {
+            var source = VectorSource(id: trafficSourceId)
+            source.url = "mapbox://mapbox.mapbox-traffic-v1"
+            try? map.addSource(source)
+        }
+        if !map.layerExists(withId: trafficLayerId) {
+            var layer = LineLayer(id: trafficLayerId, source: trafficSourceId)
+            layer.sourceLayer = "traffic"
+            layer.slot = "middle"
+            layer.lineCap = .constant(.round)
+            layer.lineJoin = .constant(.round)
+            layer.visibility = .constant(visible ? .visible : .none)
+            layer.lineColor = .expression(colorExpression(for: mode))
+            layer.lineWidth = .constant(MapTrafficPalette.lineWidth(for: mode))
+            try? map.addLayer(layer)
+            return
+        }
+        try? map.updateLayer(withId: trafficLayerId, type: LineLayer.self) { layer in
+            layer.visibility = .constant(visible ? .visible : .none)
+            layer.lineColor = .expression(colorExpression(for: mode))
+            layer.lineWidth = .constant(MapTrafficPalette.lineWidth(for: mode))
+        }
+    }
+
+    private static func colorExpression(for mode: MapMode) -> Exp {
+        let colors = MapTrafficPalette.colors(for: mode)
+        return Exp(.match) {
+            Exp(.get) { "congestion" }
+            "low"
+            color(colors.low)
+            "moderate"
+            color(colors.moderate)
+            "heavy"
+            color(colors.heavy)
+            "severe"
+            color(colors.severe)
+            color(colors.unknown)
+        }
+    }
+
+    private static func color(_ argb: UInt32) -> UIColor {
+        UIColor(
+            red: CGFloat((argb >> 16) & 0xFF) / 255,
+            green: CGFloat((argb >> 8) & 0xFF) / 255,
+            blue: CGFloat(argb & 0xFF) / 255,
+            alpha: CGFloat((argb >> 24) & 0xFF) / 255
+        )
     }
 }
 
@@ -302,12 +407,7 @@ private struct MapboxStandardMap: View {
     let onLoaded: @MainActor () -> Void
     let surface: StubMapSurface
     let locationProvider: any LocationProvider
-    @State private var viewport: Viewport = .camera(
-        center: .init(latitude: 57.4872, longitude: 12.0761),
-        zoom: StubMapSurface.defaultBrowsingZoom,
-        bearing: 0,
-        pitch: 45
-    )
+    @State private var viewport: Viewport
     @State private var cameraBeforeConvoy: MapCameraSnapshot?
     @State private var interactionObserver: ConvoyViewportInteractionObserver
     @State private var latestOwnPoint: MapPoint?
@@ -316,6 +416,7 @@ private struct MapboxStandardMap: View {
     @State private var locationAuthorization: LocationAuthorization
     @State private var surfaceActive: Bool
     @State private var pendingProgrammaticViewportTokens: Set<UUID> = []
+    @State private var canonicalCameraTarget: MapHomeCameraTarget?
     @State private var meFollowIdleTask: Task<Void, Never>?
     @State private var meFollowIdleTaskToken: UUID?
     @State private var rendererAttached = false
@@ -331,6 +432,12 @@ private struct MapboxStandardMap: View {
         self.surface = surface
         self.locationProvider = locationProvider
         self.onLoaded = onLoaded
+        _viewport = State(initialValue: .camera(
+            center: .init(latitude: 57.4872, longitude: 12.0761),
+            zoom: surface.browsingZoom,
+            bearing: 0,
+            pitch: surface.is3D ? 45 : 0
+        ))
         _interactionObserver = State(initialValue: ConvoyViewportInteractionObserver(surface: surface))
         _locationAuthorization = State(initialValue: locationProvider.authorization)
         _surfaceActive = State(initialValue: surface.isActive)
@@ -338,7 +445,25 @@ private struct MapboxStandardMap: View {
 
     var body: some View {
         MapReader { proxy in
-            MapboxMaps.Map(viewport: $viewport)
+            MapboxMaps.Map(viewport: $viewport) {
+                if let trail = surface.followMeTrail, trail.count >= 2 {
+                    PolylineAnnotation(
+                        id: "convoy-follow-me-trail",
+                        lineCoordinates: trail.map {
+                            CLLocationCoordinate2D(
+                                latitude: $0.latitude,
+                                longitude: $0.longitude
+                            )
+                        }
+                    )
+                    .lineColor(UIColor.systemYellow)
+                    .lineBorderColor(UIColor.black.withAlphaComponent(0.65))
+                    .lineBorderWidth(2)
+                    .lineWidth(6)
+                    .lineOpacity(0.92)
+                    .lineJoin(.round)
+                }
+            }
             .mapStyle(.standard)
             .onMapLoaded { _ in
                 onLoaded()
@@ -357,6 +482,9 @@ private struct MapboxStandardMap: View {
             }
             .onCameraChanged { context in
                 let state = context.cameraState
+                if pendingProgrammaticViewportTokens.isEmpty {
+                    canonicalCameraTarget = cameraTarget(from: state)
+                }
                 surface.updateCameraSnapshot(.of(
                     latitude: state.center.latitude,
                     longitude: state.center.longitude,
@@ -385,6 +513,7 @@ private struct MapboxStandardMap: View {
                 interactionObserver.onUserInteraction = {
                     // A gesture can interrupt an in-flight programmatic animation.
                     // Always suspend now; idle return waits for its token to clear.
+                    canonicalCameraTarget = nil
                     guard meFollowEnabled else { return }
                     meFollowSuspended = true
                     surface.suspendSelfFollowForInteraction()
@@ -521,6 +650,7 @@ private struct MapboxStandardMap: View {
                 resumeSelfFollow,
                 restoreViewport in
                 let state = map.cameraState
+                let baseTarget = canonicalCameraTarget ?? cameraTarget(from: state)
                 meFollowEnabled.wrappedValue = !enabled && followSelfEnabled
                 if enabled || !followSelfEnabled {
                     meFollowIdleTask?.cancel()
@@ -562,11 +692,11 @@ private struct MapboxStandardMap: View {
                 guard let points, points.count >= 2 else { return }
                 if cameraBeforeConvoy.wrappedValue == nil {
                     cameraBeforeConvoy.wrappedValue = .of(
-                        latitude: state.center.latitude,
-                        longitude: state.center.longitude,
-                        zoom: state.zoom,
-                        bearing: state.bearing,
-                        pitch: state.pitch
+                        latitude: baseTarget.latitude,
+                        longitude: baseTarget.longitude,
+                        zoom: baseTarget.zoom,
+                        bearing: baseTarget.bearing,
+                        pitch: baseTarget.pitch
                     )
                 }
                 let coordinates = points.map {
@@ -575,48 +705,99 @@ private struct MapboxStandardMap: View {
                 guard let camera = try? map.camera(
                     for: coordinates,
                     camera: CameraOptions(
-                        bearing: state.bearing,
+                        bearing: baseTarget.bearing,
                         pitch: MapHomeConvoyViewportPolicy.fitComputationPitch
                     ),
                     coordinatesPadding: UIEdgeInsets(top: 110, left: 60, bottom: 150, right: 60),
                     maxZoom: MapHomeConvoyViewportPolicy.maximumFitZoom,
                     offset: nil
                 ) else { return }
-                performProgrammaticViewportChange {
-                    // The fit is solved on a flat camera, but the final viewport
-                    // keeps the LIVE pitch so convoy focus does not silently drop
-                    // the user's current 2D/3D framing.
-                    withViewportAnimation(.easeInOut(duration: 0.9)) {
-                        viewport.wrappedValue = .camera(
-                            center: camera.center ?? state.center,
-                            zoom: MapHomeConvoyViewportPolicy.fitZoom(
-                                camera.zoom, fallback: state.zoom
-                            ),
-                            bearing: state.bearing,
-                            pitch: state.pitch
-                        )
-                    }
-                }
+                applyCameraTarget(
+                    MapHomeCameraTarget(
+                        latitude: (camera.center ?? state.center).latitude,
+                        longitude: (camera.center ?? state.center).longitude,
+                        zoom: Double(MapHomeConvoyViewportPolicy.fitZoom(
+                            camera.zoom, fallback: CGFloat(baseTarget.zoom)
+                        )),
+                        bearing: baseTarget.bearing,
+                        pitch: surface.is3D ? 45 : 0
+                    ),
+                    duration: 0.9,
+                    viewport: viewport
+                )
             },
             center: { point in
                 if meFollowEnabled.wrappedValue {
                     meFollowSuspended.wrappedValue = true
                 }
                 let state = map.cameraState
-                performProgrammaticViewportChange {
-                    withViewportAnimation(.easeInOut(duration: 0.9)) {
-                        viewport.wrappedValue = .camera(
-                            center: CLLocationCoordinate2D(
-                                latitude: point.latitude, longitude: point.longitude
-                            ),
-                            zoom: state.zoom,
-                            bearing: state.bearing,
-                            pitch: state.pitch
-                        )
-                    }
-                }
+                let baseTarget = canonicalCameraTarget ?? cameraTarget(from: state)
+                applyCameraTarget(
+                    MapHomeCameraTarget(
+                        latitude: point.latitude,
+                        longitude: point.longitude,
+                        zoom: baseTarget.zoom,
+                        bearing: baseTarget.bearing,
+                        pitch: baseTarget.pitch
+                    ),
+                    duration: 0.9,
+                    viewport: viewport
+                )
+            },
+            traffic: { enabled, mode in
+                MapHomeStyleLayers.applyTraffic(enabled, mode: mode, to: map)
+            },
+            mapMode: { mode in
+                MapHomeStyleLayers.applyMapMode(mode, to: map)
+            },
+            cameraPreferences: { enabled, zoom in
+                MapHomeStyleLayers.apply3D(enabled, to: map)
+                let state = map.cameraState
+                let target = (canonicalCameraTarget ?? cameraTarget(from: state))
+                    .applyingPreferences(
+                        is3D: enabled,
+                        browsingZoom: zoom,
+                        browsingOwnsZoom: !surface.convoyFocusEnabled
+                            && surface.routeOverlay == nil
+                    )
+                guard canonicalCameraTarget != target else { return }
+                guard abs(state.pitch - target.pitch) > 0.01
+                        || abs(state.zoom - target.zoom) > 0.01
+                else { return }
+                applyCameraTarget(target, duration: 0.5, viewport: viewport)
             }
         )
+    }
+
+    private func cameraTarget(from state: CameraState) -> MapHomeCameraTarget {
+        MapHomeCameraTarget(
+            latitude: state.center.latitude,
+            longitude: state.center.longitude,
+            zoom: state.zoom,
+            bearing: state.bearing,
+            pitch: state.pitch
+        )
+    }
+
+    private func applyCameraTarget(
+        _ target: MapHomeCameraTarget,
+        duration: TimeInterval,
+        viewport: Binding<Viewport>
+    ) {
+        canonicalCameraTarget = target
+        performProgrammaticViewportChange {
+            withViewportAnimation(.easeInOut(duration: duration)) {
+                viewport.wrappedValue = .camera(
+                    center: CLLocationCoordinate2D(
+                        latitude: target.latitude,
+                        longitude: target.longitude
+                    ),
+                    zoom: target.zoom,
+                    bearing: target.bearing,
+                    pitch: target.pitch
+                )
+            }
+        }
     }
 
     private func performProgrammaticViewportChange(_ change: () -> Void) {
@@ -629,6 +810,9 @@ private struct MapboxStandardMap: View {
                 return
             }
             pendingProgrammaticViewportTokens.remove(token)
+            if pendingProgrammaticViewportTokens.isEmpty {
+                canonicalCameraTarget = nil
+            }
             if pendingProgrammaticViewportTokens.isEmpty,
                isVisible,
                meFollowEnabled,
@@ -701,16 +885,17 @@ private struct MapboxStandardMap: View {
             snapshot: snapshot ?? surface.cameraSnapshot,
             restoringBrowsing: restoringBrowsing
         ) else { return }
-        performProgrammaticViewportChange {
-            withViewportAnimation(.easeInOut(duration: 0.9)) {
-                viewport.wrappedValue = .camera(
-                    center: camera.center,
-                    zoom: camera.zoom,
-                    bearing: camera.bearing,
-                    pitch: camera.pitch
-                )
-            }
-        }
+        applyCameraTarget(
+            MapHomeCameraTarget(
+                latitude: camera.center.latitude,
+                longitude: camera.center.longitude,
+                zoom: Double(camera.zoom),
+                bearing: Double(camera.bearing),
+                pitch: surface.is3D ? 45 : 0
+            ),
+            duration: 0.9,
+            viewport: viewport
+        )
     }
 
     private func meFollowCamera(
@@ -723,7 +908,8 @@ private struct MapboxStandardMap: View {
             point: point,
             snapshot: snapshot,
             fallback: fallback,
-            restoringBrowsing: restoringBrowsing
+            restoringBrowsing: restoringBrowsing,
+            browsingZoom: surface.browsingZoom
         ).map { camera in
             (
                 center: camera.center,

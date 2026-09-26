@@ -9,6 +9,7 @@ import UIKit
 struct ShellView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
 
     /// The signed-in session, threaded from ``RootView``. The config-less /
     /// unavailable state renders the bare shell with no profile entry —
@@ -28,6 +29,8 @@ struct ShellView: View {
     /// stand it down via ``MapSurface/setActive(_:)`` (see the map-cover
     /// effect below), never recreate it.
     @State private var mapSurface = StubMapSurface()
+    @State private var mapLayerPreferences = MapLayerPreferences()
+    @State private var showMapLayers = false
 
     /// Feature coordinators are composed once for the signed-in shell. Every
     /// factory is config-safe, so a build without GoogleService-Info.plist
@@ -46,8 +49,10 @@ struct ShellView: View {
     @State private var convoyManagementCoordinator: ConvoyManagementCoordinator?
     @State private var convoyAwareness = ConvoyAwarenessCoordinator()
     @State private var convoyReactionCoordinator: ConvoyReactionCoordinator?
+    @State private var convoyFollowMeCoordinator: ConvoyFollowMeCoordinator?
     @State private var liveLocationRepository: LiveLocationRepository?
     @State private var convoyCreateCoordinator: ConvoyCreateCoordinator?
+    @State private var incidentMapCoordinator: IncidentMapCoordinator?
     @State private var convoyCreateVehicleId: String?
     @State private var convoyCreateReturnsToList = false
     @State private var selectedConvoyId: String?
@@ -113,6 +118,14 @@ struct ShellView: View {
         .onChange(of: mapCover, initial: true) { _, cover in
             mapSurface.setActive(ShellMapHost.surfaceActive(cover: cover))
         }
+        .onChange(of: colorScheme, initial: true) { _, scheme in
+            mapSurface.setMapMode(
+                mapLayerPreferences.effectiveMapMode(systemIsDark: scheme == .dark)
+            )
+        }
+        .onAppear {
+            applyMapLayerPreferences()
+        }
         .onChange(of: selectedTab) { _, tab in
             if tab != .map, routes.current == .chatHub {
                 routes = routes.poppingOne()
@@ -141,6 +154,37 @@ struct ShellView: View {
                     onConvoy: requestConvoyCreation
                 )
             }
+        }
+        .sheet(isPresented: incidentReportIsPresented) {
+            if let incidentMapCoordinator {
+                IncidentReportSheet(
+                    coordinator: incidentMapCoordinator
+                )
+            }
+        }
+        .sheet(isPresented: incidentDetailsIsPresented) {
+            if let incidentMapCoordinator {
+                IncidentDetailsSheet(coordinator: incidentMapCoordinator)
+            }
+        }
+        .sheet(isPresented: policeDetailsIsPresented) {
+            if let incidentMapCoordinator {
+                PoliceDetailsSheet(coordinator: incidentMapCoordinator)
+            }
+        }
+        .sheet(isPresented: $showMapLayers) {
+            MapLayersSheet(
+                preferences: mapLayerPreferences,
+                systemIsDark: colorScheme == .dark,
+                trafikverketDataShown: incidentMapCoordinator?.incidents.contains(where: \.isImported) == true,
+                onTrafficAlertsChanged: { enabled in
+                    incidentMapCoordinator?.setTrafficAlertsEnabled(enabled)
+                },
+                onTrafficChanged: mapSurface.setTrafficEnabled,
+                onMapModeChanged: mapSurface.setMapMode,
+                on3DChanged: mapSurface.set3DEnabled,
+                onBrowsingZoomChanged: mapSurface.setBrowsingZoom
+            )
         }
         .confirmationDialog(
             "liveLocation.stop",
@@ -183,6 +227,11 @@ struct ShellView: View {
         } message: {
             Text("liveLocation.error")
         }
+        .alert(incidentFeedbackTitle, isPresented: incidentFeedbackIsPresented) {
+            Button("notifications.errorDismiss", role: .cancel) {
+                incidentMapCoordinator?.clearFeedback()
+            }
+        }
         .alert(convoyLeaveResultMessage, isPresented: convoyLeaveResultIsPresented) {
             Button("convoy.close", role: .cancel) {
                 convoyManagementCoordinator?.clearLeaveResult()
@@ -191,6 +240,9 @@ struct ShellView: View {
         .task(id: signedInUid) { await wireFeatures() }
         .task(id: convoyReactionSubscriptionKey) {
             convoyReactionCoordinator?.sync(convoyId: convoyReactionTargetId)
+        }
+        .task(id: convoyFollowMeSubscriptionKey) {
+            syncFollowMe()
         }
     }
 
@@ -215,7 +267,20 @@ struct ShellView: View {
                         mapCommunicationControls
                     }
                 }
+                .overlay(alignment: .bottomLeading) {
+                    // Viewing preferences are device-local and do not require
+                    // an account. Keep the control in the config-less shell so
+                    // clone-and-run builds exercise the same stub seam as CI.
+                    MapLayersButton(isPresented: $showMapLayers)
+                        .padding(KccSpacing.s4)
+                }
                 .overlay {
+                    if let incidentMapCoordinator {
+                        IncidentMapOverlay(
+                            coordinator: incidentMapCoordinator,
+                            projection: mapSurface
+                        )
+                    }
                     if liveLocationFeatureEnabled {
                         ConvoyMapAwarenessOverlay(
                             members: convoyAwareness.visibleMembers,
@@ -226,7 +291,10 @@ struct ShellView: View {
                 }
                 .overlay {
                     if convoyReactionTargetId != nil, let convoyReactionCoordinator {
-                        ConvoyReactionControls(coordinator: convoyReactionCoordinator)
+                        ConvoyReactionControls(
+                            coordinator: convoyReactionCoordinator,
+                            followMeCoordinator: convoyFollowMeCoordinator
+                        )
                     }
                 }
                 .overlay(alignment: .top) {
@@ -244,6 +312,40 @@ struct ShellView: View {
                         .padding(.top, KccSpacing.s12 + KccSpacing.s3)
                     }
                 }
+                .overlay {
+                    if incidentMapCoordinator?.pendingMapReportType != nil {
+                        IncidentLocationPickerControls(
+                            canConfirm: currentMapCenter != nil,
+                            confirm: submitMapCenterIncident,
+                            cancel: { incidentMapCoordinator?.cancelMapSelection() }
+                        )
+                    }
+                }
+                .overlay(alignment: .top) {
+                    if incidentMapCoordinator?.proximityAlert != nil {
+                        PoliceProximityBanner {
+                            incidentMapCoordinator?.dismissProximityAlert()
+                        }
+                        .padding(.horizontal, KccSpacing.s4)
+                        .padding(.top, KccSpacing.s12 + KccSpacing.s12)
+                    }
+                }
+                .task(id: incidentMapLifecycleKey) {
+                    guard let incidentMapCoordinator else { return }
+                    incidentMapCoordinator.start(
+                        surface: mapSurface,
+                        provider: locationProvider
+                    )
+                    do { try await Task.sleep(for: .seconds(86_400)) } catch {}
+                    incidentMapCoordinator.stop()
+                }
+                .task(id: mapSurface.cameraSnapshot) {
+                    guard let incidentMapCoordinator else { return }
+                    // Camera snapshots update while panning. Cancellation turns
+                    // this into a trailing-edge debounce, avoiding callable spam.
+                    do { try await Task.sleep(for: .milliseconds(700)) } catch { return }
+                    await incidentMapCoordinator.refresh(surface: mapSurface)
+                }
                 .task(id: convoyAwarenessSubscriptionKey) {
                     convoyAwareness.sync(
                         convoy: convoyAwarenessTargetConvoy,
@@ -253,7 +355,10 @@ struct ShellView: View {
                     applyConvoyFocus()
                 }
                 .onChange(of: convoyAwareness.focusMode) { _, _ in applyConvoyFocus() }
-                .onChange(of: convoyAwareness.positions) { _, _ in applyConvoyFocus() }
+                .onChange(of: convoyAwareness.positions) { _, _ in
+                    applyConvoyFocus()
+                    syncFollowMe()
+                }
                 .task(id: convoyAwareness.focusMode) {
                     guard convoyAwareness.focusMode == .convoy else { return }
                     while !Task.isCancelled {
@@ -329,6 +434,17 @@ struct ShellView: View {
 
     private var mapCommunicationControls: some View {
         VStack(spacing: KccSpacing.s3) {
+            if incidentMapCoordinator?.available == true {
+                Button {
+                    incidentMapCoordinator?.reportSheetPresented = true
+                } label: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .frame(width: 48, height: 48)
+                        .background(.regularMaterial, in: Circle())
+                }
+                .accessibilityLabel(Text("incidents.reportButton"))
+            }
+
             Button {
                 guard ChatHubCoordinator.canPresentHub(cover: mapCover, navigating: false) else { return }
                 routes = routes.opening(.chatHub)
@@ -352,6 +468,16 @@ struct ShellView: View {
         }
         .font(.system(size: 20, weight: .semibold))
         .padding(KccSpacing.s4)
+    }
+
+    private func applyMapLayerPreferences() {
+        incidentMapCoordinator?.setTrafficAlertsEnabled(mapLayerPreferences.trafficAlertsEnabled)
+        mapSurface.setTrafficEnabled(mapLayerPreferences.trafficEnabled)
+        mapSurface.setMapMode(
+            mapLayerPreferences.effectiveMapMode(systemIsDark: colorScheme == .dark)
+        )
+        mapSurface.set3DEnabled(mapLayerPreferences.is3D)
+        mapSurface.setBrowsingZoom(mapLayerPreferences.browsingZoom)
     }
 
     @ViewBuilder
@@ -960,8 +1086,12 @@ struct ShellView: View {
         convoyAwareness.sync(convoy: nil, repository: nil, currentUid: nil)
         convoyReactionCoordinator?.sync(convoyId: nil)
         convoyReactionCoordinator = nil
+        convoyFollowMeCoordinator?.stop()
+        convoyFollowMeCoordinator = nil
         liveLocationRepository = nil
         convoyCreateCoordinator = nil
+        incidentMapCoordinator?.stop()
+        incidentMapCoordinator = nil
         convoyCreateVehicleId = nil
         convoyCreateReturnsToList = false
         selectedConvoyId = nil
@@ -979,6 +1109,13 @@ struct ShellView: View {
         }
         friendsRepository = friends
         conversationsRepository = conversations
+        let incidentMap = IncidentMapCoordinator(
+            incidentRepository: FirebaseIncidentRepository.createIfAvailable(),
+            policeRepository: FirebasePoliceRepository.createIfAvailable(),
+            currentUid: uid
+        )
+        incidentMap.setTrafficAlertsEnabled(mapLayerPreferences.trafficAlertsEnabled)
+        incidentMapCoordinator = incidentMap
         eventsCoordinator = FirebaseEventsRepository.createIfAvailable().map(EventsCoordinator.init(repository:))
         leaderboardCoordinator = LeaderboardCoordinator(
             repository: FirebaseLeaderboardRepository.createIfAvailable()
@@ -1010,8 +1147,19 @@ struct ShellView: View {
             repository: FirebaseConvoyManagementRepository.createIfAvailable()
         )
         convoyManagementCoordinator = convoyManagement
-        convoyReactionCoordinator = FirebaseConvoyReactionRepository.createIfAvailable().map {
-            ConvoyReactionCoordinator(repository: $0)
+        convoyReactionCoordinator = FirebaseConvoyReactionRepository.createIfAvailable().map { repository in
+            ConvoyReactionCoordinator(
+                repository: repository,
+                onPoliceSent: { [incidentMap] in
+                    _ = await incidentMap.reportPoliceAtCurrentLocation(
+                        source: "convoy",
+                        surfaceError: false
+                    )
+                }
+            )
+        }
+        convoyFollowMeCoordinator = FirebaseConvoyFollowMeRepository.createIfAvailable().map {
+            ConvoyFollowMeCoordinator(repository: $0)
         }
 
         let crownHunt = await CrownHuntComposition.live(
@@ -1055,6 +1203,65 @@ struct ShellView: View {
         return nil
     }
 
+    private var currentMapCenter: MapPoint? {
+        mapSurface.cameraSnapshot.map {
+            MapPoint(longitude: $0.longitude, latitude: $0.latitude)
+        }
+    }
+
+    private func submitMapCenterIncident() {
+        guard let incidentMapCoordinator,
+              let type = incidentMapCoordinator.pendingMapReportType,
+              let point = currentMapCenter else { return }
+        incidentMapCoordinator.cancelMapSelection()
+        Task { await incidentMapCoordinator.report(type, at: point) }
+    }
+
+    private var incidentMapLifecycleKey: String {
+        "\(signedInUid ?? "unavailable")|\(incidentMapCoordinator == nil ? "off" : "on")"
+    }
+
+    private var incidentReportIsPresented: Binding<Bool> {
+        Binding(
+            get: { incidentMapCoordinator?.reportSheetPresented == true },
+            set: { incidentMapCoordinator?.reportSheetPresented = $0 }
+        )
+    }
+
+    private var incidentDetailsIsPresented: Binding<Bool> {
+        Binding(
+            get: { incidentMapCoordinator?.selectedIncident != nil },
+            set: { if !$0 { incidentMapCoordinator?.selectedIncident = nil } }
+        )
+    }
+
+    private var policeDetailsIsPresented: Binding<Bool> {
+        Binding(
+            get: { incidentMapCoordinator?.selectedPolice != nil },
+            set: { if !$0 { incidentMapCoordinator?.selectedPolice = nil } }
+        )
+    }
+
+    private var incidentFeedbackIsPresented: Binding<Bool> {
+        Binding(
+            get: {
+                incidentMapCoordinator?.feedback != nil
+                    && incidentMapCoordinator?.selectedIncident == nil
+                    && incidentMapCoordinator?.selectedPolice == nil
+            },
+            set: { if !$0 { incidentMapCoordinator?.clearFeedback() } }
+        )
+    }
+
+    private var incidentFeedbackTitle: LocalizedStringKey {
+        guard let feedback = incidentMapCoordinator?.feedback else {
+            return "incidents.reportError"
+        }
+        switch feedback {
+        case .success(let key), .error(let key): return LocalizedStringKey(key)
+        }
+    }
+
     private var signedInUid: String? {
         if case .signedIn(let uid, _) = session.state { return uid }
         return nil
@@ -1088,6 +1295,21 @@ struct ShellView: View {
 
     private var convoyReactionSubscriptionKey: String {
         "\(convoyReactionCoordinator != nil)|\(convoyReactionTargetId ?? "")"
+    }
+
+    private var convoyFollowMeSubscriptionKey: String {
+        let convoy = convoyManagementCoordinator?.activeConvoy
+        let members = convoy?.acceptedMembers.map(\.uid).sorted().joined(separator: ",") ?? ""
+        return "\(convoyFollowMeCoordinator != nil)|\(convoy?.convoyId ?? "")|\(members)|\(signedInUid ?? "")"
+    }
+
+    private func syncFollowMe() {
+        convoyFollowMeCoordinator?.sync(
+            convoy: convoyManagementCoordinator?.activeConvoy,
+            currentUid: signedInUid,
+            positions: convoyAwareness.positions,
+            surface: mapSurface
+        )
     }
 
     private func applyConvoyFocus() {

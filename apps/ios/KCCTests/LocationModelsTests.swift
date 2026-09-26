@@ -31,8 +31,24 @@ final class LocationModelsTests: XCTestCase {
                 timestamp: Self.when,
                 accuracyMeters: 5.0,
                 headingDegrees: 271.5,
-                speedMetersPerSecond: 13.9
+                speedMetersPerSecond: 13.9,
+                isSimulatedBySoftware: nil
             )
+        )
+    }
+
+    func testSimulationSignalPassesThroughWithoutGuessingUnknown() {
+        XCTAssertEqual(
+            LocationFix.of(
+                latitude: 57.487, longitude: 12.076, timestamp: Self.when,
+                isSimulatedBySoftware: true
+            )?.isSimulatedBySoftware,
+            true
+        )
+        XCTAssertNil(
+            LocationFix.of(
+                latitude: 57.487, longitude: 12.076, timestamp: Self.when
+            )?.isSimulatedBySoftware
         )
     }
 

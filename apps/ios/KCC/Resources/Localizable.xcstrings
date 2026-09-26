@@ -17698,6 +17698,23 @@
         }
       }
     },
+    "incidents.markerClearedFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, möjligen borta"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, possibly cleared"
+          }
+        }
+      }
+    },
     "incidents.markerLabel": {
       "extractionState": "manual",
       "localizations": {
@@ -23695,6 +23712,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reported gone by %1$lld"
+          }
+        }
+      }
+    },
+    "police.markerLabel": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Polisrapport"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Police report"
           }
         }
       }
