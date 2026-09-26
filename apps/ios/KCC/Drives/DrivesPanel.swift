@@ -1,305 +1,233 @@
 import SwiftUI
 
-/// Panel CONTENT for the History tab — the owner drives list, the iOS
-/// slice of Android's `DrivesListScreen` (Phase 12 slice 12's read side).
-/// Rendered inside the shell's `TranslucentShellPanel` like the other panel
-/// tabs.
-///
-/// This slice: the list of saved drives (title, the neutral stats line, the
-/// round photo of the driven car, and who the drive was driven with).
-/// Recording/save is integrated with the shell's live-session flow; deletion
-/// is available per card. Share, search/filter/sort, personal stats, drive
-/// detail, and route replay remain later slices.
 struct DrivesPanel: View {
-    @State private var coordinator: DrivesCoordinator
-    @State private var pendingDeleteId: String?
+    @State private var coordinator: DriveHistoryCoordinator
+    @State private var selectedDrive: SavedDrive?
+    @State private var showingStats = false
+    @State private var showingFilters = false
+    @State private var pendingDelete: SavedDrive?
 
-    /// Production wiring: builds the coordinator from the feature-level
-    /// factories (the same construction pattern as `ProfileScreen`'s
-    /// wiring). In a config-less build both factories return nil
-    /// and the coordinator settles on ``DrivesUiState/unavailable``.
     init() {
-        self.init(
-            coordinator: DrivesCoordinator(
-                repository: FirebaseDrivesRepository.createIfAvailable(),
-                uid: Self.signedInUid()
-            )
-        )
+        self.init(coordinator: DriveHistoryCoordinator(
+            repository: FirebaseDriveHistoryRepository.createIfAvailable()
+        ))
     }
 
-    /// Preview/test seam: inject a coordinator (typically fed by a fake
-    /// repository).
-    init(coordinator: DrivesCoordinator) {
-        _coordinator = State(initialValue: coordinator)
-    }
+    init(coordinator: DriveHistoryCoordinator) { _coordinator = State(initialValue: coordinator) }
 
     var body: some View {
         ScrollView {
-            // Lazy: a drive history grows without bound (Android renders it
-            // in a LazyColumn for the same reason), so only visible cards
-            // are built.
             LazyVStack(alignment: .leading, spacing: KccSpacing.s4) {
-                Text("savedDrives.screenTitle")
-                    .font(.system(size: KccTypeScale.headingLg, weight: KccTypeScale.semibold))
-
-                content
+                HStack {
+                    Text("savedDrives.screenTitle")
+                        .font(.system(size: KccTypeScale.headingLg, weight: KccTypeScale.semibold))
+                    Spacer()
+                    Button { showingStats = true } label: {
+                        Label("savedDrives.statsEntryAction", systemImage: "chart.bar")
+                    }
+                    .labelStyle(.iconOnly)
+                    .frame(minWidth: 44, minHeight: 44)
+                }
+                historyContent
             }
             .padding(KccSpacing.s6)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .task { coordinator.start() }
+        .task { await coordinator.load() }
+        .sheet(item: $selectedDrive) { drive in
+            SavedDriveDetailScreen(coordinator: coordinator, drive: drive) {
+                pendingDelete = drive
+            }
+        }
+        .sheet(isPresented: $showingStats) { DriveStatsScreen(coordinator: coordinator) }
         .confirmationDialog(
             "savedDrives.deleteConfirmTitle",
             isPresented: Binding(
-                get: { pendingDeleteId != nil },
-                set: { if !$0 { pendingDeleteId = nil } }
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
             ),
             titleVisibility: .visible
         ) {
             Button("savedDrives.deleteConfirmAction", role: .destructive) {
-                guard let id = pendingDeleteId else { return }
-                pendingDeleteId = nil
-                Task { await coordinator.deleteDrive(id: id) }
+                guard let drive = pendingDelete else { return }
+                pendingDelete = nil
+                selectedDrive = nil
+                Task { await coordinator.delete(drive) }
             }
-            Button("savedDrives.deleteConfirmCancel", role: .cancel) {
-                pendingDeleteId = nil
-            }
-        } message: {
-            Text("savedDrives.deleteConfirmBody")
-        }
+            Button("savedDrives.deleteConfirmCancel", role: .cancel) { pendingDelete = nil }
+        } message: { Text("savedDrives.deleteConfirmBody") }
     }
 
-    @ViewBuilder
-    private var content: some View {
+    @ViewBuilder private var historyContent: some View {
         switch coordinator.state {
-        case .loading:
-            Text("savedDrives.loading")
-                .font(.system(size: KccTypeScale.bodyMd))
-                .foregroundStyle(.secondary)
-        case .unavailable:
-            // The config-less build. There is no dedicated "unavailable" key
-            // in the savedDrives contract strings (Android has no such
-            // state), so the generic load-error copy is the closest honest
-            // message — the same reuse posture as EventsScreen's placeholder.
-            Text("savedDrives.error")
-                .font(.system(size: KccTypeScale.bodyMd))
-                .foregroundStyle(.secondary)
+        case .loading: ProgressView("savedDrives.loading")
+        case .unavailable: Text("savedDrives.error").foregroundStyle(.secondary)
         case .failed:
-            Text("savedDrives.error")
-                .font(.system(size: KccTypeScale.bodyMd))
-                .foregroundStyle(KccPalette.errorRed)
-            Button(action: { coordinator.reload() }) {
-                Text("savedDrives.retry")
-                    .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
-                    .frame(maxWidth: .infinity, minHeight: 44)
-            }
-            .buttonStyle(.bordered)
-        case .empty:
-            Text("savedDrives.empty")
-                .font(.system(size: KccTypeScale.bodyMd))
-                .foregroundStyle(.secondary)
-        case .loaded(let drives):
-            ForEach(drives) { drive in
-                DriveHistoryCard(
-                    drive: drive,
-                    carImageURL: drive.carImagePath.flatMap { coordinator.imageURLs[$0] },
-                    isDeleting: coordinator.deletingDriveId == drive.id,
-                    deleteFailed: coordinator.deleteFailureDriveId == drive.id,
-                    onDelete: { pendingDeleteId = drive.id }
-                )
-            }
+            Text("savedDrives.error").foregroundStyle(KccPalette.errorRed)
+            Button("savedDrives.retry") { Task { await coordinator.load() } }
+                .buttonStyle(.bordered).frame(maxWidth: .infinity, minHeight: 44)
+        case .loaded: loadedHistory
         }
     }
 
-    /// The signed-in uid from the process-wide auth repository, nil when
-    /// Firebase is unconfigured or no session exists — read here (feature
-    /// level) so the shell keeps constructing this panel argument-free, the
-    /// same seam as `ProfileScreen`.
-    private static func signedInUid() -> String? {
-        if case .signedIn(let uid, _)? = FirebaseAuthRepository.createIfAvailable()?.authState {
-            return uid
+    @ViewBuilder private var loadedHistory: some View {
+        if coordinator.hiddenDriveCount > 0 {
+            Text(String(format: String(localized: "savedDrives.tierRestrictedBanner"), coordinator.hiddenDriveCount))
+                .font(.system(size: KccTypeScale.bodySm)).foregroundStyle(.secondary)
         }
-        return nil
+        Button { showingFilters.toggle() } label: {
+            HStack {
+                Label(showingFilters ? "savedDrives.filterToggleCollapse" : "savedDrives.filterToggleExpand",
+                      systemImage: "line.3.horizontal.decrease.circle")
+                Spacer()
+                if coordinator.filters.activeFilterCount > 0 {
+                    Text("\(coordinator.filters.activeFilterCount)").font(.caption.bold())
+                        .padding(6).background(.tint, in: Circle()).foregroundStyle(.white)
+                }
+            }.frame(minHeight: 44)
+        }.buttonStyle(.plain)
+        if showingFilters { filters }
+
+        if coordinator.drives.isEmpty {
+            Text("savedDrives.empty").foregroundStyle(.secondary)
+        } else if coordinator.visibleDrives.isEmpty {
+            Text("savedDrives.filterNoMatches").foregroundStyle(.secondary)
+            Button("savedDrives.filterNoMatchesAction") { coordinator.filters = .init() }
+        } else {
+            ForEach(coordinator.visibleDrives) { drive in
+                Button { selectedDrive = drive } label: {
+                    DriveHistoryCard(drive: drive,
+                        carImageURL: drive.carImagePath.flatMap { coordinator.imageURLs[$0] })
+                }
+                .buttonStyle(.plain)
+                .contextMenu {
+                    ShareLink(item: DriveShareText.summary(for: drive)) {
+                        Label("savedDrives.shareAction", systemImage: "square.and.arrow.up")
+                    }
+                    Button(role: .destructive) { pendingDelete = drive } label: {
+                        Label("savedDrives.deleteAction", systemImage: "trash")
+                    }
+                }
+            }
+        }
+        // Paging belongs to the loaded history, not to the filtered result.
+        // A page with zero local matches can still lead to a later matching
+        // page, so keep Load more/retry reachable in that state.
+        pagingControls
+        if coordinator.deleteFailed { Text("savedDrives.deleteError").foregroundStyle(KccPalette.errorRed) }
+    }
+
+    private var filters: some View {
+        VStack(alignment: .leading, spacing: KccSpacing.s3) {
+            TextField("savedDrives.filterSearchLabel", text: $coordinator.filters.query)
+                .textFieldStyle(.roundedBorder)
+            Picker("savedDrives.filterPeriod", selection: $coordinator.filters.dateRange) {
+                Text("savedDrives.filterAll").tag(DriveDateRange.all)
+                Text("savedDrives.filterThisWeek").tag(DriveDateRange.thisWeek)
+                Text("savedDrives.filterThisMonth").tag(DriveDateRange.thisMonth)
+            }
+            Picker("savedDrives.filterDistance", selection: $coordinator.filters.distanceBand) {
+                Text("savedDrives.filterAll").tag(DriveDistanceBand.all)
+                Text("savedDrives.filterUnder10").tag(DriveDistanceBand.under10)
+                Text("savedDrives.filter10to50").tag(DriveDistanceBand.from10To50)
+                Text("savedDrives.filterOver50").tag(DriveDistanceBand.over50)
+            }
+            Picker("savedDrives.filterSort", selection: $coordinator.filters.sort) {
+                Text("savedDrives.sortNewest").tag(DriveSort.newest)
+                Text("savedDrives.sortLongest").tag(DriveSort.longest)
+                Text("savedDrives.sortFastest").tag(DriveSort.fastestAverage)
+            }
+            if coordinator.filters.activeFilterCount > 0 {
+                Button("savedDrives.filterClear") { coordinator.filters = .init() }
+            }
+        }.pickerStyle(.menu)
+    }
+
+    @ViewBuilder private var pagingControls: some View {
+        if coordinator.loadingMore { ProgressView("savedDrives.loadingMore") }
+        else if coordinator.loadMoreFailed {
+            Text("savedDrives.loadMoreError").foregroundStyle(KccPalette.errorRed)
+            Button("savedDrives.retryAction") { Task { await coordinator.loadMore() } }
+        } else if coordinator.hasMore {
+            Button("savedDrives.loadMore") { Task { await coordinator.loadMore() } }
+                .frame(maxWidth: .infinity, minHeight: 44)
+        }
     }
 }
 
-/// One saved drive: the headline (title, or the save date), the neutral
-/// stats line, the round photo of the driven car, and the "drove with" row
-/// for convoy drives — the display half of Android's `DriveCard` (its
-/// deletion is owner-authoritative via `drives-delete`; share, detail and the
-/// route-shape thumbnail arrive with later slices.
 struct DriveHistoryCard: View {
     let drive: SavedDrive
-    /// The resolved car-photo URL; nil keeps the placeholder (a missing
-    /// picture is cosmetic, never an error state).
     let carImageURL: URL?
-    var isDeleting = false
-    var deleteFailed = false
-    var onDelete: (() -> Void)?
-
-    /// Diameter of the round driven-car photo — half the 96pt profile
-    /// avatar, which uses the same circular treatment, so the photo reads
-    /// as a list adornment rather than the row's subject.
-    private static let photoDiameter: CGFloat = 48
-
     var body: some View {
-        VStack(alignment: .leading, spacing: KccSpacing.s2) {
-            HStack(alignment: .center, spacing: KccSpacing.s3) {
-                VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                    Text(headline)
-                        .font(.system(size: KccTypeScale.titleMd, weight: KccTypeScale.medium))
-
-                    // Distance, duration and maximum speed in ONE line, one
-                    // style, one colour, in that order. Max speed is a fact
-                    // about the drive exactly like the other two and is
-                    // rendered exactly like them — no emphasis, no colour
-                    // that rewards a bigger number, nothing to compare it
-                    // against. See SavedDrive.maxSpeedMetersPerSecond.
-                    Text(statsLine)
-                        .font(.system(size: KccTypeScale.bodySm))
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer(minLength: 0)
-
-                // A round photo of the car this drive was driven in, at the
-                // row's trailing edge. Renders nothing when the drive
-                // recorded no car (older drives, or a drive with no car), so
-                // the layout is unchanged for those.
-                if drive.carImagePath != nil {
-                    carPhoto
+        HStack(spacing: KccSpacing.s3) {
+            DriveRouteThumbnailView(encoded: drive.routeThumbnail).frame(width: 72, height: 56)
+            VStack(alignment: .leading, spacing: KccSpacing.s1) {
+                Text(DriveDisplay.title(for: drive))
+                    .font(.system(size: KccTypeScale.titleMd, weight: KccTypeScale.medium))
+                Text(DriveDisplay.statsLine(for: drive))
+                    .font(.system(size: KccTypeScale.bodySm)).foregroundStyle(.secondary)
+                if !drive.convoyMembers.isEmpty {
+                    Label(DriveDisplay.convoyLine(for: drive), systemImage: "person.2")
+                        .font(.system(size: KccTypeScale.bodySm)).foregroundStyle(.secondary)
                 }
             }
-
-            // Who this drive was driven with, when it was a convoy drive.
-            // Renders nothing for a solo drive (empty roster), so those
-            // cards are unchanged.
-            if !drive.convoyMembers.isEmpty {
-                Label {
-                    Text(droveWithLine)
-                        .font(.system(size: KccTypeScale.bodySm))
-                        .foregroundStyle(.secondary)
-                } icon: {
-                    Image(systemName: "person.2")
-                        .font(.system(size: KccTypeScale.bodySm))
-                        .foregroundStyle(.secondary)
-                }
+            Spacer(minLength: 0)
+            if drive.carImagePath != nil {
+                AsyncImage(url: carImageURL) { image in image.resizable().scaledToFill() } placeholder: {
+                    Image(systemName: "car").foregroundStyle(.secondary)
+                }.frame(width: 44, height: 44).clipShape(Circle()).accessibilityHidden(true)
             }
-
-            if deleteFailed {
-                Text("savedDrives.deleteError")
-                    .font(.system(size: KccTypeScale.bodySm))
-                    .foregroundStyle(KccPalette.errorRed)
-            }
-            if let onDelete {
-                Button(role: .destructive, action: onDelete) {
-                    HStack {
-                        if isDeleting { ProgressView() }
-                        Text(isDeleting
-                             ? "savedDrives.deletingProgress"
-                             : "savedDrives.deleteAction")
-                    }
-                    .frame(minHeight: 44)
-                }
-                .disabled(isDeleting)
-            }
+            Image(systemName: "chevron.right").foregroundStyle(.secondary)
         }
-        .padding(KccSpacing.s4)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
-    }
-
-    /// The drive's title, or the save date for an untitled drive, or the
-    /// neutral detail-title label when even the dates are missing —
-    /// Android's `driveTitle`.
-    private var headline: String {
-        if let title = drive.title?.trimmingCharacters(in: .whitespacesAndNewlines),
-            !title.isEmpty {
-            return title
-        }
-        if let date = drive.createdAt ?? drive.startedAt {
-            return date.formatted(date: .abbreviated, time: .omitted)
-        }
-        return String(localized: "savedDrives.detailTitle")
-    }
-
-    private var statsLine: String {
-        let maxSpeed = String(
-            format: String(localized: "savedDrives.maxSpeedShort"),
-            // Nil (no stored value) formats as the missing-value dash,
-            // never as "0 km/h".
-            DriveFormatters.formatSpeed(drive.maxSpeedMetersPerSecond)
-        )
-        return [
-            DriveFormatters.formatDistance(drive.distanceMeters),
-            DriveFormatters.formatDuration(drive.durationSeconds),
-            maxSpeed,
-        ].joined(separator: " · ")
-    }
-
-    private var droveWithLine: String {
-        String(
-            format: String(localized: "savedDrives.convoyDroveWith"),
-            ConvoyDriveMembers.joinedNames(
-                drive.convoyMembers,
-                unknownLabel: String(localized: "savedDrives.convoyMemberUnknown")
-            )
-        )
-    }
-
-    private var carPhoto: some View {
-        ZStack {
-            Circle()
-                .fill(Color(.tertiarySystemBackground))
-            if let carImageURL {
-                AsyncImage(url: carImageURL) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } placeholder: {
-                    carPhotoPlaceholder
-                }
-            } else {
-                carPhotoPlaceholder
-            }
-        }
-        .frame(width: Self.photoDiameter, height: Self.photoDiameter)
-        .clipShape(Circle())
-        // Decorative: the card's text already carries every fact about the
-        // drive, so a per-card VoiceOver stop on the photo would only add a
-        // repetitive extra swipe (the same posture as the shell's hidden
-        // dismiss layer). The savedDrives.carPhotoDescription label returns
-        // when the photo becomes an interactive affordance (the detail
-        // slice).
-        .accessibilityHidden(true)
-    }
-
-    private var carPhotoPlaceholder: some View {
-        Image(systemName: "car")
-            .font(.system(size: KccTypeScale.bodyMd))
-            .foregroundStyle(.secondary)
+        .padding(KccSpacing.s4).frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+        .background(Color(.secondarySystemBackground)).clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
     }
 }
 
-#Preview("Loaded") {
-    DriveHistoryCard(
-        drive: SavedDrive(
-            id: "ride-1",
-            title: "Kvällsrunda",
-            distanceMeters: 12_345,
-            durationSeconds: 1_845,
-            averageSpeedMetersPerSecond: 12.4,
-            startedAt: .now,
-            endedAt: .now,
-            createdAt: .now,
-            maxSpeedMetersPerSecond: 24.7,
-            carImagePath: nil,
-            convoyMembers: [
-                ConvoyDriveMember(uid: "u2", displayName: "Alex", avatarPath: nil)
-            ]
-        ),
-        carImageURL: nil
-    )
-    .padding()
+private struct DriveRouteThumbnailView: View {
+    let encoded: String?
+    var body: some View {
+        let points = DriveRouteThumbnail.decode(encoded)
+        Canvas { context, size in
+            guard points.count >= 2 else { return }
+            var path = Path()
+            for (index, point) in points.enumerated() {
+                let rendered = CGPoint(x: 6 + point.x * (size.width - 12), y: 6 + point.y * (size.height - 12))
+                index == 0 ? path.move(to: rendered) : path.addLine(to: rendered)
+            }
+            context.stroke(path, with: .color(.accentColor), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+        }
+        .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: KccRadius.sm))
+        .overlay { if points.count < 2 { Image(systemName: "map").foregroundStyle(.secondary) } }
+        .accessibilityLabel("savedDrives.routeThumbnailLabel")
+    }
+}
+
+enum DriveDisplay {
+    static func title(for drive: SavedDrive) -> String {
+        if let title = drive.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty { return title }
+        if let date = drive.createdAt ?? drive.startedAt { return date.formatted(date: .abbreviated, time: .omitted) }
+        return String(localized: "savedDrives.detailTitle")
+    }
+    static func statsLine(for drive: SavedDrive) -> String {
+        [DriveFormatters.formatDistance(drive.distanceMeters),
+         DriveFormatters.formatDuration(drive.durationSeconds),
+         String(format: String(localized: "savedDrives.maxSpeedShort"), DriveFormatters.formatSpeed(drive.maxSpeedMetersPerSecond))]
+            .joined(separator: " · ")
+    }
+    static func convoyLine(for drive: SavedDrive) -> String {
+        String(format: String(localized: "savedDrives.convoyDroveWith"),
+               ConvoyDriveMembers.joinedNames(drive.convoyMembers,
+                   unknownLabel: String(localized: "savedDrives.convoyMemberUnknown")))
+    }
+}
+
+enum DriveShareText {
+    /// Statistics-only by design: exact coordinates, map snapshots, start/end
+    /// areas and timestamps never cross the share sheet by default.
+    static func summary(for drive: SavedDrive) -> String {
+        String(format: String(localized: "savedDrives.shareSummary"),
+               String(localized: "app.name"),
+               DriveFormatters.formatDistance(drive.distanceMeters),
+               DriveFormatters.formatDuration(drive.durationSeconds))
+    }
 }
