@@ -35,6 +35,66 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
         }
     }
 
+    private final class GatedUploadRepository: DriveRecordingRepository, @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuations: [String: CheckedContinuation<Void, any Error>] = [:]
+        private var cancellationRequested: Set<String> = []
+        private var started: [String] = []
+        private var finished: [String] = []
+        private var cancelled: [String] = []
+
+        func save(_ request: DriveSaveRequest) async throws -> DriveSaveResult {
+            let sessionId = request.context.sourceSessionId
+            return DriveSaveResult(
+                rideId: "ride-\(sessionId)",
+                routePath: "rideRoutes/u/ride-\(sessionId)/route.bin",
+                alreadySaved: false
+            )
+        }
+
+        func uploadRoute(_ points: [RecordedDrivePoint], to path: String) async throws {
+            lock.withLock { started.append(path) }
+            do {
+                try await withTaskCancellationHandler {
+                    try await withCheckedThrowingContinuation { continuation in
+                        let cancelImmediately = lock.withLock {
+                            if cancellationRequested.contains(path) { return true }
+                            continuations[path] = continuation
+                            return false
+                        }
+                        if cancelImmediately {
+                            continuation.resume(throwing: CancellationError())
+                        }
+                    }
+                    try Task.checkCancellation()
+                } onCancel: {
+                    self.cancel(path)
+                }
+                lock.withLock { finished.append(path) }
+            } catch is CancellationError {
+                lock.withLock { cancelled.append(path) }
+                throw CancellationError()
+            }
+        }
+
+        func release(_ path: String) {
+            let continuation = lock.withLock { continuations.removeValue(forKey: path) }
+            continuation?.resume()
+        }
+
+        func startedPaths() -> [String] { lock.withLock { started } }
+        func finishedPaths() -> [String] { lock.withLock { finished } }
+        func cancelledPaths() -> [String] { lock.withLock { cancelled } }
+
+        private func cancel(_ path: String) {
+            let continuation = lock.withLock {
+                cancellationRequested.insert(path)
+                return continuations.removeValue(forKey: path)
+            }
+            continuation?.resume(throwing: CancellationError())
+        }
+    }
+
     func testLiveSessionEndAutoSavesKeepsAndUploadsWithoutPrompt() async {
         let start = Date(timeIntervalSince1970: 1_700_000_000)
         let clock = Clock(start)
@@ -114,6 +174,35 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
         XCTAssertEqual(repository.requests.map(\.context.sourceSessionId), ["session-a"])
     }
 
+    func testDirectActiveSessionTransitionSavesAThenRecordsBExactlyOnce() async {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let clock = Clock(start)
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let repository = FakeRepository()
+        let coordinator = makeCoordinator(repository, provider, clock)
+        coordinator.start(context: context(sessionId: "session-a"))
+        await waitUntil { provider.activeFixStreamCount == 1 }
+        provider.emitFix(fix(start, offset: 0))
+        provider.emitFix(fix(start, offset: 3, latitude: 57.0001))
+        await waitUntil { coordinator.state.summary?.pointCount == 2 }
+
+        clock.value = start.addingTimeInterval(10)
+        coordinator.start(context: context(sessionId: "session-b"))
+
+        await waitUntil {
+            if case .recording = coordinator.state {
+                return provider.activeFixStreamCount == 1
+            }
+            return false
+        }
+        XCTAssertEqual(repository.requests.count, 1)
+        XCTAssertEqual(repository.requests[0].context.sourceSessionId, "session-a")
+        XCTAssertEqual(repository.requests[0].points.count, 2)
+        provider.emitFix(fix(start, offset: 11, latitude: 58))
+        await waitUntil { coordinator.state.summary?.pointCount == 1 }
+        XCTAssertEqual(provider.activeFixStreamCount, 1)
+    }
+
     func testQueuedSessionWaitsForFailureRetryThenStarts() async {
         let start = Date(timeIntervalSince1970: 1_700_000_000)
         let clock = Clock(start)
@@ -166,6 +255,122 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
             return false
         }
         XCTAssertEqual(repository.requests.map(\.context.sourceSessionId), ["session-a"])
+    }
+
+    func testEndedQueuedSessionDoesNotImplicitlyRetryFailedDrive() async {
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let repository = FakeRepository()
+        repository.failures = Array(repeating: KccFunctionsError(code: .unavailable), count: 3)
+        let coordinator = DriveRecordingCoordinator(
+            repository: repository,
+            provider: provider,
+            retryWait: { _ in await Task.yield() }
+        )
+        coordinator.start(context: context(sessionId: "session-a"))
+        await waitUntil { provider.activeFixStreamCount == 1 }
+        coordinator.endSession(context: context(sessionId: "session-a"))
+        coordinator.start(context: context(sessionId: "session-b"))
+        await waitUntil { coordinator.state.presentsSummary }
+        let failedState = coordinator.state
+        let failedRequestCount = repository.requests.count
+
+        coordinator.endSession(context: context(sessionId: "session-b"))
+        for _ in 0..<20 { await Task.yield() }
+
+        XCTAssertEqual(coordinator.state, failedState)
+        XCTAssertEqual(repository.requests.count, failedRequestCount)
+        coordinator.retry()
+        await waitUntil {
+            if case .kept = coordinator.state { return true }
+            return false
+        }
+        XCTAssertEqual(provider.activeFixStreamCount, 0)
+    }
+
+    func testExpiredQueuedSessionDoesNotImplicitlyRetryFailedDrive() async {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let clock = Clock(start)
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let repository = FakeRepository()
+        repository.failures = Array(repeating: KccFunctionsError(code: .unavailable), count: 3)
+        let coordinator = makeCoordinator(repository, provider, clock)
+        coordinator.start(context: context(sessionId: "session-a"))
+        await waitUntil { provider.activeFixStreamCount == 1 }
+        coordinator.endSession(context: context(sessionId: "session-a"))
+        coordinator.start(context: context(
+            sessionId: "session-b",
+            expiresAt: start.addingTimeInterval(5)
+        ))
+        await waitUntil { coordinator.state.presentsSummary }
+        let failedState = coordinator.state
+        let failedRequestCount = repository.requests.count
+
+        clock.value = start.addingTimeInterval(6)
+        for _ in 0..<50 { await Task.yield() }
+
+        XCTAssertEqual(coordinator.state, failedState)
+        XCTAssertEqual(repository.requests.count, failedRequestCount)
+        coordinator.retry()
+        await waitUntil {
+            if case .kept = coordinator.state { return true }
+            return false
+        }
+        XCTAssertEqual(provider.activeFixStreamCount, 0)
+    }
+
+    func testConsecutiveDriveUploadsBothFinishWithoutCancellingEarlierUpload() async {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let repository = GatedUploadRepository()
+        let coordinator = DriveRecordingCoordinator(repository: repository, provider: provider)
+        let pathA = "rideRoutes/u/ride-session-a/route.bin"
+        let pathB = "rideRoutes/u/ride-session-b/route.bin"
+
+        coordinator.start(context: context(sessionId: "session-a"))
+        await waitUntil { provider.activeFixStreamCount == 1 }
+        provider.emitFix(fix(start, offset: 0))
+        await waitUntil { coordinator.state.summary?.pointCount == 1 }
+        coordinator.endSession(context: context(sessionId: "session-a"))
+        await waitUntil { repository.startedPaths() == [pathA] }
+
+        coordinator.start(context: context(sessionId: "session-b"))
+        await waitUntil { provider.activeFixStreamCount == 1 }
+        provider.emitFix(fix(start, offset: 3, latitude: 58))
+        await waitUntil { coordinator.state.summary?.pointCount == 1 }
+        coordinator.endSession(context: context(sessionId: "session-b"))
+        await waitUntil { Set(repository.startedPaths()) == Set([pathA, pathB]) }
+
+        repository.release(pathB)
+        repository.release(pathA)
+        await waitUntil { Set(repository.finishedPaths()) == Set([pathA, pathB]) }
+        XCTAssertEqual(repository.cancelledPaths(), [])
+    }
+
+    func testResetCancelsEveryInFlightRouteUpload() async {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let repository = GatedUploadRepository()
+        let coordinator = DriveRecordingCoordinator(repository: repository, provider: provider)
+        let paths = Set([
+            "rideRoutes/u/ride-session-a/route.bin",
+            "rideRoutes/u/ride-session-b/route.bin",
+        ])
+
+        for (index, sessionId) in ["session-a", "session-b"].enumerated() {
+            coordinator.start(context: context(sessionId: sessionId))
+            await waitUntil { provider.activeFixStreamCount == 1 }
+            provider.emitFix(fix(start, offset: TimeInterval(index * 3), latitude: 57 + Double(index)))
+            await waitUntil { coordinator.state.summary?.pointCount == 1 }
+            coordinator.endSession(context: context(sessionId: sessionId))
+            await waitUntil { repository.startedPaths().count == index + 1 }
+        }
+
+        coordinator.reset()
+
+        await waitUntil { Set(repository.cancelledPaths()) == paths }
+        XCTAssertEqual(repository.finishedPaths(), [])
+        XCTAssertEqual(coordinator.state, .idle)
+        XCTAssertEqual(provider.activeFixStreamCount, 0)
     }
 
     func testPermissionGrantWhileActiveSessionStartsPendingRecording() async {

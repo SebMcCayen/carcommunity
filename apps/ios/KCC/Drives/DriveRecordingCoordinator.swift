@@ -44,7 +44,7 @@ final class DriveRecordingCoordinator {
     @ObservationIgnored nonisolated(unsafe) private var authorizationTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var expiryTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var saveTask: Task<Void, Never>?
-    @ObservationIgnored nonisolated(unsafe) private var uploadTask: Task<Void, Never>?
+    @ObservationIgnored nonisolated(unsafe) private var uploadTasks: [UUID: Task<Void, Never>] = [:]
 
     init(
         repository: DriveRecordingRepository?,
@@ -80,7 +80,7 @@ final class DriveRecordingCoordinator {
         authorizationTask?.cancel()
         expiryTask?.cancel()
         saveTask?.cancel()
-        uploadTask?.cancel()
+        for task in uploadTasks.values { task.cancel() }
     }
 
     var isAvailable: Bool { repository != nil }
@@ -112,14 +112,18 @@ final class DriveRecordingCoordinator {
         if let existing = desiredContext,
            existing.sourceSessionId != context.sourceSessionId,
            recorder != nil || state.presentsSummary || saveTask != nil {
-            // The old, already-stopped recorder still owns the save/failure
-            // gate. Keep only the newest session queued behind it; never replace
-            // a context while that recorder is actively collecting fixes.
+            // Keep only the newest session behind an old save/failure gate. If
+            // the old session is still recording, a direct backend A→B switch is
+            // itself authoritative: freeze A now, then queue B behind A's save.
             switch state {
             case .saving, .failed:
                 desiredContext = context
                 scheduleExpiry(for: context)
-            case .idle, .recording, .kept, .discarded:
+            case .recording:
+                desiredContext = context
+                scheduleExpiry(for: context)
+                stopCurrentRecordingAndAutoSave()
+            case .idle, .kept, .discarded:
                 break
             }
             return
@@ -136,6 +140,11 @@ final class DriveRecordingCoordinator {
         desiredContext = nil
         expiryTask?.cancel()
         expiryTask = nil
+        // The failed save owns the retained recorder and frozen request. An
+        // authoritative end/expiry for a newer queued session only removes that
+        // desired session; it must never turn into an implicit retry of the old
+        // drive. Retry/discard remain explicit failure-sheet actions.
+        if case .failed = state { return }
         if recorder == nil, state == .idle,
            let restored = journal?.restore(sessionId: update?.sourceSessionId) {
             var restoredRecorder = DriveRecorder(
@@ -147,6 +156,10 @@ final class DriveRecordingCoordinator {
             recorder = restoredRecorder
             stoppedAt = restored.stoppedAt
         }
+        stopCurrentRecordingAndAutoSave()
+    }
+
+    private func stopCurrentRecordingAndAutoSave() {
         guard let recorder, saveTask == nil else { return }
         fixesTask?.cancel()
         fixesTask = nil
@@ -180,11 +193,11 @@ final class DriveRecordingCoordinator {
         fixesTask?.cancel()
         expiryTask?.cancel()
         saveTask?.cancel()
-        uploadTask?.cancel()
+        for task in uploadTasks.values { task.cancel() }
         fixesTask = nil
         expiryTask = nil
         saveTask = nil
-        uploadTask = nil
+        uploadTasks.removeAll()
         desiredContext = nil
         releaseRecording(clearJournal: true)
         state = .idle
@@ -249,11 +262,10 @@ final class DriveRecordingCoordinator {
                 self.state = .kept(rideId: result.rideId)
                 self.reconcileDesiredAfterGateRelease()
                 if let path = result.routePath, !request.points.isEmpty {
-                    self.uploadTask?.cancel()
-                    self.uploadTask = Task { [weak self] in
+                    let uploadId = UUID()
+                    self.uploadTasks[uploadId] = Task { [weak self] in
+                        defer { self?.uploadTasks[uploadId] = nil }
                         try? await repository.uploadRoute(request.points, to: path)
-                        guard !Task.isCancelled else { return }
-                        self?.uploadTask = nil
                     }
                 }
             } catch is CancellationError {
