@@ -111,7 +111,19 @@ final class DriveRecordingCoordinator {
         }
         if let existing = desiredContext,
            existing.sourceSessionId != context.sourceSessionId,
-           recorder != nil || state.presentsSummary || saveTask != nil { return }
+           recorder != nil || state.presentsSummary || saveTask != nil {
+            // The old, already-stopped recorder still owns the save/failure
+            // gate. Keep only the newest session queued behind it; never replace
+            // a context while that recorder is actively collecting fixes.
+            switch state {
+            case .saving, .failed:
+                desiredContext = context
+                scheduleExpiry(for: context)
+            case .idle, .recording, .kept, .discarded:
+                break
+            }
+            return
+        }
         desiredContext = context
         scheduleExpiry(for: context)
         beginDesiredRecordingIfPossible()
@@ -160,6 +172,7 @@ final class DriveRecordingCoordinator {
         guard case .failed = state, saveTask == nil else { return }
         releaseRecording(clearJournal: true)
         state = .discarded
+        reconcileDesiredAfterGateRelease()
     }
 
     /// Drops all exact route data on sign-out/account switch.
@@ -234,6 +247,7 @@ final class DriveRecordingCoordinator {
                 self.saveTask = nil
                 self.releaseRecording(clearJournal: true)
                 self.state = .kept(rideId: result.rideId)
+                self.reconcileDesiredAfterGateRelease()
                 if let path = result.routePath, !request.points.isEmpty {
                     self.uploadTask?.cancel()
                     self.uploadTask = Task { [weak self] in
@@ -254,6 +268,21 @@ final class DriveRecordingCoordinator {
                 self.state = .failed(summary, code: nil)
             }
         }
+    }
+
+    /// A newer live session can arrive while the previous session's idempotent
+    /// save still owns the recorder. Keep that latest desired context queued,
+    /// then re-enter the normal start gate as soon as the old route is durably
+    /// kept or explicitly discarded. A failed save deliberately does not call
+    /// this: its recorder and retry prompt must remain intact until resolved.
+    private func reconcileDesiredAfterGateRelease() {
+        guard desiredContext != nil else { return }
+        switch state {
+        case .kept, .discarded: state = .idle
+        case .idle: break
+        case .recording, .saving, .failed: return
+        }
+        beginDesiredRecordingIfPossible()
     }
 
     private func saveWithRetry(

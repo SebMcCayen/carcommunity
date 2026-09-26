@@ -8,9 +8,15 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
         var requests: [DriveSaveRequest] = []
         var uploads: [(String, [RecordedDrivePoint])] = []
         var failures: [Error] = []
+        var delayNextSave = false
+        private var delayedSaveContinuation: CheckedContinuation<Void, Never>?
 
         func save(_ request: DriveSaveRequest) async throws -> DriveSaveResult {
             requests.append(request)
+            if delayNextSave {
+                delayNextSave = false
+                await withCheckedContinuation { delayedSaveContinuation = $0 }
+            }
             if !failures.isEmpty { throw failures.removeFirst() }
             return DriveSaveResult(
                 rideId: "ride-1",
@@ -21,6 +27,11 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
 
         func uploadRoute(_ points: [RecordedDrivePoint], to path: String) async throws {
             uploads.append((path, points))
+        }
+
+        func resolveDelayedSave() {
+            delayedSaveContinuation?.resume()
+            delayedSaveContinuation = nil
         }
     }
 
@@ -73,6 +84,88 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
         }
         XCTAssertEqual(repository.requests.count, 4)
         XCTAssertEqual(repository.requests.last?.context.sourceSessionId, "session-1")
+    }
+
+    func testQueuedSessionStartsOnceWhenPreviousSaveCompletes() async {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let clock = Clock(start)
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let repository = FakeRepository()
+        repository.delayNextSave = true
+        let coordinator = makeCoordinator(repository, provider, clock)
+        coordinator.start(context: context(sessionId: "session-a"))
+        await waitUntil { provider.activeFixStreamCount == 1 }
+
+        coordinator.endSession(context: context(sessionId: "session-a"))
+        await waitUntil { repository.requests.count == 1 }
+        coordinator.start(context: context(sessionId: "session-b"))
+        XCTAssertEqual(provider.activeFixStreamCount, 0)
+
+        repository.resolveDelayedSave()
+
+        await waitUntil {
+            if case .recording = coordinator.state {
+                return provider.activeFixStreamCount == 1
+            }
+            return false
+        }
+        for _ in 0..<10 { await Task.yield() }
+        XCTAssertEqual(provider.activeFixStreamCount, 1)
+        XCTAssertEqual(repository.requests.map(\.context.sourceSessionId), ["session-a"])
+    }
+
+    func testQueuedSessionWaitsForFailureRetryThenStarts() async {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let clock = Clock(start)
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let repository = FakeRepository()
+        repository.failures = Array(repeating: KccFunctionsError(code: .unavailable), count: 3)
+        let coordinator = makeCoordinator(repository, provider, clock)
+        coordinator.start(context: context(sessionId: "session-a"))
+        await waitUntil { provider.activeFixStreamCount == 1 }
+        coordinator.endSession(context: context(sessionId: "session-a"))
+        coordinator.start(context: context(sessionId: "session-b"))
+
+        await waitUntil { coordinator.state.presentsSummary }
+        XCTAssertEqual(provider.activeFixStreamCount, 0)
+
+        coordinator.retry()
+
+        await waitUntil {
+            if case .recording = coordinator.state {
+                return provider.activeFixStreamCount == 1
+            }
+            return false
+        }
+        XCTAssertEqual(repository.requests.map(\.context.sourceSessionId), [
+            "session-a", "session-a", "session-a", "session-a",
+        ])
+    }
+
+    func testQueuedSessionStartsAfterPermanentFailureIsDiscarded() async {
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let repository = FakeRepository()
+        repository.failures = [KccFunctionsError(code: .permissionDenied)]
+        let coordinator = DriveRecordingCoordinator(
+            repository: repository,
+            provider: provider,
+            retryWait: { _ in await Task.yield() }
+        )
+        coordinator.start(context: context(sessionId: "session-a"))
+        await waitUntil { provider.activeFixStreamCount == 1 }
+        coordinator.endSession(context: context(sessionId: "session-a"))
+        coordinator.start(context: context(sessionId: "session-b"))
+        await waitUntil { coordinator.state.presentsSummary }
+
+        coordinator.discardFailed()
+
+        await waitUntil {
+            if case .recording = coordinator.state {
+                return provider.activeFixStreamCount == 1
+            }
+            return false
+        }
+        XCTAssertEqual(repository.requests.map(\.context.sourceSessionId), ["session-a"])
     }
 
     func testPermissionGrantWhileActiveSessionStartsPendingRecording() async {
