@@ -108,8 +108,11 @@ struct DrivesPanel: View {
                     }
                 }
             }
-            pagingControls
         }
+        // Paging belongs to the loaded history, not to the filtered result.
+        // A page with zero local matches can still lead to a later matching
+        // page, so keep Load more/retry reachable in that state.
+        pagingControls
         if coordinator.deleteFailed { Text("savedDrives.deleteError").foregroundStyle(KccPalette.errorRed) }
     }
 
@@ -223,11 +226,8 @@ enum DriveShareText {
     /// areas and timestamps never cross the share sheet by default.
     static func summary(for drive: SavedDrive) -> String {
         String(format: String(localized: "savedDrives.shareSummary"),
+               String(localized: "app.name"),
                DriveFormatters.formatDistance(drive.distanceMeters),
-               DriveFormatters.formatDuration(drive.durationSeconds),
-               DriveFormatters.formatSpeed(DriveFormatters.effectiveAverageSpeed(
-                    stored: drive.averageSpeedMetersPerSecond,
-                    distanceMeters: drive.distanceMeters,
-                    durationSeconds: drive.durationSeconds)))
+               DriveFormatters.formatDuration(drive.durationSeconds))
     }
 }

@@ -50,7 +50,7 @@ final class FirebaseDriveHistoryRepository: DriveHistoryRepository, @unchecked S
         }
     }
 
-    func loadRoute(rideId: String) async -> DriveRouteReplayState {
+    func loadRoute(rideId: String) async throws -> DriveRouteReplayState {
         if let points = await cache.value(rideId) { return .ready(points) }
         do {
             guard let response = try await functions.call(
@@ -68,8 +68,12 @@ final class FirebaseDriveHistoryRepository: DriveHistoryRepository, @unchecked S
             guard let points = DriveRouteCodec.decode(data) else { return .unavailable }
             await cache.insert(points, for: rideId)
             return .ready(points)
+        } catch is CancellationError {
+            // A disappearing/replaced detail task is not evidence that the
+            // stored route is unavailable. Preserve cancellation for the
+            // coordinator's identity fence.
+            throw CancellationError()
         } catch {
-            if error is CancellationError { return .unavailable }
             return .unavailable
         }
     }

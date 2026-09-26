@@ -29,6 +29,7 @@ final class DriveHistoryCoordinator {
     private let repository: DriveHistoryRepository?
     @ObservationIgnored private var nextCursorRideId: String?
     @ObservationIgnored private var generation = 0
+    @ObservationIgnored private var routeGeneration = 0
     @ObservationIgnored private var attemptedImages: Set<String> = []
 
     private(set) var state: DriveHistoryUiState
@@ -115,14 +116,31 @@ final class DriveHistoryCoordinator {
 
     func loadRoute(for drive: SavedDrive) async {
         guard let repository else { routeState = .unavailable; return }
+        routeGeneration += 1
+        let request = routeGeneration
         routeState = .loading
-        switch await repository.loadRoute(rideId: drive.id) {
-        case .unavailable: routeState = .unavailable
-        case .ready(let points): routeState = points.isEmpty ? .unavailable : .ready(points)
+        do {
+            let result = try await repository.loadRoute(rideId: drive.id)
+            guard request == routeGeneration, !Task.isCancelled else { return }
+            switch result {
+            case .unavailable: routeState = .unavailable
+            case .ready(let points): routeState = points.isEmpty ? .unavailable : .ready(points)
+            }
+        } catch is CancellationError {
+            // Selection replacement/onDisappear owns the next state. A
+            // cancellation must never masquerade as a missing private route.
+            if request == routeGeneration { routeState = .idle }
+            return
+        } catch {
+            guard request == routeGeneration, !Task.isCancelled else { return }
+            routeState = .unavailable
         }
     }
 
-    func clearRoute() { routeState = .idle }
+    func clearRoute() {
+        routeGeneration += 1
+        routeState = .idle
+    }
 
     private func apply(_ page: DriveHistoryPage, replacing: Bool) {
         tier = page.tier

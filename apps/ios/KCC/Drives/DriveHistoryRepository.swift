@@ -4,7 +4,7 @@ protocol DriveHistoryRepository: Sendable {
     func listHistory(cursorRideId: String?, pageSize: Int) async throws -> DriveHistoryPage
     func fetchStats(monthStart: Date, monthEnd: Date) async throws -> DriveStatsSnapshot
     func deleteDrive(rideId: String) async throws
-    func loadRoute(rideId: String) async -> DriveRouteReplayState
+    func loadRoute(rideId: String) async throws -> DriveRouteReplayState
     func imageDownloadURL(for imagePath: String) async -> URL?
 }
 

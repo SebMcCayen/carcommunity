@@ -1011,6 +1011,7 @@
     "filterToggleExpand": "Show filters",
     "filterToggleCollapse": "Hide filters",
     "filterActiveCount": "Active filters: %1$d",
+    "filterAll": "All",
     "filterSearchLabel": "Search drives",
     "filterPeriod": "Period",
     "filterThisWeek": "This week",
