@@ -37,6 +37,7 @@ struct EventDetailScreen: View {
     @State private var editCoordinator: EventFormCoordinator?
     @State private var showAttendees = false
     @State private var confirmRemove = false
+    @State private var checkInNow = Date()
 
     init(
         makeCoordinator: @escaping @MainActor () -> EventDetailCoordinator?,
@@ -288,13 +289,35 @@ struct EventDetailScreen: View {
 
     @ViewBuilder
     private func checkInSlot(_ coordinator: EventDetailCoordinator) -> some View {
-        // This timeline exists even before the window opens, so the section
-        // appears without requiring another repository emission or navigation.
-        TimelineView(.periodic(from: .now, by: 1)) { timeline in
-            let available = coordinator.canCheckIn(at: timeline.date)
+        let cadence = coordinator.checkInRefreshCadence(at: checkInNow)
+        Group {
+            let available = coordinator.canCheckIn(at: checkInNow)
             if available || coordinator.checkInState != .idle
                 || coordinator.checkInPending || coordinator.checkInVerified {
-                checkInSection(coordinator, now: timeline.date, available: available)
+                checkInSection(coordinator, now: checkInNow, available: available)
+            }
+        }
+        .task(id: cadence) { await refreshCheckInClock(cadence, coordinator: coordinator) }
+    }
+
+    private func refreshCheckInClock(
+        _ cadence: EventCheckInRefreshCadence,
+        coordinator: EventDetailCoordinator
+    ) async {
+        switch cadence {
+        case .none:
+            return
+        case .boundary(let boundary):
+            let delay = max(0, boundary.timeIntervalSinceNow)
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            checkInNow = max(Date(), boundary)
+        case .everySecond:
+            while !Task.isCancelled {
+                let now = Date()
+                checkInNow = now
+                guard coordinator.checkInRefreshCadence(at: now) == .everySecond else { return }
+                try? await Task.sleep(for: .seconds(1))
             }
         }
     }

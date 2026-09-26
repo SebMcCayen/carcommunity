@@ -181,6 +181,19 @@ final class EventDetailCoordinator {
         return isPaidSubscriber && Events.canCheckIn(event, now: now) && locationProvider != nil
     }
 
+    func checkInRefreshCadence(at now: Date) -> EventCheckInRefreshCadence {
+        guard case .loaded(let event) = state else { return .none }
+        return Events.checkInRefreshCadence(
+            event: event,
+            isPaidSubscriber: isPaidSubscriber,
+            hasLocationProvider: locationProvider != nil,
+            isPending: checkInPending,
+            isVerified: checkInVerified,
+            anchor: checkInAnchor,
+            now: now
+        )
+    }
+
     var checkInPending: Bool {
         guard attendanceStatus?.verified != true, checkInState != .verified else { return false }
         return attendanceStatus?.checkedIn == true || firstCheckInFixAt != nil

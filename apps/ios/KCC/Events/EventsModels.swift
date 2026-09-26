@@ -211,6 +211,15 @@ enum EventCheckInResult: String, Equatable, Sendable {
     var isVerified: Bool { self == .verified || self == .alreadyVerified }
 }
 
+/// How the detail screen should next refresh its local clock. Outside the
+/// check-in window it sleeps until a single edge; one-second cadence is
+/// reserved for a visible, incomplete dwell countdown.
+enum EventCheckInRefreshCadence: Equatable, Hashable, Sendable {
+    case none
+    case boundary(Date)
+    case everySecond
+}
+
 /// Pure events-list logic shared by the repository, coordinator, and screen.
 enum Events {
     static let titleMax = 200
@@ -249,9 +258,9 @@ enum Events {
 
     static func valid(_ input: EventFormInput) -> Bool {
         let title = input.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty, title.count <= titleMax,
-              (input.description?.count ?? 0) <= descriptionMax,
-              (input.address?.count ?? 0) <= addressMax,
+        guard !title.isEmpty, title.utf16.count <= titleMax,
+              (input.description?.utf16.count ?? 0) <= descriptionMax,
+              (input.address?.utf16.count ?? 0) <= addressMax,
               input.startsAt.timeIntervalSince1970.isFinite,
               (input.latitude == nil) == (input.longitude == nil)
         else { return false }
@@ -275,6 +284,36 @@ enum Events {
         let end = event.endsAt ?? start.addingTimeInterval(defaultEventDuration)
         return now >= start.addingTimeInterval(-checkInWindowBefore)
             && now <= end.addingTimeInterval(checkInWindowAfter)
+    }
+
+    static func checkInRefreshCadence(
+        event: EventSummary,
+        isPaidSubscriber: Bool,
+        hasLocationProvider: Bool,
+        isPending: Bool,
+        isVerified: Bool,
+        anchor: Date?,
+        now: Date
+    ) -> EventCheckInRefreshCadence {
+        guard isPaidSubscriber, hasLocationProvider, !isVerified,
+              event.status == .published || event.status == .completed,
+              event.latitude != nil, event.longitude != nil,
+              let start = event.startsAt
+        else { return .none }
+
+        let opensAt = start.addingTimeInterval(-checkInWindowBefore)
+        let end = event.endsAt ?? start.addingTimeInterval(defaultEventDuration)
+        let closesAt = end.addingTimeInterval(checkInWindowAfter)
+        if now < opensAt { return .boundary(opensAt) }
+        guard now <= closesAt else { return .none }
+
+        if isPending, let anchor,
+           checkInRemaining(from: anchor, now: now) > 0 {
+            return .everySecond
+        }
+        // The backend window is inclusive. Wake just after its closing instant
+        // so the UI moves to the closed state instead of re-scheduling itself.
+        return .boundary(closesAt.addingTimeInterval(0.001))
     }
 
     static func iso8601(_ date: Date) -> String {

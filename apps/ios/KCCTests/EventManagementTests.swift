@@ -119,6 +119,33 @@ final class EventManagementTests: XCTestCase {
         XCTAssertTrue(Events.valid(input(latitude: nil, longitude: nil)))
     }
 
+    func testFormLimitsCountUtf16ForEmojiAndZwjSequences() {
+        let suffixes = ["🚗", "👨‍👩‍👧‍👦"]
+        for suffix in suffixes {
+            let titleAtLimit = utf16Boundary(limit: Events.titleMax, suffix: suffix)
+            var titleInput = input(title: titleAtLimit, latitude: nil, longitude: nil)
+            titleInput.description = nil
+            titleInput.address = nil
+            XCTAssertTrue(Events.valid(titleInput), "title boundary for \(suffix)")
+            titleInput.title += "a"
+            XCTAssertFalse(Events.valid(titleInput), "title overflow for \(suffix)")
+
+            var descriptionInput = input(latitude: nil, longitude: nil)
+            descriptionInput.description = utf16Boundary(
+                limit: Events.descriptionMax, suffix: suffix
+            )
+            XCTAssertTrue(Events.valid(descriptionInput), "description boundary for \(suffix)")
+            descriptionInput.description! += "a"
+            XCTAssertFalse(Events.valid(descriptionInput), "description overflow for \(suffix)")
+
+            var addressInput = input(latitude: nil, longitude: nil)
+            addressInput.address = utf16Boundary(limit: Events.addressMax, suffix: suffix)
+            XCTAssertTrue(Events.valid(addressInput), "address boundary for \(suffix)")
+            addressInput.address! += "a"
+            XCTAssertFalse(Events.valid(addressInput), "address overflow for \(suffix)")
+        }
+    }
+
     func testCreatorAndCheckInGatesMatchBackendLifecycle() {
         let start = Date(timeIntervalSince1970: 10_000)
         let event = EventSummary(
@@ -312,6 +339,55 @@ final class EventManagementTests: XCTestCase {
         XCTAssertTrue(coordinator.canCheckIn(at: start.addingTimeInterval(-30 * 60)))
     }
 
+    func testCheckInRefreshUsesOnlyOpeningAndClosingBoundariesOutsideDwell() {
+        let start = Date(timeIntervalSince1970: 2_000_000)
+        let event = positionedEvent(startsAt: start)
+        let opensAt = start.addingTimeInterval(-Events.checkInWindowBefore)
+        let closesAt = start
+            .addingTimeInterval(Events.defaultEventDuration + Events.checkInWindowAfter)
+
+        XCTAssertEqual(
+            refreshCadence(event: event, now: opensAt.addingTimeInterval(-86_400)),
+            .boundary(opensAt)
+        )
+        XCTAssertEqual(
+            refreshCadence(event: event, now: opensAt),
+            .boundary(closesAt.addingTimeInterval(0.001))
+        )
+        XCTAssertEqual(
+            refreshCadence(event: event, now: closesAt.addingTimeInterval(0.002)),
+            .none
+        )
+    }
+
+    func testCheckInRefreshTicksEachSecondOnlyForVisibleIncompleteDwell() {
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        let event = positionedEvent(startsAt: now)
+
+        XCTAssertEqual(
+            refreshCadence(
+                event: event, pending: true,
+                anchor: now.addingTimeInterval(-Events.requiredCheckInDwell + 1), now: now
+            ),
+            .everySecond
+        )
+        XCTAssertNotEqual(
+            refreshCadence(
+                event: event, pending: true,
+                anchor: now.addingTimeInterval(-Events.requiredCheckInDwell), now: now
+            ),
+            .everySecond
+        )
+        XCTAssertEqual(
+            refreshCadence(event: event, paid: false, pending: true, anchor: now, now: now),
+            .none
+        )
+        XCTAssertEqual(
+            refreshCadence(event: event, pending: true, verified: true, anchor: now, now: now),
+            .none
+        )
+    }
+
     private func activeSubscription(tier: String) -> StoredSubscription {
         StoredSubscription(
             tier: tier, status: "active", entitlement: "member_monthly", userId: "viewer"
@@ -327,6 +403,32 @@ final class EventManagementTests: XCTestCase {
             approximateArea: nil, locationName: nil, latitude: 57.48, longitude: 12.07,
             isOfficial: false, status: .published, counts: .empty,
             createdByUserId: createdByUserId
+        )
+    }
+
+    private func utf16Boundary(limit: Int, suffix: String) -> String {
+        XCTAssertLessThanOrEqual(suffix.utf16.count, limit)
+        let value = String(repeating: "a", count: limit - suffix.utf16.count) + suffix
+        XCTAssertEqual(value.utf16.count, limit)
+        return value
+    }
+
+    private func refreshCadence(
+        event: EventSummary,
+        paid: Bool = true,
+        pending: Bool = false,
+        verified: Bool = false,
+        anchor: Date? = nil,
+        now: Date
+    ) -> EventCheckInRefreshCadence {
+        Events.checkInRefreshCadence(
+            event: event,
+            isPaidSubscriber: paid,
+            hasLocationProvider: true,
+            isPending: pending,
+            isVerified: verified,
+            anchor: anchor,
+            now: now
         )
     }
 
