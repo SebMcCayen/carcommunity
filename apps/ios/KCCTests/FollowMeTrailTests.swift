@@ -306,6 +306,21 @@ final class ConvoyFollowMeCoordinatorTests: XCTestCase {
         XCTFail("Timed out waiting for condition", file: file, line: line)
     }
 
+    private func waitUntil(
+        timeout: TimeInterval = 2,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        _ predicate: () async -> Bool
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if await predicate() { return }
+            await Task.yield()
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        XCTFail("Timed out waiting for condition", file: file, line: line)
+    }
+
     private func makeConvoy() -> ConvoyItem {
         ConvoyItem(
             convoyId: "convoy",
