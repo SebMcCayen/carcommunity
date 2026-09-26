@@ -57,8 +57,27 @@ enum EventChat {
     }
 
     static func isSendable(_ text: String) -> Bool {
-        let count = text.trimmingCharacters(in: .whitespacesAndNewlines).count
+        // JavaScript/Zod string limits count UTF-16 code units. Use the same
+        // measure as the callable so emoji cannot pass client validation and
+        // then be rejected by the backend.
+        let count = text.trimmingCharacters(in: .whitespacesAndNewlines).utf16.count
         return (1...eventChatMessageMaxLength).contains(count)
+    }
+
+    /// Caps an editor value to the callable's UTF-16 limit without cutting a
+    /// surrogate pair or an extended grapheme such as an emoji ZWJ sequence.
+    static func truncateToMessageLimit(_ text: String) -> String {
+        guard text.utf16.count > eventChatMessageMaxLength else { return text }
+        var used = 0
+        var end = text.startIndex
+        for index in text.indices {
+            let next = text.index(after: index)
+            let units = text[index..<next].utf16.count
+            guard used + units <= eventChatMessageMaxLength else { break }
+            used += units
+            end = next
+        }
+        return String(text[..<end])
     }
 
     static func filterHidden(

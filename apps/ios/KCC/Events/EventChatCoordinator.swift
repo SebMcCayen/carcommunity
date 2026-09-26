@@ -11,6 +11,8 @@ final class EventChatCoordinator {
     private(set) var messagesState: EventChatMessagesState = .loading
     private(set) var sendState: EventChatSendState = .idle
     private(set) var reportState: EventChatReportState = .idle
+    private var hasAccess = true
+    private var accessGeneration = 0
 
     @ObservationIgnored
     nonisolated(unsafe) private var subscription: Task<Void, Never>?
@@ -24,13 +26,17 @@ final class EventChatCoordinator {
     deinit { subscription?.cancel() }
 
     func start() {
-        guard subscription == nil else { return }
+        guard hasAccess, subscription == nil else { return }
         subscribe()
     }
 
     /// Keeps denied history off-screen immediately when the event status,
     /// RSVP, membership gate, or feature flag changes while chat is open.
     func setAccess(_ allowed: Bool) {
+        if allowed != hasAccess {
+            hasAccess = allowed
+            accessGeneration &+= 1
+        }
         if allowed {
             start()
         } else {
@@ -42,15 +48,21 @@ final class EventChatCoordinator {
         }
     }
 
-    func reload() { subscribe() }
+    func reload() {
+        guard hasAccess else { return }
+        subscribe()
+    }
 
     private func subscribe() {
+        guard hasAccess else { return }
         subscription?.cancel()
         messagesState = .loading
+        let generation = accessGeneration
         let stream = repository.messages(eventId: eventId)
         subscription = Task { [weak self] in
             for await state in stream {
                 guard !Task.isCancelled, let self else { return }
+                guard self.hasAccess, self.accessGeneration == generation else { return }
                 self.messagesState = state
             }
         }
@@ -58,24 +70,22 @@ final class EventChatCoordinator {
 
     @discardableResult
     func send(_ text: String) async -> Bool {
-        guard sendState != .sending, EventChat.isSendable(text) else { return false }
+        guard hasAccess, sendState != .sending, EventChat.isSendable(text) else { return false }
+        let generation = accessGeneration
         sendState = .sending
         do {
             try await repository.post(
                 eventId: eventId,
                 message: text.trimmingCharacters(in: .whitespacesAndNewlines)
             )
-            guard !Task.isCancelled else {
-                sendState = .idle
-                return false
-            }
+            guard !Task.isCancelled, hasAccess, accessGeneration == generation else { return false }
             sendState = .idle
             return true
         } catch is CancellationError {
-            sendState = .idle
+            if hasAccess, accessGeneration == generation { sendState = .idle }
             return false
         } catch {
-            sendState = .failed
+            if hasAccess, accessGeneration == generation { sendState = .failed }
             return false
         }
     }
@@ -85,23 +95,22 @@ final class EventChatCoordinator {
     }
 
     func report(_ message: EventChatMessage, reason: ChatReportReason) async {
-        guard message.authorUserId != currentUserId,
+        guard hasAccess,
+            message.authorUserId != currentUserId,
             !message.isRemoved,
             !message.isAutoHidden,
             reportState != .reporting
         else { return }
+        let generation = accessGeneration
         reportState = .reporting
         do {
             try await repository.report(eventId: eventId, messageId: message.id, reason: reason)
-            guard !Task.isCancelled else {
-                reportState = .idle
-                return
-            }
+            guard !Task.isCancelled, hasAccess, accessGeneration == generation else { return }
             reportState = .done
         } catch is CancellationError {
-            reportState = .idle
+            if hasAccess, accessGeneration == generation { reportState = .idle }
         } catch {
-            reportState = .failed
+            if hasAccess, accessGeneration == generation { reportState = .failed }
         }
     }
 

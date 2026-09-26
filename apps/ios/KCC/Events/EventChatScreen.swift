@@ -188,9 +188,8 @@ struct EventChatScreen: View {
                 .background(KccPalette.softSand.opacity(0.4))
                 .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
                 .onChange(of: draft) { _, value in
-                    if value.count > eventChatMessageMaxLength {
-                        draft = String(value.prefix(eventChatMessageMaxLength))
-                    }
+                    let limited = EventChat.truncateToMessageLimit(value)
+                    if limited != value { draft = limited }
                 }
             Button("chat.sendButton") {
                 let message = draft
