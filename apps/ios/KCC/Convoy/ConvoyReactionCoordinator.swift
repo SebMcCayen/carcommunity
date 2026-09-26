@@ -93,6 +93,14 @@ final class ConvoyReactionCoordinator {
             kind: kind,
             clientId: makeClientId()
         )
+        // A server-confirmed police reaction has a durable, non-UI side
+        // effect: publish the associated police pin. It must run even if the
+        // visible convoy changed while the send was in flight. Session guards
+        // below still prevent that old completion from touching cooldown or
+        // sending state in the replacement session.
+        if result == .sent, kind == .police {
+            await onPoliceSent?()
+        }
         // The same convoy can become active again while this request is in
         // flight (A -> nil/B -> A). Its id alone does not identify the session;
         // never let an earlier completion mutate the replacement session.
@@ -102,9 +110,7 @@ final class ConvoyReactionCoordinator {
         sendingKinds.remove(kind)
         switch result {
         case .sent:
-            if kind == .police {
-                await onPoliceSent?()
-            }
+            break
         case .rateLimited(let retryAfterMilliseconds):
             cooldown = cooldown.applyingServerCooldown(
                 kind,

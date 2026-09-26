@@ -1150,8 +1150,8 @@ struct ShellView: View {
         convoyReactionCoordinator = FirebaseConvoyReactionRepository.createIfAvailable().map { repository in
             ConvoyReactionCoordinator(
                 repository: repository,
-                onPoliceSent: { [weak incidentMap] in
-                    _ = await incidentMap?.reportPoliceAtCurrentLocation(
+                onPoliceSent: { [incidentMap] in
+                    _ = await incidentMap.reportPoliceAtCurrentLocation(
                         source: "convoy",
                         surfaceError: false
                     )

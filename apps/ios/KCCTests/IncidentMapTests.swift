@@ -46,6 +46,76 @@ final class IncidentMapTests: XCTestCase {
         ).isEmpty)
     }
 
+    func testIncidentAgeUsesMemberCreatedAtAndImportedPostedAt() {
+        let now = Date(timeIntervalSince1970: 100_000)
+        let member = Self.incident(
+            id: "member", type: .hazard,
+            createdAt: now.addingTimeInterval(-5 * 60),
+            postedAt: now.addingTimeInterval(-2 * 3_600)
+        )
+        let imported = Self.incident(
+            id: "imported", type: .roadwork, source: "trafikverket",
+            createdAt: now.addingTimeInterval(-5 * 60),
+            postedAt: now.addingTimeInterval(-2 * 3_600)
+        )
+
+        XCTAssertEqual(member.reportedAt, member.createdAt)
+        XCTAssertEqual(imported.reportedAt, imported.postedAt)
+        XCTAssertEqual(
+            IncidentAge.localizedDescription(for: member, now: now),
+            String.localizedStringWithFormat(
+                NSLocalizedString("incidents.ageMinutes", comment: ""), 5
+            )
+        )
+        XCTAssertEqual(
+            IncidentAge.localizedDescription(for: imported, now: now),
+            String.localizedStringWithFormat(
+                NSLocalizedString("incidents.ageHours", comment: ""), 2
+            )
+        )
+    }
+
+    func testMarkerAccessibilityLabelsDescribeTypePoliceAndClearedState() {
+        let hazard = Self.incident(id: "hazard", type: .hazard)
+        let cleared = Self.incident(
+            id: "cleared", type: .roadwork, reportedCleared: true
+        )
+        let police = Self.police(id: "pin")
+
+        XCTAssertEqual(
+            IncidentAccessibility.markerLabel(
+                id: hazard.id, incidents: [hazard, cleared], policeReports: [police]
+            ),
+            NSLocalizedString("incidents.typeHazard", comment: "")
+        )
+        XCTAssertTrue(IncidentAccessibility.markerLabel(
+            id: cleared.id, incidents: [hazard, cleared], policeReports: [police]
+        ).contains(NSLocalizedString("incidents.typeRoadwork", comment: "")))
+        XCTAssertEqual(
+            IncidentAccessibility.markerLabel(
+                id: "police:pin", incidents: [], policeReports: [police]
+            ),
+            NSLocalizedString("police.markerLabel", comment: "")
+        )
+    }
+
+    func testClearVotePayloadCarriesKnownSimulationSignal() {
+        let fix = LocationFix.of(
+            latitude: 57.48, longitude: 12.07,
+            timestamp: Date(timeIntervalSince1970: 123),
+            isSimulatedBySoftware: true
+        )!
+        let payload = FirebaseIncidentRepository.reportClearedPayload(
+            incidentId: "incident", fix: fix
+        )
+        XCTAssertEqual(payload["mockLocationReported"] as? Bool, true)
+
+        let unknown = FirebaseIncidentRepository.reportClearedPayload(
+            incidentId: "incident", fix: Self.fix()
+        )
+        XCTAssertNil(unknown["mockLocationReported"])
+    }
+
     @MainActor
     func testPoliceIncidentReportCreatesBothRecordsAndOneVisibleMarker() async {
         let incidentRepository = FakeIncidentRepository()
@@ -159,8 +229,10 @@ final class IncidentMapTests: XCTestCase {
         defer { coordinator.stop() }
         await coordinator.report(.hazard, at: MapPoint(longitude: 12.07, latitude: 57.48))
         coordinator.selectMarker(id: "incident")
-        provider.emitFix(Self.fix(timestamp: now.addingTimeInterval(-31)))
+        provider.emitFix(Self.fix(timestamp: now))
         await waitUntil { coordinator.latestFix != nil }
+        provider.emitFix(Self.fix(timestamp: now.addingTimeInterval(-31)))
+        await waitUntil { coordinator.latestFix == nil }
 
         await coordinator.clearSelectedIncident()
 
@@ -185,13 +257,70 @@ final class IncidentMapTests: XCTestCase {
         coordinator.start(surface: surface, provider: provider)
         defer { coordinator.stop() }
         provider.emitFix(Self.fix(timestamp: now))
-        await Task.yield()
+        await waitUntil { coordinator.latestFix != nil }
         await coordinator.refresh(surface: surface)
 
         XCTAssertEqual(coordinator.proximityAlert?.id, "first")
         coordinator.dismissProximityAlert()
         XCTAssertEqual(coordinator.proximityAlert?.id, "second")
         coordinator.dismissProximityAlert()
+        XCTAssertNil(coordinator.proximityAlert)
+    }
+
+    @MainActor
+    func testPoliceAlertAutomaticallyAdvancesAndReconcilesRemovedPin() async {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let police = FakePoliceRepository()
+        police.nearby = [
+            Self.police(id: "first", expiresAt: now.addingTimeInterval(60)),
+            Self.police(id: "second", latitude: 57.4801, expiresAt: now.addingTimeInterval(60))
+        ]
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = IncidentMapCoordinator(
+            incidentRepository: nil, policeRepository: police, currentUid: "me",
+            now: { now }, pollInterval: .seconds(60),
+            proximityDisplayDuration: .milliseconds(30)
+        )
+        let surface = Self.surface()
+        coordinator.start(surface: surface, provider: provider)
+        defer { coordinator.stop() }
+        provider.emitFix(Self.fix(timestamp: now))
+        await waitUntil { coordinator.latestFix != nil }
+        await coordinator.refresh(surface: surface)
+        XCTAssertEqual(coordinator.proximityAlert?.id, "first")
+
+        await waitUntil { coordinator.proximityAlert?.id == "second" }
+        police.nearby = []
+        await coordinator.refresh(surface: surface)
+        XCTAssertNil(coordinator.proximityAlert)
+    }
+
+    @MainActor
+    func testProximityRequiresAuthorizedFreshFixAndClearsOnRevocation() async {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let police = FakePoliceRepository()
+        police.nearby = [Self.police(id: "near", expiresAt: now.addingTimeInterval(60))]
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = IncidentMapCoordinator(
+            incidentRepository: nil, policeRepository: police, currentUid: "me",
+            now: { now }, pollInterval: .seconds(60), maximumFixAge: 30
+        )
+        let surface = Self.surface()
+        coordinator.start(surface: surface, provider: provider)
+        defer { coordinator.stop() }
+
+        provider.emitFix(Self.fix(timestamp: now.addingTimeInterval(-31)))
+        await coordinator.refresh(surface: surface)
+        XCTAssertNil(coordinator.latestFix)
+        XCTAssertNil(coordinator.proximityAlert)
+
+        provider.emitFix(Self.fix(timestamp: now))
+        await waitUntil { coordinator.latestFix != nil }
+        await coordinator.refresh(surface: surface)
+        XCTAssertEqual(coordinator.proximityAlert?.id, "near")
+
+        provider.setAuthorization(.denied)
+        await waitUntil { coordinator.latestFix == nil }
         XCTAssertNil(coordinator.proximityAlert)
     }
 
@@ -261,10 +390,8 @@ final class IncidentMapTests: XCTestCase {
             fixWaitTimeout: .seconds(1)
         )
         coordinator.setTrafficAlertsEnabled(false)
-        coordinator.start(
-            surface: StubMapSurface(initialState: .loaded, autoLoad: false),
-            provider: provider
-        )
+        let surface = StubMapSurface(initialState: .loaded, autoLoad: false)
+        coordinator.start(surface: surface, provider: provider)
         defer { coordinator.stop() }
         provider.emitFix(Self.fix())
         await waitUntil { coordinator.latestFix != nil }
@@ -275,12 +402,13 @@ final class IncidentMapTests: XCTestCase {
         XCTAssertEqual(incident.reportCalls, 1)
         XCTAssertEqual(police.reportSources, ["convoy"])
         XCTAssertTrue(policeReported)
-        XCTAssertTrue(coordinator.incidents.isEmpty)
-        XCTAssertTrue(coordinator.policeReports.isEmpty)
+        XCTAssertEqual(coordinator.incidents.map(\.id), ["incident"])
+        XCTAssertEqual(coordinator.policeReports.map(\.id), ["police"])
+        XCTAssertTrue(surface.incidentMarkers.isEmpty)
     }
 
     @MainActor
-    func testLayerToggleRoundTripDiscardsInFlightIncidentReport() async {
+    func testLayerToggleRoundTripPreservesInFlightIncidentReport() async {
         let reportGate = AsyncGate()
         let repository = FakeIncidentRepository(reportGate: reportGate)
         let coordinator = IncidentMapCoordinator(
@@ -299,12 +427,12 @@ final class IncidentMapTests: XCTestCase {
         await reporting.value
 
         XCTAssertEqual(repository.reportCalls, 1)
-        XCTAssertTrue(coordinator.incidents.isEmpty)
-        XCTAssertNil(coordinator.feedback)
+        XCTAssertEqual(coordinator.incidents.map(\.id), ["incident"])
+        XCTAssertEqual(coordinator.feedback, .success("incidents.reportSuccess"))
     }
 
     @MainActor
-    func testDisablingLayerDiscardsInFlightPoliceReport() async {
+    func testDisablingLayerHidesButPreservesInFlightPoliceReport() async {
         let reportGate = AsyncGate()
         let police = FakePoliceRepository(reportGate: reportGate)
         let provider = StubLocationProvider(authorization: .whileInUse)
@@ -327,7 +455,7 @@ final class IncidentMapTests: XCTestCase {
 
         XCTAssertTrue(reported)
         XCTAssertEqual(police.reportSources, ["convoy"])
-        XCTAssertTrue(coordinator.policeReports.isEmpty)
+        XCTAssertEqual(coordinator.policeReports.map(\.id), ["police"])
         XCTAssertTrue(surface.incidentMarkers.isEmpty)
         XCTAssertNil(coordinator.feedback)
     }
@@ -356,6 +484,30 @@ final class IncidentMapTests: XCTestCase {
         XCTAssertTrue(surface.incidentMarkers.isEmpty)
         XCTAssertTrue(coordinator.incidents.isEmpty)
         XCTAssertEqual(repository.listCalls, callsBeforeDisable)
+    }
+
+    @MainActor
+    func testDisabledTrafficLayerStillPollsAndWarnsForNearbyPolice() async {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let police = FakePoliceRepository()
+        police.nearby = [Self.police(id: "near", expiresAt: now.addingTimeInterval(60))]
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = IncidentMapCoordinator(
+            incidentRepository: FakeIncidentRepository(), policeRepository: police,
+            currentUid: "me", now: { now }, pollInterval: .seconds(60)
+        )
+        let surface = Self.surface()
+        coordinator.start(surface: surface, provider: provider)
+        defer { coordinator.stop() }
+        coordinator.setTrafficAlertsEnabled(false)
+        provider.emitFix(Self.fix(timestamp: now))
+        await waitUntil { coordinator.latestFix != nil }
+
+        await coordinator.refresh(surface: surface)
+
+        XCTAssertGreaterThan(police.listCalls, 0)
+        XCTAssertEqual(coordinator.proximityAlert?.id, "near")
+        XCTAssertTrue(surface.incidentMarkers.isEmpty)
     }
 
     func testTrafikverketRowsAreIdentifiedForVisibleAttribution() {
@@ -413,13 +565,16 @@ final class IncidentMapTests: XCTestCase {
         type: IncidentType,
         latitude: Double = 57.48,
         longitude: Double = 12.07,
-        source: String = "user"
+        source: String = "user",
+        createdAt: Date? = nil,
+        postedAt: Date? = nil,
+        reportedCleared: Bool = false
     ) -> RoadIncident {
         RoadIncident(
             id: id, type: type, longitude: longitude, latitude: latitude,
             note: nil, source: source, reporterUid: "reporter",
-            createdAt: nil, postedAt: nil, confirmationCount: 0,
-            clearedCount: 0, reportedCleared: false
+            createdAt: createdAt, postedAt: postedAt, confirmationCount: 0,
+            clearedCount: 0, reportedCleared: reportedCleared
         )
     }
 
@@ -496,6 +651,7 @@ final class IncidentMapTests: XCTestCase {
     private final class FakePoliceRepository: PoliceRepository, @unchecked Sendable {
         private let lock = NSLock()
         private(set) var reportSources: [String] = []
+        private(set) var listCalls = 0
         var nearby: [PoliceReport] = []
         private let reportGate: AsyncGate?
         private let listGate: AsyncGate?
@@ -513,6 +669,7 @@ final class IncidentMapTests: XCTestCase {
             )
         }
         func listNearby(center: MapPoint, radiusMeters: Double) async throws -> [PoliceReport] {
+            lock.withLock { listCalls += 1 }
             let snapshot = nearby
             if let listGate { await listGate.wait() }
             return snapshot

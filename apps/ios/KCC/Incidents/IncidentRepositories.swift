@@ -62,11 +62,7 @@ final class FirebaseIncidentRepository: IncidentRepository, @unchecked Sendable 
     }
 
     func reportCleared(incidentId: String, fix: LocationFix) async throws -> IncidentClearResult {
-        var payload: [String: Any] = [
-            "incidentId": incidentId, "latitude": fix.latitude, "longitude": fix.longitude,
-            "capturedAt": IncidentWire.format(fix.timestamp)
-        ]
-        if let accuracy = fix.accuracyMeters { payload["accuracyMeters"] = accuracy }
+        let payload = Self.reportClearedPayload(incidentId: incidentId, fix: fix)
         do {
             let raw = try await client.call("incidents-reportCleared", payload: payload) as? [String: Any]
             return IncidentClearResult(
@@ -83,6 +79,18 @@ final class FirebaseIncidentRepository: IncidentRepository, @unchecked Sendable 
             }
             throw error
         }
+    }
+
+    static func reportClearedPayload(incidentId: String, fix: LocationFix) -> [String: Any] {
+        var payload: [String: Any] = [
+            "incidentId": incidentId, "latitude": fix.latitude, "longitude": fix.longitude,
+            "capturedAt": IncidentWire.format(fix.timestamp)
+        ]
+        if let accuracy = fix.accuracyMeters { payload["accuracyMeters"] = accuracy }
+        if let simulated = fix.isSimulatedBySoftware {
+            payload["mockLocationReported"] = simulated
+        }
+        return payload
     }
 }
 

@@ -55,6 +55,7 @@ struct RoadIncident: Equatable, Identifiable, Sendable {
     var reportedCleared: Bool
 
     var isImported: Bool { source == "trafikverket" }
+    var reportedAt: Date? { isImported ? postedAt : createdAt }
 
     func isOwned(by uid: String?) -> Bool {
         guard let uid, !uid.isEmpty else { return false }
@@ -174,6 +175,54 @@ enum IncidentAttribution {
         guard let point, point.trustworthy else { return false }
         return point.x >= -30 && point.y >= -30
             && point.x <= width + 30 && point.y <= height + 30
+    }
+}
+
+enum IncidentAge {
+    static func localizedDescription(for incident: RoadIncident, now: Date = Date()) -> String {
+        guard let reportedAt = incident.reportedAt else {
+            return NSLocalizedString("incidents.ageUnknown", comment: "")
+        }
+        let seconds = max(0, now.timeIntervalSince(reportedAt))
+        if seconds < 60 {
+            return NSLocalizedString("incidents.ageJustNow", comment: "")
+        }
+        let minutes = Int64(seconds / 60)
+        if minutes < 60 {
+            return String.localizedStringWithFormat(
+                NSLocalizedString("incidents.ageMinutes", comment: ""), minutes
+            )
+        }
+        let hours = Int64(seconds / 3_600)
+        if hours < 24 {
+            return String.localizedStringWithFormat(
+                NSLocalizedString("incidents.ageHours", comment: ""), hours
+            )
+        }
+        return String.localizedStringWithFormat(
+            NSLocalizedString("incidents.ageDays", comment: ""), Int64(seconds / 86_400)
+        )
+    }
+}
+
+enum IncidentAccessibility {
+    static func markerLabel(
+        id: String,
+        incidents: [RoadIncident],
+        policeReports: [PoliceReport]
+    ) -> String {
+        if id.hasPrefix(PoliceMapMarker.prefix),
+           policeReports.contains(where: { PoliceMapMarker.prefix + $0.id == id }) {
+            return NSLocalizedString("police.markerLabel", comment: "")
+        }
+        guard let incident = incidents.first(where: { $0.id == id }) else {
+            return NSLocalizedString("incidents.markerLabel", comment: "")
+        }
+        let type = NSLocalizedString(incident.type.titleKey, comment: "")
+        guard incident.reportedCleared else { return type }
+        return String.localizedStringWithFormat(
+            NSLocalizedString("incidents.markerClearedFormat", comment: ""), type
+        )
     }
 }
 

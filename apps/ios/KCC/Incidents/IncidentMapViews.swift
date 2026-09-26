@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct IncidentMapOverlay: View {
     @Bindable var coordinator: IncidentMapCoordinator
@@ -51,7 +52,13 @@ struct IncidentMapOverlay: View {
                             }
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel(Text("incidents.markerLabel"))
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                        .accessibilityLabel(Text(IncidentAccessibility.markerLabel(
+                            id: marker.id,
+                            incidents: coordinator.incidents,
+                            policeReports: coordinator.policeReports
+                        )))
                         .position(x: CGFloat(point.x), y: CGFloat(point.y))
                     }
                 }
@@ -190,6 +197,8 @@ struct IncidentDetailsSheet: View {
                         .font(.headline)
                         if let note = incident.note, !note.isEmpty { Text(note) }
                         Text(incident.isImported ? "incidents.sourceImported" : "incidents.sourceMember")
+                            .foregroundStyle(.secondary)
+                        Text(IncidentAge.localizedDescription(for: incident))
                             .foregroundStyle(.secondary)
                         if incident.confirmationCount > 0 {
                             Text(String.localizedStringWithFormat(
@@ -341,6 +350,14 @@ struct PoliceProximityBanner: View {
         .padding(KccSpacing.s4)
         .background(Color.blue.opacity(0.94), in: RoundedRectangle(cornerRadius: 16))
         .shadow(radius: 8)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits([.isModal, .updatesFrequently])
+        .onAppear {
+            UIAccessibility.post(
+                notification: .announcement,
+                argument: NSLocalizedString("policeAlert.caption", comment: "")
+            )
+        }
     }
 }
 

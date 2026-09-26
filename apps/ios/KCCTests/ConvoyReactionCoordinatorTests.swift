@@ -189,6 +189,32 @@ final class ConvoyReactionCoordinatorTests: XCTestCase {
         XCTAssertTrue(coordinator.sendingKinds.isEmpty)
     }
 
+    func testStaleSuccessfulPoliceSendRunsDurableEffectWithoutMutatingReplacementUI() async {
+        let gate = DeferredReactionSendGate()
+        let repository = ConvoyReactionRepositoryFake(sendGate: gate)
+        let policeSuccess = PoliceSuccessRecorder()
+        let coordinator = ConvoyReactionCoordinator(
+            repository: repository,
+            nowMilliseconds: { 1_000 },
+            onPoliceSent: { await policeSuccess.record() }
+        )
+        coordinator.sync(convoyId: "convoy-1")
+
+        let staleSend = Task { await coordinator.send(.police) }
+        await waitUntil { await gate.pendingCount == 1 }
+        coordinator.sync(convoyId: "convoy-2")
+
+        await gate.resumeNext(with: .sent)
+        await staleSend.value
+
+        XCTAssertEqual(policeSuccess.count, 1)
+        XCTAssertTrue(coordinator.sendingKinds.isEmpty)
+        XCTAssertEqual(
+            coordinator.remainingMilliseconds(for: .police, nowMilliseconds: 1_000),
+            0
+        )
+    }
+
     func testStaleRateLimitCannotApplyToLaterSessionForSameConvoy() async {
         let gate = DeferredReactionSendGate()
         let repository = ConvoyReactionRepositoryFake(sendGate: gate)
