@@ -158,6 +158,10 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
 
         coordinator.endSession(context: context(sessionId: "session-a"))
         await waitUntil { repository.requests.count == 1 }
+        // Stream termination is asynchronous. Wait until A's cancelled stream
+        // has actually left the provider before asserting that queued B does not
+        // open a replacement while A's save gate is still suspended.
+        await waitUntil { provider.activeFixStreamCount == 0 }
         coordinator.start(context: context(sessionId: "session-b"))
         XCTAssertEqual(provider.activeFixStreamCount, 0)
 
