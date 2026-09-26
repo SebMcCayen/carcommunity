@@ -11,6 +11,10 @@ final class EventChatCoordinatorTests: XCTestCase {
         private var continuations: [UUID: AsyncStream<EventChatMessagesState>.Continuation] = [:]
         private var shouldFailPost = false
         private var shouldFailReport = false
+        private var shouldSuspendPost = false
+        private var shouldSuspendReport = false
+        private var postContinuation: CheckedContinuation<Void, Error>?
+        private var reportContinuation: CheckedContinuation<Void, Error>?
         private(set) var subscribeCount = 0
         private(set) var posts: [(String, String)] = []
         private(set) var reports: [(String, String, ChatReportReason)] = []
@@ -26,6 +30,29 @@ final class EventChatCoordinatorTests: XCTestCase {
 
         func failPost(_ value: Bool) { lock.withLock { shouldFailPost = value } }
         func failReport(_ value: Bool) { lock.withLock { shouldFailReport = value } }
+        func suspendPost() { lock.withLock { shouldSuspendPost = true } }
+        func suspendReport() { lock.withLock { shouldSuspendReport = true } }
+
+        func resumePost() {
+            let continuation = lock.withLock { () -> CheckedContinuation<Void, Error>? in
+                defer { postContinuation = nil }
+                return postContinuation
+            }
+            continuation?.resume()
+        }
+
+        func resumeReport() {
+            let continuation = lock.withLock { () -> CheckedContinuation<Void, Error>? in
+                defer { reportContinuation = nil }
+                return reportContinuation
+            }
+            continuation?.resume()
+        }
+
+        var postStarted: Bool { lock.withLock { !posts.isEmpty } }
+        var reportStarted: Bool { lock.withLock { !reports.isEmpty } }
+        var postWaiting: Bool { lock.withLock { postContinuation != nil } }
+        var reportWaiting: Bool { lock.withLock { reportContinuation != nil } }
 
         func messages(eventId: String) -> AsyncStream<EventChatMessagesState> {
             let snapshots = lock.withLock { () -> [EventChatMessagesState] in
@@ -49,31 +76,43 @@ final class EventChatCoordinatorTests: XCTestCase {
             }
         }
 
-        private func recordPost(eventId: String, message: String) -> Bool {
+        private func recordPost(eventId: String, message: String) -> (fails: Bool, suspends: Bool) {
             lock.withLock {
                 posts.append((eventId, message))
-                return shouldFailPost
+                return (shouldFailPost, shouldSuspendPost)
             }
         }
 
         func post(eventId: String, message: String) async throws {
-            if recordPost(eventId: eventId, message: message) { throw TestError.failed }
+            let behavior = recordPost(eventId: eventId, message: message)
+            if behavior.fails { throw TestError.failed }
+            if behavior.suspends {
+                try await withCheckedThrowingContinuation { continuation in
+                    lock.withLock { postContinuation = continuation }
+                }
+            }
         }
 
         private func recordReport(
             eventId: String,
             messageId: String,
             reason: ChatReportReason
-        ) -> Bool {
+        ) -> (fails: Bool, suspends: Bool) {
             lock.withLock {
                 reports.append((eventId, messageId, reason))
-                return shouldFailReport
+                return (shouldFailReport, shouldSuspendReport)
             }
         }
 
         func report(eventId: String, messageId: String, reason: ChatReportReason) async throws {
-            if recordReport(eventId: eventId, messageId: messageId, reason: reason) {
+            let behavior = recordReport(eventId: eventId, messageId: messageId, reason: reason)
+            if behavior.fails {
                 throw TestError.failed
+            }
+            if behavior.suspends {
+                try await withCheckedThrowingContinuation { continuation in
+                    lock.withLock { reportContinuation = continuation }
+                }
             }
         }
 
@@ -124,6 +163,23 @@ final class EventChatCoordinatorTests: XCTestCase {
         XCTAssertTrue(EventChat.isSendable(" hello "))
         XCTAssertTrue(EventChat.isSendable(String(repeating: "a", count: 1_000)))
         XCTAssertFalse(EventChat.isSendable(String(repeating: "a", count: 1_001)))
+        XCTAssertTrue(EventChat.isSendable(String(repeating: "😀", count: 500)))
+        XCTAssertFalse(EventChat.isSendable(String(repeating: "😀", count: 501)))
+    }
+
+    func testDraftTruncationPreservesEmojiAndZWJGraphemeBoundaries() {
+        let emojiBoundary = String(repeating: "a", count: 999) + "😀"
+        XCTAssertEqual(EventChat.truncateToMessageLimit(emojiBoundary), String(repeating: "a", count: 999))
+
+        let family = "👨‍👩‍👧‍👦"
+        XCTAssertEqual(family.utf16.count, 11)
+        let exactZWJBoundary = String(repeating: "a", count: 989) + family
+        XCTAssertEqual(EventChat.truncateToMessageLimit(exactZWJBoundary), exactZWJBoundary)
+
+        let overflowingZWJ = String(repeating: "a", count: 990) + family
+        let truncated = EventChat.truncateToMessageLimit(overflowingZWJ)
+        XCTAssertEqual(truncated, String(repeating: "a", count: 990))
+        XCTAssertEqual(truncated.utf16.count, 990)
     }
 
     func testHiddenAuthorsAreFiltered() {
@@ -166,6 +222,59 @@ final class EventChatCoordinatorTests: XCTestCase {
         coordinator.setAccess(true)
         await waitUntil { coordinator.messagesState == .loaded([]) }
         XCTAssertEqual(repository.subscribeCount, 2)
+    }
+
+    @MainActor
+    func testRevocationBeforeQueuedWorkPreventsReadsAndMutations() async {
+        let repository = FakeRepository()
+        let coordinator = EventChatCoordinator(repository: repository, eventId: "e1", currentUserId: "me")
+        coordinator.setAccess(false)
+
+        coordinator.start()
+        coordinator.reload()
+        let sent = await coordinator.send("blocked")
+        await coordinator.report(message(), reason: .spam)
+
+        XCTAssertFalse(sent)
+        XCTAssertEqual(repository.subscribeCount, 0)
+        XCTAssertFalse(repository.postStarted)
+        XCTAssertFalse(repository.reportStarted)
+        XCTAssertEqual(coordinator.messagesState, .loaded([]))
+        XCTAssertEqual(coordinator.sendState, .idle)
+        XCTAssertEqual(coordinator.reportState, .idle)
+    }
+
+    @MainActor
+    func testRevocationFencesSuspendedSendCompletion() async {
+        let repository = FakeRepository()
+        repository.suspendPost()
+        let coordinator = EventChatCoordinator(repository: repository, eventId: "e1", currentUserId: "me")
+
+        let send = Task { await coordinator.send("hello") }
+        await waitUntil { repository.postWaiting }
+        XCTAssertEqual(coordinator.sendState, .sending)
+        coordinator.setAccess(false)
+        repository.resumePost()
+
+        let sent = await send.value
+        XCTAssertFalse(sent)
+        XCTAssertEqual(coordinator.sendState, .idle)
+    }
+
+    @MainActor
+    func testRevocationFencesSuspendedReportCompletion() async {
+        let repository = FakeRepository()
+        repository.suspendReport()
+        let coordinator = EventChatCoordinator(repository: repository, eventId: "e1", currentUserId: "me")
+
+        let report = Task { await coordinator.report(self.message(), reason: .spam) }
+        await waitUntil { repository.reportWaiting }
+        XCTAssertEqual(coordinator.reportState, .reporting)
+        coordinator.setAccess(false)
+        repository.resumeReport()
+        await report.value
+
+        XCTAssertEqual(coordinator.reportState, .idle)
     }
 
     @MainActor
