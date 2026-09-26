@@ -1,11 +1,9 @@
 import SwiftUI
 
 /// Event detail + RSVP — the iOS port of Android's `EventDetailScreen`
-/// restricted to this slice: the teaser fields for any authenticated user,
-/// the member-gated detail (precise address + long description) or the
-/// membership gate, and — for gate-passers on a published event — the RSVP
-/// row plus the public counts breakdown. Attendee roster, chat, check-in,
-/// map, share/calendar, and creator edit/remove arrive with later slices.
+/// with member-gated private detail, RSVP, paid/admin attendee roster,
+/// paid geofenced check-in, and creator edit/remove. Chat, share/calendar,
+/// and event-linked group driving remain separate slices.
 ///
 /// A dumb switch over the coordinator's state: all decisions live in the pure
 /// ``EventDetailCoordinator``. The coordinator is created lazily on first
@@ -18,15 +16,20 @@ import SwiftUI
 /// the events feature's own `NavigationStack` (the one hosting the list), so
 /// no shell wiring is involved.
 struct EventDetailScreen: View {
+    @Environment(\.dismiss) private var dismiss
     /// Builds the coordinator on first appearance; returns nil in a
     /// config-less build.
     let makeCoordinator: @MainActor () -> EventDetailCoordinator?
+    let locationProvider: any LocationProvider
 
     @State private var coordinator: EventDetailCoordinator?
     /// Whether the one-shot wiring ran — nil `coordinator` is also the
     /// legitimate steady state of a config-less build, so nil cannot mean
     /// "not attempted yet" (the same seam ``ShellView`` uses for the list).
     @State private var hasWired = false
+    @State private var editCoordinator: EventFormCoordinator?
+    @State private var showAttendees = false
+    @State private var confirmRemove = false
 
     var body: some View {
         content
@@ -37,6 +40,42 @@ struct EventDetailScreen: View {
                 hasWired = true
                 coordinator = makeCoordinator()
                 coordinator?.start()
+            }
+            .sheet(item: $editCoordinator) { editor in
+                if let coordinator,
+                   case .loaded(let event) = coordinator.state {
+                    EventFormScreen(
+                        coordinator: editor,
+                        initial: EventFormInput(
+                            title: event.title,
+                            startsAt: event.startsAt ?? Date(),
+                            description: coordinator.detail?.description,
+                            address: coordinator.detail?.address,
+                            latitude: event.latitude,
+                            longitude: event.longitude,
+                            publicSiteEnabled: false
+                        ),
+                        locationProvider: locationProvider
+                    )
+                }
+            }
+            .sheet(isPresented: $showAttendees) {
+                if let coordinator { EventAttendeesSheet(coordinator: coordinator) }
+            }
+            .confirmationDialog(
+                "events.removeTitle",
+                isPresented: $confirmRemove,
+                titleVisibility: .visible
+            ) {
+                Button("events.removeConfirmConfirm", role: .destructive) {
+                    coordinator?.cancelEvent()
+                }
+                Button("events.removeConfirmCancel", role: .cancel) {}
+            } message: {
+                Text("events.removeConfirmMessage")
+            }
+            .onChange(of: coordinator?.manageState) { _, state in
+                if state == .deleted { dismiss() }
             }
     }
 
@@ -145,9 +184,147 @@ struct EventDetailScreen: View {
                 if coordinator.canRsvp {
                     rsvpSection(event, coordinator: coordinator)
                 }
+
+                attendeesButton(event, coordinator: coordinator)
+
+                if coordinator.canCheckIn || coordinator.checkInState != .idle
+                    || coordinator.checkInPending || coordinator.checkInVerified {
+                    checkInSection(coordinator)
+                }
+
+                if coordinator.canManage {
+                    creatorActions(coordinator)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(KccSpacing.s4)
+        }
+    }
+
+    private func attendeesButton(
+        _ event: EventSummary,
+        coordinator: EventDetailCoordinator
+    ) -> some View {
+        Button {
+            showAttendees = true
+            coordinator.loadAttendees()
+        } label: {
+            Label(attendeeCountText(event.counts.going), systemImage: "person.2")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.large)
+    }
+
+    private func attendeeCountText(_ count: Int) -> String {
+        String.localizedStringWithFormat(
+            NSLocalizedString("events.attendeesCount", comment: "RSVP attendee count"), count
+        )
+    }
+
+    private func checkInSection(_ coordinator: EventDetailCoordinator) -> some View {
+        VStack(alignment: .leading, spacing: KccSpacing.s2) {
+            Text("events.checkInTitle")
+                .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
+            if coordinator.checkInVerified {
+                Label("events.checkInConfirmed", systemImage: "checkmark.seal.fill")
+                    .foregroundStyle(.green)
+            } else {
+                TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                    let ready = coordinator.checkInAnchor.map {
+                        Events.checkInRemaining(from: $0, now: timeline.date) == 0
+                    } ?? false
+                    if coordinator.canCheckIn {
+                        Button(ready ? "events.checkInConfirmButton" : "events.checkInButton") {
+                            coordinator.checkIn()
+                        }
+                        .disabled(coordinator.checkInState == .working)
+                        .buttonStyle(.borderedProminent)
+                    }
+                    if coordinator.checkInState == .working {
+                        ProgressView()
+                    }
+                    if coordinator.checkInPending {
+                        checkInProgress(coordinator, now: timeline.date)
+                    } else if coordinator.canCheckIn {
+                        Text("events.checkInWithinArea").foregroundStyle(.secondary)
+                    }
+                    if case .failed(let error) = coordinator.checkInState {
+                        let finalGeofenceMiss = error == .outsideGeofence && ready
+                            && coordinator.checkInPending && coordinator.canCheckIn
+                        Text(finalGeofenceMiss
+                             ? "events.checkInMoveBackToFinish"
+                             : checkInErrorKey(error))
+                            .foregroundStyle(KccPalette.errorRed)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(KccSpacing.s3)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: KccSpacing.s2))
+    }
+
+    @ViewBuilder
+    private func checkInProgress(_ coordinator: EventDetailCoordinator, now: Date) -> some View {
+        if coordinator.canCheckIn, let anchor = coordinator.checkInAnchor {
+            let remaining = Events.checkInRemaining(from: anchor, now: now)
+            if remaining > 0 {
+                ProgressView(value: Events.checkInProgress(from: anchor, now: now))
+                    .accessibilityLabel(Text("events.checkInCountdownLabel"))
+                Text(checkInCountdown(remaining)).foregroundStyle(.secondary)
+            } else {
+                Text("events.checkInReadyToConfirm")
+            }
+        } else {
+            Text("events.checkInPending").foregroundStyle(.secondary)
+        }
+    }
+
+    private func checkInCountdown(_ remaining: TimeInterval) -> String {
+        let seconds = Int(ceil(max(0, remaining)))
+        let clock = String(format: "%d:%02d", seconds / 60, seconds % 60)
+        return String.localizedStringWithFormat(
+            NSLocalizedString("events.checkInCountdown", comment: "Check-in dwell countdown"),
+            clock
+        )
+    }
+
+    private func checkInErrorKey(_ error: EventCheckInFailure) -> LocalizedStringKey {
+        switch error {
+        case .windowClosed: "events.checkInErrorWindow"
+        case .positionUnavailable: "events.checkInErrorLocation"
+        case .mockLocation: "events.checkInErrorMock"
+        case .outsideGeofence: "events.checkInErrorGeofence"
+        case .notCheckinable, .generic: "events.checkInErrorGeneric"
+        }
+    }
+
+    private func creatorActions(_ coordinator: EventDetailCoordinator) -> some View {
+        VStack(spacing: KccSpacing.s2) {
+            Button("events.editButton") {
+                editCoordinator = coordinator.makeEditCoordinator()
+            }
+            .buttonStyle(.bordered)
+            .frame(maxWidth: .infinity)
+            .disabled(!coordinator.detailSettled)
+            Button("events.removeButton", role: .destructive) {
+                confirmRemove = true
+            }
+            .buttonStyle(.bordered)
+            .disabled(coordinator.manageState == .deleting)
+            if case .failed(let reason) = coordinator.manageState {
+                Text(removeErrorKey(reason)).foregroundStyle(KccPalette.errorRed)
+            }
+        }
+    }
+
+    private func removeErrorKey(_ reason: ManageEventFailure) -> LocalizedStringKey {
+        switch reason {
+        case .permissionDenied: "events.removeErrorPermission"
+        case .immutable: "events.removeErrorImmutable"
+        case .unknown: "events.removeError"
         }
     }
 
@@ -274,6 +451,9 @@ struct EventDetailScreen: View {
 
 #Preview {
     NavigationStack {
-        EventDetailScreen(makeCoordinator: { nil })
+        EventDetailScreen(
+            makeCoordinator: { nil },
+            locationProvider: StubLocationProvider()
+        )
     }
 }
