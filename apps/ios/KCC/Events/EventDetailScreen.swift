@@ -4,8 +4,9 @@ import SwiftUI
 /// restricted to this slice: the teaser fields for any authenticated user,
 /// the member-gated detail (precise address + long description) or the
 /// membership gate, and — for gate-passers on a published event — the RSVP
-/// row plus the public counts breakdown. Attendee roster, chat, check-in,
-/// map, share/calendar, and creator edit/remove arrive with later slices.
+/// row plus the public counts breakdown and eligible event-chat entry.
+/// Attendee roster, check-in, map, share/calendar, and creator edit/remove
+/// arrive with later slices.
 ///
 /// A dumb switch over the coordinator's state: all decisions live in the pure
 /// ``EventDetailCoordinator``. The coordinator is created lazily on first
@@ -144,6 +145,25 @@ struct EventDetailScreen: View {
 
                 if coordinator.canRsvp {
                     rsvpSection(event, coordinator: coordinator)
+                }
+
+                if coordinator.canOpenEventChat {
+                    NavigationLink {
+                        if let chat = coordinator.makeEventChatCoordinator() {
+                            EventChatScreen(
+                                coordinator: chat,
+                                accessCoordinator: coordinator
+                            )
+                        } else {
+                            Text("chat.accessLost")
+                                .foregroundStyle(.secondary)
+                        }
+                    } label: {
+                        Label("chat.eventChatTitle", systemImage: "bubble.left.and.bubble.right")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .frame(minHeight: 44)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

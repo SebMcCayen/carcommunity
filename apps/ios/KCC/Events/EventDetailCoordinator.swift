@@ -40,6 +40,7 @@ enum RsvpSubmitState: Equatable, Sendable {
 @Observable
 final class EventDetailCoordinator {
     private let repository: EventsRepository
+    private let eventChatRepository: EventChatRepository?
     let eventId: String
     /// The signed-in user's uid, resolved once at construction. Nil (no
     /// session) hides the RSVP affordance — there is no owner document to
@@ -59,6 +60,9 @@ final class EventDetailCoordinator {
     /// answered.
     private(set) var myRsvp: RsvpStatus?
     private(set) var rsvpState: RsvpSubmitState = .idle
+    /// Live backend feature flag. Its contract default is true; a config-less
+    /// build has no chat repository and therefore stays false.
+    private(set) var eventChatEnabled: Bool
 
     /// The live stream-consuming tasks. `nonisolated(unsafe)` so the
     /// nonisolated deinit can cancel them — every mutation happens on the
@@ -79,11 +83,14 @@ final class EventDetailCoordinator {
     init(
         repository: EventsRepository,
         eventId: String,
+        eventChatRepository: EventChatRepository? = nil,
         passesMemberGate: Bool = MemberGating.allows(isActiveMember: false)
     ) {
         self.repository = repository
         self.eventId = eventId
         self.uid = repository.currentUserId()
+        self.eventChatRepository = eventChatRepository
+        self.eventChatEnabled = eventChatRepository != nil
         self.passesMemberGate = passesMemberGate
     }
 
@@ -109,6 +116,28 @@ final class EventDetailCoordinator {
     var canSeeDetails: Bool {
         guard case .loaded(let event) = state else { return false }
         return Events.canSeeDetails(passesMemberGate: passesMemberGate, status: event.status)
+    }
+
+    /// Android's `chatEligible`: flag + configured repository + participant gate.
+    var canOpenEventChat: Bool {
+        guard eventChatRepository != nil else { return false }
+        let status: EventStatus?
+        if case .loaded(let event) = state { status = event.status } else { status = nil }
+        return eventChatEnabled
+            && EventChat.canParticipate(
+                passesMemberGate: passesMemberGate,
+                eventStatus: status,
+                rsvp: myRsvp
+            )
+    }
+
+    func makeEventChatCoordinator() -> EventChatCoordinator? {
+        guard canOpenEventChat, let eventChatRepository, let uid else { return nil }
+        return EventChatCoordinator(
+            repository: eventChatRepository,
+            eventId: eventId,
+            currentUserId: uid
+        )
     }
 
     // MARK: - Lifecycle
@@ -162,6 +191,13 @@ final class EventDetailCoordinator {
             let rsvpStream = repository.myRsvp(eventId: eventId, uid: uid)
             subscriptions.append(consume(rsvpStream) { coordinator, answer in
                 coordinator.myRsvp = answer
+            })
+        }
+
+        if let eventChatRepository {
+            let enabled = eventChatRepository.enabled()
+            subscriptions.append(consume(enabled) { coordinator, isEnabled in
+                coordinator.eventChatEnabled = isEnabled
             })
         }
     }

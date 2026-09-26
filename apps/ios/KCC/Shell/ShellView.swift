@@ -1131,7 +1131,10 @@ struct ShellView: View {
         )
         incidentMap.setTrafficAlertsEnabled(mapLayerPreferences.trafficAlertsEnabled)
         incidentMapCoordinator = incidentMap
-        eventsCoordinator = FirebaseEventsRepository.createIfAvailable().map(EventsCoordinator.init(repository:))
+        let eventChat = FirebaseEventChatRepository.createIfAvailable()
+        eventsCoordinator = FirebaseEventsRepository.createIfAvailable().map {
+            EventsCoordinator(repository: $0, eventChatRepository: eventChat)
+        }
         leaderboardCoordinator = LeaderboardCoordinator(
             repository: FirebaseLeaderboardRepository.createIfAvailable()
         )
