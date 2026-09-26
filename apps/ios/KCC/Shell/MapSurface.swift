@@ -40,12 +40,12 @@ enum MapLoadState: Sendable {
 /// map-layers popup's day/night switch. A surface that cannot re-style (the
 /// stub) still exposes the flag so the shell wiring stays uniform; only the
 /// real Mapbox surface actually swaps the style's `lightPreset`.
-enum MapMode: Sendable {
+enum MapMode: String, Sendable {
     /// Bright/day light preset (default).
-    case day
+    case day = "Day"
 
     /// Dark/night light preset.
-    case night
+    case night = "Night"
 }
 
 /// How the map is ORIENTED while it follows the user — toggled by the
@@ -1029,6 +1029,12 @@ final class StubMapSurface: MapSurface {
     @ObservationIgnored
     private var rendererCenter: ((MapPoint) -> Void)?
     @ObservationIgnored
+    private var rendererTraffic: ((Bool, MapMode) -> Void)?
+    @ObservationIgnored
+    private var rendererMapMode: ((MapMode) -> Void)?
+    @ObservationIgnored
+    private var rendererCameraPreferences: ((Bool, Double) -> Void)?
+    @ObservationIgnored
     private var appliedConvoyFit: [MapPoint]?
     @ObservationIgnored
     private var convoyFitSuspended = false
@@ -1108,11 +1114,25 @@ final class StubMapSurface: MapSurface {
     func installRenderer(
         projection: @escaping (Double, Double) -> MapScreenPoint?,
         convoyFit: @escaping ([MapPoint]?, Bool, MapPoint?, Bool, Bool, Bool) -> Void,
-        center: @escaping (MapPoint) -> Void
+        center: @escaping (MapPoint) -> Void,
+        traffic: @escaping (Bool, MapMode) -> Void = { _, _ in },
+        mapMode: @escaping (MapMode) -> Void = { _ in },
+        cameraPreferences: @escaping (Bool, Double) -> Void = { _, _ in }
     ) {
         rendererProjection = projection
         rendererConvoyFit = convoyFit
         rendererCenter = center
+        rendererTraffic = traffic
+        rendererMapMode = mapMode
+        rendererCameraPreferences = cameraPreferences
+        // Re-apply durable state after a style reload or when the retained map
+        // returns from an opaque shell cover.
+        rendererMapMode?(self.mapMode)
+        rendererTraffic?(trafficEnabled, self.mapMode)
+        // Pitch and resting zoom form one complete camera destination. Replay
+        // them together so renderer attachment cannot start two animations
+        // from the same stale camera snapshot.
+        rendererCameraPreferences?(is3D, self.browsingZoom)
         if convoyFocusEnabled || self.convoyFit != nil {
             applyConvoyFitToRenderer(force: true)
         } else if convoySelfFollowEnabled && !convoySelfFollowSuspended {
@@ -1125,6 +1145,9 @@ final class StubMapSurface: MapSurface {
         rendererProjection = nil
         rendererConvoyFit = nil
         rendererCenter = nil
+        rendererTraffic = nil
+        rendererMapMode = nil
+        rendererCameraPreferences = nil
         cameraSnapshot = nil
         bearing = 0
     }
@@ -1352,19 +1375,37 @@ final class StubMapSurface: MapSurface {
     }
 
     func setTrafficEnabled(_ enabled: Bool) {
+        guard enabled != trafficEnabled else {
+            rendererTraffic?(enabled, mapMode)
+            return
+        }
         trafficEnabled = enabled
+        rendererTraffic?(enabled, mapMode)
     }
 
     func setMapMode(_ mode: MapMode) {
         mapMode = mode
+        rendererMapMode?(mode)
+        rendererTraffic?(trafficEnabled, mode)
     }
 
     func set3DEnabled(_ enabled: Bool) {
+        guard enabled != is3D else {
+            rendererCameraPreferences?(enabled, browsingZoom)
+            return
+        }
         is3D = enabled
+        rendererCameraPreferences?(enabled, browsingZoom)
     }
 
     func setBrowsingZoom(_ zoom: Double) {
-        browsingZoom = zoom
+        let snapped = MapBrowsingZoom.snap(zoom)
+        guard snapped != browsingZoom else {
+            rendererCameraPreferences?(is3D, snapped)
+            return
+        }
+        browsingZoom = snapped
+        rendererCameraPreferences?(is3D, snapped)
     }
 
     func setRouteOverlay(_ overlay: MapRouteOverlay?) {
@@ -1415,5 +1456,5 @@ final class StubMapSurface: MapSurface {
     /// here until it is. Keep the two in sync.
     /// Shared opening/resting camera zoom for both the config-less seam and
     /// the native Mapbox renderer.
-    static let defaultBrowsingZoom: Double = 16.0
+    static let defaultBrowsingZoom: Double = MapBrowsingZoom.defaultValue
 }

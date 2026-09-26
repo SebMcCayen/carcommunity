@@ -9,6 +9,7 @@ import UIKit
 struct ShellView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
 
     /// The signed-in session, threaded from ``RootView``. The config-less /
     /// unavailable state renders the bare shell with no profile entry —
@@ -28,6 +29,8 @@ struct ShellView: View {
     /// stand it down via ``MapSurface/setActive(_:)`` (see the map-cover
     /// effect below), never recreate it.
     @State private var mapSurface = StubMapSurface()
+    @State private var mapLayerPreferences = MapLayerPreferences()
+    @State private var showMapLayers = false
 
     /// Feature coordinators are composed once for the signed-in shell. Every
     /// factory is config-safe, so a build without GoogleService-Info.plist
@@ -114,6 +117,14 @@ struct ShellView: View {
         .onChange(of: mapCover, initial: true) { _, cover in
             mapSurface.setActive(ShellMapHost.surfaceActive(cover: cover))
         }
+        .onChange(of: colorScheme, initial: true) { _, scheme in
+            mapSurface.setMapMode(
+                mapLayerPreferences.effectiveMapMode(systemIsDark: scheme == .dark)
+            )
+        }
+        .onAppear {
+            applyMapLayerPreferences()
+        }
         .onChange(of: selectedTab) { _, tab in
             if tab != .map, routes.current == .chatHub {
                 routes = routes.poppingOne()
@@ -142,6 +153,16 @@ struct ShellView: View {
                     onConvoy: requestConvoyCreation
                 )
             }
+        }
+        .sheet(isPresented: $showMapLayers) {
+            MapLayersSheet(
+                preferences: mapLayerPreferences,
+                systemIsDark: colorScheme == .dark,
+                onTrafficChanged: mapSurface.setTrafficEnabled,
+                onMapModeChanged: mapSurface.setMapMode,
+                on3DChanged: mapSurface.set3DEnabled,
+                onBrowsingZoomChanged: mapSurface.setBrowsingZoom
+            )
         }
         .confirmationDialog(
             "liveLocation.stop",
@@ -218,6 +239,13 @@ struct ShellView: View {
                     if case .signedIn = session.state {
                         mapCommunicationControls
                     }
+                }
+                .overlay(alignment: .bottomLeading) {
+                    // Viewing preferences are device-local and do not require
+                    // an account. Keep the control in the config-less shell so
+                    // clone-and-run builds exercise the same stub seam as CI.
+                    MapLayersButton(isPresented: $showMapLayers)
+                        .padding(KccSpacing.s4)
                 }
                 .overlay {
                     if liveLocationFeatureEnabled {
@@ -362,6 +390,15 @@ struct ShellView: View {
         }
         .font(.system(size: 20, weight: .semibold))
         .padding(KccSpacing.s4)
+    }
+
+    private func applyMapLayerPreferences() {
+        mapSurface.setTrafficEnabled(mapLayerPreferences.trafficEnabled)
+        mapSurface.setMapMode(
+            mapLayerPreferences.effectiveMapMode(systemIsDark: colorScheme == .dark)
+        )
+        mapSurface.set3DEnabled(mapLayerPreferences.is3D)
+        mapSurface.setBrowsingZoom(mapLayerPreferences.browsingZoom)
     }
 
     @ViewBuilder
