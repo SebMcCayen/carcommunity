@@ -268,14 +268,18 @@ final class EventManagementTests: XCTestCase {
 
         permission.start()
         coordinator.start()
-        await waitFor { coordinator.isPaidSubscriber && coordinator.canCheckIn(at: Date()) }
+        await waitFor { coordinator.isPaidSubscriber }
+        await waitFor { if case .loaded = coordinator.state { true } else { false } }
+        XCTAssertTrue(coordinator.canCheckIn(at: Date()))
         coordinator.requestCheckIn(using: permission)
         XCTAssertTrue(coordinator.checkInPermissionPending)
         XCTAssertEqual(permission.state, .rationale)
         XCTAssertEqual(repository.checkInCalls, 0)
 
         permission.proceedFromRationale()
-        await waitFor { permission.state == .granted && provider.activeFixStreamCount == 1 }
+        await waitFor { permission.state == .granted }
+        coordinator.resumeCheckInAfterPermissionGrant()
+        await waitFor { provider.activeFixStreamCount == 1 }
         provider.emitFix(LocationFix.of(
             latitude: 57.48,
             longitude: 12.07,
@@ -293,15 +297,17 @@ final class EventManagementTests: XCTestCase {
         let start = Date(timeIntervalSince1970: 2_000_000)
         repository.eventValue = positionedEvent(startsAt: start)
         let subscriptions = FakeSubscriptionRepository(activeSubscription(tier: "supporter"))
+        let provider = StubLocationProvider(authorization: .whileInUse)
         let coordinator = EventDetailCoordinator(
             repository: repository,
             eventId: "e1",
-            locationProvider: StubLocationProvider(authorization: .whileInUse),
+            locationProvider: provider,
             subscriptionRepository: subscriptions
         )
 
         coordinator.start()
         await waitFor { coordinator.isPaidSubscriber }
+        await waitFor { if case .loaded = coordinator.state { true } else { false } }
         XCTAssertFalse(coordinator.canCheckIn(at: start.addingTimeInterval(-30 * 60 - 1)))
         XCTAssertTrue(coordinator.canCheckIn(at: start.addingTimeInterval(-30 * 60)))
     }
