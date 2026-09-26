@@ -6,10 +6,10 @@
 //
 // Deliberate deviations from the Kotlin sources (documented per the parity
 // instructions):
-// - `LiveSessionInfo` omits Android's `convoyAutoStarted`, `mainCar` and
-//   `vehicleId` fields: they exist solely for the convoy coupling and the
-//   drive-recording car stamp, neither of which has ported yet. They are
-//   additive session-node reads and arrive with their slices.
+// - `LiveSessionInfo` projects Android's full `mainCar` down to the image path
+//   needed by drive recording. It also carries owner-only vehicle/convoy ids;
+//   `convoyAutoStarted` remains omitted because iOS teardown does not branch
+//   on that redundant flag.
 // - Times are `Date`/`TimeInterval` instead of epoch millis — the platform's
 //   native clock vocabulary, exactly as `LocationFix` did for `LiveCoordinate`.
 
@@ -68,6 +68,11 @@ struct LiveSessionInfo: Equatable, Sendable {
     let status: LiveSessionStatus
     let duration: LiveSessionDuration?
     let expiresAt: Date?
+    /// Start-time vehicle context used by drive recording. These owner-only
+    /// fields are never exposed through another member's marker.
+    let vehicleId: String?
+    let carImagePath: String?
+    let convoyId: String?
 
     /// Maps the RTDB session node's dictionary value to the model, or nil when
     /// the node is missing a required field. Pure (`[String: Any]` in, model
@@ -82,8 +87,35 @@ struct LiveSessionInfo: Equatable, Sendable {
             sessionId: sessionId,
             status: status,
             duration: LiveSessionDuration.fromKey(map["duration"] as? String),
-            expiresAt: (map["expiresAt"] as? String).flatMap(LiveIsoInstant.parse)
+            expiresAt: (map["expiresAt"] as? String).flatMap(LiveIsoInstant.parse),
+            vehicleId: clean(map["vehicleId"] as? String),
+            carImagePath: clean((map["mainCar"] as? [String: Any])?["imagePath"] as? String),
+            convoyId: clean(map["convoyId"] as? String)
         )
+    }
+
+    init(
+        sessionId: String,
+        status: LiveSessionStatus,
+        duration: LiveSessionDuration?,
+        expiresAt: Date?,
+        vehicleId: String? = nil,
+        carImagePath: String? = nil,
+        convoyId: String? = nil
+    ) {
+        self.sessionId = sessionId
+        self.status = status
+        self.duration = duration
+        self.expiresAt = expiresAt
+        self.vehicleId = vehicleId
+        self.carImagePath = carImagePath
+        self.convoyId = convoyId
+    }
+
+    private static func clean(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else { return nil }
+        return value
     }
 }
 

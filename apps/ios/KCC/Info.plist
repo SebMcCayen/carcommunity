@@ -25,7 +25,11 @@
 	<key>MBXAccessToken</key>
 	<string>$(MAPBOX_ACCESS_TOKEN)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Utan platsåtkomst kan kartan inte visa var du är, och vägbeskrivningar och livedelning fungerar inte.</string>
+	<string>Utan platsåtkomst kan kartan inte visa var du är, och vägbeskrivningar, körinspelning och livedelning fungerar inte.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 </dict>

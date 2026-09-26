@@ -254,6 +254,23 @@ final class LiveLocationCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testInitialNilIsDistinguishedFromAuthoritativeNilSnapshot() async {
+        let repository = FakeLiveLocationRepository()
+        let coordinator = makeCoordinator(repository: repository, provider: StubLocationProvider())
+        coordinator.start()
+        await waitUntil { repository.observedUids == ["uid-1"] }
+
+        XCTAssertFalse(coordinator.hasReceivedSessionSnapshot)
+        XCTAssertEqual(coordinator.sessionSnapshotRevision, 0)
+
+        repository.emitSession(nil)
+
+        await waitUntil { coordinator.hasReceivedSessionSnapshot }
+        XCTAssertNil(coordinator.session)
+        XCTAssertEqual(coordinator.sessionSnapshotRevision, 1)
+    }
+
+    @MainActor
     func testSessionEmissionDrivesIsSharing() async {
         let repository = FakeLiveLocationRepository()
         let coordinator = makeCoordinator(repository: repository, provider: StubLocationProvider())

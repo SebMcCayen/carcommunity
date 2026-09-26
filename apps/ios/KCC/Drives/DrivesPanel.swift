@@ -1,17 +1,18 @@
 import SwiftUI
 
-/// Panel CONTENT for the History tab — the read-only drives list, the iOS
+/// Panel CONTENT for the History tab — the owner drives list, the iOS
 /// slice of Android's `DrivesListScreen` (Phase 12 slice 12's read side).
 /// Rendered inside the shell's `TranslucentShellPanel` like the other panel
 /// tabs.
 ///
 /// This slice: the list of saved drives (title, the neutral stats line, the
 /// round photo of the driven car, and who the drive was driven with).
-/// Recording, delete, share, the search/filter/sort bar, the personal stats
-/// page, the drive detail, and the route-shape thumbnail all arrive with
-/// later slices — the cards are display-only for now.
+/// Recording/save is integrated with the shell's live-session flow; deletion
+/// is available per card. Share, search/filter/sort, personal stats, drive
+/// detail, and route replay remain later slices.
 struct DrivesPanel: View {
     @State private var coordinator: DrivesCoordinator
+    @State private var pendingDeleteId: String?
 
     /// Production wiring: builds the coordinator from the feature-level
     /// factories (the same construction pattern as `ProfileScreen`'s
@@ -47,6 +48,25 @@ struct DrivesPanel: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .task { coordinator.start() }
+        .confirmationDialog(
+            "savedDrives.deleteConfirmTitle",
+            isPresented: Binding(
+                get: { pendingDeleteId != nil },
+                set: { if !$0 { pendingDeleteId = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("savedDrives.deleteConfirmAction", role: .destructive) {
+                guard let id = pendingDeleteId else { return }
+                pendingDeleteId = nil
+                Task { await coordinator.deleteDrive(id: id) }
+            }
+            Button("savedDrives.deleteConfirmCancel", role: .cancel) {
+                pendingDeleteId = nil
+            }
+        } message: {
+            Text("savedDrives.deleteConfirmBody")
+        }
     }
 
     @ViewBuilder
@@ -82,7 +102,10 @@ struct DrivesPanel: View {
             ForEach(drives) { drive in
                 DriveHistoryCard(
                     drive: drive,
-                    carImageURL: drive.carImagePath.flatMap { coordinator.imageURLs[$0] }
+                    carImageURL: drive.carImagePath.flatMap { coordinator.imageURLs[$0] },
+                    isDeleting: coordinator.deletingDriveId == drive.id,
+                    deleteFailed: coordinator.deleteFailureDriveId == drive.id,
+                    onDelete: { pendingDeleteId = drive.id }
                 )
             }
         }
@@ -103,13 +126,16 @@ struct DrivesPanel: View {
 /// One saved drive: the headline (title, or the save date), the neutral
 /// stats line, the round photo of the driven car, and the "drove with" row
 /// for convoy drives — the display half of Android's `DriveCard` (its
-/// share/delete actions and the route-shape thumbnail arrive with later
-/// slices).
+/// deletion is owner-authoritative via `drives-delete`; share, detail and the
+/// route-shape thumbnail arrive with later slices.
 struct DriveHistoryCard: View {
     let drive: SavedDrive
     /// The resolved car-photo URL; nil keeps the placeholder (a missing
     /// picture is cosmetic, never an error state).
     let carImageURL: URL?
+    var isDeleting = false
+    var deleteFailed = false
+    var onDelete: (() -> Void)?
 
     /// Diameter of the round driven-car photo — half the 96pt profile
     /// avatar, which uses the same circular treatment, so the photo reads
@@ -158,6 +184,24 @@ struct DriveHistoryCard: View {
                         .font(.system(size: KccTypeScale.bodySm))
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            if deleteFailed {
+                Text("savedDrives.deleteError")
+                    .font(.system(size: KccTypeScale.bodySm))
+                    .foregroundStyle(KccPalette.errorRed)
+            }
+            if let onDelete {
+                Button(role: .destructive, action: onDelete) {
+                    HStack {
+                        if isDeleting { ProgressView() }
+                        Text(isDeleting
+                             ? "savedDrives.deletingProgress"
+                             : "savedDrives.deleteAction")
+                    }
+                    .frame(minHeight: 44)
+                }
+                .disabled(isDeleting)
             }
         }
         .padding(KccSpacing.s4)
