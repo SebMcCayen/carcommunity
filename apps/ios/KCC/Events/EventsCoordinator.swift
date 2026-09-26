@@ -29,6 +29,7 @@ enum EventsListUiState: Equatable, Sendable {
 @Observable
 final class EventsCoordinator {
     private let repository: EventsRepository
+    private let eventChatRepository: EventChatRepository?
     /// The live stream-consuming task. `nonisolated(unsafe)` so the
     /// nonisolated deinit can cancel it — every mutation happens on the main
     /// actor, and by the time deinit runs no other reference exists, so the
@@ -38,8 +39,9 @@ final class EventsCoordinator {
 
     private(set) var state: EventsListUiState = .loading
 
-    init(repository: EventsRepository) {
+    init(repository: EventsRepository, eventChatRepository: EventChatRepository? = nil) {
         self.repository = repository
+        self.eventChatRepository = eventChatRepository
     }
 
     deinit {
@@ -88,7 +90,11 @@ final class EventsCoordinator {
     /// from the same repository). A fresh coordinator per push, like
     /// Android's per-selection observation keys.
     func makeDetailCoordinator(eventId: String) -> EventDetailCoordinator {
-        EventDetailCoordinator(repository: repository, eventId: eventId)
+        EventDetailCoordinator(
+            repository: repository,
+            eventId: eventId,
+            eventChatRepository: eventChatRepository
+        )
     }
 
     private func apply(_ snapshot: EventsListSnapshot) {
