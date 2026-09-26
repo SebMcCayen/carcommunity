@@ -226,6 +226,71 @@ final class ConvoyFollowMeCoordinatorTests: XCTestCase {
         XCTAssertFalse(coordinator.isToggling)
     }
 
+    func testActivationRemainsLockedUntilAnnouncementCompletes() async {
+        let repository = ConvoyFollowMeRepositoryFake()
+        let coordinator = ConvoyFollowMeCoordinator(repository: repository)
+        let surface = StubMapSurface(initialState: .loaded, autoLoad: false)
+        let announcement = DeferredFollowMeAnnouncement()
+        coordinator.sync(convoy: makeConvoy(), currentUid: "me", positions: [:], surface: surface)
+
+        let activation = Task {
+            await coordinator.setLeading(true) { await announcement.wait() }
+        }
+        await waitUntil { await announcement.hasStarted }
+        XCTAssertTrue(coordinator.isToggling)
+
+        let prematureDeactivation = await coordinator.setLeading(false)
+
+        XCTAssertNil(prematureDeactivation)
+        XCTAssertEqual(repository.toggles, [FollowMeToggle(convoyId: "convoy", active: true)])
+        XCTAssertTrue(coordinator.isToggling)
+
+        await announcement.finish()
+        let activationResult = await activation.value
+        XCTAssertEqual(activationResult, true)
+        XCTAssertFalse(coordinator.isToggling)
+    }
+
+    func testStaleAnnouncementCompletionDoesNotUnlockReplacementSession() async {
+        let repository = ConvoyFollowMeRepositoryFake()
+        let coordinator = ConvoyFollowMeCoordinator(repository: repository)
+        let surface = StubMapSurface(initialState: .loaded, autoLoad: false)
+        let first = makeConvoy()
+        let announcement = DeferredFollowMeAnnouncement()
+        coordinator.sync(convoy: first, currentUid: "me", positions: [:], surface: surface)
+
+        let staleActivation = Task {
+            await coordinator.setLeading(true) { await announcement.wait() }
+        }
+        await waitUntil { await announcement.hasStarted }
+
+        let second = ConvoyItem(
+            convoyId: "other-convoy",
+            title: nil,
+            status: .active,
+            members: first.members,
+            viewer: first.viewer,
+            createdAt: nil
+        )
+        coordinator.sync(convoy: second, currentUid: "me", positions: [:], surface: surface)
+        repository.setLeadingDelay = .milliseconds(100)
+        let currentActivation = Task { await coordinator.setLeading(true) }
+        await waitUntil { repository.toggles.count == 2 }
+        XCTAssertTrue(coordinator.isToggling)
+
+        await announcement.finish()
+        let staleResult = await staleActivation.value
+        XCTAssertNil(staleResult)
+        XCTAssertTrue(
+            coordinator.isToggling,
+            "an old announcement completion must not unlock the new convoy request"
+        )
+
+        let currentResult = await currentActivation.value
+        XCTAssertEqual(currentResult, true)
+        XCTAssertFalse(coordinator.isToggling)
+    }
+
     private func waitUntil(
         timeout: TimeInterval = 2,
         file: StaticString = #filePath,
@@ -265,6 +330,23 @@ private final class FollowMeTestClock: @unchecked Sendable {
 private final class FollowMeActivationRecorder {
     private(set) var count = 0
     func record() async { count += 1 }
+}
+
+private actor DeferredFollowMeAnnouncement {
+    private var started = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    var hasStarted: Bool { started }
+
+    func wait() async {
+        started = true
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func finish() {
+        continuation?.resume()
+        continuation = nil
+    }
 }
 
 private struct FollowMeToggle: Equatable {

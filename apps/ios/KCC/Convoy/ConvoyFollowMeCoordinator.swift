@@ -79,10 +79,17 @@ final class ConvoyFollowMeCoordinator {
         isToggling = true
         let result = await repository.setFollowMe(convoyId: convoyId, active: active)
         guard activeConvoyId == convoyId, sessionGeneration == requestGeneration else { return nil }
-        isToggling = false
         if active, result == true {
             await onActivated?()
         }
+        // Keep the control locked until the activation announcement has
+        // completed. Otherwise a second tap can deactivate the trail while the
+        // first tap is still publishing "Follow me", leaving the convoy with a
+        // stale announcement for an inactive trail. A session can change while
+        // the callback is suspended, so do not let this completion unlock a
+        // newer session's request.
+        guard activeConvoyId == convoyId, sessionGeneration == requestGeneration else { return nil }
+        isToggling = false
         return result
     }
 
