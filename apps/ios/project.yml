@@ -84,9 +84,11 @@ targets:
         # Deliberately NO NSLocationAlwaysAndWhenInUseUsageDescription:
         # Android runs live sharing on a location-typed foreground service
         # WITHOUT ACCESS_BACKGROUND_LOCATION (see LocationSharingService),
-        # and the iOS analogue when that feature ports is the `location`
-        # UIBackgroundMode on a when-in-use grant — not an Always request.
-        NSLocationWhenInUseUsageDescription: "Utan platsåtkomst kan kartan inte visa var du är, och vägbeskrivningar och livedelning fungerar inte."
+        # and the iOS analogue used by the dedicated drive recorder is the
+        # `location` UIBackgroundMode on a when-in-use grant — not Always.
+        NSLocationWhenInUseUsageDescription: "Utan platsåtkomst kan kartan inte visa var du är, och vägbeskrivningar, körinspelning och livedelning fungerar inte."
+        UIBackgroundModes:
+          - location
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kungsbackacarcommunity.app

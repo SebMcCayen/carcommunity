@@ -19,7 +19,7 @@ enum DrivesSnapshot: Equatable, Sendable {
 }
 
 /// Saved-drives access — the iOS port of Android's `DrivesRepository.kt`,
-/// restricted to the HISTORY read slice. Firebase-free protocol so the
+/// for the HISTORY read slice. Firebase-free protocol so the
 /// coordinator and panel are unit-testable with fakes.
 ///
 /// The list is an owner Firestore read: `rides` documents with
@@ -28,7 +28,8 @@ enum DrivesSnapshot: Equatable, Sendable {
 /// gate, so drives saved during a previous membership stay listable). ALL
 /// writes go through the drives.* callables — `drives-save` computes stats
 /// server-side and `drives-delete` removes the Storage files with the doc —
-/// and both arrive with the recording slice, not here.
+/// The recording write seam lives in `DriveRecordingRepository`; delete is a
+/// later slice.
 protocol DrivesRepository: AnyObject, Sendable {
     /// The owner's saved drives, list-sorted. Each call returns a fresh
     /// stream backed by its own snapshot listener; terminating the stream

@@ -7,9 +7,9 @@ import SwiftUI
 ///
 /// This slice: the list of saved drives (title, the neutral stats line, the
 /// round photo of the driven car, and who the drive was driven with).
-/// Recording, delete, share, the search/filter/sort bar, the personal stats
-/// page, the drive detail, and the route-shape thumbnail all arrive with
-/// later slices — the cards are display-only for now.
+/// Recording/save is integrated with the shell's live-session flow; delete,
+/// share, search/filter/sort, personal stats, drive detail, and route replay
+/// remain later slices — the cards are display-only for now.
 struct DrivesPanel: View {
     @State private var coordinator: DrivesCoordinator
 

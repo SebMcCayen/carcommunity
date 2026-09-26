@@ -4,9 +4,8 @@ import FirebaseStorage
 import Foundation
 
 /// ``DrivesRepository`` backed by Cloud Firestore + Cloud Storage — the iOS
-/// port of Android's `FirebaseDrivesRepository.kt` read path (the
-/// `drives-save` / `drives-delete` callables arrive with the recording
-/// slice).
+/// port of Android's `FirebaseDrivesRepository.kt` read path. Recording uses
+/// the focused `FirebaseDriveRecordingRepository`; delete is a later slice.
 ///
 /// The list is an owner equality query (`userId == uid`) on the `rides`
 /// collection, exactly Android's read path — no `order(by:)`, so no

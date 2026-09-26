@@ -221,12 +221,18 @@ final class LiveLocationModelsTests: XCTestCase {
                 "status": "active",
                 "duration": "6h",
                 "expiresAt": "2026-08-30T12:00:00.000Z",
+                "vehicleId": "vehicle-7",
+                "mainCar": ["imagePath": "vehicleImages/u/vehicle-7/cover"],
+                "convoyId": "convoy-2",
             ])
         )
         XCTAssertEqual(info.sessionId, "session-9")
         XCTAssertEqual(info.status, .active)
         XCTAssertEqual(info.duration, .sixHours)
         XCTAssertEqual(info.expiresAt, Date(timeIntervalSince1970: 1_788_091_200))
+        XCTAssertEqual(info.vehicleId, "vehicle-7")
+        XCTAssertEqual(info.carImagePath, "vehicleImages/u/vehicle-7/cover")
+        XCTAssertEqual(info.convoyId, "convoy-2")
     }
 
     func testSessionInfoFromMapToleratesUnknownDurationAndBadExpiry() throws {

@@ -37,7 +37,7 @@ final class CoreLocationProvider: NSObject, LocationProvider {
     private var authContinuations: [UUID: AsyncStream<LocationAuthorization>.Continuation] = [:]
     private var fixContinuations: [UUID: AsyncStream<LocationFix>.Continuation] = [:]
 
-    override init() {
+    init(backgroundEnabled: Bool = false) {
         let manager = CLLocationManager()
         self.manager = manager
         // The synchronous read is safe (and prompt-free); the delegate keeps
@@ -49,6 +49,15 @@ final class CoreLocationProvider: NSObject, LocationProvider {
         // driving app: continuous updates tuned for road use. Automotive
         // hints the chip's fusion without gating updates to driving.
         manager.activityType = .automotiveNavigation
+        if backgroundEnabled {
+            // Dedicated drive-recording providers may continue the explicitly
+            // started recording when the screen locks. The shell's ordinary
+            // map/live provider keeps the default false, so map-puck demand
+            // alone can never turn into background tracking.
+            manager.allowsBackgroundLocationUpdates = true
+            manager.showsBackgroundLocationIndicator = true
+            manager.pausesLocationUpdatesAutomatically = false
+        }
         manager.delegate = self
     }
 
