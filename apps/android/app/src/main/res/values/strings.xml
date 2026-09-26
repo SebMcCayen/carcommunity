@@ -1808,6 +1808,7 @@
     <string name="policeAlert_caption">Polis i närheten!</string>
     <string name="reactionOverlay_dismissAlert">Stäng varningen</string>
     <string name="police_sheetTitle">Polis</string>
+    <string name="police_markerLabel">Polisrapport</string>
     <string name="police_reportedByMember">Rapporterad av en medlem</string>
     <string name="police_stillHereQuestion">Är den kvar?</string>
     <string name="police_stillHereYes">Ja, den är kvar</string>
@@ -1844,6 +1845,7 @@
     <string name="incidents_pickLocationMap">Karta för att välja platsen för händelsen</string>
     <string name="incidents_pickLocationInvalid">Välj en plats på kartan först.</string>
     <string name="incidents_markerLabel">Händelse</string>
+    <string name="incidents_markerClearedFormat">%1$s, möjligen borta</string>
     <string name="incidents_sourceTrafikverket">Källa: Trafikverket</string>
     <string name="incidents_close">Stäng</string>
     <string name="incidents_ageJustNow">Nyss</string>

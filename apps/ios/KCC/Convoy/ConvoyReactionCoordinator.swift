@@ -4,6 +4,8 @@ import Observation
 @MainActor
 @Observable
 final class ConvoyReactionCoordinator {
+    typealias PoliceSuccessHandler = @MainActor @Sendable () async -> Void
+
     private(set) var incomingReaction: ConvoyReactionEvent?
     private(set) var cooldown = ConvoyReactionCooldownState()
     private(set) var sendingKinds: Set<ConvoyReactionKind> = []
@@ -11,6 +13,7 @@ final class ConvoyReactionCoordinator {
     @ObservationIgnored private let repository: ConvoyReactionRepository
     @ObservationIgnored private let nowMilliseconds: @Sendable () -> Int64
     @ObservationIgnored private let makeClientId: @Sendable () -> String
+    @ObservationIgnored private let onPoliceSent: PoliceSuccessHandler?
     @ObservationIgnored private var activeConvoyId: String?
     @ObservationIgnored private var sessionGeneration: UInt64 = 0
     // These tasks are only mutated on the main actor. Marking their storage
@@ -28,11 +31,13 @@ final class ConvoyReactionCoordinator {
         },
         makeClientId: @escaping @Sendable () -> String = {
             UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(32).lowercased()
-        }
+        },
+        onPoliceSent: PoliceSuccessHandler? = nil
     ) {
         self.repository = repository
         self.nowMilliseconds = nowMilliseconds
         self.makeClientId = makeClientId
+        self.onPoliceSent = onPoliceSent
     }
 
     deinit {
@@ -88,6 +93,14 @@ final class ConvoyReactionCoordinator {
             kind: kind,
             clientId: makeClientId()
         )
+        // A server-confirmed police reaction has a durable, non-UI side
+        // effect: publish the associated police pin. It must run even if the
+        // visible convoy changed while the send was in flight. Session guards
+        // below still prevent that old completion from touching cooldown or
+        // sending state in the replacement session.
+        if result == .sent, kind == .police {
+            await onPoliceSent?()
+        }
         // The same convoy can become active again while this request is in
         // flight (A -> nil/B -> A). Its id alone does not identify the session;
         // never let an earlier completion mutate the replacement session.

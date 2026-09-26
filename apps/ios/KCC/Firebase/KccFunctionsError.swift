@@ -71,6 +71,11 @@ struct KccFunctionsError: Error, Equatable, Sendable {
 
 enum KccFunctionsFailureReason: String, Equatable, Sendable {
     case noValidConvoyInvitees = "no_valid_convoy_invitees"
+    case importedIncident = "imported_incident"
+    case incidentInactive = "incident_inactive"
+    case outOfRange = "out_of_range"
+    case positionTooOld = "position_too_old"
+    case voteNotCounted = "vote_not_counted"
 
     static func fromDetails(_ raw: Any?) -> Self? {
         guard let details = raw as? [String: Any],

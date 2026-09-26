@@ -1808,6 +1808,7 @@
     <string name="policeAlert_caption">Police nearby!</string>
     <string name="reactionOverlay_dismissAlert">Dismiss alert</string>
     <string name="police_sheetTitle">Police</string>
+    <string name="police_markerLabel">Police report</string>
     <string name="police_reportedByMember">Reported by a member</string>
     <string name="police_stillHereQuestion">Is it still there?</string>
     <string name="police_stillHereYes">Yes, it\'s still there</string>
@@ -1844,6 +1845,7 @@
     <string name="incidents_pickLocationMap">Map for choosing the incident location</string>
     <string name="incidents_pickLocationInvalid">Pick a spot on the map first.</string>
     <string name="incidents_markerLabel">Incident</string>
+    <string name="incidents_markerClearedFormat">%1$s, possibly cleared</string>
     <string name="incidents_sourceTrafikverket">Source: Trafikverket</string>
     <string name="incidents_close">Close</string>
     <string name="incidents_ageJustNow">Just now</string>

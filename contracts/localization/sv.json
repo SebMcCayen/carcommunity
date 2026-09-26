@@ -1947,6 +1947,7 @@
   },
   "police": {
     "sheetTitle": "Polis",
+    "markerLabel": "Polisrapport",
     "reportedByMember": "Rapporterad av en medlem",
     "stillHereQuestion": "Är den kvar?",
     "stillHereYes": "Ja, den är kvar",
@@ -1985,6 +1986,7 @@
     "pickLocationMap": "Karta för att välja platsen för händelsen",
     "pickLocationInvalid": "Välj en plats på kartan först.",
     "markerLabel": "Händelse",
+    "markerClearedFormat": "%1$s, möjligen borta",
     "sourceTrafikverket": "Källa: Trafikverket",
     "close": "Stäng",
     "ageJustNow": "Nyss",
