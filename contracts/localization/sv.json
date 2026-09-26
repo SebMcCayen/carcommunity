@@ -1011,6 +1011,7 @@
     "filterToggleExpand": "Visa filter",
     "filterToggleCollapse": "Dölj filter",
     "filterActiveCount": "Aktiva filter: %1$d",
+    "filterAll": "Alla",
     "filterSearchLabel": "Sök körningar",
     "filterPeriod": "Period",
     "filterThisWeek": "Denna vecka",

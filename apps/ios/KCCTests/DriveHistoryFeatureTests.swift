@@ -69,10 +69,41 @@ final class DriveHistoryFeatureTests: XCTestCase {
     func testShareSummaryNeverIncludesTitleDateOrRouteCoordinates() {
         let item = drive("private", title: "Home to work", distance: 12_345)
         let text = DriveShareText.summary(for: item)
+        XCTAssertTrue(text.contains(String(localized: "app.name")))
         XCTAssertFalse(text.contains("Home to work"))
         XCTAssertFalse(text.contains("57."))
         XCTAssertFalse(text.contains("12.0"))
         XCTAssertTrue(text.contains("12.3 km"))
+        XCTAssertTrue(text.contains(DriveFormatters.formatDuration(item.durationSeconds)))
+    }
+
+    @MainActor
+    func testLaterRouteRequestWinsWhenEarlierRequestFinishesLast() async {
+        let routes = RouteResponses()
+        let repository = FakeRepository(routeLoader: { try await routes.load($0) })
+        let coordinator = DriveHistoryCoordinator(repository: repository)
+        let routeA = Task { await coordinator.loadRoute(for: self.drive("a")) }
+        await routes.waitUntilRequested("a")
+        let routeB = Task { await coordinator.loadRoute(for: self.drive("b")) }
+        await routes.waitUntilRequested("b")
+
+        let pointB = DriveRoutePoint(latitude: 57.1, longitude: 12.1, timestampMilliseconds: 2)
+        await routes.resolve("b", with: .ready([pointB]))
+        await routeB.value
+        XCTAssertEqual(coordinator.routeState, .ready([pointB]))
+
+        let pointA = DriveRoutePoint(latitude: 57, longitude: 12, timestampMilliseconds: 1)
+        await routes.resolve("a", with: .ready([pointA]))
+        await routeA.value
+        XCTAssertEqual(coordinator.routeState, .ready([pointB]))
+    }
+
+    @MainActor
+    func testCancelledRouteRequestReturnsToIdleInsteadOfUnavailable() async {
+        let repository = FakeRepository(routeLoader: { _ in throw CancellationError() })
+        let coordinator = DriveHistoryCoordinator(repository: repository)
+        await coordinator.loadRoute(for: drive("cancelled"))
+        XCTAssertEqual(coordinator.routeState, .idle)
     }
 
     @MainActor
@@ -95,6 +126,26 @@ final class DriveHistoryFeatureTests: XCTestCase {
         XCTAssertEqual(coordinator.drives.map(\.id), ["b"])
     }
 
+    @MainActor
+    func testFilteredEmptyPageCanLoadLaterMatchingPage() async {
+        let repository = FakeRepository()
+        repository.pages = [
+            DriveHistoryPage(tier: .supporter, drives: [drive("a", title: "Forest")],
+                             hasMore: true, nextCursorRideId: "a", hiddenDriveCount: 0),
+            DriveHistoryPage(tier: .supporter, drives: [drive("b", title: "Coast")],
+                             hasMore: false, nextCursorRideId: nil, hiddenDriveCount: 0),
+        ]
+        let coordinator = DriveHistoryCoordinator(repository: repository)
+        coordinator.filters.query = "Coast"
+        await coordinator.load()
+        XCTAssertTrue(coordinator.visibleDrives.isEmpty)
+        XCTAssertTrue(coordinator.hasMore)
+
+        await coordinator.loadMore()
+
+        XCTAssertEqual(coordinator.visibleDrives.map(\.id), ["b"])
+    }
+
     private func drive(
         _ id: String, title: String? = "Drive", distance: Double? = 1_000
     ) -> SavedDrive {
@@ -109,6 +160,11 @@ final class DriveHistoryFeatureTests: XCTestCase {
 private final class FakeRepository: DriveHistoryRepository, @unchecked Sendable {
     var pages: [DriveHistoryPage] = []
     var deleted: [String] = []
+    private let routeLoader: @Sendable (String) async throws -> DriveRouteReplayState
+
+    init(routeLoader: @escaping @Sendable (String) async throws -> DriveRouteReplayState = { _ in .unavailable }) {
+        self.routeLoader = routeLoader
+    }
 
     func listHistory(cursorRideId: String?, pageSize: Int) async throws -> DriveHistoryPage {
         pages.removeFirst()
@@ -121,6 +177,30 @@ private final class FakeRepository: DriveHistoryRepository, @unchecked Sendable 
                            thisMonthDistanceMeters: 1_000)
     }
     func deleteDrive(rideId: String) async throws { deleted.append(rideId) }
-    func loadRoute(rideId: String) async -> DriveRouteReplayState { .unavailable }
+    func loadRoute(rideId: String) async throws -> DriveRouteReplayState {
+        try await routeLoader(rideId)
+    }
     func imageDownloadURL(for imagePath: String) async -> URL? { nil }
+}
+
+private actor RouteResponses {
+    private var requested: Set<String> = []
+    private var continuations: [String: CheckedContinuation<DriveRouteReplayState, Error>] = [:]
+
+    func load(_ rideId: String) async throws -> DriveRouteReplayState {
+        requested.insert(rideId)
+        return try await withCheckedThrowingContinuation { continuations[rideId] = $0 }
+    }
+
+    func waitUntilRequested(_ rideId: String) async {
+        for _ in 0..<2_000 {
+            if requested.contains(rideId) { return }
+            await Task.yield()
+        }
+        XCTFail("Route request \(rideId) did not start")
+    }
+
+    func resolve(_ rideId: String, with result: DriveRouteReplayState) {
+        continuations.removeValue(forKey: rideId)?.resume(returning: result)
+    }
 }

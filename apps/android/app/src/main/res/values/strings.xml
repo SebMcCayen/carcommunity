@@ -936,6 +936,7 @@
     <string name="savedDrives_filterToggleExpand">Visa filter</string>
     <string name="savedDrives_filterToggleCollapse">Dölj filter</string>
     <string name="savedDrives_filterActiveCount">Aktiva filter: %1$d</string>
+    <string name="savedDrives_filterAll">Alla</string>
     <string name="savedDrives_filterSearchLabel">Sök körningar</string>
     <string name="savedDrives_filterPeriod">Period</string>
     <string name="savedDrives_filterThisWeek">Denna vecka</string>
