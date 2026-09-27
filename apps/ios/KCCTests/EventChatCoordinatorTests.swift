@@ -188,6 +188,30 @@ final class EventChatCoordinatorTests: XCTestCase {
         XCTAssertEqual(EventChat.filterHidden([visible, hidden], hiddenUserIds: ["hidden"]), [visible])
     }
 
+    func testInitialBlockVisibilityErrorFailsClosed() {
+        let blocked = message(id: "newest", author: "blocked")
+        let visible = message(id: "oldest", author: "visible")
+        var accumulator = EventChatMessagesAccumulator(hiddenSettled: false)
+
+        XCTAssertNil(accumulator.updateMessages([blocked, visible]))
+        XCTAssertEqual(accumulator.failHidden(), .failed)
+        XCTAssertNil(accumulator.updateMessages([blocked]))
+    }
+
+    func testBlockVisibilityRecoveryFiltersRetainedWindow() {
+        let blocked = message(id: "newest", author: "blocked")
+        let visible = message(id: "oldest", author: "visible")
+        var accumulator = EventChatMessagesAccumulator(hiddenSettled: false)
+
+        XCTAssertNil(accumulator.updateMessages([blocked, visible]))
+        XCTAssertEqual(accumulator.failHidden(), .failed)
+        XCTAssertEqual(accumulator.updateHidden(["blocked"]), .loaded([visible]))
+
+        // Once settled, transient failures retain the last-known privacy filter.
+        XCTAssertNil(accumulator.failHidden())
+        XCTAssertEqual(accumulator.updateMessages([blocked, visible]), .loaded([visible]))
+    }
+
     @MainActor
     func testLiveStatesAndReload() async {
         let repository = FakeRepository()
@@ -221,6 +245,28 @@ final class EventChatCoordinatorTests: XCTestCase {
         repository.script([.loaded([])])
         coordinator.setAccess(true)
         await waitUntil { coordinator.messagesState == .loaded([]) }
+        XCTAssertEqual(repository.subscribeCount, 2)
+    }
+
+    @MainActor
+    func testQueuedMessagesFromRevokedSubscriptionNeverReplaceFreshState() async {
+        let repository = FakeRepository()
+        let stale = message(id: "stale")
+        let fresh = message(id: "fresh")
+        let coordinator = EventChatCoordinator(repository: repository, eventId: "e1", currentUserId: "me")
+
+        // Queue a value without yielding the main actor, then revoke access so
+        // the old subscription is both cancelled and generation-fenced.
+        repository.script([.loaded([stale])])
+        coordinator.start()
+        coordinator.setAccess(false)
+
+        repository.script([.loaded([fresh])])
+        coordinator.setAccess(true)
+        await waitUntil { coordinator.messagesState == .loaded([fresh]) }
+        await Task.yield()
+
+        XCTAssertEqual(coordinator.messagesState, .loaded([fresh]))
         XCTAssertEqual(repository.subscribeCount, 2)
     }
 

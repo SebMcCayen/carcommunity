@@ -104,18 +104,14 @@ private struct EventChatRegistrationBox: @unchecked Sendable {
 private final class EventChatMessagesListener: @unchecked Sendable {
     private let lock = NSLock()
     private let continuation: AsyncStream<EventChatMessagesState>.Continuation
-    private var rawNewestFirst: [EventChatMessage]?
-    private var hiddenUserIds: Set<String> = []
-    /// Match Flow.combine: never emit a message window until the block mirror
-    /// has produced its first value. This avoids a one-frame blocked-author leak.
-    private var hiddenSettled: Bool
+    private var accumulator: EventChatMessagesAccumulator
 
     private init(
         continuation: AsyncStream<EventChatMessagesState>.Continuation,
         hiddenSettled: Bool
     ) {
         self.continuation = continuation
-        self.hiddenSettled = hiddenSettled
+        accumulator = EventChatMessagesAccumulator(hiddenSettled: hiddenSettled)
     }
 
     static func stream(
@@ -150,30 +146,23 @@ private final class EventChatMessagesListener: @unchecked Sendable {
             continuation.yield(.failed)
             return
         }
-        rawNewestFirst = (snapshot?.documents ?? []).compactMap(Self.message(from:))
-        if hiddenSettled { emitLocked() }
+        let messages = (snapshot?.documents ?? []).compactMap(Self.message(from:))
+        if let state = accumulator.updateMessages(messages) { continuation.yield(state) }
     }
 
     private func onHidden(snapshot: DocumentSnapshot?, error: Error?) {
         lock.lock()
         defer { lock.unlock() }
         if error != nil && snapshot == nil {
-            // Same first-error fallback as FirebaseBlockVisibilityRepository:
-            // settle empty so the screen does not remain loading forever.
-            hiddenSettled = true
-            if rawNewestFirst != nil { emitLocked() }
+            // The hidden set is a privacy boundary. Never interpret an initial
+            // listener failure as an empty set: surface a retryable failure and
+            // retain the raw window until a usable snapshot arrives.
+            if let state = accumulator.failHidden() { continuation.yield(state) }
             return
         }
         let values = snapshot?.get(ChatFirestore.hiddenUidsField) as? [Any] ?? []
-        hiddenUserIds = Set(values.compactMap { $0 as? String }.filter { !$0.isEmpty })
-        hiddenSettled = true
-        if rawNewestFirst != nil { emitLocked() }
-    }
-
-    private func emitLocked() {
-        guard let rawNewestFirst else { return }
-        let filtered = EventChat.filterHidden(rawNewestFirst, hiddenUserIds: hiddenUserIds)
-        continuation.yield(.loaded(Array(filtered.reversed())))
+        let hidden = Set(values.compactMap { $0 as? String }.filter { !$0.isEmpty })
+        if let state = accumulator.updateHidden(hidden) { continuation.yield(state) }
     }
 
     private static func message(from document: QueryDocumentSnapshot) -> EventChatMessage? {
@@ -186,5 +175,42 @@ private final class EventChatMessagesListener: @unchecked Sendable {
             moderationState: .fromWire(document.get("moderationState") as? String),
             createdAt: (document.get("createdAt") as? Timestamp)?.dateValue()
         )
+    }
+}
+
+/// Deterministic state machine behind the paired Firestore listeners.
+///
+/// Raw messages stay private until the first usable block-visibility snapshot.
+/// A transient block-list error after that point keeps the last-known hidden set
+/// in force; a later usable snapshot refreshes the filter and re-emits the latest
+/// raw window.
+struct EventChatMessagesAccumulator {
+    private var rawNewestFirst: [EventChatMessage]?
+    private var hiddenUserIds: Set<String> = []
+    private var hiddenSettled: Bool
+
+    init(hiddenSettled: Bool) {
+        self.hiddenSettled = hiddenSettled
+    }
+
+    mutating func updateMessages(_ messages: [EventChatMessage]) -> EventChatMessagesState? {
+        rawNewestFirst = messages
+        return loadedIfReady()
+    }
+
+    mutating func updateHidden(_ hidden: Set<String>) -> EventChatMessagesState? {
+        hiddenUserIds = hidden
+        hiddenSettled = true
+        return loadedIfReady()
+    }
+
+    mutating func failHidden() -> EventChatMessagesState? {
+        hiddenSettled ? nil : .failed
+    }
+
+    private func loadedIfReady() -> EventChatMessagesState? {
+        guard hiddenSettled, let rawNewestFirst else { return nil }
+        let filtered = EventChat.filterHidden(rawNewestFirst, hiddenUserIds: hiddenUserIds)
+        return .loaded(Array(filtered.reversed()))
     }
 }
