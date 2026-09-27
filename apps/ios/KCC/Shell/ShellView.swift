@@ -44,6 +44,7 @@ struct ShellView: View {
     @State private var chatHubCoordinator: ChatHubCoordinator?
     @State private var crownHuntComposition: CrownHuntComposition?
     @State private var liveLocationCoordinator: LiveLocationCoordinator?
+    @State private var driveRecordingCoordinator: DriveRecordingCoordinator?
     @State private var locationPermissionCoordinator: LocationPermissionCoordinator?
     @State private var startDrivingGarage: GarageCoordinator?
     @State private var convoyManagementCoordinator: ConvoyManagementCoordinator?
@@ -61,6 +62,10 @@ struct ShellView: View {
     @State private var dmTarget: DmRouteTarget?
     @State private var dmCoordinator: ChatCoordinator?
     @State private var locationProvider = CoreLocationProvider()
+    /// Separate demand channel: only an explicit drive recording may keep
+    /// positioning alive after screen lock. Map-puck/live demand stays on the
+    /// foreground-only provider above.
+    @State private var driveLocationProvider = CoreLocationProvider(backgroundEnabled: true)
     @State private var showStartDriving = false
     @State private var showStopConfirmation = false
     @State private var pendingSingleSessionStart = false
@@ -144,6 +149,9 @@ struct ShellView: View {
             else { return }
             clearSessionCommand()
         }
+        .onChange(of: liveLocationCoordinator?.sessionSnapshotRevision, initial: true) { _, _ in
+            reconcileDriveRecording()
+        }
         .sheet(isPresented: $showStartDriving, onDismiss: releaseStartDrivingGarage) {
             if let startDrivingGarage {
                 StartDrivingSheet(
@@ -153,6 +161,11 @@ struct ShellView: View {
                     onStart: requestSingleSessionStart,
                     onConvoy: requestConvoyCreation
                 )
+            }
+        }
+        .sheet(isPresented: driveSummaryIsPresented) {
+            if let driveRecordingCoordinator {
+                DriveRecordingSummarySheet(coordinator: driveRecordingCoordinator)
             }
         }
         .sheet(isPresented: incidentReportIsPresented) {
@@ -1096,6 +1109,8 @@ struct ShellView: View {
         convoyCreateReturnsToList = false
         selectedConvoyId = nil
         liveLocationCoordinator = nil
+        driveRecordingCoordinator?.reset()
+        driveRecordingCoordinator = nil
         startDrivingGarage = nil
         crownHuntComposition = nil
 
@@ -1184,6 +1199,11 @@ struct ShellView: View {
         // Hide access. Starting this listener does not request GPS permission.
         liveLocation.start()
         liveLocationCoordinator = liveLocation
+        driveRecordingCoordinator = DriveRecordingCoordinator(
+            repository: FirebaseDriveRecordingRepository.createIfAvailable(),
+            provider: driveLocationProvider,
+            journal: uid.flatMap { FileDriveRecordingJournal(ownerId: $0) }
+        )
         crownHuntComposition = crownHunt
 
         if pendingCreateIntent?.belongs(to: uid) == true {
@@ -1194,6 +1214,51 @@ struct ShellView: View {
         // Convoy discovery is independent of the map's live-session wiring.
         // Load it last so a slow callable cannot delay location controls.
         await convoyManagement.load()
+        reconcileDriveRecording()
+    }
+
+    private var driveSummaryIsPresented: Binding<Bool> {
+        Binding(
+            get: { driveRecordingCoordinator?.state.presentsSummary == true },
+            set: { _ in }
+        )
+    }
+
+    private func reconcileDriveRecording() {
+        guard let driveRecordingCoordinator, let liveLocationCoordinator,
+              liveLocationCoordinator.hasReceivedSessionSnapshot else { return }
+        let session = liveLocationCoordinator.session
+        if let session {
+            driveRecordingCoordinator.updateContext(driveRecordingContext(session))
+        }
+        guard LiveLocation.isSharing(session, at: Date()), let session else {
+            driveRecordingCoordinator.endSession(
+                context: session.map(driveRecordingContext)
+            )
+            return
+        }
+        driveRecordingCoordinator.start(context: driveRecordingContext(session))
+    }
+
+    private func driveRecordingContext(_ session: LiveSessionInfo) -> DriveRecordingContext {
+        let convoy = session.convoyId.flatMap { id in
+            convoyManagementCoordinator?.snapshot?.convoys.first { $0.convoyId == id }
+        }
+        let members = convoy?.acceptedMembers.compactMap { member -> ConvoyDriveMember? in
+            guard member.uid != signedInUid else { return nil }
+            return ConvoyDriveMember(
+                uid: member.uid,
+                displayName: member.displayName,
+                avatarPath: nil
+            )
+        } ?? []
+        return DriveRecordingContext(
+            sourceSessionId: session.sessionId,
+            vehicleId: session.vehicleId,
+            carImagePath: session.carImagePath,
+            convoyMembers: members,
+            expiresAt: session.expiresAt
+        )
     }
 
     private var signedInDisplayName: String? {

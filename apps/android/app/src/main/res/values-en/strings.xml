@@ -306,7 +306,7 @@
     <string name="map_shareOwnFreeHint">You can share your own position for free.</string>
     <string name="map_liveMarkerFallbackName">Sharing live</string>
     <string name="map_locationNeededTitle">The map needs your location</string>
-    <string name="map_locationPermissionBody">Without location access the map can\'t show where you are, and directions and live sharing won\'t work.</string>
+    <string name="map_locationPermissionBody">Without location access the map can\'t show where you are, and directions, drive recording, and live sharing won\'t work.</string>
     <string name="map_locationServicesOffBody">Location is switched off on your device, so the map can\'t show where you are. Turn it on to use the map fully.</string>
     <string name="map_locationAllow">Allow location</string>
     <string name="map_locationOpenSettings">Open settings</string>

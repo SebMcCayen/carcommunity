@@ -339,7 +339,7 @@
     "shareOwnFreeHint": "You can share your own position for free.",
     "liveMarkerFallbackName": "Sharing live",
     "locationNeededTitle": "The map needs your location",
-    "locationPermissionBody": "Without location access the map can't show where you are, and directions and live sharing won't work.",
+    "locationPermissionBody": "Without location access the map can't show where you are, and directions, drive recording, and live sharing won't work.",
     "locationServicesOffBody": "Location is switched off on your device, so the map can't show where you are. Turn it on to use the map fully.",
     "locationAllow": "Allow location",
     "locationOpenSettings": "Open settings",

@@ -1,11 +1,11 @@
 import Foundation
 
 /// Saved-drives domain — the iOS port of Android's `drives/SavedDrive.kt`,
-/// restricted to the HISTORY read slice: the backend computes all stats
+/// The backend computes all stats
 /// server-side (the `drives-save` callable) and the client only reads
 /// owner-scoped `rides/{rideId}` documents
-/// (contracts/schemas/saved-drives.schema.json `ride`). Recording, save,
-/// delete, share, and the route replay arrive with the recording slice.
+/// (contracts/schemas/saved-drives.schema.json `ride`). Recording and save
+/// live beside this model; share and route replay remain later slices.
 /// Pure Swift so it is unit-testable and Firebase-free.
 struct SavedDrive: Equatable, Sendable, Identifiable {
     /// The `rides/{rideId}` document id.
@@ -94,12 +94,13 @@ struct ConvoyDriveMember: Equatable, Sendable {
     let avatarPath: String?
 }
 
-/// The read half of Android's `ConvoyDriveMembers` wire-shape helper: parses
+/// Android's `ConvoyDriveMembers` wire-shape helper: parses
 /// the stored `convoyMembers` array back into the domain. (The write half —
 /// `toRequestList` for the `drives-save` payload — arrives with the
 /// recording slice.) Pure so the tolerance rules are unit-testable without
 /// Firebase and match the backend
-/// (functions/src/drives/drives-core.ts convoyMembers schema).
+/// (functions/src/drives/drives-core.ts convoyMembers schema). The write half
+/// is extended in `DriveRecordingModels.swift`.
 enum ConvoyDriveMembers {
     /// Backend CONVOY_MEMBERS_MAX parity — a hard cap so a corrupt or
     /// oversized array can never bloat the UI.

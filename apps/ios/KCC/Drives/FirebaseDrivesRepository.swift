@@ -4,9 +4,9 @@ import FirebaseStorage
 import Foundation
 
 /// ``DrivesRepository`` backed by Cloud Firestore + Cloud Storage — the iOS
-/// port of Android's `FirebaseDrivesRepository.kt` read path (the
-/// `drives-save` / `drives-delete` callables arrive with the recording
-/// slice).
+/// port of Android's `FirebaseDrivesRepository.kt` read path. Recording uses
+/// the focused `FirebaseDriveRecordingRepository`; deletion uses the shared
+/// `drives-delete` callable so Storage and Firestore are removed atomically.
 ///
 /// The list is an owner equality query (`userId == uid`) on the `rides`
 /// collection, exactly Android's read path — no `order(by:)`, so no
@@ -27,10 +27,12 @@ import Foundation
 final class FirebaseDrivesRepository: DrivesRepository, @unchecked Sendable {
     private let firestore: Firestore
     private let storage: Storage
+    private let functions: KccFunctionsClient
 
-    private init(firestore: Firestore, storage: Storage) {
+    private init(firestore: Firestore, storage: Storage, functions: KccFunctionsClient) {
         self.firestore = firestore
         self.storage = storage
+        self.functions = functions
     }
 
     func drives(uid: String) -> AsyncStream<DrivesSnapshot> {
@@ -67,6 +69,10 @@ final class FirebaseDrivesRepository: DrivesRepository, @unchecked Sendable {
         try? await storage.reference(withPath: imagePath).downloadURL()
     }
 
+    func deleteDrive(id: String) async throws {
+        _ = try await functions.call("drives-delete", payload: ["rideId": id])
+    }
+
     // MARK: - Factory
 
     private static let ridesCollection = "rides"
@@ -88,7 +94,8 @@ final class FirebaseDrivesRepository: DrivesRepository, @unchecked Sendable {
     /// second application a no-op instead of mutating settings twice (same
     /// guard as `FirebaseUserProfileRepository`).
     static func createIfAvailable() -> DrivesRepository? {
-        guard FirebaseApp.app() != nil else { return nil }
+        guard FirebaseApp.app() != nil, let functions = KccFunctionsClient.createIfAvailable()
+        else { return nil }
         cachedLock.lock()
         defer { cachedLock.unlock() }
         if let cached { return cached }
@@ -104,7 +111,11 @@ final class FirebaseDrivesRepository: DrivesRepository, @unchecked Sendable {
         ) {
             storage.useEmulator(withHost: emulator.host, port: emulator.port)
         }
-        let repository = FirebaseDrivesRepository(firestore: firestore, storage: storage)
+        let repository = FirebaseDrivesRepository(
+            firestore: firestore,
+            storage: storage,
+            functions: functions
+        )
         cached = repository
         return repository
     }

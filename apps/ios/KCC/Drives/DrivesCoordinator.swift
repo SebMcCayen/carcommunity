@@ -23,15 +23,14 @@ enum DrivesUiState: Equatable, Sendable {
     case failed(code: String?)
 }
 
-/// Orchestrates the read-only drives history: subscribes the repository's
+/// Orchestrates the drives history: subscribes the repository's
 /// owner rides stream, folds its emissions into ``DrivesUiState``, and
 /// lazily resolves the denormalized car-photo paths to download URLs for
 /// rendering — the same lazy path→URL split as `ProfileCoordinator`'s
 /// avatar, hardened for a LIST: each path is resolved at most once, with a
-/// negative cache for failures. Pure Swift (no Firebase/SwiftUI
-/// types) so it is unit-testable with a fake repository. Deletion (Android's
-/// `DrivesCoordinator.delete`) goes through the `drives-delete` callable and
-/// arrives with the recording slice.
+/// negative cache for failures. Pure Swift (no Firebase/SwiftUI types) so it
+/// is unit-testable with a fake repository. Deletion goes through
+/// `drives-delete`; the listener remains authoritative for card removal.
 @MainActor
 @Observable
 final class DrivesCoordinator {
@@ -60,6 +59,8 @@ final class DrivesCoordinator {
     /// an error state). Resolved at most once per path (success or failure),
     /// so every later snapshot of an unchanged history re-pays nothing.
     private(set) var imageURLs: [String: URL] = [:]
+    private(set) var deletingDriveId: String?
+    private(set) var deleteFailureDriveId: String?
 
     /// - Parameters:
     ///   - repository: nil when Firebase is not configured in this build.
@@ -94,6 +95,21 @@ final class DrivesCoordinator {
     func reload() {
         guard repository != nil, uid != nil else { return }
         subscribe()
+    }
+
+    func deleteDrive(id: String) async {
+        guard deletingDriveId == nil, let repository else { return }
+        deletingDriveId = id
+        deleteFailureDriveId = nil
+        do {
+            try await repository.deleteDrive(id: id)
+        } catch is CancellationError {
+            deletingDriveId = nil
+            return
+        } catch {
+            deleteFailureDriveId = id
+        }
+        deletingDriveId = nil
     }
 
     private func subscribe() {

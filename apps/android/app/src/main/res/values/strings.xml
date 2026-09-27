@@ -306,7 +306,7 @@
     <string name="map_shareOwnFreeHint">Du kan dela din egen position gratis.</string>
     <string name="map_liveMarkerFallbackName">Delar live</string>
     <string name="map_locationNeededTitle">Kartan behöver din plats</string>
-    <string name="map_locationPermissionBody">Utan platsåtkomst kan kartan inte visa var du är, och vägbeskrivningar och livedelning fungerar inte.</string>
+    <string name="map_locationPermissionBody">Utan platsåtkomst kan kartan inte visa var du är, och vägbeskrivningar, körinspelning och livedelning fungerar inte.</string>
     <string name="map_locationServicesOffBody">Platstjänster är avstängda på din enhet, så kartan kan inte visa var du är. Slå på dem för att använda kartan fullt ut.</string>
     <string name="map_locationAllow">Tillåt plats</string>
     <string name="map_locationOpenSettings">Öppna inställningar</string>

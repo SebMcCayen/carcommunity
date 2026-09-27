@@ -19557,13 +19557,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Utan platsåtkomst kan kartan inte visa var du är, och vägbeskrivningar och livedelning fungerar inte."
+            "value": "Utan platsåtkomst kan kartan inte visa var du är, och vägbeskrivningar, körinspelning och livedelning fungerar inte."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Without location access the map can't show where you are, and directions and live sharing won't work."
+            "value": "Without location access the map can't show where you are, and directions, drive recording, and live sharing won't work."
           }
         }
       }
