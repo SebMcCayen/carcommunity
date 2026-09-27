@@ -30,22 +30,37 @@ enum EventsListUiState: Equatable, Sendable {
 final class EventsCoordinator {
     private let repository: EventsRepository
     private let eventChatRepository: EventChatRepository?
+    private weak var locationProvider: (any LocationProvider)?
+    private let subscriptionRepository: SubscriptionStateRepository?
+    private let uid: String?
     /// The live stream-consuming task. `nonisolated(unsafe)` so the
     /// nonisolated deinit can cancel it — every mutation happens on the main
     /// actor, and by the time deinit runs no other reference exists, so the
     /// unguarded access cannot race.
     @ObservationIgnored
     nonisolated(unsafe) private var subscription: Task<Void, Never>?
+    @ObservationIgnored
+    nonisolated(unsafe) private var tierSubscription: Task<Void, Never>?
 
     private(set) var state: EventsListUiState = .loading
+    private(set) var isPaidSubscriber = false
 
-    init(repository: EventsRepository, eventChatRepository: EventChatRepository? = nil) {
+    init(
+        repository: EventsRepository,
+        eventChatRepository: EventChatRepository? = nil,
+        locationProvider: (any LocationProvider)? = nil,
+        subscriptionRepository: SubscriptionStateRepository? = nil
+    ) {
         self.repository = repository
         self.eventChatRepository = eventChatRepository
+        self.locationProvider = locationProvider
+        self.subscriptionRepository = subscriptionRepository
+        self.uid = repository.currentUserId()
     }
 
     deinit {
         subscription?.cancel()
+        tierSubscription?.cancel()
     }
 
     /// Begins observing on first appearance. Idempotent: a second call (e.g.
@@ -55,6 +70,7 @@ final class EventsCoordinator {
     func start() {
         guard subscription == nil else { return }
         subscribe()
+        subscribeToTierIfNeeded()
     }
 
     /// The "try again" affordance — Android's `reloadKey++`: tears the
@@ -93,8 +109,29 @@ final class EventsCoordinator {
         EventDetailCoordinator(
             repository: repository,
             eventId: eventId,
-            eventChatRepository: eventChatRepository
+            eventChatRepository: eventChatRepository,
+            locationProvider: locationProvider,
+            subscriptionRepository: subscriptionRepository
         )
+    }
+
+    private func subscribeToTierIfNeeded() {
+        guard tierSubscription == nil, let subscriptionRepository, let uid else { return }
+        let stream = subscriptionRepository.subscription(uid: uid)
+        tierSubscription = Task { [weak self] in
+            for await subscription in stream {
+                guard !Task.isCancelled, let self else { return }
+                guard let tier = subscription?.effectiveTier else {
+                    self.isPaidSubscriber = false
+                    continue
+                }
+                self.isPaidSubscriber = tier == .plus || tier == .supporter
+            }
+        }
+    }
+
+    func makeCreateCoordinator() -> EventFormCoordinator {
+        EventFormCoordinator(repository: repository, mode: .create)
     }
 
     private func apply(_ snapshot: EventsListSnapshot) {

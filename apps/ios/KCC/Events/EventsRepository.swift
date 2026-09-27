@@ -31,8 +31,17 @@ struct RsvpWriteError: Error, Equatable, Sendable {
     let code: String?
 }
 
+/// A successful private-detail read (including an honestly absent document)
+/// versus a listener failure. Nil alone cannot carry that distinction safely:
+/// creator edit must never treat a transient read error as blank fields.
+enum EventPrivateDetailSnapshot: Equatable, Sendable {
+    case loaded(EventDetail?)
+    case failed(code: String?)
+}
+
 /// Events read + RSVP operations — the iOS port of Android's
-/// `EventsRepository.kt`, restricted to the list and detail + RSVP slices.
+/// `EventsRepository.kt`, covering list/detail, RSVP, management, roster and
+/// check-in operations.
 /// Firebase-free protocol so the coordinators and screens are unit-testable
 /// with fakes.
 ///
@@ -42,9 +51,9 @@ struct RsvpWriteError: Error, Equatable, Sendable {
 /// `details/private` document is enforced by the Security Rules. Writing an
 /// RSVP is a direct owner write of exactly `{ status, updatedAt }`
 /// (rules-validated, `validRsvpDocument()`); the backend `events-onRsvpWrite`
-/// trigger maintains the public `rsvpCounts` tally. Create/check-in writes
-/// are deliberately absent — they arrive with later slices, through the
-/// ``KccFunctionsClient`` seam.
+/// trigger maintains the public `rsvpCounts` tally. Sensitive management,
+/// roster, and check-in operations use the ``KccFunctionsClient`` seam so
+/// ownership, paid access, geofencing and anti-fraud stay server-authoritative.
 protocol EventsRepository: AnyObject, Sendable {
     /// Published events, soonest first, bounded to
     /// ``Events/publishedEventsQueryLimit``. Each call returns a fresh stream
@@ -57,13 +66,17 @@ protocol EventsRepository: AnyObject, Sendable {
     /// supplies the loading state before the first emission.
     func event(withId eventId: String) -> AsyncStream<EventSummary?>
 
-    /// Member-gated detail; emits nil when denied (non-member) or missing
-    /// (Android's `observeEventDetail`).
-    func eventDetail(eventId: String) -> AsyncStream<EventDetail?>
+    /// Member-gated detail. Successful absence and listener failure remain
+    /// distinct so creator editing is enabled only after a settled read.
+    func eventDetail(eventId: String) -> AsyncStream<EventPrivateDetailSnapshot>
 
     /// The caller's own RSVP answer; nil when they have not responded
     /// (Android's `observeMyRsvp`).
     func myRsvp(eventId: String, uid: String) -> AsyncStream<RsvpStatus?>
+
+    /// The caller's backend-owned attendance progress. Errors emit nothing so
+    /// a transient listener failure cannot erase an already shown check-in.
+    func myAttendance(eventId: String, uid: String) -> AsyncStream<EventAttendanceStatus?>
 
     /// Writes/updates the caller's RSVP answer — a direct owner write of
     /// exactly `{ status, updatedAt: serverTimestamp }` (Android's `setRsvp`).
@@ -75,4 +88,31 @@ protocol EventsRepository: AnyObject, Sendable {
     /// self-contained (the shell passes no identity), so the repository —
     /// which already owns the Firebase seam — answers it instead.
     func currentUserId() -> String?
+
+    func createEvent(_ input: EventFormInput) async throws -> String
+    func updateEvent(eventId: String, input: EventFormInput) async throws
+    func cancelEvent(eventId: String) async throws
+    func attendees(eventId: String) async -> EventAttendeesResult
+    func checkIn(eventId: String, fix: EventCheckInFix) async throws -> EventCheckInResult
+}
+
+/// Defaults keep existing fakes source-compatible while production supplies
+/// every operation. Calling an unsupported operation fails closed.
+extension EventsRepository {
+    func myAttendance(eventId: String, uid: String) -> AsyncStream<EventAttendanceStatus?> {
+        AsyncStream { $0.finish() }
+    }
+    func createEvent(_ input: EventFormInput) async throws -> String {
+        throw KccFunctionsError(code: .unavailable)
+    }
+    func updateEvent(eventId: String, input: EventFormInput) async throws {
+        throw KccFunctionsError(code: .unavailable)
+    }
+    func cancelEvent(eventId: String) async throws {
+        throw KccFunctionsError(code: .unavailable)
+    }
+    func attendees(eventId: String) async -> EventAttendeesResult { .failed }
+    func checkIn(eventId: String, fix: EventCheckInFix) async throws -> EventCheckInResult {
+        throw KccFunctionsError(code: .unavailable)
+    }
 }

@@ -114,6 +114,11 @@ final class LiveLocationCoordinator {
     nonisolated(unsafe) private var sessionSubscription: Task<Void, Never>?
     @ObservationIgnored
     nonisolated(unsafe) private var publishTask: Task<Void, Never>?
+    /// Monotonic within one publishing session. Tests use this non-location
+    /// signal to wait until the async provider drain has accepted a burst;
+    /// it also makes the relay boundary explicit without retaining coordinates.
+    @ObservationIgnored
+    private(set) var receivedFixCount = 0
     @ObservationIgnored
     nonisolated(unsafe) private var fixDrainTask: Task<Void, Never>?
     @ObservationIgnored
@@ -273,9 +278,12 @@ final class LiveLocationCoordinator {
             bufferingPolicy: .bufferingNewest(1)
         )
         let providerStream = provider.fixes()
-        fixDrainTask = Task {
+        receivedFixCount = 0
+        fixDrainTask = Task { [weak self] in
             for await fix in providerStream {
                 if Task.isCancelled { break }
+                guard let self else { break }
+                self.receivedFixCount += 1
                 relayContinuation.yield(fix)
             }
             relayContinuation.finish()
@@ -349,6 +357,7 @@ final class LiveLocationCoordinator {
         fixDrainTask = nil
         publishTask?.cancel()
         publishTask = nil
+        receivedFixCount = 0
         expiryWatchdog?.cancel()
         expiryWatchdog = nil
     }

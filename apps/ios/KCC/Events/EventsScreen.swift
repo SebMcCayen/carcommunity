@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// The upcoming-events list — the iOS slice of Android's `EventsListScreen`
-/// (upcoming tab only; past/create arrive with later slices). Tapping a row
-/// pushes ``EventDetailScreen`` on this feature's own NavigationStack.
+/// The upcoming-events list and create entry point — the iOS slice of
+/// Android's `EventsListScreen` (the past archive remains a later slice).
+/// Tapping a row pushes ``EventDetailScreen`` on this feature's NavigationStack.
 ///
 /// A dumb switch over ``EventsListUiState``: all decisions live in the pure
 /// ``EventsCoordinator``. The `coordinator` is nil in a config-less build
@@ -17,18 +17,37 @@ import SwiftUI
 struct EventsScreen: View {
     /// Nil in a config-less build; the screen degrades to a placeholder.
     let coordinator: EventsCoordinator?
+    let locationProvider: any LocationProvider
+    @State private var createCoordinator: EventFormCoordinator?
 
     var body: some View {
         content
             .navigationTitle(Text("events.title"))
             .task { coordinator?.start() }
+            .toolbar {
+                if let coordinator {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            createCoordinator = coordinator.makeCreateCoordinator()
+                        } label: {
+                            Label("events.createButton", systemImage: "plus")
+                        }
+                    }
+                }
+            }
+            .sheet(item: $createCoordinator) { coordinator in
+                EventFormScreen(
+                    coordinator: coordinator,
+                    locationProvider: locationProvider
+                )
+            }
             // The list→detail push lives INSIDE the events feature: rows are
             // `NavigationLink(value:)`s and this destination resolves them on
             // the same NavigationStack that hosts the list — no shell wiring.
             .navigationDestination(for: EventDetailRoute.self) { route in
                 EventDetailScreen(makeCoordinator: { [weak coordinator] in
                     coordinator?.makeDetailCoordinator(eventId: route.eventId)
-                })
+                }, locationProvider: locationProvider)
             }
     }
 
@@ -166,6 +185,10 @@ private struct EventRow: View {
 
 #Preview {
     NavigationStack {
-        EventsScreen(coordinator: nil)
+        EventsScreen(coordinator: nil, locationProvider: StubLocationProvider())
     }
+}
+
+extension EventFormCoordinator: Identifiable {
+    nonisolated var id: ObjectIdentifier { ObjectIdentifier(self) }
 }

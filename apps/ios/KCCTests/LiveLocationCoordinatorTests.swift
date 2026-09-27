@@ -403,8 +403,11 @@ final class LiveLocationCoordinatorTests: XCTestCase {
         // the bounded relay must keep only the NEWEST, not a backlog.
         for step in 1...4 {
             provider.emitFix(fix(latitude: 57.5 + Double(step) * 0.001, longitude: 12.1))
-            await Task.yield()
         }
+        // Wait for the async provider drain to accept the full burst before
+        // unblocking the network. A bare Task.yield is scheduler-dependent
+        // and could release while the final fix was still upstream.
+        await waitUntil { coordinator.receivedFixCount == 5 }
 
         // Enough wall-clock passes for the min-update floor before the
         // network unblocks.
