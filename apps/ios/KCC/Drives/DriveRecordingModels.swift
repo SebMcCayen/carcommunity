@@ -120,10 +120,19 @@ struct DriveRecorder: Sendable {
     static let minimumSampleInterval: TimeInterval = 2
     static let maximumPlausibleSpeedMetersPerSecond = 55.6
 
+#if DEBUG
+    typealias SegmentEvaluationObserver = @Sendable (
+        _ start: RecordedDrivePoint,
+        _ end: RecordedDrivePoint
+    ) -> Void
+
+    private static let segmentEvaluationObserverLock = NSLock()
+    nonisolated(unsafe) private static var segmentEvaluationObserver: SegmentEvaluationObserver?
+#endif
+
     let startedAt: Date
     private(set) var context: DriveRecordingContext
     private(set) var points: [RecordedDrivePoint] = []
-    private(set) var evaluatedSegmentCount = 0
     private var acceptedDistanceMeters: Double = 0
 
     init(startedAt: Date, context: DriveRecordingContext) {
@@ -164,7 +173,6 @@ struct DriveRecorder: Sendable {
             let delta = Double(point.timestampMilliseconds - previous.timestampMilliseconds) / 1_000
             guard delta >= Self.minimumSampleInterval else { return false }
             acceptedDistanceMeters += Self.segmentDistance(from: previous, to: point)
-            evaluatedSegmentCount += 1
         }
         points.append(point)
         return true
@@ -205,6 +213,12 @@ struct DriveRecorder: Sendable {
     }
 
     static func segmentDistance(from start: RecordedDrivePoint, to end: RecordedDrivePoint) -> Double {
+#if DEBUG
+        segmentEvaluationObserverLock.lock()
+        let observer = segmentEvaluationObserver
+        segmentEvaluationObserverLock.unlock()
+        observer?(start, end)
+#endif
         let delta = Double(end.timestampMilliseconds - start.timestampMilliseconds) / 1_000
         guard delta > 0 else { return 0 }
         let distance = LiveShareCadence.distanceMeters(
@@ -215,6 +229,24 @@ struct DriveRecorder: Sendable {
         )
         return distance / delta <= maximumPlausibleSpeedMetersPerSecond ? distance : 0
     }
+
+#if DEBUG
+    static func withSegmentEvaluationObserver<Result>(
+        _ observer: @escaping SegmentEvaluationObserver,
+        operation: () throws -> Result
+    ) rethrows -> Result {
+        segmentEvaluationObserverLock.lock()
+        precondition(segmentEvaluationObserver == nil, "Only one segment evaluation observer is supported")
+        segmentEvaluationObserver = observer
+        segmentEvaluationObserverLock.unlock()
+        defer {
+            segmentEvaluationObserverLock.lock()
+            segmentEvaluationObserver = nil
+            segmentEvaluationObserverLock.unlock()
+        }
+        return try operation()
+    }
+#endif
 }
 
 extension ConvoyDriveMembers {

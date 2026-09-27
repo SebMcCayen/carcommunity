@@ -30,7 +30,6 @@ final class DriveRecordingModelsTests: XCTestCase {
         let expected = DriveRecorder.totalDistance(recorder.points)
 
         XCTAssertEqual(recorder.summary(endedAt: endedAt).distanceMeters!, expected, accuracy: 0.001)
-        XCTAssertEqual(recorder.evaluatedSegmentCount, recorder.points.count - 1)
         XCTAssertEqual(recorder.request(endedAt: endedAt, title: nil).points, recorder.points)
 
         let restored = DriveRecorder(
@@ -39,36 +38,51 @@ final class DriveRecordingModelsTests: XCTestCase {
             restoring: recorder.points
         )
         XCTAssertEqual(restored.summary(endedAt: endedAt), recorder.summary(endedAt: endedAt))
-        XCTAssertEqual(restored.evaluatedSegmentCount, restored.points.count - 1)
     }
 
     func testLongRouteSummariesDoNoAdditionalSegmentWork() {
+        let firstTimestamp: Int64 = 1_900_000_000_000
         let restoredPoints = (0..<10_000).map { index in
             RecordedDrivePoint(
                 latitude: 57 + Double(index) * 0.000001,
                 longitude: 12,
-                timestampMilliseconds: 1_700_000_000_000 + Int64(index * 2_000)
+                timestampMilliseconds: firstTimestamp + Int64(index * 2_000)
             )
         }
-        let recorder = DriveRecorder(
-            startedAt: start,
-            context: context(),
-            restoring: restoredPoints
-        )
-        let workAfterRestore = recorder.evaluatedSegmentCount
+        let lastTimestamp = restoredPoints.last!.timestampMilliseconds
+        let segmentWork = SegmentWorkCounter()
 
-        for offset in 0..<1_000 {
-            _ = recorder.summary(endedAt: start.addingTimeInterval(TimeInterval(20_000 + offset)))
+        DriveRecorder.withSegmentEvaluationObserver({ start, end in
+            guard start.timestampMilliseconds >= firstTimestamp,
+                  end.timestampMilliseconds <= lastTimestamp
+            else { return }
+            segmentWork.increment()
+        }) {
+            let recorder = DriveRecorder(
+                startedAt: start,
+                context: context(),
+                restoring: restoredPoints
+            )
+            XCTAssertEqual(segmentWork.value, 9_999)
+
+            for offset in 0..<1_000 {
+                _ = recorder.summary(endedAt: start.addingTimeInterval(TimeInterval(20_000 + offset)))
+            }
+
+            // Summary must consume the cached aggregate. If it regresses to
+            // totalDistance(points), this counter increases by 9,999 per call.
+            XCTAssertEqual(segmentWork.value, 9_999)
+            XCTAssertEqual(recorder.points.count, 10_000)
+
+            let canonicalDistance = DriveRecorder.totalDistance(restoredPoints)
+            XCTAssertEqual(segmentWork.value, 19_998)
+            XCTAssertEqual(
+                recorder.summary(endedAt: start.addingTimeInterval(20_000)).distanceMeters!,
+                canonicalDistance,
+                accuracy: 0.001
+            )
+            XCTAssertEqual(segmentWork.value, 19_998)
         }
-
-        XCTAssertEqual(recorder.points.count, 10_000)
-        XCTAssertEqual(workAfterRestore, 9_999)
-        XCTAssertEqual(recorder.evaluatedSegmentCount, workAfterRestore)
-        XCTAssertEqual(
-            recorder.summary(endedAt: start.addingTimeInterval(20_000)).distanceMeters!,
-            DriveRecorder.totalDistance(restoredPoints),
-            accuracy: 0.001
-        )
     }
 
     func testRequestUsesLastFixClockAndCarriesVehicleConvoyAndIdempotencyContext() {
@@ -132,5 +146,22 @@ final class DriveRecordingModelsTests: XCTestCase {
             longitude: longitude,
             timestamp: start.addingTimeInterval(offset)
         )!
+    }
+}
+
+private final class SegmentWorkCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var value: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
+    }
+
+    func increment() {
+        lock.lock()
+        count += 1
+        lock.unlock()
     }
 }
