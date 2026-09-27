@@ -205,6 +205,40 @@
         }
       }
     },
+    "accountStatus.verificationFailedBody": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontostatusen kunde inte kontrolleras. Åtkomsten är begränsad tills anslutningen återställs."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your account status could not be verified. Access is limited until the connection recovers."
+          }
+        }
+      }
+    },
+    "accountStatus.verifying": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontrollerar kontostatus…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking account status…"
+          }
+        }
+      }
+    },
     "addressSearch.back": {
       "extractionState": "manual",
       "localizations": {

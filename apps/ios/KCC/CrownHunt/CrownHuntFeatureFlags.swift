@@ -64,6 +64,25 @@ struct CrownHuntFlags: Equatable, Sendable {
         liveShareScoringEnabled: CrownHuntFeatureFlag.crownHuntLiveShareScoring.contractDefault
     )
 
+    init(featureFlags: FeatureFlags) {
+        liveLocationEnabled = featureFlags.isEnabled(.liveLocation)
+        crownHuntEnabled = featureFlags.isEnabled(.crownHunt)
+        perksEnabled = featureFlags.isEnabled(.crownHuntPerks)
+        liveShareScoringEnabled = featureFlags.isEnabled(.crownHuntLiveShareScoring)
+    }
+
+    init(
+        liveLocationEnabled: Bool,
+        crownHuntEnabled: Bool,
+        perksEnabled: Bool,
+        liveShareScoringEnabled: Bool
+    ) {
+        self.liveLocationEnabled = liveLocationEnabled
+        self.crownHuntEnabled = crownHuntEnabled
+        self.perksEnabled = perksEnabled
+        self.liveShareScoringEnabled = liveShareScoringEnabled
+    }
+
     /// Folds a raw `config/featureFlags` document map onto the flags, taking a
     /// present boolean as-is and every absent/malformed field at its contract
     /// default — the same "degrade to default, never to off" rule as Android's

@@ -4,6 +4,7 @@ import SwiftUI
 struct KCCApp: App {
     private let session: AuthSession
     private let signInCoordinator: SignInCoordinator
+    private let accessSession: AppAccessSession
 
     init() {
         // Null-safe: a checkout without the gitignored GoogleService-Info.plist
@@ -14,6 +15,10 @@ struct KCCApp: App {
 
         let repository = FirebaseAuthRepository.createIfAvailable()
         session = AuthSession(repository: repository)
+        accessSession = AppAccessSession(
+            accessRepository: FirebaseAccountAccessRepository.createIfAvailable(),
+            flagsRepository: FirebaseFeatureFlagsRepository.createIfAvailable()
+        )
         signInCoordinator = SignInCoordinator(
             tokenProvider: repository == nil
                 ? UnavailableTokenProvider()
@@ -24,7 +29,11 @@ struct KCCApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView(session: session, signInCoordinator: signInCoordinator)
+            RootView(
+                session: session,
+                signInCoordinator: signInCoordinator,
+                accessSession: accessSession
+            )
         }
     }
 

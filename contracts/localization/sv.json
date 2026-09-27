@@ -593,7 +593,9 @@
     "appealPlaceholder": "Överklaga beslut (kommer snart)",
     "subscriptionManagementPlaceholder": "Hantera prenumeration (kommande)",
     "accountDeletionPlaceholder": "Ta bort konto (kommande)",
-    "policyLink": "Regler och villkor"
+    "policyLink": "Regler och villkor",
+    "verifying": "Kontrollerar kontostatus…",
+    "verificationFailedBody": "Kontostatusen kunde inte kontrolleras. Åtkomsten är begränsad tills anslutningen återställs."
   },
   "blocking": {
     "blockUser": "Blockera användare",

@@ -593,7 +593,9 @@
     "appealPlaceholder": "Appeal decision (coming soon)",
     "subscriptionManagementPlaceholder": "Manage subscription (coming soon)",
     "accountDeletionPlaceholder": "Delete account (coming soon)",
-    "policyLink": "Rules and terms"
+    "policyLink": "Rules and terms",
+    "verifying": "Checking account status…",
+    "verificationFailedBody": "Your account status could not be verified. Access is limited until the connection recovers."
   },
   "blocking": {
     "blockUser": "Block user",

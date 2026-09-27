@@ -53,28 +53,6 @@ struct EventDetail: Equatable, Sendable {
     let address: String?
 }
 
-/// The single switch for every member-gated UI affordance — the iOS mirror of
-/// Android's `config/MemberGating.kt`. `false` = show and enable member
-/// features for any signed-in user (the current launch posture; the backend
-/// `functions/src/shared/memberGating.ts` and the firestore.rules
-/// `isActiveMember()` switch are flipped together with this).
-///
-/// Threaded as `passesMemberGate`, never as `isActiveMember`: while disabled,
-/// any signed-in, non-suspended user passes. Suspension/deletion are NOT
-/// handled here — the backend owns those regardless of this switch.
-enum MemberGating {
-    /// Mirrors Android `MemberGating.ENABLED` (currently `false`).
-    static let enabled = false
-
-    /// Resolves a member-gated decision. While ``enabled`` is false this
-    /// returns true regardless of entitlement; flipping it back restores the
-    /// exact previous behaviour (`isActiveMember` passthrough) at every call
-    /// site.
-    static func allows(isActiveMember: Bool) -> Bool {
-        !enabled || isActiveMember
-    }
-}
-
 /// Denormalized RSVP tallies stored on the teaser event doc
 /// (events/{id}.rsvpCounts, maintained by the events-onRsvpWrite trigger).
 struct RsvpCounts: Equatable, Sendable {
