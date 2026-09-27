@@ -157,6 +157,18 @@ final class EventDetailCoordinatorTests: XCTestCase {
         }
     }
 
+    private final class FakeEventChatRepository: EventChatRepository, @unchecked Sendable {
+        let enabledScript = StreamScript<Bool>()
+
+        func messages(eventId: String) -> AsyncStream<EventChatMessagesState> {
+            AsyncStream { $0.finish() }
+        }
+        func enabled() -> AsyncStream<Bool> { enabledScript.stream() }
+        func post(eventId: String, message: String) async throws {}
+        func report(eventId: String, messageId: String, reason: ChatReportReason) async throws {}
+        func currentUserId() -> String? { "uid-1" }
+    }
+
     // MARK: - fixtures
 
     private static func event(
@@ -183,11 +195,13 @@ final class EventDetailCoordinatorTests: XCTestCase {
     @MainActor
     private func makeCoordinator(
         repository: FakeEventsRepository,
+        chatRepository: EventChatRepository? = nil,
         passesMemberGate: Bool = true
     ) -> EventDetailCoordinator {
         EventDetailCoordinator(
             repository: repository,
             eventId: "e1",
+            eventChatRepository: chatRepository,
             passesMemberGate: passesMemberGate
         )
     }
@@ -351,6 +365,39 @@ final class EventDetailCoordinatorTests: XCTestCase {
     }
 
     // MARK: - lifecycle gates
+
+    @MainActor
+    func testChatEntryRequiresFeatureFlagPublishedEventAndEligibleRsvp() async {
+        let repository = FakeEventsRepository()
+        repository.teaser.script([Self.event()])
+        repository.rsvp.script([.going])
+        let chat = FakeEventChatRepository()
+        chat.enabledScript.script([true])
+        let coordinator = makeCoordinator(repository: repository, chatRepository: chat)
+
+        coordinator.start()
+        await waitFor { coordinator.canOpenEventChat }
+        XCTAssertNotNil(coordinator.makeEventChatCoordinator())
+
+        repository.rsvp.emit(.notGoing)
+        await waitFor { !coordinator.canOpenEventChat }
+        XCTAssertNil(coordinator.makeEventChatCoordinator())
+    }
+
+    @MainActor
+    func testChatFlagTurnsEntryOffLive() async {
+        let repository = FakeEventsRepository()
+        repository.teaser.script([Self.event()])
+        repository.rsvp.script([.maybe])
+        let chat = FakeEventChatRepository()
+        chat.enabledScript.script([true])
+        let coordinator = makeCoordinator(repository: repository, chatRepository: chat)
+
+        coordinator.start()
+        await waitFor { coordinator.canOpenEventChat }
+        chat.enabledScript.emit(false)
+        await waitFor { !coordinator.canOpenEventChat }
+    }
 
     @MainActor
     func testCanRsvpRequiresAPublishedEvent() async {
