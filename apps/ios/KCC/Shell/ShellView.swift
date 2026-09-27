@@ -15,6 +15,9 @@ struct ShellView: View {
     /// unavailable state renders the bare shell with no profile entry —
     /// Android's "unavailable entries are omitted" hub rule.
     @Bindable var session: AuthSession
+    /// Canonical identity supplied by the auth-state router so direct account
+    /// replacement cannot reuse feature/profile state for the previous user.
+    let authenticatedUid: String?
     let access: AccountAccess
     let featureFlags: FeatureFlags
 
@@ -23,6 +26,22 @@ struct ShellView: View {
     /// ``ShellRouteStack``; every open/Back goes through its ``ShellRouteStack/opening(_:)``
     /// / ``ShellRouteStack/poppingOne()`` reducers rather than ad-hoc state.
     @State private var routes = ShellRouteStack.empty
+
+    init(
+        session: AuthSession,
+        authenticatedUid: String?,
+        access: AccountAccess,
+        featureFlags: FeatureFlags,
+        initialRoute: ShellRoute? = nil,
+        initialTab: ShellTab? = nil
+    ) {
+        self.session = session
+        self.authenticatedUid = authenticatedUid
+        self.access = access
+        self.featureFlags = featureFlags
+        _selectedTab = State(initialValue: initialTab ?? .defaultTab)
+        _routes = State(initialValue: initialRoute.map { .empty.opening($0) } ?? .empty)
+    }
 
     /// The shell's SINGLE map surface, composed once for the whole signed-in
     /// shell and never disposed — Android composes the surface once in
@@ -1426,8 +1445,7 @@ struct ShellView: View {
     }
 
     private var signedInUid: String? {
-        if case .signedIn(let uid, _) = session.state { return uid }
-        return nil
+        authenticatedUid
     }
 
     private var crownFeatureWiringKey: String {
@@ -1539,6 +1557,7 @@ extension ShellTab {
     // Config-less session: the bare shell, no profile entry.
     ShellView(
         session: AuthSession(repository: nil),
+        authenticatedUid: nil,
         access: .unrestrictedCommunity,
         featureFlags: .contractDefaults
     )

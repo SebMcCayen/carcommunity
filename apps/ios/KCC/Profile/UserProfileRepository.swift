@@ -25,3 +25,18 @@ protocol UserProfileRepository: AnyObject, Sendable {
     /// carried out of the failure.
     func avatarDownloadURL(for avatarPath: String) async -> URL?
 }
+
+extension UserProfileRepository {
+    /// Owner-only public profile edit. Fakes that only exercise reads can keep
+    /// the default unavailable implementation.
+    func updateProfile(uid: String, profile: ValidatedProfile) async throws {
+        throw ProfileRepositoryUnavailableError()
+    }
+
+    /// Uploads a sanitized JPEG and persists its owner-scoped Storage path.
+    func uploadAvatar(uid: String, jpegData: Data) async throws {
+        throw ProfileRepositoryUnavailableError()
+    }
+}
+
+private struct ProfileRepositoryUnavailableError: Error {}

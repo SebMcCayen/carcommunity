@@ -19,11 +19,12 @@ struct RootView: View {
             case .unavailable:
                 ShellView(
                     session: session,
+                    authenticatedUid: nil,
                     access: .unrestrictedCommunity,
                     featureFlags: .contractDefaults
                 )
-            case .signedIn:
-                authenticatedContent
+            case .signedIn(let uid, let displayName):
+                authenticatedContent(uid: uid, displayName: displayName)
             }
         }
         .task(id: signedInUid) { accessSession.bind(uid: signedInUid) }
@@ -33,7 +34,7 @@ struct RootView: View {
     }
 
     @ViewBuilder
-    private var authenticatedContent: some View {
+    private func authenticatedContent(uid: String, displayName: String?) -> some View {
         switch accessSession.accountState {
         case .loaded(let access) where access.isRestricted:
             RestrictedAccountScreen(
@@ -42,13 +43,23 @@ struct RootView: View {
                 onSignOut: session.signOut
             )
         case .loaded(let access):
-            ShellView(session: session, access: access, featureFlags: accessSession.flags)
+            AuthenticatedExperience(
+                uid: uid,
+                displayName: displayName,
+                session: session,
+                access: access,
+                featureFlags: accessSession.flags
+            )
+            .id(uid)
         case .unavailable:
-            ShellView(
+            AuthenticatedExperience(
+                uid: uid,
+                displayName: displayName,
                 session: session,
                 access: .unrestrictedCommunity,
                 featureFlags: accessSession.flags
             )
+            .id(uid)
         case .loading:
             ProgressView().accessibilityLabel(Text("accountStatus.verifying"))
         case .failed:

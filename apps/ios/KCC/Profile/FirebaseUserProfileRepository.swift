@@ -61,9 +61,42 @@ final class FirebaseUserProfileRepository: UserProfileRepository, @unchecked Sen
         try? await storage.reference(withPath: avatarPath).downloadURL()
     }
 
+    func updateProfile(uid: String, profile: ValidatedProfile) async throws {
+        var update: [String: Any] = [
+            "displayName": profile.displayName,
+            "bio": profile.bio,
+            "updatedAt": FieldValue.serverTimestamp(),
+        ]
+        update["facebook"] = profile.facebook.map { $0 as Any } ?? FieldValue.delete()
+        update["instagram"] = profile.instagram.map { $0 as Any } ?? FieldValue.delete()
+        update["youtube"] = profile.youtube.map { $0 as Any } ?? FieldValue.delete()
+        try await firestore.collection(Self.usersCollection).document(uid).updateData(update)
+    }
+
+    func uploadAvatar(uid: String, jpegData: Data) async throws {
+        guard !uid.isEmpty, jpegData.count <= Self.avatarMaxBytes else {
+            throw AvatarUploadError.invalidInput
+        }
+        let path = "profileImages/\(uid)/\(UUID().uuidString.lowercased()).jpg"
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        _ = try await storage.reference(withPath: path).putDataAsync(jpegData, metadata: metadata)
+        do {
+            try await firestore.collection(Self.usersCollection).document(uid).updateData([
+                "avatarPath": path,
+                "updatedAt": FieldValue.serverTimestamp(),
+            ])
+        } catch {
+            // Do not leave an unreferenced object when the profile write fails.
+            try? await storage.reference(withPath: path).delete()
+            throw error
+        }
+    }
+
     // MARK: - Factory
 
     private static let usersCollection = "users"
+    private static let avatarMaxBytes = 5 * 1024 * 1024
 
     private static let cachedLock = NSLock()
     nonisolated(unsafe) private static var cached: FirebaseUserProfileRepository?
@@ -109,3 +142,5 @@ final class FirebaseUserProfileRepository: UserProfileRepository, @unchecked Sen
 private struct ListenerBox: @unchecked Sendable {
     let registration: ListenerRegistration
 }
+
+private enum AvatarUploadError: Error { case invalidInput }

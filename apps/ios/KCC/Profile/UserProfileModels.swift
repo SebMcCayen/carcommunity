@@ -21,6 +21,30 @@ struct UserProfile: Equatable, Sendable {
     /// `avatarPath`); a download URL is resolved lazily for rendering, the
     /// same split as Android's `media/StorageImageUrl`.
     let avatarPath: String?
+    /// True once auth.completeOnboarding has stamped the public profile.
+    let onboardingComplete: Bool
+    /// Canonical public social handles. Nil means the field is absent.
+    let facebook: String?
+    let instagram: String?
+    let youtube: String?
+
+    init(
+        displayName: String?,
+        bio: String?,
+        avatarPath: String?,
+        onboardingComplete: Bool = false,
+        facebook: String? = nil,
+        instagram: String? = nil,
+        youtube: String? = nil
+    ) {
+        self.displayName = displayName
+        self.bio = bio
+        self.avatarPath = avatarPath
+        self.onboardingComplete = onboardingComplete
+        self.facebook = facebook
+        self.instagram = instagram
+        self.youtube = youtube
+    }
 
     /// Tolerant decoding of a `users/{uid}` document map: a missing or
     /// wrong-typed field degrades to nil (Android's `getString` semantics in
@@ -31,7 +55,11 @@ struct UserProfile: Equatable, Sendable {
         UserProfile(
             displayName: map["displayName"] as? String,
             bio: map["bio"] as? String,
-            avatarPath: map["avatarPath"] as? String
+            avatarPath: map["avatarPath"] as? String,
+            onboardingComplete: map["onboardingCompletedAt"] != nil,
+            facebook: map["facebook"] as? String,
+            instagram: map["instagram"] as? String,
+            youtube: map["youtube"] as? String
         )
     }
 }
