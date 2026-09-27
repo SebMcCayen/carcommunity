@@ -16,8 +16,9 @@ import Foundation
 ///
 /// Session state is observed per-owner (``ownSessionUpdates(uid:)``). Map
 /// awareness also reads explicit, backend-authorized member markers one uid at
-/// a time and resolves their Storage image paths. Collection scans and nearby
-/// discovery remain outside this protocol.
+/// a time and resolves their Storage image paths. Nearby discovery uses the
+/// bounded `live-listNearby` callable; its returned UIDs are then read one at a
+/// time. The protocol never permits an RTDB collection scan.
 protocol LiveLocationRepository: AnyObject, Sendable {
     /// `live-startSession` — (re)starts the caller's session with a duration.
     ///
@@ -40,6 +41,12 @@ protocol LiveLocationRepository: AnyObject, Sendable {
     /// suspended. Stops the session, removes the latest marker AND deletes
     /// the nearby-discovery doc at once.
     func hideMeNow() async throws
+
+    /// `live-listNearby` — bounded, server-filtered discovery around the map
+    /// viewport. The backend excludes self, expired sessions and block
+    /// relationships in both directions; clients still defensively filter the
+    /// roster before opening the individual RTDB marker reads.
+    func listNearby(center: MapPoint, radiusMeters: Double) async throws -> [NearbyLiveSession]
 
     /// Live view of the caller's own session node at
     /// `liveLocation/{uid}/session` (owner-only read); emits nil when none.
@@ -70,6 +77,11 @@ extension LiveLocationRepository {
     /// yet — see ``startSession(duration:vehicleId:)``).
     func startSession(duration: LiveSessionDuration) async throws {
         try await startSession(duration: duration, vehicleId: nil)
+    }
+
+    /// Keeps focused session-only fakes source-compatible.
+    func listNearby(center: MapPoint, radiusMeters: Double) async throws -> [NearbyLiveSession] {
+        []
     }
 
     /// Keeps existing focused fakes source-compatible; viewer tests can

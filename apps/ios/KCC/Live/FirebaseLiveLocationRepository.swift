@@ -65,6 +65,15 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
         _ = try await functions.call(Self.hideMeNowCallable, payload: [:])
     }
 
+    func listNearby(center: MapPoint, radiusMeters: Double) async throws -> [NearbyLiveSession] {
+        let raw = try await functions.call(Self.listNearbyCallable, payload: [
+            "latitude": center.latitude,
+            "longitude": center.longitude,
+            "radiusMeters": NearbyLiveRadius.clamp(radiusMeters),
+        ])
+        return NearbyLiveParser.parse(raw)
+    }
+
     // MARK: - RTDB reads
 
     func ownSessionUpdates(uid: String) -> AsyncStream<LiveSessionInfo?> {
@@ -152,6 +161,7 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
     private static let updatePositionCallable = "live-updatePosition"
     private static let stopSessionCallable = "live-stopSession"
     private static let hideMeNowCallable = "live-hideMeNow"
+    private static let listNearbyCallable = "live-listNearby"
 
     private static let cachedLock = NSLock()
     nonisolated(unsafe) private static var cached: FirebaseLiveLocationRepository?
