@@ -45,10 +45,10 @@ enum LocationAuthorization: Equatable, Sendable {
     case whileInUse
 
     /// Location even in the background. NOT requested by this app today:
-    /// Android's recording runs on a location-typed foreground service without
-    /// `ACCESS_BACKGROUND_LOCATION`; iOS uses the `location` background mode on
-    /// a when-in-use grant for the dedicated recording provider, not an Always
-    /// request. The case exists so a status the SYSTEM can still report (via Settings)
+    /// Android's recording/live sharing runs on a location-typed foreground
+    /// service without `ACCESS_BACKGROUND_LOCATION`; iOS uses the `location`
+    /// background mode on a when-in-use grant for dedicated session providers,
+    /// not an Always request. The case exists so a status the SYSTEM can still report (via Settings)
     /// maps honestly instead of falling into a default.
     case always
 

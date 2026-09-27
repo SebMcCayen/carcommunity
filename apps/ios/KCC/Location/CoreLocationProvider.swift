@@ -37,6 +37,10 @@ final class CoreLocationProvider: NSObject, LocationProvider {
     private var authContinuations: [UUID: AsyncStream<LocationAuthorization>.Continuation] = [:]
     private var fixContinuations: [UUID: AsyncStream<LocationFix>.Continuation] = [:]
 
+    /// `backgroundEnabled` is reserved for providers owned by an explicit,
+    /// time-bounded drive/live session. It uses Apple's visible blue
+    /// background indicator and never requests Always authorization; a
+    /// foreground-only map provider must keep the default false.
     init(backgroundEnabled: Bool = false) {
         let manager = CLLocationManager()
         self.manager = manager
@@ -50,10 +54,10 @@ final class CoreLocationProvider: NSObject, LocationProvider {
         // hints the chip's fusion without gating updates to driving.
         manager.activityType = .automotiveNavigation
         if backgroundEnabled {
-            // Dedicated drive-recording providers may continue the explicitly
-            // started recording when the screen locks. The shell's ordinary
-            // map/live provider keeps the default false, so map-puck demand
-            // alone can never turn into background tracking.
+            // Dedicated drive/live providers may continue an explicitly
+            // started, time-bounded session when the screen locks. The shell's
+            // ordinary map provider keeps the default false, so map-puck
+            // demand alone can never turn into background tracking.
             manager.allowsBackgroundLocationUpdates = true
             manager.showsBackgroundLocationIndicator = true
             manager.pausesLocationUpdatesAutomatically = false

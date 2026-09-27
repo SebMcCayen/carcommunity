@@ -62,9 +62,14 @@ struct ShellView: View {
     @State private var dmTarget: DmRouteTarget?
     @State private var dmCoordinator: ChatCoordinator?
     @State private var locationProvider = CoreLocationProvider()
+    /// Live sharing is explicitly user-started and time-bounded, so its own
+    /// provider may continue while the app is backgrounded. Keeping it
+    /// separate prevents ordinary map-puck demand from ever gaining that
+    /// behavior and lets Stop/Hide release live GPS independently of drives.
+    @State private var liveLocationProvider = CoreLocationProvider(backgroundEnabled: true)
     /// Separate demand channel: only an explicit drive recording may keep
-    /// positioning alive after screen lock. Map-puck/live demand stays on the
-    /// foreground-only provider above.
+    /// positioning alive after screen lock. It is independent of both the
+    /// foreground map provider and the time-bounded live-sharing provider.
     @State private var driveLocationProvider = CoreLocationProvider(backgroundEnabled: true)
     @State private var showStartDriving = false
     @State private var showStopConfirmation = false
@@ -251,6 +256,9 @@ struct ShellView: View {
             }
         }
         .task(id: signedInUid) { await wireFeatures() }
+        .onDisappear {
+            liveLocationCoordinator?.shutdown()
+        }
         .task(id: convoyReactionSubscriptionKey) {
             convoyReactionCoordinator?.sync(convoyId: convoyReactionTargetId)
         }
@@ -1108,6 +1116,7 @@ struct ShellView: View {
         convoyCreateVehicleId = nil
         convoyCreateReturnsToList = false
         selectedConvoyId = nil
+        liveLocationCoordinator?.shutdown()
         liveLocationCoordinator = nil
         driveRecordingCoordinator?.reset()
         driveRecordingCoordinator = nil
@@ -1199,7 +1208,7 @@ struct ShellView: View {
         liveLocationRepository = liveRepository
         let liveLocation = LiveLocationCoordinator(
             repository: liveRepository,
-            provider: locationProvider,
+            provider: liveLocationProvider,
             canShare: crownHunt.flags.liveLocationEnabled
         )
         // Observe the own session from the shell so a flag-disabled feature

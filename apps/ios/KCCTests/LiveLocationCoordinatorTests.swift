@@ -37,12 +37,14 @@ final class LiveLocationCoordinatorTests: XCTestCase {
         private(set) var startedDurations: [LiveSessionDuration] = []
         private(set) var startedVehicleIds: [String?] = []
         private(set) var publishedCoordinates: [LiveCoordinate] = []
+        private(set) var updateAttemptCount = 0
         private(set) var stopCount = 0
         private(set) var hideCount = 0
         private(set) var observedUids: [String] = []
         var uid: String? = "uid-1"
         /// When set, the next command throws it (then clears).
         var nextError: Error?
+        private var publishErrors: [Error] = []
         private var holdPublishes = false
         private var publishGates: [CheckedContinuation<Void, Never>] = []
         private var holdStart = false
@@ -111,7 +113,13 @@ final class LiveLocationCoordinatorTests: XCTestCase {
         }
 
         func updatePosition(_ coordinate: LiveCoordinate) async throws {
-            if let error = takeErrorSynchronized() { throw error }
+            let publishError: Error? = {
+                lock.lock()
+                defer { lock.unlock() }
+                updateAttemptCount += 1
+                return publishErrors.isEmpty ? nil : publishErrors.removeFirst()
+            }()
+            if let publishError { throw publishError }
             recordSynchronized { publishedCoordinates.append(coordinate) }
             // Simulated slow network: park the publish until released, so
             // tests can pile fixes up behind an in-flight call.
@@ -125,6 +133,10 @@ final class LiveLocationCoordinatorTests: XCTestCase {
                     recordSynchronized { publishGates.append(continuation) }
                 }
             }
+        }
+
+        func enqueuePublishErrors(_ errors: [Error]) {
+            recordSynchronized { publishErrors.append(contentsOf: errors) }
         }
 
         /// Makes every future publish block until ``releasePublishes()``.
@@ -181,7 +193,10 @@ final class LiveLocationCoordinatorTests: XCTestCase {
     private func makeCoordinator(
         repository: FakeLiveLocationRepository?,
         provider: StubLocationProvider,
-        canShare: Bool = true
+        canShare: Bool = true,
+        publishRetryWait: @escaping @Sendable (Int) async throws -> Void = { _ in
+            await Task.yield()
+        }
     ) -> LiveLocationCoordinator {
         let clock = clock
         return LiveLocationCoordinator(
@@ -191,13 +206,17 @@ final class LiveLocationCoordinatorTests: XCTestCase {
             now: { clock.now },
             // Fast expiry-watchdog tick so watchdog behavior is testable
             // without waiting out the production 15 s interval.
-            expiryTickWait: { try await Task.sleep(nanoseconds: 5_000_000) }
+            expiryTickWait: { try await Task.sleep(nanoseconds: 5_000_000) },
+            publishRetryWait: publishRetryWait
         )
     }
 
-    private func activeSession(expiresIn interval: TimeInterval = 6 * 3600) -> LiveSessionInfo {
+    private func activeSession(
+        id: String = "session-1",
+        expiresIn interval: TimeInterval = 6 * 3600
+    ) -> LiveSessionInfo {
         LiveSessionInfo(
-            sessionId: "session-1",
+            sessionId: id,
             status: .active,
             duration: .sixHours,
             expiresAt: clock.now.addingTimeInterval(interval)
@@ -316,6 +335,23 @@ final class LiveLocationCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(provider.activeFixStreamCount, 0)
         XCTAssertTrue(repository.publishedCoordinates.isEmpty)
+    }
+
+    @MainActor
+    func testShutdownReleasesBackgroundDemandImmediately() async {
+        let repository = FakeLiveLocationRepository()
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = makeCoordinator(repository: repository, provider: provider)
+        coordinator.start()
+        repository.emitSession(activeSession())
+        await waitUntil { provider.activeFixStreamCount == 1 }
+
+        coordinator.shutdown()
+
+        await waitUntil { provider.activeFixStreamCount == 0 }
+        repository.emitSession(activeSession(id: "session-after-sign-out"))
+        await Task.yield()
+        XCTAssertEqual(provider.activeFixStreamCount, 0)
     }
 
     @MainActor
@@ -486,6 +522,63 @@ final class LiveLocationCoordinatorTests: XCTestCase {
         await waitUntil { repository.publishedCoordinates.count == 2 }
     }
 
+    @MainActor
+    func testTransientPublishFailuresRetryWithinBoundAndSucceed() async {
+        let repository = FakeLiveLocationRepository()
+        repository.enqueuePublishErrors([
+            KccFunctionsError(code: .unavailable),
+            KccFunctionsError(code: .internalError),
+        ])
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = makeCoordinator(repository: repository, provider: provider)
+        coordinator.start()
+        repository.emitSession(activeSession())
+        await waitUntil { provider.activeFixStreamCount == 1 }
+
+        provider.emitFix(fix(latitude: 57.5, longitude: 12.1))
+
+        await waitUntil { repository.publishedCoordinates.count == 1 }
+        XCTAssertEqual(repository.updateAttemptCount, 3)
+    }
+
+    @MainActor
+    func testPublishRetryStopsAfterThreeTransientAttempts() async {
+        let repository = FakeLiveLocationRepository()
+        repository.enqueuePublishErrors(
+            Array(repeating: KccFunctionsError(code: .unavailable), count: 3)
+        )
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = makeCoordinator(repository: repository, provider: provider)
+        coordinator.start()
+        repository.emitSession(activeSession())
+        await waitUntil { provider.activeFixStreamCount == 1 }
+
+        provider.emitFix(fix(latitude: 57.5, longitude: 12.1))
+
+        await waitUntil { repository.updateAttemptCount == 3 }
+        XCTAssertTrue(repository.publishedCoordinates.isEmpty)
+        await Task.yield()
+        XCTAssertEqual(repository.updateAttemptCount, 3)
+    }
+
+    @MainActor
+    func testTerminalPublishFailureIsNotRetried() async {
+        let repository = FakeLiveLocationRepository()
+        repository.enqueuePublishErrors([KccFunctionsError(code: .permissionDenied)])
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = makeCoordinator(repository: repository, provider: provider)
+        coordinator.start()
+        repository.emitSession(activeSession())
+        await waitUntil { provider.activeFixStreamCount == 1 }
+
+        provider.emitFix(fix(latitude: 57.5, longitude: 12.1))
+
+        await waitUntil { repository.updateAttemptCount == 1 }
+        await Task.yield()
+        XCTAssertEqual(repository.updateAttemptCount, 1)
+        XCTAssertTrue(repository.publishedCoordinates.isEmpty)
+    }
+
     // MARK: - hide me now
 
     @MainActor
@@ -505,7 +598,27 @@ final class LiveLocationCoordinatorTests: XCTestCase {
     }
 
     @MainActor
-    func testFailedStopResumesPublishingWhileStillSharing() async {
+    func testFailedHideStillKeepsBackgroundPublishingDown() async {
+        let repository = FakeLiveLocationRepository()
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = makeCoordinator(repository: repository, provider: provider)
+        coordinator.start()
+        repository.emitSession(activeSession())
+        await waitUntil { provider.activeFixStreamCount == 1 }
+        repository.nextError = FakeError()
+
+        let result = await coordinator.hideMeNow()
+
+        XCTAssertEqual(result, .failed)
+        await waitUntil { provider.activeFixStreamCount == 0 }
+        repository.emitSession(nil)
+        repository.emitSession(activeSession())
+        await Task.yield()
+        XCTAssertEqual(provider.activeFixStreamCount, 0)
+    }
+
+    @MainActor
+    func testFailedStopKeepsPublishingDownForThatSession() async {
         let repository = FakeLiveLocationRepository()
         let provider = StubLocationProvider(authorization: .whileInUse)
         let coordinator = makeCoordinator(repository: repository, provider: provider)
@@ -518,8 +631,14 @@ final class LiveLocationCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(result, .failed)
         XCTAssertEqual(coordinator.actionStatus, .failed)
-        // The session is still active server-side: publishing must resume so
-        // the marker does not silently go stale.
+        // A stop tap is a local privacy boundary even if the callable fails.
+        // Re-emitting the same active backend session must not restart GPS.
+        repository.emitSession(activeSession())
+        await Task.yield()
+        XCTAssertEqual(provider.activeFixStreamCount, 0)
+
+        // A genuinely new session gets fresh user intent and may publish.
+        repository.emitSession(activeSession(id: "session-2"))
         await waitUntil { provider.activeFixStreamCount == 1 }
 
         coordinator.reset()
