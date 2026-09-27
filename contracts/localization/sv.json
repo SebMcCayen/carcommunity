@@ -612,7 +612,10 @@
     "unblockConfirmAction": "Avblockera",
     "unblockCancelAction": "Avbryt",
     "unblockSuccess": "Användaren har avblockerats.",
-    "errorGeneric": "Något gick fel. Försök igen."
+    "errorGeneric": "Något gick fel. Försök igen.",
+    "unavailable": "Blockerade användare är inte tillgängliga just nu.",
+    "retry": "Försök igen",
+    "unknownUser": "Okänd användare"
   },
   "friends": {
     "addSectionTitle": "Lägg till en vän",
