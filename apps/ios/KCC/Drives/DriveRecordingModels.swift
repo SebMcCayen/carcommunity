@@ -123,6 +123,8 @@ struct DriveRecorder: Sendable {
     let startedAt: Date
     private(set) var context: DriveRecordingContext
     private(set) var points: [RecordedDrivePoint] = []
+    private(set) var evaluatedSegmentCount = 0
+    private var acceptedDistanceMeters: Double = 0
 
     init(startedAt: Date, context: DriveRecordingContext) {
         self.startedAt = startedAt
@@ -161,6 +163,8 @@ struct DriveRecorder: Sendable {
         if let previous = points.last {
             let delta = Double(point.timestampMilliseconds - previous.timestampMilliseconds) / 1_000
             guard delta >= Self.minimumSampleInterval else { return false }
+            acceptedDistanceMeters += Self.segmentDistance(from: previous, to: point)
+            evaluatedSegmentCount += 1
         }
         points.append(point)
         return true
@@ -168,13 +172,12 @@ struct DriveRecorder: Sendable {
 
     func summary(endedAt: Date) -> DriveRecordingSummary {
         let duration = max(0, Int(endedAt.timeIntervalSince(startedAt).rounded()))
-        let distance = Self.totalDistance(points)
         return DriveRecordingSummary(
             pointCount: points.count,
             durationSeconds: duration,
-            distanceMeters: points.count >= 2 ? distance : nil,
+            distanceMeters: points.count >= 2 ? acceptedDistanceMeters : nil,
             averageSpeedMetersPerSecond: duration > 0 && points.count >= 2
-                ? distance / Double(duration)
+                ? acceptedDistanceMeters / Double(duration)
                 : nil
         )
     }

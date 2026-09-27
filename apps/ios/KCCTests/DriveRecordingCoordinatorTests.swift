@@ -261,6 +261,79 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
         XCTAssertEqual(repository.requests.map(\.context.sourceSessionId), ["session-a"])
     }
 
+    func testInvalidArgumentCannotRetryAndDiscardClearsExactRouteJournal() async {
+        let url = temporaryJournalURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let journal = FileDriveRecordingJournal(fileURL: url)
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let repository = FakeRepository()
+        repository.failures = [KccFunctionsError(code: .invalidArgument)]
+        let coordinator = DriveRecordingCoordinator(
+            repository: repository,
+            provider: provider,
+            journal: journal,
+            now: { start.addingTimeInterval(10) },
+            retryWait: { _ in await Task.yield() }
+        )
+        coordinator.start(context: context(sessionId: "session-a"))
+        await waitUntil { provider.activeFixStreamCount == 1 }
+        provider.emitFix(fix(start, offset: 1))
+        await waitUntil { coordinator.state.summary?.pointCount == 1 }
+
+        coordinator.endSession(context: context(sessionId: "session-a"))
+        await waitUntil { coordinator.state.presentsSummary }
+        XCTAssertEqual(journal.restore(sessionId: "session-a")?.points.count, 1)
+        XCTAssertFalse(coordinator.state.canRetrySave)
+
+        coordinator.retry()
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertEqual(repository.requests.count, 1)
+
+        coordinator.discardFailed()
+
+        XCTAssertEqual(coordinator.state, .discarded)
+        XCTAssertNil(journal.restore(sessionId: nil))
+        XCTAssertEqual(provider.activeFixStreamCount, 0)
+    }
+
+    func testMalformedResponseDiscardClearsOldRouteAndStartsQueuedSession() async {
+        let url = temporaryJournalURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let journal = FileDriveRecordingJournal(fileURL: url)
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let repository = FakeRepository()
+        repository.failures = [DriveRecordingRepositoryError.malformedResponse]
+        let coordinator = DriveRecordingCoordinator(
+            repository: repository,
+            provider: provider,
+            journal: journal,
+            now: { start.addingTimeInterval(10) },
+            retryWait: { _ in await Task.yield() }
+        )
+        coordinator.start(context: context(sessionId: "session-a"))
+        await waitUntil { provider.activeFixStreamCount == 1 }
+        provider.emitFix(fix(start, offset: 1))
+        await waitUntil { coordinator.state.summary?.pointCount == 1 }
+        coordinator.endSession(context: context(sessionId: "session-a"))
+        coordinator.start(context: context(sessionId: "session-b"))
+        await waitUntil { coordinator.state.presentsSummary }
+        XCTAssertFalse(coordinator.state.canRetrySave)
+
+        coordinator.discardFailed()
+
+        await waitUntil {
+            if case .recording = coordinator.state {
+                return provider.activeFixStreamCount == 1
+            }
+            return false
+        }
+        XCTAssertEqual(repository.requests.map(\.context.sourceSessionId), ["session-a"])
+        XCTAssertNil(journal.restore(sessionId: "session-a"))
+        XCTAssertEqual(journal.restore(sessionId: "session-b")?.points, [])
+    }
+
     func testEndedQueuedSessionDoesNotImplicitlyRetryFailedDrive() async {
         let provider = StubLocationProvider(authorization: .whileInUse)
         let repository = FakeRepository()

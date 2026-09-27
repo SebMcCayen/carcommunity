@@ -17,6 +17,60 @@ final class DriveRecordingModelsTests: XCTestCase {
         XCTAssertLessThan(recorder.summary(endedAt: start.addingTimeInterval(4)).distanceMeters!, 50)
     }
 
+    func testIncrementalSummaryMatchesCanonicalDistanceAndRestoredRecorder() {
+        var recorder = DriveRecorder(startedAt: start, context: context())
+        let fixes = [
+            fix(latitude: 57, longitude: 12, offset: 0),
+            fix(latitude: 57.0001, longitude: 12, offset: 2),
+            fix(latitude: 58, longitude: 12, offset: 4), // retained spike, excluded distance
+            fix(latitude: 58.0001, longitude: 12, offset: 6),
+        ]
+        for fix in fixes { XCTAssertTrue(recorder.add(fix)) }
+        let endedAt = start.addingTimeInterval(10)
+        let expected = DriveRecorder.totalDistance(recorder.points)
+
+        XCTAssertEqual(recorder.summary(endedAt: endedAt).distanceMeters!, expected, accuracy: 0.001)
+        XCTAssertEqual(recorder.evaluatedSegmentCount, recorder.points.count - 1)
+        XCTAssertEqual(recorder.request(endedAt: endedAt, title: nil).points, recorder.points)
+
+        let restored = DriveRecorder(
+            startedAt: start,
+            context: context(),
+            restoring: recorder.points
+        )
+        XCTAssertEqual(restored.summary(endedAt: endedAt), recorder.summary(endedAt: endedAt))
+        XCTAssertEqual(restored.evaluatedSegmentCount, restored.points.count - 1)
+    }
+
+    func testLongRouteSummariesDoNoAdditionalSegmentWork() {
+        let restoredPoints = (0..<10_000).map { index in
+            RecordedDrivePoint(
+                latitude: 57 + Double(index) * 0.000001,
+                longitude: 12,
+                timestampMilliseconds: 1_700_000_000_000 + Int64(index * 2_000)
+            )
+        }
+        let recorder = DriveRecorder(
+            startedAt: start,
+            context: context(),
+            restoring: restoredPoints
+        )
+        let workAfterRestore = recorder.evaluatedSegmentCount
+
+        for offset in 0..<1_000 {
+            _ = recorder.summary(endedAt: start.addingTimeInterval(TimeInterval(20_000 + offset)))
+        }
+
+        XCTAssertEqual(recorder.points.count, 10_000)
+        XCTAssertEqual(workAfterRestore, 9_999)
+        XCTAssertEqual(recorder.evaluatedSegmentCount, workAfterRestore)
+        XCTAssertEqual(
+            recorder.summary(endedAt: start.addingTimeInterval(20_000)).distanceMeters!,
+            DriveRecorder.totalDistance(restoredPoints),
+            accuracy: 0.001
+        )
+    }
+
     func testRequestUsesLastFixClockAndCarriesVehicleConvoyAndIdempotencyContext() {
         let member = ConvoyDriveMember(uid: " other ", displayName: " Ada ", avatarPath: nil)
         var recorder = DriveRecorder(

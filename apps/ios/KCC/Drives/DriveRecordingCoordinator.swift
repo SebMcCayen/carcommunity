@@ -8,7 +8,7 @@ enum DriveRecordingState: Equatable, Sendable {
     /// not a presented state: normal session teardown never waits on a dialog.
     case saving(DriveRecordingSummary)
     /// The bounded background save failed. This is the only state that forces
-    /// a prompt, preserving the exact route for an idempotent retry.
+    /// a prompt, preserving the exact route until an explicit retry or discard.
     case failed(DriveRecordingSummary, code: KccFunctionsErrorCode?)
     case kept(rideId: String)
     case discarded
@@ -23,6 +23,11 @@ enum DriveRecordingState: Equatable, Sendable {
         case .recording(let summary), .saving(let summary), .failed(let summary, _): summary
         case .idle, .kept, .discarded: nil
         }
+    }
+
+    var canRetrySave: Bool {
+        guard case .failed(_, let code) = self else { return false }
+        return code == .internalError || code == .unavailable
     }
 }
 
@@ -171,16 +176,17 @@ final class DriveRecordingCoordinator {
         autoSave(summary: summary)
     }
 
-    /// Manual retry for the only visible end-of-session prompt: a definitive
-    /// background save failure. Uses the same sourceSessionId and frozen end time.
+    /// Manual retry for a transient background save failure. Uses the same
+    /// sourceSessionId and frozen end time.
     func retry() {
-        guard case .failed(let summary, _) = state, saveTask == nil else { return }
+        guard case .failed(let summary, _) = state,
+              state.canRetrySave, saveTask == nil else { return }
         state = .saving(summary)
         autoSave(summary: summary)
     }
 
-    /// Closes a permanent refusal. No drive was stored, so clear the private
-    /// route rather than leaving an impossible retry prompt forever.
+    /// Discards a failed save of any kind. No drive was stored, so clear the
+    /// private route and journal before releasing a queued session.
     func discardFailed() {
         guard case .failed = state, saveTask == nil else { return }
         releaseRecording(clearJournal: true)

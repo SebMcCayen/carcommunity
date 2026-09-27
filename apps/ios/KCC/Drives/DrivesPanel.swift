@@ -1,5 +1,24 @@
 import SwiftUI
 
+enum DriveDeleteStatus: Equatable {
+    case ready
+    case deleting
+
+    var catalogKey: String {
+        switch self {
+        case .ready: "savedDrives.deleteAction"
+        case .deleting: "savedDrives.deletingProgress"
+        }
+    }
+
+    var localizedKey: LocalizedStringKey {
+        switch self {
+        case .ready: "savedDrives.deleteAction"
+        case .deleting: "savedDrives.deletingProgress"
+        }
+    }
+}
+
 /// Panel CONTENT for the History tab — the owner drives list, the iOS
 /// slice of Android's `DrivesListScreen` (Phase 12 slice 12's read side).
 /// Rendered inside the shell's `TranslucentShellPanel` like the other panel
@@ -195,12 +214,11 @@ struct DriveHistoryCard: View {
                 Button(role: .destructive, action: onDelete) {
                     HStack {
                         if isDeleting { ProgressView() }
-                        Text(isDeleting
-                             ? "savedDrives.deletingProgress"
-                             : "savedDrives.deleteAction")
+                        Text(deleteStatus.localizedKey)
                     }
                     .frame(minHeight: 44)
                 }
+                .accessibilityLabel(Text(deleteStatus.localizedKey))
                 .disabled(isDeleting)
             }
         }
@@ -208,6 +226,10 @@ struct DriveHistoryCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
+    }
+
+    private var deleteStatus: DriveDeleteStatus {
+        isDeleting ? .deleting : .ready
     }
 
     /// The drive's title, or the save date for an untitled drive, or the

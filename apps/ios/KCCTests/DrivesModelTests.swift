@@ -13,6 +13,30 @@ final class DrivesModelTests: XCTestCase {
     /// repository passes the Firestore `Timestamp` conversion instead).
     private let asDate: (Any?) -> Date? = { $0 as? Date }
 
+    func testDeleteStatusUsesLocalizedKeysForVisibleAndAccessibilityLabels() throws {
+        XCTAssertEqual(DriveDeleteStatus.ready.catalogKey, "savedDrives.deleteAction")
+        XCTAssertEqual(DriveDeleteStatus.deleting.catalogKey, "savedDrives.deletingProgress")
+
+        let catalogURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("KCC/Resources/Localizable.xcstrings")
+        let data = try Data(contentsOf: catalogURL)
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let strings = try XCTUnwrap(root["strings"] as? [String: Any])
+        for status in [DriveDeleteStatus.ready, .deleting] {
+            let entry = try XCTUnwrap(strings[status.catalogKey] as? [String: Any])
+            let localizations = try XCTUnwrap(entry["localizations"] as? [String: Any])
+            for locale in ["en", "sv"] {
+                let localization = try XCTUnwrap(localizations[locale] as? [String: Any])
+                let unit = try XCTUnwrap(localization["stringUnit"] as? [String: Any])
+                let value = try XCTUnwrap(unit["value"] as? String)
+                XCTAssertFalse(value.isEmpty)
+                XCTAssertNotEqual(value, status.catalogKey)
+            }
+        }
+    }
+
     private func drive(
         id: String = "ride-1",
         title: String? = nil,
