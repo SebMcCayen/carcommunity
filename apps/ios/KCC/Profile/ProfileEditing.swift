@@ -119,5 +119,6 @@ final class ProfileEditCoordinator {
         catch { status = .failed }
     }
 
+    func markUploadFailed() { if status != .saving && status != .uploading { status = .failed } }
     func reset() { if status != .saving && status != .uploading { status = .idle } }
 }

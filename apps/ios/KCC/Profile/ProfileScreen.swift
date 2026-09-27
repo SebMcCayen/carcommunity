@@ -1,3 +1,4 @@
+import ImageIO
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -193,7 +194,7 @@ struct ProfileScreen: View {
         defer { pickedPhoto = nil }
         guard let raw = try? await item.loadTransferable(type: Data.self),
               let jpeg = AvatarImageProcessor.jpegData(from: raw)
-        else { editor.reset(); return }
+        else { editor.markUploadFailed(); return }
         await editor.uploadAvatar(jpegData: jpeg)
     }
 
@@ -205,13 +206,20 @@ struct ProfileScreen: View {
 
 enum AvatarImageProcessor {
     static func jpegData(from data: Data, maxDimension: CGFloat = 2048) -> Data? {
-        guard let image = UIImage(data: data), image.size.width > 0, image.size.height > 0 else { return nil }
-        let scale = min(1, maxDimension / max(image.size.width, image.size.height))
-        let size = CGSize(width: max(1, image.size.width * scale), height: max(1, image.size.height * scale))
-        let renderer = UIGraphicsImageRenderer(size: size)
-        let normalized = renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
+        // Bound the encoded input before ImageIO sees it, then request a thumbnail
+        // so a huge-pixel image is never fully decompressed into app memory.
+        guard !data.isEmpty, data.count <= 50 * 1024 * 1024,
+              let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: Int(maxDimension),
+              ] as CFDictionary)
+        else { return nil }
+        let normalized = UIImage(cgImage: image)
         for quality in stride(from: CGFloat(0.85), through: CGFloat(0.35), by: -0.1) {
-            if let encoded = normalized.jpegData(compressionQuality: quality), encoded.count <= 5 * 1024 * 1024 {
+            if let encoded = normalized.jpegData(compressionQuality: quality),
+               encoded.count <= 5 * 1024 * 1024 {
                 return encoded
             }
         }
