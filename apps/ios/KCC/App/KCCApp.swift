@@ -5,6 +5,7 @@ struct KCCApp: App {
     private let session: AuthSession
     private let signInCoordinator: SignInCoordinator
     private let accessSession: AppAccessSession
+    private let restrictedPrivacyCoordinator: LiveLocationCoordinator
 
     init() {
         // Null-safe: a checkout without the gitignored GoogleService-Info.plist
@@ -19,6 +20,15 @@ struct KCCApp: App {
             accessRepository: FirebaseAccountAccessRepository.createIfAvailable(),
             flagsRepository: FirebaseFeatureFlagsRepository.createIfAvailable()
         )
+        // A restricted account must retain the authenticated privacy escape
+        // hatch even though the feature shell is removed. This coordinator
+        // never requests location: it only observes the user's current live
+        // session and can invoke the always-allowed hide command.
+        restrictedPrivacyCoordinator = LiveLocationCoordinator(
+            repository: FirebaseLiveLocationRepository.createIfAvailable(),
+            provider: StubLocationProvider(),
+            canShare: false
+        )
         signInCoordinator = SignInCoordinator(
             tokenProvider: repository == nil
                 ? UnavailableTokenProvider()
@@ -32,7 +42,8 @@ struct KCCApp: App {
             RootView(
                 session: session,
                 signInCoordinator: signInCoordinator,
-                accessSession: accessSession
+                accessSession: accessSession,
+                restrictedPrivacyCoordinator: restrictedPrivacyCoordinator
             )
         }
     }

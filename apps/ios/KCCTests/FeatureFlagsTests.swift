@@ -45,4 +45,31 @@ final class FeatureFlagsTests: XCTestCase {
             )
         ))
     }
+
+    func testLiveChatFlagTransitionClosesEveryChatSurface() {
+        let enabled = FeatureFlags.resolve(from: ["chat": true])
+        let disabled = FeatureFlags.resolve(from: ["chat": false])
+
+        XCTAssertTrue(FeatureGate.isAvailable(
+            flags: enabled, flag: .chat, memberGated: false,
+            access: .unrestrictedCommunity
+        ))
+        XCTAssertFalse(FeatureGate.isAvailable(
+            flags: disabled, flag: .chat, memberGated: false,
+            access: .unrestrictedCommunity
+        ))
+    }
+
+    func testSocialSharingFlagControlsDriveShareActions() {
+        XCTAssertTrue(FeatureGate.isAvailable(
+            flags: .contractDefaults, flag: .socialSharing, memberGated: false,
+            access: .unrestrictedCommunity
+        ))
+        XCTAssertFalse(FeatureGate.isAvailable(
+            flags: FeatureFlags.resolve(from: ["socialSharing": false]),
+            flag: .socialSharing,
+            memberGated: false,
+            access: .unrestrictedCommunity
+        ))
+    }
 }

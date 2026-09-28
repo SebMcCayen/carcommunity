@@ -3,6 +3,7 @@ import SwiftUI
 struct RestrictedAccountScreen: View {
     @Environment(\.openURL) private var openURL
     let access: AccountAccess?
+    @Bindable var privacyCoordinator: LiveLocationCoordinator
     let onSignOut: () -> Void
 
     var body: some View {
@@ -27,6 +28,20 @@ struct RestrictedAccountScreen: View {
                 policyButton("settings.privacyPolicy", urlKey: "url.privacy")
             }
 
+            Button {
+                Task { await privacyCoordinator.hideMeNow() }
+            } label: {
+                Label("liveLocation.hideNow", systemImage: "location.slash.fill")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(privacyCoordinator.actionStatus == .working)
+
+            if privacyCoordinator.actionStatus == .failed {
+                Text("liveLocation.error")
+                    .foregroundStyle(KccPalette.errorRed)
+            }
+
             // These remain visible but disabled until their dedicated iOS
             // slices land, matching Android's existing status placeholders.
             Text("accountStatus.subscriptionManagementPlaceholder")
@@ -39,6 +54,10 @@ struct RestrictedAccountScreen: View {
         .padding(KccSpacing.s6)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.background, ignoresSafeAreaEdges: .all)
+        .task {
+            privacyCoordinator.canShare = false
+            privacyCoordinator.start()
+        }
     }
 
     private var bodyKey: LocalizedStringKey {

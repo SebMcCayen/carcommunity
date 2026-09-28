@@ -274,6 +274,13 @@ struct ShellView: View {
         .task(id: convoyFollowMeSubscriptionKey) {
             syncFollowMe()
         }
+        .onDisappear {
+            // RootView removes the entire shell on sign-out or when a live
+            // account update becomes restricted. Stop exact-location and
+            // background drive collection synchronously during that swap.
+            liveLocationCoordinator?.standDownForRestrictedAccess()
+            driveRecordingCoordinator?.reset()
+        }
     }
 
     /// Per-tab foreground content. The persistent map is owned by `body`, so
@@ -411,7 +418,14 @@ struct ShellView: View {
             // The read-only drives history (Android's DrivesListScreen). The
             // panel wires itself (repository + uid) at the feature level, so
             // the shell stays argument-free here.
-            panelTab { DrivesPanel() }
+            panelTab {
+                DrivesPanel(sharingEnabled: FeatureGate.isAvailable(
+                    flags: featureFlags,
+                    flag: .socialSharing,
+                    memberGated: false,
+                    access: access
+                ))
+            }
         case .social:
             panelTab {
                 SocialHubPanel(
@@ -537,8 +551,12 @@ struct ShellView: View {
                                 Label("shell.back", systemImage: "chevron.backward")
                             }
                         }
-                }
+                    }
             }
+            // A live chat-flag change must invalidate NavigationStack's
+            // current detail/chat destination, not only replace the list's
+            // repository behind an already-open child view.
+            .id(chatFeatureWiringKey)
         case .leaderboard:
             routeNavigation {
                 LeaderboardScreen(coordinator: leaderboardCoordinator)
@@ -1159,7 +1177,7 @@ struct ShellView: View {
         )
         incidentMap.setTrafficAlertsEnabled(mapLayerPreferences.trafficAlertsEnabled)
         incidentMapCoordinator = incidentMap
-        let eventChat = FirebaseEventChatRepository.createIfAvailable()
+        let eventChat = chatEnabled ? FirebaseEventChatRepository.createIfAvailable() : nil
         eventsCoordinator = FirebaseEventsRepository.createIfAvailable().map {
             EventsCoordinator(
                 repository: $0,
@@ -1275,6 +1293,19 @@ struct ShellView: View {
             convoyRepository: FirebaseConvoyChatRepository.createIfAvailable(),
             chatRepliesEnabled: featureFlags.isEnabled(.chatReplies)
         ) : nil
+        // Event detail/chat lives under its own NavigationStack. Rebuild the
+        // list composition as well; the view identity key above pops any
+        // already-open detail/chat destination before the old repository can
+        // be used again.
+        eventsCoordinator = FirebaseEventsRepository.createIfAvailable().map {
+            EventsCoordinator(
+                repository: $0,
+                eventChatRepository: enabled
+                    ? FirebaseEventChatRepository.createIfAvailable() : nil,
+                locationProvider: locationProvider,
+                subscriptionRepository: FirebaseSubscriptionStateRepository.createIfAvailable()
+            )
+        }
     }
 
     private var driveSummaryIsPresented: Binding<Bool> {

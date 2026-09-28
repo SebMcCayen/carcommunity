@@ -9,6 +9,7 @@ struct RootView: View {
     @Bindable var session: AuthSession
     let signInCoordinator: SignInCoordinator
     @Bindable var accessSession: AppAccessSession
+    @Bindable var restrictedPrivacyCoordinator: LiveLocationCoordinator
 
     var body: some View {
         Group {
@@ -35,7 +36,11 @@ struct RootView: View {
     private var authenticatedContent: some View {
         switch accessSession.accountState {
         case .loaded(let access) where access.isRestricted:
-            RestrictedAccountScreen(access: access, onSignOut: session.signOut)
+            RestrictedAccountScreen(
+                access: access,
+                privacyCoordinator: restrictedPrivacyCoordinator,
+                onSignOut: session.signOut
+            )
         case .loaded(let access):
             ShellView(session: session, access: access, featureFlags: accessSession.flags)
         case .unavailable:
@@ -50,7 +55,11 @@ struct RootView: View {
             // Fail closed in the client until the live listener recovers. The
             // policy/support surface remains reachable instead of exposing
             // feature UI from stale or unknown account status.
-            RestrictedAccountScreen(access: nil, onSignOut: session.signOut)
+            RestrictedAccountScreen(
+                access: nil,
+                privacyCoordinator: restrictedPrivacyCoordinator,
+                onSignOut: session.signOut
+            )
         }
     }
 
