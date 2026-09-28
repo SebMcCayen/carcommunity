@@ -556,7 +556,7 @@ struct ShellView: View {
             // A live chat-flag change must invalidate NavigationStack's
             // current detail/chat destination, not only replace the list's
             // repository behind an already-open child view.
-            .id(chatFeatureWiringKey)
+            .id(eventChatFeatureWiringKey)
         case .leaderboard:
             routeNavigation {
                 LeaderboardScreen(coordinator: leaderboardCoordinator)
@@ -1114,8 +1114,12 @@ struct ShellView: View {
     @MainActor
     private func wireFeatures() async {
         let uid = signedInUid
-        let chatEnabled = FeatureGate.isAvailable(
-            flags: featureFlags, flag: .chat, memberGated: false, access: access
+        let eventChatEnabled = ChatFeatureGate.eventChatEnabled(
+            flags: featureFlags,
+            access: access
+        )
+        let channelAndDirectChatEnabled = ChatFeatureGate.channelAndDirectChatEnabled(
+            access: access
         )
 
         if pendingCreateIntent?.belongs(to: uid) == false {
@@ -1132,9 +1136,6 @@ struct ShellView: View {
         // any asynchronous flag work. If Chat was opened from a parent hub,
         // return to that hub; otherwise close the route entirely.
         if routes.current == .chat {
-            routes = routes.poppingOne()
-        }
-        if !chatEnabled, routes.current == .chatHub {
             routes = routes.poppingOne()
         }
         dmTarget = nil
@@ -1177,7 +1178,8 @@ struct ShellView: View {
         )
         incidentMap.setTrafficAlertsEnabled(mapLayerPreferences.trafficAlertsEnabled)
         incidentMapCoordinator = incidentMap
-        let eventChat = chatEnabled ? FirebaseEventChatRepository.createIfAvailable() : nil
+        let eventChat = eventChatEnabled
+            ? FirebaseEventChatRepository.createIfAvailable() : nil
         eventsCoordinator = FirebaseEventsRepository.createIfAvailable().map {
             EventsCoordinator(
                 repository: $0,
@@ -1201,7 +1203,7 @@ struct ShellView: View {
             )
         }
         conversationsCoordinator = nil
-        if let conversations, let uid {
+        if channelAndDirectChatEnabled, let conversations, let uid {
             conversationsCoordinator = ConversationsCoordinator(
                 repository: conversations,
                 blockVisibility: FirebaseBlockVisibilityRepository.createOrEmpty(),
@@ -1209,9 +1211,9 @@ struct ShellView: View {
             )
         }
         chatHubCoordinator = ChatHubCoordinator(
-            communityRepository: chatEnabled
+            communityRepository: channelAndDirectChatEnabled
                 ? FirebaseCommunityChatRepository.createIfAvailable() : nil,
-            convoyRepository: chatEnabled
+            convoyRepository: channelAndDirectChatEnabled
                 ? FirebaseConvoyChatRepository.createIfAvailable() : nil,
             chatRepliesEnabled: featureFlags.isEnabled(.chatReplies)
         )
@@ -1287,17 +1289,18 @@ struct ShellView: View {
 
     @MainActor
     private func applyChatFeatureGate() {
-        let enabled = FeatureGate.isAvailable(
-            flags: featureFlags, flag: .chat, memberGated: false, access: access
+        let eventChatEnabled = ChatFeatureGate.eventChatEnabled(
+            flags: featureFlags,
+            access: access
         )
-        if !enabled, routes.current == .chat || routes.current == .chatHub {
-            routes = routes.poppingOne()
-        }
-        chatHubCoordinator = enabled ? ChatHubCoordinator(
-            communityRepository: FirebaseCommunityChatRepository.createIfAvailable(),
-            convoyRepository: FirebaseConvoyChatRepository.createIfAvailable(),
+        let channelChatEnabled = ChatFeatureGate.channelAndDirectChatEnabled(access: access)
+        chatHubCoordinator = ChatHubCoordinator(
+            communityRepository: channelChatEnabled
+                ? FirebaseCommunityChatRepository.createIfAvailable() : nil,
+            convoyRepository: channelChatEnabled
+                ? FirebaseConvoyChatRepository.createIfAvailable() : nil,
             chatRepliesEnabled: featureFlags.isEnabled(.chatReplies)
-        ) : nil
+        )
         // Event detail/chat lives under its own NavigationStack. Rebuild the
         // list composition as well; the view identity key above pops any
         // already-open detail/chat destination before the old repository can
@@ -1305,7 +1308,7 @@ struct ShellView: View {
         eventsCoordinator = FirebaseEventsRepository.createIfAvailable().map {
             EventsCoordinator(
                 repository: $0,
-                eventChatRepository: enabled
+                eventChatRepository: eventChatEnabled
                     ? FirebaseEventChatRepository.createIfAvailable() : nil,
                 locationProvider: locationProvider,
                 subscriptionRepository: FirebaseSubscriptionStateRepository.createIfAvailable()
@@ -1441,6 +1444,10 @@ struct ShellView: View {
 
     private var chatFeatureWiringKey: String {
         "\(featureFlags.isEnabled(.chat))|\(featureFlags.isEnabled(.chatReplies))"
+    }
+
+    private var eventChatFeatureWiringKey: String {
+        String(ChatFeatureGate.eventChatEnabled(flags: featureFlags, access: access))
     }
 
     private var liveLocationFeatureEnabled: Bool {

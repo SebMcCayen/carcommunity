@@ -46,16 +46,19 @@ final class FeatureFlagsTests: XCTestCase {
         ))
     }
 
-    func testLiveChatFlagTransitionClosesEveryChatSurface() {
+    func testChatFlagTransitionOnlyDisablesEventChat() {
         let enabled = FeatureFlags.resolve(from: ["chat": true])
         let disabled = FeatureFlags.resolve(from: ["chat": false])
 
-        XCTAssertTrue(FeatureGate.isAvailable(
-            flags: enabled, flag: .chat, memberGated: false,
+        XCTAssertTrue(ChatFeatureGate.eventChatEnabled(
+            flags: enabled,
             access: .unrestrictedCommunity
         ))
-        XCTAssertFalse(FeatureGate.isAvailable(
-            flags: disabled, flag: .chat, memberGated: false,
+        XCTAssertFalse(ChatFeatureGate.eventChatEnabled(
+            flags: disabled,
+            access: .unrestrictedCommunity
+        ))
+        XCTAssertTrue(ChatFeatureGate.channelAndDirectChatEnabled(
             access: .unrestrictedCommunity
         ))
     }

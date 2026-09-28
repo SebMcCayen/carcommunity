@@ -51,3 +51,21 @@ enum FeatureGate {
             && (!memberGated || MemberGating.allows(access: access))
     }
 }
+
+/// The canonical `chat` flag controls event chat only. Community, convoy,
+/// and direct-message surfaces remain authenticated account features and are
+/// not disabled by that flag (matching Android's EventsRoute composition).
+enum ChatFeatureGate {
+    static func eventChatEnabled(flags: FeatureFlags, access: AccountAccess) -> Bool {
+        FeatureGate.isAvailable(
+            flags: flags,
+            flag: .chat,
+            memberGated: false,
+            access: access
+        )
+    }
+
+    static func channelAndDirectChatEnabled(access: AccountAccess) -> Bool {
+        !access.isRestricted
+    }
+}
