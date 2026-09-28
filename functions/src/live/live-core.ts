@@ -322,6 +322,13 @@ export function pickSessionVehicle(
 
 export interface LiveSession {
   id: string;
+  /**
+   * Monotonic per-user lifecycle generation. Every successful session start
+   * increments it. The backend uses it to fence delayed position writes from
+   * an older session across RTDB and Firestore. Legacy sessions omit it and
+   * are treated as generation 0 until the next start.
+   */
+  generation?: number;
   status: LiveSessionStatus;
   duration: LiveSessionDuration;
   startedAt: string;

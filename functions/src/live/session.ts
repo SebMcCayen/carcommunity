@@ -71,9 +71,131 @@ const CALLABLE_OPTS = {
 };
 
 const sessionRef = (uid: string) => adminRtdb.ref(`liveLocation/${uid}/session`);
-const latestRef = (uid: string) => adminRtdb.ref(`liveLocation/${uid}/latest`);
+const liveRootRef = (uid: string) => adminRtdb.ref(`liveLocation/${uid}`);
 /** The queryable nearby-discovery doc (Firestore), one per active sharer. */
 const discoveryRef = (uid: string) => db.collection('liveSessions').doc(uid);
+/** Backend-only cross-store lifecycle fence, one per sharer. */
+const discoveryFenceRef = (uid: string) => db.collection('_liveSessionFences').doc(uid);
+
+type LiveRoot = { session?: LiveSession | null; latest?: unknown };
+type DiscoveryFence = {
+  generation: number;
+  sessionId: string;
+  active: boolean;
+};
+
+const sessionGeneration = (session: LiveSession | null | undefined): number =>
+  typeof session?.generation === 'number' &&
+  Number.isSafeInteger(session.generation) &&
+  session.generation >= 0
+    ? session.generation
+    : 0;
+
+/**
+ * Activates the Firestore half of a generation after the RTDB start commits.
+ * A delayed older start cannot replace a newer fence because generations are
+ * monotonic and compared inside the same transaction as discovery cleanup.
+ */
+async function activateDiscoveryGeneration(uid: string, session: LiveSession): Promise<void> {
+  const generation = sessionGeneration(session);
+  await db.runTransaction(async (tx) => {
+    const fenceSnapshot = await tx.get(discoveryFenceRef(uid));
+    const fence = fenceSnapshot.data() as DiscoveryFence | undefined;
+    if (
+      fence &&
+      (fence.generation > generation || (fence.generation === generation && fence.active === false))
+    ) {
+      return;
+    }
+    tx.set(discoveryFenceRef(uid), { generation, sessionId: session.id, active: true });
+    tx.delete(discoveryRef(uid));
+  });
+}
+
+/**
+ * Revokes one lifecycle generation and removes its discovery record atomically.
+ * Newer sessions win if an older stop finishes late.
+ */
+async function revokeDiscoveryGeneration(uid: string, session: LiveSession): Promise<void> {
+  const generation = sessionGeneration(session);
+  await db.runTransaction(async (tx) => {
+    const fenceSnapshot = await tx.get(discoveryFenceRef(uid));
+    const discoverySnapshot = await tx.get(discoveryRef(uid));
+    const fence = fenceSnapshot.data() as DiscoveryFence | undefined;
+    if (fence && fence.generation > generation) return;
+    tx.set(discoveryFenceRef(uid), { generation, sessionId: session.id, active: false });
+    const discovery = discoverySnapshot.data();
+    const discoveryGeneration = discovery?.sessionGeneration;
+    if (
+      !discoverySnapshot.exists ||
+      typeof discoveryGeneration !== 'number' ||
+      discoveryGeneration <= generation
+    ) {
+      tx.delete(discoveryRef(uid));
+    }
+  });
+}
+
+/**
+ * Writes discovery only while the exact RTDB-authorized generation remains
+ * active. Stop/hide and this write serialize on the fence document, so a
+ * delayed update cannot recreate discovery after privacy teardown completes.
+ */
+export async function writeDiscoveryForGeneration(
+  uid: string,
+  session: LiveSession,
+  fields: Record<string, unknown>,
+): Promise<boolean> {
+  const generation = sessionGeneration(session);
+  return db.runTransaction(async (tx) => {
+    const fenceSnapshot = await tx.get(discoveryFenceRef(uid));
+    const fence = fenceSnapshot.data() as DiscoveryFence | undefined;
+    if (fence && fence.generation > generation) {
+      return false;
+    }
+    if (fence?.generation === generation && (!fence.active || fence.sessionId !== session.id)) {
+      return false;
+    }
+    // Missing/older fences are possible for a session that began before this
+    // deployment or whose start callable lost its Firestore response after the
+    // RTDB commit. The RTDB root transaction already authorized this exact
+    // generation, so advancing the fence here is safe; an equal-generation
+    // revocation above always wins.
+    if (!fence || fence.generation < generation) {
+      tx.set(discoveryFenceRef(uid), { generation, sessionId: session.id, active: true });
+    }
+    tx.set(discoveryRef(uid), {
+      ...fields,
+      sessionId: session.id,
+      sessionGeneration: generation,
+    });
+    return true;
+  });
+}
+
+/**
+ * Atomically validates the current session and publishes its RTDB marker at the
+ * same path. Stop/hide/start transact on this same root, eliminating the old
+ * read-then-write window that could recreate `latest` after teardown.
+ */
+export async function commitLatestForActiveSession(
+  uid: string,
+  coordinate: Parameters<typeof buildLatestNode>[0],
+  now: Date,
+): Promise<LiveSession | null> {
+  const result = await liveRootRef(uid).transaction((current: LiveRoot | null) => {
+    if (current === null) return null;
+    const session = current.session ?? null;
+    if (!isSessionActive(session, now)) return;
+    return {
+      ...current,
+      latest: buildLatestNode(coordinate, session!),
+    };
+  });
+  const committedRoot = result.snapshot.val() as LiveRoot | null;
+  const session = committedRoot?.session ?? null;
+  return result.committed && isSessionActive(session, now) ? session : null;
+}
 
 /**
  * The live-session duration a convoy-auto session is started with. A convoy has
@@ -175,7 +297,7 @@ export const startSession = onCall(CALLABLE_OPTS, async (request): Promise<Sessi
     actor.uid,
     parsed.input.vehicleId,
   );
-  const session = buildSession(
+  const candidate = buildSession(
     db.collection('_ids').doc().id, // Firestore auto-ID as a cheap unique id
     parsed.input.duration,
     new Date(),
@@ -189,9 +311,19 @@ export const startSession = onCall(CALLABLE_OPTS, async (request): Promise<Sessi
   // position update of the new session. The stale nearby-discovery doc is
   // cleared for the same reason: a restart must not stay discoverable at the
   // OLD position until the first fresh sample re-creates the doc.
-  await sessionRef(actor.uid).set(session);
-  await latestRef(actor.uid).remove();
-  await discoveryRef(actor.uid).delete();
+  const result = await liveRootRef(actor.uid).transaction((current: LiveRoot | null) => {
+    const previous = current?.session ?? null;
+    const session: LiveSession = {
+      ...candidate,
+      generation: sessionGeneration(previous) + 1,
+    };
+    return { ...(current ?? {}), session, latest: null };
+  });
+  const session = (result.snapshot.val() as LiveRoot | null)?.session;
+  if (!result.committed || !session) {
+    throw new HttpsError('internal', 'Could not start live location session.');
+  }
+  await activateDiscoveryGeneration(actor.uid, session);
 
   return { sessionId: session.id, status: 'active', expiresAt: session.expiresAt };
 });
@@ -216,14 +348,10 @@ export const updatePosition = onCall(
       throw new HttpsError(freshness.code, freshness.message);
     }
 
-    const session = (await sessionRef(actor.uid).get()).val() as LiveSession | null;
-    if (!isSessionActive(session, now)) {
+    const session = await commitLatestForActiveSession(actor.uid, parsed.input.coordinate, now);
+    if (!session) {
       throw new HttpsError('failed-precondition', 'No active live location session.');
     }
-
-    // displayName is denormalized on the session at start — no extra
-    // Firestore read on the (frequent) position-update hot path.
-    await latestRef(actor.uid).set(buildLatestNode(parsed.input.coordinate, session!));
 
     // Kronpoäng economy: accumulate the SERVER-measured distance this session
     // has covered and award `live_session_1km` the first time it passes 1 km
@@ -263,7 +391,7 @@ export const updatePosition = onCall(
       now,
     );
     if (refreshDiscovery) {
-      await discoveryRef(actor.uid).set({
+      const discoveryWritten = await writeDiscoveryForGeneration(actor.uid, session!, {
         ...discoveryFields,
         updatedAt: FieldValue.serverTimestamp(),
         expiresAt: Timestamp.fromDate(discoveryExpiresAt(session!.expiresAt, now)),
@@ -271,10 +399,12 @@ export const updatePosition = onCall(
       // Record the throttle state on the session node (cheap RTDB update) so the
       // next samples can skip the Firestore write until the interval elapses or
       // the cell changes.
-      await sessionRef(actor.uid).update({
-        discoveryRefreshedAt: now.toISOString(),
-        discoveryGeoCell: discoveryFields.geoCell,
-      });
+      if (discoveryWritten) {
+        await sessionRef(actor.uid).update({
+          discoveryRefreshedAt: now.toISOString(),
+          discoveryGeoCell: discoveryFields.geoCell,
+        });
+      }
     }
 
     // Kronjakt AUTO-SPAWN activity signal (crownHunt/spawnActivity.ts).
@@ -416,22 +546,34 @@ export const extendSession = onCall(CALLABLE_OPTS, async (request): Promise<Sess
   return { sessionId: session.id, status: 'active', expiresAt };
 });
 
-async function stopAndClear(uid: string, reason: LiveStopReason): Promise<SessionResponse> {
-  const session = (await sessionRef(uid).get()).val() as LiveSession | null;
-  if (session && session.status === 'active') {
-    await sessionRef(uid).update({
-      status: 'stopped',
-      stoppedAt: new Date().toISOString(),
-      stopReason: reason,
-    });
+export async function stopAndClear(uid: string, reason: LiveStopReason): Promise<SessionResponse> {
+  const result = await liveRootRef(uid).transaction((current: LiveRoot | null) => {
+    if (current === null) return null;
+    const session = current.session ?? null;
+    return {
+      ...current,
+      session:
+        session && session.status === 'active'
+          ? {
+              ...session,
+              status: 'stopped' as const,
+              stoppedAt: new Date().toISOString(),
+              stopReason: reason,
+            }
+          : session,
+      latest: null,
+    };
+  });
+  const session = (result.snapshot.val() as LiveRoot | null)?.session ?? null;
+  // The root transaction serializes session validation with the marker delete.
+  // Revoking this generation in Firestore then serializes discovery deletion
+  // with every delayed discovery refresh. Once this returns, neither store can
+  // be resurrected by an update that validated before stop/hide.
+  if (session) {
+    await revokeDiscoveryGeneration(uid, session);
+  } else {
+    await discoveryRef(uid).delete();
   }
-  // The marker disappears immediately regardless of session state — and so does
-  // the nearby-discovery doc, so "hide me now" / stop removes the sharer from
-  // discovery at once, not just from the per-uid marker read. This is the
-  // privacy escape hatch, so the discovery delete must not be conditional on the
-  // session having been active.
-  await latestRef(uid).remove();
-  await discoveryRef(uid).delete();
   return { sessionId: session?.id ?? 'none', status: 'stopped' };
 }
 
@@ -518,7 +660,7 @@ export async function startConvoyAutoSession(
   }
 
   const { displayName, mainCar, selectedVehicleId } = await loadSessionDenorm(uid, vehicleId);
-  const session: LiveSession = {
+  const candidate: LiveSession = {
     ...buildSession(
       db.collection('_ids').doc().id,
       CONVOY_AUTO_SESSION_DURATION,
@@ -537,13 +679,18 @@ export async function startConvoyAutoSession(
   // untouched and untagged, preserving the "don't clobber / don't stop a manual
   // session" guarantee even under the race. The denorm reads above are pure input
   // to `session`; discarding them on an abort is a cheap, rare cost.
-  const { committed } = await sessionRef(uid).transaction((current) => {
-    if (isSessionActive(current as LiveSession | null, now)) {
+  const result = await liveRootRef(uid).transaction((current: LiveRoot | null) => {
+    const existingSession = current?.session ?? null;
+    if (isSessionActive(existingSession, now)) {
       return; // abort — keep the existing active (manual or prior) session
     }
-    return session;
+    const session: LiveSession = {
+      ...candidate,
+      generation: sessionGeneration(existingSession) + 1,
+    };
+    return { ...(current ?? {}), session, latest: null };
   });
-  if (!committed) {
+  if (!result.committed) {
     return 'skipped-existing';
   }
   // Only clear the stale state once we actually took over the session node. Both
@@ -552,8 +699,9 @@ export async function startConvoyAutoSession(
   // session cannot leave the user discoverable at the OLD position in
   // live.listNearby until the first fresh updatePosition of the new session
   // re-creates the doc.
-  await latestRef(uid).remove();
-  await discoveryRef(uid).delete();
+  const session = (result.snapshot.val() as LiveRoot | null)?.session;
+  if (!session) return 'skipped-existing';
+  await activateDiscoveryGeneration(uid, session);
   return 'started';
 }
 
@@ -578,8 +726,9 @@ export async function stopConvoyAutoSession(
   uid: string,
   convoyId: string,
 ): Promise<ConvoyAutoStopOutcome> {
-  const { committed, snapshot } = await sessionRef(uid).transaction((current) => {
-    const s = current as (LiveSession & { convoyAutoStarted?: boolean }) | null;
+  const { committed, snapshot } = await liveRootRef(uid).transaction((current: LiveRoot | null) => {
+    if (current === null) return null;
+    const s = (current.session ?? null) as (LiveSession & { convoyAutoStarted?: boolean }) | null;
     // NULL is returned unchanged rather than aborted: RTDB runs the update
     // function optimistically (it may see null before the server value loads),
     // and returning `undefined` there would ABORT before ever seeing the real
@@ -587,29 +736,31 @@ export async function stopConvoyAutoSession(
     // the server value when a session actually exists. `undefined` (abort) is
     // reached ONLY for a REAL, non-matching session — so a manual live session
     // that raced in is left exactly as-is, never mutated to 'stopped'.
-    if (s === null) {
-      return null;
-    }
+    if (s === null) return;
     if (s.status === 'active' && s.convoyAutoStarted === true && s.convoyId === convoyId) {
       return {
-        ...s,
-        status: 'stopped',
-        stoppedAt: new Date().toISOString(),
-        stopReason: 'user_stop' satisfies LiveStopReason,
+        ...current,
+        session: {
+          ...s,
+          status: 'stopped',
+          stoppedAt: new Date().toISOString(),
+          stopReason: 'user_stop' satisfies LiveStopReason,
+        },
+        latest: null,
       };
     }
     return; // abort — a real non-matching session (manual / other convoy / already stopped)
   });
   // We stopped it only when the commit wrote our stopped session; an abort or a
   // no-op on a raced-in manual session leaves the node untouched.
-  const after = snapshot.val() as (LiveSession & { convoyAutoStarted?: boolean }) | null;
+  const after = (snapshot.val() as LiveRoot | null)?.session as
+    (LiveSession & { convoyAutoStarted?: boolean }) | null;
   if (committed && after?.status === 'stopped' && after?.convoyAutoStarted === true) {
     // Mirror the manual stop/hide teardown: remove BOTH the RTDB marker and the
     // Firestore nearby-discovery doc so ending/leaving the convoy takes the user
     // out of live.listNearby at once, rather than leaving them discoverable at a
     // stale position until the discovery doc's TTL sweep.
-    await latestRef(uid).remove();
-    await discoveryRef(uid).delete();
+    await revokeDiscoveryGeneration(uid, after);
     return 'stopped';
   }
   return 'left-untouched';

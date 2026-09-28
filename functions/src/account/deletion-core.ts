@@ -134,6 +134,10 @@ export const PURGE_DOC_TREES = [
   //
   // No subcollections beneath it — recursiveDelete just removes the document.
   'liveSessions',
+  // Backend-only generation fence paired with liveSessions/{uid}. It carries no
+  // coordinate, but is uid-keyed lifecycle data and must follow the same account
+  // erasure path rather than surviving forever after the RTDB subtree is gone.
+  '_liveSessionFences',
 ] as const;
 
 export const PURGE_OWNED_COLLECTIONS: ReadonlyArray<{

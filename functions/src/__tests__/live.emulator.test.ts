@@ -30,10 +30,15 @@ import {
 } from 'firebase/functions';
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
+import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getDatabase as getAdminDatabase } from 'firebase-admin/database';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runLiveCleanup } from '../live/scheduled';
+import {
+  commitLatestForActiveSession,
+  stopAndClear,
+  writeDiscoveryForGeneration,
+} from '../live/session';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -138,6 +143,73 @@ afterAll(async () => {
 });
 
 describe('live session lifecycle', () => {
+  it.each([
+    ['stop', 'user_stop' as const],
+    ['hide', 'hide_me_now' as const],
+  ])(
+    '%s fences a position update held after RTDB validation from restoring either store',
+    async (_label, reason) => {
+      const uid = `race-${reason}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+      const now = new Date();
+      const session = {
+        id: `session-${uid}`,
+        generation: 7,
+        status: 'active' as const,
+        duration: '1h' as const,
+        startedAt: now.toISOString(),
+        expiresAt: new Date(now.getTime() + 60 * 60_000).toISOString(),
+        displayName: 'Race test',
+        mainCar: null,
+      };
+      await adminRtdb.ref(`liveLocation/${uid}`).set({ session });
+      await adminDb.collection('_liveSessionFences').doc(uid).set({
+        generation: session.generation,
+        sessionId: session.id,
+        active: true,
+      });
+
+      // This is the deterministic hold point: RTDB validation + marker commit
+      // completed, while the update has not yet entered its Firestore refresh.
+      const heldSession = await commitLatestForActiveSession(
+        uid,
+        coordinate(now.toISOString()),
+        now,
+      );
+      expect(heldSession?.id).toBe(session.id);
+
+      // Privacy teardown completes while that old update remains held.
+      await stopAndClear(uid, reason);
+
+      // Resume the old update. The equal-generation inactive fence must win,
+      // and the root transaction must prevent any later RTDB resurrection.
+      const discoveryWritten = await writeDiscoveryForGeneration(uid, heldSession!, {
+        uid,
+        latitude: 59.334,
+        longitude: 18.063,
+        geoCell: 'race-cell',
+        displayName: 'Race test',
+        updatedAt: Timestamp.fromDate(now),
+        expiresAt: Timestamp.fromDate(new Date(now.getTime() + 15 * 60_000)),
+      });
+      expect(discoveryWritten).toBe(false);
+      expect((await adminRtdb.ref(`liveLocation/${uid}/latest`).get()).exists()).toBe(false);
+      expect((await adminDb.collection('liveSessions').doc(uid).get()).exists).toBe(false);
+      expect((await adminDb.collection('_liveSessionFences').doc(uid).get()).data()).toMatchObject({
+        generation: session.generation,
+        sessionId: session.id,
+        active: false,
+      });
+
+      const afterStop = await commitLatestForActiveSession(
+        uid,
+        coordinate(new Date().toISOString()),
+        new Date(),
+      );
+      expect(afterStop).toBeNull();
+      expect((await adminRtdb.ref(`liveLocation/${uid}/latest`).get()).exists()).toBe(false);
+    },
+  );
+
   it('start → update → marker exists → stop removes it', async () => {
     await signInAs(member);
     await adminDb
