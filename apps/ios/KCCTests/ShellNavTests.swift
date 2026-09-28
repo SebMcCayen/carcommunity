@@ -307,6 +307,24 @@ final class ShellNavTests: XCTestCase {
         XCTAssertTrue(ShellNavigation.chatHubAllowed(cover: .none, navigating: false))
     }
 
+    func testChatHubEntryRemainsVisibleWhenEventChatFlagIsDisabled() {
+        let flags = FeatureFlags.resolve(from: ["chat": false])
+
+        XCTAssertTrue(ShellNavigation.chatHubEntryAvailable(
+            flags: flags,
+            access: .unrestrictedCommunity
+        ))
+        XCTAssertFalse(ShellNavigation.chatHubEntryAvailable(
+            flags: flags,
+            access: AccountAccess(
+                role: .user,
+                activeMember: true,
+                suspended: true,
+                deleted: false
+            )
+        ))
+    }
+
     func testChatHubShowsOverTurnByTurn() {
         // Navigation carries the map home's chat control, so the control has
         // to be able to open the hub.

@@ -547,6 +547,8 @@
     <string name="accountStatus_subscriptionManagementPlaceholder">Hantera prenumeration (kommande)</string>
     <string name="accountStatus_accountDeletionPlaceholder">Ta bort konto (kommande)</string>
     <string name="accountStatus_policyLink">Regler och villkor</string>
+    <string name="accountStatus_verifying">Kontrollerar kontostatus…</string>
+    <string name="accountStatus_verificationFailedBody">Kontostatusen kunde inte kontrolleras. Åtkomsten är begränsad tills anslutningen återställs.</string>
     <string name="blocking_blockUser">Blockera användare</string>
     <string name="blocking_blockConfirmTitle">Blockera användare?</string>
     <string name="blocking_blockConfirmBody">Den här användaren kan inte längre se din liveposition eller interagera med dig. Du kan ändra detta senare under Inställningar.</string>

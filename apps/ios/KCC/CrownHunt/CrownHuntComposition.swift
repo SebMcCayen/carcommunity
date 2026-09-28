@@ -25,9 +25,18 @@ struct CrownHuntComposition {
     /// - Parameter passesMemberGate: while member gating is disabled repo-wide
     ///   this is true for any signed-in, non-suspended user (the current launch
     ///   posture) — the iOS mirror of Android's `passesMemberGate`.
-    static func live(uid: String?, passesMemberGate: Bool) async -> CrownHuntComposition {
-        let flags = await FirebaseCrownHuntFeatureFlagsRepository.createIfAvailable()?.flags()
-            ?? .contractDefaults
+    static func live(
+        uid: String?,
+        passesMemberGate: Bool,
+        featureFlags: FeatureFlags? = nil
+    ) async -> CrownHuntComposition {
+        let flags: CrownHuntFlags
+        if let featureFlags {
+            flags = CrownHuntFlags(featureFlags: featureFlags)
+        } else {
+            flags = await FirebaseCrownHuntFeatureFlagsRepository.createIfAvailable()?.flags()
+                ?? .contractDefaults
+        }
         return CrownHuntComposition(
             statsCoordinator: CrownHuntStatsCoordinator(
                 repository: FirebaseCrownHuntStatsRepository.createIfAvailable(),

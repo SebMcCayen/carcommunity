@@ -547,6 +547,8 @@
     <string name="accountStatus_subscriptionManagementPlaceholder">Manage subscription (coming soon)</string>
     <string name="accountStatus_accountDeletionPlaceholder">Delete account (coming soon)</string>
     <string name="accountStatus_policyLink">Rules and terms</string>
+    <string name="accountStatus_verifying">Checking account status…</string>
+    <string name="accountStatus_verificationFailedBody">Your account status could not be verified. Access is limited until the connection recovers.</string>
     <string name="blocking_blockUser">Block user</string>
     <string name="blocking_blockConfirmTitle">Block user?</string>
     <string name="blocking_blockConfirmBody">This user will no longer be able to see your live location or interact with you. You can change this later under Settings.</string>

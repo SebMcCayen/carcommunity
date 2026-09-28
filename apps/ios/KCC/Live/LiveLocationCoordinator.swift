@@ -272,6 +272,17 @@ final class LiveLocationCoordinator {
         }
     }
 
+    /// Immediately releases every local positioning demand when the signed-in
+    /// feature shell is removed (sign-out, suspension, or deletion). The
+    /// backend session is intentionally left intact so the restricted screen
+    /// can still issue the authenticated, always-allowed hide command.
+    func standDownForRestrictedAccess() {
+        canShare = false
+        endPublishing()
+        sessionSubscription?.cancel()
+        sessionSubscription = nil
+    }
+
     // MARK: - Internals
 
     private func apply(_ session: LiveSessionInfo?) {

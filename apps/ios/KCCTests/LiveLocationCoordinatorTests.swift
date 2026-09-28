@@ -321,6 +321,24 @@ final class LiveLocationCoordinatorTests: XCTestCase {
         await waitUntil { provider.activeFixStreamCount == 0 }
     }
 
+    @MainActor
+    func testRestrictedAccountFlipStopsPublishingButKeepsHideAvailable() async {
+        let repository = FakeLiveLocationRepository()
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = makeCoordinator(repository: repository, provider: provider)
+        coordinator.start()
+        repository.emitSession(activeSession())
+        await waitUntil { provider.activeFixStreamCount == 1 }
+
+        coordinator.standDownForRestrictedAccess()
+
+        await waitUntil { provider.activeFixStreamCount == 0 }
+        XCTAssertFalse(coordinator.canShare)
+        let result = await coordinator.hideMeNow()
+        XCTAssertEqual(result, .success)
+        XCTAssertEqual(repository.hideCount, 1)
+    }
+
     // MARK: - fixes flow only while sharing AND authorized
 
     @MainActor

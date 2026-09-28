@@ -6,6 +6,7 @@ struct SavedDriveDetailScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var coordinator: DriveHistoryCoordinator
     let drive: SavedDrive
+    let sharingEnabled: Bool
     let onDelete: () -> Void
 
     var body: some View {
@@ -19,10 +20,12 @@ struct SavedDriveDetailScreen: View {
                         LabeledContent("savedDrives.date", value: date.formatted(date: .long, time: .shortened))
                     }
                     route
-                    ShareLink(item: DriveShareText.summary(for: drive)) {
-                        Label("savedDrives.shareAction", systemImage: "square.and.arrow.up")
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                    }.buttonStyle(.borderedProminent)
+                    if sharingEnabled {
+                        ShareLink(item: DriveShareText.summary(for: drive)) {
+                            Label("savedDrives.shareAction", systemImage: "square.and.arrow.up")
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                        }.buttonStyle(.borderedProminent)
+                    }
                     Text("savedDrives.promptPrivacyNote")
                         .font(.system(size: KccTypeScale.bodySm)).foregroundStyle(.secondary)
                     Button(role: .destructive, action: onDelete) {

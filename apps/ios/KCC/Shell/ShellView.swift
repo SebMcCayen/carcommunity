@@ -15,6 +15,8 @@ struct ShellView: View {
     /// unavailable state renders the bare shell with no profile entry —
     /// Android's "unavailable entries are omitted" hub rule.
     @Bindable var session: AuthSession
+    let access: AccountAccess
+    let featureFlags: FeatureFlags
 
     @State private var selectedTab: ShellTab = .defaultTab
     /// The full-screen sub-route back-stack, held as the ONE pure value from
@@ -95,6 +97,31 @@ struct ShellView: View {
     }
 
     var body: some View {
+        shellPresentation
+            .task(id: signedInUid) { await wireFeatures() }
+            .task(id: crownFeatureWiringKey) { await wireCrownHunt() }
+            .onChange(of: featureFlags.isEnabled(.liveLocation)) { _, enabled in
+                liveLocationCoordinator?.canShare = enabled && !access.isRestricted
+            }
+            .onChange(of: chatFeatureWiringKey) { _, _ in
+                applyChatFeatureGate()
+            }
+            .task(id: convoyReactionSubscriptionKey) {
+                convoyReactionCoordinator?.sync(convoyId: convoyReactionTargetId)
+            }
+            .task(id: convoyFollowMeSubscriptionKey) {
+                syncFollowMe()
+            }
+            .onDisappear {
+                // RootView removes the entire shell on sign-out or when a live
+                // account update becomes restricted. Stop exact-location and
+                // background drive collection synchronously during that swap.
+                liveLocationCoordinator?.standDownForRestrictedAccess()
+                driveRecordingCoordinator?.reset()
+            }
+    }
+
+    private var shellPresentation: some View {
         ZStack {
             // Exactly one native Mapbox view for the signed-in shell. Tabs and
             // routes cover it instead of recreating its Metal render surface.
@@ -255,16 +282,6 @@ struct ShellView: View {
                 convoyManagementCoordinator?.clearLeaveResult()
             }
         }
-        .task(id: signedInUid) { await wireFeatures() }
-        .onDisappear {
-            liveLocationCoordinator?.shutdown()
-        }
-        .task(id: convoyReactionSubscriptionKey) {
-            convoyReactionCoordinator?.sync(convoyId: convoyReactionTargetId)
-        }
-        .task(id: convoyFollowMeSubscriptionKey) {
-            syncFollowMe()
-        }
     }
 
     /// Per-tab foreground content. The persistent map is owned by `body`, so
@@ -402,11 +419,18 @@ struct ShellView: View {
             // The read-only drives history (Android's DrivesListScreen). The
             // panel wires itself (repository + uid) at the feature level, so
             // the shell stays argument-free here.
-            panelTab { DrivesPanel() }
+            panelTab {
+                DrivesPanel(sharingEnabled: FeatureGate.isAvailable(
+                    flags: featureFlags,
+                    flag: .socialSharing,
+                    memberGated: false,
+                    access: access
+                ))
+            }
         case .social:
             panelTab {
                 SocialHubPanel(
-                    crownHuntEnabled: crownHuntComposition?.flags.crownHuntEnabled == true,
+                    crownHuntEnabled: featureFlags.isEnabled(.crownHunt),
                     onOpenEvents: { routes = routes.opening(.events) },
                     onOpenConvoys: openConvoyManagement,
                     onOpenCrownHunt: { routes = routes.opening(.crownHunt) },
@@ -466,15 +490,17 @@ struct ShellView: View {
                 .accessibilityLabel(Text("incidents.reportButton"))
             }
 
-            Button {
-                guard ChatHubCoordinator.canPresentHub(cover: mapCover, navigating: false) else { return }
-                routes = routes.opening(.chatHub)
-            } label: {
-                Image(systemName: "bubble.left.and.bubble.right.fill")
-                    .frame(width: 48, height: 48)
-                    .background(.regularMaterial, in: Circle())
+            if ShellNavigation.chatHubEntryAvailable(flags: featureFlags, access: access) {
+                Button {
+                    guard ChatHubCoordinator.canPresentHub(cover: mapCover, navigating: false) else { return }
+                    routes = routes.opening(.chatHub)
+                } label: {
+                    Image(systemName: "bubble.left.and.bubble.right.fill")
+                        .frame(width: 48, height: 48)
+                        .background(.regularMaterial, in: Circle())
+                }
+                .accessibilityLabel(Text("chatHub.title"))
             }
-            .accessibilityLabel(Text("chatHub.title"))
 
             if let liveLocationCoordinator, liveLocationCoordinator.canPresentScreen {
                 Button {
@@ -524,8 +550,12 @@ struct ShellView: View {
                                 Label("shell.back", systemImage: "chevron.backward")
                             }
                         }
-                }
+                    }
             }
+            // A live chat-flag change must invalidate NavigationStack's
+            // current detail/chat destination, not only replace the list's
+            // repository behind an already-open child view.
+            .id(eventChatFeatureWiringKey)
         case .leaderboard:
             routeNavigation {
                 LeaderboardScreen(coordinator: leaderboardCoordinator)
@@ -1083,6 +1113,13 @@ struct ShellView: View {
     @MainActor
     private func wireFeatures() async {
         let uid = signedInUid
+        let eventChatEnabled = ChatFeatureGate.eventChatEnabled(
+            flags: featureFlags,
+            access: access
+        )
+        let channelAndDirectChatEnabled = ChatFeatureGate.channelAndDirectChatEnabled(
+            access: access
+        )
 
         if pendingCreateIntent?.belongs(to: uid) == false {
             pendingCreateIntent = nil
@@ -1140,7 +1177,8 @@ struct ShellView: View {
         )
         incidentMap.setTrafficAlertsEnabled(mapLayerPreferences.trafficAlertsEnabled)
         incidentMapCoordinator = incidentMap
-        let eventChat = FirebaseEventChatRepository.createIfAvailable()
+        let eventChat = eventChatEnabled
+            ? FirebaseEventChatRepository.createIfAvailable() : nil
         eventsCoordinator = FirebaseEventsRepository.createIfAvailable().map {
             EventsCoordinator(
                 repository: $0,
@@ -1164,7 +1202,7 @@ struct ShellView: View {
             )
         }
         conversationsCoordinator = nil
-        if let conversations, let uid {
+        if channelAndDirectChatEnabled, let conversations, let uid {
             conversationsCoordinator = ConversationsCoordinator(
                 repository: conversations,
                 blockVisibility: FirebaseBlockVisibilityRepository.createOrEmpty(),
@@ -1172,8 +1210,11 @@ struct ShellView: View {
             )
         }
         chatHubCoordinator = ChatHubCoordinator(
-            communityRepository: FirebaseCommunityChatRepository.createIfAvailable(),
-            convoyRepository: FirebaseConvoyChatRepository.createIfAvailable()
+            communityRepository: channelAndDirectChatEnabled
+                ? FirebaseCommunityChatRepository.createIfAvailable() : nil,
+            convoyRepository: channelAndDirectChatEnabled
+                ? FirebaseConvoyChatRepository.createIfAvailable() : nil,
+            chatRepliesEnabled: featureFlags.isEnabled(.chatReplies)
         )
         let convoyManagement = ConvoyManagementCoordinator(
             repository: FirebaseConvoyManagementRepository.createIfAvailable()
@@ -1194,22 +1235,17 @@ struct ShellView: View {
             ConvoyFollowMeCoordinator(repository: $0)
         }
 
-        let crownHunt = await CrownHuntComposition.live(
-            uid: uid,
-            passesMemberGate: uid != nil
-        )
-
-        // `.task(id: signedInUid)` cancels and restarts this work when the
-        // identity changes. Do not let a slower composition for the old user
-        // overwrite the new session's coordinators after its await returns.
-        guard !Task.isCancelled, uid == signedInUid else { return }
-
         let liveRepository = FirebaseLiveLocationRepository.createIfAvailable()
         liveLocationRepository = liveRepository
         let liveLocation = LiveLocationCoordinator(
             repository: liveRepository,
             provider: liveLocationProvider,
-            canShare: crownHunt.flags.liveLocationEnabled
+            canShare: FeatureGate.isAvailable(
+                flags: featureFlags,
+                flag: .liveLocation,
+                memberGated: false,
+                access: access
+            )
         )
         // Observe the own session from the shell so a flag-disabled feature
         // can still reveal its control when an existing session needs Stop or
@@ -1221,8 +1257,6 @@ struct ShellView: View {
             provider: driveLocationProvider,
             journal: uid.flatMap { FileDriveRecordingJournal(ownerId: $0) }
         )
-        crownHuntComposition = crownHunt
-
         if pendingCreateIntent?.belongs(to: uid) == true {
             pendingCreateIntent = nil
             presentSingleSessionAction(using: liveLocation)
@@ -1231,7 +1265,54 @@ struct ShellView: View {
         // Convoy discovery is independent of the map's live-session wiring.
         // Load it last so a slow callable cannot delay location controls.
         await convoyManagement.load()
+        // The shell may have disappeared (restriction/sign-out) or switched
+        // identities while the callable was suspended. Its onDisappear path
+        // has already stopped exact-location/background recording; never let
+        // this stale continuation reconcile and start it again.
+        guard !Task.isCancelled, uid == signedInUid else { return }
         reconcileDriveRecording()
+        await wireCrownHunt()
+    }
+
+    @MainActor
+    private func wireCrownHunt() async {
+        let uid = signedInUid
+        let composition = await CrownHuntComposition.live(
+            uid: uid,
+            passesMemberGate: MemberGating.allows(access: access),
+            featureFlags: featureFlags
+        )
+        guard !Task.isCancelled, uid == signedInUid else { return }
+        crownHuntComposition = composition
+    }
+
+    @MainActor
+    private func applyChatFeatureGate() {
+        let eventChatEnabled = ChatFeatureGate.eventChatEnabled(
+            flags: featureFlags,
+            access: access
+        )
+        let channelChatEnabled = ChatFeatureGate.channelAndDirectChatEnabled(access: access)
+        chatHubCoordinator = ChatHubCoordinator(
+            communityRepository: channelChatEnabled
+                ? FirebaseCommunityChatRepository.createIfAvailable() : nil,
+            convoyRepository: channelChatEnabled
+                ? FirebaseConvoyChatRepository.createIfAvailable() : nil,
+            chatRepliesEnabled: featureFlags.isEnabled(.chatReplies)
+        )
+        // Event detail/chat lives under its own NavigationStack. Rebuild the
+        // list composition as well; the view identity key above pops any
+        // already-open detail/chat destination before the old repository can
+        // be used again.
+        eventsCoordinator = FirebaseEventsRepository.createIfAvailable().map {
+            EventsCoordinator(
+                repository: $0,
+                eventChatRepository: eventChatEnabled
+                    ? FirebaseEventChatRepository.createIfAvailable() : nil,
+                locationProvider: locationProvider,
+                subscriptionRepository: FirebaseSubscriptionStateRepository.createIfAvailable()
+            )
+        }
     }
 
     private var driveSummaryIsPresented: Binding<Bool> {
@@ -1349,6 +1430,25 @@ struct ShellView: View {
         return nil
     }
 
+    private var crownFeatureWiringKey: String {
+        [
+            signedInUid ?? "unavailable",
+            String(featureFlags.isEnabled(.liveLocation)),
+            String(featureFlags.isEnabled(.crownHunt)),
+            String(featureFlags.isEnabled(.crownHuntPerks)),
+            String(featureFlags.isEnabled(.crownHuntLiveShareScoring)),
+            String(MemberGating.allows(access: access))
+        ].joined(separator: "|")
+    }
+
+    private var chatFeatureWiringKey: String {
+        "\(featureFlags.isEnabled(.chat))|\(featureFlags.isEnabled(.chatReplies))"
+    }
+
+    private var eventChatFeatureWiringKey: String {
+        String(ChatFeatureGate.eventChatEnabled(flags: featureFlags, access: access))
+    }
+
     private var liveLocationFeatureEnabled: Bool {
         crownHuntComposition?.flags.liveLocationEnabled == true
     }
@@ -1437,5 +1537,9 @@ extension ShellTab {
 
 #Preview {
     // Config-less session: the bare shell, no profile entry.
-    ShellView(session: AuthSession(repository: nil))
+    ShellView(
+        session: AuthSession(repository: nil),
+        access: .unrestrictedCommunity,
+        featureFlags: .contractDefaults
+    )
 }

@@ -21,18 +21,25 @@ enum DriveDeleteStatus: Equatable {
 
 struct DrivesPanel: View {
     @State private var coordinator: DriveHistoryCoordinator
+    let sharingEnabled: Bool
     @State private var selectedDrive: SavedDrive?
     @State private var showingStats = false
     @State private var showingFilters = false
     @State private var pendingDelete: SavedDrive?
 
-    init() {
-        self.init(coordinator: DriveHistoryCoordinator(
-            repository: FirebaseDriveHistoryRepository.createIfAvailable()
-        ))
+    init(sharingEnabled: Bool = true) {
+        self.init(
+            coordinator: DriveHistoryCoordinator(
+                repository: FirebaseDriveHistoryRepository.createIfAvailable()
+            ),
+            sharingEnabled: sharingEnabled
+        )
     }
 
-    init(coordinator: DriveHistoryCoordinator) { _coordinator = State(initialValue: coordinator) }
+    init(coordinator: DriveHistoryCoordinator, sharingEnabled: Bool = true) {
+        _coordinator = State(initialValue: coordinator)
+        self.sharingEnabled = sharingEnabled
+    }
 
     var body: some View {
         ScrollView {
@@ -53,7 +60,11 @@ struct DrivesPanel: View {
         }
         .task { await coordinator.load() }
         .sheet(item: $selectedDrive) { drive in
-            SavedDriveDetailScreen(coordinator: coordinator, drive: drive) {
+            SavedDriveDetailScreen(
+                coordinator: coordinator,
+                drive: drive,
+                sharingEnabled: sharingEnabled
+            ) {
                 pendingDelete = drive
             }
         }
@@ -119,8 +130,10 @@ struct DrivesPanel: View {
                 }
                 .buttonStyle(.plain)
                 .contextMenu {
-                    ShareLink(item: DriveShareText.summary(for: drive)) {
-                        Label("savedDrives.shareAction", systemImage: "square.and.arrow.up")
+                    if sharingEnabled {
+                        ShareLink(item: DriveShareText.summary(for: drive)) {
+                            Label("savedDrives.shareAction", systemImage: "square.and.arrow.up")
+                        }
                     }
                     Button(role: .destructive) { pendingDelete = drive } label: {
                         Label("savedDrives.deleteAction", systemImage: "trash")
