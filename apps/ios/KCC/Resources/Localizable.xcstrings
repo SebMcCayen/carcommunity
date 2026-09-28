@@ -3571,6 +3571,40 @@
         }
       }
     },
+    "blocking.retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Försök igen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
+          }
+        }
+      }
+    },
+    "blocking.unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blockerade användare är inte tillgängliga just nu."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blocked users are unavailable right now."
+          }
+        }
+      }
+    },
     "blocking.unblock": {
       "extractionState": "manual",
       "localizations": {
@@ -3669,6 +3703,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "User has been unblocked."
+          }
+        }
+      }
+    },
+    "blocking.unknownUser": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Okänd användare"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown user"
           }
         }
       }

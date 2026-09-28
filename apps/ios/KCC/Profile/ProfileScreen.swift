@@ -4,6 +4,7 @@ import SwiftUI
 import UIKit
 
 struct ProfileScreen: View {
+    let uid: String?
     let displayName: String?
     let onSignOut: () -> Void
     let onBack: () -> Void
@@ -13,6 +14,7 @@ struct ProfileScreen: View {
     @State private var draft = ProfileDraft(profile: nil)
     @State private var validationError: ProfileValidationError?
     @State private var pickedPhoto: PhotosPickerItem?
+    @State private var showsBlockedUsers = false
 
     init(
         uid: String?, displayName: String?, onSignOut: @escaping () -> Void,
@@ -20,6 +22,7 @@ struct ProfileScreen: View {
     ) {
         let repository = FirebaseUserProfileRepository.createIfAvailable()
         self.init(
+            uid: uid,
             displayName: displayName,
             onSignOut: onSignOut,
             onBack: onBack,
@@ -29,10 +32,12 @@ struct ProfileScreen: View {
     }
 
     init(
-        displayName: String?, onSignOut: @escaping () -> Void, onBack: @escaping () -> Void,
+        uid: String? = nil, displayName: String?, onSignOut: @escaping () -> Void,
+        onBack: @escaping () -> Void,
         coordinator: ProfileCoordinator,
         editor: ProfileEditCoordinator? = nil
     ) {
+        self.uid = uid
         self.displayName = displayName
         self.onSignOut = onSignOut
         self.onBack = onBack
@@ -76,6 +81,20 @@ struct ProfileScreen: View {
                     Text("profile.saved").foregroundStyle(.secondary)
                 }
 
+                Button {
+                    showsBlockedUsers = true
+                } label: {
+                    HStack {
+                        Label("settings.blockedUsers", systemImage: "person.crop.circle.badge.xmark")
+                        Spacer()
+                        Image(systemName: "chevron.forward")
+                            .accessibilityHidden(true)
+                    }
+                    .frame(minHeight: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("profile.blockedUsers")
+
                 Button(action: onSignOut) {
                     Text("auth.signOut").frame(maxWidth: .infinity, minHeight: 44)
                 }
@@ -89,6 +108,9 @@ struct ProfileScreen: View {
         .onChange(of: pickedPhoto) { _, item in
             guard let item else { return }
             Task { await upload(item) }
+        }
+        .fullScreenCover(isPresented: $showsBlockedUsers) {
+            BlockedUsersScreen(uid: uid) { showsBlockedUsers = false }
         }
     }
 

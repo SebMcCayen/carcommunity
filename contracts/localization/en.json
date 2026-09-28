@@ -612,7 +612,10 @@
     "unblockConfirmAction": "Unblock",
     "unblockCancelAction": "Cancel",
     "unblockSuccess": "User has been unblocked.",
-    "errorGeneric": "Something went wrong. Please try again."
+    "errorGeneric": "Something went wrong. Please try again.",
+    "unavailable": "Blocked users are unavailable right now.",
+    "retry": "Try again",
+    "unknownUser": "Unknown user"
   },
   "friends": {
     "addSectionTitle": "Add a friend",
