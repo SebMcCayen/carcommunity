@@ -1264,6 +1264,11 @@ struct ShellView: View {
         // Convoy discovery is independent of the map's live-session wiring.
         // Load it last so a slow callable cannot delay location controls.
         await convoyManagement.load()
+        // The shell may have disappeared (restriction/sign-out) or switched
+        // identities while the callable was suspended. Its onDisappear path
+        // has already stopped exact-location/background recording; never let
+        // this stale continuation reconcile and start it again.
+        guard !Task.isCancelled, uid == signedInUid else { return }
         reconcileDriveRecording()
         await wireCrownHunt()
     }
