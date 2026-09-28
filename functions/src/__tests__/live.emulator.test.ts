@@ -35,6 +35,7 @@ import { getDatabase as getAdminDatabase } from 'firebase-admin/database';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runLiveCleanup } from '../live/scheduled';
 import {
+  activateDiscoveryGeneration,
   commitLatestForActiveSession,
   stopAndClear,
   writeDiscoveryForGeneration,
@@ -209,6 +210,100 @@ describe('live session lifecycle', () => {
       expect((await adminRtdb.ref(`liveLocation/${uid}/latest`).get()).exists()).toBe(false);
     },
   );
+
+  it('fails discovery closed for missing and older fences, then accepts the exact active fence', async () => {
+    const uid = `fence-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    const now = new Date();
+    const session = {
+      id: `session-${uid}`,
+      generation: 12,
+      status: 'active' as const,
+      duration: '1h' as const,
+      startedAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + 60 * 60_000).toISOString(),
+      stoppedAt: null,
+      displayName: 'Fence test',
+      mainCar: null,
+    };
+    const fields = {
+      uid,
+      latitude: 59.334,
+      longitude: 18.063,
+      geoCell: 'fence-cell',
+      displayName: 'Fence test',
+      updatedAt: Timestamp.fromDate(now),
+      expiresAt: Timestamp.fromDate(new Date(now.getTime() + 15 * 60_000)),
+    };
+
+    // Missing lifecycle authorization must never be minted by a position write.
+    expect(await writeDiscoveryForGeneration(uid, session, fields)).toBe(false);
+    expect((await adminDb.collection('_liveSessionFences').doc(uid).get()).exists).toBe(false);
+    expect((await adminDb.collection('liveSessions').doc(uid).get()).exists).toBe(false);
+
+    // A newer RTDB session may publish only after its start path activates the
+    // matching Firestore generation; an older active fence is not sufficient.
+    await adminDb.collection('_liveSessionFences').doc(uid).set({
+      generation: session.generation - 1,
+      sessionId: 'older-session',
+      active: true,
+    });
+    expect(await writeDiscoveryForGeneration(uid, session, fields)).toBe(false);
+    await activateDiscoveryGeneration(uid, session);
+    expect(await writeDiscoveryForGeneration(uid, session, fields)).toBe(true);
+    expect((await adminDb.collection('liveSessions').doc(uid).get()).data()).toMatchObject({
+      sessionId: session.id,
+      sessionGeneration: session.generation,
+    });
+  });
+
+  it('does not recreate discovery when an update resumes after account-style purge', async () => {
+    const uid = `purge-race-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    const now = new Date();
+    const heldSession = {
+      id: `session-${uid}`,
+      generation: 4,
+      status: 'active' as const,
+      duration: '1h' as const,
+      startedAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + 60 * 60_000).toISOString(),
+      stoppedAt: null,
+      displayName: 'Purge race',
+      mainCar: null,
+    };
+    await adminDb.collection('_liveSessionFences').doc(uid).set({
+      generation: heldSession.generation,
+      sessionId: heldSession.id,
+      active: true,
+    });
+    await adminDb.collection('liveSessions').doc(uid).set({
+      uid,
+      latitude: 59.334,
+      longitude: 18.063,
+      geoCell: 'purge-cell',
+      sessionId: heldSession.id,
+      sessionGeneration: heldSession.generation,
+    });
+
+    // An account purge has already removed the RTDB subtree. The privacy path
+    // must clear both Firestore documents atomically even without a session.
+    await adminRtdb.ref(`liveLocation/${uid}`).remove();
+    await stopAndClear(uid, 'hide_me_now');
+    expect((await adminDb.collection('_liveSessionFences').doc(uid).get()).exists).toBe(false);
+    expect((await adminDb.collection('liveSessions').doc(uid).get()).exists).toBe(false);
+
+    const resumed = await writeDiscoveryForGeneration(uid, heldSession, {
+      uid,
+      latitude: 59.335,
+      longitude: 18.064,
+      geoCell: 'purge-cell',
+      displayName: 'Purge race',
+      updatedAt: Timestamp.fromDate(now),
+      expiresAt: Timestamp.fromDate(new Date(now.getTime() + 15 * 60_000)),
+    });
+    expect(resumed).toBe(false);
+    expect((await adminDb.collection('_liveSessionFences').doc(uid).get()).exists).toBe(false);
+    expect((await adminDb.collection('liveSessions').doc(uid).get()).exists).toBe(false);
+  });
 
   it('start → update → marker exists → stop removes it', async () => {
     await signInAs(member);

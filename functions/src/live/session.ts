@@ -96,7 +96,7 @@ const sessionGeneration = (session: LiveSession | null | undefined): number =>
  * A delayed older start cannot replace a newer fence because generations are
  * monotonic and compared inside the same transaction as discovery cleanup.
  */
-async function activateDiscoveryGeneration(uid: string, session: LiveSession): Promise<void> {
+export async function activateDiscoveryGeneration(uid: string, session: LiveSession): Promise<void> {
   const generation = sessionGeneration(session);
   await db.runTransaction(async (tx) => {
     const fenceSnapshot = await tx.get(discoveryFenceRef(uid));
@@ -150,19 +150,13 @@ export async function writeDiscoveryForGeneration(
   return db.runTransaction(async (tx) => {
     const fenceSnapshot = await tx.get(discoveryFenceRef(uid));
     const fence = fenceSnapshot.data() as DiscoveryFence | undefined;
-    if (fence && fence.generation > generation) {
+    if (
+      !fence ||
+      !fence.active ||
+      fence.generation !== generation ||
+      fence.sessionId !== session.id
+    ) {
       return false;
-    }
-    if (fence?.generation === generation && (!fence.active || fence.sessionId !== session.id)) {
-      return false;
-    }
-    // Missing/older fences are possible for a session that began before this
-    // deployment or whose start callable lost its Firestore response after the
-    // RTDB commit. The RTDB root transaction already authorized this exact
-    // generation, so advancing the fence here is safe; an equal-generation
-    // revocation above always wins.
-    if (!fence || fence.generation < generation) {
-      tx.set(discoveryFenceRef(uid), { generation, sessionId: session.id, active: true });
     }
     tx.set(discoveryRef(uid), {
       ...fields,
@@ -572,7 +566,13 @@ export async function stopAndClear(uid: string, reason: LiveStopReason): Promise
   if (session) {
     await revokeDiscoveryGeneration(uid, session);
   } else {
-    await discoveryRef(uid).delete();
+    // With no RTDB session, no discovery generation may remain authorized.
+    // Delete both documents in one commit so a delayed post-purge update sees
+    // a missing fence and fails closed instead of recreating exact coordinates.
+    const batch = db.batch();
+    batch.delete(discoveryRef(uid));
+    batch.delete(discoveryFenceRef(uid));
+    await batch.commit();
   }
   return { sessionId: session?.id ?? 'none', status: 'stopped' };
 }
