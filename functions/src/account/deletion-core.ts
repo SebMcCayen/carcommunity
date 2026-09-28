@@ -112,32 +112,6 @@ export const PURGE_DOC_TREES = [
   // rows other members hold about this user) is swept separately — see
   // PURGE_BLOCK_MIRROR.
   'userBlocks',
-  // The nearby-discovery index, liveSessions/{uid} (live/nearby-core.ts): a
-  // uid-keyed doc carrying the sharer's LAST POSITION (latitude/longitude +
-  // geoCell) and their denormalized displayName — the same leak shape as the
-  // friend/block mirrors, with a coordinate attached.
-  //
-  // It has its own TTL, so in normal operation it is deleted within
-  // DISCOVERY_TTL_MS (15 minutes) by live-cleanupExpired's sweepDiscoveryDocs,
-  // long before the 30-day purge runs. It is listed here anyway because
-  // ERASURE MUST NOT DEPEND ON A DIFFERENT SCHEDULED JOB HAVING SUCCEEDED: a
-  // sweep that is failing, throttled or undeployed removes nothing at all, and
-  // one that is merely behind removes late — it is hard-capped at 400 deletes
-  // per run, so a backlog above that rate is worked off across several runs.
-  // (That backlog drains OLDEST-EXPIRY-FIRST, not in uid order: the
-  // `expiresAt <= now` inequality makes Firestore order the query by expiresAt
-  // ascending, so no individual doc is starved indefinitely and the failure
-  // mode of a lagging sweep is delay rather than permanent survival. It is the
-  // not-running case that leaves the doc forever.) Deleting it here costs one
-  // no-op delete in the overwhelmingly common case where the sweep already
-  // got it.
-  //
-  // No subcollections beneath it — recursiveDelete just removes the document.
-  'liveSessions',
-  // Backend-only generation fence paired with liveSessions/{uid}. It carries no
-  // coordinate, but is uid-keyed lifecycle data and must follow the same account
-  // erasure path rather than surviving forever after the RTDB subtree is gone.
-  '_liveSessionFences',
 ] as const;
 
 export const PURGE_OWNED_COLLECTIONS: ReadonlyArray<{
