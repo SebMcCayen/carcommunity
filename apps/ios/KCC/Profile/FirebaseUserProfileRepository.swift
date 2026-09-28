@@ -61,9 +61,77 @@ final class FirebaseUserProfileRepository: UserProfileRepository, @unchecked Sen
         try? await storage.reference(withPath: avatarPath).downloadURL()
     }
 
+    func updateProfile(uid: String, profile: ValidatedProfile) async throws {
+        var update: [String: Any] = [
+            "displayName": profile.displayName,
+            "bio": profile.bio,
+            "updatedAt": FieldValue.serverTimestamp(),
+        ]
+        update["facebook"] = profile.facebook.map { $0 as Any } ?? FieldValue.delete()
+        update["instagram"] = profile.instagram.map { $0 as Any } ?? FieldValue.delete()
+        update["youtube"] = profile.youtube.map { $0 as Any } ?? FieldValue.delete()
+        try await firestore.collection(Self.usersCollection).document(uid).updateData(update)
+    }
+
+    func uploadAvatar(uid: String, jpegData: Data) async throws {
+        guard !uid.isEmpty, jpegData.count <= Self.avatarMaxBytes else {
+            throw AvatarUploadError.invalidInput
+        }
+        let path = "profileImages/\(uid)/\(UUID().uuidString.lowercased()).jpg"
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        _ = try await storage.reference(withPath: path).putDataAsync(jpegData, metadata: metadata)
+
+        let document = firestore.collection(Self.usersCollection).document(uid)
+        do {
+            // The transaction returns the path it replaced. Concurrent uploads
+            // therefore form a chain (old -> A -> B): the winner that replaces
+            // each path owns cleaning it up, and no upload can delete a newer
+            // avatar selected by another request.
+            let result = try await firestore.runTransaction { transaction, errorPointer in
+                do {
+                    let snapshot = try transaction.getDocument(document)
+                    let previousPath = snapshot.get("avatarPath") as? String
+                    transaction.updateData([
+                        "avatarPath": path,
+                        "updatedAt": FieldValue.serverTimestamp(),
+                    ], forDocument: document)
+                    return previousPath ?? NSNull()
+                } catch let error as NSError {
+                    errorPointer?.pointee = error
+                    return nil
+                }
+            }
+            if let previousPath = result as? String,
+               Self.isOwnedAvatarPath(previousPath, uid: uid), previousPath != path {
+                // Best effort: the profile commit must remain successful even
+                // when deleting an obsolete image is temporarily unavailable.
+                try? await storage.reference(withPath: previousPath).delete()
+            }
+        } catch {
+            // A transaction completion can be ambiguous after a network loss.
+            // Re-read before cleanup: delete this unique upload only when it is
+            // definitely not the selected avatar. If the read also fails, keep
+            // the object rather than risk deleting the live profile image.
+            if let snapshot = try? await document.getDocument(),
+               snapshot.get("avatarPath") as? String != path {
+                try? await storage.reference(withPath: path).delete()
+            }
+            throw error
+        }
+    }
+
     // MARK: - Factory
 
     private static let usersCollection = "users"
+    private static let avatarMaxBytes = 5 * 1024 * 1024
+
+    private static func isOwnedAvatarPath(_ path: String, uid: String) -> Bool {
+        let prefix = "profileImages/\(uid)/"
+        guard path.hasPrefix(prefix) else { return false }
+        let objectName = path.dropFirst(prefix.count)
+        return !objectName.isEmpty && !objectName.contains("/")
+    }
 
     private static let cachedLock = NSLock()
     nonisolated(unsafe) private static var cached: FirebaseUserProfileRepository?
@@ -109,3 +177,5 @@ final class FirebaseUserProfileRepository: UserProfileRepository, @unchecked Sen
 private struct ListenerBox: @unchecked Sendable {
     let registration: ListenerRegistration
 }
+
+private enum AvatarUploadError: Error { case invalidInput }

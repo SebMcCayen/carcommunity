@@ -1,123 +1,121 @@
+import ImageIO
+import PhotosUI
 import SwiftUI
+import UIKit
 
-/// Signed-in own-profile surface — now backed by the live `users/{uid}`
-/// Firestore document via ``ProfileCoordinator``, mirroring the VIEW-mode
-/// fields of Android's `profile/ProfileScreen.kt`: circular avatar (resolved
-/// download URL rendered with AsyncImage — Coil on Android), display name,
-/// and bio. Edit mode, social links, badges, points and stats come with
-/// their own slices.
-///
-/// The auth display name remains the fallback identity surface while the
-/// document is loading, unavailable (config-less build) or errored — the
-/// screen never blanks a name it already had, and per the PII rules the uid
-/// is never shown or logged. Sign-out stays a DIRECT action with no
-/// confirmation dialog, exactly like Android's map-home profile menu entry.
-///
-/// The repository and the uid are wired at feature level through the
-/// `createIfAvailable` factories (the same construction pattern Android
-/// uses), so the shell keeps constructing this screen with identity +
-/// closures only; the coordinator-taking initializer is the seam previews
-/// use.
 struct ProfileScreen: View {
-    /// The signed-in member's auth display name; the fallback while the
-    /// profile document has not loaded (or has no name of its own).
     let displayName: String?
     let onSignOut: () -> Void
     let onBack: () -> Void
-
     @State private var coordinator: ProfileCoordinator
+    @State private var editor: ProfileEditCoordinator
+    @State private var editing = false
+    @State private var draft = ProfileDraft(profile: nil)
+    @State private var validationError: ProfileValidationError?
+    @State private var pickedPhoto: PhotosPickerItem?
 
-    /// Production wiring (unchanged shell-facing signature): builds the
-    /// coordinator from the feature-level factories. In a config-less build
-    /// both factories return nil and the coordinator settles on
-    /// ``ProfileUiState/unavailable`` — the screen then renders exactly the
-    /// pre-Firestore fallback.
-    init(displayName: String?, onSignOut: @escaping () -> Void, onBack: @escaping () -> Void) {
+    init(
+        uid: String?, displayName: String?, onSignOut: @escaping () -> Void,
+        onBack: @escaping () -> Void
+    ) {
+        let repository = FirebaseUserProfileRepository.createIfAvailable()
         self.init(
             displayName: displayName,
             onSignOut: onSignOut,
             onBack: onBack,
-            coordinator: ProfileCoordinator(
-                repository: FirebaseUserProfileRepository.createIfAvailable(),
-                uid: Self.signedInUid()
-            )
+            coordinator: ProfileCoordinator(repository: repository, uid: uid),
+            editor: ProfileEditCoordinator(repository: repository, uid: uid)
         )
     }
 
-    /// Preview/test seam: inject a coordinator (typically fed by a fake
-    /// repository).
     init(
-        displayName: String?,
-        onSignOut: @escaping () -> Void,
-        onBack: @escaping () -> Void,
-        coordinator: ProfileCoordinator
+        displayName: String?, onSignOut: @escaping () -> Void, onBack: @escaping () -> Void,
+        coordinator: ProfileCoordinator,
+        editor: ProfileEditCoordinator? = nil
     ) {
         self.displayName = displayName
         self.onSignOut = onSignOut
         self.onBack = onBack
         _coordinator = State(initialValue: coordinator)
+        _editor = State(initialValue: editor ?? ProfileEditCoordinator(repository: nil, uid: nil))
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: KccSpacing.s4) {
-            Button(action: onBack) {
-                Label("profile.back", systemImage: "chevron.backward")
-                    .font(.system(size: KccTypeScale.bodyMd))
+        ScrollView {
+            VStack(alignment: .leading, spacing: KccSpacing.s4) {
+                HStack {
+                    Button(action: onBack) { Label("profile.back", systemImage: "chevron.backward") }
+                    Spacer()
+                    if !editing {
+                        Button("profile.editButton") { beginEditing() }
+                            .disabled(!canEdit)
+                    }
+                }
+                Text("profile.title")
+                    .font(.system(size: KccTypeScale.headingLg, weight: .semibold))
+
+                VStack(spacing: KccSpacing.s2) {
+                    avatar
+                    if editing {
+                        PhotosPicker(selection: $pickedPhoto, matching: .images) {
+                            Text(editor.status == .uploading ? "profile.avatarUploading" : "profile.avatarChange")
+                        }
+                        .disabled(editor.status == .uploading || editor.status == .saving)
+                    }
+                    nameText
+                }
+                .frame(maxWidth: .infinity)
+
+                if editing { editForm } else { profileDetails }
+
+                if editor.status == .failed {
+                    Text("profile.saveError").foregroundStyle(.red)
+                } else if editor.status == .tooLarge {
+                    Text("profile.avatarTooLarge").foregroundStyle(.red)
+                } else if editor.status == .saved {
+                    Text("profile.saved").foregroundStyle(.secondary)
+                }
+
+                Button(action: onSignOut) {
+                    Text("auth.signOut").frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.bordered)
+                .padding(.top, KccSpacing.s6)
             }
-
-            Text("profile.title")
-                .font(.system(size: KccTypeScale.headingLg, weight: .semibold))
-                .padding(.top, KccSpacing.s2)
-
-            // Avatar + name centered as a unit, like Android's AvatarSection.
-            VStack(spacing: KccSpacing.s2) {
-                avatar
-                Text("auth.loggedInAs")
-                    .font(.system(size: KccTypeScale.bodySm))
-                    .foregroundStyle(.secondary)
-                nameText
-            }
-            .frame(maxWidth: .infinity)
-
-            bioSection
-
-            Spacer()
-
-            Button(action: onSignOut) {
-                Text("auth.signOut")
-                    .font(.system(size: KccTypeScale.bodyMd, weight: .semibold))
-                    .frame(maxWidth: .infinity, minHeight: 44)
-            }
-            .buttonStyle(.bordered)
+            .padding(KccSpacing.s6)
         }
-        .padding(KccSpacing.s6)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        // The screen renders as a full-screen overlay above the tab shell, so
-        // it must paint an opaque, scheme-aware background of its own.
-        .background(.background, ignoresSafeAreaEdges: .all)
+        .background(.background)
         .task { coordinator.start() }
+        .onChange(of: pickedPhoto) { _, item in
+            guard let item else { return }
+            Task { await upload(item) }
+        }
     }
 
-    // MARK: - Sections
+    private var canEdit: Bool {
+        if case .loaded = coordinator.state { return true }
+        return false
+    }
 
-    /// 96pt circle: the resolved avatar via AsyncImage, or the "?"
-    /// placeholder tint — Android's `AvatarSection` (a failed/missing URL
-    /// keeps the placeholder; a picture is cosmetic, never an error state).
+    private var loadedProfile: UserProfile? {
+        if case .loaded(let profile) = coordinator.state { return profile }
+        return nil
+    }
+
+    private var resolvedDisplayName: String? {
+        let profileName = loadedProfile?.displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let profileName, !profileName.isEmpty { return profileName }
+        let authName = displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return authName?.isEmpty == false ? authName : nil
+    }
+
     private var avatar: some View {
         ZStack {
-            Circle()
-                .fill(Color(.secondarySystemBackground))
+            Circle().fill(Color(.secondarySystemBackground))
             if let url = coordinator.avatarURL {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } placeholder: {
-                    avatarPlaceholder
-                }
-            } else {
-                avatarPlaceholder
-            }
+                AsyncImage(url: url) { image in image.resizable().scaledToFill() }
+                    placeholder: { avatarPlaceholder }
+            } else { avatarPlaceholder }
         }
         .frame(width: 96, height: 96)
         .clipShape(Circle())
@@ -125,133 +123,104 @@ struct ProfileScreen: View {
     }
 
     private var avatarPlaceholder: some View {
-        Text(verbatim: "?")
-            .font(.system(size: KccTypeScale.headingLg))
-            .foregroundStyle(.secondary)
+        Text(verbatim: "?").font(.system(size: KccTypeScale.headingLg)).foregroundStyle(.secondary)
     }
 
-    /// The profile displayName once loaded and non-blank; the auth display
-    /// name as fallback while loading/unavailable/errored (and when the doc
-    /// has no usable name); the explicit empty-name placeholder only when
-    /// neither exists after load — Android's `profile_emptyDisplayName`.
-    @ViewBuilder
-    private var nameText: some View {
-        if let name = resolvedDisplayName {
-            Text(name)
-                .font(.system(size: KccTypeScale.titleMd, weight: .medium))
-        } else if case .loaded = coordinator.state {
-            Text("profile.emptyDisplayName")
-                .font(.system(size: KccTypeScale.titleMd, weight: .medium))
-                .foregroundStyle(.secondary)
-        }
+    @ViewBuilder private var nameText: some View {
+        if let resolvedDisplayName { Text(resolvedDisplayName).font(.system(size: KccTypeScale.titleMd, weight: .medium)) }
+        else { Text("profile.emptyDisplayName").foregroundStyle(.secondary) }
     }
 
-    private var resolvedDisplayName: String? {
-        if case .loaded(let profile) = coordinator.state,
-            let name = profile?.displayName,
-            !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        {
-            return name
-        }
-        // The auth fallback gets the same blank-means-absent rule, so a
-        // whitespace-only Firebase displayName never renders as an empty
-        // name line.
-        guard let displayName,
-            !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else { return nil }
-        return displayName
-    }
-
-    /// Bio once loaded (empty-bio placeholder when blank — Android's
-    /// `profile_emptyBio`), a small spinner during first load, a generic
-    /// retry-free notice on listener error (the listener self-corrects on a
-    /// later snapshot — Android's `profile_loadError` posture). Unavailable
-    /// renders nothing extra.
-    @ViewBuilder
-    private var bioSection: some View {
+    @ViewBuilder private var profileDetails: some View {
         switch coordinator.state {
-        case .loading:
-            ProgressView()
-                .frame(maxWidth: .infinity)
+        case .loading: ProgressView().frame(maxWidth: .infinity)
         case .loaded(let profile):
-            if let bio = profile?.bio,
-                !bio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            {
+            if let bio = profile?.bio?.trimmingCharacters(in: .whitespacesAndNewlines), !bio.isEmpty {
                 Text(bio)
-                    .font(.system(size: KccTypeScale.bodyMd))
-            } else {
-                Text("profile.emptyBio")
-                    .font(.system(size: KccTypeScale.bodyMd))
-                    .foregroundStyle(.secondary)
-            }
-        case .failed:
-            Text("profile.loadError")
-                .font(.system(size: KccTypeScale.bodySm))
-                .foregroundStyle(.secondary)
-        case .unavailable:
-            EmptyView()
+            } else { Text("profile.emptyBio").foregroundStyle(.secondary) }
+        case .failed: Text("profile.loadError").foregroundStyle(.secondary)
+        case .unavailable: EmptyView()
         }
     }
 
-    // MARK: - Wiring
+    private var editForm: some View {
+        VStack(alignment: .leading, spacing: KccSpacing.s3) {
+            TextField("profile.displayNameLabel", text: $draft.displayName)
+                .textFieldStyle(.roundedBorder).textContentType(.nickname)
+            TextField("profile.bioLabel", text: $draft.bio, axis: .vertical)
+                .textFieldStyle(.roundedBorder).lineLimit(3...6)
+            Text("profile.social.sectionTitle").font(.headline)
+            Text("profile.social.publicNotice").font(.footnote).foregroundStyle(.secondary)
+            socialField("profile.social.facebookLabel", text: $draft.facebook)
+            socialField("profile.social.instagramLabel", text: $draft.instagram)
+            socialField("profile.social.youtubeLabel", text: $draft.youtube)
+            if let validationError {
+                Text(validationKey(validationError)).foregroundStyle(.red)
+            }
+            HStack {
+                Button("profile.cancelButton") { editing = false; validationError = nil; editor.reset() }
+                    .buttonStyle(.bordered)
+                Button("profile.saveButton") {
+                    Task {
+                        validationError = await editor.save(draft)
+                        if validationError == nil, editor.status == .saved { editing = false }
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(editor.status == .saving || editor.status == .uploading)
+            }
+        }
+    }
 
-    /// The signed-in uid from the process-wide auth repository, nil when
-    /// Firebase is unconfigured or no session exists. Read here (feature
-    /// level) so the shell-facing init stays identity + closures only.
-    private static func signedInUid() -> String? {
-        if case .signedIn(let uid, _)? = FirebaseAuthRepository.createIfAvailable()?.authState {
-            return uid
+    private func socialField(_ title: LocalizedStringKey, text: Binding<String>) -> some View {
+        TextField(title, text: text, prompt: Text("profile.social.hint"))
+            .textFieldStyle(.roundedBorder).textInputAutocapitalization(.never).autocorrectionDisabled()
+    }
+
+    private func validationKey(_ error: ProfileValidationError) -> LocalizedStringKey {
+        switch error {
+        case .nameRequired: "profile.errorNameRequired"
+        case .tooLong: "profile.errorTooLong"
+        case .invalidSocial: "profile.social.errorMalformed"
+        }
+    }
+
+    private func beginEditing() {
+        draft = ProfileDraft(profile: loadedProfile)
+        validationError = nil
+        editor.reset()
+        editing = true
+    }
+
+    private func upload(_ item: PhotosPickerItem) async {
+        defer { pickedPhoto = nil }
+        guard let raw = try? await item.loadTransferable(type: Data.self),
+              let jpeg = AvatarImageProcessor.jpegData(from: raw)
+        else { editor.markUploadFailed(); return }
+        await editor.uploadAvatar(jpegData: jpeg)
+    }
+
+}
+
+enum AvatarImageProcessor {
+    static func jpegData(from data: Data, maxDimension: CGFloat = 2048) -> Data? {
+        // Bound the encoded input before ImageIO sees it, then request a thumbnail
+        // so a huge-pixel image is never fully decompressed into app memory.
+        guard !data.isEmpty, data.count <= 50 * 1024 * 1024,
+              let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: Int(maxDimension),
+              ] as CFDictionary)
+        else { return nil }
+        let normalized = UIImage(cgImage: image)
+        for quality in stride(from: CGFloat(0.85), through: CGFloat(0.35), by: -0.1) {
+            if let encoded = normalized.jpegData(compressionQuality: quality),
+               encoded.count <= 5 * 1024 * 1024 {
+                return encoded
+            }
         }
         return nil
     }
-}
-
-#Preview("With display name (unavailable build)") {
-    ProfileScreen(displayName: "Sebbe", onSignOut: {}, onBack: {})
-}
-
-#Preview("No display name (unavailable build)") {
-    ProfileScreen(displayName: nil, onSignOut: {}, onBack: {})
-}
-
-#Preview("Loaded profile") {
-    let repository = PreviewUserProfileRepository(
-        profile: UserProfile(
-            displayName: "Sebbe",
-            bio: "Bakhjulsdriven vardag. E46:an är aldrig färdig.",
-            avatarPath: nil
-        )
-    )
-    ProfileScreen(
-        displayName: "Sebbe",
-        onSignOut: {},
-        onBack: {},
-        coordinator: ProfileCoordinator(repository: repository, uid: "preview-uid")
-    )
-}
-
-/// Preview-only scripted repository: yields one settled snapshot and stays
-/// open, like a real listener. Never resolves an avatar (placeholder shows).
-private final class PreviewUserProfileRepository: UserProfileRepository, @unchecked Sendable {
-    private let profile: UserProfile?
-    /// Keeps every handed-out stream's continuation alive for the preview's
-    /// lifetime — see profileUpdates.
-    private var openContinuations: [AsyncStream<UserProfileSnapshot>.Continuation] = []
-
-    init(profile: UserProfile?) {
-        self.profile = profile
-    }
-
-    func profileUpdates(uid: String) -> AsyncStream<UserProfileSnapshot> {
-        let profile = profile
-        return AsyncStream { continuation in
-            continuation.yield(.loaded(profile))
-            // Retain the continuation so the stream stays open like a real
-            // listener (finishing it would end the coordinator's
-            // subscription task immediately).
-            self.openContinuations.append(continuation)
-        }
-    }
-
-    func avatarDownloadURL(for avatarPath: String) async -> URL? { nil }
 }

@@ -35,7 +35,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { get as dbGet, ref as dbRef, set as dbSet } from 'firebase/database';
-import { getBytes, ref as storageRef, uploadBytes } from 'firebase/storage';
+import { deleteObject, getBytes, ref as storageRef, uploadBytes } from 'firebase/storage';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -3548,6 +3548,29 @@ describe('Cloud Storage – ownership validation', () => {
     const data = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
     const ref = storageRef(ctx.storage(), `profileImages/${OWNER}/avatar.jpg`);
     await assertFails(uploadBytes(ref, data, { contentType: 'image/jpeg' }));
+  });
+
+  it('owner can delete an obsolete profile image', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    const ref = storageRef(ctx.storage(), `profileImages/${OWNER}/obsolete.jpg`);
+    await assertSucceeds(
+      uploadBytes(ref, new Uint8Array([0xff, 0xd8, 0xff, 0xe0]), {
+        contentType: 'image/jpeg',
+      }),
+    );
+    await assertSucceeds(deleteObject(ref));
+  });
+
+  it("another user cannot delete an owner's profile image", async () => {
+    const owner = testEnv.authenticatedContext(OWNER);
+    const other = testEnv.authenticatedContext(OTHER);
+    const path = `profileImages/${OWNER}/kept.jpg`;
+    await assertSucceeds(
+      uploadBytes(storageRef(owner.storage(), path), new Uint8Array([0xff, 0xd8]), {
+        contentType: 'image/jpeg',
+      }),
+    );
+    await assertFails(deleteObject(storageRef(other.storage(), path)));
   });
 
   it('unauthenticated user cannot read a profile image', async () => {
