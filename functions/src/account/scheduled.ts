@@ -8,9 +8,7 @@
  *    userPrivate/{uid} incl. pushTokens, userLifecycle/{uid}
  *    (last-login + inactivity state), notifications/{uid} incl.
  *    items, pointsLedger/{uid} incl. entries, badgeProgress/{uid},
- *    userBlocks/{uid} incl. blocked, liveSessions/{uid} (the nearby-
- *    discovery doc: last coordinate + denormalized displayName)) via
- *    recursiveDelete.
+ *    userBlocks/{uid} incl. blocked) via recursiveDelete.
  * 2. Owned documents by query (vehicles, rides where userId == uid).
  * 3. Social-graph MIRRORS — the rows other users' documents carry about
  *    the deleted user, which no owned-doc purge can reach: the mirror
@@ -21,10 +19,11 @@
  *    and convoy membership (memberUids/members/memberProfiles, plus the
  *    stored summary's participantUids and the shared destination's
  *    setByDisplayName).
- * 4. Live-location state in Realtime Database: the liveLocation/{uid}
+ * 4. Live-location state: first the Realtime Database liveLocation/{uid}
  *    subtree (whose `session` node — denormalized displayName, main-car
  *    snapshot, last recorded coordinate — is never deleted by stop /
- *    hide-me-now / the TTL sweep) and presence/{uid}.
+ *    hide-me-now / the TTL sweep), then the Firestore discovery + generation
+ *    fence in one atomic batch, then presence/{uid}.
  * 5. Chat erasure: the user's 1:1 DM conversations (conversation doc +
  *    messages subcollection) wholesale, and the community + convoy
  *    channel messages the user authored (by senderUid).
@@ -190,10 +189,11 @@ async function purgeBlockGraph(uid: string): Promise<void> {
  * LIVE_LOCATION_RTDB_ROOTS in deletion-core.ts for what each carries and why the
  * session node would otherwise survive erasure forever).
  *
- * The Firestore half of this domain — the `liveSessions/{uid}` nearby-discovery
- * doc, which carries the last coordinate and the denormalized displayName — is
- * purged with the doc trees in purgeUserData, since it is a plain uid-keyed
- * document.
+ * After RTDB authorization is gone, `liveSessions/{uid}` and its backend-only
+ * `_liveSessionFences/{uid}` authorization document are deleted atomically.
+ * This ordering is a privacy invariant: an in-flight discovery transaction
+ * conflicts with the batch, retries, sees no exact active fence, and fails
+ * closed instead of recreating the deleted coordinate.
  *
  * Each root is removed at `{root}/{uid}` — a path built from the uid alone, so
  * there is nothing to read first and nothing a partial purge can orphan. Writing
@@ -206,8 +206,22 @@ async function purgeBlockGraph(uid: string): Promise<void> {
  * as the sequential form did.
  */
 async function purgeLiveLocationState(uid: string): Promise<void> {
+  // Revoke the source of authority first. Position updates transact on this
+  // exact RTDB root, so none can validate after this removal commits.
+  await adminRtdb.ref(`liveLocation/${uid}`).set(null);
+
+  // Fence + coordinate must disappear in one commit. Firestore retries any
+  // concurrent writeDiscoveryForGeneration transaction against this commit;
+  // its exact-fence check then rejects the missing authorization.
+  const batch = db.batch();
+  batch.delete(db.collection('_liveSessionFences').doc(uid));
+  batch.delete(db.collection('liveSessions').doc(uid));
+  await batch.commit();
+
   await Promise.all(
-    LIVE_LOCATION_RTDB_ROOTS.map((root) => adminRtdb.ref(`${root}/${uid}`).set(null)),
+    LIVE_LOCATION_RTDB_ROOTS.filter((root) => root !== 'liveLocation').map((root) =>
+      adminRtdb.ref(`${root}/${uid}`).set(null),
+    ),
   );
 }
 
@@ -428,9 +442,10 @@ export async function purgeUserData(uid: string): Promise<void> {
   await deleteFriendGraphMirror(uid);
   await purgeBlockGraph(uid);
   await removeConvoyMemberships(uid);
-  // Live-location state the doc-tree purge cannot reach: the RTDB session/marker
-  // subtree (its `session` node is never deleted by stop/hide/sweep) and the
-  // presence node. The Firestore discovery doc went with the doc trees above.
+  // Live-location state uses a deliberate cross-store order: revoke the RTDB
+  // session first, then atomically remove the Firestore fence + discovery doc,
+  // then clear presence. These documents are intentionally NOT independent
+  // PURGE_DOC_TREES entries because separate deletes reopen a resurrection race.
   //
   // Placed AFTER the three mirror sweeps so the call order matches the numbered
   // phases in this file's KDoc (3 = social-graph mirrors, 4 = live location).

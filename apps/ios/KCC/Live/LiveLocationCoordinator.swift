@@ -39,6 +39,9 @@ enum LiveActionStatus: Equatable, Sendable {
 ///   (the ``LocationProvider`` contract), so "stop sharing when the drive
 ///   ends" is structural, and an unauthorized stream yields nothing at all —
 ///   fixes flow only while sharing AND authorized.
+/// - Retries only transient position-upload failures, at most twice, while a
+///   one-element relay keeps newer fixes bounded. Stop/Hide cancels retries
+///   and locally suppresses that session even if its callable fails.
 /// - Derives the ported shell inputs: ``toggleAction`` feeds
 ///   ``LiveShareToggle/action(isSharing:canShare:wired:)`` and
 ///   ``manageRows(hasStop:)`` feeds
@@ -127,6 +130,15 @@ final class LiveLocationCoordinator {
     /// production; injected so tests can tick instantly.
     @ObservationIgnored
     private let expiryTickWait: @Sendable () async throws -> Void
+    /// Backoff between transient position-upload attempts. Injected so retry
+    /// behavior is deterministic and instant in unit tests.
+    @ObservationIgnored
+    private let publishRetryWait: @Sendable (Int) async throws -> Void
+    /// A Stop/Hide tap is a local privacy boundary even if the callable
+    /// fails. Keep background positioning down until a genuinely new session
+    /// arrives rather than silently resuming against the user's instruction.
+    @ObservationIgnored
+    private var locallyStoppedSessionId: String?
 
     /// - Parameters:
     ///   - repository: nil when Firebase is not configured in this build —
@@ -145,6 +157,10 @@ final class LiveLocationCoordinator {
         now: @escaping @Sendable () -> Date = { Date() },
         expiryTickWait: @escaping @Sendable () async throws -> Void = {
             try await Task.sleep(nanoseconds: UInt64(LiveShareCadence.expiryTick * 1_000_000_000))
+        },
+        publishRetryWait: @escaping @Sendable (Int) async throws -> Void = { attempt in
+            let seconds = min(pow(2, Double(attempt)), 4)
+            try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
         }
     ) {
         self.repository = repository
@@ -152,6 +168,7 @@ final class LiveLocationCoordinator {
         self.canShare = canShare
         self.now = now
         self.expiryTickWait = expiryTickWait
+        self.publishRetryWait = publishRetryWait
         self.uid = repository?.currentUserId()
     }
 
@@ -190,6 +207,17 @@ final class LiveLocationCoordinator {
         }
     }
 
+    /// Releases every observation and positioning demand owned by this
+    /// signed-in composition. The shell calls this before an identity swap
+    /// and when it leaves the view hierarchy, so sign-out does not depend on
+    /// ARC/deinit timing while a network operation is suspended.
+    func shutdown() {
+        sessionSubscription?.cancel()
+        sessionSubscription = nil
+        locallyStoppedSessionId = session?.sessionId
+        endPublishing()
+    }
+
     // MARK: - Commands
 
     /// Starts a session for the fixed default window (6h — see
@@ -216,9 +244,9 @@ final class LiveLocationCoordinator {
     }
 
     /// Stops the session (`user_stop`) and removes the marker. The fixes
-    /// stream is torn down FIRST so the GPS stops immediately; a failure
-    /// reconciles it back while the session is still active, so a marker is
-    /// never left going stale by a failed stop.
+    /// stream is torn down FIRST so the GPS stops immediately. A failure is
+    /// surfaced but never resumes this session's local positioning: the tap
+    /// remains a privacy boundary while the user retries the command.
     @discardableResult
     func stopSharing() async -> LiveCommandResult {
         await execute(tearDownPublishingFirst: true) { repository in
@@ -255,7 +283,7 @@ final class LiveLocationCoordinator {
     /// Aligns the publish loop with the observed session: sharing and no
     /// loop → start one; not sharing → tear it down (which stops the GPS).
     private func reconcilePublishing() {
-        if isSharing {
+        if isSharing && session?.sessionId != locallyStoppedSessionId {
             beginPublishingIfNeeded()
         } else {
             endPublishing()
@@ -320,10 +348,14 @@ final class LiveLocationCoordinator {
                 lastSubmittedAt = at
                 lastLatitude = fix.latitude
                 lastLongitude = fix.longitude
-                // A failed publish is dropped (never logged — the payload is
-                // an exact position); the session sweep and the next
-                // qualifying fix self-correct.
-                try? await repository.updatePosition(LiveCoordinate(fix: fix))
+                // Retry only transient callable failures, with a hard bound.
+                // The relay still holds at most one newer fix while these
+                // attempts run, and cancellation from Stop/Hide/expiry aborts
+                // the wait before another exact position can leave the app.
+                try? await self.publishWithRetry(
+                    LiveCoordinate(fix: fix),
+                    repository: repository
+                )
             }
         }
     }
@@ -362,6 +394,29 @@ final class LiveLocationCoordinator {
         expiryWatchdog = nil
     }
 
+    private func publishWithRetry(
+        _ coordinate: LiveCoordinate,
+        repository: LiveLocationRepository
+    ) async throws {
+        for attempt in 0..<3 {
+            do {
+                try await repository.updatePosition(coordinate)
+                return
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                let code = (error as? KccFunctionsError)?.code
+                let transient = code == .internalError || code == .unavailable
+                guard transient, attempt < 2, isSharing,
+                      session?.sessionId != locallyStoppedSessionId else {
+                    throw error
+                }
+                try await publishRetryWait(attempt)
+                try Task.checkCancellation()
+            }
+        }
+    }
+
     /// One command at a time, mirroring Android's `execute`: `working` while
     /// in flight, `failed` on error, busy-rejected when overlapped.
     private func execute(
@@ -370,7 +425,10 @@ final class LiveLocationCoordinator {
     ) async -> LiveCommandResult {
         guard actionStatus != .working else { return .busy }
         guard let repository else { return .failed }
-        if tearDownPublishingFirst { endPublishing() }
+        if tearDownPublishingFirst {
+            locallyStoppedSessionId = session?.sessionId
+            endPublishing()
+        }
         actionStatus = .working
         do {
             try await action(repository)
@@ -381,15 +439,11 @@ final class LiveLocationCoordinator {
             // fault to surface; Android rethrows here, Swift's non-throwing
             // command shape reports plain failure with an idle status.
             actionStatus = .idle
-            reconcilePublishing()
             return .failed
         } catch {
             // Details may reference the request payload (exact coordinates)
             // — never logged.
             actionStatus = .failed
-            // A failed stop/hide leaves the session active: resume
-            // publishing so the marker does not silently go stale.
-            reconcilePublishing()
             return .failed
         }
     }

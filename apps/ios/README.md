@@ -99,6 +99,16 @@ the Swedish base value additionally lives in `project.yml` under
 `.xcstrings` files are JSON and cannot carry comments, so this section (plus
 the note in `project.yml`) is that file's documentation.
 
+## Background location
+
+Live sharing and drive recording each use a dedicated Core Location provider
+with the `location` background mode. They begin only from an explicit,
+time-bounded session while the app is in use, show the system background
+location indicator, and stop their positioning demand on Stop, Hide, expiry,
+sign-out, or session end. The ordinary map provider remains foreground-only.
+The app requests only When In Use authorization; it does not request Always
+authorization or perform passive tracking.
+
 ## Parity
 
 When changing shell behaviour here, port the change (and its tests) to

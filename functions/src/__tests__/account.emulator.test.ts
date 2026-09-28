@@ -38,7 +38,8 @@ import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/fir
 import { getStorage as getAdminStorage } from 'firebase-admin/storage';
 import { getDatabase as getAdminDatabase } from 'firebase-admin/database';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { runAccountPurge } from '../account/scheduled';
+import { purgeUserData, runAccountPurge } from '../account/scheduled';
+import { commitLatestForActiveSession, writeDiscoveryForGeneration } from '../live/session';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -160,6 +161,63 @@ describe('account-deleteAccount (soft delete)', () => {
 });
 
 describe('account purge (hard delete after retention)', () => {
+  it('fences a held discovery update through the actual purge helper', async () => {
+    const user = await createProvisionedUser('purge-live-race');
+    const uid = user.uid;
+    const now = new Date();
+    const session = {
+      id: `session-${uid}`,
+      generation: 9,
+      status: 'active',
+      duration: '1h',
+      startedAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + 60 * 60_000).toISOString(),
+      stoppedAt: null,
+      displayName: 'Purge race',
+      mainCar: null,
+    };
+    await adminRtdb.ref(`liveLocation/${uid}`).set({ session });
+    await adminDb.collection('_liveSessionFences').doc(uid).set({
+      generation: session.generation,
+      sessionId: session.id,
+      active: true,
+    });
+
+    // Hold after the production RTDB transaction has validated the session and
+    // committed latest, but before its Firestore discovery transaction begins.
+    const heldSession = await commitLatestForActiveSession(
+      uid,
+      {
+        latitude: 57.7,
+        longitude: 11.97,
+        accuracyMeters: 8,
+        recordedAt: now.toISOString(),
+      },
+      now,
+    );
+    expect(heldSession?.id).toBe(session.id);
+
+    await purgeUserData(uid);
+    expect((await adminRtdb.ref(`liveLocation/${uid}`).get()).exists()).toBe(false);
+    expect((await adminDb.collection('_liveSessionFences').doc(uid).get()).exists).toBe(false);
+    expect((await adminDb.collection('liveSessions').doc(uid).get()).exists).toBe(false);
+
+    // Resume the held update after purge completion. The batch-deleted fence is
+    // authoritative, so the transaction fails closed and recreates nothing.
+    const resumed = await writeDiscoveryForGeneration(uid, heldSession!, {
+      uid,
+      geoCell: '57.70,11.97',
+      latitude: 57.7,
+      longitude: 11.97,
+      displayName: 'Purge race',
+      updatedAt: Timestamp.fromDate(now),
+      expiresAt: Timestamp.fromDate(new Date(now.getTime() + 15 * 60_000)),
+    });
+    expect(resumed).toBe(false);
+    expect((await adminDb.collection('_liveSessionFences').doc(uid).get()).exists).toBe(false);
+    expect((await adminDb.collection('liveSessions').doc(uid).get()).exists).toBe(false);
+  });
+
   it('purges due requests: trees, owned docs, storage, auth user; keeps the record', async () => {
     const user = await createProvisionedUser('purge-user');
     const uid = user.uid;
