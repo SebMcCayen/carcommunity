@@ -14,9 +14,11 @@ struct ProfileScreen: View {
     @State private var validationError: ProfileValidationError?
     @State private var pickedPhoto: PhotosPickerItem?
 
-    init(displayName: String?, onSignOut: @escaping () -> Void, onBack: @escaping () -> Void) {
+    init(
+        uid: String?, displayName: String?, onSignOut: @escaping () -> Void,
+        onBack: @escaping () -> Void
+    ) {
         let repository = FirebaseUserProfileRepository.createIfAvailable()
-        let uid = Self.signedInUid()
         self.init(
             displayName: displayName,
             onSignOut: onSignOut,
@@ -198,10 +200,6 @@ struct ProfileScreen: View {
         await editor.uploadAvatar(jpegData: jpeg)
     }
 
-    private static func signedInUid() -> String? {
-        if case .signedIn(let uid, _)? = FirebaseAuthRepository.createIfAvailable()?.authState { return uid }
-        return nil
-    }
 }
 
 enum AvatarImageProcessor {

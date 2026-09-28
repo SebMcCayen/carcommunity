@@ -45,6 +45,7 @@ struct AuthenticatedExperience: View {
                         access: access,
                         featureFlags: featureFlags
                     )
+                    .id(uid)
                 } else {
                     OnboardingScreen(coordinator: onboarding)
                 }

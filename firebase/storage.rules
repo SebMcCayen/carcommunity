@@ -52,7 +52,10 @@ service firebase.storage {
     // -------------------------------------------------------------------------
     match /profileImages/{userId}/{imageId} {
       allow read: if isAuthenticated();
-      allow write: if isOwner(userId) && isImage() && isUnderMB(5);
+      // Deletes have no request.resource, so they must not call the upload
+      // validators. Owners need deletion for safe avatar replacement cleanup.
+      allow create, update: if isOwner(userId) && isImage() && isUnderMB(5);
+      allow delete: if isOwner(userId);
       allow write: if isAdmin();
     }
 

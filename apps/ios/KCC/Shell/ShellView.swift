@@ -551,6 +551,7 @@ struct ShellView: View {
         switch route {
         case .profile:
             ProfileScreen(
+                uid: signedInUid,
                 displayName: signedInDisplayName,
                 onSignOut: { session.signOut() },
                 onBack: { routes = routes.poppingOne() }
