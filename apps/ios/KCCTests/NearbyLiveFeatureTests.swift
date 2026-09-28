@@ -181,10 +181,12 @@ final class NearbyLiveCoordinatorTests: XCTestCase {
         coordinator.activate(repository: repository, currentUid: "viewer-b", excludedUids: [])
 
         XCTAssertEqual(coordinator.positions, [:])
-        await wait {
-            repository.terminationCounts["nearby", default: 0] >= 1
-                && repository.openCounts["nearby"] == 2
-        }
+        XCTAssertEqual(coordinator.orderedUids, [])
+        XCTAssertEqual(repository.openCounts["nearby"], 1)
+        await wait { repository.terminationCounts["nearby", default: 0] >= 1 }
+
+        await coordinator.poll(center: MapPoint(longitude: 12, latitude: 57), radiusMeters: 15_000)
+        await wait { repository.openCounts["nearby"] == 2 }
         XCTAssertEqual(coordinator.positions, [:])
         repository.emit(.value(marker("nearby")), uid: "nearby")
         await wait { coordinator.positions["nearby"] != nil }
@@ -197,6 +199,9 @@ final class NearbyLiveCoordinatorTests: XCTestCase {
         )]
         firstRepository.controlledUids = ["nearby"]
         let replacementRepository = FakeRepository()
+        replacementRepository.nearby = [NearbyLiveSession(
+            uid: "nearby", latitude: 57, longitude: 12, displayName: nil
+        )]
         replacementRepository.controlledUids = ["nearby"]
         let coordinator = NearbyLiveCoordinator()
         coordinator.activate(repository: firstRepository, currentUid: "viewer", excludedUids: [])
@@ -212,10 +217,12 @@ final class NearbyLiveCoordinatorTests: XCTestCase {
         )
 
         XCTAssertEqual(coordinator.positions, [:])
-        await wait {
-            firstRepository.terminationCounts["nearby", default: 0] >= 1
-                && replacementRepository.openCounts["nearby"] == 1
-        }
+        XCTAssertEqual(coordinator.orderedUids, [])
+        XCTAssertNil(replacementRepository.openCounts["nearby"])
+        await wait { firstRepository.terminationCounts["nearby", default: 0] >= 1 }
+
+        await coordinator.poll(center: MapPoint(longitude: 12, latitude: 57), radiusMeters: 15_000)
+        await wait { replacementRepository.openCounts["nearby"] == 1 }
         XCTAssertEqual(coordinator.positions, [:])
         replacementRepository.emit(.value(marker("nearby")), uid: "nearby")
         await wait { coordinator.positions["nearby"] != nil }

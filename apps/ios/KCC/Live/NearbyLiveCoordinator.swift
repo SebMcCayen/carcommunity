@@ -36,7 +36,6 @@ final class NearbyLiveCoordinator {
         currentUid: String?,
         excludedUids: Set<String>
     ) {
-        let previouslyAuthorizedRoster = orderedUids
         let crossesAuthorizationBoundary = self.currentUid != currentUid
             || !Self.sameRepository(self.repository, repository)
         if crossesAuthorizationBoundary {
@@ -48,7 +47,9 @@ final class NearbyLiveCoordinator {
         guard repository != nil, currentUid != nil else { deactivate() ; return }
         // Re-apply exclusions immediately. Discovery refresh will reconcile the
         // listener roster; convoy members must never appear in both layers.
-        reconcileSubscriptions(with: previouslyAuthorizedRoster)
+        // An authorization boundary starts with no roster: only discovery
+        // performed by the new user/repository context may authorize reads.
+        reconcileSubscriptions(with: crossesAuthorizationBoundary ? [] : orderedUids)
     }
 
     /// A user or repository identity change invalidates every value obtained
