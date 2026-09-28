@@ -97,6 +97,31 @@ struct ShellView: View {
     }
 
     var body: some View {
+        shellPresentation
+            .task(id: signedInUid) { await wireFeatures() }
+            .task(id: crownFeatureWiringKey) { await wireCrownHunt() }
+            .onChange(of: featureFlags.isEnabled(.liveLocation)) { _, enabled in
+                liveLocationCoordinator?.canShare = enabled && !access.isRestricted
+            }
+            .onChange(of: chatFeatureWiringKey) { _, _ in
+                applyChatFeatureGate()
+            }
+            .task(id: convoyReactionSubscriptionKey) {
+                convoyReactionCoordinator?.sync(convoyId: convoyReactionTargetId)
+            }
+            .task(id: convoyFollowMeSubscriptionKey) {
+                syncFollowMe()
+            }
+            .onDisappear {
+                // RootView removes the entire shell on sign-out or when a live
+                // account update becomes restricted. Stop exact-location and
+                // background drive collection synchronously during that swap.
+                liveLocationCoordinator?.standDownForRestrictedAccess()
+                driveRecordingCoordinator?.reset()
+            }
+    }
+
+    private var shellPresentation: some View {
         ZStack {
             // Exactly one native Mapbox view for the signed-in shell. Tabs and
             // routes cover it instead of recreating its Metal render surface.
@@ -256,30 +281,6 @@ struct ShellView: View {
             Button("convoy.close", role: .cancel) {
                 convoyManagementCoordinator?.clearLeaveResult()
             }
-        }
-        .task(id: signedInUid) { await wireFeatures() }
-        .task(id: crownFeatureWiringKey) { await wireCrownHunt() }
-        .onChange(of: featureFlags.isEnabled(.liveLocation)) { _, enabled in
-            liveLocationCoordinator?.canShare = enabled && !access.isRestricted
-        }
-        .onChange(of: chatFeatureWiringKey) { _, _ in
-            applyChatFeatureGate()
-        }
-        .onDisappear {
-            liveLocationCoordinator?.shutdown()
-        }
-        .task(id: convoyReactionSubscriptionKey) {
-            convoyReactionCoordinator?.sync(convoyId: convoyReactionTargetId)
-        }
-        .task(id: convoyFollowMeSubscriptionKey) {
-            syncFollowMe()
-        }
-        .onDisappear {
-            // RootView removes the entire shell on sign-out or when a live
-            // account update becomes restricted. Stop exact-location and
-            // background drive collection synchronously during that swap.
-            liveLocationCoordinator?.standDownForRestrictedAccess()
-            driveRecordingCoordinator?.reset()
         }
     }
 
