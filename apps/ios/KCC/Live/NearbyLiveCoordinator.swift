@@ -36,13 +36,46 @@ final class NearbyLiveCoordinator {
         currentUid: String?,
         excludedUids: Set<String>
     ) {
+        let previouslyAuthorizedRoster = orderedUids
+        let crossesAuthorizationBoundary = self.currentUid != currentUid
+            || !Self.sameRepository(self.repository, repository)
+        if crossesAuthorizationBoundary {
+            resetAuthorizationBoundary()
+        }
         self.repository = repository
         self.currentUid = currentUid
         self.excludedUids = excludedUids
         guard repository != nil, currentUid != nil else { deactivate() ; return }
         // Re-apply exclusions immediately. Discovery refresh will reconcile the
         // listener roster; convoy members must never appear in both layers.
-        reconcileSubscriptions(with: orderedUids)
+        reconcileSubscriptions(with: previouslyAuthorizedRoster)
+    }
+
+    /// A user or repository identity change invalidates every value obtained
+    /// through the previous authorization context, even when discovery later
+    /// returns the same uid roster. Clear before installing the new identity
+    /// so cancelled streams cannot leave old markers visible during refresh.
+    private func resetAuthorizationBoundary() {
+        generation += 1
+        cancelTasks()
+        subscriptionKey = ""
+        orderedUids = []
+        positions = [:]
+        imageURLs = [:]
+        imageAttempts = []
+        lastRefreshFailed = false
+        lastDiscoveryStartedAt = nil
+    }
+
+    private static func sameRepository(
+        _ lhs: LiveLocationRepository?,
+        _ rhs: LiveLocationRepository?
+    ) -> Bool {
+        switch (lhs, rhs) {
+        case (nil, nil): return true
+        case let (lhs?, rhs?): return lhs === rhs
+        default: return false
+        }
     }
 
     func deactivate() {

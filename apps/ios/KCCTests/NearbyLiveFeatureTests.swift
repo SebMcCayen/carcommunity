@@ -165,6 +165,62 @@ final class NearbyLiveCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.imageURLs, [:])
     }
 
+    func testUserSwitchWithSameRosterClearsOldMarkerAndReopensStream() async {
+        let repository = FakeRepository()
+        repository.nearby = [NearbyLiveSession(
+            uid: "nearby", latitude: 57, longitude: 12, displayName: nil
+        )]
+        repository.controlledUids = ["nearby"]
+        let coordinator = NearbyLiveCoordinator()
+        coordinator.activate(repository: repository, currentUid: "viewer-a", excludedUids: [])
+        await coordinator.poll(center: MapPoint(longitude: 12, latitude: 57), radiusMeters: 15_000)
+        await wait { repository.openCounts["nearby"] == 1 }
+        repository.emit(.value(marker("nearby")), uid: "nearby")
+        await wait { coordinator.positions["nearby"] != nil }
+
+        coordinator.activate(repository: repository, currentUid: "viewer-b", excludedUids: [])
+
+        XCTAssertEqual(coordinator.positions, [:])
+        await wait {
+            repository.terminationCounts["nearby", default: 0] >= 1
+                && repository.openCounts["nearby"] == 2
+        }
+        XCTAssertEqual(coordinator.positions, [:])
+        repository.emit(.value(marker("nearby")), uid: "nearby")
+        await wait { coordinator.positions["nearby"] != nil }
+    }
+
+    func testRepositoryReplacementWithSameUserAndRosterReopensAuthorizationStream() async {
+        let firstRepository = FakeRepository()
+        firstRepository.nearby = [NearbyLiveSession(
+            uid: "nearby", latitude: 57, longitude: 12, displayName: nil
+        )]
+        firstRepository.controlledUids = ["nearby"]
+        let replacementRepository = FakeRepository()
+        replacementRepository.controlledUids = ["nearby"]
+        let coordinator = NearbyLiveCoordinator()
+        coordinator.activate(repository: firstRepository, currentUid: "viewer", excludedUids: [])
+        await coordinator.poll(center: MapPoint(longitude: 12, latitude: 57), radiusMeters: 15_000)
+        await wait { firstRepository.openCounts["nearby"] == 1 }
+        firstRepository.emit(.value(marker("nearby")), uid: "nearby")
+        await wait { coordinator.positions["nearby"] != nil }
+
+        coordinator.activate(
+            repository: replacementRepository,
+            currentUid: "viewer",
+            excludedUids: []
+        )
+
+        XCTAssertEqual(coordinator.positions, [:])
+        await wait {
+            firstRepository.terminationCounts["nearby", default: 0] >= 1
+                && replacementRepository.openCounts["nearby"] == 1
+        }
+        XCTAssertEqual(coordinator.positions, [:])
+        replacementRepository.emit(.value(marker("nearby")), uid: "nearby")
+        await wait { coordinator.positions["nearby"] != nil }
+    }
+
     func testRadiusClampsInvalidAndExtremeValues() {
         XCTAssertEqual(NearbyLiveRadius.clamp(.nan), defaultNearbyLiveRadiusMeters)
         XCTAssertEqual(NearbyLiveRadius.clamp(1), 100)
@@ -203,6 +259,17 @@ final class NearbyLiveCoordinatorTests: XCTestCase {
         )
     }
 
+    private func wait(
+        iterations: Int = 100,
+        until condition: @escaping @MainActor () -> Bool
+    ) async {
+        for _ in 0..<iterations {
+            if condition() { return }
+            await Task.yield()
+        }
+        XCTFail("Condition did not become true")
+    }
+
     private enum TestError: Error { case failed }
 
     private final class FakeRepository: LiveLocationRepository, @unchecked Sendable {
@@ -211,7 +278,11 @@ final class NearbyLiveCoordinatorTests: XCTestCase {
         var observedUids: [String] = []
         var events: [String: [LiveMarkerUpdateEvent]] = [:]
         var neverYieldUids = Set<String>()
+        var controlledUids = Set<String>()
         var heldContinuations: [AsyncStream<LiveMarkerUpdateEvent>.Continuation] = []
+        var controlledContinuations: [String: AsyncStream<LiveMarkerUpdateEvent>.Continuation] = [:]
+        var openCounts: [String: Int] = [:]
+        var terminationCounts: [String: Int] = [:]
         var listCenters: [MapPoint] = []
         var listRadii: [Double] = []
 
@@ -224,6 +295,15 @@ final class NearbyLiveCoordinatorTests: XCTestCase {
         func latestUpdates(uid: String) -> AsyncStream<LiveMarker?> { AsyncStream { $0.finish() } }
         func latestUpdateEvents(uid: String) -> AsyncStream<LiveMarkerUpdateEvent> {
             observedUids.append(uid)
+            if controlledUids.contains(uid) {
+                openCounts[uid, default: 0] += 1
+                return AsyncStream { continuation in
+                    controlledContinuations[uid] = continuation
+                    continuation.onTermination = { [weak self] _ in
+                        self?.terminationCounts[uid, default: 0] += 1
+                    }
+                }
+            }
             if neverYieldUids.contains(uid) {
                 return AsyncStream { heldContinuations.append($0) }
             }
@@ -232,6 +312,9 @@ final class NearbyLiveCoordinatorTests: XCTestCase {
                 values.forEach { continuation.yield($0) }
                 continuation.finish()
             }
+        }
+        func emit(_ event: LiveMarkerUpdateEvent, uid: String) {
+            controlledContinuations[uid]?.yield(event)
         }
         func imageDownloadURL(for imagePath: String) async -> URL? { nil }
         func listNearby(center: MapPoint, radiusMeters: Double) async throws -> [NearbyLiveSession] {
