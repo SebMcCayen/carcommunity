@@ -489,9 +489,7 @@ struct ShellView: View {
                 .accessibilityLabel(Text("incidents.reportButton"))
             }
 
-            if FeatureGate.isAvailable(
-                flags: featureFlags, flag: .chat, memberGated: false, access: access
-            ) {
+            if ShellNavigation.chatHubEntryAvailable(flags: featureFlags, access: access) {
                 Button {
                     guard ChatHubCoordinator.canPresentHub(cover: mapCover, navigating: false) else { return }
                     routes = routes.opening(.chatHub)

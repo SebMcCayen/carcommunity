@@ -228,6 +228,13 @@ enum ShellNavigation {
     static func chatHubAllowed(cover: MapCover, navigating: Bool) -> Bool {
         cover == .none || (navigating && cover == .opaque)
     }
+
+    /// Whether the map should render its primary Chat Hub entry. The
+    /// canonical `chat` feature flag is event-chat-only, so it deliberately
+    /// does not participate in this presentation decision.
+    static func chatHubEntryAvailable(flags _: FeatureFlags, access: AccountAccess) -> Bool {
+        ChatFeatureGate.channelAndDirectChatEnabled(access: access)
+    }
 }
 
 /// What tapping the floating live-location-share toggle should do.
