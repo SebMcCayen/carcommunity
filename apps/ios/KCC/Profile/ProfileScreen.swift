@@ -4,6 +4,7 @@ import SwiftUI
 import UIKit
 
 struct ProfileScreen: View {
+    let uid: String?
     let displayName: String?
     let onSignOut: () -> Void
     let onBack: () -> Void
@@ -21,6 +22,7 @@ struct ProfileScreen: View {
     ) {
         let repository = FirebaseUserProfileRepository.createIfAvailable()
         self.init(
+            uid: uid,
             displayName: displayName,
             onSignOut: onSignOut,
             onBack: onBack,
@@ -30,10 +32,12 @@ struct ProfileScreen: View {
     }
 
     init(
-        displayName: String?, onSignOut: @escaping () -> Void, onBack: @escaping () -> Void,
+        uid: String? = nil, displayName: String?, onSignOut: @escaping () -> Void,
+        onBack: @escaping () -> Void,
         coordinator: ProfileCoordinator,
         editor: ProfileEditCoordinator? = nil
     ) {
+        self.uid = uid
         self.displayName = displayName
         self.onSignOut = onSignOut
         self.onBack = onBack
@@ -106,7 +110,7 @@ struct ProfileScreen: View {
             Task { await upload(item) }
         }
         .fullScreenCover(isPresented: $showsBlockedUsers) {
-            BlockedUsersScreen { showsBlockedUsers = false }
+            BlockedUsersScreen(uid: uid) { showsBlockedUsers = false }
         }
     }
 

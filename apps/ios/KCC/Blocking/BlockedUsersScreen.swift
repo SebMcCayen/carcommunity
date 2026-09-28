@@ -9,12 +9,12 @@ struct BlockedUsersScreen: View {
     @State private var confirmationTarget: BlockedUser?
     @State private var unblockRequest: UnblockRequest?
 
-    init(onBack: @escaping () -> Void) {
+    init(uid: String?, onBack: @escaping () -> Void) {
         self.init(
             onBack: onBack,
             coordinator: BlockingCoordinator(
                 repository: FirebaseBlockingRepository.createIfAvailable(),
-                uid: Self.signedInUid()
+                uid: uid
             )
         )
     }
@@ -137,13 +137,6 @@ struct BlockedUsersScreen: View {
                 .font(.system(size: KccTypeScale.bodySm))
         }
         .accessibilityIdentifier("blockedUsers.actionError")
-    }
-
-    private static func signedInUid() -> String? {
-        if case .signedIn(let uid, _)? = FirebaseAuthRepository.createIfAvailable()?.authState {
-            return uid
-        }
-        return nil
     }
 }
 
