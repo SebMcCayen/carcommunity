@@ -564,6 +564,9 @@
     <string name="blocking_unblockCancelAction">Cancel</string>
     <string name="blocking_unblockSuccess">User has been unblocked.</string>
     <string name="blocking_errorGeneric">Something went wrong. Please try again.</string>
+    <string name="blocking_unavailable">Blocked users are unavailable right now.</string>
+    <string name="blocking_retry">Try again</string>
+    <string name="blocking_unknownUser">Unknown user</string>
     <string name="friends_addSectionTitle">Add a friend</string>
     <string name="friends_nicknameLabel">Nickname</string>
     <string name="friends_addAction">Send request</string>

@@ -564,6 +564,9 @@
     <string name="blocking_unblockCancelAction">Avbryt</string>
     <string name="blocking_unblockSuccess">Användaren har avblockerats.</string>
     <string name="blocking_errorGeneric">Något gick fel. Försök igen.</string>
+    <string name="blocking_unavailable">Blockerade användare är inte tillgängliga just nu.</string>
+    <string name="blocking_retry">Försök igen</string>
+    <string name="blocking_unknownUser">Okänd användare</string>
     <string name="friends_addSectionTitle">Lägg till en vän</string>
     <string name="friends_nicknameLabel">Smeknamn</string>
     <string name="friends_addAction">Skicka förfrågan</string>
