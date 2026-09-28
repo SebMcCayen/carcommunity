@@ -9,6 +9,7 @@ import Observation
 @Observable
 final class NearbyLiveCoordinator {
     private static let retryDelay: Duration = .seconds(1)
+    static let discoveryInterval: Duration = .seconds(20)
 
     private(set) var orderedUids: [String] = []
     private(set) var positions: [String: LiveMarker] = [:]
@@ -23,6 +24,12 @@ final class NearbyLiveCoordinator {
     @ObservationIgnored nonisolated(unsafe) private var markerTasks: [Task<Void, Never>] = []
     @ObservationIgnored private var imageTasks: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private var imageAttempts = Set<String>()
+    @ObservationIgnored private let monotonicNow: () -> ContinuousClock.Instant
+    @ObservationIgnored private var lastDiscoveryStartedAt: ContinuousClock.Instant?
+
+    init(monotonicNow: @escaping () -> ContinuousClock.Instant = { .now }) {
+        self.monotonicNow = monotonicNow
+    }
 
     func activate(
         repository: LiveLocationRepository?,
@@ -54,8 +61,22 @@ final class NearbyLiveCoordinator {
 
     /// A failed poll deliberately retains the last good roster. Cancellation
     /// simply abandons the obsolete response; it is not reported as a failure.
-    func refresh(center: MapPoint, radiusMeters: Double) async {
-        guard let repository else { return }
+    /// Starts discovery only when the monotonic cadence permits it. Keeping
+    /// this gate in the coordinator means SwiftUI task cancellation/recreation
+    /// cannot cause camera or lifecycle changes to issue back-to-back calls.
+    @discardableResult
+    func poll(
+        center: MapPoint,
+        radiusMeters: Double,
+        minimumInterval: Duration = NearbyLiveCoordinator.discoveryInterval
+    ) async -> Bool {
+        guard let repository else { return false }
+        let startedAt = monotonicNow()
+        if let lastDiscoveryStartedAt,
+           startedAt - lastDiscoveryStartedAt < minimumInterval {
+            return false
+        }
+        lastDiscoveryStartedAt = startedAt
         let requestedGeneration = generation
         do {
             let fetched = try await repository.listNearby(
@@ -63,15 +84,16 @@ final class NearbyLiveCoordinator {
                 radiusMeters: NearbyLiveRadius.clamp(radiusMeters)
             )
             guard !Task.isCancelled, generation == requestedGeneration,
-                  self.repository === repository else { return }
+                  self.repository === repository else { return true }
             lastRefreshFailed = false
             apply(fetched)
         } catch is CancellationError {
-            return
+            return true
         } catch {
-            guard generation == requestedGeneration else { return }
+            guard generation == requestedGeneration else { return true }
             lastRefreshFailed = true
         }
+        return true
     }
 
     func visibleMarkers(at now: Date = Date()) -> [LiveMarker] {
@@ -93,21 +115,10 @@ final class NearbyLiveCoordinator {
             else { return nil }
             return session
         }
-        let selected = Array(allowed.prefix(maximumNearbyLiveMarkers))
-        let selectedUids = selected.map(\.uid)
-        // Seed a marker immediately; the authorized RTDB value replaces it.
-        for seed in selected where positions[seed.uid] == nil {
-            positions[seed.uid] = LiveMarker(
-                uid: seed.uid,
-                latitude: seed.latitude,
-                longitude: seed.longitude,
-                displayName: seed.displayName,
-                imagePath: nil,
-                recordedAt: nil,
-                accuracyMeters: nil
-            )
-        }
-        reconcileSubscriptions(with: selectedUids)
+        // Discovery coordinates only select a bounded listener roster. They
+        // are never renderable: only a confirmed, non-nil authorized RTDB
+        // value may enter `positions`.
+        reconcileSubscriptions(with: Array(allowed.prefix(maximumNearbyLiveMarkers)).map(\.uid))
     }
 
     private func reconcileSubscriptions(with proposedUids: [String]) {
@@ -124,7 +135,10 @@ final class NearbyLiveCoordinator {
         cancelTasks()
         subscriptionKey = newKey
         orderedUids = filtered
-        positions = positions.filter { filtered.contains($0.key) }
+        // A new authorization roster creates new reads. Do not carry a value
+        // across that boundary: a replacement stream may be delayed, denied,
+        // or never produce its first snapshot.
+        positions = [:]
         imageURLs = [:]
         imageAttempts = []
         guard let repository else { return }
@@ -147,6 +161,9 @@ final class NearbyLiveCoordinator {
                 guard !Task.isCancelled, subscriptionKey == expectedKey else { return }
                 switch event {
                 case .retry:
+                    // A failed/denied read cannot keep its last coordinate on
+                    // screen while authorization is being re-established.
+                    positions.removeValue(forKey: uid)
                     retry = true
                 case .value(let marker):
                     guard let marker else {

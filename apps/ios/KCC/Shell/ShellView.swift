@@ -419,8 +419,7 @@ struct ShellView: View {
                 .task(id: nearbyLiveTaskKey) {
                     guard nearbyLiveShouldRun,
                           let repository = liveLocationRepository,
-                          let uid = signedInUid,
-                          let camera = mapSurface.cameraSnapshot
+                          let uid = signedInUid
                     else {
                         nearbyLive.deactivate()
                         return
@@ -430,21 +429,36 @@ struct ShellView: View {
                         currentUid: uid,
                         excludedUids: nearbyLiveExcludedUids
                     )
-                    // Camera snapshots change throughout a pan. Cancellation
-                    // makes this a trailing-edge debounce, then the same task
-                    // continues Android's 20-second discovery cadence.
+                    // This lifecycle task deliberately does not depend on the
+                    // camera. Each cadence tick reads the latest settled view,
+                    // so rapid pans cannot restart discovery or compress its
+                    // monotonic 20-second request interval.
                     do { try await Task.sleep(for: .milliseconds(700)) } catch { return }
                     while !Task.isCancelled {
-                        await nearbyLive.refresh(
-                            center: MapPoint(
-                                longitude: camera.longitude,
-                                latitude: camera.latitude
-                            ),
-                            radiusMeters: mapSurface.visibleRadiusMeters()
-                                ?? defaultNearbyLiveRadiusMeters
-                        )
-                        do { try await Task.sleep(for: .seconds(20)) } catch { return }
+                        if let camera = mapSurface.cameraSnapshot {
+                            await nearbyLive.poll(
+                                center: MapPoint(
+                                    longitude: camera.longitude,
+                                    latitude: camera.latitude
+                                ),
+                                radiusMeters: mapSurface.visibleRadiusMeters()
+                                    ?? defaultNearbyLiveRadiusMeters
+                            )
+                            do {
+                                try await Task.sleep(for: NearbyLiveCoordinator.discoveryInterval)
+                            } catch { return }
+                        } else {
+                            do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                        }
                     }
+                }
+                .onChange(of: nearbyLiveExcludedUids) { _, excludedUids in
+                    guard nearbyLiveShouldRun else { return }
+                    nearbyLive.activate(
+                        repository: liveLocationRepository,
+                        currentUid: signedInUid,
+                        excludedUids: excludedUids
+                    )
                 }
                 .onChange(of: convoyAwareness.focusMode) { _, _ in applyConvoyFocus() }
                 .onChange(of: convoyAwareness.positions) { _, _ in
@@ -1534,11 +1548,7 @@ struct ShellView: View {
     }
 
     private var nearbyLiveTaskKey: String {
-        let camera = mapSurface.cameraSnapshot
-        let cameraKey = camera.map {
-            "\($0.latitude)|\($0.longitude)|\($0.zoom)|\($0.bearing)|\($0.pitch)"
-        } ?? "no-camera"
-        return "\(nearbyLiveShouldRun)|\(signedInUid ?? "")|\(nearbyLiveExcludedUids.sorted().joined(separator: ","))|\(cameraKey)"
+        "\(nearbyLiveShouldRun)|\(signedInUid ?? "")"
     }
 
     /// Reactions follow the same map-chrome gate as Android: listen only while
