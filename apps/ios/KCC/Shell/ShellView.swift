@@ -70,6 +70,7 @@ struct ShellView: View {
     @State private var startDrivingGarage: GarageCoordinator?
     @State private var convoyManagementCoordinator: ConvoyManagementCoordinator?
     @State private var convoyAwareness = ConvoyAwarenessCoordinator()
+    @State private var nearbyLive = NearbyLiveCoordinator()
     @State private var convoyReactionCoordinator: ConvoyReactionCoordinator?
     @State private var convoyFollowMeCoordinator: ConvoyFollowMeCoordinator?
     @State private var liveLocationRepository: LiveLocationRepository?
@@ -344,6 +345,10 @@ struct ShellView: View {
                             imageURLs: convoyAwareness.imageURLs,
                             projection: mapSurface
                         )
+                        NearbyLiveOverlay(
+                            coordinator: nearbyLive,
+                            projection: mapSurface
+                        )
                     }
                 }
                 .overlay {
@@ -410,6 +415,50 @@ struct ShellView: View {
                         currentUid: signedInUid
                     )
                     applyConvoyFocus()
+                }
+                .task(id: nearbyLiveTaskKey) {
+                    guard nearbyLiveShouldRun,
+                          let repository = liveLocationRepository,
+                          let uid = signedInUid
+                    else {
+                        nearbyLive.deactivate()
+                        return
+                    }
+                    nearbyLive.activate(
+                        repository: repository,
+                        currentUid: uid,
+                        excludedUids: nearbyLiveExcludedUids
+                    )
+                    // This lifecycle task deliberately does not depend on the
+                    // camera. Each cadence tick reads the latest settled view,
+                    // so rapid pans cannot restart discovery or compress its
+                    // monotonic 20-second request interval.
+                    do { try await Task.sleep(for: .milliseconds(700)) } catch { return }
+                    while !Task.isCancelled {
+                        if let camera = mapSurface.cameraSnapshot {
+                            await nearbyLive.poll(
+                                center: MapPoint(
+                                    longitude: camera.longitude,
+                                    latitude: camera.latitude
+                                ),
+                                radiusMeters: mapSurface.visibleRadiusMeters()
+                                    ?? defaultNearbyLiveRadiusMeters
+                            )
+                            do {
+                                try await Task.sleep(for: NearbyLiveCoordinator.discoveryInterval)
+                            } catch { return }
+                        } else {
+                            do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                        }
+                    }
+                }
+                .onChange(of: nearbyLiveExcludedUids) { _, excludedUids in
+                    guard nearbyLiveShouldRun else { return }
+                    nearbyLive.activate(
+                        repository: liveLocationRepository,
+                        currentUid: signedInUid,
+                        excludedUids: excludedUids
+                    )
                 }
                 .onChange(of: convoyAwareness.focusMode) { _, _ in applyConvoyFocus() }
                 .onChange(of: convoyAwareness.positions) { _, _ in
@@ -1162,6 +1211,7 @@ struct ShellView: View {
         if routes.current == .convoys { routes = routes.poppingOne() }
         convoyManagementCoordinator = nil
         convoyAwareness.sync(convoy: nil, repository: nil, currentUid: nil)
+        nearbyLive.deactivate()
         convoyReactionCoordinator?.sync(convoyId: nil)
         convoyReactionCoordinator = nil
         convoyFollowMeCoordinator?.stop()
@@ -1482,6 +1532,23 @@ struct ShellView: View {
             return "disabled|\(signedInUid ?? "")"
         }
         return "enabled|\(convoy.convoyId)|\(convoy.livePositionUids.sorted().joined(separator: ","))|\(signedInUid ?? "")"
+    }
+
+    private var nearbyLiveShouldRun: Bool {
+        liveLocationFeatureEnabled
+            && selectedTab == .map
+            && mapCover == .none
+            && scenePhase == .active
+            && liveLocationRepository != nil
+            && signedInUid != nil
+    }
+
+    private var nearbyLiveExcludedUids: Set<String> {
+        Set(convoyAwarenessTargetConvoy?.livePositionUids ?? [])
+    }
+
+    private var nearbyLiveTaskKey: String {
+        "\(nearbyLiveShouldRun)|\(signedInUid ?? "")"
     }
 
     /// Reactions follow the same map-chrome gate as Android: listen only while
