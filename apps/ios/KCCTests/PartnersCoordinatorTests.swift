@@ -23,12 +23,12 @@ final class PartnersCoordinatorTests: XCTestCase {
 
         func observeActiveCompanies() -> AsyncStream<PartnersCollectionSnapshot> {
             AsyncStream { continuation in
-                companies.forEach(continuation.yield)
+                companies.forEach { continuation.yield($0) }
             }
         }
 
         func observeActiveOffers() -> AsyncStream<PartnerOffersSnapshot> {
-            AsyncStream { continuation in offers.forEach(continuation.yield) }
+            AsyncStream { continuation in offers.forEach { continuation.yield($0) } }
         }
 
         func observeOfferDetail(offerId: String) -> AsyncStream<PartnerOfferDetailSnapshot> {
@@ -36,7 +36,7 @@ final class PartnersCoordinatorTests: XCTestCase {
         }
 
         func observeSavedOfferIds(uid: String) -> AsyncStream<SavedOffersSnapshot> {
-            AsyncStream { continuation in saved.forEach(continuation.yield) }
+            AsyncStream { continuation in saved.forEach { continuation.yield($0) } }
         }
 
         func showOfferCode(offerId: String) async throws -> String? { code }
@@ -50,7 +50,7 @@ final class PartnersCoordinatorTests: XCTestCase {
         private let snapshots: [StoredSubscription?]
         init(_ snapshots: [StoredSubscription?]) { self.snapshots = snapshots }
         func subscription(uid: String) -> AsyncStream<StoredSubscription?> {
-            AsyncStream { continuation in snapshots.forEach(continuation.yield) }
+            AsyncStream { continuation in snapshots.forEach { continuation.yield($0) } }
         }
     }
 

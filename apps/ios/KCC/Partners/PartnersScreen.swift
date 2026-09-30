@@ -169,7 +169,13 @@ private struct CompanyRow: View {
             Text(LocalizedStringKey(company.category.localizationKey))
                 .font(.subheadline)
                 .foregroundStyle(.tint)
-            Text("partnerOffers.offerCount \(offerCount)")
+            Text(verbatim: String.localizedStringWithFormat(
+                NSLocalizedString(
+                    "partnerOffers.offerCount",
+                    comment: "Number of active offers for a partner"
+                ),
+                Int64(offerCount)
+            ))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

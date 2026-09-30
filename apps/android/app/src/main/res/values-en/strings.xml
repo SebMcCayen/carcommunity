@@ -1403,6 +1403,9 @@
     <string name="partners_categoryRestaurant">Restaurant</string>
     <string name="partners_categoryRetail">Retail</string>
     <string name="partners_categoryOther">Other</string>
+    <string name="partners_section">Content</string>
+    <string name="partners_directory">Partners</string>
+    <string name="partners_saved">Saved</string>
     <string name="partnerOffers_sectionTitle">Offers &amp; Benefits</string>
     <string name="partnerOffers_noOffers">No current offers.</string>
     <string name="partnerOffers_memberRequired">KCC Membership required to view this offer.</string>
@@ -1431,6 +1434,9 @@
     <string name="partnerOffers_offerTypeMemberBenefit">Member benefit</string>
     <string name="partnerOffers_offerTypeSpecialOffer">Special offer</string>
     <string name="partnerOffers_offerTypeOther">Offer</string>
+    <string name="partnerOffers_savedEmptyTitle">No saved offers</string>
+    <string name="partnerOffers_savedEmptyBody">Save an offer from a business partner and it will appear here.</string>
+    <string name="partnerOffers_offerCount">%1$d offers</string>
     <string name="billboard_sponsoredLabel">Sponsored placement</string>
     <string name="billboard_advertisingFrom">Advertising</string>
     <string name="billboard_viewCompany">View company</string>
