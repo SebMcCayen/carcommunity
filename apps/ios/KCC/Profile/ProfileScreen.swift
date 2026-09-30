@@ -99,7 +99,7 @@ struct ProfileScreen: View {
                         recentEarnings: pointsCoordinator.recentEarnings,
                         onOpenLedger: onOpenPoints
                     )
-                    BadgesWall(coordinator: badgesCoordinator)
+                    BadgesWall(coordinator: badgesCoordinator, isEmbedded: true)
                 }
 
                 if editor.status == .failed {
