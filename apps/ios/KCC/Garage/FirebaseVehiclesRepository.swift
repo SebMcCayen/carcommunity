@@ -108,10 +108,17 @@ final class FirebaseVehiclesRepository: VehiclesRepository, @unchecked Sendable 
                 Self.addVehiclePhoto,
                 payload: ["vehicleId": vehicleId, "photoPath": path]
             )
+        } catch let error as KccFunctionsError {
+            // Only a definitive rejection proves the transaction did not
+            // commit. On an ambiguous transport/server failure the response
+            // may have been lost after commit; retain the object so a stored
+            // photoPath can never point at an image this client deleted.
+            if VehiclePhotoUploadCleanup.shouldDelete(after: error.code) {
+                try? await reference.delete()
+            }
+            throw error
         } catch {
-            // A callable rejection must not strand an unreferenced
-            // image. Cleanup is best-effort; preserve the original error.
-            try? await reference.delete()
+            // Unknown local/SDK failures are ambiguous for the same reason.
             throw error
         }
     }

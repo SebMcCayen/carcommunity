@@ -738,15 +738,19 @@ final class GarageCoordinatorTests: XCTestCase {
         let coordinator = GarageCoordinator(repository: repository, uid: Self.uid)
         let bytes = Data([0xff, 0xd8, 0xff])
 
-        XCTAssertTrue(await coordinator.setMainVehicle("v1", isMain: true))
-        XCTAssertTrue(await coordinator.addPhoto(vehicleId: "v1", jpegData: bytes))
-        XCTAssertTrue(await coordinator.removePhoto(vehicleId: "v1", photoPath: "p1"))
-        XCTAssertTrue(
-            await coordinator.setCover(
-                vehicleId: "v1", photoPath: "p2", currentPaths: ["p1", "p2"]
-            )
+        let didSetMain = await coordinator.setMainVehicle("v1", isMain: true)
+        let didAddPhoto = await coordinator.addPhoto(vehicleId: "v1", jpegData: bytes)
+        let didRemovePhoto = await coordinator.removePhoto(vehicleId: "v1", photoPath: "p1")
+        let didSetCover = await coordinator.setCover(
+            vehicleId: "v1", photoPath: "p2", currentPaths: ["p1", "p2"]
         )
-        XCTAssertTrue(await coordinator.deleteVehicle("v1"))
+        let didDelete = await coordinator.deleteVehicle("v1")
+
+        XCTAssertTrue(didSetMain)
+        XCTAssertTrue(didAddPhoto)
+        XCTAssertTrue(didRemovePhoto)
+        XCTAssertTrue(didSetCover)
+        XCTAssertTrue(didDelete)
 
         XCTAssertEqual(repository.mainChanges.first?.0, "v1")
         XCTAssertEqual(repository.mainChanges.first?.1, true)
@@ -765,7 +769,8 @@ final class GarageCoordinatorTests: XCTestCase {
         let repository = FakeVehiclesRepository()
         let coordinator = GarageCoordinator(repository: repository, uid: nil)
 
-        XCTAssertFalse(await coordinator.addPhoto(vehicleId: "v1", jpegData: Data([1])))
+        let didAddPhoto = await coordinator.addPhoto(vehicleId: "v1", jpegData: Data([1]))
+        XCTAssertFalse(didAddPhoto)
         XCTAssertEqual(coordinator.mutationStatus, .failed)
         XCTAssertTrue(repository.addedPhotos.isEmpty)
     }

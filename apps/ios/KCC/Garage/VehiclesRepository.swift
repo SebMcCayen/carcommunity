@@ -33,7 +33,9 @@ protocol VehiclesRepository: AnyObject, Sendable {
 
     /// Uploads sanitised JPEG bytes beneath the caller's own vehicle prefix,
     /// then records the path through garage-addVehiclePhoto. Implementations
-    /// must remove the uploaded object if the callable rejects the mutation.
+    /// remove the uploaded object after a definitive callable rejection. An
+    /// ambiguous transport failure must retain it because the backend may
+    /// already have committed the path.
     func addVehiclePhoto(uid: String, vehicleId: String, jpegData: Data) async throws
 
     func removeVehiclePhoto(vehicleId: String, photoPath: String) async throws
@@ -47,6 +49,22 @@ protocol VehiclesRepository: AnyObject, Sendable {
     /// then keeps its placeholder, because a missing picture is cosmetic,
     /// never an error state.
     func imageDownloadURL(for imagePath: String) async -> URL?
+}
+
+/// Decides whether a freshly uploaded image is safe to remove after the
+/// callable fails. Transport/unknown/internal failures are ambiguous: the
+/// transaction may have committed before the response was lost, so deleting
+/// then could leave the vehicle document pointing at a missing object.
+enum VehiclePhotoUploadCleanup {
+    static func shouldDelete(after code: KccFunctionsErrorCode) -> Bool {
+        switch code {
+        case .unauthenticated, .permissionDenied, .invalidArgument, .notFound,
+             .resourceExhausted, .failedPrecondition:
+            true
+        case .internalError, .unavailable, .unknown:
+            false
+        }
+    }
 }
 
 /// Owner-readable subscription state used by Garage presentation. Firebase-
