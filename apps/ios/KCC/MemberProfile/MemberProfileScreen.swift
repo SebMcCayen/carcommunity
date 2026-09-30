@@ -6,6 +6,7 @@ struct MemberProfileScreen: View {
     let onMessage: ((String, String?) -> Void)?
 
     @State private var confirmBlock = false
+    @State private var confirmUnblock = false
     @State private var confirmUnfriend = false
 
     init(
@@ -45,7 +46,7 @@ struct MemberProfileScreen: View {
                 Button("blocking.blockCancelAction", role: .cancel) {}
             } message: { Text("blocking.blockConfirmBody") }
             .confirmationDialog(
-                "friends.removeConfirmAction",
+                Text(verbatim: unfriendConfirmationTitle),
                 isPresented: $confirmUnfriend,
                 titleVisibility: .visible
             ) {
@@ -54,6 +55,16 @@ struct MemberProfileScreen: View {
                 }
                 Button("friends.removeCancel", role: .cancel) {}
             } message: { Text("friends.removeConfirmBody") }
+            .confirmationDialog(
+                "blocking.unblockConfirmTitle",
+                isPresented: $confirmUnblock,
+                titleVisibility: .visible
+            ) {
+                Button("blocking.unblockConfirmAction", role: .destructive) {
+                    Task { await coordinator.unblock() }
+                }
+                Button("blocking.unblockCancelAction", role: .cancel) {}
+            } message: { Text("blocking.unblockConfirmBody") }
     }
 
     @ViewBuilder
@@ -64,7 +75,7 @@ struct MemberProfileScreen: View {
         case .blocked:
             notice("memberProfile.blocked") {
                 if coordinator.canModerate {
-                    Button("blocking.unblock") { Task { await coordinator.unblock() } }
+                    Button("blocking.unblock") { confirmUnblock = true }
                         .buttonStyle(.borderedProminent)
                         .disabled(coordinator.action != nil)
                 }
@@ -79,6 +90,23 @@ struct MemberProfileScreen: View {
         case .loaded(let content):
             profile(content)
         }
+    }
+
+    private var unfriendConfirmationTitle: String {
+        let name: String
+        if case .loaded(let content) = coordinator.state {
+            name = content.profile.displayName.trimmedNonBlank
+                ?? String(localized: "memberProfile.unknownMember")
+        } else {
+            name = String(localized: "memberProfile.unknownMember")
+        }
+        return String.localizedStringWithFormat(
+            NSLocalizedString(
+                "friends.removeConfirmTitle",
+                comment: "Unfriend confirmation title with the member's name"
+            ),
+            name
+        )
     }
 
     private func notice<Actions: View>(

@@ -1234,7 +1234,7 @@ struct ShellView: View {
         // Remove a conversation built for the previous identity before doing
         // any asynchronous flag work. If Chat was opened from a parent hub,
         // return to that hub; otherwise close the route entirely.
-        if routes.current == .chat || routes.current == .memberProfile {
+        while routes.current == .chat || routes.current == .memberProfile {
             routes = routes.poppingOne()
         }
         dmTarget = nil

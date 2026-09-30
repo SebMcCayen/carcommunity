@@ -41,6 +41,11 @@ final class MemberProfileCoordinator {
             return
         }
         state = .loading
+        // A refresh must not keep action affordances derived from an older
+        // friend graph. If the new list fails, unknown is the only honest
+        // authorization state; callable enforcement remains the final guard.
+        relationship = .unknown
+        actionError = nil
         avatarURL = nil
         if consultBlockList, await viewerHasBlockedTarget() {
             state = .blocked
@@ -172,4 +177,3 @@ final class MemberProfileCoordinator {
         return false
     }
 }
-

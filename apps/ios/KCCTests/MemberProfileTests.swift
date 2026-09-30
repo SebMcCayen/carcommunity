@@ -82,6 +82,31 @@ struct MemberProfileTests {
         #expect(coordinator.actionError == FriendActionError.notAddable)
     }
 
+    @MainActor
+    @Test func refreshFailureDoesNotRetainStaleFriendAuthorization() async {
+        let friends = FakeMemberFriendsRepository(
+            listResult: .loaded(FriendsData(
+                friends: [FriendSummary(
+                    uid: "target", displayName: nil, avatarPath: nil, friendsSince: nil
+                )],
+                incoming: [], outgoing: []
+            )),
+            sendResult: .failed(.generic)
+        )
+        let coordinator = MemberProfileCoordinator(
+            targetUid: "target", viewerUid: "me",
+            repository: FakeMemberProfileRepository(result: .loaded(Self.content())),
+            friends: friends, blocking: nil
+        )
+        await coordinator.load()
+        #expect(coordinator.relationship == .friends)
+
+        friends.listResult = .failed(.network)
+        await coordinator.load()
+
+        #expect(coordinator.relationship == .unknown)
+    }
+
     private static func request(
         id: String, from: String, to: String, direction: FriendRequestDirection
     ) -> FriendRequestSummary {
@@ -129,7 +154,7 @@ private final class FakeBlockingRepository: BlockingRepository, @unchecked Senda
 }
 
 private final class FakeMemberFriendsRepository: FriendsRepository, @unchecked Sendable {
-    let listResult: FriendsResult
+    var listResult: FriendsResult
     let sendResult: SendRequestResult
     init(listResult: FriendsResult, sendResult: SendRequestResult) {
         self.listResult = listResult
