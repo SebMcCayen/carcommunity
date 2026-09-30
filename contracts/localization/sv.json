@@ -1503,7 +1503,10 @@
     "categoryCharging": "Laddning",
     "categoryRestaurant": "Restaurang",
     "categoryRetail": "Butik",
-    "categoryOther": "Annat"
+    "categoryOther": "Annat",
+    "section": "Innehåll",
+    "directory": "Företag",
+    "saved": "Sparade"
   },
   "partnerOffers": {
     "sectionTitle": "Erbjudanden & förmåner",
@@ -1533,7 +1536,10 @@
     "offerTypeFixedDiscount": "Fast rabatt",
     "offerTypeMemberBenefit": "Medlemsförmån",
     "offerTypeSpecialOffer": "Specialerbjudande",
-    "offerTypeOther": "Erbjudande"
+    "offerTypeOther": "Erbjudande",
+    "savedEmptyTitle": "Inga sparade erbjudanden",
+    "savedEmptyBody": "Spara ett erbjudande hos en företagspartner så visas det här.",
+    "offerCount": "%1$d erbjudanden"
   },
   "billboard": {
     "sponsoredLabel": "Sponsrad placering",

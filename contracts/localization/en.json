@@ -1503,7 +1503,10 @@
     "categoryCharging": "Charging",
     "categoryRestaurant": "Restaurant",
     "categoryRetail": "Retail",
-    "categoryOther": "Other"
+    "categoryOther": "Other",
+    "section": "Content",
+    "directory": "Partners",
+    "saved": "Saved"
   },
   "partnerOffers": {
     "sectionTitle": "Offers & Benefits",
@@ -1533,7 +1536,10 @@
     "offerTypeFixedDiscount": "Fixed discount",
     "offerTypeMemberBenefit": "Member benefit",
     "offerTypeSpecialOffer": "Special offer",
-    "offerTypeOther": "Offer"
+    "offerTypeOther": "Offer",
+    "savedEmptyTitle": "No saved offers",
+    "savedEmptyBody": "Save an offer from a business partner and it will appear here.",
+    "offerCount": "%1$d offers"
   },
   "billboard": {
     "sponsoredLabel": "Sponsored placement",

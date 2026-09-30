@@ -22441,6 +22441,23 @@
         }
       }
     },
+    "partnerOffers.offerCount": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld erbjudanden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld offers"
+          }
+        }
+      }
+    },
     "partnerOffers.offerTypeDiscountCode": {
       "extractionState": "manual",
       "localizations": {
@@ -22573,6 +22590,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Save offer"
+          }
+        }
+      }
+    },
+    "partnerOffers.savedEmptyBody": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spara ett erbjudande hos en företagspartner så visas det här."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save an offer from a business partner and it will appear here."
+          }
+        }
+      }
+    },
+    "partnerOffers.savedEmptyTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inga sparade erbjudanden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No saved offers"
           }
         }
       }
@@ -23121,6 +23172,23 @@
         }
       }
     },
+    "partners.directory": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Företag"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partners"
+          }
+        }
+      }
+    },
     "partners.duplicateApplication": {
       "extractionState": "manual",
       "localizations": {
@@ -23342,6 +23410,23 @@
         }
       }
     },
+    "partners.saved": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sparade"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved"
+          }
+        }
+      }
+    },
     "partners.screenTitle": {
       "extractionState": "manual",
       "localizations": {
@@ -23355,6 +23440,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "KCC Business Partners"
+          }
+        }
+      }
+    },
+    "partners.section": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Innehåll"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Content"
           }
         }
       }
