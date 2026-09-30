@@ -10,44 +10,56 @@ import SwiftUI
 /// by an admin or by a one-off event rather than earned by climbing, so there
 /// is nothing actionable to show as "locked".
 ///
-/// EXPORTED, NOT WIRED. Android hosts its wall INSIDE the profile
-/// (`ProfileBadgesSection`); on iOS this slice ships the wall as a reusable,
-/// self-contained screen so the profile can host it later without this feature
-/// reaching into `KCC/Profile`. It builds its own coordinator from the
-/// feature-level factory (argument-free, like ``GaragePanel``), and also
-/// accepts an injected coordinator for previews and tests.
+/// The signed-in profile hosts this reusable wall with an injected coordinator.
+/// The argument-free initializer remains available for a standalone destination
+/// and builds its own coordinator from the feature-level factory.
 ///
 /// Presentational only beyond the coordinator it drives: it renders the
 /// pre-folded ``BadgeShowcase`` and reads no backend itself.
 struct BadgesWall: View {
     @State private var coordinator: BadgesCoordinator
+    private let isEmbedded: Bool
 
     /// Production wiring: builds the coordinator from the feature-level factory.
     /// In a config-less build the factory returns nil and the coordinator
     /// settles on ``BadgesUiState/unavailable``. The uid is resolved by the
     /// coordinator from the repository's own session seam.
     init() {
-        self.init(coordinator: BadgesCoordinator(repository: FirebaseBadgesRepository.createIfAvailable()))
+        self.init(
+            coordinator: BadgesCoordinator(repository: FirebaseBadgesRepository.createIfAvailable())
+        )
     }
 
     /// Preview/test seam: inject a coordinator (typically fed by a fake
-    /// repository).
-    init(coordinator: BadgesCoordinator) {
+    /// repository). Embedded walls rely on their parent's scroll container so
+    /// the profile has a single vertical gesture and accessibility surface.
+    init(coordinator: BadgesCoordinator, isEmbedded: Bool = false) {
         _coordinator = State(initialValue: coordinator)
+        self.isEmbedded = isEmbedded
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: KccSpacing.s5) {
-                Text("badges.screenTitle")
-                    .font(.system(size: KccTypeScale.headingLg, weight: KccTypeScale.semibold))
-
-                content
+        Group {
+            if isEmbedded {
+                wallContent
+            } else {
+                ScrollView {
+                    wallContent
+                }
             }
-            .padding(KccSpacing.s6)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .task { coordinator.start() }
+    }
+
+    private var wallContent: some View {
+        VStack(alignment: .leading, spacing: KccSpacing.s5) {
+            Text("badges.screenTitle")
+                .font(.system(size: KccTypeScale.headingLg, weight: KccTypeScale.semibold))
+
+            content
+        }
+        .padding(KccSpacing.s6)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder

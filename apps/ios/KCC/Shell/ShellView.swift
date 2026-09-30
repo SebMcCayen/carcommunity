@@ -603,8 +603,13 @@ struct ShellView: View {
                 uid: signedInUid,
                 displayName: signedInDisplayName,
                 onSignOut: { session.signOut() },
-                onBack: { routes = routes.poppingOne() }
+                onBack: { routes = routes.poppingOne() },
+                onOpenPoints: { routes = routes.opening(.points) }
             )
+        case .points:
+            routeNavigation {
+                PointsScreen(uid: signedInUid)
+            }
         case .events:
             // The read-only events list, opened from the Social hub. The
             // NavigationStack hosts the screen's `navigationTitle`; Back pops
