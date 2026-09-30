@@ -21,6 +21,7 @@ final class CrownHuntFeatureFlagsTests: XCTestCase {
         XCTAssertEqual(flags, .contractDefaults)
         XCTAssertTrue(flags.liveLocationEnabled)
         XCTAssertTrue(flags.crownHuntEnabled)
+        XCTAssertFalse(flags.spawnEnabled)
         XCTAssertFalse(flags.perksEnabled)
         XCTAssertFalse(flags.liveShareScoringEnabled)
     }
@@ -42,6 +43,7 @@ final class CrownHuntFeatureFlagsTests: XCTestCase {
             from: ["crownHuntPerks": true, "crownHuntLiveShareScoring": true]
         )
         XCTAssertTrue(live.liveShareScoringEnabled)
+        XCTAssertTrue(CrownHuntFlags.resolve(from: ["crownHuntSpawn": true]).spawnEnabled)
     }
 
     /// The top-level `crownHunt` flag ("Off hides Kronjakt entirely") must be

@@ -13,8 +13,8 @@ enum CrownHuntFeatureFlag: String, CaseIterable, Sendable {
     case liveLocation = "liveLocation"
     /// Kronjakt as a whole (hand-placed points). Contract default ON.
     case crownHunt = "crownHunt"
-    /// The AUTOMATIC spawn half. Contract default OFF — out of scope here, but
-    /// registered so the merge covers every crownHunt* key.
+    /// The AUTOMATIC spawn half. Contract default OFF, so map queries remain
+    /// dormant until an operator explicitly enables them.
     case crownHuntSpawn = "crownHuntSpawn"
     /// The Kronjakt SHOP (perks). Contract default OFF — while off the shop tab
     /// is never rendered and the buy callable rejects.
@@ -45,10 +45,11 @@ struct CrownHuntFlags: Equatable, Sendable {
     let liveLocationEnabled: Bool
     /// Kronjakt as a whole. Contract default ON; "Off hides Kronjakt entirely"
     /// per contracts/features/feature-flags.json — the gate a host must check
-    /// before offering the hub at all (the shell-wiring PR that actually
-    /// presents ``CrownHuntHubView`` reads this; this slice does not touch the
-    /// shell itself).
+    /// before offering the hub and map gameplay.
     let crownHuntEnabled: Bool
+    /// Automatic map-spawned crowns. Contract default OFF; when disabled the
+    /// client makes no `crownSpawns` reads and renders only curated points.
+    let spawnEnabled: Bool
     /// The perk shop is available end-to-end. Mirrors Android's `perksEnabled`
     /// gate on `CrownHuntRoute`.
     let perksEnabled: Bool
@@ -60,6 +61,7 @@ struct CrownHuntFlags: Equatable, Sendable {
     static let contractDefaults = CrownHuntFlags(
         liveLocationEnabled: CrownHuntFeatureFlag.liveLocation.contractDefault,
         crownHuntEnabled: CrownHuntFeatureFlag.crownHunt.contractDefault,
+        spawnEnabled: CrownHuntFeatureFlag.crownHuntSpawn.contractDefault,
         perksEnabled: CrownHuntFeatureFlag.crownHuntPerks.contractDefault,
         liveShareScoringEnabled: CrownHuntFeatureFlag.crownHuntLiveShareScoring.contractDefault
     )
@@ -67,6 +69,7 @@ struct CrownHuntFlags: Equatable, Sendable {
     init(featureFlags: FeatureFlags) {
         liveLocationEnabled = featureFlags.isEnabled(.liveLocation)
         crownHuntEnabled = featureFlags.isEnabled(.crownHunt)
+        spawnEnabled = featureFlags.isEnabled(.crownHuntSpawn)
         perksEnabled = featureFlags.isEnabled(.crownHuntPerks)
         liveShareScoringEnabled = featureFlags.isEnabled(.crownHuntLiveShareScoring)
     }
@@ -74,11 +77,13 @@ struct CrownHuntFlags: Equatable, Sendable {
     init(
         liveLocationEnabled: Bool,
         crownHuntEnabled: Bool,
+        spawnEnabled: Bool = CrownHuntFeatureFlag.crownHuntSpawn.contractDefault,
         perksEnabled: Bool,
         liveShareScoringEnabled: Bool
     ) {
         self.liveLocationEnabled = liveLocationEnabled
         self.crownHuntEnabled = crownHuntEnabled
+        self.spawnEnabled = spawnEnabled
         self.perksEnabled = perksEnabled
         self.liveShareScoringEnabled = liveShareScoringEnabled
     }
@@ -94,6 +99,7 @@ struct CrownHuntFlags: Equatable, Sendable {
         return CrownHuntFlags(
             liveLocationEnabled: value(.liveLocation),
             crownHuntEnabled: value(.crownHunt),
+            spawnEnabled: value(.crownHuntSpawn),
             perksEnabled: value(.crownHuntPerks),
             liveShareScoringEnabled: value(.crownHuntLiveShareScoring)
         )
