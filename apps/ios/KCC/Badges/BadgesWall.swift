@@ -10,12 +10,9 @@ import SwiftUI
 /// by an admin or by a one-off event rather than earned by climbing, so there
 /// is nothing actionable to show as "locked".
 ///
-/// EXPORTED, NOT WIRED. Android hosts its wall INSIDE the profile
-/// (`ProfileBadgesSection`); on iOS this slice ships the wall as a reusable,
-/// self-contained screen so the profile can host it later without this feature
-/// reaching into `KCC/Profile`. It builds its own coordinator from the
-/// feature-level factory (argument-free, like ``GaragePanel``), and also
-/// accepts an injected coordinator for previews and tests.
+/// The signed-in profile hosts this reusable wall with an injected coordinator.
+/// The argument-free initializer remains available for a standalone destination
+/// and builds its own coordinator from the feature-level factory.
 ///
 /// Presentational only beyond the coordinator it drives: it renders the
 /// pre-folded ``BadgeShowcase`` and reads no backend itself.
