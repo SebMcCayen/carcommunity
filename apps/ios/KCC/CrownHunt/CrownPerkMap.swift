@@ -174,6 +174,8 @@ final class CrownPerkMapCoordinator {
     private let enabled: Bool
     private let location: () -> LocationFix?
     @ObservationIgnored private var inventoryTask: Task<Void, Never>?
+    @ObservationIgnored private var effectsTask: Task<Void, Never>?
+    @ObservationIgnored private var lifecycleGeneration = 0
 
     private(set) var inventory: [String: Int] = [:]
     private(set) var effects: CrownPerkEffects = .empty
@@ -198,6 +200,7 @@ final class CrownPerkMapCoordinator {
 
     func start() {
         guard inventoryTask == nil, isAvailable, let uid, let shopRepository else { return }
+        lifecycleGeneration += 1
         let stream = shopRepository.inventory(uid: uid)
         inventoryTask = Task { [weak self] in
             for await inventory in stream {
@@ -205,12 +208,18 @@ final class CrownPerkMapCoordinator {
                 self.inventory = inventory
             }
         }
-        Task { await refreshEffects() }
+        effectsTask?.cancel()
+        effectsTask = Task { [weak self] in
+            await self?.refreshEffects()
+        }
     }
 
     func stop() {
+        lifecycleGeneration += 1
         inventoryTask?.cancel()
         inventoryTask = nil
+        effectsTask?.cancel()
+        effectsTask = nil
         inventory = [:]
         effects = .empty
         menuPresented = false
@@ -222,15 +231,22 @@ final class CrownPerkMapCoordinator {
             effects = .empty
             return
         }
-        effects = await repository.effects(uid: uid, now: now)
+        let generation = lifecycleGeneration
+        let refreshed = await repository.effects(uid: uid, now: now)
+        guard !Task.isCancelled, generation == lifecycleGeneration else { return }
+        effects = refreshed
     }
 
-    func deploy(perkId: String, kind: PerkKind) async {
+    func deploy(perkId: String, kind: PerkKind, now: Date = Date()) async {
         guard status.isIdle, let repository, enabled else { return }
+        let generation = lifecycleGeneration
         var latitude: Double?
         var longitude: Double?
         if kind == .trap {
-            guard let fix = location(), abs(fix.latitude) <= 90, abs(fix.longitude) <= 180 else {
+            guard let fix = location(),
+                  (0...CrownSpawnLimits.maximumPositionAge).contains(now.timeIntervalSince(fix.timestamp)),
+                  abs(fix.latitude) <= 90,
+                  abs(fix.longitude) <= 180 else {
                 status = .failed(perkId, .noLocation)
                 return
             }
@@ -245,11 +261,14 @@ final class CrownPerkMapCoordinator {
                 longitude: longitude,
                 idempotencyKey: UUID().uuidString.lowercased()
             )
+            guard !Task.isCancelled, generation == lifecycleGeneration else { return }
             status = .deployed(result)
-            await refreshEffects()
+            await refreshEffects(now: now)
         } catch let failure as CrownPerkDeployFailure {
+            guard !Task.isCancelled, generation == lifecycleGeneration else { return }
             status = .failed(perkId, failure)
         } catch {
+            guard !Task.isCancelled, generation == lifecycleGeneration else { return }
             status = .failed(perkId, .unknown)
         }
     }

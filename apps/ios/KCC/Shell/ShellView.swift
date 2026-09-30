@@ -433,15 +433,16 @@ struct ShellView: View {
                 }
                 .task(id: crownMapLifecycleKey) {
                     guard let coordinator = crownHuntComposition?.mapCoordinator else { return }
+                    let perkCoordinator = crownHuntComposition?.perkMapCoordinator
                     coordinator.start()
-                    crownHuntComposition?.perkMapCoordinator?.start()
+                    perkCoordinator?.start()
                     await coordinator.refresh(
                         camera: mapSurface.cameraSnapshot,
                         visibleRadiusMeters: mapSurface.visibleRadiusMeters()
                     )
                     do { try await Task.sleep(for: .seconds(86_400)) } catch {}
                     coordinator.stop()
-                    crownHuntComposition?.perkMapCoordinator?.stop()
+                    perkCoordinator?.stop()
                 }
                 .task(id: mapSurface.cameraSnapshot) {
                     guard let incidentMapCoordinator else { return }
