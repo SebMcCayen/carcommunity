@@ -32,6 +32,12 @@ enum VehicleSaveStatus: Equatable, Sendable {
     case failed
 }
 
+enum VehicleMutationStatus: Equatable, Sendable {
+    case idle
+    case working
+    case failed
+}
+
 /// Orchestrates the garage: subscribes the repository's vehicles stream,
 /// folds its emissions into ``GarageUiState``, tracks the add-vehicle save
 /// status (Android's `GarageCoordinator`), and lazily resolves cover-photo
@@ -64,6 +70,7 @@ final class GarageCoordinator {
 
     private(set) var state: GarageUiState
     private(set) var saveStatus: VehicleSaveStatus = .idle
+    private(set) var mutationStatus: VehicleMutationStatus = .idle
     /// Nil is intentionally Community: it covers first load, missing record,
     /// listener failure, malformed data, and config-less builds.
     private(set) var storedSubscription: StoredSubscription?
@@ -71,6 +78,10 @@ final class GarageCoordinator {
         storedSubscription?.effectiveTier ?? .community
     }
     var vehicleLimit: Int { effectiveSubscriptionTier.garageVehicleLimit }
+    func vehicle(id: String) -> Vehicle? {
+        guard case .loaded(let vehicles) = state else { return nil }
+        return vehicles.first { $0.id == id }
+    }
     /// Resolved cover-photo URLs by Storage path. A path that failed to
     /// resolve is absent — its card keeps the placeholder (cosmetic, never an
     /// error state). Resolved at most once per path (success or failure), so
@@ -128,6 +139,12 @@ final class GarageCoordinator {
     ///   to key `vehicleImages/{uid}/{vehicleId}/`.
     @discardableResult
     func addVehicle(_ input: VehicleInput) async -> String? {
+        await saveVehicle(input, editingVehicleId: nil)
+    }
+
+    /// Adds or updates without ever bypassing the callable ownership checks.
+    @discardableResult
+    func saveVehicle(_ input: VehicleInput, editingVehicleId: String?) async -> String? {
         guard saveStatus != .saving else { return nil }
         guard let repository else {
             saveStatus = .failed
@@ -135,7 +152,13 @@ final class GarageCoordinator {
         }
         saveStatus = .saving
         do {
-            let vehicleId = try await repository.addVehicle(input)
+            let vehicleId: String
+            if let editingVehicleId {
+                try await repository.updateVehicle(vehicleId: editingVehicleId, input: input)
+                vehicleId = editingVehicleId
+            } else {
+                vehicleId = try await repository.addVehicle(input)
+            }
             saveStatus = .saved
             return vehicleId
         } catch is CancellationError {
@@ -155,6 +178,72 @@ final class GarageCoordinator {
     func resetSaveStatus() {
         guard saveStatus != .saving else { return }
         saveStatus = .idle
+    }
+
+    func resetMutationStatus() {
+        guard mutationStatus != .working else { return }
+        mutationStatus = .idle
+    }
+
+    @discardableResult
+    func deleteVehicle(_ vehicleId: String) async -> Bool {
+        await performMutation { repository in
+            try await repository.deleteVehicle(vehicleId: vehicleId)
+        }
+    }
+
+    @discardableResult
+    func setMainVehicle(_ vehicleId: String, isMain: Bool) async -> Bool {
+        await performMutation { repository in
+            try await repository.setMainVehicle(vehicleId: vehicleId, isMain: isMain)
+        }
+    }
+
+    @discardableResult
+    func addPhoto(vehicleId: String, jpegData: Data) async -> Bool {
+        guard let uid else {
+            mutationStatus = .failed
+            return false
+        }
+        return await performMutation { repository in
+            try await repository.addVehiclePhoto(uid: uid, vehicleId: vehicleId, jpegData: jpegData)
+        }
+    }
+
+    @discardableResult
+    func removePhoto(vehicleId: String, photoPath: String) async -> Bool {
+        await performMutation { repository in
+            try await repository.removeVehiclePhoto(vehicleId: vehicleId, photoPath: photoPath)
+        }
+    }
+
+    @discardableResult
+    func setCover(vehicleId: String, photoPath: String, currentPaths: [String]) async -> Bool {
+        let ordered = VehicleGallery.movingToCover(photoPath, in: currentPaths)
+        guard ordered != currentPaths else { return true }
+        return await performMutation { repository in
+            try await repository.reorderVehiclePhotos(
+                vehicleId: vehicleId, orderedPaths: ordered
+            )
+        }
+    }
+
+    private func performMutation(
+        _ operation: (VehiclesRepository) async throws -> Void
+    ) async -> Bool {
+        guard mutationStatus != .working, let repository else { return false }
+        mutationStatus = .working
+        do {
+            try await operation(repository)
+            mutationStatus = .idle
+            return true
+        } catch is CancellationError {
+            mutationStatus = .idle
+            return false
+        } catch {
+            mutationStatus = .failed
+            return false
+        }
     }
 
     private func subscribeToVehiclesIfNeeded() {
@@ -211,7 +300,7 @@ final class GarageCoordinator {
         }
     }
 
-    /// Kicks off a one-time URL resolution for each cover path not yet
+    /// Kicks off a one-time URL resolution for each gallery path not yet
     /// attempted. A path is attempted at most ONCE — success or failure —
     /// until ``reload()``, so a missing/unreachable photo never turns every
     /// listener emission into a Storage round-trip. Paths that leave the
@@ -219,7 +308,8 @@ final class GarageCoordinator {
     /// cap, so eviction would be complexity without a payoff.
     private func resolveImagesIfNeeded(for vehicles: [Vehicle]) {
         guard let repository else { return }
-        for path in vehicles.compactMap(\.imagePath) {
+        let paths = vehicles.flatMap { VehicleGallery.paths(for: $0) }
+        for path in Set(paths) {
             guard !attemptedImagePaths.contains(path) else { continue }
             attemptedImagePaths.insert(path)
             imageResolutions[path] = Task { [weak self] in

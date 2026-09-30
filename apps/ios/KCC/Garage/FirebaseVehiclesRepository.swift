@@ -3,9 +3,8 @@ import FirebaseFirestore
 import FirebaseStorage
 import Foundation
 
-/// ``VehiclesRepository`` backed by Cloud Firestore + the garage-addVehicle
-/// callable + Cloud Storage — the iOS port of Android's
-/// `FirebaseGarageRepository.kt`, restricted to the list + add slice.
+/// ``VehiclesRepository`` backed by Cloud Firestore, garage callables, and
+/// Cloud Storage — the iOS port of Android's `FirebaseGarageRepository.kt`.
 ///
 /// The list is an owner equality query (`userId == uid`) on the `vehicles`
 /// collection, exactly Android's read path — no composite index needed, and
@@ -77,6 +76,60 @@ final class FirebaseVehiclesRepository: VehiclesRepository, @unchecked Sendable 
         return vehicleId
     }
 
+    func updateVehicle(vehicleId: String, input: VehicleInput) async throws {
+        var payload = input.payload
+        payload["vehicleId"] = vehicleId
+        _ = try await functions.call(Self.updateVehicle, payload: payload)
+    }
+
+    func deleteVehicle(vehicleId: String) async throws {
+        _ = try await functions.call(Self.deleteVehicle, payload: ["vehicleId": vehicleId])
+    }
+
+    func setMainVehicle(vehicleId: String, isMain: Bool) async throws {
+        _ = try await functions.call(
+            Self.setMainVehicle,
+            payload: ["vehicleId": vehicleId, "isMain": isMain]
+        )
+    }
+
+    func addVehiclePhoto(uid: String, vehicleId: String, jpegData: Data) async throws {
+        guard !uid.isEmpty, !vehicleId.isEmpty, !jpegData.isEmpty,
+            jpegData.count <= VehicleValidation.vehicleImageMaxBytes
+        else { throw VehiclePhotoUploadError.invalidInput }
+
+        let path = "vehicleImages/\(uid)/\(vehicleId)/\(UUID().uuidString.lowercased()).jpg"
+        let reference = storage.reference(withPath: path)
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        _ = try await reference.putDataAsync(jpegData, metadata: metadata)
+        do {
+            _ = try await functions.call(
+                Self.addVehiclePhoto,
+                payload: ["vehicleId": vehicleId, "photoPath": path]
+            )
+        } catch {
+            // A callable rejection must not strand an unreferenced
+            // image. Cleanup is best-effort; preserve the original error.
+            try? await reference.delete()
+            throw error
+        }
+    }
+
+    func removeVehiclePhoto(vehicleId: String, photoPath: String) async throws {
+        _ = try await functions.call(
+            Self.removeVehiclePhoto,
+            payload: ["vehicleId": vehicleId, "photoPath": photoPath]
+        )
+    }
+
+    func reorderVehiclePhotos(vehicleId: String, orderedPaths: [String]) async throws {
+        _ = try await functions.call(
+            Self.reorderVehiclePhotos,
+            payload: ["vehicleId": vehicleId, "orderedPaths": orderedPaths]
+        )
+    }
+
     func imageDownloadURL(for imagePath: String) async -> URL? {
         try? await storage.reference(withPath: imagePath).downloadURL()
     }
@@ -88,6 +141,12 @@ final class FirebaseVehiclesRepository: VehiclesRepository, @unchecked Sendable 
     /// Grouped-export spelling of the garage.addVehicle callable
     /// (contracts/functions/functions.json).
     private static let addVehicle = "garage-addVehicle"
+    private static let updateVehicle = "garage-updateVehicle"
+    private static let deleteVehicle = "garage-deleteVehicle"
+    private static let setMainVehicle = "garage-setMainVehicle"
+    private static let addVehiclePhoto = "garage-addVehiclePhoto"
+    private static let removeVehiclePhoto = "garage-removeVehiclePhoto"
+    private static let reorderVehiclePhotos = "garage-reorderVehiclePhotos"
 
     private static let cachedLock = NSLock()
     nonisolated(unsafe) private static var cached: FirebaseVehiclesRepository?
@@ -130,6 +189,8 @@ final class FirebaseVehiclesRepository: VehiclesRepository, @unchecked Sendable 
         return repository
     }
 }
+
+private enum VehiclePhotoUploadError: Error { case invalidInput }
 
 extension VehicleInput {
     /// The garage-addVehicle wire payload

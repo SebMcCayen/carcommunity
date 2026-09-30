@@ -1,7 +1,7 @@
 import Foundation
 
 /// Garage operations — the iOS port of Android's `GarageRepository.kt`,
-/// restricted to the list + add slice. Firebase-free protocol so the
+/// including owner management and photo-gallery operations. Firebase-free protocol so the
 /// coordinator and screens are unit-testable with fakes.
 ///
 /// The list is an owner Firestore read (the `vehicles` collection is
@@ -9,8 +9,7 @@ import Foundation
 /// `vehicles/{vehicleId}`), mirroring Android's read path; ALL writes go
 /// through the garage.* callables — direct client writes are denied by rules
 /// because the per-user cap, the no-VIN schema validation, and the plate
-/// normalisation can only be enforced server-side. The remaining manage
-/// operations (update, delete, photos, main car) arrive with later slices.
+/// normalisation can only be enforced server-side.
 protocol VehiclesRepository: AnyObject, Sendable {
     /// The user's vehicles, list-sorted (``Garage/sortedForList(_:)``). Each
     /// call returns a fresh stream backed by its own snapshot listener;
@@ -25,6 +24,21 @@ protocol VehiclesRepository: AnyObject, Sendable {
     ///
     /// - Throws: ``KccFunctionsError`` with the contract error code.
     func addVehicle(_ input: VehicleInput) async throws -> String
+
+    func updateVehicle(vehicleId: String, input: VehicleInput) async throws
+
+    func deleteVehicle(vehicleId: String) async throws
+
+    func setMainVehicle(vehicleId: String, isMain: Bool) async throws
+
+    /// Uploads sanitised JPEG bytes beneath the caller's own vehicle prefix,
+    /// then records the path through garage-addVehiclePhoto. Implementations
+    /// must remove the uploaded object if the callable rejects the mutation.
+    func addVehiclePhoto(uid: String, vehicleId: String, jpegData: Data) async throws
+
+    func removeVehiclePhoto(vehicleId: String, photoPath: String) async throws
+
+    func reorderVehiclePhotos(vehicleId: String, orderedPaths: [String]) async throws
 
     /// Resolves a Cloud Storage vehicle-photo path
     /// (vehicleImages/{uid}/{vehicleId}/{imageId}) to a download URL for

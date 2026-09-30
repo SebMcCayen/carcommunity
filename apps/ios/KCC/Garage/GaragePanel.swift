@@ -1,4 +1,5 @@
 import Foundation
+import PhotosUI
 import SwiftUI
 
 /// Panel CONTENT for the Garage tab — what the tab shows is the user's own
@@ -6,12 +7,12 @@ import SwiftUI
 /// (Android's `GarageScreen` posture). Rendered inside the shell's
 /// `TranslucentShellPanel` like the other panel tabs.
 ///
-/// This slice: the vehicle list plus the add-vehicle flow. The manage
-/// actions (edit, delete, photos, main car) arrive with later slices, so the
-/// cards are display-only for now.
+/// Includes the complete owner-management flow: detail, edit/delete,
+/// gallery management, and main-car selection.
 struct GaragePanel: View {
     @State private var coordinator: GarageCoordinator
     @State private var isAddPresented = false
+    @State private var selectedVehicleId: String?
 
     /// Production wiring: builds the coordinator from the feature-level
     /// factories (the same construction pattern as ``ProfileScreen``). In a
@@ -47,7 +48,17 @@ struct GaragePanel: View {
         }
         .task { coordinator.start() }
         .sheet(isPresented: $isAddPresented) {
-            AddVehicleSheet(coordinator: coordinator)
+            VehicleFormSheet(coordinator: coordinator, vehicle: nil)
+        }
+        .sheet(
+            isPresented: Binding(
+                get: { selectedVehicleId != nil },
+                set: { if !$0 { selectedVehicleId = nil } }
+            )
+        ) {
+            if let id = selectedVehicleId, let vehicle = coordinator.vehicle(id: id) {
+                VehicleDetailSheet(vehicle: vehicle, coordinator: coordinator)
+            }
         }
     }
 
@@ -95,10 +106,13 @@ struct GaragePanel: View {
                 .foregroundStyle(.secondary)
         } else {
             ForEach(vehicles) { vehicle in
-                GarageVehicleCard(
-                    vehicle: vehicle,
-                    imageURL: vehicle.imagePath.flatMap { coordinator.imageURLs[$0] }
-                )
+                Button { selectedVehicleId = vehicle.id } label: {
+                    GarageVehicleCard(
+                        vehicle: vehicle,
+                        imageURL: vehicle.imagePath.flatMap { coordinator.imageURLs[$0] }
+                    )
+                }
+                .buttonStyle(.plain)
             }
         }
 
@@ -237,6 +251,254 @@ struct GarageVehicleCard: View {
     }
 }
 
+/// Self-contained owner detail page. Every mutation is reflected by the live
+/// garage listener; the sheet receives the latest vehicle value whenever that
+/// snapshot changes.
+struct VehicleDetailSheet: View {
+    let vehicle: Vehicle
+    @Bindable var coordinator: GarageCoordinator
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var isEditing = false
+    @State private var deleteConfirmation = false
+    @State private var removalPath: String?
+    @State private var pickedPhoto: PhotosPickerItem?
+    @State private var selectedPhotoIndex = 0
+    @State private var photoProcessingFailed = false
+
+    private var paths: [String] { VehicleGallery.paths(for: vehicle) }
+    private var isWorking: Bool { coordinator.mutationStatus == .working }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: KccSpacing.s4) {
+                    gallery
+
+                    Text(
+                        VehicleDisplay.headline(
+                            vehicle, otherLabel: String(localized: "garage.catalogueOther")
+                        )
+                    )
+                    .font(.system(size: KccTypeScale.headingLg, weight: KccTypeScale.semibold))
+
+                    if vehicle.isMainCar {
+                        Text("garage.mainCarBadge")
+                            .font(.system(size: KccTypeScale.caption, weight: KccTypeScale.semibold))
+                            .foregroundStyle(KccPalette.crownGold)
+                    }
+
+                    if let plate = vehicle.registrationPlate, !plate.isEmpty {
+                        infoRow("garage.registrationPlate", value: plate)
+                    }
+                    infoRow(
+                        "garage.powertrain",
+                        value: String(localized: String.LocalizationValue(vehicle.powertrain.localizationKey))
+                    )
+                    if let engine = vehicle.engineDescription, !engine.isEmpty {
+                        infoRow("garage.engineDescription", value: engine)
+                    }
+                    if let modifications = vehicle.modifications, !modifications.isEmpty {
+                        infoRow("garage.modifications", value: modifications)
+                    }
+
+                    PhotosPicker(selection: $pickedPhoto, matching: .images) {
+                        Text("garage.photoAddMore")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(paths.count >= VehicleValidation.maxVehiclePhotos || isWorking)
+
+                    if paths.count >= VehicleValidation.maxVehiclePhotos {
+                        Text("garage.photoAddMoreUnavailable")
+                            .font(.system(size: KccTypeScale.bodySm))
+                            .foregroundStyle(.secondary)
+                    }
+                    if isWorking {
+                        ProgressView("garage.photoUploading")
+                    }
+                    if photoProcessingFailed {
+                        Text("garage.photoTooLarge")
+                            .font(.system(size: KccTypeScale.bodySm))
+                            .foregroundStyle(KccPalette.errorRed)
+                    } else if coordinator.mutationStatus == .failed {
+                        Text("garage.errorDetail")
+                            .font(.system(size: KccTypeScale.bodySm))
+                            .foregroundStyle(KccPalette.errorRed)
+                    }
+
+                    Button {
+                        Task {
+                            await coordinator.setMainVehicle(vehicle.id, isMain: !vehicle.isMainCar)
+                        }
+                    } label: {
+                        Text(vehicle.isMainCar ? "garage.unsetMainCar" : "garage.setMainCar")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(isWorking)
+
+                    HStack(spacing: KccSpacing.s2) {
+                        Button("garage.editVehicle") {
+                            coordinator.resetSaveStatus()
+                            isEditing = true
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .buttonStyle(.bordered)
+
+                        Button("garage.deleteVehicle", role: .destructive) {
+                            deleteConfirmation = true
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .buttonStyle(.bordered)
+                    }
+                    .disabled(isWorking)
+                }
+                .padding(KccSpacing.s6)
+            }
+            .navigationTitle(Text("garage.detailTitle"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("garage.cancelButton") { dismiss() }
+                }
+            }
+        }
+        .sheet(isPresented: $isEditing) {
+            VehicleFormSheet(coordinator: coordinator, vehicle: vehicle)
+        }
+        .alert("garage.deleteVehicle", isPresented: $deleteConfirmation) {
+            Button("garage.cancelButton", role: .cancel) {}
+            Button("garage.deleteConfirmButton", role: .destructive) {
+                Task {
+                    if await coordinator.deleteVehicle(vehicle.id) { dismiss() }
+                }
+            }
+        } message: {
+            Text("garage.deleteConfirm")
+        }
+        .alert(
+            "garage.photoRemove",
+            isPresented: Binding(
+                get: { removalPath != nil },
+                set: { if !$0 { removalPath = nil } }
+            )
+        ) {
+            Button("garage.cancelButton", role: .cancel) { removalPath = nil }
+            Button("garage.photoRemoveConfirmButton", role: .destructive) {
+                guard let path = removalPath else { return }
+                removalPath = nil
+                Task { await coordinator.removePhoto(vehicleId: vehicle.id, photoPath: path) }
+            }
+        } message: {
+            Text("garage.photoRemoveConfirm")
+        }
+        .onChange(of: pickedPhoto) { _, item in
+            guard let item else { return }
+            Task { await addPhoto(item) }
+        }
+        .onChange(of: paths.count) { _, count in
+            selectedPhotoIndex = VehicleGallery.clampedIndex(selectedPhotoIndex, count: count)
+        }
+    }
+
+    @ViewBuilder
+    private var gallery: some View {
+        if paths.isEmpty {
+            ZStack {
+                Circle().fill(Color(.secondarySystemBackground))
+                Image(systemName: "car").font(.system(size: 48)).foregroundStyle(.secondary)
+            }
+            .aspectRatio(1, contentMode: .fit)
+            .accessibilityLabel(Text("garage.photoNone"))
+        } else {
+            TabView(selection: $selectedPhotoIndex) {
+                ForEach(Array(paths.enumerated()), id: \.element) { index, path in
+                    galleryImage(path: path).tag(index)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: paths.count > 1 ? .automatic : .never))
+            .aspectRatio(1, contentMode: .fit)
+            .clipShape(Circle())
+
+            let current = VehicleGallery.clampedIndex(selectedPhotoIndex, count: paths.count)
+            let currentPath = paths[current]
+            if paths.count > 1 {
+                Text(
+                    String.localizedStringWithFormat(
+                        String(localized: "garage.photoCounter"), current + 1, paths.count
+                    )
+                )
+                .font(.system(size: KccTypeScale.caption))
+                .foregroundStyle(.secondary)
+            }
+            if current == 0 {
+                Text("garage.photoCoverBadge")
+                    .font(.system(size: KccTypeScale.caption, weight: KccTypeScale.semibold))
+            }
+            HStack(spacing: KccSpacing.s2) {
+                Button("garage.photoSetCover") {
+                    Task {
+                        await coordinator.setCover(
+                            vehicleId: vehicle.id,
+                            photoPath: currentPath,
+                            currentPaths: paths
+                        )
+                    }
+                }
+                .disabled(current == 0 || isWorking)
+                .frame(maxWidth: .infinity)
+                .buttonStyle(.bordered)
+
+                Button("garage.photoRemove", role: .destructive) { removalPath = currentPath }
+                    .disabled(isWorking)
+                    .frame(maxWidth: .infinity)
+                    .buttonStyle(.bordered)
+            }
+        }
+    }
+
+    private func galleryImage(path: String) -> some View {
+        ZStack {
+            Color(.secondarySystemBackground)
+            if let url = coordinator.imageURLs[path] {
+                AsyncImage(url: url) { image in
+                    image.resizable().scaledToFill()
+                } placeholder: {
+                    ProgressView()
+                }
+            } else {
+                Image(systemName: "car").font(.system(size: 48)).foregroundStyle(.secondary)
+            }
+        }
+        .clipShape(Circle())
+        .accessibilityLabel(Text("garage.photoAlt"))
+    }
+
+    private func infoRow(_ label: LocalizedStringKey, value: String) -> some View {
+        VStack(alignment: .leading, spacing: KccSpacing.s1) {
+            Text(label)
+                .font(.system(size: KccTypeScale.caption))
+                .foregroundStyle(.secondary)
+            Text(verbatim: value).font(.system(size: KccTypeScale.bodyMd))
+        }
+    }
+
+    private func addPhoto(_ item: PhotosPickerItem) async {
+        pickedPhoto = nil
+        photoProcessingFailed = false
+        coordinator.resetMutationStatus()
+        guard paths.count < VehicleValidation.maxVehiclePhotos,
+            let raw = try? await item.loadTransferable(type: Data.self),
+            let jpeg = AvatarImageProcessor.jpegData(from: raw)
+        else {
+            photoProcessingFailed = true
+            return
+        }
+        _ = await coordinator.addPhoto(vehicleId: vehicle.id, jpegData: jpeg)
+    }
+}
+
 /// Which selector sheet is open. Only one at a time, so a single value beats
 /// three booleans that could disagree (Android's `VehiclePicker`).
 private enum VehiclePickerSheet: String, Identifiable {
@@ -244,8 +506,8 @@ private enum VehiclePickerSheet: String, Identifiable {
     var id: String { rawValue }
 }
 
-/// The add-vehicle form — the iOS port of Android's `VehicleFormScreen`,
-/// restricted to the add path. Owns its field state; validates against the
+/// The add/edit vehicle form — the iOS port of Android's `VehicleFormScreen`.
+/// Owns its field state; validates against the
 /// backend bounds (``VehicleValidation``) before reporting a payload, and
 /// closes on a successful save.
 ///
@@ -253,16 +515,23 @@ private enum VehiclePickerSheet: String, Identifiable {
 /// dependent selectors (choosing a manufacturer filters the models); there is
 /// no free-text field for any of them, because per-manufacturer counts only
 /// work if everyone's Volvo stores the same id.
-struct AddVehicleSheet: View {
+struct VehicleFormSheet: View {
     @Bindable var coordinator: GarageCoordinator
+    let vehicle: Vehicle?
     @Environment(\.dismiss) private var dismiss
 
-    @State private var form = VehicleForm()
+    @State private var form: VehicleForm
     @State private var openPicker: VehiclePickerSheet?
     /// Validation runs live but is only SHOWN after a save attempt, so a
     /// half-filled form is not shouting errors while the member types
     /// (Android's `showError`).
     @State private var showValidation = false
+
+    init(coordinator: GarageCoordinator, vehicle: Vehicle?) {
+        self.coordinator = coordinator
+        self.vehicle = vehicle
+        _form = State(initialValue: vehicle.map(VehicleForm.init(vehicle:)) ?? VehicleForm())
+    }
 
     private var currentYear: Int {
         Calendar.current.component(.year, from: Date())
@@ -311,7 +580,7 @@ struct AddVehicleSheet: View {
                     .disabled(coordinator.saveStatus == .saving)
                 }
             }
-            .navigationTitle(Text("garage.formTitleCreate"))
+            .navigationTitle(Text(vehicle == nil ? "garage.formTitleCreate" : "garage.formTitleEdit"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -478,7 +747,7 @@ struct AddVehicleSheet: View {
         }
         showValidation = false
         Task {
-            await coordinator.addVehicle(input)
+            await coordinator.saveVehicle(input, editingVehicleId: vehicle?.id)
         }
     }
 }

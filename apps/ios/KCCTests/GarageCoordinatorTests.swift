@@ -31,6 +31,12 @@ final class GarageCoordinatorTests: XCTestCase {
         private(set) var subscribeCount = 0
         private(set) var observedUids: [String] = []
         private(set) var addCount = 0
+        private(set) var updates: [(String, VehicleInput)] = []
+        private(set) var deletedIds: [String] = []
+        private(set) var mainChanges: [(String, Bool)] = []
+        private(set) var addedPhotos: [(String, String, Data)] = []
+        private(set) var removedPhotos: [(String, String)] = []
+        private(set) var reorderedPhotos: [(String, [String])] = []
         private(set) var imageResolveCount = 0
 
         /// Snapshots replayed to each FUTURE subscription (the listener's
@@ -117,6 +123,36 @@ final class GarageCoordinatorTests: XCTestCase {
                 }
             }
             return try result.get()
+        }
+
+        func updateVehicle(vehicleId: String, input: VehicleInput) async throws {
+            record { updates.append((vehicleId, input)) }
+        }
+
+        func deleteVehicle(vehicleId: String) async throws {
+            record { deletedIds.append(vehicleId) }
+        }
+
+        func setMainVehicle(vehicleId: String, isMain: Bool) async throws {
+            record { mainChanges.append((vehicleId, isMain)) }
+        }
+
+        func addVehiclePhoto(uid: String, vehicleId: String, jpegData: Data) async throws {
+            record { addedPhotos.append((uid, vehicleId, jpegData)) }
+        }
+
+        func removeVehiclePhoto(vehicleId: String, photoPath: String) async throws {
+            record { removedPhotos.append((vehicleId, photoPath)) }
+        }
+
+        func reorderVehiclePhotos(vehicleId: String, orderedPaths: [String]) async throws {
+            record { reorderedPhotos.append((vehicleId, orderedPaths)) }
+        }
+
+        private func record(_ mutation: () -> Void) {
+            lock.lock()
+            mutation()
+            lock.unlock()
         }
 
         private func recordAdd() -> (gated: Bool, result: Result<String, Error>) {
@@ -677,6 +713,92 @@ final class GarageCoordinatorTests: XCTestCase {
         repository.scriptImageURL(url, for: path)
         coordinator.reload()
         await wait { coordinator.imageURLs[path] == url }
+        XCTAssertEqual(repository.imageResolveCount, 2)
+    }
+
+    // MARK: - owner management
+
+    @MainActor
+    func testUpdateUsesExistingIdAndTracksSaveSuccess() async {
+        let repository = FakeVehiclesRepository()
+        let coordinator = GarageCoordinator(repository: repository, uid: Self.uid)
+
+        let result = await coordinator.saveVehicle(Self.input, editingVehicleId: "existing")
+
+        XCTAssertEqual(result, "existing")
+        XCTAssertEqual(coordinator.saveStatus, .saved)
+        XCTAssertEqual(repository.updates.count, 1)
+        XCTAssertEqual(repository.updates.first?.0, "existing")
+        XCTAssertEqual(repository.addCount, 0)
+    }
+
+    @MainActor
+    func testDeleteSetMainAndPhotoMutationsUseOwnerRepository() async {
+        let repository = FakeVehiclesRepository()
+        let coordinator = GarageCoordinator(repository: repository, uid: Self.uid)
+        let bytes = Data([0xff, 0xd8, 0xff])
+
+        XCTAssertTrue(await coordinator.setMainVehicle("v1", isMain: true))
+        XCTAssertTrue(await coordinator.addPhoto(vehicleId: "v1", jpegData: bytes))
+        XCTAssertTrue(await coordinator.removePhoto(vehicleId: "v1", photoPath: "p1"))
+        XCTAssertTrue(
+            await coordinator.setCover(
+                vehicleId: "v1", photoPath: "p2", currentPaths: ["p1", "p2"]
+            )
+        )
+        XCTAssertTrue(await coordinator.deleteVehicle("v1"))
+
+        XCTAssertEqual(repository.mainChanges.first?.0, "v1")
+        XCTAssertEqual(repository.mainChanges.first?.1, true)
+        XCTAssertEqual(repository.addedPhotos.first?.0, Self.uid)
+        XCTAssertEqual(repository.addedPhotos.first?.1, "v1")
+        XCTAssertEqual(repository.addedPhotos.first?.2, bytes)
+        XCTAssertEqual(repository.removedPhotos.first?.0, "v1")
+        XCTAssertEqual(repository.removedPhotos.first?.1, "p1")
+        XCTAssertEqual(repository.reorderedPhotos.first?.1, ["p2", "p1"])
+        XCTAssertEqual(repository.deletedIds, ["v1"])
+        XCTAssertEqual(coordinator.mutationStatus, .idle)
+    }
+
+    @MainActor
+    func testPhotoMutationFailsClosedWithoutAuthenticatedUid() async {
+        let repository = FakeVehiclesRepository()
+        let coordinator = GarageCoordinator(repository: repository, uid: nil)
+
+        XCTAssertFalse(await coordinator.addPhoto(vehicleId: "v1", jpegData: Data([1])))
+        XCTAssertEqual(coordinator.mutationStatus, .failed)
+        XCTAssertTrue(repository.addedPhotos.isEmpty)
+    }
+
+    @MainActor
+    func testAllGalleryPathsResolveRatherThanOnlyCover() async {
+        let repository = FakeVehiclesRepository()
+        let first = "vehicleImages/uid-1/a/first.jpg"
+        let second = "vehicleImages/uid-1/a/second.jpg"
+        repository.scriptImageURL(URL(string: "https://example.test/first.jpg")!, for: first)
+        repository.scriptImageURL(URL(string: "https://example.test/second.jpg")!, for: second)
+        let base = Self.vehicle("a", imagePath: first)
+        let vehicle = Vehicle(
+            id: base.id,
+            make: base.make,
+            model: base.model,
+            makeId: base.makeId,
+            modelId: base.modelId,
+            modelYear: base.modelYear,
+            powertrain: base.powertrain,
+            engineDescription: base.engineDescription,
+            modifications: base.modifications,
+            registrationPlate: base.registrationPlate,
+            imagePath: first,
+            photoPaths: [first, second],
+            isMainCar: false
+        )
+        repository.script([.loaded([vehicle])])
+        let coordinator = GarageCoordinator(repository: repository, uid: Self.uid)
+
+        coordinator.start()
+        await wait { coordinator.imageURLs.count == 2 }
+
         XCTAssertEqual(repository.imageResolveCount, 2)
     }
 }
