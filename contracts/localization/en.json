@@ -1467,6 +1467,7 @@
     "websiteButton": "Visit website",
     "noPartnersNearby": "No business partners found in this area.",
     "loading": "Loading...",
+    "loadMore": "Load more",
     "error": "Could not load business partners.",
     "retry": "Try again",
     "applicationTitle": "For businesses",

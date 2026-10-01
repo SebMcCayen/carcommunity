@@ -23308,23 +23308,6 @@
         }
       }
     },
-    "partners.loading": {
-      "extractionState": "manual",
-      "localizations": {
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Laddar..."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Loading..."
-          }
-        }
-      }
-    },
     "partners.loadMore": {
       "extractionState": "manual",
       "localizations": {
@@ -23338,6 +23321,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Load more"
+          }
+        }
+      }
+    },
+    "partners.loading": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laddar..."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading..."
           }
         }
       }
