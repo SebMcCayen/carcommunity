@@ -135,7 +135,9 @@ struct MemberProfileScreen: View {
                     Text(verbatim: bio).font(.system(size: KccTypeScale.bodyMd))
                 }
                 socialLinks(content.profile)
-                statistics(content)
+                if let joined = content.profile.createdAt {
+                    statistics(joined: joined)
+                }
                 vehicles(content.vehicles)
                 badges(content.badges)
                 if coordinator.canModerate {
@@ -206,6 +208,7 @@ struct MemberProfileScreen: View {
                 if let onMessage {
                     Button("friends.message") { onMessage(profile.uid, profile.displayName) }
                         .buttonStyle(.borderedProminent)
+                        .disabled(disabled)
                 }
                 Button("friends.remove", role: .destructive) { confirmUnfriend = true }
                     .buttonStyle(.bordered).disabled(disabled)
@@ -230,16 +233,14 @@ struct MemberProfileScreen: View {
         }
     }
 
-    private func statistics(_ content: MemberProfileContent) -> some View {
+    private func statistics(joined: Date) -> some View {
         VStack(alignment: .leading, spacing: KccSpacing.s2) {
             Text("memberProfile.statsTitle")
                 .font(.system(size: KccTypeScale.titleMd, weight: .semibold))
-            if let joined = content.profile.createdAt {
-                HStack {
-                    Text("memberProfile.statsMemberSince")
-                    Spacer()
-                    Text(joined, format: .dateTime.month(.wide).year())
-                }
+            HStack {
+                Text("memberProfile.statsMemberSince")
+                Spacer()
+                Text(joined, format: .dateTime.month(.wide).year())
             }
         }
     }
