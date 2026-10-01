@@ -105,7 +105,7 @@ enum GarageAllowance {
 }
 
 /// Garage / vehicles domain + validation — the iOS port of Android's
-/// `garage/Vehicle.kt`, restricted to the list + add slice.
+/// `garage/Vehicle.kt`, including owner management and photo galleries.
 ///
 /// Mirrors the backend garage-core contract
 /// (contracts/schemas/garage.schema.json): the powertrain vocabulary, the
@@ -300,6 +300,9 @@ enum VehicleFieldError: Equatable, Sendable {
 }
 
 enum VehicleValidation {
+    static let maxVehiclePhotos = 10
+
+    static let vehicleImageMaxBytes = 10 * 1024 * 1024
     /// First model year the selector OFFERS (catalogue `minModelYear`).
     /// Deliberately later than the backend's absolute floor of 1886, which
     /// the backend honours only on its legacy free-text path.
@@ -404,6 +407,41 @@ enum VehicleValidation {
     private static func nonEmptyTrimmed(_ value: String) -> String? {
         let result = trimmed(value)
         return result.isEmpty ? nil : result
+    }
+}
+
+/// Pure helpers for the ordered vehicle gallery. `photoPaths` is the source
+/// of truth and the first entry is the cover.
+enum VehicleGallery {
+    static func paths(for vehicle: Vehicle) -> [String] {
+        let explicit = vehicle.photoPaths.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        if !explicit.isEmpty { return explicit }
+        guard let cover = vehicle.imagePath,
+            !cover.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return [] }
+        return [cover]
+    }
+
+    static func clampedIndex(_ index: Int, count: Int) -> Int {
+        guard count > 0 else { return 0 }
+        return min(max(index, 0), count - 1)
+    }
+
+    static func movingToCover(_ path: String, in paths: [String]) -> [String] {
+        guard paths.contains(path) else { return paths }
+        return [path] + paths.filter { $0 != path }
+    }
+}
+
+extension VehicleForm {
+    init(vehicle: Vehicle) {
+        makeId = vehicle.makeId
+        modelId = vehicle.modelId
+        modelYear = vehicle.modelYear
+        powertrain = vehicle.powertrain.isSelectable ? vehicle.powertrain : nil
+        engineDescription = vehicle.engineDescription ?? ""
+        modifications = vehicle.modifications ?? ""
+        registrationPlate = vehicle.registrationPlate ?? ""
     }
 }
 
