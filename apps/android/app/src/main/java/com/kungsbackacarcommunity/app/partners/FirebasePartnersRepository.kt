@@ -97,12 +97,13 @@ class FirebasePartnersRepository private constructor(
 
     override fun observeOffers(offerIds: Set<String>): Flow<OffersState> = callbackFlow {
         trySend(OffersState.Loading)
-        if (offerIds.isEmpty()) {
+        val boundedOfferIds = offerIds.take(Partners.SAVED_OFFERS_QUERY_LIMIT.toInt())
+        if (boundedOfferIds.isEmpty()) {
             trySend(OffersState.Loaded(emptyList()))
             close()
             return@callbackFlow
         }
-        val chunks = offerIds.toList().chunked(FIRESTORE_IN_LIMIT)
+        val chunks = boundedOfferIds.chunked(FIRESTORE_IN_LIMIT)
         val lock = Any()
         val snapshots = mutableMapOf<Int, List<PartnerOffer>>()
         var failedBeforeLoad = false
@@ -159,15 +160,23 @@ class FirebasePartnersRepository private constructor(
                 .collection(USERS)
                 .document(uid)
                 .collection(SAVED_OFFERS)
+                .orderBy(SAVED_AT, Query.Direction.DESCENDING)
+                .limit(Partners.SAVED_OFFERS_QUERY_LIMIT + 1)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
                         if (!hasLoadedSnapshot) trySend(SavedOfferIdsState.Error)
                         return@addSnapshotListener
                     }
                     hasLoadedSnapshot = true
+                    val documents = snapshot?.documents.orEmpty()
                     trySend(
                         SavedOfferIdsState.Loaded(
-                            snapshot?.documents?.map { it.id }?.toSet() ?: emptySet(),
+                            ids =
+                                documents
+                                    .take(Partners.SAVED_OFFERS_QUERY_LIMIT.toInt())
+                                    .map { it.id }
+                                    .toSet(),
+                            isExhaustive = documents.size.toLong() <= Partners.SAVED_OFFERS_QUERY_LIMIT,
                         ),
                     )
                 }
@@ -224,6 +233,7 @@ class FirebasePartnersRepository private constructor(
         private const val MEMBER = "member"
         private const val USERS = "users"
         private const val SAVED_OFFERS = "savedOffers"
+        private const val SAVED_AT = "savedAt"
         private const val REGION = "europe-west1"
         private const val SHOW_OFFER_CODE = "partners-showOfferCode"
         private const val FIRESTORE_IN_LIMIT = 30

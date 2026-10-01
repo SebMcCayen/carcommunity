@@ -22645,6 +22645,23 @@
         }
       }
     },
+    "partnerOffers.savedLimitedBody": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Endast dina 30 senast sparade erbjudanden visas."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only your 30 most recently saved offers are shown."
+          }
+        }
+      }
+    },
     "partnerOffers.sectionTitle": {
       "extractionState": "manual",
       "localizations": {

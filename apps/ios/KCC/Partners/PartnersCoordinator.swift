@@ -23,6 +23,7 @@ final class PartnersCoordinator {
     private(set) var offersAreExhaustive = false
     private(set) var savedOfferIds: Set<String> = []
     private(set) var savedOffers: [PartnerOffer] = []
+    private(set) var savedOffersAreExhaustive = true
     private(set) var savedState: SavedOffersUiState = .loading
     private(set) var companyLookupState: PartnerCompanyLookupState = .idle
     private(set) var canAccessMemberOffers: Bool
@@ -97,6 +98,7 @@ final class PartnersCoordinator {
         offersAreExhaustive = false
         savedOfferIds = []
         savedOffers = []
+        savedOffersAreExhaustive = true
         hasLoadedOffersSnapshot = false
         hasLoadedSavedIdsSnapshot = false
         hasLoadedSavedSnapshot = false
@@ -351,6 +353,7 @@ final class PartnersCoordinator {
             savedOffersTask = nil
             savedOfferIds = []
             savedOffers = []
+            savedOffersAreExhaustive = true
             savedState = .unavailable
             hasLoadedSavedIdsSnapshot = false
             hasLoadedSavedSnapshot = false
@@ -367,8 +370,9 @@ final class PartnersCoordinator {
             for await snapshot in stream {
                 guard !Task.isCancelled, let self, self.canAccessMemberOffers else { return }
                 switch snapshot {
-                case .loaded(let ids):
+                case .loaded(let ids, let isExhaustive):
                     self.hasLoadedSavedIdsSnapshot = true
+                    self.savedOffersAreExhaustive = isExhaustive
                     let changed = ids != self.savedOfferIds
                     self.savedOfferIds = ids
                     if changed {

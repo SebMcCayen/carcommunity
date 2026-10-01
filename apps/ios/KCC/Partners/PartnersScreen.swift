@@ -121,6 +121,11 @@ struct PartnersScreen: View {
                 Spacer()
             }
         } else if coordinator.savedOffers.isEmpty {
+            if !coordinator.savedOffersAreExhaustive {
+                Text("partnerOffers.savedLimitedBody")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
             ContentUnavailableView(
                 "partnerOffers.savedEmptyTitle",
                 systemImage: "bookmark",
@@ -128,6 +133,11 @@ struct PartnersScreen: View {
             )
             .listRowBackground(Color.clear)
         } else {
+            if !coordinator.savedOffersAreExhaustive {
+                Text("partnerOffers.savedLimitedBody")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
             ForEach(coordinator.savedOffers) { offer in
                 NavigationLink(value: PartnerDestination(
                     companyId: offer.companyId,

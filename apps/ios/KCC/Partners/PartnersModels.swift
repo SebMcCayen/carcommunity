@@ -133,7 +133,7 @@ enum PartnerOfferDetailSnapshot: Equatable, Sendable {
 }
 
 enum SavedOffersSnapshot: Equatable, Sendable {
-    case loaded(ids: Set<String>)
+    case loaded(ids: Set<String>, isExhaustive: Bool = true)
     case failed(code: String?)
 }
 

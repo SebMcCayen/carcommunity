@@ -29,7 +29,10 @@ sealed interface OffersState {
 
 sealed interface SavedOfferIdsState {
     data object Loading : SavedOfferIdsState
-    data class Loaded(val ids: Set<String>) : SavedOfferIdsState
+    data class Loaded(
+        val ids: Set<String>,
+        val isExhaustive: Boolean = true,
+    ) : SavedOfferIdsState
     data object Error : SavedOfferIdsState
 }
 

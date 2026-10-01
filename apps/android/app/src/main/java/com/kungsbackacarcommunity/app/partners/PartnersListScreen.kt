@@ -29,6 +29,7 @@ fun PartnersRootScreen(
     state: CompaniesState,
     offersState: OffersState,
     savedOffersState: OffersState,
+    savedOffersAreExhaustive: Boolean = true,
     canAccessMemberOffers: Boolean,
     section: PartnersRootSection,
     onSectionChange: (PartnersRootSection) -> Unit,
@@ -59,6 +60,7 @@ fun PartnersRootScreen(
             PartnersRootSection.SAVED ->
                 SavedOffersContent(
                     savedOffersState = savedOffersState,
+                    savedOffersAreExhaustive = savedOffersAreExhaustive,
                     companies = (state as? CompaniesState.Loaded)?.companies.orEmpty(),
                     canAccessMemberOffers = canAccessMemberOffers,
                     onOpenSavedOffer = onOpenSavedOffer,
@@ -153,6 +155,7 @@ private fun PartnersDirectoryContent(
 @Composable
 private fun SavedOffersContent(
     savedOffersState: OffersState,
+    savedOffersAreExhaustive: Boolean,
     companies: List<PartnerCompany>,
     canAccessMemberOffers: Boolean,
     onOpenSavedOffer: (companyId: String, offerId: String) -> Unit,
@@ -197,6 +200,13 @@ private fun SavedOffersContent(
         is OffersState.Loaded -> Unit
     }
     val savedOffers = savedOffersState.offers.sortedBy { it.title.lowercase() }
+    if (!savedOffersAreExhaustive) {
+        Text(
+            text = stringResource(R.string.partnerOffers_savedLimitedBody),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
     if (savedOffers.isEmpty()) {
         Text(
             text = stringResource(R.string.partnerOffers_savedEmptyTitle),

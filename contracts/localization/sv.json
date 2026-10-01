@@ -1539,6 +1539,7 @@
     "offerTypeOther": "Erbjudande",
     "savedEmptyTitle": "Inga sparade erbjudanden",
     "savedEmptyBody": "Spara ett erbjudande hos en företagspartner så visas det här.",
+    "savedLimitedBody": "Endast dina 30 senast sparade erbjudanden visas.",
     "offerCountOne": "%1$d erbjudande",
     "offerCountOther": "%1$d erbjudanden"
   },

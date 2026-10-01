@@ -465,6 +465,22 @@ final class PartnersCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testCappedSavedIdsSnapshotIsMarkedIncomplete() async {
+        let repository = FakeRepository(saved: [.loaded(ids: ["o1"], isExhaustive: false)])
+        let coordinator = PartnersCoordinator(
+            repository: repository,
+            subscriptionRepository: nil,
+            uid: "me",
+            access: AccountAccess(role: .admin, activeMember: false, suspended: false, deleted: false)
+        )
+
+        coordinator.start()
+        await waitUntil { coordinator.savedOfferIds == ["o1"] }
+
+        XCTAssertFalse(coordinator.savedOffersAreExhaustive)
+    }
+
+    @MainActor
     func testChangedSavedIdsDiscardStaleOfferAndSurfaceReplacementFailure() async {
         let oldOffer = PartnerOffer(
             id: "old", companyId: "c1", partnerCompanyName: nil, title: "Old",

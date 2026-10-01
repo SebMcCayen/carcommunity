@@ -104,6 +104,9 @@ object Partners {
      * required index deploy.
      */
     const val ACTIVE_OFFERS_QUERY_LIMIT = 200L
+
+    /** Maximum recent bookmarks resolved by the live saved-offers surface. */
+    const val SAVED_OFFERS_QUERY_LIMIT = 30L
 }
 
 /** Validated external destinations for partner actions. */

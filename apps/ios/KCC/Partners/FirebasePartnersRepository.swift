@@ -88,7 +88,7 @@ final class FirebasePartnersRepository: PartnersRepository, @unchecked Sendable 
                 return
             }
 
-            let values = Array(ids)
+            let values = Array(ids.prefix(Self.savedOffersLimit))
             let chunks = stride(from: 0, to: values.count, by: Self.firestoreInLimit).map {
                 Array(values[$0..<min($0 + Self.firestoreInLimit, values.count)])
             }
@@ -142,12 +142,18 @@ final class FirebasePartnersRepository: PartnersRepository, @unchecked Sendable 
         AsyncStream { continuation in
             let registration = firestore.collection("users").document(uid)
                 .collection("savedOffers")
+                .order(by: "savedAt", descending: true)
+                .limit(to: Self.savedOffersLimit + 1)
                 .addSnapshotListener { snapshot, error in
                     if let error {
                         continuation.yield(.failed(code: Self.errorCode(error)))
                         return
                     }
-                    continuation.yield(.loaded(ids: Set(snapshot?.documents.map(\.documentID) ?? [])))
+                    let documents = snapshot?.documents ?? []
+                    continuation.yield(.loaded(
+                        ids: Set(documents.prefix(Self.savedOffersLimit).map(\.documentID)),
+                        isExhaustive: documents.count <= Self.savedOffersLimit
+                    ))
                 }
             let box = PartnerListenerBox(registration: registration)
             continuation.onTermination = { _ in box.registration.remove() }
@@ -183,6 +189,7 @@ final class FirebasePartnersRepository: PartnersRepository, @unchecked Sendable 
     }
 
     private static let firestoreInLimit = 30
+    private static let savedOffersLimit = 30
     private static let activeOffersLimit = 200
 
     private static let lock = NSLock()

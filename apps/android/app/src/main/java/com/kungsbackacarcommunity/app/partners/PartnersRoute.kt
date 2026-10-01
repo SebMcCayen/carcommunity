@@ -55,6 +55,8 @@ fun PartnersRoute(
         }
             .collectAsState(initial = SavedOfferIdsState.Loading)
     val savedIds = (savedIdsState as? SavedOfferIdsState.Loaded)?.ids.orEmpty()
+    val savedIdsAreExhaustive =
+        (savedIdsState as? SavedOfferIdsState.Loaded)?.isExhaustive ?: true
     val savedOffersState by
         remember(repository, savedIdsState, canAccessMemberOffers, savedReloadKey) {
             if (!canAccessMemberOffers) {
@@ -106,6 +108,7 @@ fun PartnersRoute(
             state = companiesState,
             offersState = offersState,
             savedOffersState = savedOffersState,
+            savedOffersAreExhaustive = savedIdsAreExhaustive,
             canAccessMemberOffers = canAccessMemberOffers,
             section = rootSection,
             onSectionChange = { rootSection = it },

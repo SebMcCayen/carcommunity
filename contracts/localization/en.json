@@ -1539,6 +1539,7 @@
     "offerTypeOther": "Offer",
     "savedEmptyTitle": "No saved offers",
     "savedEmptyBody": "Save an offer from a business partner and it will appear here.",
+    "savedLimitedBody": "Only your 30 most recently saved offers are shown.",
     "offerCountOne": "%1$d offer",
     "offerCountOther": "%1$d offers"
   },
