@@ -75,4 +75,3 @@ enum MemberRelationship: Equatable, Sendable {
 enum MemberProfileAction: Equatable, Sendable {
     case addFriend, cancelRequest, acceptRequest, declineRequest, unfriend, block, unblock
 }
-

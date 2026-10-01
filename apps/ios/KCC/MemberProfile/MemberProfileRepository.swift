@@ -6,4 +6,3 @@ protocol MemberProfileRepository: AnyObject, Sendable {
     func load(targetUid: String) async -> MemberProfileResult
     func imageDownloadURL(for path: String) async -> URL?
 }
-
