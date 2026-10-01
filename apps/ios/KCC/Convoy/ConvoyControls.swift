@@ -29,6 +29,7 @@ struct ConvoyStatusBar: View {
     @Bindable var awareness: ConvoyAwarenessCoordinator
     let mapSurface: StubMapSurface
     let liveLocationEnabled: Bool
+    let viewerUid: String?
     var onOpenMemberProfile: ((String, String?) -> Void)? = nil
 
     @State private var memberTarget: ConvoySheetTarget?
@@ -107,6 +108,7 @@ struct ConvoyStatusBar: View {
                 coordinator: coordinator,
                 awareness: awareness,
                 target: target,
+                viewerUid: viewerUid,
                 onCenter: mapSurface.centerOn,
                 onOpenMemberProfile: onOpenMemberProfile
             )
@@ -202,6 +204,7 @@ struct ConvoyStatusBar: View {
 struct ConvoyMembersSheet: View {
     @Environment(\.dismiss) private var dismiss
     let convoy: ConvoyItem
+    let viewerUid: String?
     var positions: [String: ConvoyMemberPosition] = [:]
     var onCenter: ((MapPoint) -> Void)?
     var onOpenMemberProfile: ((String, String?) -> Void)? = nil
@@ -252,7 +255,11 @@ struct ConvoyMembersSheet: View {
                 }
             }
             Spacer()
-            if !waiting, let onOpenMemberProfile {
+            if ConvoyBarLogic.canOpenMemberProfile(
+                memberUid: member.uid,
+                viewerUid: viewerUid,
+                waiting: waiting
+            ), let onOpenMemberProfile {
                 Button {
                     dismiss()
                     onOpenMemberProfile(member.uid, member.displayName)
@@ -292,12 +299,14 @@ private struct LiveConvoyMembersSheet: View {
     @Bindable var coordinator: ConvoyManagementCoordinator
     @Bindable var awareness: ConvoyAwarenessCoordinator
     let target: ConvoySheetTarget
+    let viewerUid: String?
     let onCenter: (MapPoint) -> Void
     let onOpenMemberProfile: ((String, String?) -> Void)?
 
     var body: some View {
         ConvoyMembersSheet(
             convoy: coordinator.convoy(id: target.id) ?? target.initial,
+            viewerUid: viewerUid,
             positions: awareness.positions,
             onCenter: onCenter,
             onOpenMemberProfile: onOpenMemberProfile

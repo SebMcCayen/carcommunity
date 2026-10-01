@@ -370,6 +370,7 @@ struct ShellView: View {
                             awareness: convoyAwareness,
                             mapSurface: mapSurface,
                             liveLocationEnabled: liveLocationFeatureEnabled,
+                            viewerUid: signedInUid,
                             onOpenMemberProfile: openMemberProfile
                         )
                         .padding(.horizontal, KccSpacing.s4)

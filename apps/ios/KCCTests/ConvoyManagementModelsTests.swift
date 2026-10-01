@@ -263,6 +263,21 @@ final class ConvoyManagementModelsTests: XCTestCase {
         )
     }
 
+    func testRosterProfileActionExcludesSelfPendingAndUnknownViewer() {
+        XCTAssertFalse(ConvoyBarLogic.canOpenMemberProfile(
+            memberUid: "me", viewerUid: "me", waiting: false
+        ))
+        XCTAssertTrue(ConvoyBarLogic.canOpenMemberProfile(
+            memberUid: "friend", viewerUid: "me", waiting: false
+        ))
+        XCTAssertFalse(ConvoyBarLogic.canOpenMemberProfile(
+            memberUid: "friend", viewerUid: "me", waiting: true
+        ))
+        XCTAssertFalse(ConvoyBarLogic.canOpenMemberProfile(
+            memberUid: "friend", viewerUid: nil, waiting: false
+        ))
+    }
+
     func testParsesViewerRoleAndLifecycleResults() {
         let payload = convoy(id: "convoy", viewer: "accepted")
         let snapshot = ConvoyManagementParser.parseList([
