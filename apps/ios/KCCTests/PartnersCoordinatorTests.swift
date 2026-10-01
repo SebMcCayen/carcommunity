@@ -327,6 +327,26 @@ final class PartnersCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testTransientSavedListenerFailurePreservesLoadedIds() async {
+        let repository = FakeRepository(saved: [.loaded(ids: ["o1"])])
+        repository.directSnapshotsByIds[["o1"]] = []
+        let coordinator = PartnersCoordinator(
+            repository: repository,
+            subscriptionRepository: nil,
+            uid: "me",
+            access: AccountAccess(role: .admin, activeMember: false, suspended: false, deleted: false)
+        )
+        coordinator.start()
+        await waitUntil { coordinator.savedOfferIds == ["o1"] }
+
+        repository.sendSaved(.failed(code: "unavailable"))
+        await Task.yield()
+
+        XCTAssertEqual(coordinator.savedOfferIds, ["o1"])
+        XCTAssertEqual(coordinator.savedState, .loading)
+    }
+
+    @MainActor
     func testLoadsSavedOfferCompanyOutsideCappedDirectoryById() async {
         let company = PartnerCompany(
             id: "older", name: "Older Partner", category: .retail, description: nil,

@@ -34,6 +34,7 @@ final class PartnersCoordinator {
     private var revealGeneration = 0
     private var savedGeneration = 0
     private var hasLoadedOffersSnapshot = false
+    private var hasLoadedSavedIdsSnapshot = false
     private var hasLoadedSavedSnapshot = false
     private var resolvedCompanies: [String: PartnerCompany] = [:]
 
@@ -313,6 +314,7 @@ final class PartnersCoordinator {
             savedOfferIds = []
             savedOffers = []
             savedState = .unavailable
+            hasLoadedSavedIdsSnapshot = false
             hasLoadedSavedSnapshot = false
             savedGeneration += 1
             savedActionStatus = .idle
@@ -328,6 +330,7 @@ final class PartnersCoordinator {
                 guard !Task.isCancelled, let self, self.canAccessMemberOffers else { return }
                 switch snapshot {
                 case .loaded(let ids):
+                    self.hasLoadedSavedIdsSnapshot = true
                     let changed = ids != self.savedOfferIds
                     self.savedOfferIds = ids
                     if changed {
@@ -343,7 +346,7 @@ final class PartnersCoordinator {
                         self.subscribeSavedOfferDocuments(ids: ids)
                     }
                 case .failed:
-                    if !self.hasLoadedSavedSnapshot {
+                    if !self.hasLoadedSavedIdsSnapshot {
                         self.savedOfferIds = []
                         self.savedState = .failed
                     }
