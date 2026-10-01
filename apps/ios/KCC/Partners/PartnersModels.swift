@@ -112,8 +112,23 @@ struct PartnerOfferDetail: Equatable, Sendable {
     }
 }
 
+struct PartnerPageCursor: Equatable, Sendable {
+    let createdAt: Date
+    let documentId: String
+}
+
+struct PartnerCompaniesPage: Equatable, Sendable {
+    let companies: [PartnerCompany]
+    let nextCursor: PartnerPageCursor?
+}
+
+struct PartnerOffersPage: Equatable, Sendable {
+    let offers: [PartnerOffer]
+    let nextCursor: PartnerPageCursor?
+}
+
 enum PartnersCollectionSnapshot: Equatable, Sendable {
-    case loaded(companies: [PartnerCompany])
+    case loaded(companies: [PartnerCompany], nextCursor: PartnerPageCursor? = nil)
     case failed(code: String?)
 }
 
@@ -124,6 +139,11 @@ enum PartnerCompanySnapshot: Equatable, Sendable {
 
 enum PartnerOffersSnapshot: Equatable, Sendable {
     case loaded(offers: [PartnerOffer], isExhaustive: Bool = true)
+    case failed(code: String?)
+}
+
+enum PartnerActiveOffersSnapshot: Equatable, Sendable {
+    case loaded(offers: [PartnerOffer], nextCursor: PartnerPageCursor? = nil)
     case failed(code: String?)
 }
 

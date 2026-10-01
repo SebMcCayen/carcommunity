@@ -2,8 +2,10 @@ import Foundation
 
 protocol PartnersRepository: Sendable {
     func observeActiveCompanies() -> AsyncStream<PartnersCollectionSnapshot>
+    func fetchActiveCompanies(after cursor: PartnerPageCursor) async throws -> PartnerCompaniesPage
     func observeCompany(id: String) -> AsyncStream<PartnerCompanySnapshot>
-    func observeActiveOffers() -> AsyncStream<PartnerOffersSnapshot>
+    func observeActiveOffers() -> AsyncStream<PartnerActiveOffersSnapshot>
+    func fetchActiveOffers(after cursor: PartnerPageCursor) async throws -> PartnerOffersPage
     func observeOffers(ids: Set<String>) -> AsyncStream<PartnerOffersSnapshot>
     func observeOfferDetail(offerId: String) -> AsyncStream<PartnerOfferDetailSnapshot>
     func observeSavedOfferIds(uid: String) -> AsyncStream<SavedOffersSnapshot>

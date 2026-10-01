@@ -23325,6 +23325,23 @@
         }
       }
     },
+    "partners.loadMore": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa fler"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Load more"
+          }
+        }
+      }
+    },
     "partners.loginRequired": {
       "extractionState": "manual",
       "localizations": {

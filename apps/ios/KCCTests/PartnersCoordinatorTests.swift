@@ -5,10 +5,10 @@ import XCTest
 final class PartnersCoordinatorTests: XCTestCase {
     private final class FakeRepository: PartnersRepository, @unchecked Sendable {
         let companies: [PartnersCollectionSnapshot]
-        let offers: [PartnerOffersSnapshot]
+        let offers: [PartnerActiveOffersSnapshot]
         let saved: [SavedOffersSnapshot]
         let directOffers: [PartnerOffer]?
-        var offersContinuation: AsyncStream<PartnerOffersSnapshot>.Continuation?
+        var offersContinuation: AsyncStream<PartnerActiveOffersSnapshot>.Continuation?
         var directOffersContinuation: AsyncStream<PartnerOffersSnapshot>.Continuation?
         var savedContinuation: AsyncStream<SavedOffersSnapshot>.Continuation?
         var directSnapshotsByIds: [Set<String>: [PartnerOffersSnapshot]] = [:]
@@ -17,10 +17,12 @@ final class PartnersCoordinatorTests: XCTestCase {
         var companiesById: [String: PartnerCompany] = [:]
         var observedCompanyIds: [String] = []
         var setSavedCalls: [(String, String, Bool)] = []
+        var companyPages: [PartnerCompaniesPage] = []
+        var offerPages: [PartnerOffersPage] = []
 
         init(
             companies: [PartnersCollectionSnapshot] = [.loaded(companies: [])],
-            offers: [PartnerOffersSnapshot] = [.loaded(offers: [])],
+            offers: [PartnerActiveOffersSnapshot] = [.loaded(offers: [])],
             saved: [SavedOffersSnapshot] = [.loaded(ids: [])],
             directOffers: [PartnerOffer]? = nil
         ) {
@@ -36,19 +38,34 @@ final class PartnersCoordinatorTests: XCTestCase {
             }
         }
 
+        func fetchActiveCompanies(
+            after cursor: PartnerPageCursor
+        ) async throws -> PartnerCompaniesPage {
+            guard !companyPages.isEmpty else {
+                return PartnerCompaniesPage(companies: [], nextCursor: nil)
+            }
+            return companyPages.removeFirst()
+        }
+
         func observeCompany(id: String) -> AsyncStream<PartnerCompanySnapshot> {
             observedCompanyIds.append(id)
             return AsyncStream { continuation in continuation.yield(.loaded(companiesById[id])) }
         }
 
-        func observeActiveOffers() -> AsyncStream<PartnerOffersSnapshot> {
+        func observeActiveOffers() -> AsyncStream<PartnerActiveOffersSnapshot> {
             AsyncStream { continuation in
                 offersContinuation = continuation
                 offers.forEach { continuation.yield($0) }
             }
         }
+        func fetchActiveOffers(after cursor: PartnerPageCursor) async throws -> PartnerOffersPage {
+            guard !offerPages.isEmpty else {
+                return PartnerOffersPage(offers: [], nextCursor: nil)
+            }
+            return offerPages.removeFirst()
+        }
 
-        func sendOffers(_ snapshot: PartnerOffersSnapshot) {
+        func sendOffers(_ snapshot: PartnerActiveOffersSnapshot) {
             offersContinuation?.yield(snapshot)
         }
 
@@ -201,7 +218,10 @@ final class PartnersCoordinatorTests: XCTestCase {
     @MainActor
     func testCappedOfferSnapshotIsNotTreatedAsExhaustive() async {
         let repository = FakeRepository(
-            offers: [.loaded(offers: [], isExhaustive: false)]
+            offers: [.loaded(offers: [], nextCursor: PartnerPageCursor(
+                createdAt: Date(timeIntervalSince1970: 1),
+                documentId: "cursor"
+            ))]
         )
         let coordinator = PartnersCoordinator(
             repository: repository,
@@ -214,6 +234,58 @@ final class PartnersCoordinatorTests: XCTestCase {
         await waitUntil { coordinator.offersState == .loaded }
 
         XCTAssertFalse(coordinator.offersAreExhaustive)
+    }
+
+    @MainActor
+    func testLoadsAdditionalCompanyAndOfferPages() async {
+        let cursor = PartnerPageCursor(
+            createdAt: Date(timeIntervalSince1970: 1),
+            documentId: "cursor"
+        )
+        let firstCompany = PartnerCompany(
+            id: "c1", name: "Zulu", category: .workshop, description: nil,
+            website: nil, phone: nil, address: nil, latitude: nil, longitude: nil
+        )
+        let nextCompany = PartnerCompany(
+            id: "c2", name: "Alpha", category: .retail, description: nil,
+            website: nil, phone: nil, address: nil, latitude: nil, longitude: nil
+        )
+        let firstOffer = PartnerOffer(
+            id: "o1", companyId: firstCompany.id, partnerCompanyName: nil, title: "First",
+            teaserText: "", offerType: .other
+        )
+        let nextOffer = PartnerOffer(
+            id: "o2", companyId: nextCompany.id, partnerCompanyName: nil, title: "Next",
+            teaserText: "", offerType: .other
+        )
+        let repository = FakeRepository(
+            companies: [.loaded(companies: [firstCompany], nextCursor: cursor)],
+            offers: [.loaded(offers: [firstOffer], nextCursor: cursor)]
+        )
+        repository.companyPages = [PartnerCompaniesPage(
+            companies: [nextCompany],
+            nextCursor: nil
+        )]
+        repository.offerPages = [PartnerOffersPage(offers: [nextOffer], nextCursor: nil)]
+        let coordinator = PartnersCoordinator(
+            repository: repository,
+            subscriptionRepository: nil,
+            uid: "me",
+            access: .unrestrictedCommunity
+        )
+
+        coordinator.start()
+        await waitUntil {
+            coordinator.state == .loaded([firstCompany])
+                && coordinator.offers == [firstOffer]
+        }
+        await coordinator.loadMoreCompanies()
+        await coordinator.loadMoreOffers()
+
+        XCTAssertEqual(coordinator.state, .loaded([nextCompany, firstCompany]))
+        XCTAssertEqual(Set(coordinator.offers), [firstOffer, nextOffer])
+        XCTAssertTrue(coordinator.companiesAreExhaustive)
+        XCTAssertTrue(coordinator.offersAreExhaustive)
     }
 
     @MainActor

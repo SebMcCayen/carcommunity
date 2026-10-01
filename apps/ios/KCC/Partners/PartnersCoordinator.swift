@@ -21,6 +21,11 @@ final class PartnersCoordinator {
     private(set) var offers: [PartnerOffer] = []
     private(set) var offersState: PartnerOffersUiState = .loading
     private(set) var offersAreExhaustive = false
+    private(set) var companiesAreExhaustive = false
+    private(set) var isLoadingMoreCompanies = false
+    private(set) var didFailLoadingMoreCompanies = false
+    private(set) var isLoadingMoreOffers = false
+    private(set) var didFailLoadingMoreOffers = false
     private(set) var savedOfferIds: Set<String> = []
     private(set) var savedOffers: [PartnerOffer] = []
     private(set) var savedOffersAreExhaustive = true
@@ -39,6 +44,8 @@ final class PartnersCoordinator {
     private var hasLoadedSavedIdsSnapshot = false
     private var hasLoadedSavedSnapshot = false
     private var resolvedCompanies: [String: PartnerCompany] = [:]
+    private var companiesCursor: PartnerPageCursor?
+    private var offersCursor: PartnerPageCursor?
 
     init(
         repository: PartnersRepository?,
@@ -96,6 +103,13 @@ final class PartnersCoordinator {
         offers = []
         offersState = .loading
         offersAreExhaustive = false
+        companiesAreExhaustive = false
+        companiesCursor = nil
+        offersCursor = nil
+        isLoadingMoreCompanies = false
+        didFailLoadingMoreCompanies = false
+        isLoadingMoreOffers = false
+        didFailLoadingMoreOffers = false
         savedOfferIds = []
         savedOffers = []
         savedOffersAreExhaustive = true
@@ -119,8 +133,64 @@ final class PartnersCoordinator {
         offersTask = nil
         state = .loading
         offersState = hasLoadedOffersSnapshot ? .loaded : .loading
+        companiesCursor = nil
+        offersCursor = nil
+        companiesAreExhaustive = false
+        offersAreExhaustive = false
+        isLoadingMoreCompanies = false
+        didFailLoadingMoreCompanies = false
+        isLoadingMoreOffers = false
+        didFailLoadingMoreOffers = false
         subscribeCompanies(repository)
         subscribeOffers(repository)
+    }
+
+    func loadMoreCompanies() async {
+        guard isRunning,
+              let repository,
+              let cursor = companiesCursor,
+              !isLoadingMoreCompanies
+        else { return }
+        isLoadingMoreCompanies = true
+        defer { isLoadingMoreCompanies = false }
+        didFailLoadingMoreCompanies = false
+        do {
+            let page = try await repository.fetchActiveCompanies(after: cursor)
+            guard !Task.isCancelled, isRunning else { return }
+            let current: [PartnerCompany]
+            if case .loaded(let companies) = state { current = companies } else { current = [] }
+            state = .loaded(Self.mergeCompanies(current + page.companies))
+            companiesCursor = page.nextCursor
+            companiesAreExhaustive = page.nextCursor == nil
+        } catch is CancellationError {
+            return
+        } catch {
+            guard isRunning else { return }
+            didFailLoadingMoreCompanies = true
+        }
+    }
+
+    func loadMoreOffers() async {
+        guard isRunning,
+              let repository,
+              let cursor = offersCursor,
+              !isLoadingMoreOffers
+        else { return }
+        isLoadingMoreOffers = true
+        defer { isLoadingMoreOffers = false }
+        didFailLoadingMoreOffers = false
+        do {
+            let page = try await repository.fetchActiveOffers(after: cursor)
+            guard !Task.isCancelled, isRunning else { return }
+            offers = Self.mergeOffers(offers + page.offers)
+            offersCursor = page.nextCursor
+            offersAreExhaustive = page.nextCursor == nil
+        } catch is CancellationError {
+            return
+        } catch {
+            guard isRunning else { return }
+            didFailLoadingMoreOffers = true
+        }
     }
 
     func updateAccess(_ access: AccountAccess) {
@@ -284,7 +354,10 @@ final class PartnersCoordinator {
             for await snapshot in stream {
                 guard !Task.isCancelled, let self else { return }
                 switch snapshot {
-                case .loaded(let companies):
+                case .loaded(let companies, let nextCursor):
+                    self.companiesCursor = nextCursor
+                    self.companiesAreExhaustive = nextCursor == nil
+                    self.didFailLoadingMoreCompanies = false
                     self.state = companies.isEmpty ? .empty : .loaded(companies)
                 case .failed:
                     self.state = .failed
@@ -299,9 +372,11 @@ final class PartnersCoordinator {
             for await snapshot in stream {
                 guard !Task.isCancelled, let self else { return }
                 switch snapshot {
-                case .loaded(let offers, let isExhaustive):
+                case .loaded(let offers, let nextCursor):
                     self.offers = offers
-                    self.offersAreExhaustive = isExhaustive
+                    self.offersCursor = nextCursor
+                    self.offersAreExhaustive = nextCursor == nil
+                    self.didFailLoadingMoreOffers = false
                     self.hasLoadedOffersSnapshot = true
                     self.offersState = .loaded
                     if let expandedOfferId = self.expandedOfferId,
@@ -453,6 +528,19 @@ final class PartnersCoordinator {
                 }
             }
         }
+    }
+
+    private static func mergeCompanies(_ companies: [PartnerCompany]) -> [PartnerCompany] {
+        Dictionary(companies.map { ($0.id, $0) }, uniquingKeysWith: { current, _ in current })
+            .values
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    private static func mergeOffers(_ offers: [PartnerOffer]) -> [PartnerOffer] {
+        Array(Dictionary(
+            offers.map { ($0.id, $0) },
+            uniquingKeysWith: { current, _ in current }
+        ).values)
     }
 }
 

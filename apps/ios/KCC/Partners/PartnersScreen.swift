@@ -96,6 +96,9 @@ struct PartnersScreen: View {
                     )
                 }
             }
+            if !coordinator.companiesAreExhaustive {
+                loadMoreCompaniesRow
+            }
         }
     }
 
@@ -187,6 +190,24 @@ struct PartnersScreen: View {
                 .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder private var loadMoreCompaniesRow: some View {
+        if coordinator.isLoadingMoreCompanies {
+            HStack {
+                Spacer()
+                ProgressView("partners.loading")
+                Spacer()
+            }
+        } else {
+            if coordinator.didFailLoadingMoreCompanies {
+                Text("partners.error").foregroundStyle(.secondary)
+            }
+            Button("partners.loadMore") {
+                Task { await coordinator.loadMoreCompanies() }
+            }
+            .frame(maxWidth: .infinity)
+        }
     }
 }
 
@@ -289,6 +310,18 @@ private struct PartnerDetailScreen: View {
                     case .loaded:
                         if coordinator.offersAreExhaustive {
                             Text("partnerOffers.noOffers").foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                if !coordinator.offersAreExhaustive {
+                    if coordinator.isLoadingMoreOffers {
+                        ProgressView("partners.loading")
+                    } else {
+                        if coordinator.didFailLoadingMoreOffers {
+                            Text("partnerOffers.loadError").foregroundStyle(.secondary)
+                        }
+                        Button("partners.loadMore") {
+                            Task { await coordinator.loadMoreOffers() }
                         }
                     }
                 }

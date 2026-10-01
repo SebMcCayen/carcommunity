@@ -512,7 +512,8 @@ struct ShellView: View {
             panelTab {
                 SocialHubPanel(
                     crownHuntEnabled: featureFlags.isEnabled(.crownHunt),
-                    partnersEnabled: featureFlags.isEnabled(.partners),
+                    partnersEnabled: featureFlags.isEnabled(.partners)
+                        && partnersCoordinator != nil,
                     onOpenEvents: { routes = routes.opening(.events) },
                     onOpenConvoys: openConvoyManagement,
                     onOpenCrownHunt: { routes = routes.opening(.crownHunt) },
@@ -1316,12 +1317,14 @@ struct ShellView: View {
         leaderboardCoordinator = LeaderboardCoordinator(
             repository: FirebaseLeaderboardRepository.createIfAvailable()
         )
-        partnersCoordinator = PartnersCoordinator(
-            repository: FirebasePartnersRepository.createIfAvailable(),
-            subscriptionRepository: FirebaseSubscriptionStateRepository.createIfAvailable(),
-            uid: uid,
-            access: access
-        )
+        partnersCoordinator = FirebasePartnersRepository.createIfAvailable().map {
+            PartnersCoordinator(
+                repository: $0,
+                subscriptionRepository: FirebaseSubscriptionStateRepository.createIfAvailable(),
+                uid: uid,
+                access: access
+            )
+        }
         notificationsCoordinator = NotificationsInboxCoordinator(repository: notifications, uid: uid)
         notificationSettingsCoordinator = NotificationSettingsCoordinator(
             repository: FirebaseNotificationSettingsRepository.createIfAvailable(),
