@@ -54,6 +54,7 @@ data class PartnerCompany(
     val phone: String?,
     val latitude: Double?,
     val longitude: Double?,
+    val address: String? = null,
 )
 
 /** Offer teaser (offers/{id}) — visible to any authenticated user. */
@@ -63,6 +64,7 @@ data class PartnerOffer(
     val title: String,
     val teaserText: String,
     val offerType: PartnerOfferType,
+    val partnerCompanyName: String? = null,
 )
 
 /** Member-gated offer detail (offers/{id}/details/member). */
@@ -118,9 +120,9 @@ object PartnerDestinations {
 
     fun phone(rawValue: String?): String? {
         val value = rawValue?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        if (!value.all { it.isDigit() || it in "+ ()-." }) return null
+        if (!value.all { it in '0'..'9' || it in "+ ()-." }) return null
         if ('+' in value.drop(1)) return null
-        val digits = value.filter(Char::isDigit)
+        val digits = value.filter { it in '0'..'9' }
         if (digits.length < 3) return null
         return "tel:${if (value.startsWith('+')) "+" else ""}$digits"
     }

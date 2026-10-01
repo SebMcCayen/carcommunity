@@ -101,6 +101,13 @@ fun PartnerDetailScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            company.address?.takeIf { it.isNotBlank() }?.let { address ->
+                Text(
+                    text = address,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             PartnerDestinations.coordinates(company.latitude, company.longitude)?.let { (latitude, longitude) ->
                 OutlinedButton(
                     onClick = {

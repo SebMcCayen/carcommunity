@@ -246,6 +246,7 @@ private fun DocumentSnapshot.toCompany(): PartnerCompany? {
         phone = getString("phone"),
         latitude = getDouble("latitude"),
         longitude = getDouble("longitude"),
+        address = getString("address"),
     )
 }
 
@@ -259,6 +260,7 @@ private fun DocumentSnapshot.toOffer(): PartnerOffer? {
         title = title,
         teaserText = getString("teaserText") ?: "",
         offerType = PartnerOfferType.fromWire(getString("offerType")),
+        partnerCompanyName = getString("partnerCompanyName"),
     )
 }
 

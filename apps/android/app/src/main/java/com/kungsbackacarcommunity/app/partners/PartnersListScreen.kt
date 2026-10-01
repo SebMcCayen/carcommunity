@@ -211,7 +211,9 @@ private fun SavedOffersContent(
     }
 
     savedOffers.forEach { offer ->
-        val companyName = companies.firstOrNull { it.id == offer.companyId }?.name
+        val companyName =
+            offer.partnerCompanyName?.takeIf { it.isNotBlank() }
+                ?: companies.firstOrNull { it.id == offer.companyId }?.name
         Card(
             modifier =
                 Modifier.fillMaxWidth().clickable {
