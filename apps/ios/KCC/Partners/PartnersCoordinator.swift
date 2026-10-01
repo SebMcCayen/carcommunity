@@ -20,6 +20,7 @@ final class PartnersCoordinator {
     private(set) var state: PartnersUiState
     private(set) var offers: [PartnerOffer] = []
     private(set) var offersState: PartnerOffersUiState = .loading
+    private(set) var offersAreExhaustive = false
     private(set) var savedOfferIds: Set<String> = []
     private(set) var savedOffers: [PartnerOffer] = []
     private(set) var savedState: SavedOffersUiState = .loading
@@ -262,8 +263,9 @@ final class PartnersCoordinator {
             for await snapshot in stream {
                 guard !Task.isCancelled, let self else { return }
                 switch snapshot {
-                case .loaded(let offers):
+                case .loaded(let offers, let isExhaustive):
                     self.offers = offers
+                    self.offersAreExhaustive = isExhaustive
                     self.hasLoadedOffersSnapshot = true
                     self.offersState = .loaded
                     if let expandedOfferId = self.expandedOfferId,
@@ -274,6 +276,7 @@ final class PartnersCoordinator {
                 case .failed:
                     if !self.hasLoadedOffersSnapshot {
                         self.offers = []
+                        self.offersAreExhaustive = false
                         self.offersState = .failed
                     }
                 }
@@ -369,7 +372,7 @@ final class PartnersCoordinator {
             for await snapshot in stream {
                 guard !Task.isCancelled, let self, self.canAccessMemberOffers else { return }
                 switch snapshot {
-                case .loaded(let offers):
+                case .loaded(let offers, _):
                     self.savedOffers = offers.sorted {
                         $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
                     }

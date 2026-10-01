@@ -90,7 +90,7 @@ struct PartnersScreen: View {
                 )) {
                     CompanyRow(
                         company: company,
-                        offerCount: coordinator.offersState == .loaded
+                        offerCount: coordinator.offersState == .loaded && coordinator.offersAreExhaustive
                             ? coordinator.offers(for: company.id).count : nil
                     )
                 }
@@ -268,7 +268,7 @@ private struct PartnerDetailScreen: View {
                     Button("partners.retry") { coordinator.reload() }
                 case .loaded:
                     let offers = coordinator.offers(for: company.id)
-                    if offers.isEmpty {
+                    if offers.isEmpty && coordinator.offersAreExhaustive {
                         Text("partnerOffers.noOffers").foregroundStyle(.secondary)
                     } else {
                         ForEach(offers) { offer in

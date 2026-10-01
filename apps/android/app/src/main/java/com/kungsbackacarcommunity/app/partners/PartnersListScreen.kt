@@ -139,9 +139,10 @@ private fun PartnersDirectoryContent(
                     CompanyCard(
                         company = company,
                         offerCount =
-                            (offersState as? OffersState.Loaded)?.offers?.let {
-                                offers -> Partners.offersForCompany(offers, company.id).size
-                            },
+                            (offersState as? OffersState.Loaded)
+                                ?.takeIf { it.isExhaustive }
+                                ?.offers
+                                ?.let { offers -> Partners.offersForCompany(offers, company.id).size },
                         onClick = { onOpenCompany(company.id) },
                     )
                 }

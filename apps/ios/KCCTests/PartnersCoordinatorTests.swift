@@ -54,7 +54,7 @@ final class PartnersCoordinatorTests: XCTestCase {
                 return AsyncStream { continuation in snapshots.forEach { continuation.yield($0) } }
             }
             let fallback = offers.compactMap { snapshot -> [PartnerOffer]? in
-                if case .loaded(let values) = snapshot { return values }
+                if case .loaded(let values, _) = snapshot { return values }
                 return nil
             }.flatMap { $0 }
             let resolved = (directOffers ?? fallback).filter { ids.contains($0.id) }
@@ -183,6 +183,24 @@ final class PartnersCoordinatorTests: XCTestCase {
 
         XCTAssertTrue(coordinator.offers.isEmpty)
         XCTAssertEqual(coordinator.state, .loaded([company]))
+    }
+
+    @MainActor
+    func testCappedOfferSnapshotIsNotTreatedAsExhaustive() async {
+        let repository = FakeRepository(
+            offers: [.loaded(offers: [], isExhaustive: false)]
+        )
+        let coordinator = PartnersCoordinator(
+            repository: repository,
+            subscriptionRepository: nil,
+            uid: "me",
+            access: .unrestrictedCommunity
+        )
+
+        coordinator.start()
+        await waitUntil { coordinator.offersState == .loaded }
+
+        XCTAssertFalse(coordinator.offersAreExhaustive)
     }
 
     @MainActor

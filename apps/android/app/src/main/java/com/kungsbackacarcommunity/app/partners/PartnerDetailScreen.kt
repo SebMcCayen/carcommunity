@@ -42,6 +42,7 @@ import com.kungsbackacarcommunity.app.navigation.LatLng
 fun PartnerDetailScreen(
     companyState: CompanyState,
     offers: List<PartnerOffer>,
+    offersAreExhaustive: Boolean = true,
     savedOfferIds: Set<String>,
     canAccessMemberOffers: Boolean,
     expandedOfferId: String?,
@@ -163,7 +164,7 @@ fun PartnerDetailScreen(
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground,
             )
-            if (offers.isEmpty()) {
+            if (offers.isEmpty() && offersAreExhaustive) {
                 Text(
                     text = stringResource(R.string.partnerOffers_noOffers),
                     style = MaterialTheme.typography.bodyMedium,

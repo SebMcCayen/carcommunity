@@ -104,6 +104,49 @@ class PartnersScreensTest {
     }
 
     @Test
+    fun directory_doesNotShowCountWhenOfferSnapshotIsCapped() {
+        composeTestRule.setContent {
+            KccTheme {
+                PartnersListScreen(
+                    state = CompaniesState.Loaded(listOf(company())),
+                    offersState = OffersState.Loaded(emptyList(), isExhaustive = false),
+                    onOpenCompany = {},
+                    onBack = {},
+                )
+            }
+        }
+        val zeroOffers =
+            InstrumentationRegistry.getInstrumentation().targetContext.getString(
+                R.string.partnerOffers_offerCountOther,
+                0,
+            )
+        composeTestRule.onNodeWithText(zeroOffers).assertDoesNotExist()
+    }
+
+    @Test
+    fun detail_doesNotClaimNoOffersWhenOfferSnapshotIsCapped() {
+        composeTestRule.setContent {
+            KccTheme {
+                PartnerDetailScreen(
+                    companyState = CompanyState.Loaded(company()),
+                    offers = emptyList(),
+                    offersAreExhaustive = false,
+                    savedOfferIds = emptySet(),
+                    canAccessMemberOffers = true,
+                    expandedOfferId = null,
+                    expandedOfferDetail = null,
+                    codeStatus = OfferCodeStatus.Idle,
+                    onToggleExpand = {},
+                    onShowCode = {},
+                    onToggleSave = { _, _ -> },
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.partnerOffers_noOffers)).assertDoesNotExist()
+    }
+
+    @Test
     fun savedSection_tapOffer_reportsCompanyAndOfferIds() {
         var opened: Pair<String, String>? = null
         composeTestRule.setContent {

@@ -20,7 +20,10 @@ sealed interface CompanyState {
 
 sealed interface OffersState {
     data object Loading : OffersState
-    data class Loaded(val offers: List<PartnerOffer>) : OffersState
+    data class Loaded(
+        val offers: List<PartnerOffer>,
+        val isExhaustive: Boolean = true,
+    ) : OffersState
     data object Error : OffersState
 }
 

@@ -123,7 +123,7 @@ enum PartnerCompanySnapshot: Equatable, Sendable {
 }
 
 enum PartnerOffersSnapshot: Equatable, Sendable {
-    case loaded(offers: [PartnerOffer])
+    case loaded(offers: [PartnerOffer], isExhaustive: Bool = true)
     case failed(code: String?)
 }
 

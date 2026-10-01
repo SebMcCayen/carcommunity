@@ -82,9 +82,12 @@ class FirebasePartnersRepository private constructor(
                         return@addSnapshotListener
                     }
                     hasLoadedSnapshot = true
+                    val documents = snapshot?.documents.orEmpty()
                     trySend(
                         OffersState.Loaded(
-                            snapshot?.documents?.mapNotNull { it.toOffer() } ?: emptyList(),
+                            offers = documents.mapNotNull { it.toOffer() },
+                            // A full page may have more active offers behind it.
+                            isExhaustive = documents.size.toLong() < Partners.ACTIVE_OFFERS_QUERY_LIMIT,
                         ),
                     )
                 }

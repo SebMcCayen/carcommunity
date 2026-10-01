@@ -63,15 +63,16 @@ final class FirebasePartnersRepository: PartnersRepository, @unchecked Sendable 
             let registration = firestore.collection("offers")
                 .whereField("status", isEqualTo: "active")
                 .order(by: "createdAt", descending: true)
-                .limit(to: 200)
+                .limit(to: Self.activeOffersLimit)
                 .addSnapshotListener { snapshot, error in
                     if let error {
                         continuation.yield(.failed(code: Self.errorCode(error)))
                         return
                     }
-                    continuation.yield(.loaded(offers: snapshot?.documents.compactMap {
+                    let documents = snapshot?.documents ?? []
+                    continuation.yield(.loaded(offers: documents.compactMap {
                         PartnerOffer.fromMap(id: $0.documentID, map: $0.data())
-                    } ?? []))
+                    }, isExhaustive: documents.count < Self.activeOffersLimit))
                 }
             let box = PartnerListenerBox(registration: registration)
             continuation.onTermination = { _ in box.registration.remove() }
@@ -181,6 +182,7 @@ final class FirebasePartnersRepository: PartnersRepository, @unchecked Sendable 
     }
 
     private static let firestoreInLimit = 30
+    private static let activeOffersLimit = 200
 
     private static let lock = NSLock()
     nonisolated(unsafe) private static var cached: FirebasePartnersRepository?
