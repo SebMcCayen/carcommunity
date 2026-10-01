@@ -302,6 +302,20 @@ describe('offers and the three-tier privacy split', () => {
         call('partners-setOfferStatus', { offerId: created.offerId, action: 'activate' }),
       ),
     ).toBe('functions/failed-precondition');
+
+    await call('partners-setCompanyStatus', { companyId, action: 'activate' });
+    await call('partners-setOfferStatus', { offerId: created.offerId, action: 'activate' });
+    await call('partners-setCompanyStatus', { companyId, action: 'end' });
+    expect((await offerRef.get()).data()!.status).toBe('ended');
+
+    const endAuditEvents = await adminDb
+      .collection('adminAuditEvents')
+      .where('targetId', '==', companyId)
+      .get();
+    const endAudit = endAuditEvents.docs.find(
+      (event) => event.data().action === 'partners.endCompany',
+    );
+    expect(endAudit?.data().details?.cascadedActiveOfferCount).toBe(1);
   });
 
   it('atomically cascades 498 active offers and rejects 499 without writes', async () => {
