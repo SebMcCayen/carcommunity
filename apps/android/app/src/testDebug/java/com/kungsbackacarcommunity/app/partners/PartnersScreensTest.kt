@@ -181,7 +181,8 @@ class PartnersScreensTest {
                 PartnersRootScreen(
                     state = CompaniesState.Loaded(listOf(company())),
                     offersState = OffersState.Loaded(listOf(offer())),
-                    savedOffersState = OffersState.Loaded(listOf(offer())),
+                    savedOffersState =
+                        OffersState.Loaded(listOf(offer().copy(partnerCompanyName = "Old name"))),
                     canAccessMemberOffers = true,
                     section = PartnersRootSection.SAVED,
                     onSectionChange = {},
@@ -192,6 +193,7 @@ class PartnersScreensTest {
             }
         }
         composeTestRule.onNodeWithText("20% off").performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Bilverkstan").assertIsDisplayed()
         assertEquals("c1" to "o1", opened)
     }
 

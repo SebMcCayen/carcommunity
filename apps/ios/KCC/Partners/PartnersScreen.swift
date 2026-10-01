@@ -145,7 +145,11 @@ struct PartnersScreen: View {
                 )) {
                     VStack(alignment: .leading, spacing: KccSpacing.s1) {
                         Text(offer.title).font(.headline)
-                        Text(offer.partnerCompanyName ?? companyName(for: offer.companyId))
+                        Text(
+                            companyName(for: offer.companyId)
+                                ?? offer.partnerCompanyName
+                                ?? String(localized: "partners.detailTitle")
+                        )
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                         Text(LocalizedStringKey(offer.offerType.localizationKey))
@@ -163,9 +167,8 @@ struct PartnersScreen: View {
         return []
     }
 
-    private func companyName(for companyId: String) -> String {
+    private func companyName(for companyId: String) -> String? {
         companies.first(where: { $0.id == companyId })?.name
-            ?? String(localized: "partners.detailTitle")
     }
 
     private var unavailableRow: some View {

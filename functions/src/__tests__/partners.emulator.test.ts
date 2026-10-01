@@ -294,6 +294,14 @@ describe('offers and the three-tier privacy split', () => {
         call('partners-updateOffer', { offerId: created.offerId, title: 'Ny titel' }),
       ),
     ).toBe('functions/failed-precondition');
+
+    await call('partners-setCompanyStatus', { companyId, action: 'pause' });
+    expect((await offerRef.get()).data()!.status).toBe('paused');
+    expect(
+      await callableErrorCode(
+        call('partners-setOfferStatus', { offerId: created.offerId, action: 'activate' }),
+      ),
+    ).toBe('functions/failed-precondition');
   });
 
   it('reveals the code only to members for active offers', async () => {
