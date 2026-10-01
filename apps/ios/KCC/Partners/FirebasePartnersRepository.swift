@@ -78,6 +78,44 @@ final class FirebasePartnersRepository: PartnersRepository, @unchecked Sendable 
         }
     }
 
+    func observeOffers(ids: Set<String>) -> AsyncStream<PartnerOffersSnapshot> {
+        AsyncStream { continuation in
+            guard !ids.isEmpty else {
+                continuation.yield(.loaded(offers: []))
+                continuation.finish()
+                return
+            }
+
+            let values = Array(ids)
+            let chunks = stride(from: 0, to: values.count, by: Self.firestoreInLimit).map {
+                Array(values[$0..<min($0 + Self.firestoreInLimit, values.count)])
+            }
+            let aggregate = PartnerOffersAggregate(count: chunks.count)
+            let registrations = chunks.enumerated().map { index, chunk in
+                firestore.collection("offers")
+                    .whereField("status", isEqualTo: "active")
+                    .whereField(FieldPath.documentID(), in: chunk)
+                    .addSnapshotListener { snapshot, error in
+                        if let error {
+                            if aggregate.shouldReportFailure() {
+                                continuation.yield(.failed(code: Self.errorCode(error)))
+                            }
+                            return
+                        }
+                        let offers: [PartnerOffer] = snapshot?.documents.compactMap { document -> PartnerOffer? in
+                            guard document.data()["status"] as? String == "active" else { return nil }
+                            return PartnerOffer.fromMap(id: document.documentID, map: document.data())
+                        } ?? []
+                        if let offers = aggregate.receive(index: index, offers: offers) {
+                            continuation.yield(.loaded(offers: offers))
+                        }
+                    }
+            }
+            let box = PartnerListenerCollectionBox(registrations: registrations)
+            continuation.onTermination = { _ in box.registrations.forEach { $0.remove() } }
+        }
+    }
+
     func observeOfferDetail(offerId: String) -> AsyncStream<PartnerOfferDetailSnapshot> {
         AsyncStream { continuation in
             let registration = firestore.collection("offers").document(offerId)
@@ -142,6 +180,8 @@ final class FirebasePartnersRepository: PartnersRepository, @unchecked Sendable 
             ?? String((error as NSError).code)
     }
 
+    private static let firestoreInLimit = 30
+
     private static let lock = NSLock()
     nonisolated(unsafe) private static var cached: FirebasePartnersRepository?
 
@@ -166,6 +206,36 @@ final class FirebasePartnersRepository: PartnersRepository, @unchecked Sendable 
 
 private struct PartnerListenerBox: @unchecked Sendable {
     let registration: ListenerRegistration
+}
+
+private struct PartnerListenerCollectionBox: @unchecked Sendable {
+    let registrations: [ListenerRegistration]
+}
+
+private final class PartnerOffersAggregate: @unchecked Sendable {
+    private let lock = NSLock()
+    private let count: Int
+    private var snapshots: [Int: [PartnerOffer]] = [:]
+    private var reportedFailure = false
+
+    init(count: Int) { self.count = count }
+
+    func shouldReportFailure() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard snapshots.count < count, !reportedFailure else { return false }
+        reportedFailure = true
+        return true
+    }
+
+    func receive(index: Int, offers: [PartnerOffer]) -> [PartnerOffer]? {
+        lock.lock()
+        defer { lock.unlock() }
+        snapshots[index] = offers
+        guard snapshots.count == count else { return nil }
+        reportedFailure = false
+        return snapshots.keys.sorted().flatMap { snapshots[$0] ?? [] }
+    }
 }
 
 private extension String {

@@ -27,8 +27,8 @@ enum class PartnersRootSection {
 @Composable
 fun PartnersRootScreen(
     state: CompaniesState,
-    offers: List<PartnerOffer>,
-    savedOfferIds: Set<String>,
+    offersState: OffersState,
+    savedOffersState: OffersState,
     canAccessMemberOffers: Boolean,
     section: PartnersRootSection,
     onSectionChange: (PartnersRootSection) -> Unit,
@@ -37,6 +37,7 @@ fun PartnersRootScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     onRetry: (() -> Unit)? = null,
+    onRetrySaved: (() -> Unit)? = null,
 ) {
     AeroPage(title = stringResource(R.string.partners_screenTitle), modifier = modifier) {
         TabRow(selectedTabIndex = section.ordinal) {
@@ -54,14 +55,14 @@ fun PartnersRootScreen(
 
         when (section) {
             PartnersRootSection.DIRECTORY ->
-                PartnersDirectoryContent(state, offers, onOpenCompany, onRetry)
+                PartnersDirectoryContent(state, offersState, onOpenCompany, onRetry)
             PartnersRootSection.SAVED ->
                 SavedOffersContent(
-                    offers = offers,
-                    savedOfferIds = savedOfferIds,
+                    savedOffersState = savedOffersState,
                     companies = (state as? CompaniesState.Loaded)?.companies.orEmpty(),
                     canAccessMemberOffers = canAccessMemberOffers,
                     onOpenSavedOffer = onOpenSavedOffer,
+                    onRetry = onRetrySaved,
                 )
         }
     }
@@ -74,7 +75,7 @@ fun PartnersRootScreen(
 @Composable
 fun PartnersListScreen(
     state: CompaniesState,
-    offers: List<PartnerOffer> = emptyList(),
+    offersState: OffersState = OffersState.Loaded(emptyList()),
     onOpenCompany: (String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -82,14 +83,14 @@ fun PartnersListScreen(
     onRetry: (() -> Unit)? = null,
 ) {
     AeroPage(title = stringResource(R.string.partners_screenTitle), modifier = modifier) {
-        PartnersDirectoryContent(state, offers, onOpenCompany, onRetry)
+        PartnersDirectoryContent(state, offersState, onOpenCompany, onRetry)
     }
 }
 
 @Composable
 private fun PartnersDirectoryContent(
     state: CompaniesState,
-    offers: List<PartnerOffer>,
+    offersState: OffersState,
     onOpenCompany: (String) -> Unit,
     onRetry: (() -> Unit)?,
 ) {
@@ -122,10 +123,25 @@ private fun PartnersDirectoryContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
+                if (offersState == OffersState.Error) {
+                    Text(
+                        text = stringResource(R.string.partnerOffers_loadError),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    if (onRetry != null) {
+                        Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
+                            Text(text = stringResource(R.string.partners_retry))
+                        }
+                    }
+                }
                 state.companies.forEach { company ->
                     CompanyCard(
                         company = company,
-                        offerCount = Partners.offersForCompany(offers, company.id).size,
+                        offerCount =
+                            (offersState as? OffersState.Loaded)?.offers?.let {
+                                offers -> Partners.offersForCompany(offers, company.id).size
+                            },
                         onClick = { onOpenCompany(company.id) },
                     )
                 }
@@ -135,11 +151,11 @@ private fun PartnersDirectoryContent(
 
 @Composable
 private fun SavedOffersContent(
-    offers: List<PartnerOffer>,
-    savedOfferIds: Set<String>,
+    savedOffersState: OffersState,
     companies: List<PartnerCompany>,
     canAccessMemberOffers: Boolean,
     onOpenSavedOffer: (companyId: String, offerId: String) -> Unit,
+    onRetry: (() -> Unit)?,
 ) {
     if (!canAccessMemberOffers) {
         Text(
@@ -155,7 +171,31 @@ private fun SavedOffersContent(
         return
     }
 
-    val savedOffers = Partners.savedOffers(offers, savedOfferIds)
+    when (savedOffersState) {
+        OffersState.Loading -> {
+            Text(
+                text = stringResource(R.string.partners_loading),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            return
+        }
+        OffersState.Error -> {
+            Text(
+                text = stringResource(R.string.partnerOffers_loadError),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+            if (onRetry != null) {
+                Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.partners_retry))
+                }
+            }
+            return
+        }
+        is OffersState.Loaded -> Unit
+    }
+    val savedOffers = savedOffersState.offers.sortedBy { it.title.lowercase() }
     if (savedOffers.isEmpty()) {
         Text(
             text = stringResource(R.string.partnerOffers_savedEmptyTitle),
@@ -207,7 +247,7 @@ private fun SavedOffersContent(
 @Composable
 private fun CompanyCard(
     company: PartnerCompany,
-    offerCount: Int,
+    offerCount: Int?,
     onClick: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
@@ -225,19 +265,21 @@ private fun CompanyCard(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
             )
-            Text(
-                text =
-                    stringResource(
-                        if (offerCount == 1) {
-                            R.string.partnerOffers_offerCountOne
-                        } else {
-                            R.string.partnerOffers_offerCountOther
-                        },
-                        offerCount,
-                    ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            offerCount?.let { count ->
+                Text(
+                    text =
+                        stringResource(
+                            if (count == 1) {
+                                R.string.partnerOffers_offerCountOne
+                            } else {
+                                R.string.partnerOffers_offerCountOther
+                            },
+                            count,
+                        ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

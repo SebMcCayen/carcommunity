@@ -34,17 +34,41 @@ fun PartnersRoute(
     var rootSection by rememberSaveable { mutableStateOf(PartnersRootSection.DIRECTORY) }
     // Bumped by the "try again" affordance to re-subscribe the companies flow.
     var reloadKey by rememberSaveable { mutableStateOf(0) }
+    var savedReloadKey by rememberSaveable { mutableStateOf(0) }
+    var companyReloadKey by rememberSaveable { mutableStateOf(0) }
 
     val companiesState by
         remember(repository, reloadKey) { repository.observeActiveCompanies() }
             .collectAsState(initial = CompaniesState.Loading)
-    val offers by
-        remember(repository) { repository.observeActiveOffers() }.collectAsState(initial = emptyList())
-    val savedIds by
-        remember(repository, uid, canAccessMemberOffers) {
-            if (canAccessMemberOffers) repository.observeSavedOfferIds(uid) else flowOf(emptySet())
+    val offersState by
+        remember(repository, reloadKey) { repository.observeActiveOffers() }
+            .collectAsState(initial = OffersState.Loading)
+    val offers = (offersState as? OffersState.Loaded)?.offers.orEmpty()
+    val savedIdsState by
+        remember(repository, uid, canAccessMemberOffers, savedReloadKey) {
+            if (canAccessMemberOffers) {
+                repository.observeSavedOfferIds(uid)
+            } else {
+                flowOf(SavedOfferIdsState.Loaded(emptySet()))
+            }
         }
-            .collectAsState(initial = emptySet())
+            .collectAsState(initial = SavedOfferIdsState.Loading)
+    val savedIds = (savedIdsState as? SavedOfferIdsState.Loaded)?.ids.orEmpty()
+    val savedOffersState by
+        remember(repository, savedIdsState, canAccessMemberOffers, savedReloadKey) {
+            if (!canAccessMemberOffers) {
+                flowOf(OffersState.Loaded(emptyList()))
+            } else {
+                when (val state = savedIdsState) {
+                    SavedOfferIdsState.Loading -> flowOf(OffersState.Loading)
+                    SavedOfferIdsState.Error -> flowOf(OffersState.Error)
+                    is SavedOfferIdsState.Loaded -> repository.observeOffers(state.ids)
+                }
+            }
+        }
+            .collectAsState(initial = OffersState.Loading)
+    val savedOffers = (savedOffersState as? OffersState.Loaded)?.offers.orEmpty()
+    val accessibleOffers = (offers + savedOffers).distinctBy { it.id }
     val codeStatus by
         (offerCodeCoordinator?.status ?: flowOf(OfferCodeStatus.Idle))
             .collectAsState(initial = OfferCodeStatus.Idle)
@@ -64,8 +88,8 @@ fun PartnersRoute(
         }
     }
 
-    LaunchedEffect(offers, expandedOfferId) {
-        if (expandedOfferId != null && offers.none { it.id == expandedOfferId }) {
+    LaunchedEffect(accessibleOffers, expandedOfferId) {
+        if (expandedOfferId != null && accessibleOffers.none { it.id == expandedOfferId }) {
             expandedOfferId = null
             offerCodeCoordinator?.reset()
         }
@@ -75,8 +99,8 @@ fun PartnersRoute(
     if (companyId == null) {
         PartnersRootScreen(
             state = companiesState,
-            offers = offers,
-            savedOfferIds = savedIds,
+            offersState = offersState,
+            savedOffersState = savedOffersState,
             canAccessMemberOffers = canAccessMemberOffers,
             section = rootSection,
             onSectionChange = { rootSection = it },
@@ -87,6 +111,7 @@ fun PartnersRoute(
                 offerCodeCoordinator?.reset()
             },
             onRetry = { reloadKey++ },
+            onRetrySaved = { savedReloadKey++ },
             onBack = onBack,
         )
         return
@@ -94,12 +119,16 @@ fun PartnersRoute(
 
     val cachedCompany =
         (companiesState as? CompaniesState.Loaded)?.companies?.firstOrNull { it.id == companyId }
-    val company by
-        remember(repository, companyId, cachedCompany) {
-            cachedCompany?.let(::flowOf) ?: repository.observeCompany(companyId)
+    val companyState by
+        remember(repository, companyId, cachedCompany, companyReloadKey) {
+            cachedCompany?.let { flowOf(CompanyState.Loaded(it)) }
+                ?: repository.observeCompany(companyId)
         }
-            .collectAsState(initial = cachedCompany)
-    val companyOffers = Partners.offersForCompany(offers, companyId)
+            .collectAsState(
+                initial = cachedCompany?.let(CompanyState::Loaded) ?: CompanyState.Loading,
+            )
+    val company = (companyState as? CompanyState.Loaded)?.company
+    val companyOffers = Partners.offersForCompany(accessibleOffers, companyId)
     val expandedDetail by
         remember(expandedOfferId, canAccessMemberOffers, repository) {
             val id = expandedOfferId
@@ -108,7 +137,7 @@ fun PartnersRoute(
             .collectAsState(initial = null)
 
     PartnerDetailScreen(
-        company = company,
+        companyState = companyState,
         offers = companyOffers,
         savedOfferIds = savedIds,
         canAccessMemberOffers = canAccessMemberOffers,
@@ -139,5 +168,6 @@ fun PartnersRoute(
             expandedOfferId = null
             offerCodeCoordinator?.reset()
         },
+        onRetryCompany = { companyReloadKey++ },
     )
 }

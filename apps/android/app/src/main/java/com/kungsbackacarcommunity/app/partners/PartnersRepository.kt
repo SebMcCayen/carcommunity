@@ -11,6 +11,25 @@ sealed interface CompaniesState {
     data class Loaded(val companies: List<PartnerCompany>) : CompaniesState
 }
 
+sealed interface CompanyState {
+    data object Loading : CompanyState
+    data class Loaded(val company: PartnerCompany) : CompanyState
+    data object Missing : CompanyState
+    data object Error : CompanyState
+}
+
+sealed interface OffersState {
+    data object Loading : OffersState
+    data class Loaded(val offers: List<PartnerOffer>) : OffersState
+    data object Error : OffersState
+}
+
+sealed interface SavedOfferIdsState {
+    data object Loading : SavedOfferIdsState
+    data class Loaded(val ids: Set<String>) : SavedOfferIdsState
+    data object Error : SavedOfferIdsState
+}
+
 /**
  * Partner read + offer operations (Phase 12 slice 17). Firebase-free interface
  * so the route/screens are unit- and UI-testable with fakes.
@@ -24,15 +43,18 @@ interface PartnersRepository {
     fun observeActiveCompanies(): Flow<CompaniesState>
 
     /** One active company by id, used when a saved offer falls outside the capped directory. */
-    fun observeCompany(companyId: String): Flow<PartnerCompany?>
+    fun observeCompany(companyId: String): Flow<CompanyState>
 
-    fun observeActiveOffers(): Flow<List<PartnerOffer>>
+    fun observeActiveOffers(): Flow<OffersState>
+
+    /** Active offer documents resolved directly for authoritative saved ids. */
+    fun observeOffers(offerIds: Set<String>): Flow<OffersState>
 
     /** Member-gated offer detail; null when denied (non-member) or missing. */
     fun observeOfferDetail(offerId: String): Flow<OfferMemberDetail?>
 
     /** The set of offer ids the caller has bookmarked. */
-    fun observeSavedOfferIds(uid: String): Flow<Set<String>>
+    fun observeSavedOfferIds(uid: String): Flow<SavedOfferIdsState>
 
     /** partners.showOfferCode — reveals an active offer's code to a member. */
     suspend fun showOfferCode(offerId: String): String?

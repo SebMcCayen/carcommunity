@@ -53,7 +53,7 @@ class PartnersScreensTest {
             KccTheme {
                 PartnersListScreen(
                     state = CompaniesState.Loaded(listOf(company())),
-                    offers = listOf(offer()),
+                    offersState = OffersState.Loaded(listOf(offer())),
                     onOpenCompany = { opened = it },
                     onBack = {},
                 )
@@ -69,7 +69,7 @@ class PartnersScreensTest {
             KccTheme {
                 PartnersListScreen(
                     state = CompaniesState.Loaded(listOf(company())),
-                    offers = listOf(offer()),
+                    offersState = OffersState.Loaded(listOf(offer())),
                     onOpenCompany = {},
                     onBack = {},
                 )
@@ -84,14 +84,34 @@ class PartnersScreensTest {
     }
 
     @Test
+    fun directory_doesNotShowZeroWhileOffersAreLoading() {
+        composeTestRule.setContent {
+            KccTheme {
+                PartnersListScreen(
+                    state = CompaniesState.Loaded(listOf(company())),
+                    offersState = OffersState.Loading,
+                    onOpenCompany = {},
+                    onBack = {},
+                )
+            }
+        }
+        val zeroOffers =
+            InstrumentationRegistry.getInstrumentation().targetContext.getString(
+                R.string.partnerOffers_offerCountOther,
+                0,
+            )
+        composeTestRule.onNodeWithText(zeroOffers).assertDoesNotExist()
+    }
+
+    @Test
     fun savedSection_tapOffer_reportsCompanyAndOfferIds() {
         var opened: Pair<String, String>? = null
         composeTestRule.setContent {
             KccTheme {
                 PartnersRootScreen(
                     state = CompaniesState.Loaded(listOf(company())),
-                    offers = listOf(offer()),
-                    savedOfferIds = setOf("o1"),
+                    offersState = OffersState.Loaded(listOf(offer())),
+                    savedOffersState = OffersState.Loaded(listOf(offer())),
                     canAccessMemberOffers = true,
                     section = PartnersRootSection.SAVED,
                     onSectionChange = {},
@@ -110,7 +130,7 @@ class PartnersScreensTest {
         composeTestRule.setContent {
             KccTheme {
                 PartnerDetailScreen(
-                    company = company().copy(latitude = 57.49, longitude = 12.07),
+                    companyState = CompanyState.Loaded(company().copy(latitude = 57.49, longitude = 12.07)),
                     offers = listOf(offer()),
                     savedOfferIds = emptySet(),
                     canAccessMemberOffers = false,
@@ -135,11 +155,36 @@ class PartnersScreensTest {
     }
 
     @Test
+    fun detail_companyFailure_showsRetry() {
+        var retries = 0
+        composeTestRule.setContent {
+            KccTheme {
+                PartnerDetailScreen(
+                    companyState = CompanyState.Error,
+                    offers = emptyList(),
+                    savedOfferIds = emptySet(),
+                    canAccessMemberOffers = true,
+                    expandedOfferId = null,
+                    expandedOfferDetail = null,
+                    codeStatus = OfferCodeStatus.Idle,
+                    onToggleExpand = {},
+                    onShowCode = {},
+                    onToggleSave = { _, _ -> },
+                    onBack = {},
+                    onRetryCompany = { retries++ },
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.partners_retry)).performClick()
+        assertEquals(1, retries)
+    }
+
+    @Test
     fun detail_paidSubscriber_expanded_showsCodeAfterReveal() {
         composeTestRule.setContent {
             KccTheme {
                 PartnerDetailScreen(
-                    company = company(),
+                    companyState = CompanyState.Loaded(company()),
                     offers = listOf(offer()),
                     savedOfferIds = setOf("o1"),
                     canAccessMemberOffers = true,
@@ -164,7 +209,7 @@ class PartnersScreensTest {
         composeTestRule.setContent {
             KccTheme {
                 PartnerDetailScreen(
-                    company = company(),
+                    companyState = CompanyState.Loaded(company()),
                     offers = listOf(offer()),
                     savedOfferIds = emptySet(),
                     canAccessMemberOffers = true,

@@ -7,6 +7,7 @@ final class PartnersCoordinatorTests: XCTestCase {
         let companies: [PartnersCollectionSnapshot]
         let offers: [PartnerOffersSnapshot]
         let saved: [SavedOffersSnapshot]
+        let directOffers: [PartnerOffer]?
         var offersContinuation: AsyncStream<PartnerOffersSnapshot>.Continuation?
         var detail = PartnerOfferDetail(description: "Detail", redemptionInstructions: "Use", terms: nil)
         var code: String? = "SAVE20"
@@ -16,11 +17,13 @@ final class PartnersCoordinatorTests: XCTestCase {
         init(
             companies: [PartnersCollectionSnapshot] = [.loaded(companies: [])],
             offers: [PartnerOffersSnapshot] = [.loaded(offers: [])],
-            saved: [SavedOffersSnapshot] = [.loaded(ids: [])]
+            saved: [SavedOffersSnapshot] = [.loaded(ids: [])],
+            directOffers: [PartnerOffer]? = nil
         ) {
             self.companies = companies
             self.offers = offers
             self.saved = saved
+            self.directOffers = directOffers
         }
 
         func observeActiveCompanies() -> AsyncStream<PartnersCollectionSnapshot> {
@@ -42,6 +45,15 @@ final class PartnersCoordinatorTests: XCTestCase {
 
         func sendOffers(_ snapshot: PartnerOffersSnapshot) {
             offersContinuation?.yield(snapshot)
+        }
+
+        func observeOffers(ids: Set<String>) -> AsyncStream<PartnerOffersSnapshot> {
+            let fallback = offers.compactMap { snapshot -> [PartnerOffer]? in
+                if case .loaded(let values) = snapshot { return values }
+                return nil
+            }.flatMap { $0 }
+            let resolved = (directOffers ?? fallback).filter { ids.contains($0.id) }
+            return AsyncStream { continuation in continuation.yield(.loaded(offers: resolved)) }
         }
 
         func observeOfferDetail(offerId: String) -> AsyncStream<PartnerOfferDetailSnapshot> {
@@ -261,6 +273,31 @@ final class PartnersCoordinatorTests: XCTestCase {
         await waitUntil { coordinator.company(id: company.id) == company }
 
         XCTAssertEqual(coordinator.companyLookupState, .loaded(id: company.id))
+    }
+
+    @MainActor
+    func testLoadsSavedOfferOutsideCappedActiveOfferSnapshotById() async {
+        let savedOffer = PartnerOffer(
+            id: "older", companyId: "c1", partnerCompanyName: "Partner", title: "Older offer",
+            teaserText: "Still active", offerType: .memberBenefit
+        )
+        let repository = FakeRepository(
+            offers: [.loaded(offers: [])],
+            saved: [.loaded(ids: [savedOffer.id])],
+            directOffers: [savedOffer]
+        )
+        let coordinator = PartnersCoordinator(
+            repository: repository,
+            subscriptionRepository: nil,
+            uid: "me",
+            access: AccountAccess(role: .admin, activeMember: false, suspended: false, deleted: false)
+        )
+
+        coordinator.start()
+        await waitUntil { coordinator.savedOffers == [savedOffer] }
+
+        XCTAssertEqual(coordinator.savedState, .loaded)
+        XCTAssertEqual(coordinator.offers(for: savedOffer.companyId), [savedOffer])
     }
 
     @MainActor

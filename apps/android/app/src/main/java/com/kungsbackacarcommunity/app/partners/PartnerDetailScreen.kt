@@ -40,7 +40,7 @@ import com.kungsbackacarcommunity.app.navigation.LatLng
  */
 @Composable
 fun PartnerDetailScreen(
-    company: PartnerCompany?,
+    companyState: CompanyState,
     offers: List<PartnerOffer>,
     savedOfferIds: Set<String>,
     canAccessMemberOffers: Boolean,
@@ -51,18 +51,43 @@ fun PartnerDetailScreen(
     onShowCode: (String) -> Unit,
     onToggleSave: (String, Boolean) -> Unit,
     onBack: () -> Unit,
+    onRetryCompany: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    AeroPage(title = company?.name ?: stringResource(R.string.partners_detailTitle), modifier = modifier) {
-            if (company == null) {
-                Text(
-                    text = stringResource(R.string.partners_error),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
-                )
-                return@AeroPage
+    val headerCompany = (companyState as? CompanyState.Loaded)?.company
+    AeroPage(title = headerCompany?.name ?: stringResource(R.string.partners_detailTitle), modifier = modifier) {
+            when (companyState) {
+                CompanyState.Loading -> {
+                    Text(
+                        text = stringResource(R.string.partners_loading),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    return@AeroPage
+                }
+                CompanyState.Error -> {
+                    Text(
+                        text = stringResource(R.string.partners_error),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Button(onClick = onRetryCompany, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.partners_retry))
+                    }
+                    return@AeroPage
+                }
+                CompanyState.Missing -> {
+                    Text(
+                        text = stringResource(R.string.partners_error),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    return@AeroPage
+                }
+                is CompanyState.Loaded -> Unit
             }
+            val company = (companyState as CompanyState.Loaded).company
 
             Text(
                 text = stringResource(company.category.labelRes()),

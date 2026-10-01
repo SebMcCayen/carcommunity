@@ -16,13 +16,17 @@ class OfferCodeCoordinatorTest {
 
         override fun observeActiveCompanies(): Flow<CompaniesState> = flowOf(CompaniesState.Loading)
 
-        override fun observeCompany(companyId: String): Flow<PartnerCompany?> = flowOf(null)
+        override fun observeCompany(companyId: String): Flow<CompanyState> = flowOf(CompanyState.Missing)
 
-        override fun observeActiveOffers(): Flow<List<PartnerOffer>> = flowOf(emptyList())
+        override fun observeActiveOffers(): Flow<OffersState> = flowOf(OffersState.Loaded(emptyList()))
+
+        override fun observeOffers(offerIds: Set<String>): Flow<OffersState> =
+            flowOf(OffersState.Loaded(emptyList()))
 
         override fun observeOfferDetail(offerId: String): Flow<OfferMemberDetail?> = flowOf(null)
 
-        override fun observeSavedOfferIds(uid: String): Flow<Set<String>> = flowOf(emptySet())
+        override fun observeSavedOfferIds(uid: String): Flow<SavedOfferIdsState> =
+            flowOf(SavedOfferIdsState.Loaded(emptySet()))
 
         override suspend fun showOfferCode(offerId: String): String? {
             failWith?.let { throw it }

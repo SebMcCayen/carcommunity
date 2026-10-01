@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.partners
 import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -49,23 +50,26 @@ class FirebasePartnersRepository private constructor(
         awaitClose { registration.remove() }
     }
 
-    override fun observeCompany(companyId: String): Flow<PartnerCompany?> = callbackFlow {
+    override fun observeCompany(companyId: String): Flow<CompanyState> = callbackFlow {
+        trySend(CompanyState.Loading)
         val registration =
             firestore
                 .collection(COMPANIES)
                 .document(companyId)
                 .addSnapshotListener { snapshot, error ->
-                    if (error != null) return@addSnapshotListener
-                    trySend(
-                        snapshot
-                            ?.takeIf { it.getString("status") == "active" }
-                            ?.toCompany(),
-                    )
+                    if (error != null) {
+                        trySend(CompanyState.Error)
+                        return@addSnapshotListener
+                    }
+                    val company =
+                        snapshot?.takeIf { it.getString("status") == "active" }?.toCompany()
+                    trySend(company?.let(CompanyState::Loaded) ?: CompanyState.Missing)
                 }
         awaitClose { registration.remove() }
     }
 
-    override fun observeActiveOffers(): Flow<List<PartnerOffer>> = callbackFlow {
+    override fun observeActiveOffers(): Flow<OffersState> = callbackFlow {
+        var hasLoadedSnapshot = false
         val registration =
             firestore
                 .collection(OFFERS)
@@ -74,13 +78,56 @@ class FirebasePartnersRepository private constructor(
                 .limit(Partners.ACTIVE_OFFERS_QUERY_LIMIT)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
-                        // Keep the last known offers on a transient listener error
-                        // rather than flickering to an empty ("no offers") list.
+                        if (!hasLoadedSnapshot) trySend(OffersState.Error)
                         return@addSnapshotListener
                     }
-                    trySend(snapshot?.documents?.mapNotNull { it.toOffer() } ?: emptyList())
+                    hasLoadedSnapshot = true
+                    trySend(
+                        OffersState.Loaded(
+                            snapshot?.documents?.mapNotNull { it.toOffer() } ?: emptyList(),
+                        ),
+                    )
                 }
         awaitClose { registration.remove() }
+    }
+
+    override fun observeOffers(offerIds: Set<String>): Flow<OffersState> = callbackFlow {
+        if (offerIds.isEmpty()) {
+            trySend(OffersState.Loaded(emptyList()))
+            close()
+            return@callbackFlow
+        }
+        val chunks = offerIds.toList().chunked(FIRESTORE_IN_LIMIT)
+        val lock = Any()
+        val snapshots = mutableMapOf<Int, List<PartnerOffer>>()
+        var failedBeforeLoad = false
+        val registrations =
+            chunks.mapIndexed { index, ids ->
+                firestore
+                    .collection(OFFERS)
+                    .whereEqualTo("status", "active")
+                    .whereIn(FieldPath.documentId(), ids)
+                    .addSnapshotListener { snapshot, error ->
+                        synchronized(lock) {
+                            if (error != null) {
+                                if (snapshots.size < chunks.size && !failedBeforeLoad) {
+                                    failedBeforeLoad = true
+                                    trySend(OffersState.Error)
+                                }
+                                return@synchronized
+                            }
+                            snapshots[index] =
+                                snapshot?.documents?.mapNotNull { document ->
+                                    document.takeIf { it.getString("status") == "active" }?.toOffer()
+                                } ?: emptyList()
+                            if (snapshots.size == chunks.size) {
+                                failedBeforeLoad = false
+                                trySend(OffersState.Loaded(snapshots.toSortedMap().values.flatten()))
+                            }
+                        }
+                    }
+            }
+        awaitClose { registrations.forEach { it.remove() } }
     }
 
     override fun observeOfferDetail(offerId: String): Flow<OfferMemberDetail?> = callbackFlow {
@@ -100,7 +147,8 @@ class FirebasePartnersRepository private constructor(
         awaitClose { registration.remove() }
     }
 
-    override fun observeSavedOfferIds(uid: String): Flow<Set<String>> = callbackFlow {
+    override fun observeSavedOfferIds(uid: String): Flow<SavedOfferIdsState> = callbackFlow {
+        var hasLoadedSnapshot = false
         val registration =
             firestore
                 .collection(USERS)
@@ -108,10 +156,15 @@ class FirebasePartnersRepository private constructor(
                 .collection(SAVED_OFFERS)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
-                        trySend(emptySet())
+                        if (!hasLoadedSnapshot) trySend(SavedOfferIdsState.Error)
                         return@addSnapshotListener
                     }
-                    trySend(snapshot?.documents?.map { it.id }?.toSet() ?: emptySet())
+                    hasLoadedSnapshot = true
+                    trySend(
+                        SavedOfferIdsState.Loaded(
+                            snapshot?.documents?.map { it.id }?.toSet() ?: emptySet(),
+                        ),
+                    )
                 }
         awaitClose { registration.remove() }
     }
@@ -168,6 +221,7 @@ class FirebasePartnersRepository private constructor(
         private const val SAVED_OFFERS = "savedOffers"
         private const val REGION = "europe-west1"
         private const val SHOW_OFFER_CODE = "partners-showOfferCode"
+        private const val FIRESTORE_IN_LIMIT = 30
 
         fun createIfAvailable(context: Context): PartnersRepository? {
             if (FirebaseApp.getApps(context).isEmpty()) return null

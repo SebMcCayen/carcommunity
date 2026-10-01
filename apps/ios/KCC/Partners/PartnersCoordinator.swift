@@ -12,6 +12,7 @@ final class PartnersCoordinator {
     @ObservationIgnored nonisolated(unsafe) private var companiesTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var offersTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var savedTask: Task<Void, Never>?
+    @ObservationIgnored nonisolated(unsafe) private var savedOffersTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var entitlementTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var detailTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var companyTask: Task<Void, Never>?
@@ -20,6 +21,7 @@ final class PartnersCoordinator {
     private(set) var offers: [PartnerOffer] = []
     private(set) var offersState: PartnerOffersUiState = .loading
     private(set) var savedOfferIds: Set<String> = []
+    private(set) var savedOffers: [PartnerOffer] = []
     private(set) var savedState: SavedOffersUiState = .loading
     private(set) var companyLookupState: PartnerCompanyLookupState = .idle
     private(set) var canAccessMemberOffers: Bool
@@ -55,6 +57,7 @@ final class PartnersCoordinator {
         companiesTask?.cancel()
         offersTask?.cancel()
         savedTask?.cancel()
+        savedOffersTask?.cancel()
         entitlementTask?.cancel()
         detailTask?.cancel()
         companyTask?.cancel()
@@ -99,11 +102,11 @@ final class PartnersCoordinator {
     }
 
     func offers(for companyId: String) -> [PartnerOffer] {
-        PartnersPresentation.offers(offers, forCompany: companyId)
-    }
-
-    var savedOffers: [PartnerOffer] {
-        PartnersPresentation.savedOffers(offers, savedIds: savedOfferIds)
+        let merged = Dictionary(
+            (offers + savedOffers).map { ($0.id, $0) },
+            uniquingKeysWith: { current, _ in current }
+        ).map(\.value)
+        return PartnersPresentation.offers(merged, forCompany: companyId)
     }
 
     func company(id: String) -> PartnerCompany? {
@@ -149,7 +152,9 @@ final class PartnersCoordinator {
     func reloadSavedOffers() {
         guard canAccessMemberOffers else { return }
         savedTask?.cancel()
+        savedOffersTask?.cancel()
         savedTask = nil
+        savedOffersTask = nil
         savedState = hasLoadedSavedSnapshot ? .loaded : .loading
         subscribeSavedOffers()
     }
@@ -262,7 +267,8 @@ final class PartnersCoordinator {
                     self.hasLoadedOffersSnapshot = true
                     self.offersState = .loaded
                     if let expandedOfferId = self.expandedOfferId,
-                       !offers.contains(where: { $0.id == expandedOfferId }) {
+                       !offers.contains(where: { $0.id == expandedOfferId }),
+                       !self.savedOffers.contains(where: { $0.id == expandedOfferId }) {
                         self.clearSensitiveOfferState()
                     }
                 case .failed:
@@ -302,8 +308,11 @@ final class PartnersCoordinator {
             subscribeSavedOffers()
         } else {
             savedTask?.cancel()
+            savedOffersTask?.cancel()
             savedTask = nil
+            savedOffersTask = nil
             savedOfferIds = []
+            savedOffers = []
             savedState = .unavailable
             hasLoadedSavedSnapshot = false
             savedGeneration += 1
@@ -321,11 +330,42 @@ final class PartnersCoordinator {
                 switch snapshot {
                 case .loaded(let ids):
                     self.savedOfferIds = ids
+                    self.subscribeSavedOfferDocuments(ids: ids)
+                case .failed:
+                    if !self.hasLoadedSavedSnapshot {
+                        self.savedOfferIds = []
+                        self.savedState = .failed
+                    }
+                }
+            }
+        }
+    }
+
+    private func subscribeSavedOfferDocuments(ids: Set<String>) {
+        savedOffersTask?.cancel()
+        savedOffersTask = nil
+        guard let repository else { return }
+        if ids.isEmpty {
+            savedOffers = []
+            hasLoadedSavedSnapshot = true
+            savedState = .loaded
+            return
+        }
+        if !hasLoadedSavedSnapshot { savedState = .loading }
+        let stream = repository.observeOffers(ids: ids)
+        savedOffersTask = Task { [weak self] in
+            for await snapshot in stream {
+                guard !Task.isCancelled, let self, self.canAccessMemberOffers else { return }
+                switch snapshot {
+                case .loaded(let offers):
+                    self.savedOffers = offers.sorted {
+                        $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+                    }
                     self.hasLoadedSavedSnapshot = true
                     self.savedState = .loaded
                 case .failed:
                     if !self.hasLoadedSavedSnapshot {
-                        self.savedOfferIds = []
+                        self.savedOffers = []
                         self.savedState = .failed
                     }
                 }
