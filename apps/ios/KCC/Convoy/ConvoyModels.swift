@@ -255,6 +255,15 @@ enum ConvoyBarLogic {
         return joined.first(where: { $0.status == .active }) ?? joined.first
     }
 
+    static func canOpenMemberProfile(
+        memberUid: String,
+        viewerUid: String?,
+        waiting: Bool
+    ) -> Bool {
+        guard !waiting, let viewerUid, !viewerUid.isEmpty else { return false }
+        return memberUid != viewerUid
+    }
+
     static func exitChoice(viewerIsOwner: Bool, acceptedMemberCount: Int) -> ConvoyExitChoice {
         let remaining = max(acceptedMemberCount - 1, 0)
         let survives = remaining >= minimumRemainingMembers

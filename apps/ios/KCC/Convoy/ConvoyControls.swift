@@ -29,6 +29,8 @@ struct ConvoyStatusBar: View {
     @Bindable var awareness: ConvoyAwarenessCoordinator
     let mapSurface: StubMapSurface
     let liveLocationEnabled: Bool
+    let viewerUid: String?
+    var onOpenMemberProfile: ((String, String?) -> Void)? = nil
 
     @State private var memberTarget: ConvoySheetTarget?
     @State private var inviteTarget: ConvoySheetTarget?
@@ -106,7 +108,9 @@ struct ConvoyStatusBar: View {
                 coordinator: coordinator,
                 awareness: awareness,
                 target: target,
-                onCenter: mapSurface.centerOn
+                viewerUid: viewerUid,
+                onCenter: mapSurface.centerOn,
+                onOpenMemberProfile: onOpenMemberProfile
             )
         }
         .sheet(item: $inviteTarget) { target in
@@ -200,8 +204,10 @@ struct ConvoyStatusBar: View {
 struct ConvoyMembersSheet: View {
     @Environment(\.dismiss) private var dismiss
     let convoy: ConvoyItem
+    let viewerUid: String?
     var positions: [String: ConvoyMemberPosition] = [:]
     var onCenter: ((MapPoint) -> Void)?
+    var onOpenMemberProfile: ((String, String?) -> Void)? = nil
 
     var body: some View {
         NavigationStack {
@@ -249,6 +255,20 @@ struct ConvoyMembersSheet: View {
                 }
             }
             Spacer()
+            if ConvoyBarLogic.canOpenMemberProfile(
+                memberUid: member.uid,
+                viewerUid: viewerUid,
+                waiting: waiting
+            ), let onOpenMemberProfile {
+                Button {
+                    dismiss()
+                    onOpenMemberProfile(member.uid, member.displayName)
+                } label: {
+                    Image(systemName: "person.crop.circle")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(Text("memberProfile.title"))
+            }
             if !waiting, let onCenter {
                 VStack(alignment: .trailing, spacing: KccSpacing.s1) {
                     Button {
@@ -279,13 +299,17 @@ private struct LiveConvoyMembersSheet: View {
     @Bindable var coordinator: ConvoyManagementCoordinator
     @Bindable var awareness: ConvoyAwarenessCoordinator
     let target: ConvoySheetTarget
+    let viewerUid: String?
     let onCenter: (MapPoint) -> Void
+    let onOpenMemberProfile: ((String, String?) -> Void)?
 
     var body: some View {
         ConvoyMembersSheet(
             convoy: coordinator.convoy(id: target.id) ?? target.initial,
+            viewerUid: viewerUid,
             positions: awareness.positions,
-            onCenter: onCenter
+            onCenter: onCenter,
+            onOpenMemberProfile: onOpenMemberProfile
         )
     }
 }

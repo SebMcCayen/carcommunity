@@ -83,6 +83,7 @@ struct ShellView: View {
     @State private var conversationsRepository: ConversationsRepository?
     @State private var dmTarget: DmRouteTarget?
     @State private var dmCoordinator: ChatCoordinator?
+    @State private var memberProfileTarget: MemberProfileRouteTarget?
     @State private var locationProvider = CoreLocationProvider()
     /// Live sharing is explicitly user-started and time-bounded, so its own
     /// provider may continue while the app is backgrounded. Keeping it
@@ -368,7 +369,9 @@ struct ShellView: View {
                             friendsCoordinator: friendsCoordinator,
                             awareness: convoyAwareness,
                             mapSurface: mapSurface,
-                            liveLocationEnabled: liveLocationFeatureEnabled
+                            liveLocationEnabled: liveLocationFeatureEnabled,
+                            viewerUid: signedInUid,
+                            onOpenMemberProfile: openMemberProfile
                         )
                         .padding(.horizontal, KccSpacing.s4)
                         .padding(.top, KccSpacing.s12 + KccSpacing.s3)
@@ -677,7 +680,9 @@ struct ShellView: View {
                     onMessageFriend: { friend in
                         openDm(uid: friend.uid, displayName: friend.displayName)
                     },
-                    onViewProfile: nil
+                    onViewProfile: { friend in
+                        openMemberProfile(uid: friend.uid, displayName: friend.displayName)
+                    }
                 )
             }
         case .convoys:
@@ -731,13 +736,29 @@ struct ShellView: View {
                     onOpenConversation: openDm
                 )
             }
+        case .memberProfile:
+            if let target = memberProfileTarget, let viewerUid = signedInUid {
+                routeNavigation {
+                    MemberProfileScreen(
+                        targetUid: target.uid,
+                        viewerUid: viewerUid,
+                        friends: friendsRepository,
+                        onMessage: openDm
+                    )
+                }
+            } else {
+                unavailableRoute
+            }
         case .chat:
             if let target = dmTarget {
                 routeNavigation {
                     ChatScreen(
                         coordinator: dmCoordinator,
                         otherName: target.displayName,
-                        currentUid: signedInUid ?? ""
+                        currentUid: signedInUid ?? "",
+                        onViewProfile: {
+                            openMemberProfile(uid: target.uid, displayName: target.displayName)
+                        }
                     )
                 }
             } else {
@@ -824,6 +845,12 @@ struct ShellView: View {
             otherUid: uid
         )
         routes = routes.opening(.chat)
+    }
+
+    private func openMemberProfile(uid: String, displayName: String?) {
+        guard !uid.isEmpty, uid != signedInUid else { return }
+        memberProfileTarget = MemberProfileRouteTarget(uid: uid, displayName: displayName)
+        routes = routes.opening(.memberProfile)
     }
 
     private var tabSelection: Binding<ShellTab> {
@@ -1208,11 +1235,12 @@ struct ShellView: View {
         // Remove a conversation built for the previous identity before doing
         // any asynchronous flag work. If Chat was opened from a parent hub,
         // return to that hub; otherwise close the route entirely.
-        if routes.current == .chat {
+        while routes.current == .chat || routes.current == .memberProfile {
             routes = routes.poppingOne()
         }
         dmTarget = nil
         dmCoordinator = nil
+        memberProfileTarget = nil
         if routes.current == .convoys { routes = routes.poppingOne() }
         convoyManagementCoordinator = nil
         convoyAwareness.sync(convoy: nil, repository: nil, currentUid: nil)
@@ -1597,6 +1625,11 @@ struct ShellView: View {
 }
 
 private struct DmRouteTarget: Equatable, Sendable {
+    let uid: String
+    let displayName: String?
+}
+
+private struct MemberProfileRouteTarget: Equatable, Sendable {
     let uid: String
     let displayName: String?
 }

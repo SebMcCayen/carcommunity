@@ -57,7 +57,7 @@ struct FriendsData: Equatable, Sendable {
 /// string. ``notAddable`` is deliberately neutral — it must never reveal
 /// whether the caller was blocked or did the blocking (Android:
 /// `FriendActionError`).
-enum FriendActionError: Equatable, Sendable {
+enum FriendActionError: Error, Equatable, Sendable {
     case signedOut
     case notMember
     case invalid

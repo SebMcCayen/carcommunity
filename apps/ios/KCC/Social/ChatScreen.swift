@@ -29,6 +29,8 @@ struct ChatScreen: View {
     let otherName: String?
     /// The caller's uid — decides own vs other bubble alignment.
     let currentUid: String
+    /// Opens the counterparty's public profile from the chat header.
+    var onViewProfile: (() -> Void)? = nil
 
     @State private var draft = ""
 
@@ -37,6 +39,16 @@ struct ChatScreen: View {
             .navigationTitle(titleText)
             .navigationBarTitleDisplayMode(.inline)
             .task { await coordinator?.start() }
+            .toolbar {
+                if let onViewProfile {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button(action: onViewProfile) {
+                            Image(systemName: "person.crop.circle")
+                        }
+                        .accessibilityLabel(Text("memberProfile.title"))
+                    }
+                }
+            }
     }
 
     /// Trimmed-first, so a whitespace-only name never renders the thread
@@ -269,7 +281,7 @@ enum ChatScreenStrings {
 
 #Preview("Config-less") {
     NavigationStack {
-        ChatScreen(coordinator: nil, otherName: nil, currentUid: "me")
+        ChatScreen(coordinator: nil, otherName: nil, currentUid: "me", onViewProfile: nil)
     }
 }
 
@@ -299,7 +311,8 @@ enum ChatScreenStrings {
                 otherUid: "u1"
             ),
             otherName: "GT86_swe",
-            currentUid: "me"
+            currentUid: "me",
+            onViewProfile: nil
         )
     }
 }
