@@ -304,6 +304,77 @@ describe('offers and the three-tier privacy split', () => {
     ).toBe('functions/failed-precondition');
   });
 
+  it('atomically cascades 498 active offers and rejects 499 without writes', async () => {
+    await signInAs(adminUser);
+
+    const seedActiveCompanyAndOffers = async (offerCount: number) => {
+      const companyRef = adminDb.collection('companies').doc();
+      await companyRef.set({
+        name: `Boundary ${offerCount} AB`,
+        category: 'workshop',
+        status: 'active',
+      });
+
+      const batch = adminDb.batch();
+      for (let index = 0; index < offerCount; index += 1) {
+        batch.set(adminDb.collection('offers').doc(), {
+          companyId: companyRef.id,
+          status: 'active',
+        });
+      }
+      await batch.commit();
+      return companyRef;
+    };
+
+    const atLimitCompany = await seedActiveCompanyAndOffers(498);
+    await call('partners-setCompanyStatus', {
+      companyId: atLimitCompany.id,
+      action: 'pause',
+    });
+
+    expect((await atLimitCompany.get()).data()!.status).toBe('paused');
+    const atLimitOffers = await adminDb
+      .collection('offers')
+      .where('companyId', '==', atLimitCompany.id)
+      .get();
+    expect(atLimitOffers.size).toBe(498);
+    expect(atLimitOffers.docs.every((offer) => offer.data().status === 'paused')).toBe(true);
+
+    const auditEvents = await adminDb
+      .collection('adminAuditEvents')
+      .where('targetId', '==', atLimitCompany.id)
+      .get();
+    const pauseAudit = auditEvents.docs.find(
+      (event) => event.data().action === 'partners.pauseCompany',
+    );
+    expect(pauseAudit?.data().details?.cascadedActiveOfferCount).toBe(498);
+
+    const overLimitCompany = await seedActiveCompanyAndOffers(499);
+    expect(
+      await callableErrorCode(
+        call('partners-setCompanyStatus', {
+          companyId: overLimitCompany.id,
+          action: 'pause',
+        }),
+      ),
+    ).toBe('functions/resource-exhausted');
+
+    expect((await overLimitCompany.get()).data()!.status).toBe('active');
+    const overLimitOffers = await adminDb
+      .collection('offers')
+      .where('companyId', '==', overLimitCompany.id)
+      .get();
+    expect(overLimitOffers.size).toBe(499);
+    expect(overLimitOffers.docs.every((offer) => offer.data().status === 'active')).toBe(true);
+    expect(
+      await adminDb
+        .collection('adminAuditEvents')
+        .where('targetId', '==', overLimitCompany.id)
+        .get()
+        .then((snapshot) => snapshot.empty),
+    ).toBe(true);
+  }, 120_000);
+
   it('reveals the code only to members for active offers', async () => {
     const companyId = await createActiveCompany();
     await signInAs(adminUser);

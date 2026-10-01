@@ -615,7 +615,7 @@
     {
       "name": "partners.setCompanyStatus",
       "domain": "partners",
-      "description": "Company lifecycle transitions: activate | pause | end (ended is terminal). Audited. Deployed via grouped export as partners-setCompanyStatus (functions/src/partners/manageCompany.ts).",
+      "description": "Company lifecycle transitions: activate | pause | end (ended is terminal). Pausing or ending a company atomically rewrites its active offers to paused or ended respectively; activating a company does not reactivate offers. A pause/end with more than 498 active offers is rejected with resource-exhausted and makes no changes, so administrators must pause offers first. Audited. Deployed via grouped export as partners-setCompanyStatus (functions/src/partners/manageCompany.ts).",
       "access": "admin",
       "appCheck": true,
       "status": "implemented",
@@ -642,7 +642,7 @@
     {
       "name": "partners.setOfferStatus",
       "domain": "partners",
-      "description": "Offer lifecycle transitions: activate | pause | end (ended/expired are terminal). Audited. Deployed via grouped export as partners-setOfferStatus (functions/src/partners/manageOffer.ts).",
+      "description": "Offer lifecycle transitions: activate | pause | end (ended/expired are terminal). Activating an offer requires its parent company to be active; otherwise the callable rejects with failed-precondition. Audited. Deployed via grouped export as partners-setOfferStatus (functions/src/partners/manageOffer.ts).",
       "access": "admin",
       "appCheck": true,
       "status": "implemented",

@@ -189,7 +189,7 @@
     },
     "setCompanyStatusRequest": {
       "type": "object",
-      "description": "Input for partners.setCompanyStatus (admin). Lifecycle: draft → active ⇄ paused → ended; ended is terminal.",
+      "description": "Input for partners.setCompanyStatus (admin). Lifecycle: draft → active ⇄ paused → ended; ended is terminal. Pause/end atomically rewrites active child offers to paused/ended. More than 498 active offers is rejected with resource-exhausted and no writes.",
       "properties": {
         "companyId": { "type": "string", "minLength": 1 },
         "action": { "type": "string", "enum": ["activate", "pause", "end"] },
@@ -200,7 +200,7 @@
     },
     "setOfferStatusRequest": {
       "type": "object",
-      "description": "Input for partners.setOfferStatus (admin). Lifecycle: draft → active ⇄ paused → ended; ended/expired are terminal.",
+      "description": "Input for partners.setOfferStatus (admin). Lifecycle: draft → active ⇄ paused → ended; ended/expired are terminal. Activation requires an active parent company and otherwise fails with failed-precondition.",
       "properties": {
         "offerId": { "type": "string", "minLength": 1 },
         "action": { "type": "string", "enum": ["activate", "pause", "end"] },
