@@ -119,14 +119,6 @@ struct PartnersScreen: View {
                 ProgressView("partners.loading")
                 Spacer()
             }
-        } else if coordinator.offersState == .failed {
-            offersFailureRow
-        } else if coordinator.offersState == .loading {
-            HStack {
-                Spacer()
-                ProgressView("partners.loading")
-                Spacer()
-            }
         } else if coordinator.savedOffers.isEmpty {
             ContentUnavailableView(
                 "partnerOffers.savedEmptyTitle",

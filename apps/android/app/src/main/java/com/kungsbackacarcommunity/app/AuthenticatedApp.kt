@@ -811,6 +811,7 @@ fun AuthenticatedApp(
     leaderboardRepository: LeaderboardRepository?,
     partnersRepository: PartnersRepository?,
     offerCodeCoordinator: OfferCodeCoordinator?,
+    partnersEnabled: Boolean,
     notificationsRepository: NotificationsRepository?,
     notificationsCoordinator: NotificationsCoordinator?,
     notificationSettingsRepository: NotificationSettingsRepository?,
@@ -6501,6 +6502,13 @@ fun AuthenticatedApp(
                         leaderboardRepository = leaderboardRepository,
                         partnersRepository = partnersRepository,
                         offerCodeCoordinator = offerCodeCoordinator,
+                        partnersEnabled =
+                            FeatureGate.isAvailable(
+                                flags = flags,
+                                flag = FeatureFlag.PARTNERS,
+                                memberGated = false,
+                                isActiveMember = profile?.activeMember == true,
+                            ),
                         notificationsRepository = notificationsRepository,
                         notificationsCoordinator = notificationsCoordinator,
                         notificationSettingsRepository = notificationSettingsRepository,
@@ -9425,7 +9433,13 @@ private fun RouteHost(
             )
 
         ShellRoute.Partners ->
-            if (partnersRepository != null) {
+            if (!partnersEnabled) {
+                LaunchedEffect(Unit) {
+                    offerCodeCoordinator?.reset()
+                    onClose()
+                }
+                LoadingScreen()
+            } else if (partnersRepository != null) {
                 PartnersRoute(
                     repository = partnersRepository,
                     offerCodeCoordinator = offerCodeCoordinator,

@@ -329,8 +329,20 @@ final class PartnersCoordinator {
                 guard !Task.isCancelled, let self, self.canAccessMemberOffers else { return }
                 switch snapshot {
                 case .loaded(let ids):
+                    let changed = ids != self.savedOfferIds
                     self.savedOfferIds = ids
-                    self.subscribeSavedOfferDocuments(ids: ids)
+                    if changed {
+                        self.savedOffers.removeAll { !ids.contains($0.id) }
+                        self.hasLoadedSavedSnapshot = false
+                        if let expandedOfferId = self.expandedOfferId,
+                           !ids.contains(expandedOfferId),
+                           !self.offers.contains(where: { $0.id == expandedOfferId }) {
+                            self.clearSensitiveOfferState()
+                        }
+                    }
+                    if changed || self.savedOffersTask == nil {
+                        self.subscribeSavedOfferDocuments(ids: ids)
+                    }
                 case .failed:
                     if !self.hasLoadedSavedSnapshot {
                         self.savedOfferIds = []

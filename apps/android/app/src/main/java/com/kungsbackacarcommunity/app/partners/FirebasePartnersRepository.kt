@@ -92,6 +92,7 @@ class FirebasePartnersRepository private constructor(
     }
 
     override fun observeOffers(offerIds: Set<String>): Flow<OffersState> = callbackFlow {
+        trySend(OffersState.Loading)
         if (offerIds.isEmpty()) {
             trySend(OffersState.Loaded(emptyList()))
             close()

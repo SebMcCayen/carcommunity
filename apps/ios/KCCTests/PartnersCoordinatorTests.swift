@@ -9,6 +9,8 @@ final class PartnersCoordinatorTests: XCTestCase {
         let saved: [SavedOffersSnapshot]
         let directOffers: [PartnerOffer]?
         var offersContinuation: AsyncStream<PartnerOffersSnapshot>.Continuation?
+        var savedContinuation: AsyncStream<SavedOffersSnapshot>.Continuation?
+        var directSnapshotsByIds: [Set<String>: [PartnerOffersSnapshot]] = [:]
         var detail = PartnerOfferDetail(description: "Detail", redemptionInstructions: "Use", terms: nil)
         var code: String? = "SAVE20"
         var companiesById: [String: PartnerCompany] = [:]
@@ -48,6 +50,9 @@ final class PartnersCoordinatorTests: XCTestCase {
         }
 
         func observeOffers(ids: Set<String>) -> AsyncStream<PartnerOffersSnapshot> {
+            if let snapshots = directSnapshotsByIds[ids] {
+                return AsyncStream { continuation in snapshots.forEach { continuation.yield($0) } }
+            }
             let fallback = offers.compactMap { snapshot -> [PartnerOffer]? in
                 if case .loaded(let values) = snapshot { return values }
                 return nil
@@ -61,8 +66,13 @@ final class PartnersCoordinatorTests: XCTestCase {
         }
 
         func observeSavedOfferIds(uid: String) -> AsyncStream<SavedOffersSnapshot> {
-            AsyncStream { continuation in saved.forEach { continuation.yield($0) } }
+            AsyncStream { continuation in
+                savedContinuation = continuation
+                saved.forEach { continuation.yield($0) }
+            }
         }
+
+        func sendSaved(_ snapshot: SavedOffersSnapshot) { savedContinuation?.yield(snapshot) }
 
         func showOfferCode(offerId: String) async throws -> String? { code }
 
@@ -298,6 +308,35 @@ final class PartnersCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(coordinator.savedState, .loaded)
         XCTAssertEqual(coordinator.offers(for: savedOffer.companyId), [savedOffer])
+    }
+
+    @MainActor
+    func testChangedSavedIdsDiscardStaleOfferAndSurfaceReplacementFailure() async {
+        let oldOffer = PartnerOffer(
+            id: "old", companyId: "c1", partnerCompanyName: nil, title: "Old",
+            teaserText: "", offerType: .other
+        )
+        let repository = FakeRepository(
+            offers: [.loaded(offers: [])],
+            saved: [.loaded(ids: [oldOffer.id])],
+            directOffers: [oldOffer]
+        )
+        repository.directSnapshotsByIds[["new"]] = [.failed(code: "unavailable")]
+        let coordinator = PartnersCoordinator(
+            repository: repository,
+            subscriptionRepository: nil,
+            uid: "me",
+            access: AccountAccess(role: .admin, activeMember: false, suspended: false, deleted: false)
+        )
+        coordinator.start()
+        await waitUntil { coordinator.savedOffers == [oldOffer] }
+        coordinator.setExpandedOffer(oldOffer.id, expanded: true)
+
+        repository.sendSaved(.loaded(ids: ["new"]))
+        await waitUntil { coordinator.savedState == .failed }
+
+        XCTAssertTrue(coordinator.savedOffers.isEmpty)
+        XCTAssertNil(coordinator.expandedOfferId)
     }
 
     @MainActor
