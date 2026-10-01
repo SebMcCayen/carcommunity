@@ -54,7 +54,7 @@ fun PartnersRootScreen(
 
         when (section) {
             PartnersRootSection.DIRECTORY ->
-                PartnersDirectoryContent(state, onOpenCompany, onRetry)
+                PartnersDirectoryContent(state, offers, onOpenCompany, onRetry)
             PartnersRootSection.SAVED ->
                 SavedOffersContent(
                     offers = offers,
@@ -74,6 +74,7 @@ fun PartnersRootScreen(
 @Composable
 fun PartnersListScreen(
     state: CompaniesState,
+    offers: List<PartnerOffer> = emptyList(),
     onOpenCompany: (String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -81,13 +82,14 @@ fun PartnersListScreen(
     onRetry: (() -> Unit)? = null,
 ) {
     AeroPage(title = stringResource(R.string.partners_screenTitle), modifier = modifier) {
-        PartnersDirectoryContent(state, onOpenCompany, onRetry)
+        PartnersDirectoryContent(state, offers, onOpenCompany, onRetry)
     }
 }
 
 @Composable
 private fun PartnersDirectoryContent(
     state: CompaniesState,
+    offers: List<PartnerOffer>,
     onOpenCompany: (String) -> Unit,
     onRetry: (() -> Unit)?,
 ) {
@@ -121,7 +123,11 @@ private fun PartnersDirectoryContent(
                 )
             } else {
                 state.companies.forEach { company ->
-                    CompanyCard(company = company, onClick = { onOpenCompany(company.id) })
+                    CompanyCard(
+                        company = company,
+                        offerCount = Partners.offersForCompany(offers, company.id).size,
+                        onClick = { onOpenCompany(company.id) },
+                    )
                 }
             }
     }
@@ -199,7 +205,11 @@ private fun SavedOffersContent(
 }
 
 @Composable
-private fun CompanyCard(company: PartnerCompany, onClick: () -> Unit) {
+private fun CompanyCard(
+    company: PartnerCompany,
+    offerCount: Int,
+    onClick: () -> Unit,
+) {
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -214,6 +224,19 @@ private fun CompanyCard(company: PartnerCompany, onClick: () -> Unit) {
                 text = stringResource(company.category.labelRes()),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text =
+                    stringResource(
+                        if (offerCount == 1) {
+                            R.string.partnerOffers_offerCountOne
+                        } else {
+                            R.string.partnerOffers_offerCountOther
+                        },
+                        offerCount,
+                    ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

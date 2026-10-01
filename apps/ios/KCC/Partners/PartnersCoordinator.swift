@@ -14,11 +14,14 @@ final class PartnersCoordinator {
     @ObservationIgnored nonisolated(unsafe) private var savedTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var entitlementTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var detailTask: Task<Void, Never>?
+    @ObservationIgnored nonisolated(unsafe) private var companyTask: Task<Void, Never>?
 
     private(set) var state: PartnersUiState
     private(set) var offers: [PartnerOffer] = []
     private(set) var offersState: PartnerOffersUiState = .loading
     private(set) var savedOfferIds: Set<String> = []
+    private(set) var savedState: SavedOffersUiState = .loading
+    private(set) var companyLookupState: PartnerCompanyLookupState = .idle
     private(set) var canAccessMemberOffers: Bool
     private(set) var expandedOfferId: String?
     private(set) var detailState: OfferDetailUiState = .idle
@@ -28,6 +31,8 @@ final class PartnersCoordinator {
     private var revealGeneration = 0
     private var savedGeneration = 0
     private var hasLoadedOffersSnapshot = false
+    private var hasLoadedSavedSnapshot = false
+    private var resolvedCompanies: [String: PartnerCompany] = [:]
 
     init(
         repository: PartnersRepository?,
@@ -52,6 +57,7 @@ final class PartnersCoordinator {
         savedTask?.cancel()
         entitlementTask?.cancel()
         detailTask?.cancel()
+        companyTask?.cancel()
     }
 
     func start() {
@@ -98,6 +104,54 @@ final class PartnersCoordinator {
 
     var savedOffers: [PartnerOffer] {
         PartnersPresentation.savedOffers(offers, savedIds: savedOfferIds)
+    }
+
+    func company(id: String) -> PartnerCompany? {
+        if case .loaded(let companies) = state,
+           let company = companies.first(where: { $0.id == id }) {
+            return company
+        }
+        return resolvedCompanies[id]
+    }
+
+    func loadCompany(id: String) {
+        if company(id: id) != nil {
+            companyLookupState = .loaded(id: id)
+            return
+        }
+        if companyLookupState == .loading(id: id) { return }
+        guard let repository else {
+            companyLookupState = .failed(id: id)
+            return
+        }
+        companyTask?.cancel()
+        companyLookupState = .loading(id: id)
+        let stream = repository.observeCompany(id: id)
+        companyTask = Task { [weak self] in
+            for await snapshot in stream {
+                guard !Task.isCancelled, let self else { return }
+                switch snapshot {
+                case .loaded(let company):
+                    if let company {
+                        self.resolvedCompanies[id] = company
+                        self.companyLookupState = .loaded(id: id)
+                    } else {
+                        self.resolvedCompanies[id] = nil
+                        self.companyLookupState = .missing(id: id)
+                    }
+                case .failed:
+                    self.companyLookupState = .failed(id: id)
+                }
+            }
+        }
+    }
+
+    func reloadSavedOffers() {
+        guard canAccessMemberOffers else { return }
+        savedTask?.cancel()
+        savedTask = nil
+        savedState = hasLoadedSavedSnapshot ? .loaded : .loading
+        subscribeSavedOffers()
     }
 
     func setExpandedOffer(_ offerId: String, expanded: Bool) {
@@ -244,11 +298,14 @@ final class PartnersCoordinator {
         guard allowed != canAccessMemberOffers else { return }
         canAccessMemberOffers = allowed
         if allowed {
+            savedState = hasLoadedSavedSnapshot ? .loaded : .loading
             subscribeSavedOffers()
         } else {
             savedTask?.cancel()
             savedTask = nil
             savedOfferIds = []
+            savedState = .unavailable
+            hasLoadedSavedSnapshot = false
             savedGeneration += 1
             savedActionStatus = .idle
             clearSensitiveOfferState()
@@ -262,8 +319,15 @@ final class PartnersCoordinator {
             for await snapshot in stream {
                 guard !Task.isCancelled, let self, self.canAccessMemberOffers else { return }
                 switch snapshot {
-                case .loaded(let ids): self.savedOfferIds = ids
-                case .failed: break // retain the last owner-authoritative set
+                case .loaded(let ids):
+                    self.savedOfferIds = ids
+                    self.hasLoadedSavedSnapshot = true
+                    self.savedState = .loaded
+                case .failed:
+                    if !self.hasLoadedSavedSnapshot {
+                        self.savedOfferIds = []
+                        self.savedState = .failed
+                    }
                 }
             }
         }

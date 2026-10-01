@@ -53,6 +53,7 @@ class PartnersScreensTest {
             KccTheme {
                 PartnersListScreen(
                     state = CompaniesState.Loaded(listOf(company())),
+                    offers = listOf(offer()),
                     onOpenCompany = { opened = it },
                     onBack = {},
                 )
@@ -60,6 +61,26 @@ class PartnersScreensTest {
         }
         composeTestRule.onNodeWithText("Bilverkstan").performScrollTo().performClick()
         assertEquals("c1", opened)
+    }
+
+    @Test
+    fun directory_showsLocalizedSingularOfferCount() {
+        composeTestRule.setContent {
+            KccTheme {
+                PartnersListScreen(
+                    state = CompaniesState.Loaded(listOf(company())),
+                    offers = listOf(offer()),
+                    onOpenCompany = {},
+                    onBack = {},
+                )
+            }
+        }
+        val expected =
+            InstrumentationRegistry.getInstrumentation().targetContext.getString(
+                R.string.partnerOffers_offerCountOne,
+                1,
+            )
+        composeTestRule.onNodeWithText(expected).performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -89,7 +110,7 @@ class PartnersScreensTest {
         composeTestRule.setContent {
             KccTheme {
                 PartnerDetailScreen(
-                    company = company(),
+                    company = company().copy(latitude = 57.49, longitude = 12.07),
                     offers = listOf(offer()),
                     savedOfferIds = emptySet(),
                     canAccessMemberOffers = false,
@@ -108,6 +129,9 @@ class PartnersScreensTest {
             .assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.partnerOffers_showCode)).assertDoesNotExist()
         composeTestRule.onNodeWithText(str(R.string.partnerOffers_saveOffer)).assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.partners_callButton)).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.partners_websiteButton)).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.partners_navigateButton)).performScrollTo().assertIsDisplayed()
     }
 
     @Test

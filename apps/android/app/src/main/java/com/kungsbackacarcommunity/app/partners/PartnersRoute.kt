@@ -92,7 +92,13 @@ fun PartnersRoute(
         return
     }
 
-    val company = (companiesState as? CompaniesState.Loaded)?.companies?.firstOrNull { it.id == companyId }
+    val cachedCompany =
+        (companiesState as? CompaniesState.Loaded)?.companies?.firstOrNull { it.id == companyId }
+    val company by
+        remember(repository, companyId, cachedCompany) {
+            cachedCompany?.let(::flowOf) ?: repository.observeCompany(companyId)
+        }
+            .collectAsState(initial = cachedCompany)
     val companyOffers = Partners.offersForCompany(offers, companyId)
     val expandedDetail by
         remember(expandedOfferId, canAccessMemberOffers, repository) {

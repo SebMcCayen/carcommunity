@@ -48,19 +48,7 @@ struct PartnersScreen: View {
                 }
             }
             .navigationDestination(for: PartnerDestination.self) { destination in
-                if let company = companies.first(where: { $0.id == destination.companyId }) {
-                    PartnerDetailScreen(
-                        coordinator: coordinator,
-                        company: company,
-                        focusedOfferId: destination.focusedOfferId
-                    )
-                } else {
-                    ContentUnavailableView(
-                        "shell.unavailable",
-                        systemImage: "building.2",
-                        description: Text("shell.unavailable")
-                    )
-                }
+                PartnerDestinationScreen(coordinator: coordinator, destination: destination)
             }
         }
         .background(.background, ignoresSafeAreaEdges: .all)
@@ -118,6 +106,19 @@ struct PartnersScreen: View {
                 description: Text("partnerOffers.upgradeForMemberOffersHint")
             )
             .listRowBackground(Color.clear)
+        } else if coordinator.savedState == .failed {
+            VStack(spacing: KccSpacing.s3) {
+                Text("partnerOffers.loadError").foregroundStyle(.secondary)
+                Button("partners.retry") { coordinator.reloadSavedOffers() }
+                    .buttonStyle(.borderedProminent)
+            }
+            .frame(maxWidth: .infinity)
+        } else if coordinator.savedState == .loading {
+            HStack {
+                Spacer()
+                ProgressView("partners.loading")
+                Spacer()
+            }
         } else if coordinator.offersState == .failed {
             offersFailureRow
         } else if coordinator.offersState == .loading {
@@ -180,6 +181,46 @@ struct PartnersScreen: View {
                 .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+private struct PartnerDestinationScreen: View {
+    @Bindable var coordinator: PartnersCoordinator
+    let destination: PartnerDestination
+
+    var body: some View {
+        Group {
+            if let company = coordinator.company(id: destination.companyId) {
+                PartnerDetailScreen(
+                    coordinator: coordinator,
+                    company: company,
+                    focusedOfferId: destination.focusedOfferId
+                )
+            } else {
+                switch coordinator.companyLookupState {
+                case .idle:
+                    ProgressView("partners.loading")
+                case .loading(let id) where id == destination.companyId:
+                    ProgressView("partners.loading")
+                case .failed(let id) where id == destination.companyId:
+                    VStack(spacing: KccSpacing.s3) {
+                        Text("partners.error")
+                        Button("partners.retry") {
+                            coordinator.loadCompany(id: destination.companyId)
+                        }
+                    }
+                default:
+                    ContentUnavailableView(
+                        "shell.unavailable",
+                        systemImage: "building.2",
+                        description: Text("shell.unavailable")
+                    )
+                }
+            }
+        }
+        .task(id: destination.companyId) {
+            coordinator.loadCompany(id: destination.companyId)
+        }
     }
 }
 

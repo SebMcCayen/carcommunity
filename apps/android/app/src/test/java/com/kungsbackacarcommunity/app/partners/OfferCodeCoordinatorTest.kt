@@ -16,6 +16,8 @@ class OfferCodeCoordinatorTest {
 
         override fun observeActiveCompanies(): Flow<CompaniesState> = flowOf(CompaniesState.Loading)
 
+        override fun observeCompany(companyId: String): Flow<PartnerCompany?> = flowOf(null)
+
         override fun observeActiveOffers(): Flow<List<PartnerOffer>> = flowOf(emptyList())
 
         override fun observeOfferDetail(offerId: String): Flow<OfferMemberDetail?> = flowOf(null)

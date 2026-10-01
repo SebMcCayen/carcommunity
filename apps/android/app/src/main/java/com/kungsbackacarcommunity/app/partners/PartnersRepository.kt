@@ -23,6 +23,9 @@ sealed interface CompaniesState {
 interface PartnersRepository {
     fun observeActiveCompanies(): Flow<CompaniesState>
 
+    /** One active company by id, used when a saved offer falls outside the capped directory. */
+    fun observeCompany(companyId: String): Flow<PartnerCompany?>
+
     fun observeActiveOffers(): Flow<List<PartnerOffer>>
 
     /** Member-gated offer detail; null when denied (non-member) or missing. */

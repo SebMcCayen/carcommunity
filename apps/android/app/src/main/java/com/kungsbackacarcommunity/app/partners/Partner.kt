@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.partners
 
+import java.net.URI
 import java.util.Locale
 
 /**
@@ -101,4 +102,32 @@ object Partners {
      * required index deploy.
      */
     const val ACTIVE_OFFERS_QUERY_LIMIT = 200L
+}
+
+/** Validated external destinations for partner actions. */
+object PartnerDestinations {
+    fun website(rawValue: String?): String? {
+        val value = rawValue?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val uri = runCatching { URI(value) }.getOrNull() ?: return null
+        if (uri.scheme?.lowercase(Locale.ROOT) !in setOf("https", "http")) return null
+        if (uri.host.isNullOrBlank() || uri.userInfo != null) return null
+        return runCatching {
+            URI(uri.scheme, null, uri.host, uri.port, uri.path, uri.query, null).toString()
+        }.getOrNull()
+    }
+
+    fun phone(rawValue: String?): String? {
+        val value = rawValue?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        if (!value.all { it.isDigit() || it in "+ ()-." }) return null
+        if ('+' in value.drop(1)) return null
+        val digits = value.filter(Char::isDigit)
+        if (digits.length < 3) return null
+        return "tel:${if (value.startsWith('+')) "+" else ""}$digits"
+    }
+
+    fun coordinates(latitude: Double?, longitude: Double?): Pair<Double, Double>? {
+        if (latitude == null || longitude == null || !latitude.isFinite() || !longitude.isFinite()) return null
+        if (latitude !in -90.0..90.0 || longitude !in -180.0..180.0) return null
+        return latitude to longitude
+    }
 }

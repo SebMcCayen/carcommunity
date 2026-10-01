@@ -49,6 +49,22 @@ class FirebasePartnersRepository private constructor(
         awaitClose { registration.remove() }
     }
 
+    override fun observeCompany(companyId: String): Flow<PartnerCompany?> = callbackFlow {
+        val registration =
+            firestore
+                .collection(COMPANIES)
+                .document(companyId)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) return@addSnapshotListener
+                    trySend(
+                        snapshot
+                            ?.takeIf { it.getString("status") == "active" }
+                            ?.toCompany(),
+                    )
+                }
+        awaitClose { registration.remove() }
+    }
+
     override fun observeActiveOffers(): Flow<List<PartnerOffer>> = callbackFlow {
         val registration =
             firestore

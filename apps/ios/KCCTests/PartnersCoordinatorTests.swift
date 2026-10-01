@@ -10,6 +10,7 @@ final class PartnersCoordinatorTests: XCTestCase {
         var offersContinuation: AsyncStream<PartnerOffersSnapshot>.Continuation?
         var detail = PartnerOfferDetail(description: "Detail", redemptionInstructions: "Use", terms: nil)
         var code: String? = "SAVE20"
+        var companiesById: [String: PartnerCompany] = [:]
         var setSavedCalls: [(String, String, Bool)] = []
 
         init(
@@ -26,6 +27,10 @@ final class PartnersCoordinatorTests: XCTestCase {
             AsyncStream { continuation in
                 companies.forEach { continuation.yield($0) }
             }
+        }
+
+        func observeCompany(id: String) -> AsyncStream<PartnerCompanySnapshot> {
+            AsyncStream { continuation in continuation.yield(.loaded(companiesById[id])) }
         }
 
         func observeActiveOffers() -> AsyncStream<PartnerOffersSnapshot> {
@@ -218,6 +223,44 @@ final class PartnersCoordinatorTests: XCTestCase {
         XCTAssertNil(coordinator.expandedOfferId)
         XCTAssertEqual(coordinator.detailState, .idle)
         XCTAssertEqual(coordinator.codeStatus, .idle)
+    }
+
+    @MainActor
+    func testInitialSavedListenerFailureIsNotPresentedAsEmpty() async {
+        let repository = FakeRepository(saved: [.failed(code: "unavailable")])
+        let admin = AccountAccess(role: .admin, activeMember: false, suspended: false, deleted: false)
+        let coordinator = PartnersCoordinator(
+            repository: repository,
+            subscriptionRepository: nil,
+            uid: "me",
+            access: admin
+        )
+
+        coordinator.start()
+        await waitUntil { coordinator.savedState == .failed }
+
+        XCTAssertTrue(coordinator.savedOfferIds.isEmpty)
+    }
+
+    @MainActor
+    func testLoadsSavedOfferCompanyOutsideCappedDirectoryById() async {
+        let company = PartnerCompany(
+            id: "older", name: "Older Partner", category: .retail, description: nil,
+            website: nil, phone: nil, address: nil, latitude: nil, longitude: nil
+        )
+        let repository = FakeRepository()
+        repository.companiesById[company.id] = company
+        let coordinator = PartnersCoordinator(
+            repository: repository,
+            subscriptionRepository: nil,
+            uid: "me",
+            access: .unrestrictedCommunity
+        )
+
+        coordinator.loadCompany(id: company.id)
+        await waitUntil { coordinator.company(id: company.id) == company }
+
+        XCTAssertEqual(coordinator.companyLookupState, .loaded(id: company.id))
     }
 
     @MainActor

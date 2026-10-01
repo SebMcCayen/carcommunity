@@ -1,5 +1,10 @@
 package com.kungsbackacarcommunity.app.partners
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,10 +18,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.shell.AeroPage
+import com.kungsbackacarcommunity.app.navigation.ExternalNavigation
+import com.kungsbackacarcommunity.app.navigation.LatLng
 
 /**
  * Partner company detail + its offers (Phase 12 slice 17). Stateless. Offers
@@ -45,6 +53,7 @@ fun PartnerDetailScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     AeroPage(title = company?.name ?: stringResource(R.string.partners_detailTitle), modifier = modifier) {
             if (company == null) {
                 Text(
@@ -67,19 +76,54 @@ fun PartnerDetailScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            company.website?.takeIf { it.isNotBlank() }?.let { website ->
-                Text(
-                    text = website,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            PartnerDestinations.coordinates(company.latitude, company.longitude)?.let { (latitude, longitude) ->
+                OutlinedButton(
+                    onClick = {
+                        ExternalNavigation.launch(
+                            context = context,
+                            destination = LatLng(longitude = longitude, latitude = latitude),
+                            label = company.name,
+                            onUnavailable = {
+                                Toast.makeText(
+                                    context,
+                                    R.string.partners_cannotOpenNavigation,
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            },
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.partners_navigateButton))
+                }
             }
-            company.phone?.takeIf { it.isNotBlank() }?.let { phone ->
-                Text(
-                    text = phone,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            PartnerDestinations.phone(company.phone)?.let { phone ->
+                OutlinedButton(
+                    onClick = {
+                        launchPartnerIntent(
+                            context,
+                            Intent(Intent.ACTION_DIAL, Uri.parse(phone)),
+                            R.string.partners_cannotOpenPhone,
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.partners_callButton))
+                }
+            }
+            PartnerDestinations.website(company.website)?.let { website ->
+                OutlinedButton(
+                    onClick = {
+                        launchPartnerIntent(
+                            context,
+                            Intent(Intent.ACTION_VIEW, Uri.parse(website)),
+                            R.string.partners_cannotOpenWebsite,
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.partners_websiteButton))
+                }
             }
 
             Text(
@@ -108,6 +152,18 @@ fun PartnerDetailScreen(
                     )
                 }
             }
+    }
+}
+
+private fun launchPartnerIntent(
+    context: Context,
+    intent: Intent,
+    unavailableMessage: Int,
+) {
+    try {
+        context.startActivity(intent)
+    } catch (_: ActivityNotFoundException) {
+        Toast.makeText(context, unavailableMessage, Toast.LENGTH_SHORT).show()
     }
 }
 

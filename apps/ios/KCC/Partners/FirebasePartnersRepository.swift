@@ -34,6 +34,30 @@ final class FirebasePartnersRepository: PartnersRepository, @unchecked Sendable 
         }
     }
 
+    func observeCompany(id: String) -> AsyncStream<PartnerCompanySnapshot> {
+        AsyncStream { continuation in
+            let registration = firestore.collection("companies").document(id)
+                .addSnapshotListener { snapshot, error in
+                    if let error {
+                        continuation.yield(.failed(code: Self.errorCode(error)))
+                        return
+                    }
+                    guard let snapshot, snapshot.exists,
+                          snapshot.data()?["status"] as? String == "active"
+                    else {
+                        continuation.yield(.loaded(nil))
+                        return
+                    }
+                    continuation.yield(.loaded(PartnerCompany.fromMap(
+                        id: snapshot.documentID,
+                        map: snapshot.data() ?? [:]
+                    )))
+                }
+            let box = PartnerListenerBox(registration: registration)
+            continuation.onTermination = { _ in box.registration.remove() }
+        }
+    }
+
     func observeActiveOffers() -> AsyncStream<PartnerOffersSnapshot> {
         AsyncStream { continuation in
             let registration = firestore.collection("offers")

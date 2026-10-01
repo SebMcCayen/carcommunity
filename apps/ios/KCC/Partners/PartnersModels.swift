@@ -117,6 +117,11 @@ enum PartnersCollectionSnapshot: Equatable, Sendable {
     case failed(code: String?)
 }
 
+enum PartnerCompanySnapshot: Equatable, Sendable {
+    case loaded(PartnerCompany?)
+    case failed(code: String?)
+}
+
 enum PartnerOffersSnapshot: Equatable, Sendable {
     case loaded(offers: [PartnerOffer])
     case failed(code: String?)
@@ -130,6 +135,14 @@ enum PartnerOfferDetailSnapshot: Equatable, Sendable {
 enum SavedOffersSnapshot: Equatable, Sendable {
     case loaded(ids: Set<String>)
     case failed(code: String?)
+}
+
+enum SavedOffersUiState: Equatable, Sendable {
+    case unavailable, loading, loaded, failed
+}
+
+enum PartnerCompanyLookupState: Equatable, Sendable {
+    case idle, loading(id: String), loaded(id: String), missing(id: String), failed(id: String)
 }
 
 enum PartnersUiState: Equatable, Sendable {

@@ -51,6 +51,17 @@ class PartnerTest {
         assertEquals(200L, Partners.ACTIVE_OFFERS_QUERY_LIMIT)
     }
 
+    @Test
+    fun `external destinations reject unsafe values and normalize valid values`() {
+        assertEquals(null, PartnerDestinations.website("javascript:alert(1)"))
+        assertEquals(null, PartnerDestinations.website("https://user:pass@example.com/path"))
+        assertEquals("https://example.com/path", PartnerDestinations.website("https://example.com/path#fragment"))
+        assertEquals(null, PartnerDestinations.phone("12+34"))
+        assertEquals("tel:+46012345", PartnerDestinations.phone("+46 (0) 123-45"))
+        assertEquals(null, PartnerDestinations.coordinates(91.0, 12.0))
+        assertEquals(57.49 to 12.07, PartnerDestinations.coordinates(57.49, 12.07))
+    }
+
     private fun offer(id: String, companyId: String, title: String) =
         PartnerOffer(id, companyId, title, "teaser", PartnerOfferType.DISCOUNT_CODE)
 }
