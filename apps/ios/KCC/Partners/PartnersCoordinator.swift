@@ -33,6 +33,7 @@ final class PartnersCoordinator {
 
     private var revealGeneration = 0
     private var savedGeneration = 0
+    private var isRunning = false
     private var hasLoadedOffersSnapshot = false
     private var hasLoadedSavedIdsSnapshot = false
     private var hasLoadedSavedSnapshot = false
@@ -66,17 +67,50 @@ final class PartnersCoordinator {
     }
 
     func start() {
-        guard companiesTask == nil, offersTask == nil,
-              let repository, uid != nil
+        guard !isRunning, let repository, uid != nil
         else { return }
+        isRunning = true
         subscribeCompanies(repository)
         subscribeOffers(repository)
         subscribeEntitlement()
         if canAccessMemberOffers { subscribeSavedOffers() }
     }
 
+    func stop() {
+        isRunning = false
+        companiesTask?.cancel()
+        offersTask?.cancel()
+        savedTask?.cancel()
+        savedOffersTask?.cancel()
+        entitlementTask?.cancel()
+        companyTask?.cancel()
+        companiesTask = nil
+        offersTask = nil
+        savedTask = nil
+        savedOffersTask = nil
+        entitlementTask = nil
+        companyTask = nil
+
+        state = repository == nil || uid == nil ? .unavailable : .loading
+        offers = []
+        offersState = .loading
+        offersAreExhaustive = false
+        savedOfferIds = []
+        savedOffers = []
+        hasLoadedOffersSnapshot = false
+        hasLoadedSavedIdsSnapshot = false
+        hasLoadedSavedSnapshot = false
+        resolvedCompanies = [:]
+        companyLookupState = .idle
+        canAccessMemberOffers = PartnerOfferAccess.allows(access: access, subscription: nil)
+        savedState = canAccessMemberOffers ? .loading : .unavailable
+        savedGeneration += 1
+        savedActionStatus = .idle
+        clearSensitiveOfferState()
+    }
+
     func reload() {
-        guard let repository, uid != nil else { return }
+        guard isRunning, let repository, uid != nil else { return }
         companiesTask?.cancel()
         offersTask?.cancel()
         companiesTask = nil
@@ -99,7 +133,7 @@ final class PartnersCoordinator {
         } else {
             // Fail closed while a fresh backend subscription snapshot is pending.
             setMemberOfferAccess(false)
-            subscribeEntitlement()
+            if isRunning { subscribeEntitlement() }
         }
     }
 
@@ -121,6 +155,7 @@ final class PartnersCoordinator {
 
     func loadCompany(id: String) {
         if companyLookupState == .loading(id: id) { return }
+        guard isRunning else { return }
         guard let repository else {
             companyLookupState = .failed(id: id)
             return
@@ -148,7 +183,7 @@ final class PartnersCoordinator {
     }
 
     func reloadSavedOffers() {
-        guard canAccessMemberOffers else { return }
+        guard isRunning, canAccessMemberOffers else { return }
         savedTask?.cancel()
         savedOffersTask?.cancel()
         savedTask = nil
@@ -158,7 +193,7 @@ final class PartnersCoordinator {
     }
 
     func setExpandedOffer(_ offerId: String, expanded: Bool) {
-        guard canAccessMemberOffers else {
+        guard isRunning, canAccessMemberOffers else {
             clearSensitiveOfferState()
             return
         }
@@ -173,7 +208,8 @@ final class PartnersCoordinator {
     }
 
     func revealCode(offerId: String) async {
-        guard canAccessMemberOffers,
+        guard isRunning,
+              canAccessMemberOffers,
               expandedOfferId == offerId,
               let repository,
               codeStatus != .loading(offerId: offerId)
@@ -202,7 +238,8 @@ final class PartnersCoordinator {
     }
 
     func toggleSaved(offerId: String) async {
-        guard canAccessMemberOffers,
+        guard isRunning,
+              canAccessMemberOffers,
               let repository,
               let uid,
               !savedActionStatus.isWorking
@@ -282,7 +319,8 @@ final class PartnersCoordinator {
     }
 
     private func subscribeEntitlement() {
-        guard !access.canAccessAdminFeatures,
+        guard isRunning,
+              !access.canAccessAdminFeatures,
               let subscriptionRepository,
               let uid
         else { return }
@@ -305,7 +343,7 @@ final class PartnersCoordinator {
         canAccessMemberOffers = allowed
         if allowed {
             savedState = hasLoadedSavedSnapshot ? .loaded : .loading
-            subscribeSavedOffers()
+            if isRunning { subscribeSavedOffers() }
         } else {
             savedTask?.cancel()
             savedOffersTask?.cancel()
@@ -323,7 +361,7 @@ final class PartnersCoordinator {
     }
 
     private func subscribeSavedOffers() {
-        guard savedTask == nil, let repository, let uid else { return }
+        guard isRunning, savedTask == nil, let repository, let uid else { return }
         let stream = repository.observeSavedOfferIds(uid: uid)
         savedTask = Task { [weak self] in
             for await snapshot in stream {
@@ -393,7 +431,7 @@ final class PartnersCoordinator {
     }
 
     private func subscribeDetail(offerId: String) {
-        guard let repository else { return }
+        guard isRunning, let repository else { return }
         detailTask?.cancel()
         detailState = .loading
         let stream = repository.observeOfferDetail(offerId: offerId)

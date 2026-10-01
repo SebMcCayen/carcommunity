@@ -55,14 +55,15 @@ class FirebasePartnersRepository private constructor(
         val registration =
             firestore
                 .collection(COMPANIES)
-                .document(companyId)
+                .whereEqualTo(FieldPath.documentId(), companyId)
+                .whereEqualTo("status", "active")
+                .limit(1)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
                         trySend(CompanyState.Error)
                         return@addSnapshotListener
                     }
-                    val company =
-                        snapshot?.takeIf { it.getString("status") == "active" }?.toCompany()
+                    val company = snapshot?.documents?.firstOrNull()?.toCompany()
                     trySend(company?.let(CompanyState::Loaded) ?: CompanyState.Missing)
                 }
         awaitClose { registration.remove() }

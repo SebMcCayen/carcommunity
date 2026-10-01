@@ -361,6 +361,7 @@ final class PartnersCoordinatorTests: XCTestCase {
             access: .unrestrictedCommunity
         )
 
+        coordinator.start()
         coordinator.loadCompany(id: company.id)
         await waitUntil { coordinator.company(id: company.id) == company }
 
@@ -388,6 +389,54 @@ final class PartnersCoordinatorTests: XCTestCase {
         await waitUntil { coordinator.companyLookupState == .loaded(id: company.id) }
 
         XCTAssertEqual(repository.observedCompanyIds, [company.id])
+    }
+
+    @MainActor
+    func testStopClearsStateAndAllowsFreshListenersOnRestart() async {
+        let company = PartnerCompany(
+            id: "c1", name: "Partner", category: .workshop, description: nil,
+            website: nil, phone: nil, address: nil, latitude: nil, longitude: nil
+        )
+        let offer = PartnerOffer(
+            id: "o1", companyId: company.id, partnerCompanyName: company.name, title: "Offer",
+            teaserText: "Teaser", offerType: .discountCode
+        )
+        let repository = FakeRepository(
+            companies: [.loaded(companies: [company])],
+            offers: [.loaded(offers: [offer])],
+            saved: [.loaded(ids: [offer.id])]
+        )
+        let coordinator = PartnersCoordinator(
+            repository: repository,
+            subscriptionRepository: nil,
+            uid: "me",
+            access: AccountAccess(role: .admin, activeMember: false, suspended: false, deleted: false)
+        )
+        coordinator.start()
+        await waitUntil {
+            coordinator.state == .loaded([company]) && coordinator.savedOfferIds == [offer.id]
+        }
+        coordinator.loadCompany(id: company.id)
+        coordinator.setExpandedOffer(offer.id, expanded: true)
+
+        coordinator.stop()
+
+        XCTAssertEqual(coordinator.state, .loading)
+        XCTAssertEqual(coordinator.offersState, .loading)
+        XCTAssertTrue(coordinator.offers.isEmpty)
+        XCTAssertTrue(coordinator.savedOfferIds.isEmpty)
+        XCTAssertTrue(coordinator.savedOffers.isEmpty)
+        XCTAssertEqual(coordinator.savedState, .loading)
+        XCTAssertEqual(coordinator.companyLookupState, .idle)
+        XCTAssertNil(coordinator.company(id: company.id))
+        XCTAssertNil(coordinator.expandedOfferId)
+        XCTAssertEqual(coordinator.detailState, .idle)
+        XCTAssertEqual(coordinator.codeStatus, .idle)
+
+        coordinator.start()
+        await waitUntil {
+            coordinator.state == .loaded([company]) && coordinator.savedOfferIds == [offer.id]
+        }
     }
 
     @MainActor

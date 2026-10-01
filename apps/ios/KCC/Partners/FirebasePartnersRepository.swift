@@ -36,21 +36,22 @@ final class FirebasePartnersRepository: PartnersRepository, @unchecked Sendable 
 
     func observeCompany(id: String) -> AsyncStream<PartnerCompanySnapshot> {
         AsyncStream { continuation in
-            let registration = firestore.collection("companies").document(id)
+            let registration = firestore.collection("companies")
+                .whereField(FieldPath.documentID(), isEqualTo: id)
+                .whereField("status", isEqualTo: "active")
+                .limit(to: 1)
                 .addSnapshotListener { snapshot, error in
                     if let error {
                         continuation.yield(.failed(code: Self.errorCode(error)))
                         return
                     }
-                    guard let snapshot, snapshot.exists,
-                          snapshot.data()?["status"] as? String == "active"
-                    else {
+                    guard let document = snapshot?.documents.first else {
                         continuation.yield(.loaded(nil))
                         return
                     }
                     continuation.yield(.loaded(PartnerCompany.fromMap(
-                        id: snapshot.documentID,
-                        map: snapshot.data() ?? [:]
+                        id: document.documentID,
+                        map: document.data()
                     )))
                 }
             let box = PartnerListenerBox(registration: registration)

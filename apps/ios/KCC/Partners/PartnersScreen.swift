@@ -52,7 +52,8 @@ struct PartnersScreen: View {
             }
         }
         .background(.background, ignoresSafeAreaEdges: .all)
-        .task { coordinator.start() }
+        .onAppear { coordinator.start() }
+        .onDisappear { coordinator.stop() }
     }
 
     @ViewBuilder private var directoryContent: some View {
