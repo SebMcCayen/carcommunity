@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -15,6 +17,55 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.shell.AeroPage
+
+enum class PartnersRootSection {
+    DIRECTORY,
+    SAVED,
+}
+
+/** Shared Partners root, including the saved-offers surface available on iOS. */
+@Composable
+fun PartnersRootScreen(
+    state: CompaniesState,
+    offers: List<PartnerOffer>,
+    savedOfferIds: Set<String>,
+    canAccessMemberOffers: Boolean,
+    section: PartnersRootSection,
+    onSectionChange: (PartnersRootSection) -> Unit,
+    onOpenCompany: (String) -> Unit,
+    onOpenSavedOffer: (companyId: String, offerId: String) -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    onRetry: (() -> Unit)? = null,
+) {
+    AeroPage(title = stringResource(R.string.partners_screenTitle), modifier = modifier) {
+        TabRow(selectedTabIndex = section.ordinal) {
+            Tab(
+                selected = section == PartnersRootSection.DIRECTORY,
+                onClick = { onSectionChange(PartnersRootSection.DIRECTORY) },
+                text = { Text(stringResource(R.string.partners_directory)) },
+            )
+            Tab(
+                selected = section == PartnersRootSection.SAVED,
+                onClick = { onSectionChange(PartnersRootSection.SAVED) },
+                text = { Text(stringResource(R.string.partners_saved)) },
+            )
+        }
+
+        when (section) {
+            PartnersRootSection.DIRECTORY ->
+                PartnersDirectoryContent(state, onOpenCompany, onRetry)
+            PartnersRootSection.SAVED ->
+                SavedOffersContent(
+                    offers = offers,
+                    savedOfferIds = savedOfferIds,
+                    companies = (state as? CompaniesState.Loaded)?.companies.orEmpty(),
+                    canAccessMemberOffers = canAccessMemberOffers,
+                    onOpenSavedOffer = onOpenSavedOffer,
+                )
+        }
+    }
+}
 
 /**
  * Partner companies list (Phase 12 slice 17). Stateless: renders [state] and
@@ -30,40 +81,120 @@ fun PartnersListScreen(
     onRetry: (() -> Unit)? = null,
 ) {
     AeroPage(title = stringResource(R.string.partners_screenTitle), modifier = modifier) {
-            when (state) {
-                CompaniesState.Loading ->
+        PartnersDirectoryContent(state, onOpenCompany, onRetry)
+    }
+}
+
+@Composable
+private fun PartnersDirectoryContent(
+    state: CompaniesState,
+    onOpenCompany: (String) -> Unit,
+    onRetry: (() -> Unit)?,
+) {
+    when (state) {
+        CompaniesState.Loading ->
+            Text(
+                text = stringResource(R.string.partners_loading),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+        CompaniesState.Error -> {
+            Text(
+                text = stringResource(R.string.partners_error),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+            if (onRetry != null) {
+                Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.partners_retry))
+                }
+            }
+        }
+
+        is CompaniesState.Loaded ->
+            if (state.companies.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.partners_noPartnersNearby),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                state.companies.forEach { company ->
+                    CompanyCard(company = company, onClick = { onOpenCompany(company.id) })
+                }
+            }
+    }
+}
+
+@Composable
+private fun SavedOffersContent(
+    offers: List<PartnerOffer>,
+    savedOfferIds: Set<String>,
+    companies: List<PartnerCompany>,
+    canAccessMemberOffers: Boolean,
+    onOpenSavedOffer: (companyId: String, offerId: String) -> Unit,
+) {
+    if (!canAccessMemberOffers) {
+        Text(
+            text = stringResource(R.string.partnerOffers_upgradeForMemberOffers),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = stringResource(R.string.partnerOffers_upgradeForMemberOffersHint),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+
+    val savedOffers = Partners.savedOffers(offers, savedOfferIds)
+    if (savedOffers.isEmpty()) {
+        Text(
+            text = stringResource(R.string.partnerOffers_savedEmptyTitle),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = stringResource(R.string.partnerOffers_savedEmptyBody),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+
+    savedOffers.forEach { offer ->
+        val companyName = companies.firstOrNull { it.id == offer.companyId }?.name
+        Card(
+            modifier =
+                Modifier.fillMaxWidth().clickable {
+                    onOpenSavedOffer(offer.companyId, offer.id)
+                },
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = offer.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                companyName?.let {
                     Text(
-                        text = stringResource(R.string.partners_loading),
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-
-                CompaniesState.Error -> {
-                    Text(
-                        text = stringResource(R.string.partners_error),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    if (onRetry != null) {
-                        Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
-                            Text(text = stringResource(R.string.partners_retry))
-                        }
-                    }
                 }
-
-                is CompaniesState.Loaded ->
-                    if (state.companies.isEmpty()) {
-                        Text(
-                            text = stringResource(R.string.partners_noPartnersNearby),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    } else {
-                        state.companies.forEach { company ->
-                            CompanyCard(company = company, onClick = { onOpenCompany(company.id) })
-                        }
-                    }
+                Text(
+                    text = stringResource(offer.offerType.labelRes()),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
             }
+        }
     }
 }
 

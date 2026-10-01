@@ -31,6 +31,7 @@ fun PartnersRoute(
     val scope = rememberCoroutineScope()
     var selectedCompanyId by rememberSaveable { mutableStateOf<String?>(null) }
     var expandedOfferId by rememberSaveable { mutableStateOf<String?>(null) }
+    var rootSection by rememberSaveable { mutableStateOf(PartnersRootSection.DIRECTORY) }
     // Bumped by the "try again" affordance to re-subscribe the companies flow.
     var reloadKey by rememberSaveable { mutableStateOf(0) }
 
@@ -63,11 +64,28 @@ fun PartnersRoute(
         }
     }
 
+    LaunchedEffect(offers, expandedOfferId) {
+        if (expandedOfferId != null && offers.none { it.id == expandedOfferId }) {
+            expandedOfferId = null
+            offerCodeCoordinator?.reset()
+        }
+    }
+
     val companyId = selectedCompanyId
     if (companyId == null) {
-        PartnersListScreen(
+        PartnersRootScreen(
             state = companiesState,
+            offers = offers,
+            savedOfferIds = savedIds,
+            canAccessMemberOffers = canAccessMemberOffers,
+            section = rootSection,
+            onSectionChange = { rootSection = it },
             onOpenCompany = { selectedCompanyId = it },
+            onOpenSavedOffer = { savedCompanyId, offerId ->
+                selectedCompanyId = savedCompanyId
+                expandedOfferId = offerId
+                offerCodeCoordinator?.reset()
+            },
             onRetry = { reloadKey++ },
             onBack = onBack,
         )

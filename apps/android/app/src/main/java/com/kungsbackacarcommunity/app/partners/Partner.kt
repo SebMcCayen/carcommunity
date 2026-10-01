@@ -76,6 +76,10 @@ object Partners {
     fun offersForCompany(offers: List<PartnerOffer>, companyId: String): List<PartnerOffer> =
         offers.filter { it.companyId == companyId }.sortedBy { it.title.lowercase(Locale.ROOT) }
 
+    /** Active offers bookmarked by the member, in stable title order. */
+    fun savedOffers(offers: List<PartnerOffer>, savedIds: Set<String>): List<PartnerOffer> =
+        offers.filter { it.id in savedIds }.sortedBy { it.title.lowercase(Locale.ROOT) }
+
     /**
      * Maximum active companies the Firestore listener subscribes to (newest
      * first by createdAt, though the list itself displays alphabetically by

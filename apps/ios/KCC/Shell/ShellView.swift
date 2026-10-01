@@ -128,6 +128,9 @@ struct ShellView: View {
             .onChange(of: chatFeatureWiringKey) { _, _ in
                 applyChatFeatureGate()
             }
+            .onChange(of: access) { _, access in
+                partnersCoordinator?.updateAccess(access)
+            }
             .onChange(of: featureFlags.isEnabled(.partners)) { _, enabled in
                 if !enabled, routes.current == .partners {
                     partnersCoordinator?.clearSensitiveOfferState()

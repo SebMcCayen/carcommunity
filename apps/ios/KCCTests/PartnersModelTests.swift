@@ -51,6 +51,8 @@ final class PartnersModelTests: XCTestCase {
             "https://example.com/path"
         )
         XCTAssertNil(PartnerExternalDestination.phone("+46;drop"))
+        XCTAssertNil(PartnerExternalDestination.phone("12+34"))
+        XCTAssertNil(PartnerExternalDestination.phone("++46123"))
         XCTAssertEqual(PartnerExternalDestination.phone("+46 (0) 123-45")?.absoluteString, "tel:+46012345")
         XCTAssertNil(PartnerExternalDestination.maps(latitude: 91, longitude: 12))
         XCTAssertNotNil(PartnerExternalDestination.maps(latitude: 57.49, longitude: 12.07))

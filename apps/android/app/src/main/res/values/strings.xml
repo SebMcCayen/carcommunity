@@ -1436,7 +1436,8 @@
     <string name="partnerOffers_offerTypeOther">Erbjudande</string>
     <string name="partnerOffers_savedEmptyTitle">Inga sparade erbjudanden</string>
     <string name="partnerOffers_savedEmptyBody">Spara ett erbjudande hos en företagspartner så visas det här.</string>
-    <string name="partnerOffers_offerCount">%1$d erbjudanden</string>
+    <string name="partnerOffers_offerCountOne">%1$d erbjudande</string>
+    <string name="partnerOffers_offerCountOther">%1$d erbjudanden</string>
     <string name="billboard_sponsoredLabel">Sponsrad placering</string>
     <string name="billboard_advertisingFrom">Marknadsföring</string>
     <string name="billboard_viewCompany">Visa företag</string>

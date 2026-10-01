@@ -7,7 +7,7 @@ final class PartnersCoordinator {
     private let repository: PartnersRepository?
     private let subscriptionRepository: SubscriptionStateRepository?
     private let uid: String?
-    private let access: AccountAccess
+    private var access: AccountAccess
 
     @ObservationIgnored nonisolated(unsafe) private var companiesTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var offersTask: Task<Void, Never>?
@@ -17,6 +17,7 @@ final class PartnersCoordinator {
 
     private(set) var state: PartnersUiState
     private(set) var offers: [PartnerOffer] = []
+    private(set) var offersState: PartnerOffersUiState = .loading
     private(set) var savedOfferIds: Set<String> = []
     private(set) var canAccessMemberOffers: Bool
     private(set) var expandedOfferId: String?
@@ -26,6 +27,7 @@ final class PartnersCoordinator {
 
     private var revealGeneration = 0
     private var savedGeneration = 0
+    private var hasLoadedOffersSnapshot = false
 
     init(
         repository: PartnersRepository?,
@@ -69,8 +71,25 @@ final class PartnersCoordinator {
         companiesTask = nil
         offersTask = nil
         state = .loading
+        offersState = hasLoadedOffersSnapshot ? .loaded : .loading
         subscribeCompanies(repository)
         subscribeOffers(repository)
+    }
+
+    func updateAccess(_ access: AccountAccess) {
+        guard access != self.access else { return }
+        clearSensitiveOfferState()
+        entitlementTask?.cancel()
+        entitlementTask = nil
+        self.access = access
+
+        if access.canAccessAdminFeatures {
+            setMemberOfferAccess(true)
+        } else {
+            // Fail closed while a fresh backend subscription snapshot is pending.
+            setMemberOfferAccess(false)
+            subscribeEntitlement()
+        }
     }
 
     func offers(for companyId: String) -> [PartnerOffer] {
@@ -184,8 +203,19 @@ final class PartnersCoordinator {
             for await snapshot in stream {
                 guard !Task.isCancelled, let self else { return }
                 switch snapshot {
-                case .loaded(let offers): self.offers = offers
-                case .failed: break // retain the last safe teaser snapshot
+                case .loaded(let offers):
+                    self.offers = offers
+                    self.hasLoadedOffersSnapshot = true
+                    self.offersState = .loaded
+                    if let expandedOfferId = self.expandedOfferId,
+                       !offers.contains(where: { $0.id == expandedOfferId }) {
+                        self.clearSensitiveOfferState()
+                    }
+                case .failed:
+                    if !self.hasLoadedOffersSnapshot {
+                        self.offers = []
+                        self.offersState = .failed
+                    }
                 }
             }
         }
@@ -207,6 +237,10 @@ final class PartnersCoordinator {
 
     private func applyEntitlement(_ subscription: StoredSubscription?) {
         let allowed = PartnerOfferAccess.allows(access: access, subscription: subscription)
+        setMemberOfferAccess(allowed)
+    }
+
+    private func setMemberOfferAccess(_ allowed: Bool) {
         guard allowed != canAccessMemberOffers else { return }
         canAccessMemberOffers = allowed
         if allowed {

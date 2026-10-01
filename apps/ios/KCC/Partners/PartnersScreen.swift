@@ -92,12 +92,19 @@ struct PartnersScreen: View {
             }
             .frame(maxWidth: .infinity)
         case .loaded(let companies):
+            if coordinator.offersState == .failed {
+                offersFailureRow
+            }
             ForEach(companies) { company in
                 NavigationLink(value: PartnerDestination(
                     companyId: company.id,
                     focusedOfferId: nil
                 )) {
-                    CompanyRow(company: company, offerCount: coordinator.offers(for: company.id).count)
+                    CompanyRow(
+                        company: company,
+                        offerCount: coordinator.offersState == .loaded
+                            ? coordinator.offers(for: company.id).count : nil
+                    )
                 }
             }
         }
@@ -111,6 +118,14 @@ struct PartnersScreen: View {
                 description: Text("partnerOffers.upgradeForMemberOffersHint")
             )
             .listRowBackground(Color.clear)
+        } else if coordinator.offersState == .failed {
+            offersFailureRow
+        } else if coordinator.offersState == .loading {
+            HStack {
+                Spacer()
+                ProgressView("partners.loading")
+                Spacer()
+            }
         } else if coordinator.savedOffers.isEmpty {
             ContentUnavailableView(
                 "partnerOffers.savedEmptyTitle",
@@ -157,11 +172,20 @@ struct PartnersScreen: View {
         )
         .listRowBackground(Color.clear)
     }
+
+    private var offersFailureRow: some View {
+        VStack(spacing: KccSpacing.s3) {
+            Text("partnerOffers.loadError").foregroundStyle(.secondary)
+            Button("partners.retry") { coordinator.reload() }
+                .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity)
+    }
 }
 
 private struct CompanyRow: View {
     let company: PartnerCompany
-    let offerCount: Int
+    let offerCount: Int?
 
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s1) {
@@ -169,15 +193,16 @@ private struct CompanyRow: View {
             Text(LocalizedStringKey(company.category.localizationKey))
                 .font(.subheadline)
                 .foregroundStyle(.tint)
-            Text(verbatim: String.localizedStringWithFormat(
-                NSLocalizedString(
-                    "partnerOffers.offerCount",
-                    comment: "Number of active offers for a partner"
-                ),
-                Int64(offerCount)
-            ))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if let offerCount {
+                let key = offerCount == 1
+                    ? "partnerOffers.offerCountOne" : "partnerOffers.offerCountOther"
+                Text(verbatim: String.localizedStringWithFormat(
+                    NSLocalizedString(key, comment: "Number of active offers for a partner"),
+                    Int64(offerCount)
+                ))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.vertical, KccSpacing.s1)
     }
@@ -202,12 +227,20 @@ private struct PartnerDetailScreen: View {
             }
 
             Section("partnerOffers.sectionTitle") {
-                let offers = coordinator.offers(for: company.id)
-                if offers.isEmpty {
-                    Text("partnerOffers.noOffers").foregroundStyle(.secondary)
-                } else {
-                    ForEach(offers) { offer in
-                        PartnerOfferCard(coordinator: coordinator, offer: offer)
+                switch coordinator.offersState {
+                case .loading:
+                    ProgressView("partners.loading")
+                case .failed:
+                    Text("partnerOffers.loadError").foregroundStyle(.red)
+                    Button("partners.retry") { coordinator.reload() }
+                case .loaded:
+                    let offers = coordinator.offers(for: company.id)
+                    if offers.isEmpty {
+                        Text("partnerOffers.noOffers").foregroundStyle(.secondary)
+                    } else {
+                        ForEach(offers) { offer in
+                            PartnerOfferCard(coordinator: coordinator, offer: offer)
+                        }
                     }
                 }
             }

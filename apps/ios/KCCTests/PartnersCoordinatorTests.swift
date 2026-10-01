@@ -7,6 +7,7 @@ final class PartnersCoordinatorTests: XCTestCase {
         let companies: [PartnersCollectionSnapshot]
         let offers: [PartnerOffersSnapshot]
         let saved: [SavedOffersSnapshot]
+        var offersContinuation: AsyncStream<PartnerOffersSnapshot>.Continuation?
         var detail = PartnerOfferDetail(description: "Detail", redemptionInstructions: "Use", terms: nil)
         var code: String? = "SAVE20"
         var setSavedCalls: [(String, String, Bool)] = []
@@ -28,7 +29,14 @@ final class PartnersCoordinatorTests: XCTestCase {
         }
 
         func observeActiveOffers() -> AsyncStream<PartnerOffersSnapshot> {
-            AsyncStream { continuation in offers.forEach { continuation.yield($0) } }
+            AsyncStream { continuation in
+                offersContinuation = continuation
+                offers.forEach { continuation.yield($0) }
+            }
+        }
+
+        func sendOffers(_ snapshot: PartnerOffersSnapshot) {
+            offersContinuation?.yield(snapshot)
         }
 
         func observeOfferDetail(offerId: String) -> AsyncStream<PartnerOfferDetailSnapshot> {
@@ -124,6 +132,92 @@ final class PartnersCoordinatorTests: XCTestCase {
         XCTAssertEqual(repository.setSavedCalls.first?.1, "o1")
         XCTAssertEqual(repository.setSavedCalls.first?.2, true)
         XCTAssertFalse(coordinator.savedOfferIds.contains("o1"))
+    }
+
+    @MainActor
+    func testInitialOffersFailureIsNotPresentedAsAnAuthoritativeEmptySnapshot() async {
+        let company = PartnerCompany(
+            id: "c1", name: "Partner", category: .workshop, description: nil,
+            website: nil, phone: nil, address: nil, latitude: nil, longitude: nil
+        )
+        let repository = FakeRepository(
+            companies: [.loaded(companies: [company])],
+            offers: [.failed(code: "unavailable")]
+        )
+        let coordinator = PartnersCoordinator(
+            repository: repository,
+            subscriptionRepository: nil,
+            uid: "me",
+            access: .unrestrictedCommunity
+        )
+
+        coordinator.start()
+        await waitUntil { coordinator.offersState == .failed }
+
+        XCTAssertTrue(coordinator.offers.isEmpty)
+        XCTAssertEqual(coordinator.state, .loaded([company]))
+    }
+
+    @MainActor
+    func testDisappearingExpandedOfferClearsDetailAndRevealedCode() async {
+        let offer = PartnerOffer(
+            id: "o1", companyId: "c1", partnerCompanyName: "Partner", title: "Offer",
+            teaserText: "Teaser", offerType: .discountCode
+        )
+        let repository = FakeRepository(offers: [.loaded(offers: [offer])])
+        let admin = AccountAccess(role: .admin, activeMember: false, suspended: false, deleted: false)
+        let coordinator = PartnersCoordinator(
+            repository: repository,
+            subscriptionRepository: nil,
+            uid: "me",
+            access: admin
+        )
+        coordinator.start()
+        await waitUntil { coordinator.offersState == .loaded }
+        coordinator.setExpandedOffer("o1", expanded: true)
+        await waitUntil {
+            if case .loaded = coordinator.detailState { return true }
+            return false
+        }
+        await coordinator.revealCode(offerId: "o1")
+        XCTAssertEqual(coordinator.codeStatus, .shown(offerId: "o1", code: "SAVE20"))
+
+        repository.sendOffers(.loaded(offers: []))
+        await waitUntil { coordinator.expandedOfferId == nil }
+
+        XCTAssertEqual(coordinator.detailState, .idle)
+        XCTAssertEqual(coordinator.codeStatus, .idle)
+    }
+
+    @MainActor
+    func testAdminRevocationClearsProtectedStateBeforeFreshSubscription() async {
+        let offer = PartnerOffer(
+            id: "o1", companyId: "c1", partnerCompanyName: "Partner", title: "Offer",
+            teaserText: "Teaser", offerType: .discountCode
+        )
+        let repository = FakeRepository(
+            offers: [.loaded(offers: [offer])],
+            saved: [.loaded(ids: ["o1"])]
+        )
+        let admin = AccountAccess(role: .admin, activeMember: false, suspended: false, deleted: false)
+        let coordinator = PartnersCoordinator(
+            repository: repository,
+            subscriptionRepository: FakeSubscriptions([]),
+            uid: "me",
+            access: admin
+        )
+        coordinator.start()
+        await waitUntil { coordinator.savedOfferIds == ["o1"] }
+        coordinator.setExpandedOffer("o1", expanded: true)
+        await coordinator.revealCode(offerId: "o1")
+
+        coordinator.updateAccess(.unrestrictedCommunity)
+
+        XCTAssertFalse(coordinator.canAccessMemberOffers)
+        XCTAssertTrue(coordinator.savedOfferIds.isEmpty)
+        XCTAssertNil(coordinator.expandedOfferId)
+        XCTAssertEqual(coordinator.detailState, .idle)
+        XCTAssertEqual(coordinator.codeStatus, .idle)
     }
 
     @MainActor

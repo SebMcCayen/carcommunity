@@ -63,6 +63,28 @@ class PartnersScreensTest {
     }
 
     @Test
+    fun savedSection_tapOffer_reportsCompanyAndOfferIds() {
+        var opened: Pair<String, String>? = null
+        composeTestRule.setContent {
+            KccTheme {
+                PartnersRootScreen(
+                    state = CompaniesState.Loaded(listOf(company())),
+                    offers = listOf(offer()),
+                    savedOfferIds = setOf("o1"),
+                    canAccessMemberOffers = true,
+                    section = PartnersRootSection.SAVED,
+                    onSectionChange = {},
+                    onOpenCompany = {},
+                    onOpenSavedOffer = { companyId, offerId -> opened = companyId to offerId },
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText("20% off").performScrollTo().performClick()
+        assertEquals("c1" to "o1", opened)
+    }
+
+    @Test
     fun detail_freeUser_seesUpgradePrompt_noSaveOrCode() {
         composeTestRule.setContent {
             KccTheme {

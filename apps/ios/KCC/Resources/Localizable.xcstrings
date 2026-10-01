@@ -22441,7 +22441,24 @@
         }
       }
     },
-    "partnerOffers.offerCount": {
+    "partnerOffers.offerCountOne": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld erbjudande"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld offer"
+          }
+        }
+      }
+    },
+    "partnerOffers.offerCountOther": {
       "extractionState": "manual",
       "localizations": {
         "sv": {

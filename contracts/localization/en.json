@@ -1539,7 +1539,8 @@
     "offerTypeOther": "Offer",
     "savedEmptyTitle": "No saved offers",
     "savedEmptyBody": "Save an offer from a business partner and it will appear here.",
-    "offerCount": "%1$d offers"
+    "offerCountOne": "%1$d offer",
+    "offerCountOther": "%1$d offers"
   },
   "billboard": {
     "sponsoredLabel": "Sponsored placement",

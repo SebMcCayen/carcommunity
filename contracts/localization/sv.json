@@ -1539,7 +1539,8 @@
     "offerTypeOther": "Erbjudande",
     "savedEmptyTitle": "Inga sparade erbjudanden",
     "savedEmptyBody": "Spara ett erbjudande hos en företagspartner så visas det här.",
-    "offerCount": "%1$d erbjudanden"
+    "offerCountOne": "%1$d erbjudande",
+    "offerCountOther": "%1$d erbjudanden"
   },
   "billboard": {
     "sponsoredLabel": "Sponsrad placering",

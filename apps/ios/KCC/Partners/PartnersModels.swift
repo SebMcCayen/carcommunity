@@ -136,6 +136,10 @@ enum PartnersUiState: Equatable, Sendable {
     case unavailable, loading, empty, loaded([PartnerCompany]), failed
 }
 
+enum PartnerOffersUiState: Equatable, Sendable {
+    case loading, loaded, failed
+}
+
 enum OfferDetailUiState: Equatable, Sendable {
     case idle, loading, loaded(PartnerOfferDetail), missing, failed
 }
@@ -197,7 +201,9 @@ enum PartnerExternalDestination {
     static func phone(_ rawValue: String?) -> URL? {
         guard let rawValue = rawValue?.trimmedNonempty else { return nil }
         let allowed = CharacterSet(charactersIn: "+0123456789 ()-.")
-        guard rawValue.unicodeScalars.allSatisfy(allowed.contains) else { return nil }
+        guard rawValue.unicodeScalars.allSatisfy(allowed.contains),
+              !rawValue.dropFirst().contains("+")
+        else { return nil }
         let hasLeadingPlus = rawValue.hasPrefix("+")
         let digits = rawValue.filter(\.isNumber)
         guard digits.count >= 3 else { return nil }

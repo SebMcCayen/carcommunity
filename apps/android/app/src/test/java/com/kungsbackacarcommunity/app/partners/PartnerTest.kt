@@ -34,6 +34,18 @@ class PartnerTest {
     }
 
     @Test
+    fun `savedOffers intersects active offers and sorts by title`() {
+        val offers =
+            listOf(
+                offer("o1", "c1", "Zebra"),
+                offer("o2", "c2", "Alpha"),
+                offer("o3", "c1", "apple"),
+            )
+        val result = Partners.savedOffers(offers, setOf("o1", "o3", "missing")).map { it.id }
+        assertEquals(listOf("o3", "o1"), result)
+    }
+
+    @Test
     fun `active companies and offers query limits are bounded`() {
         assertEquals(150L, Partners.ACTIVE_COMPANIES_QUERY_LIMIT)
         assertEquals(200L, Partners.ACTIVE_OFFERS_QUERY_LIMIT)
