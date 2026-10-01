@@ -1366,6 +1366,7 @@
     <string name="partners_websiteButton">Besök webbplats</string>
     <string name="partners_noPartnersNearby">Inga företagspartner hittades i området.</string>
     <string name="partners_loading">Laddar...</string>
+    <string name="partners_loadMore">Visa fler</string>
     <string name="partners_error">Kunde inte hämta företagspartner.</string>
     <string name="partners_retry">Försök igen</string>
     <string name="partners_applicationTitle">För företag</string>
