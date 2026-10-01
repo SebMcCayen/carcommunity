@@ -119,10 +119,6 @@ final class PartnersCoordinator {
     }
 
     func loadCompany(id: String) {
-        if company(id: id) != nil {
-            companyLookupState = .loaded(id: id)
-            return
-        }
         if companyLookupState == .loading(id: id) { return }
         guard let repository else {
             companyLookupState = .failed(id: id)

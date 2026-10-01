@@ -14,6 +14,7 @@ final class PartnersCoordinatorTests: XCTestCase {
         var detail = PartnerOfferDetail(description: "Detail", redemptionInstructions: "Use", terms: nil)
         var code: String? = "SAVE20"
         var companiesById: [String: PartnerCompany] = [:]
+        var observedCompanyIds: [String] = []
         var setSavedCalls: [(String, String, Bool)] = []
 
         init(
@@ -35,7 +36,8 @@ final class PartnersCoordinatorTests: XCTestCase {
         }
 
         func observeCompany(id: String) -> AsyncStream<PartnerCompanySnapshot> {
-            AsyncStream { continuation in continuation.yield(.loaded(companiesById[id])) }
+            observedCompanyIds.append(id)
+            return AsyncStream { continuation in continuation.yield(.loaded(companiesById[id])) }
         }
 
         func observeActiveOffers() -> AsyncStream<PartnerOffersSnapshot> {
@@ -301,6 +303,29 @@ final class PartnersCoordinatorTests: XCTestCase {
         await waitUntil { coordinator.company(id: company.id) == company }
 
         XCTAssertEqual(coordinator.companyLookupState, .loaded(id: company.id))
+    }
+
+    @MainActor
+    func testOpenCompanySubscribesByIdEvenWhenPresentInDirectory() async {
+        let company = PartnerCompany(
+            id: "c1", name: "Partner", category: .workshop, description: nil,
+            website: nil, phone: nil, address: nil, latitude: nil, longitude: nil
+        )
+        let repository = FakeRepository(companies: [.loaded(companies: [company])])
+        repository.companiesById[company.id] = company
+        let coordinator = PartnersCoordinator(
+            repository: repository,
+            subscriptionRepository: nil,
+            uid: "me",
+            access: .unrestrictedCommunity
+        )
+        coordinator.start()
+        await waitUntil { coordinator.state == .loaded([company]) }
+
+        coordinator.loadCompany(id: company.id)
+        await waitUntil { coordinator.companyLookupState == .loaded(id: company.id) }
+
+        XCTAssertEqual(repository.observedCompanyIds, [company.id])
     }
 
     @MainActor
