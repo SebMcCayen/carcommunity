@@ -372,6 +372,11 @@ final class PartnersCoordinator {
                     self.savedOffers = offers.sorted {
                         $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
                     }
+                    if let expandedOfferId = self.expandedOfferId,
+                       !self.offers.contains(where: { $0.id == expandedOfferId }),
+                       !self.savedOffers.contains(where: { $0.id == expandedOfferId }) {
+                        self.clearSensitiveOfferState()
+                    }
                     self.hasLoadedSavedSnapshot = true
                     self.savedState = .loaded
                 case .failed:

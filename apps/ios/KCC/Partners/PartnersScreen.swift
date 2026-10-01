@@ -260,19 +260,21 @@ private struct PartnerDetailScreen: View {
             }
 
             Section("partnerOffers.sectionTitle") {
-                switch coordinator.offersState {
-                case .loading:
-                    ProgressView("partners.loading")
-                case .failed:
-                    Text("partnerOffers.loadError").foregroundStyle(.red)
-                    Button("partners.retry") { coordinator.reload() }
-                case .loaded:
-                    let offers = coordinator.offers(for: company.id)
-                    if offers.isEmpty && coordinator.offersAreExhaustive {
-                        Text("partnerOffers.noOffers").foregroundStyle(.secondary)
-                    } else {
-                        ForEach(offers) { offer in
-                            PartnerOfferCard(coordinator: coordinator, offer: offer)
+                let offers = coordinator.offers(for: company.id)
+                if !offers.isEmpty {
+                    ForEach(offers) { offer in
+                        PartnerOfferCard(coordinator: coordinator, offer: offer)
+                    }
+                } else {
+                    switch coordinator.offersState {
+                    case .loading:
+                        ProgressView("partners.loading")
+                    case .failed:
+                        Text("partnerOffers.loadError").foregroundStyle(.red)
+                        Button("partners.retry") { coordinator.reload() }
+                    case .loaded:
+                        if coordinator.offersAreExhaustive {
+                            Text("partnerOffers.noOffers").foregroundStyle(.secondary)
                         }
                     }
                 }

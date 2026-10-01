@@ -42,7 +42,7 @@ import com.kungsbackacarcommunity.app.navigation.LatLng
 fun PartnerDetailScreen(
     companyState: CompanyState,
     offers: List<PartnerOffer>,
-    offersAreExhaustive: Boolean = true,
+    offersState: OffersState = OffersState.Loaded(emptyList()),
     savedOfferIds: Set<String>,
     canAccessMemberOffers: Boolean,
     expandedOfferId: String?,
@@ -53,6 +53,7 @@ fun PartnerDetailScreen(
     onToggleSave: (String, Boolean) -> Unit,
     onBack: () -> Unit,
     onRetryCompany: () -> Unit = {},
+    onRetryOffers: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -164,13 +165,7 @@ fun PartnerDetailScreen(
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground,
             )
-            if (offers.isEmpty() && offersAreExhaustive) {
-                Text(
-                    text = stringResource(R.string.partnerOffers_noOffers),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
+            if (offers.isNotEmpty()) {
                 offers.forEach { offer ->
                     OfferCard(
                         offer = offer,
@@ -183,6 +178,33 @@ fun PartnerDetailScreen(
                         onShowCode = { onShowCode(offer.id) },
                         onToggleSave = { onToggleSave(offer.id, !savedOfferIds.contains(offer.id)) },
                     )
+                }
+            } else {
+                when (offersState) {
+                    OffersState.Loading ->
+                        Text(
+                            text = stringResource(R.string.partners_loading),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    OffersState.Error -> {
+                        Text(
+                            text = stringResource(R.string.partnerOffers_loadError),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        Button(onClick = onRetryOffers, modifier = Modifier.fillMaxWidth()) {
+                            Text(stringResource(R.string.partners_retry))
+                        }
+                    }
+                    is OffersState.Loaded ->
+                        if (offersState.isExhaustive) {
+                            Text(
+                                text = stringResource(R.string.partnerOffers_noOffers),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                 }
             }
     }

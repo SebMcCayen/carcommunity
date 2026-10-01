@@ -9,6 +9,7 @@ final class PartnersCoordinatorTests: XCTestCase {
         let saved: [SavedOffersSnapshot]
         let directOffers: [PartnerOffer]?
         var offersContinuation: AsyncStream<PartnerOffersSnapshot>.Continuation?
+        var directOffersContinuation: AsyncStream<PartnerOffersSnapshot>.Continuation?
         var savedContinuation: AsyncStream<SavedOffersSnapshot>.Continuation?
         var directSnapshotsByIds: [Set<String>: [PartnerOffersSnapshot]] = [:]
         var detail = PartnerOfferDetail(description: "Detail", redemptionInstructions: "Use", terms: nil)
@@ -52,15 +53,25 @@ final class PartnersCoordinatorTests: XCTestCase {
         }
 
         func observeOffers(ids: Set<String>) -> AsyncStream<PartnerOffersSnapshot> {
-            if let snapshots = directSnapshotsByIds[ids] {
-                return AsyncStream { continuation in snapshots.forEach { continuation.yield($0) } }
+            let snapshotsToYield: [PartnerOffersSnapshot]
+            if let configuredSnapshots = directSnapshotsByIds[ids] {
+                snapshotsToYield = configuredSnapshots
+            } else {
+                let fallback = offers.compactMap { snapshot -> [PartnerOffer]? in
+                    if case .loaded(let values, _) = snapshot { return values }
+                    return nil
+                }.flatMap { $0 }
+                let resolved = (directOffers ?? fallback).filter { ids.contains($0.id) }
+                snapshotsToYield = [.loaded(offers: resolved)]
             }
-            let fallback = offers.compactMap { snapshot -> [PartnerOffer]? in
-                if case .loaded(let values, _) = snapshot { return values }
-                return nil
-            }.flatMap { $0 }
-            let resolved = (directOffers ?? fallback).filter { ids.contains($0.id) }
-            return AsyncStream { continuation in continuation.yield(.loaded(offers: resolved)) }
+            return AsyncStream { continuation in
+                directOffersContinuation = continuation
+                snapshotsToYield.forEach { continuation.yield($0) }
+            }
+        }
+
+        func sendDirectOffers(_ snapshot: PartnerOffersSnapshot) {
+            directOffersContinuation?.yield(snapshot)
         }
 
         func observeOfferDetail(offerId: String) -> AsyncStream<PartnerOfferDetailSnapshot> {
@@ -230,6 +241,37 @@ final class PartnersCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.codeStatus, .shown(offerId: "o1", code: "SAVE20"))
 
         repository.sendOffers(.loaded(offers: []))
+        await waitUntil { coordinator.expandedOfferId == nil }
+
+        XCTAssertEqual(coordinator.detailState, .idle)
+        XCTAssertEqual(coordinator.codeStatus, .idle)
+    }
+
+    @MainActor
+    func testInactiveSavedOfferClearsDetailAndRevealedCode() async {
+        let offer = PartnerOffer(
+            id: "o1", companyId: "c1", partnerCompanyName: "Partner", title: "Offer",
+            teaserText: "Teaser", offerType: .discountCode
+        )
+        let repository = FakeRepository(
+            offers: [.loaded(offers: [offer])],
+            saved: [.loaded(ids: [offer.id])],
+            directOffers: [offer]
+        )
+        let coordinator = PartnersCoordinator(
+            repository: repository,
+            subscriptionRepository: nil,
+            uid: "me",
+            access: AccountAccess(role: .admin, activeMember: false, suspended: false, deleted: false)
+        )
+        coordinator.start()
+        await waitUntil { coordinator.savedOffers == [offer] && coordinator.offers == [offer] }
+        coordinator.setExpandedOffer(offer.id, expanded: true)
+        await coordinator.revealCode(offerId: offer.id)
+
+        repository.sendOffers(.loaded(offers: []))
+        await waitUntil { coordinator.offers.isEmpty }
+        repository.sendDirectOffers(.loaded(offers: []))
         await waitUntil { coordinator.expandedOfferId == nil }
 
         XCTAssertEqual(coordinator.detailState, .idle)

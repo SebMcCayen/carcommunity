@@ -130,7 +130,7 @@ class PartnersScreensTest {
                 PartnerDetailScreen(
                     companyState = CompanyState.Loaded(company()),
                     offers = emptyList(),
-                    offersAreExhaustive = false,
+                    offersState = OffersState.Loaded(emptyList(), isExhaustive = false),
                     savedOfferIds = emptySet(),
                     canAccessMemberOffers = true,
                     expandedOfferId = null,
@@ -144,6 +144,33 @@ class PartnersScreensTest {
             }
         }
         composeTestRule.onNodeWithText(str(R.string.partnerOffers_noOffers)).assertDoesNotExist()
+    }
+
+    @Test
+    fun detail_offerFailure_showsRetry() {
+        var retries = 0
+        composeTestRule.setContent {
+            KccTheme {
+                PartnerDetailScreen(
+                    companyState = CompanyState.Loaded(company()),
+                    offers = emptyList(),
+                    offersState = OffersState.Error,
+                    savedOfferIds = emptySet(),
+                    canAccessMemberOffers = true,
+                    expandedOfferId = null,
+                    expandedOfferDetail = null,
+                    codeStatus = OfferCodeStatus.Idle,
+                    onToggleExpand = {},
+                    onShowCode = {},
+                    onToggleSave = { _, _ -> },
+                    onBack = {},
+                    onRetryOffers = { retries++ },
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.partnerOffers_loadError)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.partners_retry)).performClick()
+        assertEquals(1, retries)
     }
 
     @Test

@@ -144,7 +144,7 @@ fun PartnersRoute(
     PartnerDetailScreen(
         companyState = companyState,
         offers = companyOffers,
-        offersAreExhaustive = (offersState as? OffersState.Loaded)?.isExhaustive == true,
+        offersState = offersState,
         savedOfferIds = savedIds,
         canAccessMemberOffers = canAccessMemberOffers,
         expandedOfferId = expandedOfferId,
@@ -175,5 +175,6 @@ fun PartnersRoute(
             offerCodeCoordinator?.reset()
         },
         onRetryCompany = { companyReloadKey++ },
+        onRetryOffers = { reloadKey++ },
     )
 }
