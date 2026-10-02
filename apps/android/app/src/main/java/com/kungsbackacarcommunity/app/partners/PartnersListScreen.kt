@@ -17,6 +17,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.shell.AeroPage
+import java.util.Locale
 
 enum class PartnersRootSection {
     DIRECTORY,
@@ -231,7 +232,7 @@ private fun SavedOffersContent(
         }
         is OffersState.Loaded -> Unit
     }
-    val savedOffers = savedOffersState.offers.sortedBy { it.title.lowercase() }
+    val savedOffers = savedOffersState.offers.sortedBy { it.title.lowercase(Locale.ROOT) }
     if (!savedOffersAreExhaustive) {
         Text(
             text = stringResource(R.string.partnerOffers_savedLimitedBody),

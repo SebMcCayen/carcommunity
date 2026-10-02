@@ -363,6 +363,17 @@ activating the company does not reactivate offers. To stay within Firestore's
 offers fails with `resource-exhausted` and makes no changes; administrators must
 pause offers first.
 
+Deployment requires the idempotent `functions/scripts/backfill-partner-offer-status.mjs`
+reconciliation before clients rely on status-only offer queries. Run it first as
+a dry run, then with `--apply`, and repeat the dry run until it reports zero
+offers to update:
+
+```bash
+cd functions
+npm run backfill:partner-offer-status -- --project <projectId>
+npm run backfill:partner-offer-status -- --project <projectId> --apply
+```
+
 ---
 
 ### `offers` — partner offers, three-tier privacy (Phase 9i)
