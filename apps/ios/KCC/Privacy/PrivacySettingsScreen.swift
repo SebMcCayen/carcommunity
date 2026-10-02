@@ -9,6 +9,7 @@ struct PrivacySettingsScreen: View {
         content
             .navigationTitle(Text("privacySettings.title"))
             .task { coordinator.start() }
+            .onDisappear { coordinator.stop() }
     }
 
     @ViewBuilder
@@ -56,22 +57,25 @@ struct PrivacySettingsScreen: View {
             Toggle(
                 "privacySettings.partnerStatsBody",
                 isOn: Binding(
-                    get: { coordinator.draft?.partnerStatsOptIn ?? true },
-                    set: coordinator.setPendingPartnerStatsOptIn
+                    get: { coordinator.draft?.partnerStatsOptIn ?? false },
+                    set: { value in coordinator.setPendingPartnerStatsOptIn(value) }
                 )
             )
             .disabled(!coordinator.canEdit || coordinator.partnerSaveStatus == .saving)
 
-            saveButton(status: coordinator.partnerSaveStatus) {
-                await coordinator.savePartnerStats()
+            Button {
+                Task { await coordinator.savePartnerStats() }
+            } label: {
+                saveButtonLabel(status: coordinator.partnerSaveStatus)
             }
+            .disabled(!coordinator.canEdit || coordinator.partnerSaveStatus == .saving)
+            .accessibilityIdentifier("privacySettings.partnerStats.save")
         } header: {
             Text("privacySettings.partnerStatsTitle")
         } footer: {
             VStack(alignment: .leading, spacing: KccSpacing.s2) {
                 Text("privacySettings.partnerStatsExplainer")
                 Text("privacySettings.partnerStatsNotice")
-                Text("privacySettings.partnerStatsNote")
                 statusText(coordinator.partnerSaveStatus)
             }
         }
@@ -83,14 +87,18 @@ struct PrivacySettingsScreen: View {
                 "privacySettings.leaderboardBody",
                 isOn: Binding(
                     get: { coordinator.draft?.leaderboardShown ?? true },
-                    set: coordinator.setPendingLeaderboardShown
+                    set: { value in coordinator.setPendingLeaderboardShown(value) }
                 )
             )
             .disabled(!coordinator.canEdit || coordinator.leaderboardSaveStatus == .saving)
 
-            saveButton(status: coordinator.leaderboardSaveStatus) {
-                await coordinator.saveLeaderboardVisibility()
+            Button {
+                Task { await coordinator.saveLeaderboardVisibility() }
+            } label: {
+                saveButtonLabel(status: coordinator.leaderboardSaveStatus)
             }
+            .disabled(!coordinator.canEdit || coordinator.leaderboardSaveStatus == .saving)
+            .accessibilityIdentifier("privacySettings.leaderboard.save")
         } header: {
             Text("privacySettings.leaderboardTitle")
         } footer: {
@@ -101,21 +109,13 @@ struct PrivacySettingsScreen: View {
         }
     }
 
-    private func saveButton(
-        status: PrivacySettingsSaveStatus,
-        action: @escaping @MainActor () async -> Void
-    ) -> some View {
-        Button {
-            Task { await action() }
-        } label: {
-            if status == .saving {
-                ProgressView().frame(maxWidth: .infinity)
-            } else {
-                Text("privacySettings.saveButton").frame(maxWidth: .infinity)
-            }
+    @ViewBuilder
+    private func saveButtonLabel(status: PrivacySettingsSaveStatus) -> some View {
+        if status == .saving {
+            ProgressView().frame(maxWidth: .infinity)
+        } else {
+            Text("privacySettings.saveButton").frame(maxWidth: .infinity)
         }
-        .disabled(!coordinator.canEdit || status == .saving)
-        .accessibilityIdentifier("privacySettings.save")
     }
 
     @ViewBuilder

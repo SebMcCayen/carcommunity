@@ -131,10 +131,18 @@ struct ShellView: View {
             }
             .onChange(of: access) { _, access in
                 partnersCoordinator?.updateAccess(access)
+                if !partnerStatsEntryAvailable, routes.current == .partnerStats {
+                    routes = routes.poppingOne()
+                }
             }
             .onChange(of: featureFlags.isEnabled(.partners)) { _, enabled in
                 if !enabled, routes.current == .partners {
                     partnersCoordinator?.clearSensitiveOfferState()
+                    routes = routes.poppingOne()
+                }
+            }
+            .onChange(of: featureFlags.isEnabled(.partnerStats)) { _, enabled in
+                if !enabled, routes.current == .partnerStats {
                     routes = routes.poppingOne()
                 }
             }
@@ -605,10 +613,12 @@ struct ShellView: View {
                     Label("shell.friendsTitle", systemImage: "person.2")
                 }
             }
-            Button {
-                routes = routes.opening(.partnerStats)
-            } label: {
-                Label("shell.morePartnerStats", systemImage: "hand.raised")
+            if partnerStatsEntryAvailable {
+                Button {
+                    routes = routes.opening(.partnerStats)
+                } label: {
+                    Label("shell.morePartnerStats", systemImage: "hand.raised")
+                }
             }
         } label: {
             Label("shell.moreProfile", systemImage: "person.circle")
@@ -753,7 +763,8 @@ struct ShellView: View {
                 NotificationSettingsScreen(coordinator: notificationSettingsCoordinator)
             }
         case .partnerStats:
-            if let privacySettingsCoordinator {
+            if partnerStatsEntryAvailable, let privacySettingsCoordinator
+            {
                 routeNavigation {
                     PrivacySettingsScreen(coordinator: privacySettingsCoordinator)
                 }
@@ -1688,6 +1699,14 @@ struct ShellView: View {
 
     private var liveLocationFeatureEnabled: Bool {
         crownHuntComposition?.flags.liveLocationEnabled == true
+    }
+
+    private var partnerStatsEntryAvailable: Bool {
+        ShellNavigation.partnerStatsEntryAvailable(
+            flags: featureFlags,
+            access: access,
+            repositoryAvailable: privacySettingsCoordinator?.isAvailable == true
+        )
     }
 
     private var convoyAwarenessTargetConvoy: ConvoyItem? {

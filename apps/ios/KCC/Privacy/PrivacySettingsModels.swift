@@ -1,15 +1,14 @@
 import Foundation
 
 /// The two owner-controlled privacy choices stored on `userPrivate/{uid}`.
-/// Both are opt-out settings in the shared contract: an absent field means
-/// partner-statistics contribution is enabled and leaderboard visibility is
-/// shown.
+/// Partner statistics requires explicit opt-in; an absent field is disabled.
+/// Leaderboard visibility remains opt-out, so an absent field is shown.
 struct PrivacySettingsChoices: Equatable, Sendable {
     let partnerStatsOptIn: Bool
     let leaderboardShown: Bool
 
     static let contractDefaults = PrivacySettingsChoices(
-        partnerStatsOptIn: true,
+        partnerStatsOptIn: false,
         leaderboardShown: true
     )
 
@@ -24,7 +23,7 @@ struct PrivacySettingsChoices: Equatable, Sendable {
             guard let value = data["anonymousPartnerStatsOptIn"] as? Bool else { return nil }
             partner = value
         } else {
-            partner = true
+            partner = false
         }
 
         let leaderboardOptOut: Bool

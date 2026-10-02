@@ -66,6 +66,7 @@ final class PrivacySettingsCoordinatorTests: XCTestCase {
 
     func testDecoderUsesOptOutDefaultsOnlyForMissingFields() {
         XCTAssertEqual(PrivacySettingsChoices.decode(nil), .contractDefaults)
+        XCTAssertFalse(PrivacySettingsChoices.contractDefaults.partnerStatsOptIn)
         XCTAssertEqual(
             PrivacySettingsChoices.decode([
                 "anonymousPartnerStatsOptIn": false,
@@ -161,7 +162,7 @@ final class PrivacySettingsCoordinatorTests: XCTestCase {
         repository.emit(.loaded(later))
         await wait(coordinator) { $0.state == .loaded(later) }
         XCTAssertEqual(coordinator.draft?.partnerStatsOptIn, false)
-        XCTAssertEqual(coordinator.draft?.leaderboardShown, true)
+        XCTAssertEqual(coordinator.draft?.leaderboardShown, false)
     }
 
     @MainActor
@@ -191,6 +192,26 @@ final class PrivacySettingsCoordinatorTests: XCTestCase {
         coordinator.reload()
         await wait(coordinator) { $0.state == .loaded(refreshed) }
         await wait(coordinator) { _ in repository.terminations == 1 }
+        XCTAssertEqual(coordinator.draft, PrivacySettingsDraft(refreshed))
+    }
+
+    @MainActor
+    func testStopDetachesListenerAndReentryUsesFreshServerChoices() async {
+        let repository = FakeRepository()
+        repository.script([.loaded(.contractDefaults)])
+        let coordinator = PrivacySettingsCoordinator(repository: repository, uid: "me")
+        coordinator.start()
+        await wait(coordinator) { $0.state == .loaded(.contractDefaults) }
+
+        coordinator.stop()
+        await wait(coordinator) { _ in repository.terminations == 1 }
+        XCTAssertEqual(coordinator.state, .loading)
+        XCTAssertNil(coordinator.draft)
+
+        let refreshed = PrivacySettingsChoices(partnerStatsOptIn: false, leaderboardShown: false)
+        repository.script([.loaded(refreshed)])
+        coordinator.start()
+        await wait(coordinator) { $0.state == .loaded(refreshed) }
         XCTAssertEqual(coordinator.draft, PrivacySettingsDraft(refreshed))
     }
 }

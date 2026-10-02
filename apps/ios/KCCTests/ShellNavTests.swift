@@ -143,6 +143,34 @@ final class ShellNavTests: XCTestCase {
         XCTAssertEqual(popped.parents, [])
     }
 
+    func testPartnerStatsEntryFollowsSharedFeatureFlag() {
+        XCTAssertTrue(ShellNavigation.partnerStatsEntryAvailable(
+            flags: .contractDefaults,
+            access: .unrestrictedCommunity,
+            repositoryAvailable: true
+        ))
+        XCTAssertFalse(ShellNavigation.partnerStatsEntryAvailable(
+            flags: FeatureFlags.resolve(from: ["partnerStats": false]),
+            access: .unrestrictedCommunity,
+            repositoryAvailable: true
+        ))
+        XCTAssertFalse(ShellNavigation.partnerStatsEntryAvailable(
+            flags: .contractDefaults,
+            access: AccountAccess(
+                role: .user,
+                activeMember: false,
+                suspended: true,
+                deleted: false
+            ),
+            repositoryAvailable: true
+        ))
+        XCTAssertFalse(ShellNavigation.partnerStatsEntryAvailable(
+            flags: .contractDefaults,
+            access: .unrestrictedCommunity,
+            repositoryAvailable: false
+        ))
+    }
+
     func testPoppingATopLevelRouteClosesTheStack() {
         // Back from the profile (opened from the map home) leaves nothing
         // open — the shell falls through to its tab Back rules.
