@@ -34,12 +34,14 @@ fun PartnersRoute(
     var selectedCompanyId by rememberSaveable { mutableStateOf<String?>(null) }
     var expandedOfferId by rememberSaveable { mutableStateOf<String?>(null) }
     var rootSection by rememberSaveable { mutableStateOf(PartnersRootSection.DIRECTORY) }
+    val companiesPageBoundary = remember { PartnerPageBoundary() }
     // Bumped by the "try again" affordance to re-subscribe the companies flow.
     var reloadKey by rememberSaveable { mutableStateOf(0) }
     var savedReloadKey by rememberSaveable { mutableStateOf(0) }
     var companyReloadKey by rememberSaveable { mutableStateOf(0) }
     var pagedCompanies by remember { mutableStateOf(emptyList<PartnerCompany>()) }
     var companiesCursor by remember { mutableStateOf<PartnerPageCursor?>(null) }
+    var companiesPageGeneration by remember { mutableStateOf(0) }
     var isLoadingMoreCompanies by remember { mutableStateOf(false) }
     var didFailLoadingMoreCompanies by remember { mutableStateOf(false) }
 
@@ -49,13 +51,24 @@ fun PartnersRoute(
     LaunchedEffect(reloadKey) {
         pagedCompanies = emptyList()
         companiesCursor = null
+        companiesPageBoundary.reset()
+        companiesPageGeneration++
         isLoadingMoreCompanies = false
         didFailLoadingMoreCompanies = false
     }
     LaunchedEffect(companiesState) {
         val loaded = companiesState as? CompaniesState.Loaded ?: return@LaunchedEffect
-        if (pagedCompanies.isEmpty()) companiesCursor = loaded.nextCursor
-        didFailLoadingMoreCompanies = false
+        val boundaryChanged = companiesPageBoundary.update(loaded.nextCursor)
+        if (boundaryChanged) {
+            pagedCompanies = emptyList()
+            companiesCursor = loaded.nextCursor
+            companiesPageGeneration++
+            isLoadingMoreCompanies = false
+            didFailLoadingMoreCompanies = false
+        } else {
+            if (pagedCompanies.isEmpty()) companiesCursor = loaded.nextCursor
+            didFailLoadingMoreCompanies = false
+        }
     }
     val displayedCompaniesState =
         (companiesState as? CompaniesState.Loaded)?.let { live ->
@@ -139,22 +152,27 @@ fun PartnersRoute(
             onLoadMoreCompanies = {
                 val cursor = companiesCursor
                 val generation = reloadKey
+                val pageGeneration = companiesPageGeneration
                 if (cursor != null && !isLoadingMoreCompanies) {
                     scope.launch {
                         isLoadingMoreCompanies = true
                         didFailLoadingMoreCompanies = false
                         try {
                             val page = repository.fetchActiveCompanies(cursor)
-                            if (generation == reloadKey) {
+                            if (generation == reloadKey && pageGeneration == companiesPageGeneration) {
                                 pagedCompanies = (pagedCompanies + page.companies).distinctBy { it.id }
                                 companiesCursor = page.nextCursor
                             }
                         } catch (e: CancellationException) {
                             throw e
                         } catch (_: Exception) {
-                            if (generation == reloadKey) didFailLoadingMoreCompanies = true
+                            if (generation == reloadKey && pageGeneration == companiesPageGeneration) {
+                                didFailLoadingMoreCompanies = true
+                            }
                         } finally {
-                            if (generation == reloadKey) isLoadingMoreCompanies = false
+                            if (generation == reloadKey && pageGeneration == companiesPageGeneration) {
+                                isLoadingMoreCompanies = false
+                            }
                         }
                     }
                 }
@@ -183,12 +201,23 @@ fun PartnersRoute(
             .collectAsState(initial = OffersState.Loading)
     var pagedCompanyOffers by remember(companyId) { mutableStateOf(emptyList<PartnerOffer>()) }
     var companyOffersCursor by remember(companyId) { mutableStateOf<PartnerPageCursor?>(null) }
+    var companyOffersPageGeneration by remember(companyId) { mutableStateOf(0) }
     var isLoadingMoreCompanyOffers by remember(companyId) { mutableStateOf(false) }
     var didFailLoadingMoreCompanyOffers by remember(companyId) { mutableStateOf(false) }
+    val companyOffersPageBoundary = remember(companyId) { PartnerPageBoundary() }
     LaunchedEffect(companyOffersState) {
         val loaded = companyOffersState as? OffersState.Loaded ?: return@LaunchedEffect
-        if (pagedCompanyOffers.isEmpty()) companyOffersCursor = loaded.nextCursor
-        didFailLoadingMoreCompanyOffers = false
+        val boundaryChanged = companyOffersPageBoundary.update(loaded.nextCursor)
+        if (boundaryChanged) {
+            pagedCompanyOffers = emptyList()
+            companyOffersCursor = loaded.nextCursor
+            companyOffersPageGeneration++
+            isLoadingMoreCompanyOffers = false
+            didFailLoadingMoreCompanyOffers = false
+        } else {
+            if (pagedCompanyOffers.isEmpty()) companyOffersCursor = loaded.nextCursor
+            didFailLoadingMoreCompanyOffers = false
+        }
     }
     val companyOffers =
         (
@@ -270,22 +299,33 @@ fun PartnersRoute(
         onLoadMoreOffers = {
             val cursor = companyOffersCursor
             val requestedCompanyId = companyId
+            val pageGeneration = companyOffersPageGeneration
             if (cursor != null && !isLoadingMoreCompanyOffers) {
                 scope.launch {
                     isLoadingMoreCompanyOffers = true
                     didFailLoadingMoreCompanyOffers = false
                     try {
                         val page = repository.fetchActiveOffers(companyId, cursor)
-                        if (selectedCompanyId == requestedCompanyId) {
+                        if (selectedCompanyId == requestedCompanyId &&
+                            pageGeneration == companyOffersPageGeneration
+                        ) {
                             pagedCompanyOffers = (pagedCompanyOffers + page.offers).distinctBy { it.id }
                             companyOffersCursor = page.nextCursor
                         }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {
-                        if (selectedCompanyId == requestedCompanyId) didFailLoadingMoreCompanyOffers = true
+                        if (selectedCompanyId == requestedCompanyId &&
+                            pageGeneration == companyOffersPageGeneration
+                        ) {
+                            didFailLoadingMoreCompanyOffers = true
+                        }
                     } finally {
-                        if (selectedCompanyId == requestedCompanyId) isLoadingMoreCompanyOffers = false
+                        if (selectedCompanyId == requestedCompanyId &&
+                            pageGeneration == companyOffersPageGeneration
+                        ) {
+                            isLoadingMoreCompanyOffers = false
+                        }
                     }
                 }
             }

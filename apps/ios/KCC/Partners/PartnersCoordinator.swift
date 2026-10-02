@@ -41,13 +41,19 @@ final class PartnersCoordinator {
     private var revealGeneration = 0
     private var savedGeneration = 0
     private var paginationGeneration = 0
+    private var companiesPageGeneration = 0
+    private var offersPageGeneration = 0
     private var isRunning = false
     private var hasLoadedOffersSnapshot = false
+    private var hasLoadedCompaniesPage = false
+    private var hasLoadedOffersPage = false
     private var hasLoadedSavedIdsSnapshot = false
     private var hasLoadedSavedSnapshot = false
     private var resolvedCompanies: [String: PartnerCompany] = [:]
     private var companiesCursor: PartnerPageCursor?
     private var offersCursor: PartnerPageCursor?
+    private var liveCompaniesCursor: PartnerPageCursor?
+    private var liveOffersCursor: PartnerPageCursor?
     private var liveCompanies: [PartnerCompany] = []
     private var pagedCompanies: [PartnerCompany] = []
     private var liveOffers: [PartnerOffer] = []
@@ -114,6 +120,10 @@ final class PartnersCoordinator {
         companiesAreExhaustive = false
         companiesCursor = nil
         offersCursor = nil
+        liveCompaniesCursor = nil
+        liveOffersCursor = nil
+        hasLoadedCompaniesPage = false
+        hasLoadedOffersPage = false
         liveCompanies = []
         pagedCompanies = []
         liveOffers = []
@@ -148,6 +158,10 @@ final class PartnersCoordinator {
         offersState = hasLoadedOffersSnapshot ? .loaded : .loading
         companiesCursor = nil
         offersCursor = nil
+        liveCompaniesCursor = nil
+        liveOffersCursor = nil
+        hasLoadedCompaniesPage = false
+        hasLoadedOffersPage = false
         liveCompanies = []
         pagedCompanies = []
         liveOffers = []
@@ -169,14 +183,21 @@ final class PartnersCoordinator {
               !isLoadingMoreCompanies
         else { return }
         let generation = paginationGeneration
+        let pageGeneration = companiesPageGeneration
         isLoadingMoreCompanies = true
         defer {
-            if generation == paginationGeneration { isLoadingMoreCompanies = false }
+            if generation == paginationGeneration, pageGeneration == companiesPageGeneration {
+                isLoadingMoreCompanies = false
+            }
         }
         didFailLoadingMoreCompanies = false
         do {
             let page = try await repository.fetchActiveCompanies(after: cursor)
-            guard !Task.isCancelled, isRunning, generation == paginationGeneration else { return }
+            guard !Task.isCancelled,
+                  isRunning,
+                  generation == paginationGeneration,
+                  pageGeneration == companiesPageGeneration
+            else { return }
             pagedCompanies = Self.mergeCompanies(pagedCompanies + page.companies)
             state = .loaded(Self.mergeCompanies(liveCompanies + pagedCompanies))
             companiesCursor = page.nextCursor
@@ -184,7 +205,10 @@ final class PartnersCoordinator {
         } catch is CancellationError {
             return
         } catch {
-            guard isRunning, generation == paginationGeneration else { return }
+            guard isRunning,
+                  generation == paginationGeneration,
+                  pageGeneration == companiesPageGeneration
+            else { return }
             didFailLoadingMoreCompanies = true
         }
     }
@@ -196,14 +220,21 @@ final class PartnersCoordinator {
               !isLoadingMoreOffers
         else { return }
         let generation = paginationGeneration
+        let pageGeneration = offersPageGeneration
         isLoadingMoreOffers = true
         defer {
-            if generation == paginationGeneration { isLoadingMoreOffers = false }
+            if generation == paginationGeneration, pageGeneration == offersPageGeneration {
+                isLoadingMoreOffers = false
+            }
         }
         didFailLoadingMoreOffers = false
         do {
             let page = try await repository.fetchActiveOffers(after: cursor)
-            guard !Task.isCancelled, isRunning, generation == paginationGeneration else { return }
+            guard !Task.isCancelled,
+                  isRunning,
+                  generation == paginationGeneration,
+                  pageGeneration == offersPageGeneration
+            else { return }
             pagedOffers = Self.mergeOffers(pagedOffers + page.offers)
             offers = Self.mergeOffers(liveOffers + pagedOffers)
             offersCursor = page.nextCursor
@@ -211,7 +242,10 @@ final class PartnersCoordinator {
         } catch is CancellationError {
             return
         } catch {
-            guard isRunning, generation == paginationGeneration else { return }
+            guard isRunning,
+                  generation == paginationGeneration,
+                  pageGeneration == offersPageGeneration
+            else { return }
             didFailLoadingMoreOffers = true
         }
     }
@@ -412,7 +446,18 @@ final class PartnersCoordinator {
                 switch snapshot {
                 case .loaded(let companies, let nextCursor):
                     self.liveCompanies = companies
-                    if self.pagedCompanies.isEmpty {
+                    let boundaryChanged = self.hasLoadedCompaniesPage
+                        && self.liveCompaniesCursor != nextCursor
+                    self.liveCompaniesCursor = nextCursor
+                    self.hasLoadedCompaniesPage = true
+                    if boundaryChanged {
+                        self.companiesPageGeneration += 1
+                        self.pagedCompanies = []
+                        self.companiesCursor = nextCursor
+                        self.companiesAreExhaustive = nextCursor == nil
+                        self.isLoadingMoreCompanies = false
+                        self.didFailLoadingMoreCompanies = false
+                    } else if self.pagedCompanies.isEmpty {
                         self.companiesCursor = nextCursor
                         self.companiesAreExhaustive = nextCursor == nil
                     }
@@ -434,7 +479,18 @@ final class PartnersCoordinator {
                 switch snapshot {
                 case .loaded(let offers, let nextCursor):
                     self.liveOffers = offers
-                    if self.pagedOffers.isEmpty {
+                    let boundaryChanged = self.hasLoadedOffersPage
+                        && self.liveOffersCursor != nextCursor
+                    self.liveOffersCursor = nextCursor
+                    self.hasLoadedOffersPage = true
+                    if boundaryChanged {
+                        self.offersPageGeneration += 1
+                        self.pagedOffers = []
+                        self.offersCursor = nextCursor
+                        self.offersAreExhaustive = nextCursor == nil
+                        self.isLoadingMoreOffers = false
+                        self.didFailLoadingMoreOffers = false
+                    } else if self.pagedOffers.isEmpty {
                         self.offersCursor = nextCursor
                         self.offersAreExhaustive = nextCursor == nil
                     }

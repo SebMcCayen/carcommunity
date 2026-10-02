@@ -279,7 +279,7 @@ private struct PartnerListenerCollectionBox: @unchecked Sendable {
     let registrations: [ListenerRegistration]
 }
 
-private final class PartnerOffersAggregate: @unchecked Sendable {
+final class PartnerOffersAggregate: @unchecked Sendable {
     private let lock = NSLock()
     private let count: Int
     private var snapshots: [Int: [PartnerOffer]] = [:]
@@ -290,7 +290,7 @@ private final class PartnerOffersAggregate: @unchecked Sendable {
     func shouldReportFailure() -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        guard snapshots.count < count, !reportedFailure else { return false }
+        guard !reportedFailure else { return false }
         reportedFailure = true
         return true
     }

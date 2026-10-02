@@ -48,6 +48,39 @@ data class PartnerOffersPage(
     val nextCursor: PartnerPageCursor?,
 )
 
+internal class PartnerPageBoundary {
+    private var hasSnapshot = false
+    private var cursor: PartnerPageCursor? = null
+
+    fun update(nextCursor: PartnerPageCursor?): Boolean {
+        val changed = hasSnapshot && cursor != nextCursor
+        hasSnapshot = true
+        cursor = nextCursor
+        return changed
+    }
+
+    fun reset() {
+        hasSnapshot = false
+        cursor = null
+    }
+}
+
+internal class PartnerOffersListenerFailureGate {
+    private var hasReportedFailure = false
+
+    @Synchronized
+    fun shouldReportFailure(): Boolean {
+        if (hasReportedFailure) return false
+        hasReportedFailure = true
+        return true
+    }
+
+    @Synchronized
+    fun didLoadSnapshot() {
+        hasReportedFailure = false
+    }
+}
+
 sealed interface SavedOfferIdsState {
     data object Loading : SavedOfferIdsState
     data class Loaded(
