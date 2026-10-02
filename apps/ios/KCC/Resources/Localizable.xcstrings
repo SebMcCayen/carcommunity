@@ -23603,13 +23603,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "En ansökan för denna e-post granskas redan."
+            "value": "En ansökan granskas redan."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "An application for this email is already under review."
+            "value": "An application is already under review."
           }
         }
       }
