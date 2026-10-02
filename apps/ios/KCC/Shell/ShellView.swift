@@ -51,6 +51,7 @@ struct ShellView: View {
     /// effect below), never recreate it.
     @State private var mapSurface = StubMapSurface()
     @State private var mapLayerPreferences = MapLayerPreferences()
+    @State private var diagnostics = IOSDiagnosticsComposition()
     @State private var showMapLayers = false
 
     /// Feature coordinators are composed once for the signed-in shell. Every
@@ -156,7 +157,11 @@ struct ShellView: View {
         ZStack {
             // Exactly one native Mapbox view for the signed-in shell. Tabs and
             // routes cover it instead of recreating its Metal render surface.
-            MapHomeView(surface: mapSurface, locationProvider: locationProvider)
+            MapHomeView(
+                surface: mapSurface,
+                locationProvider: locationProvider,
+                featureHealthReporter: diagnostics.featureHealthReporter
+            )
 
             TabView(selection: tabSelection) {
                 ForEach(ShellTab.allCases, id: \.self) { tab in
@@ -1378,7 +1383,11 @@ struct ShellView: View {
                 access: access
             )
         }
-        notificationsCoordinator = NotificationsInboxCoordinator(repository: notifications, uid: uid)
+        notificationsCoordinator = NotificationsInboxCoordinator(
+            repository: notifications,
+            uid: uid,
+            errorReporter: diagnostics.clientErrorReporter
+        )
         notificationSettingsCoordinator = NotificationSettingsCoordinator(
             repository: FirebaseNotificationSettingsRepository.createIfAvailable(),
             uid: uid

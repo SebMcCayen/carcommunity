@@ -331,20 +331,26 @@ private final class ConvoyViewportInteractionObserver: @preconcurrency ViewportS
 /// renderer without changing the shell-facing ``MapSurface`` seam.
 @MainActor
 struct MapHomeView: View {
+    @Environment(\.scenePhase) private var scenePhase
     /// The shell's one surface instance, owned by ``ShellView`` — composed
     /// once for the whole signed-in shell and never disposed.
     let surface: StubMapSurface
     let locationProvider: any LocationProvider
     private let accessToken: String?
+    private let featureHealthReporter: FeatureHealthReporter?
+    @State private var renderWatchdog: MapRenderWatchdog
 
     init(
         surface: StubMapSurface,
         locationProvider: any LocationProvider,
-        accessToken: String? = MapboxConfiguration.accessToken()
+        accessToken: String? = MapboxConfiguration.accessToken(),
+        featureHealthReporter: FeatureHealthReporter? = nil
     ) {
         self.surface = surface
         self.locationProvider = locationProvider
         self.accessToken = accessToken
+        self.featureHealthReporter = featureHealthReporter
+        _renderWatchdog = State(initialValue: MapRenderWatchdog())
     }
 
     var body: some View {
@@ -355,6 +361,7 @@ struct MapHomeView: View {
                     surface: surface,
                     locationProvider: locationProvider
                 ) {
+                    _ = renderWatchdog.tick(milliseconds: 0, eligible: false, rendered: true)
                     surface.markLoaded()
                 }
             } else {
@@ -374,6 +381,39 @@ struct MapHomeView: View {
         .task {
             guard accessToken == nil else { return }
             await surface.simulateInitialLoadIfNeeded()
+        }
+        // Detect the silent failure class where Mapbox never emits a load
+        // callback. Only foreground, uncovered, online time consumes the 12s
+        // budget; config-less placeholder builds never start the watchdog.
+        .task(id: accessToken != nil) {
+            guard accessToken != nil, let featureHealthReporter else { return }
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(1))
+                } catch {
+                    return
+                }
+                let rendered: Bool
+                switch surface.loadState {
+                case .loaded: rendered = true
+                case .loading: rendered = false
+                }
+                let surfaceShown = surface.isActive
+                let foreground = scenePhase == .active
+                let eligible = surfaceShown && foreground && featureHealthReporter.isOnline()
+                if renderWatchdog.tick(
+                    milliseconds: 1_000,
+                    eligible: eligible,
+                    rendered: rendered
+                ) {
+                    featureHealthReporter.report(
+                        .mapRenderTimeout,
+                        foreground: foreground,
+                        surfaceShown: surfaceShown
+                    )
+                }
+                if renderWatchdog.isDisarmed { return }
+            }
         }
     }
 

@@ -15,6 +15,9 @@ struct KCCApp: App {
         FirebaseBootstrap.configureIfAvailable()
 
         let repository = FirebaseAuthRepository.createIfAvailable()
+        let diagnosticsReporter = FirebaseDiagnosticsReporter.createIfAvailable()
+            ?? NoopDiagnosticsReporter()
+        let diagnosticsEnvironment = DiagnosticsEnvironment.current()
         session = AuthSession(repository: repository)
         accessSession = AppAccessSession(
             accessRepository: FirebaseAccountAccessRepository.createIfAvailable(),
@@ -33,7 +36,11 @@ struct KCCApp: App {
             tokenProvider: repository == nil
                 ? UnavailableTokenProvider()
                 : Self.makeTokenProvider(),
-            repository: repository ?? UnavailableAuthRepository()
+            repository: repository ?? UnavailableAuthRepository(),
+            failureReporter: DiagnosticsSignInFailureReporter(
+                reporter: diagnosticsReporter,
+                environment: diagnosticsEnvironment
+            )
         )
     }
 
