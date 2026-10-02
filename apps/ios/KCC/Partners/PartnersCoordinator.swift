@@ -382,7 +382,7 @@ final class PartnersCoordinator {
             for await snapshot in stream {
                 guard !Task.isCancelled, let self, self.expandedOfferId == offerId else { return }
                 switch snapshot {
-                case .loaded(let offers):
+                case .loaded(let offers, _):
                     if !offers.contains(where: { $0.id == offerId }) {
                         self.clearSensitiveOfferState()
                     }
