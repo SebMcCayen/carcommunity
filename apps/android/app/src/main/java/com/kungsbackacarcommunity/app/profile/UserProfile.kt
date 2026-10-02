@@ -21,6 +21,13 @@ data class UserProfile(
      */
     val activeMember: Boolean = false,
     /**
+     * True when the backend has suspended or soft-deleted this account. The
+     * value comes from the same live users/{uid} snapshot as the rest of the
+     * profile and must revoke client-side access to protected member data even
+     * when a previously verified paid subscription is still cached locally.
+     */
+    val isRestricted: Boolean = false,
+    /**
      * True for a staff account that the backend admits to admin-bypass paths
      * regardless of subscription — mirroring canAccessAdminFeatures exactly:
      * users/{uid}.role in {admin, owner} AND not suspended AND not deleted.

@@ -44,6 +44,9 @@ class FirebaseProfileRepository private constructor(
                             avatarPath = snapshot.getString("avatarPath"),
                             onboardingComplete = snapshot.get("onboardingCompletedAt") != null,
                             activeMember = snapshot.getBoolean("activeMember") ?: false,
+                            isRestricted =
+                                snapshot.getBoolean("suspended") == true ||
+                                    snapshot.getBoolean("deleted") == true,
                             supporterBadge = SupporterBadge.fromFields(
                                 snapshot.get("supporterBadgeEligible"), snapshot.get("showSupporterBadge"),
                             ),

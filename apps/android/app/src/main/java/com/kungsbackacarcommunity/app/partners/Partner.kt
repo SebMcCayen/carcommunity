@@ -112,6 +112,15 @@ object Partners {
     const val SAVED_OFFERS_QUERY_LIMIT = 30L
 }
 
+/** Mirrors the backend authority for member-only partner offer data. */
+object PartnerOfferAccess {
+    fun allows(
+        isAdmin: Boolean,
+        isPaidSubscriber: Boolean,
+        isAccountRestricted: Boolean,
+    ): Boolean = !isAccountRestricted && (isAdmin || isPaidSubscriber)
+}
+
 /** Validated external destinations for partner actions. */
 object PartnerDestinations {
     fun website(rawValue: String?): String? {

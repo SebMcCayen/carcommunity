@@ -279,6 +279,7 @@ import com.kungsbackacarcommunity.app.notifications.openAppNotificationSettings
 import com.kungsbackacarcommunity.app.partners.OfferCodeCoordinator
 import com.kungsbackacarcommunity.app.partners.PartnerApplicationCoordinator
 import com.kungsbackacarcommunity.app.partners.PartnerApplicationRoute
+import com.kungsbackacarcommunity.app.partners.PartnerOfferAccess
 import com.kungsbackacarcommunity.app.partners.PartnersRepository
 import com.kungsbackacarcommunity.app.partners.PartnersRoute
 import com.kungsbackacarcommunity.app.points.Points
@@ -6409,6 +6410,7 @@ fun AuthenticatedApp(
                         uid = uid,
                         profileActiveMember = profile?.activeMember == true,
                         profileIsAdmin = profile?.isAdmin == true,
+                        profileIsRestricted = profile?.isRestricted == true,
                         scope = scope,
                         onClose = closeRoute,
                         // Navigation from WITHIN an open route (a hub → its child,
@@ -8832,6 +8834,10 @@ private fun RouteHost(
     // subscription (e.g. the event-details roster), so the client gate mirrors
     // that here to avoid a free-vs-admin divergence with the backend.
     profileIsAdmin: Boolean,
+    // Authoritative users/{uid}.suspended/deleted state. A cached paid
+    // subscription must never keep protected partner offers unlocked after
+    // either backend flag changes.
+    profileIsRestricted: Boolean,
     scope: kotlinx.coroutines.CoroutineScope,
     onClose: () -> Unit,
     onOpenRoute: (ShellRoute) -> Unit,
@@ -9444,9 +9450,14 @@ private fun RouteHost(
                     repository = partnersRepository,
                     offerCodeCoordinator = offerCodeCoordinator,
                     uid = uid,
-                    // Member offers always require verified paid/admin access.
+                    // Member offers require verified paid/admin access on an
+                    // account that remains active in the live profile snapshot.
                     canAccessMemberOffers =
-                        profileIsAdmin || storedSubscription.isPaidSubscriber,
+                        PartnerOfferAccess.allows(
+                            isAdmin = profileIsAdmin,
+                            isPaidSubscriber = storedSubscription.isPaidSubscriber,
+                            isAccountRestricted = profileIsRestricted,
+                        ),
                     onBack = onClose,
                 )
             } else {

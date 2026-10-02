@@ -1,6 +1,8 @@
 package com.kungsbackacarcommunity.app.partners
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PartnerTest {
@@ -51,6 +53,45 @@ class PartnerTest {
         assertEquals(200L, Partners.ACTIVE_OFFERS_QUERY_LIMIT)
         assertEquals(50L, Partners.COMPANY_OFFERS_QUERY_LIMIT)
         assertEquals(30L, Partners.SAVED_OFFERS_QUERY_LIMIT)
+    }
+
+    @Test
+    fun `member offer access requires paid or admin and an unrestricted account`() {
+        assertTrue(
+            PartnerOfferAccess.allows(
+                isAdmin = false,
+                isPaidSubscriber = true,
+                isAccountRestricted = false,
+            ),
+        )
+        assertTrue(
+            PartnerOfferAccess.allows(
+                isAdmin = true,
+                isPaidSubscriber = false,
+                isAccountRestricted = false,
+            ),
+        )
+        assertFalse(
+            PartnerOfferAccess.allows(
+                isAdmin = false,
+                isPaidSubscriber = true,
+                isAccountRestricted = true,
+            ),
+        )
+        assertFalse(
+            PartnerOfferAccess.allows(
+                isAdmin = true,
+                isPaidSubscriber = true,
+                isAccountRestricted = true,
+            ),
+        )
+        assertFalse(
+            PartnerOfferAccess.allows(
+                isAdmin = false,
+                isPaidSubscriber = false,
+                isAccountRestricted = false,
+            ),
+        )
     }
 
     @Test
