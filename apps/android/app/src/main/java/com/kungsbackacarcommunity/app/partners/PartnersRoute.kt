@@ -62,9 +62,16 @@ fun PartnersRoute(
         remember(repository, reloadKey) { repository.observeActiveCompanies() }
             .collectAsState(initial = CompaniesState.Loading)
     LaunchedEffect(reloadKey) {
+        // collectAsState retains its last value while the replacement flow
+        // subscribes. Seed the reset from that authoritative first-page
+        // boundary so an equal re-emission cannot strand Load more disabled.
+        val retainedCursor = (companiesState as? CompaniesState.Loaded)?.nextCursor
         pagedCompanies = emptyList()
-        companiesCursor = null
+        companiesCursor = retainedCursor
         companiesPageBoundary.reset()
+        if (companiesState is CompaniesState.Loaded) {
+            companiesPageBoundary.update(retainedCursor)
+        }
         companiesPageGeneration++
         isLoadingMoreCompanies = false
         didFailLoadingMoreCompanies = false
@@ -223,11 +230,15 @@ fun PartnersRoute(
         didFailLoadingMoreCompanyOffers = false
     }
     val companyOffers =
-        (
-            (companyOffersState as? OffersState.Loaded)?.offers.orEmpty() +
-                pagedCompanyOffers +
-                savedOffers.filter { it.companyId == companyId }
-        ).distinctBy { it.id }
+        Partners.offersForCompany(
+            offers =
+                (
+                    (companyOffersState as? OffersState.Loaded)?.offers.orEmpty() +
+                        pagedCompanyOffers +
+                        savedOffers.filter { it.companyId == companyId }
+                ).distinctBy { it.id },
+            companyId = companyId,
+        )
     val displayedCompanyOffersState =
         (companyOffersState as? OffersState.Loaded)?.let {
             OffersState.Loaded(

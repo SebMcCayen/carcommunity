@@ -427,7 +427,7 @@ private struct PartnerOfferCard: View {
         case .missing:
             Text("partnerOffers.detailUnavailable").foregroundStyle(.secondary)
         case .failed:
-            Text("partnerOffers.loadError").foregroundStyle(.red)
+            Text("partnerOffers.detailLoadError").foregroundStyle(.red)
         case .loaded(let detail):
             VStack(alignment: .leading, spacing: KccSpacing.s3) {
                 if let description = detail.description { Text(description) }
@@ -483,9 +483,7 @@ private struct PartnerOfferCard: View {
     }
 
     private var saveIsWorking: Bool {
-        if case .working(let offerId) = coordinator.savedActionStatus {
-            return offerId == offer.id
-        }
+        if case .working = coordinator.savedActionStatus { return true }
         return false
     }
 
