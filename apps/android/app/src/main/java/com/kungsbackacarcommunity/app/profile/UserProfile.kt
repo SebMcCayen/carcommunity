@@ -96,3 +96,15 @@ fun authedDestination(state: ProfileState): AuthedDestination =
                 AuthedDestination.Onboarding
             }
     }
+
+/**
+ * Fail-closed policy for member-only data while the authoritative profile is
+ * absent or unreadable. [ProfileState.Unavailable] is reserved for the explicit
+ * config-less build and remains navigable for local validation.
+ */
+fun ProfileState.restrictsProtectedMemberData(): Boolean =
+    when (this) {
+        is ProfileState.Loaded -> profile?.isRestricted != false
+        ProfileState.Unavailable -> false
+        ProfileState.Loading, ProfileState.Error -> true
+    }

@@ -381,6 +381,7 @@ import com.kungsbackacarcommunity.app.profile.ProfileScreen
 import com.kungsbackacarcommunity.app.profile.ProfileState
 import com.kungsbackacarcommunity.app.profile.ProfileStatsSummary
 import com.kungsbackacarcommunity.app.profile.authedDestination
+import com.kungsbackacarcommunity.app.profile.restrictsProtectedMemberData
 import com.kungsbackacarcommunity.app.auth.LoginRecordCoordinator
 import com.kungsbackacarcommunity.app.push.ActiveChat
 import com.kungsbackacarcommunity.app.push.ActiveChatRegistry
@@ -6410,7 +6411,11 @@ fun AuthenticatedApp(
                         uid = uid,
                         profileActiveMember = profile?.activeMember == true,
                         profileIsAdmin = profile?.isAdmin == true,
-                        profileIsRestricted = profile?.isRestricted == true,
+                        // A listener error leaves the shell mounted, but protected
+                        // partner data must fail closed until an authoritative
+                        // profile snapshot returns. The config-less build remains
+                        // navigable through its explicit Unavailable state.
+                        profileIsRestricted = profileState.restrictsProtectedMemberData(),
                         scope = scope,
                         onClose = closeRoute,
                         // Navigation from WITHIN an open route (a hub → its child,

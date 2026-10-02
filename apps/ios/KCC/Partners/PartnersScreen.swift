@@ -248,6 +248,7 @@ private struct PartnerDestinationScreen: View {
         .task(id: destination.companyId) {
             coordinator.loadCompany(id: destination.companyId)
         }
+        .onDisappear { coordinator.closeCompanyDetail() }
     }
 }
 
@@ -338,7 +339,6 @@ private struct PartnerDetailScreen: View {
                 coordinator.setExpandedOffer(focusedOfferId, expanded: true)
             }
         }
-        .onDisappear { coordinator.closeCompanyDetail() }
         .alert("partnerOffers.saveError", isPresented: saveErrorPresented) {
             Button("partners.close") { coordinator.resetSavedError() }
         } message: {

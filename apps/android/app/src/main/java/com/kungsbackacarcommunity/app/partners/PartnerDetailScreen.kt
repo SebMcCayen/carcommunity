@@ -46,7 +46,7 @@ fun PartnerDetailScreen(
     savedOfferIds: Set<String>,
     canAccessMemberOffers: Boolean,
     expandedOfferId: String?,
-    expandedOfferDetail: OfferMemberDetail?,
+    expandedOfferDetailState: OfferDetailState,
     codeStatus: OfferCodeStatus,
     onToggleExpand: (String) -> Unit,
     onShowCode: (String) -> Unit,
@@ -186,7 +186,12 @@ fun PartnerDetailScreen(
                         canAccessMemberOffers = canAccessMemberOffers,
                         isSaved = savedOfferIds.contains(offer.id),
                         isExpanded = expandedOfferId == offer.id,
-                        detail = if (expandedOfferId == offer.id) expandedOfferDetail else null,
+                        detailState =
+                            if (expandedOfferId == offer.id) {
+                                expandedOfferDetailState
+                            } else {
+                                OfferDetailState.Loading
+                            },
                         codeStatus = codeStatus,
                         onToggleExpand = { onToggleExpand(offer.id) },
                         onShowCode = { onShowCode(offer.id) },
@@ -253,7 +258,7 @@ private fun OfferCard(
     canAccessMemberOffers: Boolean,
     isSaved: Boolean,
     isExpanded: Boolean,
-    detail: OfferMemberDetail?,
+    detailState: OfferDetailState,
     codeStatus: OfferCodeStatus,
     onToggleExpand: () -> Unit,
     onShowCode: () -> Unit,
@@ -311,31 +316,54 @@ private fun OfferCard(
             }
 
             if (isExpanded) {
-                detail?.description?.takeIf { it.isNotBlank() }?.let { description ->
-                    Text(
-                        text = description,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                when (detailState) {
+                    OfferDetailState.Loading ->
+                        Text(
+                            text = stringResource(R.string.partners_loading),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    OfferDetailState.Missing ->
+                        Text(
+                            text = stringResource(R.string.partnerOffers_detailUnavailable),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    OfferDetailState.Error ->
+                        Text(
+                            text = stringResource(R.string.partnerOffers_detailLoadError),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    is OfferDetailState.Loaded -> {
+                        val detail = detailState.detail
+                        detail.description?.takeIf { it.isNotBlank() }?.let { description ->
+                            Text(
+                                text = description,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        detail.redemptionInstructions?.takeIf { it.isNotBlank() }?.let { instructions ->
+                            Text(
+                                text = instructions,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        detail.terms?.takeIf { it.isNotBlank() }?.let { terms ->
+                            Text(
+                                text = "${stringResource(R.string.partnerOffers_terms)}: $terms",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Button(onClick = onShowCode, modifier = Modifier.fillMaxWidth()) {
+                            Text(text = stringResource(R.string.partnerOffers_showCode))
+                        }
+                        CodeArea(offerId = offer.id, codeStatus = codeStatus)
+                    }
                 }
-                detail?.redemptionInstructions?.takeIf { it.isNotBlank() }?.let { instructions ->
-                    Text(
-                        text = instructions,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-                detail?.terms?.takeIf { it.isNotBlank() }?.let { terms ->
-                    Text(
-                        text = "${stringResource(R.string.partnerOffers_terms)}: $terms",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Button(onClick = onShowCode, modifier = Modifier.fillMaxWidth()) {
-                    Text(text = stringResource(R.string.partnerOffers_showCode))
-                }
-                CodeArea(offerId = offer.id, codeStatus = codeStatus)
             }
         }
     }

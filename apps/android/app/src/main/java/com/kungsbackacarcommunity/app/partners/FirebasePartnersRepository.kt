@@ -192,7 +192,7 @@ class FirebasePartnersRepository private constructor(
         awaitClose { registrations.forEach { it.remove() } }
     }
 
-    override fun observeOfferDetail(offerId: String): Flow<OfferMemberDetail?> = callbackFlow {
+    override fun observeOfferDetail(offerId: String): Flow<OfferDetailState> = callbackFlow {
         val registration =
             firestore
                 .collection(OFFERS)
@@ -201,10 +201,11 @@ class FirebasePartnersRepository private constructor(
                 .document(MEMBER)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
-                        trySend(null)
+                        trySend(OfferDetailState.Error)
                         return@addSnapshotListener
                     }
-                    trySend(snapshot?.toOfferDetail())
+                    val detail = snapshot?.toOfferDetail()
+                    trySend(detail?.let(OfferDetailState::Loaded) ?: OfferDetailState.Missing)
                 }
         awaitClose { registration.remove() }
     }

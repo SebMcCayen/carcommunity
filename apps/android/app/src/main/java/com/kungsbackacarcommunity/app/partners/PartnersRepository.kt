@@ -31,6 +31,14 @@ sealed interface OffersState {
     data object Error : OffersState
 }
 
+/** Authoritative state of one member-only offer detail document. */
+sealed interface OfferDetailState {
+    data object Loading : OfferDetailState
+    data class Loaded(val detail: OfferMemberDetail) : OfferDetailState
+    data object Missing : OfferDetailState
+    data object Error : OfferDetailState
+}
+
 /** Stable Firestore cursor without leaking Firebase types into UI and tests. */
 data class PartnerPageCursor(
     val createdAtSeconds: Long,
@@ -120,8 +128,8 @@ interface PartnersRepository {
     /** Active offer documents resolved directly for authoritative saved ids. */
     fun observeOffers(offerIds: Set<String>): Flow<OffersState>
 
-    /** Member-gated offer detail; null when denied (non-member) or missing. */
-    fun observeOfferDetail(offerId: String): Flow<OfferMemberDetail?>
+    /** Member-gated offer detail with distinct missing and listener-error states. */
+    fun observeOfferDetail(offerId: String): Flow<OfferDetailState>
 
     /** The set of offer ids the caller has bookmarked. */
     fun observeSavedOfferIds(uid: String): Flow<SavedOfferIdsState>

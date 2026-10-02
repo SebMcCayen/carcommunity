@@ -134,7 +134,7 @@ class PartnersScreensTest {
                     savedOfferIds = emptySet(),
                     canAccessMemberOffers = true,
                     expandedOfferId = null,
-                    expandedOfferDetail = null,
+                    expandedOfferDetailState = OfferDetailState.Missing,
                     codeStatus = OfferCodeStatus.Idle,
                     onToggleExpand = {},
                     onShowCode = {},
@@ -158,7 +158,7 @@ class PartnersScreensTest {
                     savedOfferIds = emptySet(),
                     canAccessMemberOffers = true,
                     expandedOfferId = null,
-                    expandedOfferDetail = null,
+                    expandedOfferDetailState = OfferDetailState.Missing,
                     codeStatus = OfferCodeStatus.Idle,
                     onToggleExpand = {},
                     onShowCode = {},
@@ -207,7 +207,7 @@ class PartnersScreensTest {
                     savedOfferIds = emptySet(),
                     canAccessMemberOffers = false,
                     expandedOfferId = null,
-                    expandedOfferDetail = null,
+                    expandedOfferDetailState = OfferDetailState.Missing,
                     codeStatus = OfferCodeStatus.Idle,
                     onToggleExpand = {},
                     onShowCode = {},
@@ -237,7 +237,7 @@ class PartnersScreensTest {
                     savedOfferIds = emptySet(),
                     canAccessMemberOffers = true,
                     expandedOfferId = null,
-                    expandedOfferDetail = null,
+                    expandedOfferDetailState = OfferDetailState.Missing,
                     codeStatus = OfferCodeStatus.Idle,
                     onToggleExpand = {},
                     onShowCode = {},
@@ -261,7 +261,8 @@ class PartnersScreensTest {
                     savedOfferIds = setOf("o1"),
                     canAccessMemberOffers = true,
                     expandedOfferId = "o1",
-                    expandedOfferDetail = OfferMemberDetail("Great deal", null, "No cash value"),
+                    expandedOfferDetailState =
+                        OfferDetailState.Loaded(OfferMemberDetail("Great deal", null, "No cash value")),
                     codeStatus = OfferCodeStatus.Shown("o1", "SAVE20"),
                     onToggleExpand = {},
                     onShowCode = {},
@@ -276,6 +277,58 @@ class PartnersScreensTest {
     }
 
     @Test
+    fun detail_missingMemberDetail_showsUnavailableWithoutCodeAction() {
+        composeTestRule.setContent {
+            KccTheme {
+                PartnerDetailScreen(
+                    companyState = CompanyState.Loaded(company()),
+                    offers = listOf(offer()),
+                    savedOfferIds = emptySet(),
+                    canAccessMemberOffers = true,
+                    expandedOfferId = "o1",
+                    expandedOfferDetailState = OfferDetailState.Missing,
+                    codeStatus = OfferCodeStatus.Idle,
+                    onToggleExpand = {},
+                    onShowCode = {},
+                    onToggleSave = { _, _ -> },
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule
+            .onNodeWithText(str(R.string.partnerOffers_detailUnavailable))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.partnerOffers_showCode)).assertDoesNotExist()
+    }
+
+    @Test
+    fun detail_listenerFailure_showsErrorWithoutCodeAction() {
+        composeTestRule.setContent {
+            KccTheme {
+                PartnerDetailScreen(
+                    companyState = CompanyState.Loaded(company()),
+                    offers = listOf(offer()),
+                    savedOfferIds = emptySet(),
+                    canAccessMemberOffers = true,
+                    expandedOfferId = "o1",
+                    expandedOfferDetailState = OfferDetailState.Error,
+                    codeStatus = OfferCodeStatus.Idle,
+                    onToggleExpand = {},
+                    onShowCode = {},
+                    onToggleSave = { _, _ -> },
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule
+            .onNodeWithText(str(R.string.partnerOffers_detailLoadError))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.partnerOffers_showCode)).assertDoesNotExist()
+    }
+
+    @Test
     fun detail_member_toggleSave_reportsInverse() {
         var saveCall: Pair<String, Boolean>? = null
         composeTestRule.setContent {
@@ -286,7 +339,7 @@ class PartnersScreensTest {
                     savedOfferIds = emptySet(),
                     canAccessMemberOffers = true,
                     expandedOfferId = null,
-                    expandedOfferDetail = null,
+                    expandedOfferDetailState = OfferDetailState.Missing,
                     codeStatus = OfferCodeStatus.Idle,
                     onToggleExpand = {},
                     onShowCode = {},

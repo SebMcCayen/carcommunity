@@ -220,12 +220,16 @@ fun PartnersRoute(
                 nextCursor = companyOffersCursor,
             )
         } ?: companyOffersState
-    val expandedDetail by
+    val expandedDetailState by
         remember(expandedOfferId, canAccessMemberOffers, repository) {
             val id = expandedOfferId
-            if (id != null && canAccessMemberOffers) repository.observeOfferDetail(id) else flowOf(null)
+            if (id != null && canAccessMemberOffers) {
+                repository.observeOfferDetail(id)
+            } else {
+                flowOf(OfferDetailState.Missing)
+            }
         }
-            .collectAsState(initial = null)
+            .collectAsState(initial = OfferDetailState.Loading)
     val expandedVisibility by
         remember(expandedOfferId, canAccessMemberOffers, repository) {
             val id = expandedOfferId
@@ -249,7 +253,8 @@ fun PartnersRoute(
         savedOfferIds = savedIds,
         canAccessMemberOffers = canAccessMemberOffers,
         expandedOfferId = expandedOfferId,
-        expandedOfferDetail = if (canAccessMemberOffers) expandedDetail else null,
+        expandedOfferDetailState =
+            if (canAccessMemberOffers) expandedDetailState else OfferDetailState.Missing,
         codeStatus = if (canAccessMemberOffers) codeStatus else OfferCodeStatus.Idle,
         onToggleExpand = { offerId ->
             expandedOfferId = if (expandedOfferId == offerId) null else offerId
