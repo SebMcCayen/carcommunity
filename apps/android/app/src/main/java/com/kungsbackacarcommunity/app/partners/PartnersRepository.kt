@@ -8,7 +8,10 @@ sealed interface CompaniesState {
 
     data object Error : CompaniesState
 
-    data class Loaded(val companies: List<PartnerCompany>) : CompaniesState
+    data class Loaded(
+        val companies: List<PartnerCompany>,
+        val nextCursor: PartnerPageCursor? = null,
+    ) : CompaniesState
 }
 
 sealed interface CompanyState {
@@ -23,9 +26,27 @@ sealed interface OffersState {
     data class Loaded(
         val offers: List<PartnerOffer>,
         val isExhaustive: Boolean = true,
+        val nextCursor: PartnerPageCursor? = null,
     ) : OffersState
     data object Error : OffersState
 }
+
+/** Stable Firestore cursor without leaking Firebase types into UI and tests. */
+data class PartnerPageCursor(
+    val createdAtSeconds: Long,
+    val createdAtNanoseconds: Int,
+    val documentId: String,
+)
+
+data class PartnerCompaniesPage(
+    val companies: List<PartnerCompany>,
+    val nextCursor: PartnerPageCursor?,
+)
+
+data class PartnerOffersPage(
+    val offers: List<PartnerOffer>,
+    val nextCursor: PartnerPageCursor?,
+)
 
 sealed interface SavedOfferIdsState {
     data object Loading : SavedOfferIdsState
@@ -48,6 +69,8 @@ sealed interface SavedOfferIdsState {
 interface PartnersRepository {
     fun observeActiveCompanies(): Flow<CompaniesState>
 
+    suspend fun fetchActiveCompanies(after: PartnerPageCursor): PartnerCompaniesPage
+
     /** One active company by id, used when a saved offer falls outside the capped directory. */
     fun observeCompany(companyId: String): Flow<CompanyState>
 
@@ -55,6 +78,11 @@ interface PartnersRepository {
 
     /** All active offers for one company, used by detail beyond the capped global preview. */
     fun observeActiveOffers(companyId: String): Flow<OffersState>
+
+    suspend fun fetchActiveOffers(
+        companyId: String,
+        after: PartnerPageCursor,
+    ): PartnerOffersPage
 
     /** Active offer documents resolved directly for authoritative saved ids. */
     fun observeOffers(offerIds: Set<String>): Flow<OffersState>

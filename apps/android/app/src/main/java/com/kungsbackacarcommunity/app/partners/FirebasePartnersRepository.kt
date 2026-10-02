@@ -7,7 +7,9 @@ import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.Timestamp
 import com.google.firebase.functions.FirebaseFunctions
+import com.kungsbackacarcommunity.app.firebase.await
 import java.util.Locale
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -37,18 +39,32 @@ class FirebasePartnersRepository private constructor(
                 .collection(COMPANIES)
                 .whereEqualTo("status", "active")
                 .orderBy(CREATED_AT, Query.Direction.DESCENDING)
-                .limit(Partners.ACTIVE_COMPANIES_QUERY_LIMIT)
+                .orderBy(FieldPath.documentId(), Query.Direction.DESCENDING)
+                .limit(Partners.ACTIVE_COMPANIES_QUERY_LIMIT + 1)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
                         trySend(CompaniesState.Error)
                         return@addSnapshotListener
                     }
-                    val companies = snapshot?.documents?.mapNotNull { it.toCompany() } ?: emptyList()
-                    // Locale.ROOT: stable, device-locale-independent ordering.
-                    trySend(CompaniesState.Loaded(companies.sortedBy { it.name.lowercase(Locale.ROOT) }))
+                    val page = companyPage(snapshot?.documents.orEmpty())
+                    trySend(CompaniesState.Loaded(page.companies, page.nextCursor))
                 }
         awaitClose { registration.remove() }
     }
+
+    override suspend fun fetchActiveCompanies(after: PartnerPageCursor): PartnerCompaniesPage =
+        companyPage(
+            firestore
+                .collection(COMPANIES)
+                .whereEqualTo("status", "active")
+                .orderBy(CREATED_AT, Query.Direction.DESCENDING)
+                .orderBy(FieldPath.documentId(), Query.Direction.DESCENDING)
+                .startAfter(after.timestamp(), after.documentId)
+                .limit(Partners.ACTIVE_COMPANIES_QUERY_LIMIT + 1)
+                .get()
+                .await()
+                .documents,
+        )
 
     override fun observeCompany(companyId: String): Flow<CompanyState> = callbackFlow {
         trySend(CompanyState.Loading)
@@ -76,19 +92,20 @@ class FirebasePartnersRepository private constructor(
                 .collection(OFFERS)
                 .whereEqualTo("status", "active")
                 .orderBy(CREATED_AT, Query.Direction.DESCENDING)
-                .limit(Partners.ACTIVE_OFFERS_QUERY_LIMIT)
+                .orderBy(FieldPath.documentId(), Query.Direction.DESCENDING)
+                .limit(Partners.ACTIVE_OFFERS_QUERY_LIMIT + 1)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
                         if (!hasLoadedSnapshot) trySend(OffersState.Error)
                         return@addSnapshotListener
                     }
                     hasLoadedSnapshot = true
-                    val documents = snapshot?.documents.orEmpty()
+                    val page = offerPage(snapshot?.documents.orEmpty(), Partners.ACTIVE_OFFERS_QUERY_LIMIT)
                     trySend(
                         OffersState.Loaded(
-                            offers = documents.mapNotNull { it.toOffer() },
-                            // A full page may have more active offers behind it.
-                            isExhaustive = documents.size.toLong() < Partners.ACTIVE_OFFERS_QUERY_LIMIT,
+                            offers = page.offers,
+                            isExhaustive = page.nextCursor == null,
+                            nextCursor = page.nextCursor,
                         ),
                     )
                 }
@@ -103,20 +120,38 @@ class FirebasePartnersRepository private constructor(
                 .whereEqualTo("companyId", companyId)
                 .whereEqualTo("status", "active")
                 .orderBy(CREATED_AT, Query.Direction.DESCENDING)
+                .orderBy(FieldPath.documentId(), Query.Direction.DESCENDING)
+                .limit(Partners.COMPANY_OFFERS_QUERY_LIMIT + 1)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
                         if (!hasLoadedSnapshot) trySend(OffersState.Error)
                         return@addSnapshotListener
                     }
                     hasLoadedSnapshot = true
-                    trySend(
-                        OffersState.Loaded(
-                            offers = snapshot?.documents.orEmpty().mapNotNull { it.toOffer() },
-                        ),
-                    )
+                    val page = offerPage(snapshot?.documents.orEmpty(), Partners.COMPANY_OFFERS_QUERY_LIMIT)
+                    trySend(OffersState.Loaded(page.offers, page.nextCursor == null, page.nextCursor))
                 }
         awaitClose { registration.remove() }
     }
+
+    override suspend fun fetchActiveOffers(
+        companyId: String,
+        after: PartnerPageCursor,
+    ): PartnerOffersPage =
+        offerPage(
+            firestore
+                .collection(OFFERS)
+                .whereEqualTo("companyId", companyId)
+                .whereEqualTo("status", "active")
+                .orderBy(CREATED_AT, Query.Direction.DESCENDING)
+                .orderBy(FieldPath.documentId(), Query.Direction.DESCENDING)
+                .startAfter(after.timestamp(), after.documentId)
+                .limit(Partners.COMPANY_OFFERS_QUERY_LIMIT + 1)
+                .get()
+                .await()
+                .documents,
+            Partners.COMPANY_OFFERS_QUERY_LIMIT,
+        )
 
     override fun observeOffers(offerIds: Set<String>): Flow<OffersState> = callbackFlow {
         trySend(OffersState.Loading)
@@ -261,6 +296,30 @@ class FirebasePartnersRepository private constructor(
         private const val SHOW_OFFER_CODE = "partners-showOfferCode"
         private const val FIRESTORE_IN_LIMIT = 30
 
+        private fun companyPage(documents: List<DocumentSnapshot>): PartnerCompaniesPage {
+            val visible = documents.take(Partners.ACTIVE_COMPANIES_QUERY_LIMIT.toInt())
+            return PartnerCompaniesPage(
+                companies = visible.mapNotNull { it.toCompany() }.sortedBy { it.name.lowercase(Locale.ROOT) },
+                nextCursor =
+                    if (documents.size > Partners.ACTIVE_COMPANIES_QUERY_LIMIT) {
+                        visible.lastOrNull()?.pageCursor()
+                    } else {
+                        null
+                    },
+            )
+        }
+
+        private fun offerPage(
+            documents: List<DocumentSnapshot>,
+            limit: Long,
+        ): PartnerOffersPage {
+            val visible = documents.take(limit.toInt())
+            return PartnerOffersPage(
+                offers = visible.mapNotNull { it.toOffer() },
+                nextCursor = if (documents.size > limit) visible.lastOrNull()?.pageCursor() else null,
+            )
+        }
+
         fun createIfAvailable(context: Context): PartnersRepository? {
             if (FirebaseApp.getApps(context).isEmpty()) return null
             return FirebasePartnersRepository(
@@ -269,6 +328,13 @@ class FirebasePartnersRepository private constructor(
             )
         }
     }
+}
+
+private fun PartnerPageCursor.timestamp(): Timestamp = Timestamp(createdAtSeconds, createdAtNanoseconds)
+
+private fun DocumentSnapshot.pageCursor(): PartnerPageCursor? {
+    val timestamp = getTimestamp("createdAt") ?: return null
+    return PartnerPageCursor(timestamp.seconds, timestamp.nanoseconds, id)
 }
 
 private fun DocumentSnapshot.toCompany(): PartnerCompany? {

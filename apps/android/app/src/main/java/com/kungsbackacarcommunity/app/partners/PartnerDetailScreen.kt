@@ -54,6 +54,10 @@ fun PartnerDetailScreen(
     onBack: () -> Unit,
     onRetryCompany: () -> Unit = {},
     onRetryOffers: () -> Unit = {},
+    onLoadMoreOffers: () -> Unit = {},
+    canLoadMoreOffers: Boolean = false,
+    isLoadingMoreOffers: Boolean = false,
+    didFailLoadingMoreOffers: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -177,6 +181,26 @@ fun PartnerDetailScreen(
                         onToggleExpand = { onToggleExpand(offer.id) },
                         onShowCode = { onShowCode(offer.id) },
                         onToggleSave = { onToggleSave(offer.id, !savedOfferIds.contains(offer.id)) },
+                    )
+                }
+                if (canLoadMoreOffers) {
+                    Button(
+                        onClick = onLoadMoreOffers,
+                        enabled = !isLoadingMoreOffers,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            stringResource(
+                                if (isLoadingMoreOffers) R.string.partners_loading else R.string.partners_loadMore,
+                            ),
+                        )
+                    }
+                }
+                if (didFailLoadingMoreOffers) {
+                    Text(
+                        text = stringResource(R.string.partnerOffers_loadError),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
                     )
                 }
             } else {

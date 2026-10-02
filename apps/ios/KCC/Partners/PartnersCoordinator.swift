@@ -15,6 +15,7 @@ final class PartnersCoordinator {
     @ObservationIgnored nonisolated(unsafe) private var savedOffersTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var entitlementTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var detailTask: Task<Void, Never>?
+    @ObservationIgnored nonisolated(unsafe) private var offerVisibilityTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var companyTask: Task<Void, Never>?
 
     private(set) var state: PartnersUiState
@@ -39,6 +40,7 @@ final class PartnersCoordinator {
 
     private var revealGeneration = 0
     private var savedGeneration = 0
+    private var paginationGeneration = 0
     private var isRunning = false
     private var hasLoadedOffersSnapshot = false
     private var hasLoadedSavedIdsSnapshot = false
@@ -75,6 +77,7 @@ final class PartnersCoordinator {
         savedOffersTask?.cancel()
         entitlementTask?.cancel()
         detailTask?.cancel()
+        offerVisibilityTask?.cancel()
         companyTask?.cancel()
     }
 
@@ -90,6 +93,7 @@ final class PartnersCoordinator {
 
     func stop() {
         isRunning = false
+        paginationGeneration += 1
         companiesTask?.cancel()
         offersTask?.cancel()
         savedTask?.cancel()
@@ -135,6 +139,7 @@ final class PartnersCoordinator {
 
     func reload() {
         guard isRunning, let repository, uid != nil else { return }
+        paginationGeneration += 1
         companiesTask?.cancel()
         offersTask?.cancel()
         companiesTask = nil
@@ -163,12 +168,15 @@ final class PartnersCoordinator {
               let cursor = companiesCursor,
               !isLoadingMoreCompanies
         else { return }
+        let generation = paginationGeneration
         isLoadingMoreCompanies = true
-        defer { isLoadingMoreCompanies = false }
+        defer {
+            if generation == paginationGeneration { isLoadingMoreCompanies = false }
+        }
         didFailLoadingMoreCompanies = false
         do {
             let page = try await repository.fetchActiveCompanies(after: cursor)
-            guard !Task.isCancelled, isRunning else { return }
+            guard !Task.isCancelled, isRunning, generation == paginationGeneration else { return }
             pagedCompanies = Self.mergeCompanies(pagedCompanies + page.companies)
             state = .loaded(Self.mergeCompanies(liveCompanies + pagedCompanies))
             companiesCursor = page.nextCursor
@@ -176,7 +184,7 @@ final class PartnersCoordinator {
         } catch is CancellationError {
             return
         } catch {
-            guard isRunning else { return }
+            guard isRunning, generation == paginationGeneration else { return }
             didFailLoadingMoreCompanies = true
         }
     }
@@ -187,12 +195,15 @@ final class PartnersCoordinator {
               let cursor = offersCursor,
               !isLoadingMoreOffers
         else { return }
+        let generation = paginationGeneration
         isLoadingMoreOffers = true
-        defer { isLoadingMoreOffers = false }
+        defer {
+            if generation == paginationGeneration { isLoadingMoreOffers = false }
+        }
         didFailLoadingMoreOffers = false
         do {
             let page = try await repository.fetchActiveOffers(after: cursor)
-            guard !Task.isCancelled, isRunning else { return }
+            guard !Task.isCancelled, isRunning, generation == paginationGeneration else { return }
             pagedOffers = Self.mergeOffers(pagedOffers + page.offers)
             offers = Self.mergeOffers(liveOffers + pagedOffers)
             offersCursor = page.nextCursor
@@ -200,7 +211,7 @@ final class PartnersCoordinator {
         } catch is CancellationError {
             return
         } catch {
-            guard isRunning else { return }
+            guard isRunning, generation == paginationGeneration else { return }
             didFailLoadingMoreOffers = true
         }
     }
@@ -285,6 +296,7 @@ final class PartnersCoordinator {
             guard expandedOfferId != offerId else { return }
             expandedOfferId = offerId
             codeStatus = .idle
+            subscribeOfferVisibility(offerId: offerId)
             subscribeDetail(offerId: offerId)
         } else if expandedOfferId == offerId {
             clearSensitiveOfferState()
@@ -353,11 +365,34 @@ final class PartnersCoordinator {
 
     func clearSensitiveOfferState() {
         detailTask?.cancel()
+        offerVisibilityTask?.cancel()
         detailTask = nil
+        offerVisibilityTask = nil
         expandedOfferId = nil
         detailState = .idle
         revealGeneration += 1
         codeStatus = .idle
+    }
+
+    private func subscribeOfferVisibility(offerId: String) {
+        offerVisibilityTask?.cancel()
+        guard let repository else { return }
+        let stream = repository.observeOffers(ids: [offerId])
+        offerVisibilityTask = Task { [weak self] in
+            for await snapshot in stream {
+                guard !Task.isCancelled, let self, self.expandedOfferId == offerId else { return }
+                switch snapshot {
+                case .loaded(let offers):
+                    if !offers.contains(where: { $0.id == offerId }) {
+                        self.clearSensitiveOfferState()
+                    }
+                case .failed:
+                    // Fail closed: the active teaser is the authority for access
+                    // to member detail and a revealed discount code.
+                    self.clearSensitiveOfferState()
+                }
+            }
+        }
     }
 
     private func subscribeCompanies(_ repository: PartnersRepository) {
@@ -399,7 +434,7 @@ final class PartnersCoordinator {
                     self.hasLoadedOffersSnapshot = true
                     self.offersState = .loaded
                     if let expandedOfferId = self.expandedOfferId,
-                       !offers.contains(where: { $0.id == expandedOfferId }),
+                       !self.offers.contains(where: { $0.id == expandedOfferId }),
                        !self.savedOffers.contains(where: { $0.id == expandedOfferId }) {
                         self.clearSensitiveOfferState()
                     }

@@ -39,6 +39,10 @@ fun PartnersRootScreen(
     modifier: Modifier = Modifier,
     onRetry: (() -> Unit)? = null,
     onRetrySaved: (() -> Unit)? = null,
+    onLoadMoreCompanies: (() -> Unit)? = null,
+    canLoadMoreCompanies: Boolean = false,
+    isLoadingMoreCompanies: Boolean = false,
+    didFailLoadingMoreCompanies: Boolean = false,
 ) {
     AeroPage(title = stringResource(R.string.partners_screenTitle), modifier = modifier) {
         TabRow(selectedTabIndex = section.ordinal) {
@@ -56,7 +60,11 @@ fun PartnersRootScreen(
 
         when (section) {
             PartnersRootSection.DIRECTORY ->
-                PartnersDirectoryContent(state, offersState, onOpenCompany, onRetry)
+                PartnersDirectoryContent(
+                    state, offersState, onOpenCompany, onRetry,
+                    onLoadMoreCompanies, canLoadMoreCompanies,
+                    isLoadingMoreCompanies, didFailLoadingMoreCompanies,
+                )
             PartnersRootSection.SAVED ->
                 SavedOffersContent(
                     savedOffersState = savedOffersState,
@@ -95,6 +103,10 @@ private fun PartnersDirectoryContent(
     offersState: OffersState,
     onOpenCompany: (String) -> Unit,
     onRetry: (() -> Unit)?,
+    onLoadMore: (() -> Unit)? = null,
+    canLoadMore: Boolean = false,
+    isLoadingMore: Boolean = false,
+    didFailLoadingMore: Boolean = false,
 ) {
     when (state) {
         CompaniesState.Loading ->
@@ -146,6 +158,26 @@ private fun PartnersDirectoryContent(
                                 ?.offers
                                 ?.let { offers -> Partners.offersForCompany(offers, company.id).size },
                         onClick = { onOpenCompany(company.id) },
+                    )
+                }
+                if (canLoadMore && onLoadMore != null) {
+                    Button(
+                        onClick = onLoadMore,
+                        enabled = !isLoadingMore,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            stringResource(
+                                if (isLoadingMore) R.string.partners_loading else R.string.partners_loadMore,
+                            ),
+                        )
+                    }
+                }
+                if (didFailLoadingMore && onLoadMore != null) {
+                    Text(
+                        text = stringResource(R.string.partnerOffers_loadError),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
                     )
                 }
             }

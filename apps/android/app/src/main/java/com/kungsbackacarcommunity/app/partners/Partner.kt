@@ -105,6 +105,9 @@ object Partners {
      */
     const val ACTIVE_OFFERS_QUERY_LIMIT = 200L
 
+    /** Page size for active offers shown in one company detail. */
+    const val COMPANY_OFFERS_QUERY_LIMIT = 50L
+
     /** Maximum recent bookmarks resolved by the live saved-offers surface. */
     const val SAVED_OFFERS_QUERY_LIMIT = 30L
 }

@@ -16,12 +16,20 @@ class OfferCodeCoordinatorTest {
 
         override fun observeActiveCompanies(): Flow<CompaniesState> = flowOf(CompaniesState.Loading)
 
+        override suspend fun fetchActiveCompanies(after: PartnerPageCursor): PartnerCompaniesPage =
+            PartnerCompaniesPage(emptyList(), null)
+
         override fun observeCompany(companyId: String): Flow<CompanyState> = flowOf(CompanyState.Missing)
 
         override fun observeActiveOffers(): Flow<OffersState> = flowOf(OffersState.Loaded(emptyList()))
 
         override fun observeActiveOffers(companyId: String): Flow<OffersState> =
             flowOf(OffersState.Loaded(emptyList()))
+
+        override suspend fun fetchActiveOffers(
+            companyId: String,
+            after: PartnerPageCursor,
+        ): PartnerOffersPage = PartnerOffersPage(emptyList(), null)
 
         override fun observeOffers(offerIds: Set<String>): Flow<OffersState> =
             flowOf(OffersState.Loaded(emptyList()))

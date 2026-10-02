@@ -11,6 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -37,10 +38,35 @@ fun PartnersRoute(
     var reloadKey by rememberSaveable { mutableStateOf(0) }
     var savedReloadKey by rememberSaveable { mutableStateOf(0) }
     var companyReloadKey by rememberSaveable { mutableStateOf(0) }
+    var pagedCompanies by remember { mutableStateOf(emptyList<PartnerCompany>()) }
+    var companiesCursor by remember { mutableStateOf<PartnerPageCursor?>(null) }
+    var isLoadingMoreCompanies by remember { mutableStateOf(false) }
+    var didFailLoadingMoreCompanies by remember { mutableStateOf(false) }
 
     val companiesState by
         remember(repository, reloadKey) { repository.observeActiveCompanies() }
             .collectAsState(initial = CompaniesState.Loading)
+    LaunchedEffect(reloadKey) {
+        pagedCompanies = emptyList()
+        companiesCursor = null
+        isLoadingMoreCompanies = false
+        didFailLoadingMoreCompanies = false
+    }
+    LaunchedEffect(companiesState) {
+        val loaded = companiesState as? CompaniesState.Loaded ?: return@LaunchedEffect
+        if (pagedCompanies.isEmpty()) companiesCursor = loaded.nextCursor
+        didFailLoadingMoreCompanies = false
+    }
+    val displayedCompaniesState =
+        (companiesState as? CompaniesState.Loaded)?.let { live ->
+            CompaniesState.Loaded(
+                companies =
+                    (live.companies + pagedCompanies)
+                        .distinctBy { it.id }
+                        .sortedBy { it.name.lowercase(Locale.ROOT) },
+                nextCursor = companiesCursor,
+            )
+        } ?: companiesState
     val offersState by
         remember(repository, reloadKey) { repository.observeActiveOffers() }
             .collectAsState(initial = OffersState.Loading)
@@ -96,7 +122,7 @@ fun PartnersRoute(
     val companyId = selectedCompanyId
     if (companyId == null) {
         PartnersRootScreen(
-            state = companiesState,
+            state = displayedCompaniesState,
             offersState = offersState,
             savedOffersState = savedOffersState,
             savedOffersAreExhaustive = savedIdsAreExhaustive,
@@ -110,6 +136,32 @@ fun PartnersRoute(
                 offerCodeCoordinator?.reset()
             },
             onRetry = { reloadKey++ },
+            onLoadMoreCompanies = {
+                val cursor = companiesCursor
+                val generation = reloadKey
+                if (cursor != null && !isLoadingMoreCompanies) {
+                    scope.launch {
+                        isLoadingMoreCompanies = true
+                        didFailLoadingMoreCompanies = false
+                        try {
+                            val page = repository.fetchActiveCompanies(cursor)
+                            if (generation == reloadKey) {
+                                pagedCompanies = (pagedCompanies + page.companies).distinctBy { it.id }
+                                companiesCursor = page.nextCursor
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            if (generation == reloadKey) didFailLoadingMoreCompanies = true
+                        } finally {
+                            if (generation == reloadKey) isLoadingMoreCompanies = false
+                        }
+                    }
+                }
+            },
+            canLoadMoreCompanies = companiesCursor != null,
+            isLoadingMoreCompanies = isLoadingMoreCompanies,
+            didFailLoadingMoreCompanies = didFailLoadingMoreCompanies,
             onRetrySaved = { savedReloadKey++ },
             onBack = onBack,
         )
@@ -117,7 +169,7 @@ fun PartnersRoute(
     }
 
     val cachedCompany =
-        (companiesState as? CompaniesState.Loaded)?.companies?.firstOrNull { it.id == companyId }
+        (displayedCompaniesState as? CompaniesState.Loaded)?.companies?.firstOrNull { it.id == companyId }
     val companyState by
         remember(repository, companyId, cachedCompany, companyReloadKey) {
             cachedCompany?.let { flowOf(CompanyState.Loaded(it)) }
@@ -130,11 +182,29 @@ fun PartnersRoute(
     val companyOffersState by
         remember(repository, companyId, reloadKey) { repository.observeActiveOffers(companyId) }
             .collectAsState(initial = OffersState.Loading)
+    var pagedCompanyOffers by remember(companyId) { mutableStateOf(emptyList<PartnerOffer>()) }
+    var companyOffersCursor by remember(companyId) { mutableStateOf<PartnerPageCursor?>(null) }
+    var isLoadingMoreCompanyOffers by remember(companyId) { mutableStateOf(false) }
+    var didFailLoadingMoreCompanyOffers by remember(companyId) { mutableStateOf(false) }
+    LaunchedEffect(companyOffersState) {
+        val loaded = companyOffersState as? OffersState.Loaded ?: return@LaunchedEffect
+        if (pagedCompanyOffers.isEmpty()) companyOffersCursor = loaded.nextCursor
+        didFailLoadingMoreCompanyOffers = false
+    }
     val companyOffers =
         (
             (companyOffersState as? OffersState.Loaded)?.offers.orEmpty() +
+                pagedCompanyOffers +
                 savedOffers.filter { it.companyId == companyId }
         ).distinctBy { it.id }
+    val displayedCompanyOffersState =
+        (companyOffersState as? OffersState.Loaded)?.let {
+            OffersState.Loaded(
+                offers = companyOffers,
+                isExhaustive = companyOffersCursor == null,
+                nextCursor = companyOffersCursor,
+            )
+        } ?: companyOffersState
     LaunchedEffect(companyOffers, expandedOfferId) {
         if (expandedOfferId != null && companyOffers.none { it.id == expandedOfferId }) {
             expandedOfferId = null
@@ -147,11 +217,26 @@ fun PartnersRoute(
             if (id != null && canAccessMemberOffers) repository.observeOfferDetail(id) else flowOf(null)
         }
             .collectAsState(initial = null)
+    val expandedVisibility by
+        remember(expandedOfferId, canAccessMemberOffers, repository) {
+            val id = expandedOfferId
+            if (id != null && canAccessMemberOffers) repository.observeOffers(setOf(id)) else flowOf(OffersState.Loaded(emptyList()))
+        }
+            .collectAsState(initial = OffersState.Loading)
+    LaunchedEffect(expandedOfferId, expandedVisibility) {
+        if (expandedOfferId != null &&
+            (expandedVisibility == OffersState.Error ||
+                (expandedVisibility as? OffersState.Loaded)?.offers?.none { it.id == expandedOfferId } == true)
+        ) {
+            expandedOfferId = null
+            offerCodeCoordinator?.reset()
+        }
+    }
 
     PartnerDetailScreen(
         companyState = companyState,
         offers = companyOffers,
-        offersState = companyOffersState,
+        offersState = displayedCompanyOffersState,
         savedOfferIds = savedIds,
         canAccessMemberOffers = canAccessMemberOffers,
         expandedOfferId = expandedOfferId,
@@ -183,5 +268,31 @@ fun PartnersRoute(
         },
         onRetryCompany = { companyReloadKey++ },
         onRetryOffers = { reloadKey++ },
+        onLoadMoreOffers = {
+            val cursor = companyOffersCursor
+            val requestedCompanyId = companyId
+            if (cursor != null && !isLoadingMoreCompanyOffers) {
+                scope.launch {
+                    isLoadingMoreCompanyOffers = true
+                    didFailLoadingMoreCompanyOffers = false
+                    try {
+                        val page = repository.fetchActiveOffers(companyId, cursor)
+                        if (selectedCompanyId == requestedCompanyId) {
+                            pagedCompanyOffers = (pagedCompanyOffers + page.offers).distinctBy { it.id }
+                            companyOffersCursor = page.nextCursor
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        if (selectedCompanyId == requestedCompanyId) didFailLoadingMoreCompanyOffers = true
+                    } finally {
+                        if (selectedCompanyId == requestedCompanyId) isLoadingMoreCompanyOffers = false
+                    }
+                }
+            }
+        },
+        canLoadMoreOffers = companyOffersCursor != null,
+        isLoadingMoreOffers = isLoadingMoreCompanyOffers,
+        didFailLoadingMoreOffers = didFailLoadingMoreCompanyOffers,
     )
 }

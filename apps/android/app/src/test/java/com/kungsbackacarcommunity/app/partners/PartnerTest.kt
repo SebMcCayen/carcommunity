@@ -49,6 +49,7 @@ class PartnerTest {
     fun `active companies and offers query limits are bounded`() {
         assertEquals(150L, Partners.ACTIVE_COMPANIES_QUERY_LIMIT)
         assertEquals(200L, Partners.ACTIVE_OFFERS_QUERY_LIMIT)
+        assertEquals(50L, Partners.COMPANY_OFFERS_QUERY_LIMIT)
         assertEquals(30L, Partners.SAVED_OFFERS_QUERY_LIMIT)
     }
 
