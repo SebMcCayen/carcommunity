@@ -6,7 +6,7 @@ final class PartnersCoordinatorTests: XCTestCase {
     private final class FakeRepository: PartnersRepository, @unchecked Sendable {
         let companies: [PartnersCollectionSnapshot]
         let offers: [PartnerActiveOffersSnapshot]
-        let saved: [SavedOffersSnapshot]
+        var saved: [SavedOffersSnapshot]
         let directOffers: [PartnerOffer]?
         var companiesContinuation: AsyncStream<PartnersCollectionSnapshot>.Continuation?
         var offersContinuation: AsyncStream<PartnerActiveOffersSnapshot>.Continuation?
@@ -643,6 +643,26 @@ final class PartnersCoordinatorTests: XCTestCase {
         await waitUntil { coordinator.savedState == .failed }
 
         XCTAssertTrue(coordinator.savedOfferIds.isEmpty)
+    }
+
+    @MainActor
+    func testSavedRetrySurfacesReplacementIdListenerFailure() async {
+        let repository = FakeRepository(saved: [.loaded(ids: ["old"])])
+        repository.directSnapshotsByIds[["old"]] = [.failed(code: "unavailable")]
+        let coordinator = PartnersCoordinator(
+            repository: repository,
+            subscriptionRepository: nil,
+            uid: "me",
+            access: AccountAccess(role: .admin, activeMember: false, suspended: false, deleted: false)
+        )
+        coordinator.start()
+        await waitUntil { coordinator.savedState == .failed }
+
+        repository.saved = [.failed(code: "unavailable")]
+        coordinator.reloadSavedOffers()
+        await waitUntil { coordinator.savedOfferIds.isEmpty }
+
+        XCTAssertEqual(coordinator.savedState, .failed)
     }
 
     @MainActor

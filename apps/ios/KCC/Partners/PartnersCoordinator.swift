@@ -395,6 +395,7 @@ final class PartnersCoordinator {
         savedOffersTask?.cancel()
         savedTask = nil
         savedOffersTask = nil
+        hasLoadedSavedIdsSnapshot = false
         savedState = hasLoadedSavedSnapshot ? .loaded : .loading
         subscribeSavedOffers()
     }
