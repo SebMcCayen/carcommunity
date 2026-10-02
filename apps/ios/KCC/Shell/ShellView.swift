@@ -60,6 +60,7 @@ struct ShellView: View {
     @State private var leaderboardCoordinator: LeaderboardCoordinator?
     @State private var notificationsCoordinator: NotificationsInboxCoordinator?
     @State private var notificationSettingsCoordinator: NotificationSettingsCoordinator?
+    @State private var privacySettingsCoordinator: PrivacySettingsCoordinator?
     @State private var friendsCoordinator: FriendsCoordinator?
     @State private var conversationsCoordinator: ConversationsCoordinator?
     @State private var chatHubCoordinator: ChatHubCoordinator?
@@ -604,6 +605,11 @@ struct ShellView: View {
                     Label("shell.friendsTitle", systemImage: "person.2")
                 }
             }
+            Button {
+                routes = routes.opening(.partnerStats)
+            } label: {
+                Label("shell.morePartnerStats", systemImage: "hand.raised")
+            }
         } label: {
             Label("shell.moreProfile", systemImage: "person.circle")
                 .labelStyle(.iconOnly)
@@ -745,6 +751,14 @@ struct ShellView: View {
         case .notificationSettings:
             routeNavigation {
                 NotificationSettingsScreen(coordinator: notificationSettingsCoordinator)
+            }
+        case .partnerStats:
+            if let privacySettingsCoordinator {
+                routeNavigation {
+                    PrivacySettingsScreen(coordinator: privacySettingsCoordinator)
+                }
+            } else {
+                unavailableRoute
             }
         case .friends:
             routeNavigation {
@@ -1381,6 +1395,10 @@ struct ShellView: View {
         notificationsCoordinator = NotificationsInboxCoordinator(repository: notifications, uid: uid)
         notificationSettingsCoordinator = NotificationSettingsCoordinator(
             repository: FirebaseNotificationSettingsRepository.createIfAvailable(),
+            uid: uid
+        )
+        privacySettingsCoordinator = PrivacySettingsCoordinator(
+            repository: FirebasePrivacySettingsRepository.createIfAvailable(),
             uid: uid
         )
         friendsCoordinator = friends.map {

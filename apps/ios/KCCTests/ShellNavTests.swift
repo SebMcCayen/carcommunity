@@ -134,6 +134,15 @@ final class ShellNavTests: XCTestCase {
         XCTAssertEqual(popped.parents, [])
     }
 
+    func testPoppingPrivacySettingsReturnsToItsFutureSettingsParent() {
+        let popped = ShellRouteStack.empty
+            .opening(.settings)
+            .opening(.partnerStats)
+            .poppingOne()
+        XCTAssertEqual(popped.current, .settings)
+        XCTAssertEqual(popped.parents, [])
+    }
+
     func testPoppingATopLevelRouteClosesTheStack() {
         // Back from the profile (opened from the map home) leaves nothing
         // open — the shell falls through to its tab Back rules.
