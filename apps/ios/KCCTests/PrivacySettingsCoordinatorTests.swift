@@ -66,7 +66,7 @@ final class PrivacySettingsCoordinatorTests: XCTestCase {
 
     func testDecoderUsesOptOutDefaultsOnlyForMissingFields() {
         XCTAssertEqual(PrivacySettingsChoices.decode(nil), .contractDefaults)
-        XCTAssertFalse(PrivacySettingsChoices.contractDefaults.partnerStatsOptIn)
+        XCTAssertTrue(PrivacySettingsChoices.contractDefaults.partnerStatsOptIn)
         XCTAssertEqual(
             PrivacySettingsChoices.decode([
                 "anonymousPartnerStatsOptIn": false,

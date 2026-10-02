@@ -57,7 +57,7 @@ struct PrivacySettingsScreen: View {
             Toggle(
                 "privacySettings.partnerStatsBody",
                 isOn: Binding(
-                    get: { coordinator.draft?.partnerStatsOptIn ?? false },
+                    get: { coordinator.draft?.partnerStatsOptIn ?? true },
                     set: { value in coordinator.setPendingPartnerStatsOptIn(value) }
                 )
             )
@@ -76,6 +76,7 @@ struct PrivacySettingsScreen: View {
             VStack(alignment: .leading, spacing: KccSpacing.s2) {
                 Text("privacySettings.partnerStatsExplainer")
                 Text("privacySettings.partnerStatsNotice")
+                Text("privacySettings.partnerStatsNote")
                 statusText(coordinator.partnerSaveStatus)
             }
         }
