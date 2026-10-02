@@ -506,7 +506,7 @@ final class PartnersCoordinatorTests: XCTestCase {
         await coordinator.revealCode(offerId: "o1")
         XCTAssertEqual(coordinator.codeStatus, .shown(offerId: "o1", code: "SAVE20"))
 
-        repository.sendOffers(.loaded(offers: []))
+        repository.sendDirectOffers(.loaded(offers: []))
         await waitUntil { coordinator.expandedOfferId == nil }
 
         XCTAssertEqual(coordinator.detailState, .idle)
