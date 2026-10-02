@@ -545,6 +545,28 @@ final class PartnersCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testAuthoritativeMissingLookupHidesPagedDirectoryCompany() async {
+        let company = PartnerCompany(
+            id: "paged", name: "Paused Partner", category: .workshop, description: nil,
+            website: nil, phone: nil, address: nil, latitude: nil, longitude: nil
+        )
+        let repository = FakeRepository(companies: [.loaded(companies: [company])])
+        let coordinator = PartnersCoordinator(
+            repository: repository,
+            subscriptionRepository: nil,
+            uid: "me",
+            access: .unrestrictedCommunity
+        )
+        coordinator.start()
+        await waitUntil { coordinator.company(id: company.id) == company }
+
+        coordinator.loadCompany(id: company.id)
+        await waitUntil { coordinator.companyLookupState == .missing(id: company.id) }
+
+        XCTAssertNil(coordinator.company(id: company.id))
+    }
+
+    @MainActor
     func testStopClearsStateAndAllowsFreshListenersOnRestart() async {
         let company = PartnerCompany(
             id: "c1", name: "Partner", category: .workshop, description: nil,

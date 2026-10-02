@@ -241,6 +241,15 @@ final class PartnersCoordinator {
     }
 
     func company(id: String) -> PartnerCompany? {
+        switch companyLookupState {
+        case .loaded(let resolvedId) where resolvedId == id:
+            return resolvedCompanies[id]
+        case .missing(let resolvedId) where resolvedId == id,
+             .failed(let resolvedId) where resolvedId == id:
+            return nil
+        default:
+            break
+        }
         if case .loaded(let companies) = state,
            let company = companies.first(where: { $0.id == id }) {
             return company

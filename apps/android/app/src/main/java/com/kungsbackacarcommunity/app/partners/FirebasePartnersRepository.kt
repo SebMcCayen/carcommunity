@@ -67,7 +67,6 @@ class FirebasePartnersRepository private constructor(
         )
 
     override fun observeCompany(companyId: String): Flow<CompanyState> = callbackFlow {
-        trySend(CompanyState.Loading)
         val registration =
             firestore
                 .collection(COMPANIES)

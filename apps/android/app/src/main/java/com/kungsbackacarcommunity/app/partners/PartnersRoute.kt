@@ -171,9 +171,8 @@ fun PartnersRoute(
     val cachedCompany =
         (displayedCompaniesState as? CompaniesState.Loaded)?.companies?.firstOrNull { it.id == companyId }
     val companyState by
-        remember(repository, companyId, cachedCompany, companyReloadKey) {
-            cachedCompany?.let { flowOf(CompanyState.Loaded(it)) }
-                ?: repository.observeCompany(companyId)
+        remember(repository, companyId, companyReloadKey) {
+            repository.observeCompany(companyId)
         }
             .collectAsState(
                 initial = cachedCompany?.let(CompanyState::Loaded) ?: CompanyState.Loading,
