@@ -39,6 +39,15 @@ struct PartnerApplicationInput: Equatable, Sendable {
 
 enum PartnerApplicationValidationError: Equatable, Sendable {
     case companyName, category, contactName, contactEmail, fieldTooLong
+
+    var localizationKey: String {
+        switch self {
+        case .contactEmail, .fieldTooLong:
+            "partners.submitErrorInvalid"
+        case .companyName, .category, .contactName:
+            "partners.fieldRequired"
+        }
+    }
 }
 
 enum PartnerApplications {

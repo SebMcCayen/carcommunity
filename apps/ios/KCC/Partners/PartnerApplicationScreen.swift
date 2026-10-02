@@ -107,9 +107,10 @@ struct PartnerApplicationScreen: View {
     }
 
     private var validationMessage: LocalizedStringKey {
-        PartnerApplications.validate(form) == .fieldTooLong
-            ? "partners.submitErrorInvalid"
-            : "partners.fieldRequired"
+        guard let error = PartnerApplications.validate(form) else {
+            return "partners.fieldRequired"
+        }
+        return LocalizedStringKey(error.localizationKey)
     }
 
     private func failureMessage(_ failure: PartnerApplicationFailure) -> LocalizedStringKey {

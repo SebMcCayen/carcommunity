@@ -53,15 +53,17 @@ protocol VehiclesRepository: AnyObject, Sendable {
 
 /// Decides whether a freshly uploaded image is safe to remove after the
 /// callable fails. Transport/unknown/internal failures are ambiguous: the
-/// transaction may have committed before the response was lost, so deleting
-/// then could leave the vehicle document pointing at a missing object.
+/// transaction may have committed before the response was lost. An
+/// already-exists response also proves the uploaded path is already stored.
+/// Deleting in either case could leave the vehicle document pointing at a
+/// missing object.
 enum VehiclePhotoUploadCleanup {
     static func shouldDelete(after code: KccFunctionsErrorCode) -> Bool {
         switch code {
-        case .unauthenticated, .permissionDenied, .invalidArgument, .notFound, .alreadyExists,
+        case .unauthenticated, .permissionDenied, .invalidArgument, .notFound,
              .resourceExhausted, .failedPrecondition:
             true
-        case .internalError, .unavailable, .unknown:
+        case .alreadyExists, .internalError, .unavailable, .unknown:
             false
         }
     }

@@ -17,4 +17,3 @@ final class FirebasePartnerApplicationRepository: PartnerApplicationRepository, 
         KccFunctionsClient.createIfAvailable().map(FirebasePartnerApplicationRepository.init)
     }
 }
-

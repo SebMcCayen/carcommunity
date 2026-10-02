@@ -34,6 +34,22 @@ final class PartnerApplicationTests: XCTestCase {
         XCTAssertEqual(PartnerApplications.validate(form), .contactEmail)
     }
 
+    func testValidationMessagesDistinguishInvalidValuesFromMissingFields() {
+        XCTAssertEqual(
+            PartnerApplicationValidationError.contactEmail.localizationKey,
+            "partners.submitErrorInvalid"
+        )
+        XCTAssertEqual(
+            PartnerApplicationValidationError.fieldTooLong.localizationKey,
+            "partners.submitErrorInvalid"
+        )
+        for error in [
+            PartnerApplicationValidationError.companyName, .category, .contactName,
+        ] {
+            XCTAssertEqual(error.localizationKey, "partners.fieldRequired")
+        }
+    }
+
     func testInputTrimsFieldsNormalizesWebsiteAndOmitsBlanks() {
         var form = validForm()
         form.contactPhone = " "
