@@ -76,7 +76,7 @@ interface PartnersRepository {
 
     fun observeActiveOffers(): Flow<OffersState>
 
-    /** All active offers for one company, used by detail beyond the capped global preview. */
+    /** Live first page of active offers for one company. Continue with [fetchActiveOffers]. */
     fun observeActiveOffers(companyId: String): Flow<OffersState>
 
     suspend fun fetchActiveOffers(
