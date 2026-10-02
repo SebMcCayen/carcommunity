@@ -248,6 +248,16 @@ struct ShellView: View {
                 PoliceDetailsSheet(coordinator: incidentMapCoordinator)
             }
         }
+        .sheet(isPresented: crownSelectionIsPresented) {
+            if let coordinator = crownHuntComposition?.mapCoordinator {
+                CrownHuntCollectSheet(coordinator: coordinator)
+            }
+        }
+        .sheet(isPresented: crownPerkMenuIsPresented) {
+            if let coordinator = crownHuntComposition?.perkMapCoordinator {
+                CrownPerkDeploySheet(coordinator: coordinator)
+            }
+        }
         .sheet(isPresented: $showMapLayers) {
             MapLayersSheet(
                 preferences: mapLayerPreferences,
@@ -343,7 +353,27 @@ struct ShellView: View {
                     MapLayersButton(isPresented: $showMapLayers)
                         .padding(KccSpacing.s4)
                 }
+                .overlay(alignment: .bottom) {
+                    if let coordinator = crownHuntComposition?.perkMapCoordinator,
+                       coordinator.isAvailable {
+                        CrownPerkMapControl(coordinator: coordinator)
+                            .padding(.bottom, KccSpacing.s4)
+                    }
+                }
                 .overlay {
+                    if let crownMapCoordinator = crownHuntComposition?.mapCoordinator {
+                        CrownHuntMapOverlay(
+                            coordinator: crownMapCoordinator,
+                            projection: mapSurface
+                        )
+                    }
+                    if let perkMapCoordinator = crownHuntComposition?.perkMapCoordinator {
+                        CrownPerkMapOverlay(
+                            coordinator: perkMapCoordinator,
+                            projection: mapSurface,
+                            ownFix: crownHuntComposition?.mapCoordinator?.latestFix
+                        )
+                    }
                     if let incidentMapCoordinator {
                         IncidentMapOverlay(
                             coordinator: incidentMapCoordinator,
@@ -414,12 +444,33 @@ struct ShellView: View {
                     do { try await Task.sleep(for: .seconds(86_400)) } catch {}
                     incidentMapCoordinator.stop()
                 }
+                .task(id: crownMapLifecycleKey) {
+                    guard let coordinator = crownHuntComposition?.mapCoordinator else { return }
+                    let perkCoordinator = crownHuntComposition?.perkMapCoordinator
+                    coordinator.start()
+                    perkCoordinator?.start()
+                    await coordinator.refresh(
+                        camera: mapSurface.cameraSnapshot,
+                        visibleRadiusMeters: mapSurface.visibleRadiusMeters()
+                    )
+                    do { try await Task.sleep(for: .seconds(86_400)) } catch {}
+                    coordinator.stop()
+                    perkCoordinator?.stop()
+                }
                 .task(id: mapSurface.cameraSnapshot) {
                     guard let incidentMapCoordinator else { return }
                     // Camera snapshots update while panning. Cancellation turns
                     // this into a trailing-edge debounce, avoiding callable spam.
                     do { try await Task.sleep(for: .milliseconds(700)) } catch { return }
                     await incidentMapCoordinator.refresh(surface: mapSurface)
+                }
+                .task(id: crownMapRefreshKey) {
+                    guard let coordinator = crownHuntComposition?.mapCoordinator else { return }
+                    do { try await Task.sleep(for: .milliseconds(700)) } catch { return }
+                    await coordinator.refresh(
+                        camera: mapSurface.cameraSnapshot,
+                        visibleRadiusMeters: mapSurface.visibleRadiusMeters()
+                    )
                 }
                 .task(id: convoyAwarenessSubscriptionKey) {
                     convoyAwareness.sync(
@@ -1283,6 +1334,8 @@ struct ShellView: View {
         driveRecordingCoordinator?.reset()
         driveRecordingCoordinator = nil
         startDrivingGarage = nil
+        crownHuntComposition?.mapCoordinator?.stop()
+        crownHuntComposition?.perkMapCoordinator?.stop()
         crownHuntComposition = nil
         partnersCoordinator?.clearSensitiveOfferState()
         partnersCoordinator = nil
@@ -1415,7 +1468,8 @@ struct ShellView: View {
         let composition = await CrownHuntComposition.live(
             uid: uid,
             passesMemberGate: MemberGating.allows(access: access),
-            featureFlags: featureFlags
+            featureFlags: featureFlags,
+            locationProvider: locationProvider
         )
         guard !Task.isCancelled, uid == signedInUid else { return }
         crownHuntComposition = composition
@@ -1519,6 +1573,36 @@ struct ShellView: View {
         "\(signedInUid ?? "unavailable")|\(incidentMapCoordinator == nil ? "off" : "on")"
     }
 
+    private var crownMapLifecycleKey: String {
+        [
+            signedInUid ?? "unavailable",
+            crownHuntComposition?.mapCoordinator?.isAvailable == true ? "on" : "off",
+            selectedTab == .map ? "visible" : "covered"
+        ].joined(separator: "|")
+    }
+
+    private var crownMapRefreshKey: String {
+        let camera = mapSurface.cameraSnapshot
+        return [
+            crownMapLifecycleKey,
+            camera.map { "\($0.latitude)|\($0.longitude)|\($0.zoom)" } ?? "no-camera"
+        ].joined(separator: "|")
+    }
+
+    private var crownSelectionIsPresented: Binding<Bool> {
+        Binding(
+            get: { crownHuntComposition?.mapCoordinator?.selectedTarget != nil },
+            set: { if !$0 { crownHuntComposition?.mapCoordinator?.dismissSelection() } }
+        )
+    }
+
+    private var crownPerkMenuIsPresented: Binding<Bool> {
+        Binding(
+            get: { crownHuntComposition?.perkMapCoordinator?.menuPresented == true },
+            set: { crownHuntComposition?.perkMapCoordinator?.menuPresented = $0 }
+        )
+    }
+
     private var incidentReportIsPresented: Binding<Bool> {
         Binding(
             get: { incidentMapCoordinator?.reportSheetPresented == true },
@@ -1569,6 +1653,7 @@ struct ShellView: View {
             signedInUid ?? "unavailable",
             String(featureFlags.isEnabled(.liveLocation)),
             String(featureFlags.isEnabled(.crownHunt)),
+            String(featureFlags.isEnabled(.crownHuntSpawn)),
             String(featureFlags.isEnabled(.crownHuntPerks)),
             String(featureFlags.isEnabled(.crownHuntLiveShareScoring)),
             String(MemberGating.allows(access: access))

@@ -15,6 +15,8 @@ struct CrownHuntComposition {
     let statsCoordinator: CrownHuntStatsCoordinator
     let claimsCoordinator: CrownHuntClaimsCoordinator
     let shopCoordinator: PerkShopCoordinator
+    let mapCoordinator: CrownHuntMapCoordinator?
+    let perkMapCoordinator: CrownPerkMapCoordinator?
     let flags: CrownHuntFlags
 
     /// Builds the live composition for `uid`. Reads the feature flags first
@@ -28,7 +30,8 @@ struct CrownHuntComposition {
     static func live(
         uid: String?,
         passesMemberGate: Bool,
-        featureFlags: FeatureFlags? = nil
+        featureFlags: FeatureFlags? = nil,
+        locationProvider: (any LocationProvider)? = nil
     ) async -> CrownHuntComposition {
         let flags: CrownHuntFlags
         if let featureFlags {
@@ -36,6 +39,17 @@ struct CrownHuntComposition {
         } else {
             flags = await FirebaseCrownHuntFeatureFlagsRepository.createIfAvailable()?.flags()
                 ?? .contractDefaults
+        }
+        let shopRepository = FirebasePerkShopRepository.createIfAvailable()
+        let mapCoordinator = locationProvider.map {
+            CrownHuntMapCoordinator(
+                repository: FirebaseCrownHuntMapRepository.createIfAvailable(),
+                locationProvider: $0,
+                crownHuntEnabled: flags.crownHuntEnabled,
+                spawnEnabled: flags.spawnEnabled,
+                passesMemberGate: passesMemberGate,
+                uid: uid
+            )
         }
         return CrownHuntComposition(
             statsCoordinator: CrownHuntStatsCoordinator(
@@ -49,12 +63,22 @@ struct CrownHuntComposition {
                 passesMemberGate: passesMemberGate
             ),
             shopCoordinator: PerkShopCoordinator(
-                repository: FirebasePerkShopRepository.createIfAvailable(),
+                repository: shopRepository,
                 balanceRepository: FirebasePerkBalanceRepository.createIfAvailable(),
                 uid: uid,
                 perksEnabled: flags.perksEnabled,
                 passesMemberGate: passesMemberGate
             ),
+            mapCoordinator: mapCoordinator,
+            perkMapCoordinator: mapCoordinator.map { mapCoordinator in
+                CrownPerkMapCoordinator(
+                    repository: FirebaseCrownPerkDeployRepository.createIfAvailable(),
+                    shopRepository: shopRepository,
+                    uid: uid,
+                    enabled: flags.crownHuntEnabled && flags.perksEnabled && passesMemberGate,
+                    location: { [weak mapCoordinator] in mapCoordinator?.latestFix }
+                )
+            },
             flags: flags
         )
     }
