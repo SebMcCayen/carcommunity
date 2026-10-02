@@ -65,6 +65,7 @@ struct ShellView: View {
     @State private var chatHubCoordinator: ChatHubCoordinator?
     @State private var crownHuntComposition: CrownHuntComposition?
     @State private var partnersCoordinator: PartnersCoordinator?
+    @State private var partnerApplicationCoordinator: PartnerApplicationCoordinator?
     @State private var liveLocationCoordinator: LiveLocationCoordinator?
     @State private var driveRecordingCoordinator: DriveRecordingCoordinator?
     @State private var locationPermissionCoordinator: LocationPermissionCoordinator?
@@ -604,6 +605,13 @@ struct ShellView: View {
                     Label("shell.friendsTitle", systemImage: "person.2")
                 }
             }
+            if partnerApplicationCoordinator != nil {
+                Button {
+                    routes = routes.opening(.partnerApplication)
+                } label: {
+                    Label("shell.morePartnerApplication", systemImage: "briefcase")
+                }
+            }
         } label: {
             Label("shell.moreProfile", systemImage: "person.circle")
                 .labelStyle(.iconOnly)
@@ -707,6 +715,17 @@ struct ShellView: View {
                     coordinator: partnersCoordinator,
                     onBack: { routes = routes.poppingOne() }
                 )
+            } else {
+                unavailableRoute
+            }
+        case .partnerApplication:
+            if let partnerApplicationCoordinator {
+                routeNavigation {
+                    PartnerApplicationScreen(
+                        coordinator: partnerApplicationCoordinator,
+                        onClose: { routes = routes.poppingOne() }
+                    )
+                }
             } else {
                 unavailableRoute
             }
@@ -1339,6 +1358,7 @@ struct ShellView: View {
         crownHuntComposition = nil
         partnersCoordinator?.clearSensitiveOfferState()
         partnersCoordinator = nil
+        partnerApplicationCoordinator = nil
 
         let friends = FirebaseFriendsRepository.createIfAvailable()
         let conversations = FirebaseConversationsRepository.createIfAvailable()
@@ -1377,6 +1397,9 @@ struct ShellView: View {
                 uid: uid,
                 access: access
             )
+        }
+        partnerApplicationCoordinator = FirebasePartnerApplicationRepository.createIfAvailable().map {
+            PartnerApplicationCoordinator(repository: $0)
         }
         notificationsCoordinator = NotificationsInboxCoordinator(repository: notifications, uid: uid)
         notificationSettingsCoordinator = NotificationSettingsCoordinator(

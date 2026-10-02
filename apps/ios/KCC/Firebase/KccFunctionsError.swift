@@ -19,6 +19,8 @@ enum KccFunctionsErrorCode: String, Equatable, Sendable, CaseIterable {
     case invalidArgument = "invalid-argument"
     /// Resource does not exist (e.g. a draft/cancelled event's roster).
     case notFound = "not-found"
+    /// The requested resource conflicts with one that already exists.
+    case alreadyExists = "already-exists"
     /// Rate limit or quota exceeded (the events.create 3-per-24h cap).
     case resourceExhausted = "resource-exhausted"
     /// State precondition not met (e.g. editing a cancelled event).

@@ -58,7 +58,7 @@ protocol VehiclesRepository: AnyObject, Sendable {
 enum VehiclePhotoUploadCleanup {
     static func shouldDelete(after code: KccFunctionsErrorCode) -> Bool {
         switch code {
-        case .unauthenticated, .permissionDenied, .invalidArgument, .notFound,
+        case .unauthenticated, .permissionDenied, .invalidArgument, .notFound, .alreadyExists,
              .resourceExhausted, .failedPrecondition:
             true
         case .internalError, .unavailable, .unknown:

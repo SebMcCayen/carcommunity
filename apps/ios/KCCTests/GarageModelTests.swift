@@ -118,7 +118,7 @@ final class GarageModelTests: XCTestCase {
     func testPhotoUploadCleanupOnlyDeletesAfterDefinitiveRejection() {
         for code in [
             KccFunctionsErrorCode.unauthenticated, .permissionDenied, .invalidArgument,
-            .notFound, .resourceExhausted, .failedPrecondition,
+            .notFound, .alreadyExists, .resourceExhausted, .failedPrecondition,
         ] {
             XCTAssertTrue(VehiclePhotoUploadCleanup.shouldDelete(after: code))
         }
