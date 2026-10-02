@@ -22339,6 +22339,23 @@
         }
       }
     },
+    "partnerOffers.detailLoadError": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kunde inte hämta erbjudandedetaljerna."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not load offer details."
+          }
+        }
+      }
+    },
     "partnerOffers.detailUnavailable": {
       "extractionState": "manual",
       "localizations": {

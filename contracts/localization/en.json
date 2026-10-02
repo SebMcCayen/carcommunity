@@ -1531,6 +1531,7 @@
     "codeAlertClose": "Close",
     "loadError": "Could not load offers.",
     "detailUnavailable": "Offer details are unavailable.",
+    "detailLoadError": "Could not load offer details.",
     "codeLoadError": "Could not load the code. Please try again.",
     "saveError": "Could not save the offer.",
     "offerTypeDiscountCode": "Discount code",

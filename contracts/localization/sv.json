@@ -1531,6 +1531,7 @@
     "codeAlertClose": "Stäng",
     "loadError": "Kunde inte hämta erbjudanden.",
     "detailUnavailable": "Erbjudandedetaljerna är inte tillgängliga.",
+    "detailLoadError": "Kunde inte hämta erbjudandedetaljerna.",
     "codeLoadError": "Kunde inte hämta koden. Försök igen.",
     "saveError": "Kunde inte spara erbjudandet.",
     "offerTypeDiscountCode": "Rabattkod",
