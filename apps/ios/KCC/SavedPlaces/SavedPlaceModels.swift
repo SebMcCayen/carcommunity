@@ -1,0 +1,172 @@
+import Foundation
+
+enum SavedPlaceKind: String, Codable, CaseIterable, Sendable {
+    case home
+    case work
+    case favourite
+
+    var titleKey: String {
+        switch self {
+        case .home: "addressSearch.savedHome"
+        case .work: "addressSearch.savedWork"
+        case .favourite: "addressSearch.savedFavourite"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .home: "house.fill"
+        case .work: "briefcase.fill"
+        case .favourite: "star.fill"
+        }
+    }
+}
+
+struct PlaceSuggestion: Codable, Equatable, Identifiable, Sendable {
+    let id: String
+    let name: String
+    let address: String?
+    let point: MapPoint
+
+    var secondaryText: String? {
+        guard let address, !address.isEmpty, address != name else { return nil }
+        return address
+    }
+}
+
+struct SavedPlace: Codable, Equatable, Identifiable, Sendable {
+    let id: String
+    let kind: SavedPlaceKind
+    let label: String
+    let place: PlaceSuggestion
+
+    var displayLabel: String {
+        switch kind {
+        case .home, .work: String(localized: String.LocalizationValue(kind.titleKey))
+        case .favourite: label
+        }
+    }
+}
+
+enum SavedPlacesPolicy {
+    static let maximumCount = 6
+    static let maximumLabelLength = 40
+    static let maximumQueryLength = 120
+    static let maximumSearchResults = 6
+
+    static func create(
+        kind: SavedPlaceKind,
+        place: PlaceSuggestion,
+        label: String
+    ) -> SavedPlace? {
+        guard isValid(point: place.point) else { return nil }
+        let normalizedLabel = normalize(label: label).nilIfEmpty ?? normalize(label: place.name)
+        guard !normalizedLabel.isEmpty else { return nil }
+        return SavedPlace(
+            id: id(for: kind, place: place),
+            kind: kind,
+            label: normalizedLabel,
+            place: PlaceSuggestion(
+                id: String(place.id.prefix(256)),
+                name: String(place.name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(160)),
+                address: place.address.map {
+                    String($0.trimmingCharacters(in: .whitespacesAndNewlines).prefix(240))
+                }?.nilIfEmpty,
+                point: place.point
+            )
+        )
+    }
+
+    static func upsert(_ saved: SavedPlace, into existing: [SavedPlace]) -> [SavedPlace] {
+        var items = normalize(existing)
+        if let index = items.firstIndex(where: { $0.id == saved.id }) {
+            items[index] = saved
+            return sorted(items)
+        }
+        if items.count >= maximumCount {
+            guard let oldestFavourite = items.firstIndex(where: { $0.kind == .favourite }) else {
+                return items
+            }
+            items.remove(at: oldestFavourite)
+        }
+        items.append(saved)
+        return sorted(items)
+    }
+
+    static func remove(id: String, from existing: [SavedPlace]) -> [SavedPlace] {
+        existing.filter { $0.id != id }
+    }
+
+    static func normalize(_ raw: [SavedPlace]) -> [SavedPlace] {
+        var seen = Set<String>()
+        var valid: [SavedPlace] = []
+        for candidate in raw {
+            guard let rebuilt = create(
+                kind: candidate.kind,
+                place: candidate.place,
+                label: candidate.label
+            ), seen.insert(rebuilt.id).inserted else { continue }
+            valid.append(rebuilt)
+        }
+        var result = sorted(valid)
+        while result.count > maximumCount,
+              let oldestFavourite = result.firstIndex(where: { $0.kind == .favourite }) {
+            result.remove(at: oldestFavourite)
+        }
+        return Array(result.prefix(maximumCount))
+    }
+
+    static func id(for kind: SavedPlaceKind, place: PlaceSuggestion) -> String {
+        switch kind {
+        case .home: "home"
+        case .work: "work"
+        case .favourite:
+            if !place.id.isEmpty { return "fav:\(place.id)" }
+            return String(format: "fav:%.6f,%.6f", place.point.longitude, place.point.latitude)
+        }
+    }
+
+    static func isValid(point: MapPoint) -> Bool {
+        point.latitude.isFinite && point.longitude.isFinite
+            && (-90...90).contains(point.latitude)
+            && (-180...180).contains(point.longitude)
+    }
+
+    static func normalizedQuery(_ query: String) -> String {
+        String(query.trimmingCharacters(in: .whitespacesAndNewlines).prefix(maximumQueryLength))
+    }
+
+    private static func normalize(label: String) -> String {
+        String(label.trimmingCharacters(in: .whitespacesAndNewlines).prefix(maximumLabelLength))
+    }
+
+    private static func sorted(_ items: [SavedPlace]) -> [SavedPlace] {
+        let home = items.filter { $0.kind == .home }
+        let work = items.filter { $0.kind == .work }
+        let favourites = items.filter { $0.kind == .favourite }
+        return home + work + favourites
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
+}
+
+enum SavedPlaceShare {
+    static func url(for savedPlace: SavedPlace) -> URL? {
+        url(name: savedPlace.displayLabel, point: savedPlace.place.point)
+    }
+
+    static func url(name: String, point: MapPoint) -> URL? {
+        guard SavedPlacesPolicy.isValid(point: point) else { return nil }
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "maps.apple.com"
+        components.path = "/"
+        components.queryItems = [
+            URLQueryItem(name: "ll", value: "\(point.latitude),\(point.longitude)"),
+            URLQueryItem(name: "q", value: String(name.prefix(160)))
+        ]
+        return components.url
+    }
+}
