@@ -22,6 +22,7 @@ final class PartnersCoordinatorTests: XCTestCase {
         var offerPages: [PartnerOffersPage] = []
         var companyOfferPages: [PartnerOffersPage] = []
         var companyPageDelayNanoseconds: UInt64 = 0
+        var companyOfferPageDelayNanoseconds: UInt64 = 0
 
         init(
             companies: [PartnersCollectionSnapshot] = [.loaded(companies: [])],
@@ -88,6 +89,9 @@ final class PartnersCoordinatorTests: XCTestCase {
             companyId: String,
             after cursor: PartnerPageCursor
         ) async throws -> PartnerOffersPage {
+            if companyOfferPageDelayNanoseconds > 0 {
+                try await Task.sleep(nanoseconds: companyOfferPageDelayNanoseconds)
+            }
             guard !companyOfferPages.isEmpty else {
                 return PartnerOffersPage(offers: [], nextCursor: nil)
             }
@@ -370,6 +374,40 @@ final class PartnersCoordinatorTests: XCTestCase {
         await pageTask.value
 
         XCTAssertEqual(coordinator.state, .loaded([liveCompany]))
+        XCTAssertFalse(coordinator.isLoadingMoreCompanies)
+    }
+
+    @MainActor
+    func testLiveBoundaryShiftInvalidatesFirstInFlightCompanyPage() async {
+        let oldCursor = PartnerPageCursor(createdAt: .distantPast, documentId: "old")
+        let newCursor = PartnerPageCursor(createdAt: .distantFuture, documentId: "new")
+        let liveCompany = PartnerCompany(
+            id: "live", name: "Live", category: .other, description: nil,
+            website: nil, phone: nil, address: nil, latitude: nil, longitude: nil
+        )
+        let staleCompany = PartnerCompany(
+            id: "stale", name: "Stale", category: .other, description: nil,
+            website: nil, phone: nil, address: nil, latitude: nil, longitude: nil
+        )
+        let repository = FakeRepository(
+            companies: [.loaded(companies: [liveCompany], nextCursor: oldCursor)]
+        )
+        repository.companyPages = [PartnerCompaniesPage(companies: [staleCompany], nextCursor: nil)]
+        repository.companyPageDelayNanoseconds = 100_000_000
+        let coordinator = PartnersCoordinator(
+            repository: repository, subscriptionRepository: nil, uid: "me",
+            access: .unrestrictedCommunity
+        )
+        coordinator.start()
+        await waitUntil { coordinator.state == .loaded([liveCompany]) }
+
+        let pageTask = Task { await coordinator.loadMoreCompanies() }
+        try? await Task.sleep(nanoseconds: 10_000_000)
+        repository.sendCompanies(.loaded(companies: [liveCompany], nextCursor: newCursor))
+        await pageTask.value
+
+        XCTAssertEqual(coordinator.state, .loaded([liveCompany]))
+        XCTAssertFalse(coordinator.companiesAreExhaustive)
         XCTAssertFalse(coordinator.isLoadingMoreCompanies)
     }
 

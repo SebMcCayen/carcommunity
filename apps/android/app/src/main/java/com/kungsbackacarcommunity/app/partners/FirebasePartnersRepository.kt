@@ -85,6 +85,7 @@ class FirebasePartnersRepository private constructor(
     }
 
     override fun observeActiveOffers(): Flow<OffersState> = callbackFlow {
+        var hasLoadedSnapshot = false
         val registration =
             firestore
                 .collection(OFFERS)
@@ -94,9 +95,10 @@ class FirebasePartnersRepository private constructor(
                 .limit(Partners.ACTIVE_OFFERS_QUERY_LIMIT + 1)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
-                        trySend(OffersState.Error)
+                        if (!hasLoadedSnapshot) trySend(OffersState.Error)
                         return@addSnapshotListener
                     }
+                    hasLoadedSnapshot = true
                     val page = offerPage(snapshot?.documents.orEmpty(), Partners.ACTIVE_OFFERS_QUERY_LIMIT)
                     trySend(
                         OffersState.Loaded(
@@ -110,6 +112,7 @@ class FirebasePartnersRepository private constructor(
     }
 
     override fun observeActiveOffers(companyId: String): Flow<OffersState> = callbackFlow {
+        var hasLoadedSnapshot = false
         val registration =
             firestore
                 .collection(OFFERS)
@@ -120,9 +123,10 @@ class FirebasePartnersRepository private constructor(
                 .limit(Partners.COMPANY_OFFERS_QUERY_LIMIT + 1)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
-                        trySend(OffersState.Error)
+                        if (!hasLoadedSnapshot) trySend(OffersState.Error)
                         return@addSnapshotListener
                     }
+                    hasLoadedSnapshot = true
                     val page = offerPage(snapshot?.documents.orEmpty(), Partners.COMPANY_OFFERS_QUERY_LIMIT)
                     trySend(OffersState.Loaded(page.offers, page.nextCursor == null, page.nextCursor))
                 }

@@ -1530,6 +1530,7 @@
     "codeAlertTitle": "Discount code",
     "codeAlertClose": "Close",
     "loadError": "Could not load offers.",
+    "detailUnavailable": "Offer details are unavailable.",
     "codeLoadError": "Could not load the code. Please try again.",
     "saveError": "Could not save the offer.",
     "offerTypeDiscountCode": "Discount code",

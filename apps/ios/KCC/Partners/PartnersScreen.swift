@@ -338,7 +338,7 @@ private struct PartnerDetailScreen: View {
                 coordinator.setExpandedOffer(focusedOfferId, expanded: true)
             }
         }
-        .onDisappear { coordinator.clearSensitiveOfferState() }
+        .onDisappear { coordinator.closeCompanyDetail() }
         .alert("partnerOffers.saveError", isPresented: saveErrorPresented) {
             Button("partners.close") { coordinator.resetSavedError() }
         } message: {
@@ -425,7 +425,7 @@ private struct PartnerOfferCard: View {
         case .idle, .loading:
             ProgressView("partners.loading")
         case .missing:
-            Text("partnerOffers.memberRequired").foregroundStyle(.secondary)
+            Text("partnerOffers.detailUnavailable").foregroundStyle(.secondary)
         case .failed:
             Text("partnerOffers.loadError").foregroundStyle(.red)
         case .loaded(let detail):

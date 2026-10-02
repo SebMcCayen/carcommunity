@@ -336,6 +336,25 @@ final class PartnersCoordinator {
         subscribeCompanyOffers(repository, companyId: companyId)
     }
 
+    func closeCompanyDetail() {
+        companyTask?.cancel()
+        companyOffersTask?.cancel()
+        companyTask = nil
+        companyOffersTask = nil
+        companyLookupState = .idle
+        companyOffersCompanyId = nil
+        liveCompanyOffers = []
+        pagedCompanyOffers = []
+        companyOffersCursor = nil
+        liveCompanyOffersCursor = nil
+        hasLoadedCompanyOffersSnapshot = false
+        companyOffersState = .loading
+        companyOffersAreExhaustive = false
+        isLoadingMoreCompanyOffers = false
+        didFailLoadingMoreCompanyOffers = false
+        clearSensitiveOfferState()
+    }
+
     func loadMoreCompanyOffers() async {
         guard isRunning,
               let repository,
@@ -516,8 +535,7 @@ final class PartnersCoordinator {
                 switch snapshot {
                 case .loaded(let offers, let nextCursor):
                     if self.hasLoadedCompanyOffersSnapshot,
-                       self.liveCompanyOffersCursor != nextCursor,
-                       !self.pagedCompanyOffers.isEmpty {
+                       self.liveCompanyOffersCursor != nextCursor {
                         self.paginationGeneration += 1
                         self.isLoadingMoreCompanies = false
                         self.isLoadingMoreOffers = false
@@ -548,8 +566,7 @@ final class PartnersCoordinator {
                 switch snapshot {
                 case .loaded(let companies, let nextCursor):
                     if self.hasLoadedCompaniesSnapshot,
-                       self.liveCompaniesCursor != nextCursor,
-                       !self.pagedCompanies.isEmpty {
+                       self.liveCompaniesCursor != nextCursor {
                         self.paginationGeneration += 1
                         self.isLoadingMoreCompanies = false
                         self.isLoadingMoreOffers = false
@@ -581,8 +598,7 @@ final class PartnersCoordinator {
                 switch snapshot {
                 case .loaded(let offers, let nextCursor):
                     if self.hasLoadedOffersSnapshot,
-                       self.liveOffersCursor != nextCursor,
-                       !self.pagedOffers.isEmpty {
+                       self.liveOffersCursor != nextCursor {
                         self.paginationGeneration += 1
                         self.isLoadingMoreCompanies = false
                         self.isLoadingMoreOffers = false

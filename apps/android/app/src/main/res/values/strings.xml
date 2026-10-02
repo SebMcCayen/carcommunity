@@ -1427,6 +1427,7 @@
     <string name="partnerOffers_codeAlertTitle">Rabattkod</string>
     <string name="partnerOffers_codeAlertClose">Stäng</string>
     <string name="partnerOffers_loadError">Kunde inte hämta erbjudanden.</string>
+    <string name="partnerOffers_detailUnavailable">Erbjudandedetaljerna är inte tillgängliga.</string>
     <string name="partnerOffers_codeLoadError">Kunde inte hämta koden. Försök igen.</string>
     <string name="partnerOffers_saveError">Kunde inte spara erbjudandet.</string>
     <string name="partnerOffers_offerTypeDiscountCode">Rabattkod</string>

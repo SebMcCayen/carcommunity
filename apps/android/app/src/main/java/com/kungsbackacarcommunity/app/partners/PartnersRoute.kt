@@ -58,7 +58,7 @@ fun PartnersRoute(
     }
     LaunchedEffect(companiesState) {
         val loaded = companiesState as? CompaniesState.Loaded ?: return@LaunchedEffect
-        if (companiesPageBoundary.update(loaded.nextCursor) && pagedCompanies.isNotEmpty()) {
+        if (companiesPageBoundary.update(loaded.nextCursor)) {
             pagedCompanies = emptyList()
             companiesPageGeneration++
             isLoadingMoreCompanies = false
@@ -198,7 +198,7 @@ fun PartnersRoute(
     var didFailLoadingMoreCompanyOffers by remember(companyId) { mutableStateOf(false) }
     LaunchedEffect(companyOffersState) {
         val loaded = companyOffersState as? OffersState.Loaded ?: return@LaunchedEffect
-        if (companyOffersPageBoundary.update(loaded.nextCursor) && pagedCompanyOffers.isNotEmpty()) {
+        if (companyOffersPageBoundary.update(loaded.nextCursor)) {
             pagedCompanyOffers = emptyList()
             companyOffersPageGeneration++
             isLoadingMoreCompanyOffers = false
