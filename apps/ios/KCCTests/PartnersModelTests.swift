@@ -27,6 +27,16 @@ final class PartnersModelTests: XCTestCase {
         XCTAssertEqual(PartnerOfferType(wireValue: nil), .other)
     }
 
+    func testOfferAggregateReportsListenerFailureAfterLoadedSnapshot() {
+        let aggregate = PartnerOffersAggregate(count: 1)
+
+        XCTAssertNotNil(aggregate.receive(index: 0, offers: []))
+        XCTAssertTrue(aggregate.shouldReportFailure())
+        XCTAssertFalse(aggregate.shouldReportFailure())
+        XCTAssertNotNil(aggregate.receive(index: 0, offers: []))
+        XCTAssertTrue(aggregate.shouldReportFailure())
+    }
+
     func testOffersAreScopedAndSortedAndSavedListCannotInventOffers() {
         let offers = [
             offer(id: "z", company: "c1", title: "Zebra"),

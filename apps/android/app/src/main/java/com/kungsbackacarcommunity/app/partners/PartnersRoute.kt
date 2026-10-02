@@ -38,10 +38,9 @@ fun PartnersRoute(
     var reloadKey by rememberSaveable { mutableStateOf(0) }
     var savedReloadKey by rememberSaveable { mutableStateOf(0) }
     var companyReloadKey by rememberSaveable { mutableStateOf(0) }
+    val companiesPageBoundary = remember { PartnerPageBoundary() }
     var pagedCompanies by remember { mutableStateOf(emptyList<PartnerCompany>()) }
     var companiesCursor by remember { mutableStateOf<PartnerPageCursor?>(null) }
-    var liveCompaniesCursor by remember { mutableStateOf<PartnerPageCursor?>(null) }
-    var hasLoadedCompaniesPage by remember { mutableStateOf(false) }
     var companiesPageGeneration by remember { mutableStateOf(0) }
     var isLoadingMoreCompanies by remember { mutableStateOf(false) }
     var didFailLoadingMoreCompanies by remember { mutableStateOf(false) }
@@ -52,21 +51,18 @@ fun PartnersRoute(
     LaunchedEffect(reloadKey) {
         pagedCompanies = emptyList()
         companiesCursor = null
-        liveCompaniesCursor = null
-        hasLoadedCompaniesPage = false
+        companiesPageBoundary.reset()
         companiesPageGeneration++
         isLoadingMoreCompanies = false
         didFailLoadingMoreCompanies = false
     }
     LaunchedEffect(companiesState) {
         val loaded = companiesState as? CompaniesState.Loaded ?: return@LaunchedEffect
-        if (hasLoadedCompaniesPage && liveCompaniesCursor != loaded.nextCursor && pagedCompanies.isNotEmpty()) {
+        if (companiesPageBoundary.update(loaded.nextCursor) && pagedCompanies.isNotEmpty()) {
             pagedCompanies = emptyList()
             companiesPageGeneration++
             isLoadingMoreCompanies = false
         }
-        hasLoadedCompaniesPage = true
-        liveCompaniesCursor = loaded.nextCursor
         if (pagedCompanies.isEmpty()) companiesCursor = loaded.nextCursor
         didFailLoadingMoreCompanies = false
     }
@@ -196,20 +192,17 @@ fun PartnersRoute(
             .collectAsState(initial = OffersState.Loading)
     var pagedCompanyOffers by remember(companyId) { mutableStateOf(emptyList<PartnerOffer>()) }
     var companyOffersCursor by remember(companyId) { mutableStateOf<PartnerPageCursor?>(null) }
-    var liveCompanyOffersCursor by remember(companyId) { mutableStateOf<PartnerPageCursor?>(null) }
-    var hasLoadedCompanyOffersPage by remember(companyId) { mutableStateOf(false) }
+    val companyOffersPageBoundary = remember(companyId) { PartnerPageBoundary() }
     var companyOffersPageGeneration by remember(companyId) { mutableStateOf(0) }
     var isLoadingMoreCompanyOffers by remember(companyId) { mutableStateOf(false) }
     var didFailLoadingMoreCompanyOffers by remember(companyId) { mutableStateOf(false) }
     LaunchedEffect(companyOffersState) {
         val loaded = companyOffersState as? OffersState.Loaded ?: return@LaunchedEffect
-        if (hasLoadedCompanyOffersPage && liveCompanyOffersCursor != loaded.nextCursor && pagedCompanyOffers.isNotEmpty()) {
+        if (companyOffersPageBoundary.update(loaded.nextCursor) && pagedCompanyOffers.isNotEmpty()) {
             pagedCompanyOffers = emptyList()
             companyOffersPageGeneration++
             isLoadingMoreCompanyOffers = false
         }
-        hasLoadedCompanyOffersPage = true
-        liveCompanyOffersCursor = loaded.nextCursor
         if (pagedCompanyOffers.isEmpty()) companyOffersCursor = loaded.nextCursor
         didFailLoadingMoreCompanyOffers = false
     }

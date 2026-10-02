@@ -322,7 +322,7 @@ private struct PartnerListenerCollectionBox: @unchecked Sendable {
     let registrations: [ListenerRegistration]
 }
 
-private final class PartnerOffersAggregate: @unchecked Sendable {
+final class PartnerOffersAggregate: @unchecked Sendable {
     private let lock = NSLock()
     private let count: Int
     private var snapshots: [Int: [PartnerOffer]] = [:]

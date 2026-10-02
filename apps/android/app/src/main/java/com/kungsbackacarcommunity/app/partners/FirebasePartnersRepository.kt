@@ -159,7 +159,7 @@ class FirebasePartnersRepository private constructor(
         val chunks = boundedOfferIds.chunked(FIRESTORE_IN_LIMIT)
         val lock = Any()
         val snapshots = mutableMapOf<Int, List<PartnerOffer>>()
-        var failedBeforeLoad = false
+        val failureGate = PartnerOffersListenerFailureGate()
         val registrations =
             chunks.mapIndexed { index, ids ->
                 firestore
@@ -169,8 +169,7 @@ class FirebasePartnersRepository private constructor(
                     .addSnapshotListener { snapshot, error ->
                         synchronized(lock) {
                             if (error != null) {
-                                if (!failedBeforeLoad) {
-                                    failedBeforeLoad = true
+                                if (failureGate.shouldReportFailure()) {
                                     trySend(OffersState.Error)
                                 }
                                 return@synchronized
@@ -180,7 +179,7 @@ class FirebasePartnersRepository private constructor(
                                     document.takeIf { it.getString("status") == "active" }?.toOffer()
                                 } ?: emptyList()
                             if (snapshots.size == chunks.size) {
-                                failedBeforeLoad = false
+                                failureGate.didLoadSnapshot()
                                 trySend(OffersState.Loaded(snapshots.toSortedMap().values.flatten()))
                             }
                         }
