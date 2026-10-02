@@ -295,33 +295,36 @@ private struct PartnerDetailScreen: View {
             }
 
             Section("partnerOffers.sectionTitle") {
-                let offers = coordinator.offers(for: company.id)
+                let offers = coordinator.detailOffers(for: company.id)
+                if coordinator.companyOffersState == .failed {
+                    Text("partnerOffers.loadError").foregroundStyle(.red)
+                    Button("partners.retry") { coordinator.reloadCompanyOffers() }
+                }
                 if !offers.isEmpty {
                     ForEach(offers) { offer in
                         PartnerOfferCard(coordinator: coordinator, offer: offer)
                     }
                 } else {
-                    switch coordinator.offersState {
+                    switch coordinator.companyOffersState {
                     case .loading:
                         ProgressView("partners.loading")
                     case .failed:
-                        Text("partnerOffers.loadError").foregroundStyle(.red)
-                        Button("partners.retry") { coordinator.reload() }
+                        EmptyView()
                     case .loaded:
                         if coordinator.offersAreExhaustive {
                             Text("partnerOffers.noOffers").foregroundStyle(.secondary)
                         }
                     }
                 }
-                if !coordinator.offersAreExhaustive {
-                    if coordinator.isLoadingMoreOffers {
+                if !coordinator.companyOffersAreExhaustive {
+                    if coordinator.isLoadingMoreCompanyOffers {
                         ProgressView("partners.loading")
                     } else {
-                        if coordinator.didFailLoadingMoreOffers {
+                        if coordinator.didFailLoadingMoreCompanyOffers {
                             Text("partnerOffers.loadError").foregroundStyle(.secondary)
                         }
                         Button("partners.loadMore") {
-                            Task { await coordinator.loadMoreOffers() }
+                            Task { await coordinator.loadMoreCompanyOffers() }
                         }
                     }
                 }

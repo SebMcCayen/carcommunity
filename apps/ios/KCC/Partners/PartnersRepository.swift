@@ -6,6 +6,11 @@ protocol PartnersRepository: Sendable {
     func observeCompany(id: String) -> AsyncStream<PartnerCompanySnapshot>
     func observeActiveOffers() -> AsyncStream<PartnerActiveOffersSnapshot>
     func fetchActiveOffers(after cursor: PartnerPageCursor) async throws -> PartnerOffersPage
+    func observeActiveOffers(companyId: String) -> AsyncStream<PartnerActiveOffersSnapshot>
+    func fetchActiveOffers(
+        companyId: String,
+        after cursor: PartnerPageCursor
+    ) async throws -> PartnerOffersPage
     func observeOffers(ids: Set<String>) -> AsyncStream<PartnerOffersSnapshot>
     func observeOfferDetail(offerId: String) -> AsyncStream<PartnerOfferDetailSnapshot>
     func observeSavedOfferIds(uid: String) -> AsyncStream<SavedOffersSnapshot>

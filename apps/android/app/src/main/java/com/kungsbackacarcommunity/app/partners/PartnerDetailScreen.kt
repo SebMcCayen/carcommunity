@@ -169,6 +169,16 @@ fun PartnerDetailScreen(
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground,
             )
+            if (offersState == OffersState.Error) {
+                Text(
+                    text = stringResource(R.string.partnerOffers_loadError),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Button(onClick = onRetryOffers, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.partners_retry))
+                }
+            }
             if (offers.isNotEmpty()) {
                 offers.forEach { offer ->
                     OfferCard(
@@ -211,16 +221,7 @@ fun PartnerDetailScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                    OffersState.Error -> {
-                        Text(
-                            text = stringResource(R.string.partnerOffers_loadError),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                        Button(onClick = onRetryOffers, modifier = Modifier.fillMaxWidth()) {
-                            Text(stringResource(R.string.partners_retry))
-                        }
-                    }
+                    OffersState.Error -> Unit
                     is OffersState.Loaded ->
                         if (offersState.isExhaustive) {
                             Text(

@@ -17,6 +17,7 @@ final class PartnersCoordinator {
     @ObservationIgnored nonisolated(unsafe) private var detailTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var offerVisibilityTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var companyTask: Task<Void, Never>?
+    @ObservationIgnored nonisolated(unsafe) private var companyOffersTask: Task<Void, Never>?
 
     private(set) var state: PartnersUiState
     private(set) var offers: [PartnerOffer] = []
@@ -32,6 +33,10 @@ final class PartnersCoordinator {
     private(set) var savedOffersAreExhaustive = true
     private(set) var savedState: SavedOffersUiState = .loading
     private(set) var companyLookupState: PartnerCompanyLookupState = .idle
+    private(set) var companyOffersState: PartnerOffersUiState = .loading
+    private(set) var companyOffersAreExhaustive = false
+    private(set) var isLoadingMoreCompanyOffers = false
+    private(set) var didFailLoadingMoreCompanyOffers = false
     private(set) var canAccessMemberOffers: Bool
     private(set) var expandedOfferId: String?
     private(set) var detailState: OfferDetailUiState = .idle
@@ -42,16 +47,25 @@ final class PartnersCoordinator {
     private var savedGeneration = 0
     private var paginationGeneration = 0
     private var isRunning = false
+    private var hasLoadedCompaniesSnapshot = false
     private var hasLoadedOffersSnapshot = false
     private var hasLoadedSavedIdsSnapshot = false
     private var hasLoadedSavedSnapshot = false
     private var resolvedCompanies: [String: PartnerCompany] = [:]
     private var companiesCursor: PartnerPageCursor?
     private var offersCursor: PartnerPageCursor?
+    private var liveCompaniesCursor: PartnerPageCursor?
+    private var liveOffersCursor: PartnerPageCursor?
     private var liveCompanies: [PartnerCompany] = []
     private var pagedCompanies: [PartnerCompany] = []
     private var liveOffers: [PartnerOffer] = []
     private var pagedOffers: [PartnerOffer] = []
+    private var companyOffersCompanyId: String?
+    private var liveCompanyOffers: [PartnerOffer] = []
+    private var pagedCompanyOffers: [PartnerOffer] = []
+    private var companyOffersCursor: PartnerPageCursor?
+    private var liveCompanyOffersCursor: PartnerPageCursor?
+    private var hasLoadedCompanyOffersSnapshot = false
 
     init(
         repository: PartnersRepository?,
@@ -79,6 +93,7 @@ final class PartnersCoordinator {
         detailTask?.cancel()
         offerVisibilityTask?.cancel()
         companyTask?.cancel()
+        companyOffersTask?.cancel()
     }
 
     func start() {
@@ -100,12 +115,14 @@ final class PartnersCoordinator {
         savedOffersTask?.cancel()
         entitlementTask?.cancel()
         companyTask?.cancel()
+        companyOffersTask?.cancel()
         companiesTask = nil
         offersTask = nil
         savedTask = nil
         savedOffersTask = nil
         entitlementTask = nil
         companyTask = nil
+        companyOffersTask = nil
 
         state = repository == nil || uid == nil ? .unavailable : .loading
         offers = []
@@ -114,6 +131,8 @@ final class PartnersCoordinator {
         companiesAreExhaustive = false
         companiesCursor = nil
         offersCursor = nil
+        liveCompaniesCursor = nil
+        liveOffersCursor = nil
         liveCompanies = []
         pagedCompanies = []
         liveOffers = []
@@ -125,11 +144,22 @@ final class PartnersCoordinator {
         savedOfferIds = []
         savedOffers = []
         savedOffersAreExhaustive = true
+        hasLoadedCompaniesSnapshot = false
         hasLoadedOffersSnapshot = false
         hasLoadedSavedIdsSnapshot = false
         hasLoadedSavedSnapshot = false
         resolvedCompanies = [:]
         companyLookupState = .idle
+        companyOffersCompanyId = nil
+        liveCompanyOffers = []
+        pagedCompanyOffers = []
+        companyOffersCursor = nil
+        liveCompanyOffersCursor = nil
+        hasLoadedCompanyOffersSnapshot = false
+        companyOffersState = .loading
+        companyOffersAreExhaustive = false
+        isLoadingMoreCompanyOffers = false
+        didFailLoadingMoreCompanyOffers = false
         canAccessMemberOffers = PartnerOfferAccess.allows(access: access, subscription: nil)
         savedState = canAccessMemberOffers ? .loading : .unavailable
         savedGeneration += 1
@@ -148,12 +178,16 @@ final class PartnersCoordinator {
         offersState = hasLoadedOffersSnapshot ? .loaded : .loading
         companiesCursor = nil
         offersCursor = nil
+        liveCompaniesCursor = nil
+        liveOffersCursor = nil
         liveCompanies = []
         pagedCompanies = []
         liveOffers = []
         pagedOffers = []
         companiesAreExhaustive = false
         offersAreExhaustive = false
+        hasLoadedCompaniesSnapshot = false
+        hasLoadedOffersSnapshot = false
         isLoadingMoreCompanies = false
         didFailLoadingMoreCompanies = false
         isLoadingMoreOffers = false
@@ -240,6 +274,15 @@ final class PartnersCoordinator {
         return PartnersPresentation.offers(merged, forCompany: companyId)
     }
 
+    func detailOffers(for companyId: String) -> [PartnerOffer] {
+        let scoped = companyOffersCompanyId == companyId
+            ? Self.mergeOffers(liveCompanyOffers + pagedCompanyOffers) : []
+        return PartnersPresentation.offers(
+            Self.mergeOffers(scoped + savedOffers),
+            forCompany: companyId
+        )
+    }
+
     func company(id: String) -> PartnerCompany? {
         switch companyLookupState {
         case .loaded(let resolvedId) where resolvedId == id:
@@ -265,6 +308,7 @@ final class PartnersCoordinator {
             return
         }
         companyTask?.cancel()
+        subscribeCompanyOffers(repository, companyId: id)
         companyLookupState = .loading(id: id)
         let stream = repository.observeCompany(id: id)
         companyTask = Task { [weak self] in
@@ -283,6 +327,45 @@ final class PartnersCoordinator {
                     self.companyLookupState = .failed(id: id)
                 }
             }
+        }
+    }
+
+    func reloadCompanyOffers() {
+        guard isRunning, let repository, let companyId = companyOffersCompanyId else { return }
+        subscribeCompanyOffers(repository, companyId: companyId)
+    }
+
+    func loadMoreCompanyOffers() async {
+        guard isRunning,
+              let repository,
+              let companyId = companyOffersCompanyId,
+              let cursor = companyOffersCursor,
+              !isLoadingMoreCompanyOffers
+        else { return }
+        let generation = paginationGeneration
+        isLoadingMoreCompanyOffers = true
+        defer {
+            if generation == paginationGeneration { isLoadingMoreCompanyOffers = false }
+        }
+        didFailLoadingMoreCompanyOffers = false
+        do {
+            let page = try await repository.fetchActiveOffers(companyId: companyId, after: cursor)
+            guard !Task.isCancelled,
+                  isRunning,
+                  companyOffersCompanyId == companyId,
+                  generation == paginationGeneration
+            else { return }
+            pagedCompanyOffers = Self.mergeOffers(pagedCompanyOffers + page.offers)
+            companyOffersCursor = page.nextCursor
+            companyOffersAreExhaustive = page.nextCursor == nil
+        } catch is CancellationError {
+            return
+        } catch {
+            guard isRunning,
+                  companyOffersCompanyId == companyId,
+                  generation == paginationGeneration
+            else { return }
+            didFailLoadingMoreCompanyOffers = true
         }
     }
 
@@ -404,6 +487,58 @@ final class PartnersCoordinator {
         }
     }
 
+    private func subscribeCompanyOffers(
+        _ repository: PartnersRepository,
+        companyId: String
+    ) {
+        companyOffersTask?.cancel()
+        paginationGeneration += 1
+        isLoadingMoreCompanies = false
+        isLoadingMoreOffers = false
+        isLoadingMoreCompanyOffers = false
+        companyOffersCompanyId = companyId
+        liveCompanyOffers = []
+        pagedCompanyOffers = []
+        companyOffersCursor = nil
+        liveCompanyOffersCursor = nil
+        hasLoadedCompanyOffersSnapshot = false
+        companyOffersState = .loading
+        companyOffersAreExhaustive = false
+        didFailLoadingMoreCompanyOffers = false
+        let stream = repository.observeActiveOffers(companyId: companyId)
+        companyOffersTask = Task { [weak self] in
+            for await snapshot in stream {
+                guard !Task.isCancelled,
+                      let self,
+                      self.companyOffersCompanyId == companyId
+                else { return }
+                switch snapshot {
+                case .loaded(let offers, let nextCursor):
+                    if self.hasLoadedCompanyOffersSnapshot,
+                       self.liveCompanyOffersCursor != nextCursor,
+                       !self.pagedCompanyOffers.isEmpty {
+                        self.paginationGeneration += 1
+                        self.isLoadingMoreCompanies = false
+                        self.isLoadingMoreOffers = false
+                        self.isLoadingMoreCompanyOffers = false
+                        self.pagedCompanyOffers = []
+                    }
+                    self.hasLoadedCompanyOffersSnapshot = true
+                    self.liveCompanyOffersCursor = nextCursor
+                    self.liveCompanyOffers = offers
+                    if self.pagedCompanyOffers.isEmpty {
+                        self.companyOffersCursor = nextCursor
+                        self.companyOffersAreExhaustive = nextCursor == nil
+                    }
+                    self.didFailLoadingMoreCompanyOffers = false
+                    self.companyOffersState = .loaded
+                case .failed:
+                    self.companyOffersState = .failed
+                }
+            }
+        }
+    }
+
     private func subscribeCompanies(_ repository: PartnersRepository) {
         let stream = repository.observeActiveCompanies()
         companiesTask = Task { [weak self] in
@@ -411,6 +546,17 @@ final class PartnersCoordinator {
                 guard !Task.isCancelled, let self else { return }
                 switch snapshot {
                 case .loaded(let companies, let nextCursor):
+                    if self.hasLoadedCompaniesSnapshot,
+                       self.liveCompaniesCursor != nextCursor,
+                       !self.pagedCompanies.isEmpty {
+                        self.paginationGeneration += 1
+                        self.isLoadingMoreCompanies = false
+                        self.isLoadingMoreOffers = false
+                        self.isLoadingMoreCompanyOffers = false
+                        self.pagedCompanies = []
+                    }
+                    self.hasLoadedCompaniesSnapshot = true
+                    self.liveCompaniesCursor = nextCursor
                     self.liveCompanies = companies
                     if self.pagedCompanies.isEmpty {
                         self.companiesCursor = nextCursor
@@ -433,6 +579,16 @@ final class PartnersCoordinator {
                 guard !Task.isCancelled, let self else { return }
                 switch snapshot {
                 case .loaded(let offers, let nextCursor):
+                    if self.hasLoadedOffersSnapshot,
+                       self.liveOffersCursor != nextCursor,
+                       !self.pagedOffers.isEmpty {
+                        self.paginationGeneration += 1
+                        self.isLoadingMoreCompanies = false
+                        self.isLoadingMoreOffers = false
+                        self.isLoadingMoreCompanyOffers = false
+                        self.pagedOffers = []
+                    }
+                    self.liveOffersCursor = nextCursor
                     self.liveOffers = offers
                     if self.pagedOffers.isEmpty {
                         self.offersCursor = nextCursor
@@ -442,11 +598,6 @@ final class PartnersCoordinator {
                     self.didFailLoadingMoreOffers = false
                     self.hasLoadedOffersSnapshot = true
                     self.offersState = .loaded
-                    if let expandedOfferId = self.expandedOfferId,
-                       !self.offers.contains(where: { $0.id == expandedOfferId }),
-                       !self.savedOffers.contains(where: { $0.id == expandedOfferId }) {
-                        self.clearSensitiveOfferState()
-                    }
                 case .failed:
                     if !self.hasLoadedOffersSnapshot {
                         self.offers = []
@@ -518,7 +669,8 @@ final class PartnersCoordinator {
                         self.hasLoadedSavedSnapshot = false
                         if let expandedOfferId = self.expandedOfferId,
                            !ids.contains(expandedOfferId),
-                           !self.offers.contains(where: { $0.id == expandedOfferId }) {
+                           !self.liveCompanyOffers.contains(where: { $0.id == expandedOfferId }),
+                           !self.pagedCompanyOffers.contains(where: { $0.id == expandedOfferId }) {
                             self.clearSensitiveOfferState()
                         }
                     }
@@ -554,11 +706,6 @@ final class PartnersCoordinator {
                 case .loaded(let offers, _):
                     self.savedOffers = offers.sorted {
                         $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
-                    }
-                    if let expandedOfferId = self.expandedOfferId,
-                       !self.offers.contains(where: { $0.id == expandedOfferId }),
-                       !self.savedOffers.contains(where: { $0.id == expandedOfferId }) {
-                        self.clearSensitiveOfferState()
                     }
                     self.hasLoadedSavedSnapshot = true
                     self.savedState = .loaded

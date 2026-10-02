@@ -104,6 +104,45 @@ final class FirebasePartnersRepository: PartnersRepository, @unchecked Sendable 
         return Self.offerPage(from: snapshot.documents)
     }
 
+    func observeActiveOffers(companyId: String) -> AsyncStream<PartnerActiveOffersSnapshot> {
+        AsyncStream { continuation in
+            let registration = firestore.collection("offers")
+                .whereField("companyId", isEqualTo: companyId)
+                .whereField("status", isEqualTo: "active")
+                .order(by: "createdAt", descending: true)
+                .order(by: FieldPath.documentID(), descending: true)
+                .limit(to: Self.companyOffersPageSize + 1)
+                .addSnapshotListener { snapshot, error in
+                    if let error {
+                        continuation.yield(.failed(code: Self.errorCode(error)))
+                        return
+                    }
+                    let page = Self.offerPage(
+                        from: snapshot?.documents ?? [],
+                        pageSize: Self.companyOffersPageSize
+                    )
+                    continuation.yield(.loaded(offers: page.offers, nextCursor: page.nextCursor))
+                }
+            let box = PartnerListenerBox(registration: registration)
+            continuation.onTermination = { _ in box.registration.remove() }
+        }
+    }
+
+    func fetchActiveOffers(
+        companyId: String,
+        after cursor: PartnerPageCursor
+    ) async throws -> PartnerOffersPage {
+        let snapshot = try await firestore.collection("offers")
+            .whereField("companyId", isEqualTo: companyId)
+            .whereField("status", isEqualTo: "active")
+            .order(by: "createdAt", descending: true)
+            .order(by: FieldPath.documentID(), descending: true)
+            .start(after: [Timestamp(date: cursor.createdAt), cursor.documentId])
+            .limit(to: Self.companyOffersPageSize + 1)
+            .getDocuments()
+        return Self.offerPage(from: snapshot.documents, pageSize: Self.companyOffersPageSize)
+    }
+
     func observeOffers(ids: Set<String>) -> AsyncStream<PartnerOffersSnapshot> {
         AsyncStream { continuation in
             guard !ids.isEmpty else {
@@ -228,13 +267,16 @@ final class FirebasePartnersRepository: PartnersRepository, @unchecked Sendable 
         )
     }
 
-    private static func offerPage(from documents: [QueryDocumentSnapshot]) -> PartnerOffersPage {
-        let visible = Array(documents.prefix(activeOffersPageSize))
+    private static func offerPage(
+        from documents: [QueryDocumentSnapshot],
+        pageSize: Int = activeOffersPageSize
+    ) -> PartnerOffersPage {
+        let visible = Array(documents.prefix(pageSize))
         return PartnerOffersPage(
             offers: visible.compactMap {
                 PartnerOffer.fromMap(id: $0.documentID, map: $0.data())
             },
-            nextCursor: documents.count > activeOffersPageSize
+            nextCursor: documents.count > pageSize
                 ? visible.last.flatMap(pageCursor) : nil
         )
     }
@@ -248,6 +290,7 @@ final class FirebasePartnersRepository: PartnersRepository, @unchecked Sendable 
     private static let savedOffersLimit = 30
     private static let activeCompaniesPageSize = 150
     private static let activeOffersPageSize = 200
+    private static let companyOffersPageSize = 50
 
     private static let lock = NSLock()
     nonisolated(unsafe) private static var cached: FirebasePartnersRepository?
@@ -290,7 +333,7 @@ private final class PartnerOffersAggregate: @unchecked Sendable {
     func shouldReportFailure() -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        guard snapshots.count < count, !reportedFailure else { return false }
+        guard !reportedFailure else { return false }
         reportedFailure = true
         return true
     }
