@@ -25,32 +25,37 @@ class OfferCodeCoordinator(
 ) {
     private val state = MutableStateFlow<OfferCodeStatus>(OfferCodeStatus.Idle)
     val status: StateFlow<OfferCodeStatus> = state.asStateFlow()
+    private var revealGeneration = 0
 
     suspend fun reveal(offerId: String) {
         val current = state.value
         // Only dedupe an in-flight reveal for the *same* offer; a switch to a
         // different offer must be able to start its own reveal.
         if (current is OfferCodeStatus.Loading && current.offerId == offerId) return
+        val generation = ++revealGeneration
         state.value = OfferCodeStatus.Loading(offerId)
         try {
             val code = repository.showOfferCode(offerId)
-            // Publish only if we're still loading this offer — a reset() or a
-            // switch to another offer while the callable was in flight wins.
-            if (isLoadingOffer(offerId)) state.value = OfferCodeStatus.Shown(offerId, code)
+            // The generation distinguishes a reset-and-reopen of the same offer
+            // from the request that was active before the reset.
+            if (isCurrentReveal(offerId, generation)) {
+                state.value = OfferCodeStatus.Shown(offerId, code)
+            }
         } catch (cancellation: CancellationException) {
-            if (isLoadingOffer(offerId)) state.value = OfferCodeStatus.Idle
+            if (isCurrentReveal(offerId, generation)) state.value = OfferCodeStatus.Idle
             throw cancellation
         } catch (failure: Exception) {
-            if (isLoadingOffer(offerId)) state.value = OfferCodeStatus.Failed(offerId)
+            if (isCurrentReveal(offerId, generation)) state.value = OfferCodeStatus.Failed(offerId)
         }
     }
 
     fun reset() {
+        revealGeneration++
         state.value = OfferCodeStatus.Idle
     }
 
-    private fun isLoadingOffer(offerId: String): Boolean {
+    private fun isCurrentReveal(offerId: String, generation: Int): Boolean {
         val s = state.value
-        return s is OfferCodeStatus.Loading && s.offerId == offerId
+        return revealGeneration == generation && s is OfferCodeStatus.Loading && s.offerId == offerId
     }
 }
