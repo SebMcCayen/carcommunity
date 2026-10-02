@@ -8,6 +8,7 @@ final class PartnersCoordinatorTests: XCTestCase {
         let offers: [PartnerActiveOffersSnapshot]
         let saved: [SavedOffersSnapshot]
         let directOffers: [PartnerOffer]?
+        var companiesContinuation: AsyncStream<PartnersCollectionSnapshot>.Continuation?
         var offersContinuation: AsyncStream<PartnerActiveOffersSnapshot>.Continuation?
         var directOffersContinuation: AsyncStream<PartnerOffersSnapshot>.Continuation?
         var savedContinuation: AsyncStream<SavedOffersSnapshot>.Continuation?
@@ -34,8 +35,13 @@ final class PartnersCoordinatorTests: XCTestCase {
 
         func observeActiveCompanies() -> AsyncStream<PartnersCollectionSnapshot> {
             AsyncStream { continuation in
+                companiesContinuation = continuation
                 companies.forEach { continuation.yield($0) }
             }
+        }
+
+        func sendCompanies(_ snapshot: PartnersCollectionSnapshot) {
+            companiesContinuation?.yield(snapshot)
         }
 
         func fetchActiveCompanies(
@@ -284,6 +290,16 @@ final class PartnersCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(coordinator.state, .loaded([nextCompany, firstCompany]))
         XCTAssertEqual(Set(coordinator.offers), [firstOffer, nextOffer])
+        XCTAssertTrue(coordinator.companiesAreExhaustive)
+        XCTAssertTrue(coordinator.offersAreExhaustive)
+
+        repository.sendCompanies(.loaded(companies: [firstCompany], nextCursor: cursor))
+        repository.sendOffers(.loaded(offers: [firstOffer], nextCursor: cursor))
+        await waitUntil {
+            coordinator.state == .loaded([nextCompany, firstCompany])
+                && Set(coordinator.offers) == [firstOffer, nextOffer]
+        }
+
         XCTAssertTrue(coordinator.companiesAreExhaustive)
         XCTAssertTrue(coordinator.offersAreExhaustive)
     }

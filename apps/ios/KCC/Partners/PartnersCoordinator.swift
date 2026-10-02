@@ -46,6 +46,10 @@ final class PartnersCoordinator {
     private var resolvedCompanies: [String: PartnerCompany] = [:]
     private var companiesCursor: PartnerPageCursor?
     private var offersCursor: PartnerPageCursor?
+    private var liveCompanies: [PartnerCompany] = []
+    private var pagedCompanies: [PartnerCompany] = []
+    private var liveOffers: [PartnerOffer] = []
+    private var pagedOffers: [PartnerOffer] = []
 
     init(
         repository: PartnersRepository?,
@@ -106,6 +110,10 @@ final class PartnersCoordinator {
         companiesAreExhaustive = false
         companiesCursor = nil
         offersCursor = nil
+        liveCompanies = []
+        pagedCompanies = []
+        liveOffers = []
+        pagedOffers = []
         isLoadingMoreCompanies = false
         didFailLoadingMoreCompanies = false
         isLoadingMoreOffers = false
@@ -135,6 +143,10 @@ final class PartnersCoordinator {
         offersState = hasLoadedOffersSnapshot ? .loaded : .loading
         companiesCursor = nil
         offersCursor = nil
+        liveCompanies = []
+        pagedCompanies = []
+        liveOffers = []
+        pagedOffers = []
         companiesAreExhaustive = false
         offersAreExhaustive = false
         isLoadingMoreCompanies = false
@@ -157,9 +169,8 @@ final class PartnersCoordinator {
         do {
             let page = try await repository.fetchActiveCompanies(after: cursor)
             guard !Task.isCancelled, isRunning else { return }
-            let current: [PartnerCompany]
-            if case .loaded(let companies) = state { current = companies } else { current = [] }
-            state = .loaded(Self.mergeCompanies(current + page.companies))
+            pagedCompanies = Self.mergeCompanies(pagedCompanies + page.companies)
+            state = .loaded(Self.mergeCompanies(liveCompanies + pagedCompanies))
             companiesCursor = page.nextCursor
             companiesAreExhaustive = page.nextCursor == nil
         } catch is CancellationError {
@@ -182,7 +193,8 @@ final class PartnersCoordinator {
         do {
             let page = try await repository.fetchActiveOffers(after: cursor)
             guard !Task.isCancelled, isRunning else { return }
-            offers = Self.mergeOffers(offers + page.offers)
+            pagedOffers = Self.mergeOffers(pagedOffers + page.offers)
+            offers = Self.mergeOffers(liveOffers + pagedOffers)
             offersCursor = page.nextCursor
             offersAreExhaustive = page.nextCursor == nil
         } catch is CancellationError {
@@ -355,10 +367,14 @@ final class PartnersCoordinator {
                 guard !Task.isCancelled, let self else { return }
                 switch snapshot {
                 case .loaded(let companies, let nextCursor):
-                    self.companiesCursor = nextCursor
-                    self.companiesAreExhaustive = nextCursor == nil
+                    self.liveCompanies = companies
+                    if self.pagedCompanies.isEmpty {
+                        self.companiesCursor = nextCursor
+                        self.companiesAreExhaustive = nextCursor == nil
+                    }
                     self.didFailLoadingMoreCompanies = false
-                    self.state = companies.isEmpty ? .empty : .loaded(companies)
+                    let merged = Self.mergeCompanies(companies + self.pagedCompanies)
+                    self.state = merged.isEmpty ? .empty : .loaded(merged)
                 case .failed:
                     self.state = .failed
                 }
@@ -373,9 +389,12 @@ final class PartnersCoordinator {
                 guard !Task.isCancelled, let self else { return }
                 switch snapshot {
                 case .loaded(let offers, let nextCursor):
-                    self.offers = offers
-                    self.offersCursor = nextCursor
-                    self.offersAreExhaustive = nextCursor == nil
+                    self.liveOffers = offers
+                    if self.pagedOffers.isEmpty {
+                        self.offersCursor = nextCursor
+                        self.offersAreExhaustive = nextCursor == nil
+                    }
+                    self.offers = Self.mergeOffers(offers + self.pagedOffers)
                     self.didFailLoadingMoreOffers = false
                     self.hasLoadedOffersSnapshot = true
                     self.offersState = .loaded

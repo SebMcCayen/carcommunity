@@ -44,7 +44,6 @@ fun PartnersRoute(
     val offersState by
         remember(repository, reloadKey) { repository.observeActiveOffers() }
             .collectAsState(initial = OffersState.Loading)
-    val offers = (offersState as? OffersState.Loaded)?.offers.orEmpty()
     val savedIdsState by
         remember(repository, uid, canAccessMemberOffers, savedReloadKey) {
             if (canAccessMemberOffers) {
@@ -71,7 +70,6 @@ fun PartnersRoute(
         }
             .collectAsState(initial = OffersState.Loading)
     val savedOffers = (savedOffersState as? OffersState.Loaded)?.offers.orEmpty()
-    val accessibleOffers = (offers + savedOffers).distinctBy { it.id }
     val codeStatus by
         (offerCodeCoordinator?.status ?: flowOf(OfferCodeStatus.Idle))
             .collectAsState(initial = OfferCodeStatus.Idle)
@@ -90,13 +88,6 @@ fun PartnersRoute(
 
     LaunchedEffect(canAccessMemberOffers, uid) {
         if (!canAccessMemberOffers) {
-            expandedOfferId = null
-            offerCodeCoordinator?.reset()
-        }
-    }
-
-    LaunchedEffect(accessibleOffers, expandedOfferId) {
-        if (expandedOfferId != null && accessibleOffers.none { it.id == expandedOfferId }) {
             expandedOfferId = null
             offerCodeCoordinator?.reset()
         }
@@ -136,7 +127,20 @@ fun PartnersRoute(
                 initial = cachedCompany?.let(CompanyState::Loaded) ?: CompanyState.Loading,
             )
     val company = (companyState as? CompanyState.Loaded)?.company
-    val companyOffers = Partners.offersForCompany(accessibleOffers, companyId)
+    val companyOffersState by
+        remember(repository, companyId, reloadKey) { repository.observeActiveOffers(companyId) }
+            .collectAsState(initial = OffersState.Loading)
+    val companyOffers =
+        (
+            (companyOffersState as? OffersState.Loaded)?.offers.orEmpty() +
+                savedOffers.filter { it.companyId == companyId }
+        ).distinctBy { it.id }
+    LaunchedEffect(companyOffers, expandedOfferId) {
+        if (expandedOfferId != null && companyOffers.none { it.id == expandedOfferId }) {
+            expandedOfferId = null
+            offerCodeCoordinator?.reset()
+        }
+    }
     val expandedDetail by
         remember(expandedOfferId, canAccessMemberOffers, repository) {
             val id = expandedOfferId
@@ -147,7 +151,7 @@ fun PartnersRoute(
     PartnerDetailScreen(
         companyState = companyState,
         offers = companyOffers,
-        offersState = offersState,
+        offersState = companyOffersState,
         savedOfferIds = savedIds,
         canAccessMemberOffers = canAccessMemberOffers,
         expandedOfferId = expandedOfferId,

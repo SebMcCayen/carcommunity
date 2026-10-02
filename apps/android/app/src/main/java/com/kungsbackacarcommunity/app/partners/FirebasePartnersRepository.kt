@@ -95,6 +95,29 @@ class FirebasePartnersRepository private constructor(
         awaitClose { registration.remove() }
     }
 
+    override fun observeActiveOffers(companyId: String): Flow<OffersState> = callbackFlow {
+        var hasLoadedSnapshot = false
+        val registration =
+            firestore
+                .collection(OFFERS)
+                .whereEqualTo("companyId", companyId)
+                .whereEqualTo("status", "active")
+                .orderBy(CREATED_AT, Query.Direction.DESCENDING)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        if (!hasLoadedSnapshot) trySend(OffersState.Error)
+                        return@addSnapshotListener
+                    }
+                    hasLoadedSnapshot = true
+                    trySend(
+                        OffersState.Loaded(
+                            offers = snapshot?.documents.orEmpty().mapNotNull { it.toOffer() },
+                        ),
+                    )
+                }
+        awaitClose { registration.remove() }
+    }
+
     override fun observeOffers(offerIds: Set<String>): Flow<OffersState> = callbackFlow {
         trySend(OffersState.Loading)
         val boundedOfferIds = offerIds.take(Partners.SAVED_OFFERS_QUERY_LIMIT.toInt())

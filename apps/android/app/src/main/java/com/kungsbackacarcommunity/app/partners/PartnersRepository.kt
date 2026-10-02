@@ -53,6 +53,9 @@ interface PartnersRepository {
 
     fun observeActiveOffers(): Flow<OffersState>
 
+    /** All active offers for one company, used by detail beyond the capped global preview. */
+    fun observeActiveOffers(companyId: String): Flow<OffersState>
+
     /** Active offer documents resolved directly for authoritative saved ids. */
     fun observeOffers(offerIds: Set<String>): Flow<OffersState>
 
