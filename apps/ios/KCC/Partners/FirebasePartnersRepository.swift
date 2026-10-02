@@ -39,7 +39,7 @@ final class FirebasePartnersRepository: PartnersRepository, @unchecked Sendable 
             .whereField("status", isEqualTo: "active")
             .order(by: "createdAt", descending: true)
             .order(by: FieldPath.documentID(), descending: true)
-            .start(after: [Timestamp(date: cursor.createdAt), cursor.documentId])
+            .start(after: [cursor.timestamp, cursor.documentId])
             .limit(to: Self.activeCompaniesPageSize + 1)
             .getDocuments()
         return Self.companyPage(from: snapshot.documents)
@@ -98,7 +98,7 @@ final class FirebasePartnersRepository: PartnersRepository, @unchecked Sendable 
             .whereField("status", isEqualTo: "active")
             .order(by: "createdAt", descending: true)
             .order(by: FieldPath.documentID(), descending: true)
-            .start(after: [Timestamp(date: cursor.createdAt), cursor.documentId])
+            .start(after: [cursor.timestamp, cursor.documentId])
             .limit(to: Self.activeOffersPageSize + 1)
             .getDocuments()
         return Self.offerPage(from: snapshot.documents)
@@ -137,7 +137,7 @@ final class FirebasePartnersRepository: PartnersRepository, @unchecked Sendable 
             .whereField("status", isEqualTo: "active")
             .order(by: "createdAt", descending: true)
             .order(by: FieldPath.documentID(), descending: true)
-            .start(after: [Timestamp(date: cursor.createdAt), cursor.documentId])
+            .start(after: [cursor.timestamp, cursor.documentId])
             .limit(to: Self.companyOffersPageSize + 1)
             .getDocuments()
         return Self.offerPage(from: snapshot.documents, pageSize: Self.companyOffersPageSize)
@@ -283,7 +283,11 @@ final class FirebasePartnersRepository: PartnersRepository, @unchecked Sendable 
 
     private static func pageCursor(_ document: QueryDocumentSnapshot) -> PartnerPageCursor? {
         guard let timestamp = document.data()["createdAt"] as? Timestamp else { return nil }
-        return PartnerPageCursor(createdAt: timestamp.dateValue(), documentId: document.documentID)
+        return PartnerPageCursor(
+            createdAtSeconds: timestamp.seconds,
+            createdAtNanoseconds: timestamp.nanoseconds,
+            documentId: document.documentID
+        )
     }
 
     private static let firestoreInLimit = 30
@@ -311,6 +315,12 @@ final class FirebasePartnersRepository: PartnersRepository, @unchecked Sendable 
         let repository = FirebasePartnersRepository(firestore: firestore, functions: functions)
         cached = repository
         return repository
+    }
+}
+
+private extension PartnerPageCursor {
+    var timestamp: Timestamp {
+        Timestamp(seconds: createdAtSeconds, nanoseconds: createdAtNanoseconds)
     }
 }
 

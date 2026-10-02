@@ -23,6 +23,8 @@ final class PartnersCoordinatorTests: XCTestCase {
         var companyPages: [PartnerCompaniesPage] = []
         var offerPages: [PartnerOffersPage] = []
         var companyOfferPages: [PartnerOffersPage] = []
+        var fetchedCompanyCursors: [PartnerPageCursor] = []
+        var fetchedOfferCursors: [PartnerPageCursor] = []
         var companyPageDelayNanoseconds: UInt64 = 0
         var offerPageDelayNanoseconds: UInt64 = 0
         var companyOfferPageDelayNanoseconds: UInt64 = 0
@@ -53,6 +55,7 @@ final class PartnersCoordinatorTests: XCTestCase {
         func fetchActiveCompanies(
             after cursor: PartnerPageCursor
         ) async throws -> PartnerCompaniesPage {
+            fetchedCompanyCursors.append(cursor)
             if companyPageDelayNanoseconds > 0 {
                 try await Task.sleep(nanoseconds: companyPageDelayNanoseconds)
             }
@@ -74,6 +77,7 @@ final class PartnersCoordinatorTests: XCTestCase {
             }
         }
         func fetchActiveOffers(after cursor: PartnerPageCursor) async throws -> PartnerOffersPage {
+            fetchedOfferCursors.append(cursor)
             if offerPageDelayNanoseconds > 0 {
                 try await Task.sleep(nanoseconds: offerPageDelayNanoseconds)
             }
@@ -266,7 +270,8 @@ final class PartnersCoordinatorTests: XCTestCase {
     func testCappedOfferSnapshotIsNotTreatedAsExhaustive() async {
         let repository = FakeRepository(
             offers: [.loaded(offers: [], nextCursor: PartnerPageCursor(
-                createdAt: Date(timeIntervalSince1970: 1),
+                createdAtSeconds: 1,
+                createdAtNanoseconds: 123_456_789,
                 documentId: "cursor"
             ))]
         )
@@ -286,7 +291,8 @@ final class PartnersCoordinatorTests: XCTestCase {
     @MainActor
     func testLoadsAdditionalCompanyAndOfferPages() async {
         let cursor = PartnerPageCursor(
-            createdAt: Date(timeIntervalSince1970: 1),
+            createdAtSeconds: 1,
+            createdAtNanoseconds: 123_456_789,
             documentId: "cursor"
         )
         let firstCompany = PartnerCompany(
@@ -331,6 +337,8 @@ final class PartnersCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(coordinator.state, .loaded([nextCompany, firstCompany]))
         XCTAssertEqual(Set(coordinator.offers), [firstOffer, nextOffer])
+        XCTAssertEqual(repository.fetchedCompanyCursors, [cursor])
+        XCTAssertEqual(repository.fetchedOfferCursors, [cursor])
         XCTAssertTrue(coordinator.companiesAreExhaustive)
         XCTAssertTrue(coordinator.offersAreExhaustive)
 
@@ -345,7 +353,8 @@ final class PartnersCoordinatorTests: XCTestCase {
         XCTAssertTrue(coordinator.offersAreExhaustive)
 
         let shiftedCursor = PartnerPageCursor(
-            createdAt: Date(timeIntervalSince1970: 2),
+            createdAtSeconds: 2,
+            createdAtNanoseconds: 987_654_321,
             documentId: "shifted"
         )
         repository.sendCompanies(.loaded(companies: [firstCompany], nextCursor: shiftedCursor))
@@ -361,7 +370,9 @@ final class PartnersCoordinatorTests: XCTestCase {
 
     @MainActor
     func testReloadInvalidatesAnInFlightCompanyPage() async {
-        let cursor = PartnerPageCursor(createdAt: .distantPast, documentId: "cursor")
+        let cursor = PartnerPageCursor(
+            createdAtSeconds: 0, createdAtNanoseconds: 0, documentId: "cursor"
+        )
         let liveCompany = PartnerCompany(
             id: "live", name: "Live", category: .other, description: nil,
             website: nil, phone: nil, address: nil, latitude: nil, longitude: nil
@@ -393,8 +404,12 @@ final class PartnersCoordinatorTests: XCTestCase {
 
     @MainActor
     func testLiveCompanyBoundaryInvalidatesFirstInFlightPage() async {
-        let cursor = PartnerPageCursor(createdAt: .distantPast, documentId: "old")
-        let shifted = PartnerPageCursor(createdAt: .distantPast, documentId: "new")
+        let cursor = PartnerPageCursor(
+            createdAtSeconds: 0, createdAtNanoseconds: 0, documentId: "old"
+        )
+        let shifted = PartnerPageCursor(
+            createdAtSeconds: 0, createdAtNanoseconds: 0, documentId: "new"
+        )
         let live = PartnerCompany(
             id: "live", name: "Live", category: .other, description: nil,
             website: nil, phone: nil, address: nil, latitude: nil, longitude: nil
@@ -425,8 +440,12 @@ final class PartnersCoordinatorTests: XCTestCase {
 
     @MainActor
     func testLiveOfferBoundaryInvalidatesFirstInFlightPage() async {
-        let cursor = PartnerPageCursor(createdAt: .distantPast, documentId: "old")
-        let shifted = PartnerPageCursor(createdAt: .distantPast, documentId: "new")
+        let cursor = PartnerPageCursor(
+            createdAtSeconds: 0, createdAtNanoseconds: 0, documentId: "old"
+        )
+        let shifted = PartnerPageCursor(
+            createdAtSeconds: 0, createdAtNanoseconds: 0, documentId: "new"
+        )
         let live = PartnerOffer(
             id: "live", companyId: "c1", partnerCompanyName: nil, title: "Live",
             teaserText: "", offerType: .other
@@ -457,7 +476,9 @@ final class PartnersCoordinatorTests: XCTestCase {
 
     @MainActor
     func testPagedOfferLosingActiveVisibilityClearsSensitiveState() async {
-        let cursor = PartnerPageCursor(createdAt: .distantPast, documentId: "cursor")
+        let cursor = PartnerPageCursor(
+            createdAtSeconds: 0, createdAtNanoseconds: 0, documentId: "cursor"
+        )
         let pagedOffer = PartnerOffer(
             id: "paged", companyId: "c1", partnerCompanyName: nil, title: "Paged",
             teaserText: "", offerType: .discountCode
@@ -713,7 +734,9 @@ final class PartnersCoordinatorTests: XCTestCase {
 
     @MainActor
     func testCompanyDetailUsesScopedOfferPages() async {
-        let cursor = PartnerPageCursor(createdAt: .distantPast, documentId: "cursor")
+        let cursor = PartnerPageCursor(
+            createdAtSeconds: 0, createdAtNanoseconds: 0, documentId: "cursor"
+        )
         let first = PartnerOffer(
             id: "first", companyId: "c1", partnerCompanyName: nil, title: "First",
             teaserText: "", offerType: .other
@@ -746,8 +769,12 @@ final class PartnersCoordinatorTests: XCTestCase {
 
     @MainActor
     func testScopedOfferBoundaryInvalidatesFirstInFlightPage() async {
-        let cursor = PartnerPageCursor(createdAt: .distantPast, documentId: "old")
-        let shifted = PartnerPageCursor(createdAt: .distantPast, documentId: "new")
+        let cursor = PartnerPageCursor(
+            createdAtSeconds: 0, createdAtNanoseconds: 0, documentId: "old"
+        )
+        let shifted = PartnerPageCursor(
+            createdAtSeconds: 0, createdAtNanoseconds: 0, documentId: "new"
+        )
         let live = PartnerOffer(
             id: "live", companyId: "c1", partnerCompanyName: nil, title: "Live",
             teaserText: "", offerType: .other

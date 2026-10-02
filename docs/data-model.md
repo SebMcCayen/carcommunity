@@ -482,13 +482,6 @@ Business rules:
 | created_at         | timestamptz       |                                |
 | updated_at         | timestamptz       |                                |
 
-Partner lifecycle invariants are enforced by the audited `partners.*` callables:
-activating an offer requires an active parent company, while pausing or ending a
-company atomically rewrites its active offers to the matching inactive status.
-Company activation never reactivates offers. A company pause/end with more than
-498 active offers returns `resource-exhausted` without changing the company or
-its offers, so administrators must pause offers before retrying.
-
 ## Digital billboards
 
 ### Table sketch: `digital_billboards`

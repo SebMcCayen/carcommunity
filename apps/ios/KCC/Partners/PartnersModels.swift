@@ -113,7 +113,8 @@ struct PartnerOfferDetail: Equatable, Sendable {
 }
 
 struct PartnerPageCursor: Equatable, Sendable {
-    let createdAt: Date
+    let createdAtSeconds: Int64
+    let createdAtNanoseconds: Int32
     let documentId: String
 }
 
