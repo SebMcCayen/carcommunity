@@ -64,6 +64,7 @@ struct ShellView: View {
     @State private var conversationsCoordinator: ConversationsCoordinator?
     @State private var chatHubCoordinator: ChatHubCoordinator?
     @State private var crownHuntComposition: CrownHuntComposition?
+    @State private var partnersCoordinator: PartnersCoordinator?
     @State private var liveLocationCoordinator: LiveLocationCoordinator?
     @State private var driveRecordingCoordinator: DriveRecordingCoordinator?
     @State private var locationPermissionCoordinator: LocationPermissionCoordinator?
@@ -83,6 +84,7 @@ struct ShellView: View {
     @State private var conversationsRepository: ConversationsRepository?
     @State private var dmTarget: DmRouteTarget?
     @State private var dmCoordinator: ChatCoordinator?
+    @State private var memberProfileTarget: MemberProfileRouteTarget?
     @State private var locationProvider = CoreLocationProvider()
     /// Live sharing is explicitly user-started and time-bounded, so its own
     /// provider may continue while the app is backgrounded. Keeping it
@@ -125,6 +127,15 @@ struct ShellView: View {
             }
             .onChange(of: chatFeatureWiringKey) { _, _ in
                 applyChatFeatureGate()
+            }
+            .onChange(of: access) { _, access in
+                partnersCoordinator?.updateAccess(access)
+            }
+            .onChange(of: featureFlags.isEnabled(.partners)) { _, enabled in
+                if !enabled, routes.current == .partners {
+                    partnersCoordinator?.clearSensitiveOfferState()
+                    routes = routes.poppingOne()
+                }
             }
             .task(id: convoyReactionSubscriptionKey) {
                 convoyReactionCoordinator?.sync(convoyId: convoyReactionTargetId)
@@ -398,7 +409,9 @@ struct ShellView: View {
                             friendsCoordinator: friendsCoordinator,
                             awareness: convoyAwareness,
                             mapSurface: mapSurface,
-                            liveLocationEnabled: liveLocationFeatureEnabled
+                            liveLocationEnabled: liveLocationFeatureEnabled,
+                            viewerUid: signedInUid,
+                            onOpenMemberProfile: openMemberProfile
                         )
                         .padding(.horizontal, KccSpacing.s4)
                         .padding(.top, KccSpacing.s12 + KccSpacing.s3)
@@ -550,10 +563,13 @@ struct ShellView: View {
             panelTab {
                 SocialHubPanel(
                     crownHuntEnabled: featureFlags.isEnabled(.crownHunt),
+                    partnersEnabled: featureFlags.isEnabled(.partners)
+                        && partnersCoordinator != nil,
                     onOpenEvents: { routes = routes.opening(.events) },
                     onOpenConvoys: openConvoyManagement,
                     onOpenCrownHunt: { routes = routes.opening(.crownHunt) },
-                    onOpenLeaderboard: { routes = routes.opening(.leaderboard) }
+                    onOpenLeaderboard: { routes = routes.opening(.leaderboard) },
+                    onOpenPartners: { routes = routes.opening(.partners) }
                 )
             }
         case .garage:
@@ -654,8 +670,13 @@ struct ShellView: View {
                 uid: signedInUid,
                 displayName: signedInDisplayName,
                 onSignOut: { session.signOut() },
-                onBack: { routes = routes.poppingOne() }
+                onBack: { routes = routes.poppingOne() },
+                onOpenPoints: { routes = routes.opening(.points) }
             )
+        case .points:
+            routeNavigation {
+                PointsScreen(uid: signedInUid)
+            }
         case .events:
             // The read-only events list, opened from the Social hub. The
             // NavigationStack hosts the screen's `navigationTitle`; Back pops
@@ -679,6 +700,15 @@ struct ShellView: View {
         case .leaderboard:
             routeNavigation {
                 LeaderboardScreen(coordinator: leaderboardCoordinator)
+            }
+        case .partners:
+            if featureFlags.isEnabled(.partners), let partnersCoordinator {
+                PartnersScreen(
+                    coordinator: partnersCoordinator,
+                    onBack: { routes = routes.poppingOne() }
+                )
+            } else {
+                unavailableRoute
             }
         case .crownHunt:
             if let composition = crownHuntComposition {
@@ -723,7 +753,9 @@ struct ShellView: View {
                     onMessageFriend: { friend in
                         openDm(uid: friend.uid, displayName: friend.displayName)
                     },
-                    onViewProfile: nil
+                    onViewProfile: { friend in
+                        openMemberProfile(uid: friend.uid, displayName: friend.displayName)
+                    }
                 )
             }
         case .convoys:
@@ -777,13 +809,29 @@ struct ShellView: View {
                     onOpenConversation: openDm
                 )
             }
+        case .memberProfile:
+            if let target = memberProfileTarget, let viewerUid = signedInUid {
+                routeNavigation {
+                    MemberProfileScreen(
+                        targetUid: target.uid,
+                        viewerUid: viewerUid,
+                        friends: friendsRepository,
+                        onMessage: openDm
+                    )
+                }
+            } else {
+                unavailableRoute
+            }
         case .chat:
             if let target = dmTarget {
                 routeNavigation {
                     ChatScreen(
                         coordinator: dmCoordinator,
                         otherName: target.displayName,
-                        currentUid: signedInUid ?? ""
+                        currentUid: signedInUid ?? "",
+                        onViewProfile: {
+                            openMemberProfile(uid: target.uid, displayName: target.displayName)
+                        }
                     )
                 }
             } else {
@@ -870,6 +918,12 @@ struct ShellView: View {
             otherUid: uid
         )
         routes = routes.opening(.chat)
+    }
+
+    private func openMemberProfile(uid: String, displayName: String?) {
+        guard !uid.isEmpty, uid != signedInUid else { return }
+        memberProfileTarget = MemberProfileRouteTarget(uid: uid, displayName: displayName)
+        routes = routes.opening(.memberProfile)
     }
 
     private var tabSelection: Binding<ShellTab> {
@@ -1254,11 +1308,12 @@ struct ShellView: View {
         // Remove a conversation built for the previous identity before doing
         // any asynchronous flag work. If Chat was opened from a parent hub,
         // return to that hub; otherwise close the route entirely.
-        if routes.current == .chat {
+        while routes.current == .chat || routes.current == .memberProfile {
             routes = routes.poppingOne()
         }
         dmTarget = nil
         dmCoordinator = nil
+        memberProfileTarget = nil
         if routes.current == .convoys { routes = routes.poppingOne() }
         convoyManagementCoordinator = nil
         convoyAwareness.sync(convoy: nil, repository: nil, currentUid: nil)
@@ -1282,6 +1337,8 @@ struct ShellView: View {
         crownHuntComposition?.mapCoordinator?.stop()
         crownHuntComposition?.perkMapCoordinator?.stop()
         crownHuntComposition = nil
+        partnersCoordinator?.clearSensitiveOfferState()
+        partnersCoordinator = nil
 
         let friends = FirebaseFriendsRepository.createIfAvailable()
         let conversations = FirebaseConversationsRepository.createIfAvailable()
@@ -1313,6 +1370,14 @@ struct ShellView: View {
         leaderboardCoordinator = LeaderboardCoordinator(
             repository: FirebaseLeaderboardRepository.createIfAvailable()
         )
+        partnersCoordinator = FirebasePartnersRepository.createIfAvailable().map {
+            PartnersCoordinator(
+                repository: $0,
+                subscriptionRepository: FirebaseSubscriptionStateRepository.createIfAvailable(),
+                uid: uid,
+                access: access
+            )
+        }
         notificationsCoordinator = NotificationsInboxCoordinator(repository: notifications, uid: uid)
         notificationSettingsCoordinator = NotificationSettingsCoordinator(
             repository: FirebaseNotificationSettingsRepository.createIfAvailable(),
@@ -1677,6 +1742,11 @@ struct ShellView: View {
 }
 
 private struct DmRouteTarget: Equatable, Sendable {
+    let uid: String
+    let displayName: String?
+}
+
+private struct MemberProfileRouteTarget: Equatable, Sendable {
     let uid: String
     let displayName: String?
 }

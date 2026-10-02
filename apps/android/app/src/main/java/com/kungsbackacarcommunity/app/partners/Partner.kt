@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.partners
 
+import java.net.URI
 import java.util.Locale
 
 /**
@@ -53,6 +54,7 @@ data class PartnerCompany(
     val phone: String?,
     val latitude: Double?,
     val longitude: Double?,
+    val address: String? = null,
 )
 
 /** Offer teaser (offers/{id}) — visible to any authenticated user. */
@@ -62,6 +64,7 @@ data class PartnerOffer(
     val title: String,
     val teaserText: String,
     val offerType: PartnerOfferType,
+    val partnerCompanyName: String? = null,
 )
 
 /** Member-gated offer detail (offers/{id}/details/member). */
@@ -75,6 +78,10 @@ object Partners {
     /** Offers belonging to a company, in stable order (by title). */
     fun offersForCompany(offers: List<PartnerOffer>, companyId: String): List<PartnerOffer> =
         offers.filter { it.companyId == companyId }.sortedBy { it.title.lowercase(Locale.ROOT) }
+
+    /** Active offers bookmarked by the member, in stable title order. */
+    fun savedOffers(offers: List<PartnerOffer>, savedIds: Set<String>): List<PartnerOffer> =
+        offers.filter { it.id in savedIds }.sortedBy { it.title.lowercase(Locale.ROOT) }
 
     /**
      * Maximum active companies the Firestore listener subscribes to (newest
@@ -97,4 +104,47 @@ object Partners {
      * required index deploy.
      */
     const val ACTIVE_OFFERS_QUERY_LIMIT = 200L
+
+    /** Page size for active offers shown in one company detail. */
+    const val COMPANY_OFFERS_QUERY_LIMIT = 50L
+
+    /** Maximum recent bookmarks resolved by the live saved-offers surface. */
+    const val SAVED_OFFERS_QUERY_LIMIT = 30L
+}
+
+/** Mirrors the backend authority for member-only partner offer data. */
+object PartnerOfferAccess {
+    fun allows(
+        isAdmin: Boolean,
+        isPaidSubscriber: Boolean,
+        isAccountRestricted: Boolean,
+    ): Boolean = !isAccountRestricted && (isAdmin || isPaidSubscriber)
+}
+
+/** Validated external destinations for partner actions. */
+object PartnerDestinations {
+    fun website(rawValue: String?): String? {
+        val value = rawValue?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val uri = runCatching { URI(value) }.getOrNull() ?: return null
+        if (uri.scheme?.lowercase(Locale.ROOT) !in setOf("https", "http")) return null
+        if (uri.host.isNullOrBlank() || uri.userInfo != null) return null
+        return runCatching {
+            URI(uri.scheme, null, uri.host, uri.port, uri.path, uri.query, null).toString()
+        }.getOrNull()
+    }
+
+    fun phone(rawValue: String?): String? {
+        val value = rawValue?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        if (!value.all { it in '0'..'9' || it in "+ ()-." }) return null
+        if ('+' in value.drop(1)) return null
+        val digits = value.filter { it in '0'..'9' }
+        if (digits.length < 3) return null
+        return "tel:${if (value.startsWith('+')) "+" else ""}$digits"
+    }
+
+    fun coordinates(latitude: Double?, longitude: Double?): Pair<Double, Double>? {
+        if (latitude == null || longitude == null || !latitude.isFinite() || !longitude.isFinite()) return null
+        if (latitude !in -90.0..90.0 || longitude !in -180.0..180.0) return null
+        return latitude to longitude
+    }
 }

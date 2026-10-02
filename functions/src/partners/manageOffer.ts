@@ -186,6 +186,16 @@ export const setOfferStatus = onCall(CALLABLE_OPTS, async (request): Promise<Off
     if (!guard.ok) {
       throw new HttpsError(guard.code, guard.message);
     }
+    if (guard.nextStatus === 'active') {
+      const companyId = snap.data()!.companyId as string;
+      const company = await tx.get(db.collection('companies').doc(companyId));
+      if (!company.exists || company.data()!.status !== 'active') {
+        throw new HttpsError(
+          'failed-precondition',
+          'The partner company must be active before activating an offer.',
+        );
+      }
+    }
     tx.update(offerRef, { status: guard.nextStatus, updatedAt: serverTimestamp() });
     tx.set(
       db.collection('adminAuditEvents').doc(),

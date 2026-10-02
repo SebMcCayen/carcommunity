@@ -115,6 +115,20 @@ final class GarageModelTests: XCTestCase {
         )
     }
 
+    func testPhotoUploadCleanupOnlyDeletesAfterDefinitiveRejection() {
+        for code in [
+            KccFunctionsErrorCode.unauthenticated, .permissionDenied, .invalidArgument,
+            .notFound, .resourceExhausted, .failedPrecondition,
+        ] {
+            XCTAssertTrue(VehiclePhotoUploadCleanup.shouldDelete(after: code))
+        }
+        for code in [
+            KccFunctionsErrorCode.internalError, .unavailable, .unknown,
+        ] {
+            XCTAssertFalse(VehiclePhotoUploadCleanup.shouldDelete(after: code))
+        }
+    }
+
     // MARK: - decoding
 
     private func fullDocument() -> [String: Any] {
@@ -377,6 +391,64 @@ final class GarageModelTests: XCTestCase {
         var form = validForm()
         form.modelId = nil
         XCTAssertNil(VehicleValidation.toInput(form, currentYear: Self.currentYear))
+    }
+
+    // MARK: - edit form and gallery
+
+    func testEditFormPreservesEditableVehicleFields() {
+        let vehicle = Vehicle.fromMap(id: "v1", map: fullDocument())!
+        XCTAssertEqual(
+            VehicleForm(vehicle: vehicle),
+            VehicleForm(
+                makeId: "volvo",
+                modelId: "240",
+                modelYear: 1988,
+                powertrain: .petrol,
+                engineDescription: "B230F",
+                modifications: "Sänkt, chipp",
+                registrationPlate: "ABC 123"
+            )
+        )
+    }
+
+    func testRetiredPowertrainRequiresAReplacementBeforeEditCanSave() {
+        var map = fullDocument()
+        map["powertrain"] = "plug_in_hybrid"
+        let form = VehicleForm(vehicle: Vehicle.fromMap(id: "v1", map: map)!)
+        XCTAssertNil(form.powertrain)
+        XCTAssertEqual(
+            VehicleValidation.validate(form, currentYear: Self.currentYear),
+            .powertrainRequired
+        )
+    }
+
+    func testGalleryFiltersBlanksAndFallsBackToLegacyCover() {
+        var map = fullDocument()
+        map["photoPaths"] = ["  ", "vehicleImages/uid-1/v1/two.jpg"]
+        XCTAssertEqual(
+            VehicleGallery.paths(for: Vehicle.fromMap(id: "v1", map: map)!),
+            ["vehicleImages/uid-1/v1/two.jpg"]
+        )
+
+        map["photoPaths"] = nil
+        XCTAssertEqual(
+            VehicleGallery.paths(for: Vehicle.fromMap(id: "v1", map: map)!),
+            ["vehicleImages/uid-1/v1/cover.jpg"]
+        )
+    }
+
+    func testGalleryIndexClampsAfterRemovalAndCoverMovePreservesOrder() {
+        XCTAssertEqual(VehicleGallery.clampedIndex(4, count: 2), 1)
+        XCTAssertEqual(VehicleGallery.clampedIndex(-1, count: 2), 0)
+        XCTAssertEqual(VehicleGallery.clampedIndex(8, count: 0), 0)
+        XCTAssertEqual(
+            VehicleGallery.movingToCover("c", in: ["a", "b", "c"]),
+            ["c", "a", "b"]
+        )
+        XCTAssertEqual(
+            VehicleGallery.movingToCover("missing", in: ["a", "b"]),
+            ["a", "b"]
+        )
     }
 
     // MARK: - list sort

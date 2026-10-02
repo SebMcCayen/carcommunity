@@ -279,6 +279,7 @@ import com.kungsbackacarcommunity.app.notifications.openAppNotificationSettings
 import com.kungsbackacarcommunity.app.partners.OfferCodeCoordinator
 import com.kungsbackacarcommunity.app.partners.PartnerApplicationCoordinator
 import com.kungsbackacarcommunity.app.partners.PartnerApplicationRoute
+import com.kungsbackacarcommunity.app.partners.PartnerOfferAccess
 import com.kungsbackacarcommunity.app.partners.PartnersRepository
 import com.kungsbackacarcommunity.app.partners.PartnersRoute
 import com.kungsbackacarcommunity.app.points.Points
@@ -380,6 +381,7 @@ import com.kungsbackacarcommunity.app.profile.ProfileScreen
 import com.kungsbackacarcommunity.app.profile.ProfileState
 import com.kungsbackacarcommunity.app.profile.ProfileStatsSummary
 import com.kungsbackacarcommunity.app.profile.authedDestination
+import com.kungsbackacarcommunity.app.profile.restrictsProtectedMemberData
 import com.kungsbackacarcommunity.app.auth.LoginRecordCoordinator
 import com.kungsbackacarcommunity.app.push.ActiveChat
 import com.kungsbackacarcommunity.app.push.ActiveChatRegistry
@@ -6409,6 +6411,11 @@ fun AuthenticatedApp(
                         uid = uid,
                         profileActiveMember = profile?.activeMember == true,
                         profileIsAdmin = profile?.isAdmin == true,
+                        // A listener error leaves the shell mounted, but protected
+                        // partner data must fail closed until an authoritative
+                        // profile snapshot returns. The config-less build remains
+                        // navigable through its explicit Unavailable state.
+                        profileIsRestricted = profileState.restrictsProtectedMemberData(),
                         scope = scope,
                         onClose = closeRoute,
                         // Navigation from WITHIN an open route (a hub → its child,
@@ -6501,6 +6508,13 @@ fun AuthenticatedApp(
                         leaderboardRepository = leaderboardRepository,
                         partnersRepository = partnersRepository,
                         offerCodeCoordinator = offerCodeCoordinator,
+                        partnersEnabled =
+                            FeatureGate.isAvailable(
+                                flags = flags,
+                                flag = FeatureFlag.PARTNERS,
+                                memberGated = false,
+                                isActiveMember = profile?.activeMember == true,
+                            ),
                         notificationsRepository = notificationsRepository,
                         notificationsCoordinator = notificationsCoordinator,
                         notificationSettingsRepository = notificationSettingsRepository,
@@ -8825,6 +8839,10 @@ private fun RouteHost(
     // subscription (e.g. the event-details roster), so the client gate mirrors
     // that here to avoid a free-vs-admin divergence with the backend.
     profileIsAdmin: Boolean,
+    // Authoritative users/{uid}.suspended/deleted state. A cached paid
+    // subscription must never keep protected partner offers unlocked after
+    // either backend flag changes.
+    profileIsRestricted: Boolean,
     scope: kotlinx.coroutines.CoroutineScope,
     onClose: () -> Unit,
     onOpenRoute: (ShellRoute) -> Unit,
@@ -8880,6 +8898,7 @@ private fun RouteHost(
     leaderboardRepository: LeaderboardRepository?,
     partnersRepository: PartnersRepository?,
     offerCodeCoordinator: OfferCodeCoordinator?,
+    partnersEnabled: Boolean,
     notificationsRepository: NotificationsRepository?,
     notificationsCoordinator: NotificationsCoordinator?,
     notificationSettingsRepository: NotificationSettingsRepository?,
@@ -9425,14 +9444,25 @@ private fun RouteHost(
             )
 
         ShellRoute.Partners ->
-            if (partnersRepository != null) {
+            if (!partnersEnabled) {
+                LaunchedEffect(Unit) {
+                    offerCodeCoordinator?.reset()
+                    onClose()
+                }
+                LoadingScreen()
+            } else if (partnersRepository != null) {
                 PartnersRoute(
                     repository = partnersRepository,
                     offerCodeCoordinator = offerCodeCoordinator,
                     uid = uid,
-                    // Member offers always require verified paid/admin access.
+                    // Member offers require verified paid/admin access on an
+                    // account that remains active in the live profile snapshot.
                     canAccessMemberOffers =
-                        profileIsAdmin || storedSubscription.isPaidSubscriber,
+                        PartnerOfferAccess.allows(
+                            isAdmin = profileIsAdmin,
+                            isPaidSubscriber = storedSubscription.isPaidSubscriber,
+                            isAccountRestricted = profileIsRestricted,
+                        ),
                     onBack = onClose,
                 )
             } else {

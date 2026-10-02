@@ -356,7 +356,23 @@ sourceApplicationId?, createdByUserId, createdAt, updatedAt }`
 
 Security: authenticated read while ACTIVE; all writes via the audited
 admin `partners.*` callables (lifecycle draft → active ⇄ paused → ended;
-ended is terminal; only draft/paused editable).
+ended is terminal; only draft/paused editable). Pausing or ending a company
+atomically changes every active child offer to `paused` or `ended`, respectively;
+activating the company does not reactivate offers. To stay within Firestore's
+500-write transaction limit, a company transition with more than 498 active
+offers fails with `resource-exhausted` and makes no changes; administrators must
+pause offers first.
+
+Deployment requires the idempotent `functions/scripts/backfill-partner-offer-status.mjs`
+reconciliation before clients rely on status-only offer queries. Run it first as
+a dry run, then with `--apply`, and repeat the dry run until it reports zero
+offers to update:
+
+```bash
+cd functions
+npm run backfill:partner-offer-status -- --project <projectId>
+npm run backfill:partner-offer-status -- --project <projectId> --apply
+```
 
 ---
 
@@ -380,7 +396,9 @@ createdAt, updatedAt }`. Authenticated read while active. Never contains
   offers only) and is never logged.
 
 All writes via the audited admin `partners.*` callables. Composite index:
-`companyId ASC, status ASC, createdAt DESC`.
+`companyId ASC, status ASC, createdAt DESC`. An offer can be activated only while
+its parent company is active; otherwise `partners.setOfferStatus` fails with
+`failed-precondition`.
 
 #### `users/{uid}/savedOffers/{offerId}` — saved offers
 

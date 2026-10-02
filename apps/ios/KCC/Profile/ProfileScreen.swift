@@ -8,8 +8,11 @@ struct ProfileScreen: View {
     let displayName: String?
     let onSignOut: () -> Void
     let onBack: () -> Void
+    let onOpenPoints: (() -> Void)?
     @State private var coordinator: ProfileCoordinator
     @State private var editor: ProfileEditCoordinator
+    @State private var pointsCoordinator: PointsCoordinator
+    @State private var badgesCoordinator: BadgesCoordinator
     @State private var editing = false
     @State private var draft = ProfileDraft(profile: nil)
     @State private var validationError: ProfileValidationError?
@@ -18,31 +21,47 @@ struct ProfileScreen: View {
 
     init(
         uid: String?, displayName: String?, onSignOut: @escaping () -> Void,
-        onBack: @escaping () -> Void
+        onBack: @escaping () -> Void, onOpenPoints: @escaping () -> Void
     ) {
         let repository = FirebaseUserProfileRepository.createIfAvailable()
+        let pointsRepository = FirebasePointsRepository.createIfAvailable()
         self.init(
             uid: uid,
             displayName: displayName,
             onSignOut: onSignOut,
             onBack: onBack,
+            onOpenPoints: pointsRepository == nil ? nil : onOpenPoints,
             coordinator: ProfileCoordinator(repository: repository, uid: uid),
-            editor: ProfileEditCoordinator(repository: repository, uid: uid)
+            editor: ProfileEditCoordinator(repository: repository, uid: uid),
+            pointsCoordinator: PointsCoordinator(repository: pointsRepository, uid: uid),
+            badgesCoordinator: BadgesCoordinator(
+                repository: FirebaseBadgesRepository.createIfAvailable(), uid: uid
+            )
         )
     }
 
     init(
         uid: String? = nil, displayName: String?, onSignOut: @escaping () -> Void,
         onBack: @escaping () -> Void,
+        onOpenPoints: (() -> Void)? = nil,
         coordinator: ProfileCoordinator,
-        editor: ProfileEditCoordinator? = nil
+        editor: ProfileEditCoordinator? = nil,
+        pointsCoordinator: PointsCoordinator? = nil,
+        badgesCoordinator: BadgesCoordinator? = nil
     ) {
         self.uid = uid
         self.displayName = displayName
         self.onSignOut = onSignOut
         self.onBack = onBack
+        self.onOpenPoints = onOpenPoints
         _coordinator = State(initialValue: coordinator)
         _editor = State(initialValue: editor ?? ProfileEditCoordinator(repository: nil, uid: nil))
+        _pointsCoordinator = State(initialValue: pointsCoordinator ?? PointsCoordinator(
+            repository: nil, uid: nil
+        ))
+        _badgesCoordinator = State(initialValue: badgesCoordinator ?? BadgesCoordinator(
+            repository: nil, uid: nil
+        ))
     }
 
     var body: some View {
@@ -71,7 +90,17 @@ struct ProfileScreen: View {
                 }
                 .frame(maxWidth: .infinity)
 
-                if editing { editForm } else { profileDetails }
+                if editing {
+                    editForm
+                } else {
+                    profileDetails
+                    ProfilePointsSection(
+                        balance: pointsCoordinator.balance,
+                        recentEarnings: pointsCoordinator.recentEarnings,
+                        onOpenLedger: onOpenPoints
+                    )
+                    BadgesWall(coordinator: badgesCoordinator, isEmbedded: true)
+                }
 
                 if editor.status == .failed {
                     Text("profile.saveError").foregroundStyle(.red)
@@ -104,7 +133,10 @@ struct ProfileScreen: View {
             .padding(KccSpacing.s6)
         }
         .background(.background)
-        .task { coordinator.start() }
+        .task {
+            coordinator.start()
+            pointsCoordinator.start()
+        }
         .onChange(of: pickedPhoto) { _, item in
             guard let item else { return }
             Task { await upload(item) }

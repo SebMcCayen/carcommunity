@@ -1,6 +1,8 @@
 package com.kungsbackacarcommunity.app.profile
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AuthedDestinationTest {
@@ -34,5 +36,23 @@ class AuthedDestinationTest {
             AuthedDestination.Main,
             authedDestination(ProfileState.Loaded(UserProfile("Seb", "bio", onboardingComplete = true))),
         )
+    }
+
+    @Test
+    fun `protected member data fails closed without an authoritative active profile`() {
+        assertTrue(ProfileState.Loading.restrictsProtectedMemberData())
+        assertTrue(ProfileState.Error.restrictsProtectedMemberData())
+        assertTrue(ProfileState.Loaded(null).restrictsProtectedMemberData())
+        assertTrue(
+            ProfileState.Loaded(
+                UserProfile("Seb", null, onboardingComplete = true, isRestricted = true),
+            ).restrictsProtectedMemberData(),
+        )
+        assertFalse(
+            ProfileState.Loaded(
+                UserProfile("Seb", null, onboardingComplete = true, isRestricted = false),
+            ).restrictsProtectedMemberData(),
+        )
+        assertFalse(ProfileState.Unavailable.restrictsProtectedMemberData())
     }
 }

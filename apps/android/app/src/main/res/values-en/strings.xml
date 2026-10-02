@@ -1366,6 +1366,7 @@
     <string name="partners_websiteButton">Visit website</string>
     <string name="partners_noPartnersNearby">No business partners found in this area.</string>
     <string name="partners_loading">Loading...</string>
+    <string name="partners_loadMore">Load more</string>
     <string name="partners_error">Could not load business partners.</string>
     <string name="partners_retry">Try again</string>
     <string name="partners_applicationTitle">For businesses</string>
@@ -1403,6 +1404,9 @@
     <string name="partners_categoryRestaurant">Restaurant</string>
     <string name="partners_categoryRetail">Retail</string>
     <string name="partners_categoryOther">Other</string>
+    <string name="partners_section">Content</string>
+    <string name="partners_directory">Partners</string>
+    <string name="partners_saved">Saved</string>
     <string name="partnerOffers_sectionTitle">Offers &amp; Benefits</string>
     <string name="partnerOffers_noOffers">No current offers.</string>
     <string name="partnerOffers_memberRequired">KCC Membership required to view this offer.</string>
@@ -1423,6 +1427,8 @@
     <string name="partnerOffers_codeAlertTitle">Discount code</string>
     <string name="partnerOffers_codeAlertClose">Close</string>
     <string name="partnerOffers_loadError">Could not load offers.</string>
+    <string name="partnerOffers_detailUnavailable">Offer details are unavailable.</string>
+    <string name="partnerOffers_detailLoadError">Could not load offer details.</string>
     <string name="partnerOffers_codeLoadError">Could not load the code. Please try again.</string>
     <string name="partnerOffers_saveError">Could not save the offer.</string>
     <string name="partnerOffers_offerTypeDiscountCode">Discount code</string>
@@ -1431,6 +1437,11 @@
     <string name="partnerOffers_offerTypeMemberBenefit">Member benefit</string>
     <string name="partnerOffers_offerTypeSpecialOffer">Special offer</string>
     <string name="partnerOffers_offerTypeOther">Offer</string>
+    <string name="partnerOffers_savedEmptyTitle">No saved offers</string>
+    <string name="partnerOffers_savedEmptyBody">Save an offer from a business partner and it will appear here.</string>
+    <string name="partnerOffers_savedLimitedBody">Only your 30 most recently saved offers are shown.</string>
+    <string name="partnerOffers_offerCountOne">%1$d offer</string>
+    <string name="partnerOffers_offerCountOther">%1$d offers</string>
     <string name="billboard_sponsoredLabel">Sponsored placement</string>
     <string name="billboard_advertisingFrom">Advertising</string>
     <string name="billboard_viewCompany">View company</string>

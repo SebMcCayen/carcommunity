@@ -1366,6 +1366,7 @@
     <string name="partners_websiteButton">Besök webbplats</string>
     <string name="partners_noPartnersNearby">Inga företagspartner hittades i området.</string>
     <string name="partners_loading">Laddar...</string>
+    <string name="partners_loadMore">Visa fler</string>
     <string name="partners_error">Kunde inte hämta företagspartner.</string>
     <string name="partners_retry">Försök igen</string>
     <string name="partners_applicationTitle">För företag</string>
@@ -1403,6 +1404,9 @@
     <string name="partners_categoryRestaurant">Restaurang</string>
     <string name="partners_categoryRetail">Butik</string>
     <string name="partners_categoryOther">Annat</string>
+    <string name="partners_section">Innehåll</string>
+    <string name="partners_directory">Företag</string>
+    <string name="partners_saved">Sparade</string>
     <string name="partnerOffers_sectionTitle">Erbjudanden &amp; förmåner</string>
     <string name="partnerOffers_noOffers">Inga aktuella erbjudanden.</string>
     <string name="partnerOffers_memberRequired">KCC Medlem krävs för att visa erbjudandet.</string>
@@ -1423,6 +1427,8 @@
     <string name="partnerOffers_codeAlertTitle">Rabattkod</string>
     <string name="partnerOffers_codeAlertClose">Stäng</string>
     <string name="partnerOffers_loadError">Kunde inte hämta erbjudanden.</string>
+    <string name="partnerOffers_detailUnavailable">Erbjudandedetaljerna är inte tillgängliga.</string>
+    <string name="partnerOffers_detailLoadError">Kunde inte hämta erbjudandedetaljerna.</string>
     <string name="partnerOffers_codeLoadError">Kunde inte hämta koden. Försök igen.</string>
     <string name="partnerOffers_saveError">Kunde inte spara erbjudandet.</string>
     <string name="partnerOffers_offerTypeDiscountCode">Rabattkod</string>
@@ -1431,6 +1437,11 @@
     <string name="partnerOffers_offerTypeMemberBenefit">Medlemsförmån</string>
     <string name="partnerOffers_offerTypeSpecialOffer">Specialerbjudande</string>
     <string name="partnerOffers_offerTypeOther">Erbjudande</string>
+    <string name="partnerOffers_savedEmptyTitle">Inga sparade erbjudanden</string>
+    <string name="partnerOffers_savedEmptyBody">Spara ett erbjudande hos en företagspartner så visas det här.</string>
+    <string name="partnerOffers_savedLimitedBody">Endast dina 30 senast sparade erbjudanden visas.</string>
+    <string name="partnerOffers_offerCountOne">%1$d erbjudande</string>
+    <string name="partnerOffers_offerCountOther">%1$d erbjudanden</string>
     <string name="billboard_sponsoredLabel">Sponsrad placering</string>
     <string name="billboard_advertisingFrom">Marknadsföring</string>
     <string name="billboard_viewCompany">Visa företag</string>

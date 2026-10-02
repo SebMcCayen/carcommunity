@@ -1467,6 +1467,7 @@
     "websiteButton": "Visit website",
     "noPartnersNearby": "No business partners found in this area.",
     "loading": "Loading...",
+    "loadMore": "Load more",
     "error": "Could not load business partners.",
     "retry": "Try again",
     "applicationTitle": "For businesses",
@@ -1503,7 +1504,10 @@
     "categoryCharging": "Charging",
     "categoryRestaurant": "Restaurant",
     "categoryRetail": "Retail",
-    "categoryOther": "Other"
+    "categoryOther": "Other",
+    "section": "Content",
+    "directory": "Partners",
+    "saved": "Saved"
   },
   "partnerOffers": {
     "sectionTitle": "Offers & Benefits",
@@ -1526,6 +1530,8 @@
     "codeAlertTitle": "Discount code",
     "codeAlertClose": "Close",
     "loadError": "Could not load offers.",
+    "detailUnavailable": "Offer details are unavailable.",
+    "detailLoadError": "Could not load offer details.",
     "codeLoadError": "Could not load the code. Please try again.",
     "saveError": "Could not save the offer.",
     "offerTypeDiscountCode": "Discount code",
@@ -1533,7 +1539,12 @@
     "offerTypeFixedDiscount": "Fixed discount",
     "offerTypeMemberBenefit": "Member benefit",
     "offerTypeSpecialOffer": "Special offer",
-    "offerTypeOther": "Offer"
+    "offerTypeOther": "Offer",
+    "savedEmptyTitle": "No saved offers",
+    "savedEmptyBody": "Save an offer from a business partner and it will appear here.",
+    "savedLimitedBody": "Only your 30 most recently saved offers are shown.",
+    "offerCountOne": "%1$d offer",
+    "offerCountOther": "%1$d offers"
   },
   "billboard": {
     "sponsoredLabel": "Sponsored placement",
