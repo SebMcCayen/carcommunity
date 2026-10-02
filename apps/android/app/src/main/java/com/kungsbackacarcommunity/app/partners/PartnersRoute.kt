@@ -14,7 +14,19 @@ import androidx.compose.runtime.setValue
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+
+private data class ScopedOfferDetailState(
+    val offerId: String?,
+    val generation: Int,
+    val state: OfferDetailState,
+)
+
+private data class ScopedOfferVisibilityState(
+    val generation: Int,
+    val state: OffersState,
+)
 
 /**
  * Partners integration route (Phase 12 slice 17): owns the list ↔ detail
@@ -33,6 +45,7 @@ fun PartnersRoute(
     val scope = rememberCoroutineScope()
     var selectedCompanyId by rememberSaveable { mutableStateOf<String?>(null) }
     var expandedOfferId by rememberSaveable { mutableStateOf<String?>(null) }
+    var expandedOfferGeneration by rememberSaveable { mutableStateOf(0) }
     var rootSection by rememberSaveable { mutableStateOf(PartnersRootSection.DIRECTORY) }
     // Bumped by the "try again" affordance to re-subscribe the companies flow.
     var reloadKey by rememberSaveable { mutableStateOf(0) }
@@ -118,12 +131,14 @@ fun PartnersRoute(
     BackHandler(enabled = selectedCompanyId != null) {
         selectedCompanyId = null
         expandedOfferId = null
+        expandedOfferGeneration++
         offerCodeCoordinator?.reset()
     }
 
     LaunchedEffect(canAccessMemberOffers, uid) {
         if (!canAccessMemberOffers) {
             expandedOfferId = null
+            expandedOfferGeneration++
             offerCodeCoordinator?.reset()
         }
     }
@@ -142,6 +157,7 @@ fun PartnersRoute(
             onOpenSavedOffer = { savedCompanyId, offerId ->
                 selectedCompanyId = savedCompanyId
                 expandedOfferId = offerId
+                expandedOfferGeneration++
                 offerCodeCoordinator?.reset()
             },
             onRetry = { reloadKey++ },
@@ -220,28 +236,66 @@ fun PartnersRoute(
                 nextCursor = companyOffersCursor,
             )
         } ?: companyOffersState
-    val expandedDetailState by
-        remember(expandedOfferId, canAccessMemberOffers, repository) {
+    val expandedVisibilitySnapshot by
+        remember(expandedOfferId, expandedOfferGeneration, canAccessMemberOffers, repository) {
             val id = expandedOfferId
             if (id != null && canAccessMemberOffers) {
-                repository.observeOfferDetail(id)
+                repository.observeOffers(setOf(id)).map {
+                    ScopedOfferVisibilityState(expandedOfferGeneration, it)
+                }
             } else {
-                flowOf(OfferDetailState.Missing)
+                flowOf(
+                    ScopedOfferVisibilityState(
+                        expandedOfferGeneration,
+                        OffersState.Loaded(emptyList()),
+                    ),
+                )
             }
         }
-            .collectAsState(initial = OfferDetailState.Loading)
-    val expandedVisibility by
-        remember(expandedOfferId, canAccessMemberOffers, repository) {
-            val id = expandedOfferId
-            if (id != null && canAccessMemberOffers) repository.observeOffers(setOf(id)) else flowOf(OffersState.Loaded(emptyList()))
+            .collectAsState(initial = ScopedOfferVisibilityState(-1, OffersState.Loading))
+    val expandedVisibility =
+        if (expandedVisibilitySnapshot.generation == expandedOfferGeneration) {
+            expandedVisibilitySnapshot.state
+        } else {
+            OffersState.Loading
         }
-            .collectAsState(initial = OffersState.Loading)
+    val expandedOfferIsAuthoritativelyVisible =
+        expandedOfferId?.let { id ->
+            (expandedVisibility as? OffersState.Loaded)?.offers?.any { it.id == id } == true
+        } == true
+    val expandedDetailSnapshot by
+        remember(
+            expandedOfferId,
+            expandedOfferGeneration,
+            expandedOfferIsAuthoritativelyVisible,
+            canAccessMemberOffers,
+            repository,
+        ) {
+            val id = expandedOfferId
+            if (id != null && canAccessMemberOffers && expandedOfferIsAuthoritativelyVisible) {
+                repository.observeOfferDetail(id).map {
+                    ScopedOfferDetailState(id, expandedOfferGeneration, it)
+                }
+            } else {
+                // Do not start or expose a cached member-detail listener until
+                // the direct active-offer lookup has positively revalidated it.
+                flowOf(
+                    ScopedOfferDetailState(
+                        id,
+                        expandedOfferGeneration,
+                        OfferDetailState.Loading,
+                    ),
+                )
+            }
+        }
+            .collectAsState(initial = ScopedOfferDetailState(null, -1, OfferDetailState.Loading))
     LaunchedEffect(expandedOfferId, expandedVisibility) {
         if (expandedOfferId != null &&
             (expandedVisibility == OffersState.Error ||
                 (expandedVisibility as? OffersState.Loaded)?.offers?.none { it.id == expandedOfferId } == true)
         ) {
             expandedOfferId = null
+            expandedOfferGeneration++
             offerCodeCoordinator?.reset()
         }
     }
@@ -254,9 +308,18 @@ fun PartnersRoute(
         canAccessMemberOffers = canAccessMemberOffers,
         expandedOfferId = expandedOfferId,
         expandedOfferDetailState =
-            if (canAccessMemberOffers) expandedDetailState else OfferDetailState.Missing,
+            if (canAccessMemberOffers &&
+                expandedOfferIsAuthoritativelyVisible &&
+                expandedDetailSnapshot.offerId == expandedOfferId &&
+                expandedDetailSnapshot.generation == expandedOfferGeneration
+            ) {
+                expandedDetailSnapshot.state
+            } else {
+                OfferDetailState.Loading
+            },
         codeStatus = if (canAccessMemberOffers) codeStatus else OfferCodeStatus.Idle,
         onToggleExpand = { offerId ->
+            expandedOfferGeneration++
             expandedOfferId = if (expandedOfferId == offerId) null else offerId
             offerCodeCoordinator?.reset()
         },
@@ -278,6 +341,7 @@ fun PartnersRoute(
         onBack = {
             selectedCompanyId = null
             expandedOfferId = null
+            expandedOfferGeneration++
             offerCodeCoordinator?.reset()
         },
         onRetryCompany = { companyReloadKey++ },

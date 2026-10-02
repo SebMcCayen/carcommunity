@@ -406,10 +406,12 @@ final class PartnersCoordinator {
         }
         if expanded {
             guard expandedOfferId != offerId else { return }
+            detailTask?.cancel()
+            detailTask = nil
             expandedOfferId = offerId
+            detailState = .loading
             codeStatus = .idle
             subscribeOfferVisibility(offerId: offerId)
-            subscribeDetail(offerId: offerId)
         } else if expandedOfferId == offerId {
             clearSensitiveOfferState()
         }
@@ -495,7 +497,14 @@ final class PartnersCoordinator {
                 guard !Task.isCancelled, let self, self.expandedOfferId == offerId else { return }
                 switch snapshot {
                 case .loaded(let offers, _):
-                    if !offers.contains(where: { $0.id == offerId }) {
+                    if offers.contains(where: { $0.id == offerId }) {
+                        // Visibility is authoritative. Only after it positively
+                        // confirms an active teaser may cached member detail be
+                        // subscribed to and rendered.
+                        if self.detailTask == nil {
+                            self.subscribeDetail(offerId: offerId)
+                        }
+                    } else {
                         self.clearSensitiveOfferState()
                     }
                 case .failed:

@@ -18,6 +18,7 @@ final class PartnersCoordinatorTests: XCTestCase {
         var code: String? = "SAVE20"
         var companiesById: [String: PartnerCompany] = [:]
         var observedCompanyIds: [String] = []
+        var observedDetailIds: [String] = []
         var setSavedCalls: [(String, String, Bool)] = []
         var companyPages: [PartnerCompaniesPage] = []
         var offerPages: [PartnerOffersPage] = []
@@ -137,6 +138,7 @@ final class PartnersCoordinatorTests: XCTestCase {
         }
 
         func observeOfferDetail(offerId: String) -> AsyncStream<PartnerOfferDetailSnapshot> {
+            observedDetailIds.append(offerId)
             AsyncStream { continuation in continuation.yield(.loaded(detail)) }
         }
 
@@ -480,6 +482,36 @@ final class PartnersCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(coordinator.detailState, .idle)
         XCTAssertEqual(coordinator.codeStatus, .idle)
+    }
+
+    @MainActor
+    func testExpandedOfferWaitsForAuthoritativeVisibilityBeforeLoadingDetail() async {
+        let offer = PartnerOffer(
+            id: "o1", companyId: "c1", partnerCompanyName: "Partner", title: "Offer",
+            teaserText: "Teaser", offerType: .discountCode
+        )
+        let repository = FakeRepository(offers: [.loaded(offers: [offer])])
+        repository.directSnapshotsByIds[[offer.id]] = []
+        let coordinator = PartnersCoordinator(
+            repository: repository,
+            subscriptionRepository: nil,
+            uid: "me",
+            access: AccountAccess(role: .admin, activeMember: false, suspended: false, deleted: false)
+        )
+        coordinator.start()
+        await waitUntil { coordinator.offersState == .loaded }
+
+        coordinator.setExpandedOffer(offer.id, expanded: true)
+        await waitUntil { repository.directOffersContinuation != nil }
+        XCTAssertEqual(coordinator.detailState, .loading)
+        XCTAssertTrue(repository.observedDetailIds.isEmpty)
+
+        repository.sendDirectOffers(.loaded(offers: [offer]))
+        await waitUntil {
+            if case .loaded = coordinator.detailState { return true }
+            return false
+        }
+        XCTAssertEqual(repository.observedDetailIds, [offer.id])
     }
 
     @MainActor
