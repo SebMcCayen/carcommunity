@@ -139,7 +139,7 @@ final class PartnersCoordinatorTests: XCTestCase {
 
         func observeOfferDetail(offerId: String) -> AsyncStream<PartnerOfferDetailSnapshot> {
             observedDetailIds.append(offerId)
-            AsyncStream { continuation in continuation.yield(.loaded(detail)) }
+            return AsyncStream { continuation in continuation.yield(.loaded(detail)) }
         }
 
         func observeSavedOfferIds(uid: String) -> AsyncStream<SavedOffersSnapshot> {
