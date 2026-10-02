@@ -311,12 +311,13 @@ private struct PartnerDetailScreen: View {
                     case .failed:
                         EmptyView()
                     case .loaded:
-                        if coordinator.offersAreExhaustive {
+                        if coordinator.companyOffersAreExhaustive {
                             Text("partnerOffers.noOffers").foregroundStyle(.secondary)
                         }
                     }
                 }
-                if !coordinator.companyOffersAreExhaustive {
+                if coordinator.companyOffersState == .loaded,
+                   coordinator.canLoadMoreCompanyOffers {
                     if coordinator.isLoadingMoreCompanyOffers {
                         ProgressView("partners.loading")
                     } else {

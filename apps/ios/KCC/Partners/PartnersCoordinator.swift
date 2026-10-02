@@ -37,6 +37,7 @@ final class PartnersCoordinator {
     private(set) var companyOffersAreExhaustive = false
     private(set) var isLoadingMoreCompanyOffers = false
     private(set) var didFailLoadingMoreCompanyOffers = false
+    var canLoadMoreCompanyOffers: Bool { companyOffersCursor != nil }
     private(set) var canAccessMemberOffers: Bool
     private(set) var expandedOfferId: String?
     private(set) var detailState: OfferDetailUiState = .idle

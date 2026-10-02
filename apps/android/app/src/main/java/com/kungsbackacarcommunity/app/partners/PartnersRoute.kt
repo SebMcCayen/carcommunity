@@ -305,7 +305,7 @@ fun PartnersRoute(
                 }
             }
         },
-        canLoadMoreOffers = companyOffersCursor != null,
+        canLoadMoreOffers = companyOffersState is OffersState.Loaded && companyOffersCursor != null,
         isLoadingMoreOffers = isLoadingMoreCompanyOffers,
         didFailLoadingMoreOffers = didFailLoadingMoreCompanyOffers,
     )

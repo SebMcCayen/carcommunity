@@ -175,7 +175,7 @@ private fun PartnersDirectoryContent(
                 }
                 if (didFailLoadingMore && onLoadMore != null) {
                     Text(
-                        text = stringResource(R.string.partnerOffers_loadError),
+                        text = stringResource(R.string.partners_error),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
                     )
