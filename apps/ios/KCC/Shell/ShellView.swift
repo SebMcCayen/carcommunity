@@ -60,6 +60,8 @@ struct ShellView: View {
     @State private var leaderboardCoordinator: LeaderboardCoordinator?
     @State private var notificationsCoordinator: NotificationsInboxCoordinator?
     @State private var notificationSettingsCoordinator: NotificationSettingsCoordinator?
+    @State private var notificationSettingsAvailable = false
+    @State private var blockedUsersAvailable = false
     @State private var friendsCoordinator: FriendsCoordinator?
     @State private var conversationsCoordinator: ConversationsCoordinator?
     @State private var chatHubCoordinator: ChatHubCoordinator?
@@ -604,6 +606,11 @@ struct ShellView: View {
                     Label("shell.friendsTitle", systemImage: "person.2")
                 }
             }
+            Button {
+                routes = routes.opening(.settings)
+            } label: {
+                Label("settingsMenu.title", systemImage: "gearshape")
+            }
         } label: {
             Label("shell.moreProfile", systemImage: "person.circle")
                 .labelStyle(.iconOnly)
@@ -746,6 +753,14 @@ struct ShellView: View {
             routeNavigation {
                 NotificationSettingsScreen(coordinator: notificationSettingsCoordinator)
             }
+        case .blocked:
+            BlockedUsersScreen(uid: signedInUid) {
+                routes = routes.poppingOne()
+            }
+        case .settings:
+            routeNavigation {
+                SettingsScreen(actions: settingsActions)
+            }
         case .friends:
             routeNavigation {
                 FriendsScreen(
@@ -843,6 +858,15 @@ struct ShellView: View {
             // trapping) keeps an unexpected value harmless.
             EmptyView()
         }
+    }
+
+    private var settingsActions: SettingsActions {
+        SettingsActions(
+            onNotificationSettings: notificationSettingsAvailable
+                ? { routes = routes.opening(.notificationSettings) } : nil,
+            onBlockedUsers: blockedUsersAvailable
+                ? { routes = routes.opening(.blocked) } : nil
+        )
     }
 
     private var routeBackButton: some View {
@@ -1379,8 +1403,12 @@ struct ShellView: View {
             )
         }
         notificationsCoordinator = NotificationsInboxCoordinator(repository: notifications, uid: uid)
+        let notificationSettingsRepository =
+            FirebaseNotificationSettingsRepository.createIfAvailable()
+        notificationSettingsAvailable = notificationSettingsRepository != nil && uid != nil
+        blockedUsersAvailable = FirebaseBlockingRepository.createIfAvailable() != nil && uid != nil
         notificationSettingsCoordinator = NotificationSettingsCoordinator(
-            repository: FirebaseNotificationSettingsRepository.createIfAvailable(),
+            repository: notificationSettingsRepository,
             uid: uid
         )
         friendsCoordinator = friends.map {
