@@ -74,7 +74,13 @@
     "github": "GitHub / Open Source",
     "blockedUsers": "Blocked users",
     "accountDeletionWarning": "Deleting your account removes your profile and data. This cannot be undone.",
-    "accountDeletionError": "Could not delete your account. Please try again."
+    "accountDeletionError": "Could not delete your account. Please try again.",
+    "accountDeletionConfirmTitle": "Delete your account?",
+    "accountDeletionConfirmBody": "Access ends immediately. Your account data is permanently deleted after 30 days.",
+    "accountDeletionAuthenticationRequired": "Your session has expired. Sign in again before deleting your account.",
+    "accountDeletionTemporaryError": "Account deletion is temporarily unavailable. Please try again.",
+    "accountDeletionUnavailable": "Account deletion is not available in this build.",
+    "signInAgain": "Sign in again"
   },
   "about": {
     "title": "About app",

@@ -5,6 +5,10 @@ struct RestrictedAccountScreen: View {
     let access: AccountAccess?
     @Bindable var privacyCoordinator: LiveLocationCoordinator
     let onSignOut: () -> Void
+    @State private var deletionCoordinator = AccountDeletionCoordinator(
+        repository: FirebaseAccountDeletionRepository.createIfAvailable()
+    )
+    @State private var showsAccountDeletion = false
 
     var body: some View {
         VStack(spacing: KccSpacing.s4) {
@@ -42,10 +46,16 @@ struct RestrictedAccountScreen: View {
                     .foregroundStyle(KccPalette.errorRed)
             }
 
-            // These remain visible but disabled until their dedicated iOS
-            // slices land, matching Android's existing status placeholders.
+            // Subscription management remains a later production-cutover
+            // milestone. Account deletion is always reachable while suspended.
             Text("accountStatus.subscriptionManagementPlaceholder")
-            Text("accountStatus.accountDeletionPlaceholder")
+
+            if deletionCoordinator.isAvailable {
+                Button("settings.accountDeletion", role: .destructive) {
+                    showsAccountDeletion = true
+                }
+                .buttonStyle(.bordered)
+            }
 
             Button("auth.signOut", action: onSignOut)
                 .buttonStyle(.bordered)
@@ -57,6 +67,14 @@ struct RestrictedAccountScreen: View {
         .task {
             privacyCoordinator.canShare = false
             privacyCoordinator.start()
+        }
+        .fullScreenCover(isPresented: $showsAccountDeletion) {
+            AccountDeletionScreen(
+                coordinator: deletionCoordinator,
+                onDeleted: onSignOut,
+                onReauthenticate: onSignOut,
+                onBack: { showsAccountDeletion = false }
+            )
         }
     }
 

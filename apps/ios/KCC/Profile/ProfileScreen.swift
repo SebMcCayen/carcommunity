@@ -9,6 +9,7 @@ struct ProfileScreen: View {
     let onSignOut: () -> Void
     let onBack: () -> Void
     let onOpenPoints: (() -> Void)?
+    let onOpenAccountDeletion: (() -> Void)?
     @State private var coordinator: ProfileCoordinator
     @State private var editor: ProfileEditCoordinator
     @State private var pointsCoordinator: PointsCoordinator
@@ -21,7 +22,8 @@ struct ProfileScreen: View {
 
     init(
         uid: String?, displayName: String?, onSignOut: @escaping () -> Void,
-        onBack: @escaping () -> Void, onOpenPoints: @escaping () -> Void
+        onBack: @escaping () -> Void, onOpenPoints: @escaping () -> Void,
+        onOpenAccountDeletion: @escaping () -> Void
     ) {
         let repository = FirebaseUserProfileRepository.createIfAvailable()
         let pointsRepository = FirebasePointsRepository.createIfAvailable()
@@ -31,6 +33,8 @@ struct ProfileScreen: View {
             onSignOut: onSignOut,
             onBack: onBack,
             onOpenPoints: pointsRepository == nil ? nil : onOpenPoints,
+            onOpenAccountDeletion: FirebaseAccountDeletionRepository.createIfAvailable() == nil
+                ? nil : onOpenAccountDeletion,
             coordinator: ProfileCoordinator(repository: repository, uid: uid),
             editor: ProfileEditCoordinator(repository: repository, uid: uid),
             pointsCoordinator: PointsCoordinator(repository: pointsRepository, uid: uid),
@@ -44,6 +48,7 @@ struct ProfileScreen: View {
         uid: String? = nil, displayName: String?, onSignOut: @escaping () -> Void,
         onBack: @escaping () -> Void,
         onOpenPoints: (() -> Void)? = nil,
+        onOpenAccountDeletion: (() -> Void)? = nil,
         coordinator: ProfileCoordinator,
         editor: ProfileEditCoordinator? = nil,
         pointsCoordinator: PointsCoordinator? = nil,
@@ -54,6 +59,7 @@ struct ProfileScreen: View {
         self.onSignOut = onSignOut
         self.onBack = onBack
         self.onOpenPoints = onOpenPoints
+        self.onOpenAccountDeletion = onOpenAccountDeletion
         _coordinator = State(initialValue: coordinator)
         _editor = State(initialValue: editor ?? ProfileEditCoordinator(repository: nil, uid: nil))
         _pointsCoordinator = State(initialValue: pointsCoordinator ?? PointsCoordinator(
@@ -123,6 +129,20 @@ struct ProfileScreen: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("profile.blockedUsers")
+
+                if let onOpenAccountDeletion {
+                    Button(role: .destructive, action: onOpenAccountDeletion) {
+                        HStack {
+                            Label("settings.accountDeletion", systemImage: "trash")
+                            Spacer()
+                            Image(systemName: "chevron.forward")
+                                .accessibilityHidden(true)
+                        }
+                        .frame(minHeight: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("profile.accountDeletion")
+                }
 
                 Button(action: onSignOut) {
                     Text("auth.signOut").frame(maxWidth: .infinity, minHeight: 44)

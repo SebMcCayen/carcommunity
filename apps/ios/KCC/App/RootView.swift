@@ -36,7 +36,14 @@ struct RootView: View {
     @ViewBuilder
     private func authenticatedContent(uid: String, displayName: String?) -> some View {
         switch accessSession.accountState {
-        case .loaded(let access) where access.isRestricted:
+        case .loaded(let access) where access.deleted:
+            // The callable disables the Auth user before marking the profile.
+            // If the profile listener wins the race against the callable
+            // response (or the app relaunches with a cached token), clear the
+            // local Firebase session here as the lifecycle backstop.
+            ProgressView()
+                .task { session.signOut() }
+        case .loaded(let access) where access.suspended:
             RestrictedAccountScreen(
                 access: access,
                 privacyCoordinator: restrictedPrivacyCoordinator,

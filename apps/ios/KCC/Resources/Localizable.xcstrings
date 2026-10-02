@@ -27813,6 +27813,57 @@
         }
       }
     },
+    "settings.accountDeletionAuthenticationRequired": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Din session har gått ut. Logga in igen innan du tar bort kontot."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your session has expired. Sign in again before deleting your account."
+          }
+        }
+      }
+    },
+    "settings.accountDeletionConfirmBody": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åtkomsten avslutas direkt. Dina kontouppgifter raderas permanent efter 30 dagar."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Access ends immediately. Your account data is permanently deleted after 30 days."
+          }
+        }
+      }
+    },
+    "settings.accountDeletionConfirmTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ta bort ditt konto?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete your account?"
+          }
+        }
+      }
+    },
     "settings.accountDeletionError": {
       "extractionState": "manual",
       "localizations": {
@@ -27826,6 +27877,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Could not delete your account. Please try again."
+          }
+        }
+      }
+    },
+    "settings.accountDeletionTemporaryError": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontot kan inte tas bort just nu. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account deletion is temporarily unavailable. Please try again."
+          }
+        }
+      }
+    },
+    "settings.accountDeletionUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontoborttagning är inte tillgänglig i den här versionen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account deletion is not available in this build."
           }
         }
       }
@@ -28030,6 +28115,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Report a bug"
+          }
+        }
+      }
+    },
+    "settings.signInAgain": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Logga in igen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in again"
           }
         }
       }

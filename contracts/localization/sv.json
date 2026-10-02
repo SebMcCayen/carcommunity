@@ -74,7 +74,13 @@
     "github": "GitHub / Open Source",
     "blockedUsers": "Blockerade användare",
     "accountDeletionWarning": "Om du raderar ditt konto tas din profil och dina data bort. Detta kan inte ångras.",
-    "accountDeletionError": "Kunde inte radera ditt konto. Försök igen."
+    "accountDeletionError": "Kunde inte radera ditt konto. Försök igen.",
+    "accountDeletionConfirmTitle": "Ta bort ditt konto?",
+    "accountDeletionConfirmBody": "Åtkomsten avslutas direkt. Dina kontouppgifter raderas permanent efter 30 dagar.",
+    "accountDeletionAuthenticationRequired": "Din session har gått ut. Logga in igen innan du tar bort kontot.",
+    "accountDeletionTemporaryError": "Kontot kan inte tas bort just nu. Försök igen.",
+    "accountDeletionUnavailable": "Kontoborttagning är inte tillgänglig i den här versionen.",
+    "signInAgain": "Logga in igen"
   },
   "about": {
     "title": "Om appen",
