@@ -516,8 +516,7 @@ final class PartnersCoordinator {
                 switch snapshot {
                 case .loaded(let offers, let nextCursor):
                     if self.hasLoadedCompanyOffersSnapshot,
-                       self.liveCompanyOffersCursor != nextCursor,
-                       !self.pagedCompanyOffers.isEmpty {
+                       self.liveCompanyOffersCursor != nextCursor {
                         self.paginationGeneration += 1
                         self.isLoadingMoreCompanies = false
                         self.isLoadingMoreOffers = false
@@ -548,8 +547,7 @@ final class PartnersCoordinator {
                 switch snapshot {
                 case .loaded(let companies, let nextCursor):
                     if self.hasLoadedCompaniesSnapshot,
-                       self.liveCompaniesCursor != nextCursor,
-                       !self.pagedCompanies.isEmpty {
+                       self.liveCompaniesCursor != nextCursor {
                         self.paginationGeneration += 1
                         self.isLoadingMoreCompanies = false
                         self.isLoadingMoreOffers = false
@@ -581,8 +579,7 @@ final class PartnersCoordinator {
                 switch snapshot {
                 case .loaded(let offers, let nextCursor):
                     if self.hasLoadedOffersSnapshot,
-                       self.liveOffersCursor != nextCursor,
-                       !self.pagedOffers.isEmpty {
+                       self.liveOffersCursor != nextCursor {
                         self.paginationGeneration += 1
                         self.isLoadingMoreCompanies = false
                         self.isLoadingMoreOffers = false

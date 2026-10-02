@@ -10,6 +10,7 @@ final class PartnersCoordinatorTests: XCTestCase {
         let directOffers: [PartnerOffer]?
         var companiesContinuation: AsyncStream<PartnersCollectionSnapshot>.Continuation?
         var offersContinuation: AsyncStream<PartnerActiveOffersSnapshot>.Continuation?
+        var companyOffersContinuation: AsyncStream<PartnerActiveOffersSnapshot>.Continuation?
         var directOffersContinuation: AsyncStream<PartnerOffersSnapshot>.Continuation?
         var savedContinuation: AsyncStream<SavedOffersSnapshot>.Continuation?
         var directSnapshotsByIds: [Set<String>: [PartnerOffersSnapshot]] = [:]
@@ -22,6 +23,8 @@ final class PartnersCoordinatorTests: XCTestCase {
         var offerPages: [PartnerOffersPage] = []
         var companyOfferPages: [PartnerOffersPage] = []
         var companyPageDelayNanoseconds: UInt64 = 0
+        var offerPageDelayNanoseconds: UInt64 = 0
+        var companyOfferPageDelayNanoseconds: UInt64 = 0
 
         init(
             companies: [PartnersCollectionSnapshot] = [.loaded(companies: [])],
@@ -70,6 +73,9 @@ final class PartnersCoordinatorTests: XCTestCase {
             }
         }
         func fetchActiveOffers(after cursor: PartnerPageCursor) async throws -> PartnerOffersPage {
+            if offerPageDelayNanoseconds > 0 {
+                try await Task.sleep(nanoseconds: offerPageDelayNanoseconds)
+            }
             guard !offerPages.isEmpty else {
                 return PartnerOffersPage(offers: [], nextCursor: nil)
             }
@@ -81,13 +87,19 @@ final class PartnersCoordinatorTests: XCTestCase {
                 guard case .loaded(let values, let cursor) = snapshot else { return snapshot }
                 return .loaded(offers: values.filter { $0.companyId == companyId }, nextCursor: cursor)
             }
-            return AsyncStream { continuation in scoped.forEach { continuation.yield($0) } }
+            return AsyncStream { continuation in
+                companyOffersContinuation = continuation
+                scoped.forEach { continuation.yield($0) }
+            }
         }
 
         func fetchActiveOffers(
             companyId: String,
             after cursor: PartnerPageCursor
         ) async throws -> PartnerOffersPage {
+            if companyOfferPageDelayNanoseconds > 0 {
+                try await Task.sleep(nanoseconds: companyOfferPageDelayNanoseconds)
+            }
             guard !companyOfferPages.isEmpty else {
                 return PartnerOffersPage(offers: [], nextCursor: nil)
             }
@@ -96,6 +108,10 @@ final class PartnersCoordinatorTests: XCTestCase {
 
         func sendOffers(_ snapshot: PartnerActiveOffersSnapshot) {
             offersContinuation?.yield(snapshot)
+        }
+
+        func sendCompanyOffers(_ snapshot: PartnerActiveOffersSnapshot) {
+            companyOffersContinuation?.yield(snapshot)
         }
 
         func observeOffers(ids: Set<String>) -> AsyncStream<PartnerOffersSnapshot> {
@@ -374,6 +390,70 @@ final class PartnersCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testLiveCompanyBoundaryInvalidatesFirstInFlightPage() async {
+        let cursor = PartnerPageCursor(createdAt: .distantPast, documentId: "old")
+        let shifted = PartnerPageCursor(createdAt: .distantPast, documentId: "new")
+        let live = PartnerCompany(
+            id: "live", name: "Live", category: .other, description: nil,
+            website: nil, phone: nil, address: nil, latitude: nil, longitude: nil
+        )
+        let stale = PartnerCompany(
+            id: "stale", name: "Stale", category: .other, description: nil,
+            website: nil, phone: nil, address: nil, latitude: nil, longitude: nil
+        )
+        let repository = FakeRepository(companies: [.loaded(companies: [live], nextCursor: cursor)])
+        repository.companyPages = [PartnerCompaniesPage(companies: [stale], nextCursor: nil)]
+        repository.companyPageDelayNanoseconds = 100_000_000
+        let coordinator = PartnersCoordinator(
+            repository: repository, subscriptionRepository: nil, uid: "me",
+            access: .unrestrictedCommunity
+        )
+        coordinator.start()
+        await waitUntil { coordinator.state == .loaded([live]) }
+
+        let pageTask = Task { await coordinator.loadMoreCompanies() }
+        await waitUntil { coordinator.isLoadingMoreCompanies }
+        repository.sendCompanies(.loaded(companies: [live], nextCursor: shifted))
+        await waitUntil { !coordinator.isLoadingMoreCompanies }
+        await pageTask.value
+
+        XCTAssertEqual(coordinator.state, .loaded([live]))
+        XCTAssertFalse(coordinator.companiesAreExhaustive)
+    }
+
+    @MainActor
+    func testLiveOfferBoundaryInvalidatesFirstInFlightPage() async {
+        let cursor = PartnerPageCursor(createdAt: .distantPast, documentId: "old")
+        let shifted = PartnerPageCursor(createdAt: .distantPast, documentId: "new")
+        let live = PartnerOffer(
+            id: "live", companyId: "c1", partnerCompanyName: nil, title: "Live",
+            teaserText: "", offerType: .other
+        )
+        let stale = PartnerOffer(
+            id: "stale", companyId: "c1", partnerCompanyName: nil, title: "Stale",
+            teaserText: "", offerType: .other
+        )
+        let repository = FakeRepository(offers: [.loaded(offers: [live], nextCursor: cursor)])
+        repository.offerPages = [PartnerOffersPage(offers: [stale], nextCursor: nil)]
+        repository.offerPageDelayNanoseconds = 100_000_000
+        let coordinator = PartnersCoordinator(
+            repository: repository, subscriptionRepository: nil, uid: "me",
+            access: .unrestrictedCommunity
+        )
+        coordinator.start()
+        await waitUntil { coordinator.offers == [live] }
+
+        let pageTask = Task { await coordinator.loadMoreOffers() }
+        await waitUntil { coordinator.isLoadingMoreOffers }
+        repository.sendOffers(.loaded(offers: [live], nextCursor: shifted))
+        await waitUntil { !coordinator.isLoadingMoreOffers }
+        await pageTask.value
+
+        XCTAssertEqual(coordinator.offers, [live])
+        XCTAssertFalse(coordinator.offersAreExhaustive)
+    }
+
+    @MainActor
     func testPagedOfferLosingActiveVisibilityClearsSensitiveState() async {
         let cursor = PartnerPageCursor(createdAt: .distantPast, documentId: "cursor")
         let pagedOffer = PartnerOffer(
@@ -630,6 +710,39 @@ final class PartnersCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(Set(coordinator.detailOffers(for: "c1")), [first, second])
         XCTAssertTrue(coordinator.companyOffersAreExhaustive)
+    }
+
+    @MainActor
+    func testScopedOfferBoundaryInvalidatesFirstInFlightPage() async {
+        let cursor = PartnerPageCursor(createdAt: .distantPast, documentId: "old")
+        let shifted = PartnerPageCursor(createdAt: .distantPast, documentId: "new")
+        let live = PartnerOffer(
+            id: "live", companyId: "c1", partnerCompanyName: nil, title: "Live",
+            teaserText: "", offerType: .other
+        )
+        let stale = PartnerOffer(
+            id: "stale", companyId: "c1", partnerCompanyName: nil, title: "Stale",
+            teaserText: "", offerType: .other
+        )
+        let repository = FakeRepository(offers: [.loaded(offers: [live], nextCursor: cursor)])
+        repository.companyOfferPages = [PartnerOffersPage(offers: [stale], nextCursor: nil)]
+        repository.companyOfferPageDelayNanoseconds = 100_000_000
+        let coordinator = PartnersCoordinator(
+            repository: repository, subscriptionRepository: nil, uid: "me",
+            access: .unrestrictedCommunity
+        )
+        coordinator.start()
+        coordinator.loadCompany(id: "c1")
+        await waitUntil { coordinator.companyOffersState == .loaded }
+
+        let pageTask = Task { await coordinator.loadMoreCompanyOffers() }
+        await waitUntil { coordinator.isLoadingMoreCompanyOffers }
+        repository.sendCompanyOffers(.loaded(offers: [live], nextCursor: shifted))
+        await waitUntil { !coordinator.isLoadingMoreCompanyOffers }
+        await pageTask.value
+
+        XCTAssertEqual(coordinator.detailOffers(for: "c1"), [live])
+        XCTAssertFalse(coordinator.companyOffersAreExhaustive)
     }
 
     @MainActor

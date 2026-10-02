@@ -425,7 +425,7 @@ private struct PartnerOfferCard: View {
         case .idle, .loading:
             ProgressView("partners.loading")
         case .missing:
-            Text("partnerOffers.memberRequired").foregroundStyle(.secondary)
+            Text("partnerOffers.detailsUnavailable").foregroundStyle(.secondary)
         case .failed:
             Text("partnerOffers.loadError").foregroundStyle(.red)
         case .loaded(let detail):

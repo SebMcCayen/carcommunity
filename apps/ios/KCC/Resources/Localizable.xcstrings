@@ -22339,6 +22339,23 @@
         }
       }
     },
+    "partnerOffers.detailsUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Information om erbjudandet saknas."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offer details are unavailable."
+          }
+        }
+      }
+    },
     "partnerOffers.drivingSafetyWarning": {
       "extractionState": "manual",
       "localizations": {
