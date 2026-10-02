@@ -62,18 +62,19 @@ enum SavedPlacesPolicy {
         guard isValid(point: place.point) else { return nil }
         let normalizedLabel = normalize(label: label).nilIfEmpty ?? normalize(label: place.name)
         guard !normalizedLabel.isEmpty else { return nil }
+        let normalizedPlace = PlaceSuggestion(
+            id: bounded(place.id.trimmingCharacters(in: .whitespacesAndNewlines), to: 256),
+            name: bounded(place.name.trimmingCharacters(in: .whitespacesAndNewlines), to: 160),
+            address: place.address.map {
+                bounded($0.trimmingCharacters(in: .whitespacesAndNewlines), to: 240)
+            }?.nilIfEmpty,
+            point: place.point
+        )
         return SavedPlace(
-            id: id(for: kind, place: place),
+            id: id(for: kind, place: normalizedPlace),
             kind: kind,
             label: normalizedLabel,
-            place: PlaceSuggestion(
-                id: String(place.id.prefix(256)),
-                name: String(place.name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(160)),
-                address: place.address.map {
-                    String($0.trimmingCharacters(in: .whitespacesAndNewlines).prefix(240))
-                }?.nilIfEmpty,
-                point: place.point
-            )
+            place: normalizedPlace
         )
     }
 
@@ -118,8 +119,8 @@ enum SavedPlacesPolicy {
 
     static func id(for kind: SavedPlaceKind, place: PlaceSuggestion) -> String {
         switch kind {
-        case .home: "home"
-        case .work: "work"
+        case .home: return "home"
+        case .work: return "work"
         case .favourite:
             if !place.id.isEmpty { return "fav:\(place.id)" }
             return String(format: "fav:%.6f,%.6f", place.point.longitude, place.point.latitude)
@@ -133,11 +134,15 @@ enum SavedPlacesPolicy {
     }
 
     static func normalizedQuery(_ query: String) -> String {
-        String(query.trimmingCharacters(in: .whitespacesAndNewlines).prefix(maximumQueryLength))
+        bounded(query.trimmingCharacters(in: .whitespacesAndNewlines), to: maximumQueryLength)
     }
 
     private static func normalize(label: String) -> String {
-        String(label.trimmingCharacters(in: .whitespacesAndNewlines).prefix(maximumLabelLength))
+        bounded(label.trimmingCharacters(in: .whitespacesAndNewlines), to: maximumLabelLength)
+    }
+
+    private static func bounded(_ value: String, to maximumScalars: Int) -> String {
+        String(value.unicodeScalars.prefix(maximumScalars))
     }
 
     private static func sorted(_ items: [SavedPlace]) -> [SavedPlace] {

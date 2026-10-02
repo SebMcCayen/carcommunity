@@ -19,11 +19,13 @@ struct UnavailableAddressSearchClient: AddressSearchClient {
 /// used by Mapbox Maps. A missing token never creates this client, preserving
 /// config-less builds and preventing accidental tokenless network traffic.
 struct MapboxAddressSearchClient: AddressSearchClient {
+    static let maximumResponseBytes = 1_000_000
+
     private let token: String
     private let language: String
     private let session: URLSession
 
-    init(token: String, language: String, session: URLSession = .shared) {
+    init(token: String, language: String, session: URLSession = Self.ephemeralSession()) {
         self.token = token
         self.language = language
         self.session = session
@@ -33,10 +35,19 @@ struct MapboxAddressSearchClient: AddressSearchClient {
         let query = SavedPlacesPolicy.normalizedQuery(query)
         guard !query.isEmpty, token.hasPrefix("pk."), let url = requestURL(query: query, proximity: proximity)
         else { return [] }
-        let (data, response) = try await session.data(from: url)
+        var request = URLRequest(
+            url: url,
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            timeoutInterval: 15
+        )
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw AddressSearchError.invalidResponse
         }
+        guard http.expectedContentLength <= Int64(Self.maximumResponseBytes),
+              data.count <= Self.maximumResponseBytes
+        else { throw AddressSearchError.invalidResponse }
         return try Self.decode(data: data)
     }
 
@@ -46,6 +57,9 @@ struct MapboxAddressSearchClient: AddressSearchClient {
             URLQueryItem(name: "q", value: query),
             URLQueryItem(name: "access_token", value: token),
             URLQueryItem(name: "autocomplete", value: "true"),
+            // Selected results are persisted as saved places. Mapbox requires
+            // permanent geocoding rather than its default temporary mode.
+            URLQueryItem(name: "permanent", value: "true"),
             URLQueryItem(name: "limit", value: String(SavedPlacesPolicy.maximumSearchResults)),
             URLQueryItem(name: "language", value: language)
         ]
@@ -60,27 +74,43 @@ struct MapboxAddressSearchClient: AddressSearchClient {
     }
 
     static func decode(data: Data) throws -> [PlaceSuggestion] {
+        guard data.count <= maximumResponseBytes else { throw AddressSearchError.invalidResponse }
         let response = try JSONDecoder().decode(GeocodingResponse.self, from: data)
-        return response.features.prefix(SavedPlacesPolicy.maximumSearchResults).compactMap { feature in
-            guard feature.geometry.coordinates.count >= 2 else { return nil }
+        var seen = Set<String>()
+        var suggestions: [PlaceSuggestion] = []
+        for feature in response.features {
+            guard feature.geometry.coordinates.count >= 2 else { continue }
             let point = MapPoint(
                 longitude: feature.geometry.coordinates[0],
                 latitude: feature.geometry.coordinates[1]
             )
-            guard SavedPlacesPolicy.isValid(point: point) else { return nil }
+            guard SavedPlacesPolicy.isValid(point: point) else { continue }
             let properties = feature.properties
             let name = properties.name?.trimmingCharacters(in: .whitespacesAndNewlines)
                 ?? properties.fullAddress?.trimmingCharacters(in: .whitespacesAndNewlines)
                 ?? ""
-            guard !name.isEmpty else { return nil }
+            guard !name.isEmpty else { continue }
             let address = properties.fullAddress ?? properties.placeFormatted
-            return PlaceSuggestion(
-                id: properties.mapboxID ?? feature.id ?? "\(point.longitude),\(point.latitude)",
+            let rawID = properties.mapboxID ?? feature.id ?? "\(point.longitude),\(point.latitude)"
+            let id = String(rawID.trimmingCharacters(in: .whitespacesAndNewlines).prefix(256))
+            guard !id.isEmpty, seen.insert(id).inserted else { continue }
+            suggestions.append(PlaceSuggestion(
+                id: id,
                 name: String(name.prefix(160)),
                 address: address.map { String($0.prefix(240)) },
                 point: point
-            )
+            ))
+            if suggestions.count == SavedPlacesPolicy.maximumSearchResults { break }
         }
+        return suggestions
+    }
+
+    private static func ephemeralSession() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.timeoutIntervalForRequest = 15
+        return URLSession(configuration: configuration)
     }
 }
 

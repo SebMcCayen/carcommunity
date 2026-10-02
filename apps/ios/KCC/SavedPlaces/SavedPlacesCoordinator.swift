@@ -53,10 +53,11 @@ final class SavedPlacesCoordinator {
 
     func save(kind: SavedPlaceKind, place: PlaceSuggestion, label: String, replacingID: String? = nil) {
         guard let saved = SavedPlacesPolicy.create(kind: kind, place: place, label: label) else { return }
-        var updated = SavedPlacesPolicy.upsert(saved, into: places)
+        var updated = places
         if let replacingID, replacingID != saved.id {
             updated = SavedPlacesPolicy.remove(id: replacingID, from: updated)
         }
+        updated = SavedPlacesPolicy.upsert(saved, into: updated)
         places = SavedPlacesPolicy.normalize(updated)
         store.save(places)
     }

@@ -69,6 +69,20 @@ final class SavedPlacesTests: XCTestCase {
         XCTAssertEqual(saved?.label.count, SavedPlacesPolicy.maximumLabelLength)
     }
 
+    func testQueryAndPersistedIdentityUseScalarBounds() throws {
+        let combiningQuery = "a" + String(repeating: "\u{0301}", count: 500)
+        XCTAssertEqual(
+            SavedPlacesPolicy.normalizedQuery(combiningQuery).unicodeScalars.count,
+            SavedPlacesPolicy.maximumQueryLength
+        )
+
+        let longID = String(repeating: "x", count: 500)
+        let saved = try XCTUnwrap(makeSaved(.favourite, id: longID, latitude: 57))
+        XCTAssertEqual(saved.place.id.unicodeScalars.count, 256)
+        XCTAssertEqual(saved.id, "fav:\(saved.place.id)")
+        XCTAssertEqual(SavedPlacesPolicy.normalize([saved]), [saved])
+    }
+
     func testStoreIsIsolatedByAccountAndToleratesCorruptPayload() throws {
         let first = UserDefaultsSavedPlacesStore(uid: "member-a", defaults: defaults)
         let second = UserDefaultsSavedPlacesStore(uid: "member-b", defaults: defaults)
@@ -103,6 +117,7 @@ final class SavedPlacesTests: XCTestCase {
         let items = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
 
         XCTAssertEqual(items.first(where: { $0.name == "limit" })?.value, "6")
+        XCTAssertEqual(items.first(where: { $0.name == "permanent" })?.value, "true")
         XCTAssertEqual(items.first(where: { $0.name == "proximity" })?.value, "12.08,57.49")
         XCTAssertEqual(items.first(where: { $0.name == "language" })?.value, "sv")
     }
@@ -125,6 +140,27 @@ final class SavedPlacesTests: XCTestCase {
         XCTAssertEqual(decoded.first?.name, "Place 0")
     }
 
+    func testGeocoderDeduplicatesStableFeatureIdentity() throws {
+        let data = Data("""
+        {"features":[
+          {"id":"feature.1","geometry":{"coordinates":[12,57]},"properties":{"name":"First","mapbox_id":"same"}},
+          {"id":"feature.2","geometry":{"coordinates":[13,58]},"properties":{"name":"Duplicate","mapbox_id":"same"}}
+        ]}
+        """.utf8)
+
+        let decoded = try MapboxAddressSearchClient.decode(data: data)
+
+        XCTAssertEqual(decoded.map(\.name), ["First"])
+    }
+
+    func testGeocoderRejectsOversizedResponseBeforeDecoding() {
+        let data = Data(repeating: 0x20, count: MapboxAddressSearchClient.maximumResponseBytes + 1)
+
+        XCTAssertThrowsError(try MapboxAddressSearchClient.decode(data: data)) { error in
+            XCTAssertEqual(error as? AddressSearchError, .invalidResponse)
+        }
+    }
+
     func testRepointingFavouriteRemovesOldCoordinateIdentity() throws {
         let old = try XCTUnwrap(makeSaved(.favourite, id: "old", latitude: 57))
         let store = UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults)
@@ -142,6 +178,30 @@ final class SavedPlacesTests: XCTestCase {
         )
 
         XCTAssertEqual(coordinator.places.map(\.id), ["fav:new"])
+    }
+
+    func testRepointingFavouriteAtCapacityOnlyReplacesThatFavourite() throws {
+        let store = UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults)
+        let existing = try (0..<SavedPlacesPolicy.maximumCount).map { index in
+            try XCTUnwrap(makeSaved(.favourite, id: "f\(index)", latitude: 50 + Double(index)))
+        }
+        store.save(existing)
+        let coordinator = SavedPlacesCoordinator(
+            store: store,
+            searchClient: UnavailableAddressSearchClient()
+        )
+
+        coordinator.save(
+            kind: .favourite,
+            place: suggestion(id: "replacement", latitude: 60),
+            label: "Replacement",
+            replacingID: "fav:f5"
+        )
+
+        XCTAssertEqual(coordinator.places.count, SavedPlacesPolicy.maximumCount)
+        XCTAssertTrue(coordinator.places.contains { $0.id == "fav:f0" })
+        XCTAssertFalse(coordinator.places.contains { $0.id == "fav:f5" })
+        XCTAssertTrue(coordinator.places.contains { $0.id == "fav:replacement" })
     }
 
     private func suggestion(id: String, latitude: Double) -> PlaceSuggestion {

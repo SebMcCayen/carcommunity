@@ -118,7 +118,15 @@ struct ShellView: View {
             tab: selectedTab,
             route: routes.current,
             navigating: false,
-            navSearchOpen: navSearchOpen
+            navSearchOpen: addressSearchPresented
+        )
+    }
+
+    private var addressSearchPresented: Bool {
+        ShellNavigation.addressSearchPresented(
+            tab: selectedTab,
+            route: routes.current,
+            requested: navSearchOpen
         )
     }
 
@@ -134,6 +142,9 @@ struct ShellView: View {
             }
             .onChange(of: access) { _, access in
                 partnersCoordinator?.updateAccess(access)
+            }
+            .onChange(of: routes.current) { _, route in
+                if route != nil { closeAddressSearch() }
             }
             .onChange(of: featureFlags.isEnabled(.partners)) { _, enabled in
                 if !enabled, routes.current == .partners {
@@ -184,7 +195,7 @@ struct ShellView: View {
             }
         }
         .overlay {
-            if navSearchOpen, routes.current == nil, let savedPlacesCoordinator {
+            if addressSearchPresented, let savedPlacesCoordinator {
                 AddressSearchOverlay(
                     coordinator: savedPlacesCoordinator,
                     proximity: currentMapCenter,
@@ -213,6 +224,7 @@ struct ShellView: View {
             applyMapLayerPreferences()
         }
         .onChange(of: selectedTab) { _, tab in
+            if tab != .map { closeAddressSearch() }
             if tab != .map, routes.current == .chatHub {
                 routes = routes.poppingOne()
             }
@@ -1658,6 +1670,11 @@ struct ShellView: View {
         navSearchOpen = false
         selectedTab = .map
         mapSurface.centerOn(place.point)
+    }
+
+    private func closeAddressSearch() {
+        savedPlacesCoordinator?.clearSearch()
+        navSearchOpen = false
     }
 
     private func submitMapCenterIncident() {

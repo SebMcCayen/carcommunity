@@ -33,6 +33,7 @@ struct AddressSearchOverlay: View {
                     } label: {
                         Label("addressSearch.clearQuery", systemImage: "xmark.circle.fill")
                             .labelStyle(.iconOnly)
+                            .frame(width: 44, height: 44)
                     }
                 }
             }
@@ -227,9 +228,11 @@ struct SavedPlacesScreen: View {
             }
             Spacer()
             Menu {
-                Button("savedPlaces.rename", systemImage: "pencil") {
-                    renameLabel = saved.label
-                    renaming = saved
+                if saved.kind == .favourite {
+                    Button("savedPlaces.rename", systemImage: "pencil") {
+                        renameLabel = saved.label
+                        renaming = saved
+                    }
                 }
                 Button("savedPlaces.changeAddress", systemImage: "mappin.and.ellipse") {
                     picker = saved
@@ -397,7 +400,10 @@ private struct SavedPlaceEditorSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("addressSearch.savedSave") { onSave(kind, label) }
-                        .disabled(label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(
+                            kind == .favourite
+                                && label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        )
                 }
             }
         }

@@ -27649,13 +27649,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Dina destinationer med ett tryck. Hem, Jobbet och favoriter dyker upp i sökfältet för snabb vägbeskrivning."
+            "value": "Dina destinationer med ett tryck. Hem, Jobbet och favoriter visas i sökningen så att du snabbt kan centrera dem på kartan."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your one-tap destinations. Home, Work and favourites show up in the search bar for instant routing."
+            "value": "Your one-tap destinations. Home, Work and favourites appear in search so you can quickly center them on the map."
           }
         }
       }
