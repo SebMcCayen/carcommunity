@@ -53,6 +53,7 @@ class PartnersScreensTest {
             KccTheme {
                 PartnersListScreen(
                     state = CompaniesState.Loaded(listOf(company())),
+                    offersState = OffersState.Loaded(listOf(offer())),
                     onOpenCompany = { opened = it },
                     onBack = {},
                 )
@@ -63,16 +64,150 @@ class PartnersScreensTest {
     }
 
     @Test
+    fun directory_showsLocalizedSingularOfferCount() {
+        composeTestRule.setContent {
+            KccTheme {
+                PartnersListScreen(
+                    state = CompaniesState.Loaded(listOf(company())),
+                    offersState = OffersState.Loaded(listOf(offer())),
+                    onOpenCompany = {},
+                    onBack = {},
+                )
+            }
+        }
+        val expected =
+            InstrumentationRegistry.getInstrumentation().targetContext.getString(
+                R.string.partnerOffers_offerCountOne,
+                1,
+            )
+        composeTestRule.onNodeWithText(expected).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun directory_doesNotShowZeroWhileOffersAreLoading() {
+        composeTestRule.setContent {
+            KccTheme {
+                PartnersListScreen(
+                    state = CompaniesState.Loaded(listOf(company())),
+                    offersState = OffersState.Loading,
+                    onOpenCompany = {},
+                    onBack = {},
+                )
+            }
+        }
+        val zeroOffers =
+            InstrumentationRegistry.getInstrumentation().targetContext.getString(
+                R.string.partnerOffers_offerCountOther,
+                0,
+            )
+        composeTestRule.onNodeWithText(zeroOffers).assertDoesNotExist()
+    }
+
+    @Test
+    fun directory_doesNotShowCountWhenOfferSnapshotIsCapped() {
+        composeTestRule.setContent {
+            KccTheme {
+                PartnersListScreen(
+                    state = CompaniesState.Loaded(listOf(company())),
+                    offersState = OffersState.Loaded(emptyList(), isExhaustive = false),
+                    onOpenCompany = {},
+                    onBack = {},
+                )
+            }
+        }
+        val zeroOffers =
+            InstrumentationRegistry.getInstrumentation().targetContext.getString(
+                R.string.partnerOffers_offerCountOther,
+                0,
+            )
+        composeTestRule.onNodeWithText(zeroOffers).assertDoesNotExist()
+    }
+
+    @Test
+    fun detail_doesNotClaimNoOffersWhenOfferSnapshotIsCapped() {
+        composeTestRule.setContent {
+            KccTheme {
+                PartnerDetailScreen(
+                    companyState = CompanyState.Loaded(company()),
+                    offers = emptyList(),
+                    offersState = OffersState.Loaded(emptyList(), isExhaustive = false),
+                    savedOfferIds = emptySet(),
+                    canAccessMemberOffers = true,
+                    expandedOfferId = null,
+                    expandedOfferDetailState = OfferDetailState.Missing,
+                    codeStatus = OfferCodeStatus.Idle,
+                    onToggleExpand = {},
+                    onShowCode = {},
+                    onToggleSave = { _, _ -> },
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.partnerOffers_noOffers)).assertDoesNotExist()
+    }
+
+    @Test
+    fun detail_offerFailure_showsRetry() {
+        var retries = 0
+        composeTestRule.setContent {
+            KccTheme {
+                PartnerDetailScreen(
+                    companyState = CompanyState.Loaded(company()),
+                    offers = emptyList(),
+                    offersState = OffersState.Error,
+                    savedOfferIds = emptySet(),
+                    canAccessMemberOffers = true,
+                    expandedOfferId = null,
+                    expandedOfferDetailState = OfferDetailState.Missing,
+                    codeStatus = OfferCodeStatus.Idle,
+                    onToggleExpand = {},
+                    onShowCode = {},
+                    onToggleSave = { _, _ -> },
+                    onBack = {},
+                    onRetryOffers = { retries++ },
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.partnerOffers_loadError)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.partners_retry)).performClick()
+        assertEquals(1, retries)
+    }
+
+    @Test
+    fun savedSection_tapOffer_reportsCompanyAndOfferIds() {
+        var opened: Pair<String, String>? = null
+        composeTestRule.setContent {
+            KccTheme {
+                PartnersRootScreen(
+                    state = CompaniesState.Loaded(listOf(company())),
+                    offersState = OffersState.Loaded(listOf(offer())),
+                    savedOffersState =
+                        OffersState.Loaded(listOf(offer().copy(partnerCompanyName = "Old name"))),
+                    canAccessMemberOffers = true,
+                    section = PartnersRootSection.SAVED,
+                    onSectionChange = {},
+                    onOpenCompany = {},
+                    onOpenSavedOffer = { companyId, offerId -> opened = companyId to offerId },
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText("20% off").performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Bilverkstan").assertIsDisplayed()
+        assertEquals("c1" to "o1", opened)
+    }
+
+    @Test
     fun detail_freeUser_seesUpgradePrompt_noSaveOrCode() {
         composeTestRule.setContent {
             KccTheme {
                 PartnerDetailScreen(
-                    company = company(),
+                    companyState = CompanyState.Loaded(company().copy(latitude = 57.49, longitude = 12.07)),
                     offers = listOf(offer()),
                     savedOfferIds = emptySet(),
                     canAccessMemberOffers = false,
                     expandedOfferId = null,
-                    expandedOfferDetail = null,
+                    expandedOfferDetailState = OfferDetailState.Missing,
                     codeStatus = OfferCodeStatus.Idle,
                     onToggleExpand = {},
                     onShowCode = {},
@@ -86,6 +221,34 @@ class PartnersScreensTest {
             .assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.partnerOffers_showCode)).assertDoesNotExist()
         composeTestRule.onNodeWithText(str(R.string.partnerOffers_saveOffer)).assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.partners_callButton)).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.partners_websiteButton)).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.partners_navigateButton)).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun detail_companyFailure_showsRetry() {
+        var retries = 0
+        composeTestRule.setContent {
+            KccTheme {
+                PartnerDetailScreen(
+                    companyState = CompanyState.Error,
+                    offers = emptyList(),
+                    savedOfferIds = emptySet(),
+                    canAccessMemberOffers = true,
+                    expandedOfferId = null,
+                    expandedOfferDetailState = OfferDetailState.Missing,
+                    codeStatus = OfferCodeStatus.Idle,
+                    onToggleExpand = {},
+                    onShowCode = {},
+                    onToggleSave = { _, _ -> },
+                    onBack = {},
+                    onRetryCompany = { retries++ },
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.partners_retry)).performClick()
+        assertEquals(1, retries)
     }
 
     @Test
@@ -93,12 +256,13 @@ class PartnersScreensTest {
         composeTestRule.setContent {
             KccTheme {
                 PartnerDetailScreen(
-                    company = company(),
+                    companyState = CompanyState.Loaded(company()),
                     offers = listOf(offer()),
                     savedOfferIds = setOf("o1"),
                     canAccessMemberOffers = true,
                     expandedOfferId = "o1",
-                    expandedOfferDetail = OfferMemberDetail("Great deal", null, "No cash value"),
+                    expandedOfferDetailState =
+                        OfferDetailState.Loaded(OfferMemberDetail("Great deal", null, "No cash value")),
                     codeStatus = OfferCodeStatus.Shown("o1", "SAVE20"),
                     onToggleExpand = {},
                     onShowCode = {},
@@ -113,17 +277,69 @@ class PartnersScreensTest {
     }
 
     @Test
+    fun detail_missingMemberDetail_showsUnavailableWithoutCodeAction() {
+        composeTestRule.setContent {
+            KccTheme {
+                PartnerDetailScreen(
+                    companyState = CompanyState.Loaded(company()),
+                    offers = listOf(offer()),
+                    savedOfferIds = emptySet(),
+                    canAccessMemberOffers = true,
+                    expandedOfferId = "o1",
+                    expandedOfferDetailState = OfferDetailState.Missing,
+                    codeStatus = OfferCodeStatus.Idle,
+                    onToggleExpand = {},
+                    onShowCode = {},
+                    onToggleSave = { _, _ -> },
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule
+            .onNodeWithText(str(R.string.partnerOffers_detailUnavailable))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.partnerOffers_showCode)).assertDoesNotExist()
+    }
+
+    @Test
+    fun detail_listenerFailure_showsErrorWithoutCodeAction() {
+        composeTestRule.setContent {
+            KccTheme {
+                PartnerDetailScreen(
+                    companyState = CompanyState.Loaded(company()),
+                    offers = listOf(offer()),
+                    savedOfferIds = emptySet(),
+                    canAccessMemberOffers = true,
+                    expandedOfferId = "o1",
+                    expandedOfferDetailState = OfferDetailState.Error,
+                    codeStatus = OfferCodeStatus.Idle,
+                    onToggleExpand = {},
+                    onShowCode = {},
+                    onToggleSave = { _, _ -> },
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule
+            .onNodeWithText(str(R.string.partnerOffers_detailLoadError))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.partnerOffers_showCode)).assertDoesNotExist()
+    }
+
+    @Test
     fun detail_member_toggleSave_reportsInverse() {
         var saveCall: Pair<String, Boolean>? = null
         composeTestRule.setContent {
             KccTheme {
                 PartnerDetailScreen(
-                    company = company(),
+                    companyState = CompanyState.Loaded(company()),
                     offers = listOf(offer()),
                     savedOfferIds = emptySet(),
                     canAccessMemberOffers = true,
                     expandedOfferId = null,
-                    expandedOfferDetail = null,
+                    expandedOfferDetailState = OfferDetailState.Missing,
                     codeStatus = OfferCodeStatus.Idle,
                     onToggleExpand = {},
                     onShowCode = {},

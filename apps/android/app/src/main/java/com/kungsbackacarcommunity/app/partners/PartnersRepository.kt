@@ -8,7 +8,94 @@ sealed interface CompaniesState {
 
     data object Error : CompaniesState
 
-    data class Loaded(val companies: List<PartnerCompany>) : CompaniesState
+    data class Loaded(
+        val companies: List<PartnerCompany>,
+        val nextCursor: PartnerPageCursor? = null,
+    ) : CompaniesState
+}
+
+sealed interface CompanyState {
+    data object Loading : CompanyState
+    data class Loaded(val company: PartnerCompany) : CompanyState
+    data object Missing : CompanyState
+    data object Error : CompanyState
+}
+
+sealed interface OffersState {
+    data object Loading : OffersState
+    data class Loaded(
+        val offers: List<PartnerOffer>,
+        val isExhaustive: Boolean = true,
+        val nextCursor: PartnerPageCursor? = null,
+    ) : OffersState
+    data object Error : OffersState
+}
+
+/** Authoritative state of one member-only offer detail document. */
+sealed interface OfferDetailState {
+    data object Loading : OfferDetailState
+    data class Loaded(val detail: OfferMemberDetail) : OfferDetailState
+    data object Missing : OfferDetailState
+    data object Error : OfferDetailState
+}
+
+/** Stable Firestore cursor without leaking Firebase types into UI and tests. */
+data class PartnerPageCursor(
+    val createdAtSeconds: Long,
+    val createdAtNanoseconds: Int,
+    val documentId: String,
+)
+
+data class PartnerCompaniesPage(
+    val companies: List<PartnerCompany>,
+    val nextCursor: PartnerPageCursor?,
+)
+
+data class PartnerOffersPage(
+    val offers: List<PartnerOffer>,
+    val nextCursor: PartnerPageCursor?,
+)
+
+internal class PartnerPageBoundary {
+    private var hasSnapshot = false
+    private var cursor: PartnerPageCursor? = null
+
+    fun update(nextCursor: PartnerPageCursor?): Boolean {
+        val changed = hasSnapshot && cursor != nextCursor
+        hasSnapshot = true
+        cursor = nextCursor
+        return changed
+    }
+
+    fun reset() {
+        hasSnapshot = false
+        cursor = null
+    }
+}
+
+internal class PartnerOffersListenerFailureGate {
+    private var hasReportedFailure = false
+
+    @Synchronized
+    fun shouldReportFailure(): Boolean {
+        if (hasReportedFailure) return false
+        hasReportedFailure = true
+        return true
+    }
+
+    @Synchronized
+    fun didLoadSnapshot() {
+        hasReportedFailure = false
+    }
+}
+
+sealed interface SavedOfferIdsState {
+    data object Loading : SavedOfferIdsState
+    data class Loaded(
+        val ids: Set<String>,
+        val isExhaustive: Boolean = true,
+    ) : SavedOfferIdsState
+    data object Error : SavedOfferIdsState
 }
 
 /**
@@ -23,13 +110,29 @@ sealed interface CompaniesState {
 interface PartnersRepository {
     fun observeActiveCompanies(): Flow<CompaniesState>
 
-    fun observeActiveOffers(): Flow<List<PartnerOffer>>
+    suspend fun fetchActiveCompanies(after: PartnerPageCursor): PartnerCompaniesPage
 
-    /** Member-gated offer detail; null when denied (non-member) or missing. */
-    fun observeOfferDetail(offerId: String): Flow<OfferMemberDetail?>
+    /** One active company by id, used when a saved offer falls outside the capped directory. */
+    fun observeCompany(companyId: String): Flow<CompanyState>
+
+    fun observeActiveOffers(): Flow<OffersState>
+
+    /** Live first page of active offers for one company. Continue with [fetchActiveOffers]. */
+    fun observeActiveOffers(companyId: String): Flow<OffersState>
+
+    suspend fun fetchActiveOffers(
+        companyId: String,
+        after: PartnerPageCursor,
+    ): PartnerOffersPage
+
+    /** Active offer documents resolved directly for authoritative saved ids. */
+    fun observeOffers(offerIds: Set<String>): Flow<OffersState>
+
+    /** Member-gated offer detail with distinct missing and listener-error states. */
+    fun observeOfferDetail(offerId: String): Flow<OfferDetailState>
 
     /** The set of offer ids the caller has bookmarked. */
-    fun observeSavedOfferIds(uid: String): Flow<Set<String>>
+    fun observeSavedOfferIds(uid: String): Flow<SavedOfferIdsState>
 
     /** partners.showOfferCode — reveals an active offer's code to a member. */
     suspend fun showOfferCode(offerId: String): String?

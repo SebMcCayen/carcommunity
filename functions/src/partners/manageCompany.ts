@@ -36,6 +36,11 @@ const CALLABLE_OPTS = {
   enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',
 };
 
+// A Firestore transaction permits 500 writes. Reserve one write each for the
+// company and audit event; one extra query result detects an oversized cascade
+// before any lifecycle state changes are committed.
+const MAX_ACTIVE_OFFERS_PER_COMPANY_TRANSITION = 498;
+
 export interface CompanyIdResponse {
   companyId: string;
   status: PartnerCompanyStatus;
@@ -153,7 +158,30 @@ export const setCompanyStatus = onCall(
       if (!guard.ok) {
         throw new HttpsError(guard.code, guard.message);
       }
+      const activeOffers =
+        guard.nextStatus === 'active'
+          ? null
+          : await tx.get(
+              db
+                .collection('offers')
+                .where('companyId', '==', companyId)
+                .where('status', '==', 'active')
+                .limit(MAX_ACTIVE_OFFERS_PER_COMPANY_TRANSITION + 1),
+            );
+      if (activeOffers && activeOffers.size > MAX_ACTIVE_OFFERS_PER_COMPANY_TRANSITION) {
+        throw new HttpsError(
+          'resource-exhausted',
+          'Pause active offers before changing this company status.',
+        );
+      }
       tx.update(companyRef, { status: guard.nextStatus, updatedAt: serverTimestamp() });
+      const cascadedOfferStatus = guard.nextStatus === 'ended' ? 'ended' : 'paused';
+      activeOffers?.docs.forEach((offer) => {
+        tx.update(offer.ref, {
+          status: cascadedOfferStatus,
+          updatedAt: serverTimestamp(),
+        });
+      });
       tx.set(
         db.collection('adminAuditEvents').doc(),
         buildAdminAuditEvent(
@@ -163,6 +191,7 @@ export const setCompanyStatus = onCall(
             targetType: 'partnerCompany',
             targetId: companyId,
             reason: reason?.trim() || `Company ${statusActionPastTense(action)}.`,
+            details: { cascadedActiveOfferCount: activeOffers?.size ?? 0 },
           },
           serverTimestamp,
         ),

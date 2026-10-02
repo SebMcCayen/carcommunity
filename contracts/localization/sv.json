@@ -1467,6 +1467,7 @@
     "websiteButton": "Besök webbplats",
     "noPartnersNearby": "Inga företagspartner hittades i området.",
     "loading": "Laddar...",
+    "loadMore": "Visa fler",
     "error": "Kunde inte hämta företagspartner.",
     "retry": "Försök igen",
     "applicationTitle": "För företag",
@@ -1503,7 +1504,10 @@
     "categoryCharging": "Laddning",
     "categoryRestaurant": "Restaurang",
     "categoryRetail": "Butik",
-    "categoryOther": "Annat"
+    "categoryOther": "Annat",
+    "section": "Innehåll",
+    "directory": "Företag",
+    "saved": "Sparade"
   },
   "partnerOffers": {
     "sectionTitle": "Erbjudanden & förmåner",
@@ -1526,6 +1530,8 @@
     "codeAlertTitle": "Rabattkod",
     "codeAlertClose": "Stäng",
     "loadError": "Kunde inte hämta erbjudanden.",
+    "detailUnavailable": "Erbjudandedetaljerna är inte tillgängliga.",
+    "detailLoadError": "Kunde inte hämta erbjudandedetaljerna.",
     "codeLoadError": "Kunde inte hämta koden. Försök igen.",
     "saveError": "Kunde inte spara erbjudandet.",
     "offerTypeDiscountCode": "Rabattkod",
@@ -1533,7 +1539,12 @@
     "offerTypeFixedDiscount": "Fast rabatt",
     "offerTypeMemberBenefit": "Medlemsförmån",
     "offerTypeSpecialOffer": "Specialerbjudande",
-    "offerTypeOther": "Erbjudande"
+    "offerTypeOther": "Erbjudande",
+    "savedEmptyTitle": "Inga sparade erbjudanden",
+    "savedEmptyBody": "Spara ett erbjudande hos en företagspartner så visas det här.",
+    "savedLimitedBody": "Endast dina 30 senast sparade erbjudanden visas.",
+    "offerCountOne": "%1$d erbjudande",
+    "offerCountOther": "%1$d erbjudanden"
   },
   "billboard": {
     "sponsoredLabel": "Sponsrad placering",

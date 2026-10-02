@@ -7,17 +7,18 @@ import SwiftUI
 
 /// The Social hub panel. Android's Social hub lists Events / Crown Hunt /
 /// Leaderboard / Partners (label-sorted, unavailable entries omitted). iOS
-/// currently has Events, Convoys, Crown Hunt, and Leaderboard, so those are the
-/// entries this panel exposes; Partners remains absent until its repository and
-/// screen land.
+/// currently has Events, Convoys, Crown Hunt, Leaderboard, and Partners. Entries
+/// whose live feature flag is off are omitted, matching Android.
 struct SocialHubPanel: View {
     @Environment(\.locale) private var locale
 
     let crownHuntEnabled: Bool
+    let partnersEnabled: Bool
     let onOpenEvents: () -> Void
     let onOpenConvoys: () -> Void
     let onOpenCrownHunt: () -> Void
     let onOpenLeaderboard: () -> Void
+    let onOpenPartners: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s4) {
@@ -68,6 +69,17 @@ struct SocialHubPanel: View {
                 )
             )
         }
+        if partnersEnabled {
+            entries.append(
+                SocialHubEntry(
+                    id: .partners,
+                    label: "partners.screenTitle",
+                    localizedLabel: String(localized: "partners.screenTitle", locale: locale),
+                    icon: "building.2",
+                    action: onOpenPartners
+                )
+            )
+        }
         return entries.sorted {
             $0.localizedLabel.localizedStandardCompare($1.localizedLabel) == .orderedAscending
         }
@@ -101,6 +113,7 @@ private struct SocialHubEntry: Identifiable {
         case convoys
         case crownHunt
         case leaderboard
+        case partners
     }
 
     let id: ID
@@ -134,10 +147,12 @@ struct ComingSoonPanel: View {
 #Preview("Social hub") {
     SocialHubPanel(
         crownHuntEnabled: true,
+        partnersEnabled: true,
         onOpenEvents: {},
         onOpenConvoys: {},
         onOpenCrownHunt: {},
-        onOpenLeaderboard: {}
+        onOpenLeaderboard: {},
+        onOpenPartners: {}
     )
 }
 

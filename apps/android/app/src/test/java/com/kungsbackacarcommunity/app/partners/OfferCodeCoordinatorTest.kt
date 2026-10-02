@@ -1,8 +1,10 @@
 package com.kungsbackacarcommunity.app.partners
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -13,17 +15,37 @@ class OfferCodeCoordinatorTest {
     private class FakeRepo : PartnersRepository {
         var code: String? = "SAVE20"
         var failWith: Exception? = null
+        var showOfferCodeHandler: (suspend (String) -> String?)? = null
 
         override fun observeActiveCompanies(): Flow<CompaniesState> = flowOf(CompaniesState.Loading)
 
-        override fun observeActiveOffers(): Flow<List<PartnerOffer>> = flowOf(emptyList())
+        override suspend fun fetchActiveCompanies(after: PartnerPageCursor): PartnerCompaniesPage =
+            PartnerCompaniesPage(emptyList(), null)
 
-        override fun observeOfferDetail(offerId: String): Flow<OfferMemberDetail?> = flowOf(null)
+        override fun observeCompany(companyId: String): Flow<CompanyState> = flowOf(CompanyState.Missing)
 
-        override fun observeSavedOfferIds(uid: String): Flow<Set<String>> = flowOf(emptySet())
+        override fun observeActiveOffers(): Flow<OffersState> = flowOf(OffersState.Loaded(emptyList()))
+
+        override fun observeActiveOffers(companyId: String): Flow<OffersState> =
+            flowOf(OffersState.Loaded(emptyList()))
+
+        override suspend fun fetchActiveOffers(
+            companyId: String,
+            after: PartnerPageCursor,
+        ): PartnerOffersPage = PartnerOffersPage(emptyList(), null)
+
+        override fun observeOffers(offerIds: Set<String>): Flow<OffersState> =
+            flowOf(OffersState.Loaded(emptyList()))
+
+        override fun observeOfferDetail(offerId: String): Flow<OfferDetailState> =
+            flowOf(OfferDetailState.Missing)
+
+        override fun observeSavedOfferIds(uid: String): Flow<SavedOfferIdsState> =
+            flowOf(SavedOfferIdsState.Loaded(emptySet()))
 
         override suspend fun showOfferCode(offerId: String): String? {
             failWith?.let { throw it }
+            showOfferCodeHandler?.let { return it(offerId) }
             return code
         }
 
@@ -82,5 +104,35 @@ class OfferCodeCoordinatorTest {
         }
         assertTrue(rethrown)
         assertEquals(OfferCodeStatus.Idle, coordinator.status.value)
+    }
+
+    @Test
+    fun `stale same-offer reveal cannot publish after reset and reopen`() = runTest {
+        val firstStarted = CompletableDeferred<Unit>()
+        val releaseFirst = CompletableDeferred<Unit>()
+        var callCount = 0
+        val repository =
+            FakeRepo().apply {
+                showOfferCodeHandler = {
+                    callCount++
+                    if (callCount == 1) {
+                        firstStarted.complete(Unit)
+                        releaseFirst.await()
+                        "STALE"
+                    } else {
+                        "FRESH"
+                    }
+                }
+            }
+        val coordinator = OfferCodeCoordinator(repository)
+
+        val firstReveal = launch { coordinator.reveal("o1") }
+        firstStarted.await()
+        coordinator.reset()
+        coordinator.reveal("o1")
+        releaseFirst.complete(Unit)
+        firstReveal.join()
+
+        assertEquals(OfferCodeStatus.Shown("o1", "FRESH"), coordinator.status.value)
     }
 }

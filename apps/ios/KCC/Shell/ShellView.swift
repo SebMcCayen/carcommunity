@@ -64,6 +64,7 @@ struct ShellView: View {
     @State private var conversationsCoordinator: ConversationsCoordinator?
     @State private var chatHubCoordinator: ChatHubCoordinator?
     @State private var crownHuntComposition: CrownHuntComposition?
+    @State private var partnersCoordinator: PartnersCoordinator?
     @State private var liveLocationCoordinator: LiveLocationCoordinator?
     @State private var driveRecordingCoordinator: DriveRecordingCoordinator?
     @State private var locationPermissionCoordinator: LocationPermissionCoordinator?
@@ -126,6 +127,15 @@ struct ShellView: View {
             }
             .onChange(of: chatFeatureWiringKey) { _, _ in
                 applyChatFeatureGate()
+            }
+            .onChange(of: access) { _, access in
+                partnersCoordinator?.updateAccess(access)
+            }
+            .onChange(of: featureFlags.isEnabled(.partners)) { _, enabled in
+                if !enabled, routes.current == .partners {
+                    partnersCoordinator?.clearSensitiveOfferState()
+                    routes = routes.poppingOne()
+                }
             }
             .task(id: convoyReactionSubscriptionKey) {
                 convoyReactionCoordinator?.sync(convoyId: convoyReactionTargetId)
@@ -502,10 +512,13 @@ struct ShellView: View {
             panelTab {
                 SocialHubPanel(
                     crownHuntEnabled: featureFlags.isEnabled(.crownHunt),
+                    partnersEnabled: featureFlags.isEnabled(.partners)
+                        && partnersCoordinator != nil,
                     onOpenEvents: { routes = routes.opening(.events) },
                     onOpenConvoys: openConvoyManagement,
                     onOpenCrownHunt: { routes = routes.opening(.crownHunt) },
-                    onOpenLeaderboard: { routes = routes.opening(.leaderboard) }
+                    onOpenLeaderboard: { routes = routes.opening(.leaderboard) },
+                    onOpenPartners: { routes = routes.opening(.partners) }
                 )
             }
         case .garage:
@@ -636,6 +649,15 @@ struct ShellView: View {
         case .leaderboard:
             routeNavigation {
                 LeaderboardScreen(coordinator: leaderboardCoordinator)
+            }
+        case .partners:
+            if featureFlags.isEnabled(.partners), let partnersCoordinator {
+                PartnersScreen(
+                    coordinator: partnersCoordinator,
+                    onBack: { routes = routes.poppingOne() }
+                )
+            } else {
+                unavailableRoute
             }
         case .crownHunt:
             if let composition = crownHuntComposition {
@@ -1262,6 +1284,8 @@ struct ShellView: View {
         driveRecordingCoordinator = nil
         startDrivingGarage = nil
         crownHuntComposition = nil
+        partnersCoordinator?.clearSensitiveOfferState()
+        partnersCoordinator = nil
 
         let friends = FirebaseFriendsRepository.createIfAvailable()
         let conversations = FirebaseConversationsRepository.createIfAvailable()
@@ -1293,6 +1317,14 @@ struct ShellView: View {
         leaderboardCoordinator = LeaderboardCoordinator(
             repository: FirebaseLeaderboardRepository.createIfAvailable()
         )
+        partnersCoordinator = FirebasePartnersRepository.createIfAvailable().map {
+            PartnersCoordinator(
+                repository: $0,
+                subscriptionRepository: FirebaseSubscriptionStateRepository.createIfAvailable(),
+                uid: uid,
+                access: access
+            )
+        }
         notificationsCoordinator = NotificationsInboxCoordinator(repository: notifications, uid: uid)
         notificationSettingsCoordinator = NotificationSettingsCoordinator(
             repository: FirebaseNotificationSettingsRepository.createIfAvailable(),

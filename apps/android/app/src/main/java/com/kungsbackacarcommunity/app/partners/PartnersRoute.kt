@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.partners
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -10,9 +11,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+
+private data class ScopedOfferDetailState(
+    val offerId: String?,
+    val generation: Int,
+    val state: OfferDetailState,
+)
+
+private data class ScopedOfferVisibilityState(
+    val generation: Int,
+    val state: OffersState,
+)
 
 /**
  * Partners integration route (Phase 12 slice 17): owns the list ↔ detail
@@ -31,67 +45,292 @@ fun PartnersRoute(
     val scope = rememberCoroutineScope()
     var selectedCompanyId by rememberSaveable { mutableStateOf<String?>(null) }
     var expandedOfferId by rememberSaveable { mutableStateOf<String?>(null) }
+    var expandedOfferGeneration by rememberSaveable { mutableStateOf(0) }
+    var rootSection by rememberSaveable { mutableStateOf(PartnersRootSection.DIRECTORY) }
     // Bumped by the "try again" affordance to re-subscribe the companies flow.
     var reloadKey by rememberSaveable { mutableStateOf(0) }
+    var savedReloadKey by rememberSaveable { mutableStateOf(0) }
+    var companyReloadKey by rememberSaveable { mutableStateOf(0) }
+    val companiesPageBoundary = remember { PartnerPageBoundary() }
+    var pagedCompanies by remember { mutableStateOf(emptyList<PartnerCompany>()) }
+    var companiesCursor by remember { mutableStateOf<PartnerPageCursor?>(null) }
+    var companiesPageGeneration by remember { mutableStateOf(0) }
+    var isLoadingMoreCompanies by remember { mutableStateOf(false) }
+    var didFailLoadingMoreCompanies by remember { mutableStateOf(false) }
 
     val companiesState by
         remember(repository, reloadKey) { repository.observeActiveCompanies() }
             .collectAsState(initial = CompaniesState.Loading)
-    val offers by
-        remember(repository) { repository.observeActiveOffers() }.collectAsState(initial = emptyList())
-    val savedIds by
-        remember(repository, uid, canAccessMemberOffers) {
-            if (canAccessMemberOffers) repository.observeSavedOfferIds(uid) else flowOf(emptySet())
+    LaunchedEffect(reloadKey) {
+        // collectAsState retains its last value while the replacement flow
+        // subscribes. Seed the reset from that authoritative first-page
+        // boundary so an equal re-emission cannot strand Load more disabled.
+        val retainedCursor = (companiesState as? CompaniesState.Loaded)?.nextCursor
+        pagedCompanies = emptyList()
+        companiesCursor = retainedCursor
+        companiesPageBoundary.reset()
+        if (companiesState is CompaniesState.Loaded) {
+            companiesPageBoundary.update(retainedCursor)
         }
-            .collectAsState(initial = emptySet())
+        companiesPageGeneration++
+        isLoadingMoreCompanies = false
+        didFailLoadingMoreCompanies = false
+    }
+    LaunchedEffect(companiesState) {
+        val loaded = companiesState as? CompaniesState.Loaded ?: return@LaunchedEffect
+        if (companiesPageBoundary.update(loaded.nextCursor)) {
+            pagedCompanies = emptyList()
+            companiesPageGeneration++
+            isLoadingMoreCompanies = false
+        }
+        if (pagedCompanies.isEmpty()) companiesCursor = loaded.nextCursor
+        didFailLoadingMoreCompanies = false
+    }
+    val displayedCompaniesState =
+        (companiesState as? CompaniesState.Loaded)?.let { live ->
+            CompaniesState.Loaded(
+                companies =
+                    (live.companies + pagedCompanies)
+                        .distinctBy { it.id }
+                        .sortedBy { it.name.lowercase(Locale.ROOT) },
+                nextCursor = companiesCursor,
+            )
+        } ?: companiesState
+    val offersState by
+        remember(repository, reloadKey) { repository.observeActiveOffers() }
+            .collectAsState(initial = OffersState.Loading)
+    val savedIdsState by
+        remember(repository, uid, canAccessMemberOffers, savedReloadKey) {
+            if (canAccessMemberOffers) {
+                repository.observeSavedOfferIds(uid)
+            } else {
+                flowOf(SavedOfferIdsState.Loaded(emptySet()))
+            }
+        }
+            .collectAsState(initial = SavedOfferIdsState.Loading)
+    val savedIds = (savedIdsState as? SavedOfferIdsState.Loaded)?.ids.orEmpty()
+    val savedIdsAreExhaustive =
+        (savedIdsState as? SavedOfferIdsState.Loaded)?.isExhaustive ?: true
+    val savedOffersState by
+        remember(repository, savedIdsState, canAccessMemberOffers, savedReloadKey) {
+            if (!canAccessMemberOffers) {
+                flowOf(OffersState.Loaded(emptyList()))
+            } else {
+                when (val state = savedIdsState) {
+                    SavedOfferIdsState.Loading -> flowOf(OffersState.Loading)
+                    SavedOfferIdsState.Error -> flowOf(OffersState.Error)
+                    is SavedOfferIdsState.Loaded -> repository.observeOffers(state.ids)
+                }
+            }
+        }
+            .collectAsState(initial = OffersState.Loading)
+    val savedOffers = (savedOffersState as? OffersState.Loaded)?.offers.orEmpty()
     val codeStatus by
         (offerCodeCoordinator?.status ?: flowOf(OfferCodeStatus.Idle))
             .collectAsState(initial = OfferCodeStatus.Idle)
+
+    DisposableEffect(offerCodeCoordinator) {
+        onDispose { offerCodeCoordinator?.reset() }
+    }
 
     // System/gesture Back returns from the company detail to the list; at the
     // list root it is disabled so the shell's BackHandler returns to Home.
     BackHandler(enabled = selectedCompanyId != null) {
         selectedCompanyId = null
         expandedOfferId = null
+        expandedOfferGeneration++
         offerCodeCoordinator?.reset()
     }
 
     LaunchedEffect(canAccessMemberOffers, uid) {
         if (!canAccessMemberOffers) {
             expandedOfferId = null
+            expandedOfferGeneration++
             offerCodeCoordinator?.reset()
         }
     }
 
     val companyId = selectedCompanyId
     if (companyId == null) {
-        PartnersListScreen(
-            state = companiesState,
+        PartnersRootScreen(
+            state = displayedCompaniesState,
+            offersState = offersState,
+            savedOffersState = savedOffersState,
+            savedOffersAreExhaustive = savedIdsAreExhaustive,
+            canAccessMemberOffers = canAccessMemberOffers,
+            section = rootSection,
+            onSectionChange = { rootSection = it },
             onOpenCompany = { selectedCompanyId = it },
+            onOpenSavedOffer = { savedCompanyId, offerId ->
+                selectedCompanyId = savedCompanyId
+                expandedOfferId = offerId
+                expandedOfferGeneration++
+                offerCodeCoordinator?.reset()
+            },
             onRetry = { reloadKey++ },
+            onLoadMoreCompanies = {
+                val cursor = companiesCursor
+                val generation = companiesPageGeneration
+                if (cursor != null && !isLoadingMoreCompanies) {
+                    scope.launch {
+                        isLoadingMoreCompanies = true
+                        didFailLoadingMoreCompanies = false
+                        try {
+                            val page = repository.fetchActiveCompanies(cursor)
+                            if (generation == companiesPageGeneration) {
+                                pagedCompanies = (pagedCompanies + page.companies).distinctBy { it.id }
+                                companiesCursor = page.nextCursor
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            if (generation == companiesPageGeneration) didFailLoadingMoreCompanies = true
+                        } finally {
+                            if (generation == companiesPageGeneration) isLoadingMoreCompanies = false
+                        }
+                    }
+                }
+            },
+            canLoadMoreCompanies = companiesCursor != null,
+            isLoadingMoreCompanies = isLoadingMoreCompanies,
+            didFailLoadingMoreCompanies = didFailLoadingMoreCompanies,
+            onRetrySaved = { savedReloadKey++ },
             onBack = onBack,
         )
         return
     }
 
-    val company = (companiesState as? CompaniesState.Loaded)?.companies?.firstOrNull { it.id == companyId }
-    val companyOffers = Partners.offersForCompany(offers, companyId)
-    val expandedDetail by
-        remember(expandedOfferId, canAccessMemberOffers, repository) {
-            val id = expandedOfferId
-            if (id != null && canAccessMemberOffers) repository.observeOfferDetail(id) else flowOf(null)
+    val cachedCompany =
+        (displayedCompaniesState as? CompaniesState.Loaded)?.companies?.firstOrNull { it.id == companyId }
+    val companyState by
+        remember(repository, companyId, companyReloadKey) {
+            repository.observeCompany(companyId)
         }
-            .collectAsState(initial = null)
+            .collectAsState(
+                initial = cachedCompany?.let(CompanyState::Loaded) ?: CompanyState.Loading,
+            )
+    val company = (companyState as? CompanyState.Loaded)?.company
+    val companyOffersState by
+        remember(repository, companyId, reloadKey) { repository.observeActiveOffers(companyId) }
+            .collectAsState(initial = OffersState.Loading)
+    var pagedCompanyOffers by remember(companyId) { mutableStateOf(emptyList<PartnerOffer>()) }
+    var companyOffersCursor by remember(companyId) { mutableStateOf<PartnerPageCursor?>(null) }
+    val companyOffersPageBoundary = remember(companyId) { PartnerPageBoundary() }
+    var companyOffersPageGeneration by remember(companyId) { mutableStateOf(0) }
+    var isLoadingMoreCompanyOffers by remember(companyId) { mutableStateOf(false) }
+    var didFailLoadingMoreCompanyOffers by remember(companyId) { mutableStateOf(false) }
+    LaunchedEffect(companyOffersState) {
+        val loaded = companyOffersState as? OffersState.Loaded ?: return@LaunchedEffect
+        if (companyOffersPageBoundary.update(loaded.nextCursor)) {
+            pagedCompanyOffers = emptyList()
+            companyOffersPageGeneration++
+            isLoadingMoreCompanyOffers = false
+        }
+        if (pagedCompanyOffers.isEmpty()) companyOffersCursor = loaded.nextCursor
+        didFailLoadingMoreCompanyOffers = false
+    }
+    val companyOffers =
+        Partners.offersForCompany(
+            offers =
+                (
+                    (companyOffersState as? OffersState.Loaded)?.offers.orEmpty() +
+                        pagedCompanyOffers +
+                        savedOffers.filter { it.companyId == companyId }
+                ).distinctBy { it.id },
+            companyId = companyId,
+        )
+    val displayedCompanyOffersState =
+        (companyOffersState as? OffersState.Loaded)?.let {
+            OffersState.Loaded(
+                offers = companyOffers,
+                isExhaustive = companyOffersCursor == null,
+                nextCursor = companyOffersCursor,
+            )
+        } ?: companyOffersState
+    val expandedVisibilitySnapshot by
+        remember(expandedOfferId, expandedOfferGeneration, canAccessMemberOffers, repository) {
+            val id = expandedOfferId
+            if (id != null && canAccessMemberOffers) {
+                repository.observeOffers(setOf(id)).map {
+                    ScopedOfferVisibilityState(expandedOfferGeneration, it)
+                }
+            } else {
+                flowOf(
+                    ScopedOfferVisibilityState(
+                        expandedOfferGeneration,
+                        OffersState.Loaded(emptyList()),
+                    ),
+                )
+            }
+        }
+            .collectAsState(initial = ScopedOfferVisibilityState(-1, OffersState.Loading))
+    val expandedVisibility =
+        if (expandedVisibilitySnapshot.generation == expandedOfferGeneration) {
+            expandedVisibilitySnapshot.state
+        } else {
+            OffersState.Loading
+        }
+    val expandedOfferIsAuthoritativelyVisible =
+        expandedOfferId?.let { id ->
+            (expandedVisibility as? OffersState.Loaded)?.offers?.any { it.id == id } == true
+        } == true
+    val expandedDetailSnapshot by
+        remember(
+            expandedOfferId,
+            expandedOfferGeneration,
+            expandedOfferIsAuthoritativelyVisible,
+            canAccessMemberOffers,
+            repository,
+        ) {
+            val id = expandedOfferId
+            if (id != null && canAccessMemberOffers && expandedOfferIsAuthoritativelyVisible) {
+                repository.observeOfferDetail(id).map {
+                    ScopedOfferDetailState(id, expandedOfferGeneration, it)
+                }
+            } else {
+                // Do not start or expose a cached member-detail listener until
+                // the direct active-offer lookup has positively revalidated it.
+                flowOf(
+                    ScopedOfferDetailState(
+                        id,
+                        expandedOfferGeneration,
+                        OfferDetailState.Loading,
+                    ),
+                )
+            }
+        }
+            .collectAsState(initial = ScopedOfferDetailState(null, -1, OfferDetailState.Loading))
+    LaunchedEffect(expandedOfferId, expandedVisibility) {
+        if (expandedOfferId != null &&
+            (expandedVisibility == OffersState.Error ||
+                (expandedVisibility as? OffersState.Loaded)?.offers?.none { it.id == expandedOfferId } == true)
+        ) {
+            expandedOfferId = null
+            expandedOfferGeneration++
+            offerCodeCoordinator?.reset()
+        }
+    }
 
     PartnerDetailScreen(
-        company = company,
+        companyState = companyState,
         offers = companyOffers,
+        offersState = displayedCompanyOffersState,
         savedOfferIds = savedIds,
         canAccessMemberOffers = canAccessMemberOffers,
         expandedOfferId = expandedOfferId,
-        expandedOfferDetail = if (canAccessMemberOffers) expandedDetail else null,
+        expandedOfferDetailState =
+            if (canAccessMemberOffers &&
+                expandedOfferIsAuthoritativelyVisible &&
+                expandedDetailSnapshot.offerId == expandedOfferId &&
+                expandedDetailSnapshot.generation == expandedOfferGeneration
+            ) {
+                expandedDetailSnapshot.state
+            } else {
+                OfferDetailState.Loading
+            },
         codeStatus = if (canAccessMemberOffers) codeStatus else OfferCodeStatus.Idle,
         onToggleExpand = { offerId ->
+            expandedOfferGeneration++
             expandedOfferId = if (expandedOfferId == offerId) null else offerId
             offerCodeCoordinator?.reset()
         },
@@ -113,7 +352,41 @@ fun PartnersRoute(
         onBack = {
             selectedCompanyId = null
             expandedOfferId = null
+            expandedOfferGeneration++
             offerCodeCoordinator?.reset()
         },
+        onRetryCompany = { companyReloadKey++ },
+        onRetryOffers = { reloadKey++ },
+        onLoadMoreOffers = {
+            val cursor = companyOffersCursor
+            val requestedCompanyId = companyId
+            val generation = companyOffersPageGeneration
+            if (cursor != null && !isLoadingMoreCompanyOffers) {
+                scope.launch {
+                    isLoadingMoreCompanyOffers = true
+                    didFailLoadingMoreCompanyOffers = false
+                    try {
+                        val page = repository.fetchActiveOffers(companyId, cursor)
+                        if (selectedCompanyId == requestedCompanyId && generation == companyOffersPageGeneration) {
+                            pagedCompanyOffers = (pagedCompanyOffers + page.offers).distinctBy { it.id }
+                            companyOffersCursor = page.nextCursor
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        if (selectedCompanyId == requestedCompanyId && generation == companyOffersPageGeneration) {
+                            didFailLoadingMoreCompanyOffers = true
+                        }
+                    } finally {
+                        if (selectedCompanyId == requestedCompanyId && generation == companyOffersPageGeneration) {
+                            isLoadingMoreCompanyOffers = false
+                        }
+                    }
+                }
+            }
+        },
+        canLoadMoreOffers = companyOffersState is OffersState.Loaded && companyOffersCursor != null,
+        isLoadingMoreOffers = isLoadingMoreCompanyOffers,
+        didFailLoadingMoreOffers = didFailLoadingMoreCompanyOffers,
     )
 }
