@@ -66,6 +66,12 @@
     <string name="settings_blockedUsers">Blockerade användare</string>
     <string name="settings_accountDeletionWarning">Om du raderar ditt konto tas din profil och dina data bort. Detta kan inte ångras.</string>
     <string name="settings_accountDeletionError">Kunde inte radera ditt konto. Försök igen.</string>
+    <string name="settings_accountDeletionConfirmTitle">Ta bort ditt konto?</string>
+    <string name="settings_accountDeletionConfirmBody">Åtkomsten avslutas direkt. Dina kontouppgifter raderas permanent efter 30 dagar.</string>
+    <string name="settings_accountDeletionAuthenticationRequired">Din session har gått ut. Logga in igen innan du tar bort kontot.</string>
+    <string name="settings_accountDeletionTemporaryError">Kontot kan inte tas bort just nu. Försök igen.</string>
+    <string name="settings_accountDeletionUnavailable">Kontoborttagning är inte tillgänglig i den här versionen.</string>
+    <string name="settings_signInAgain">Logga in igen</string>
     <string name="about_title">Om appen</string>
     <string name="about_appName">Appnamn</string>
     <string name="about_version">Version</string>

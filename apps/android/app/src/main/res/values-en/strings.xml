@@ -66,6 +66,12 @@
     <string name="settings_blockedUsers">Blocked users</string>
     <string name="settings_accountDeletionWarning">Deleting your account removes your profile and data. This cannot be undone.</string>
     <string name="settings_accountDeletionError">Could not delete your account. Please try again.</string>
+    <string name="settings_accountDeletionConfirmTitle">Delete your account?</string>
+    <string name="settings_accountDeletionConfirmBody">Access ends immediately. Your account data is permanently deleted after 30 days.</string>
+    <string name="settings_accountDeletionAuthenticationRequired">Your session has expired. Sign in again before deleting your account.</string>
+    <string name="settings_accountDeletionTemporaryError">Account deletion is temporarily unavailable. Please try again.</string>
+    <string name="settings_accountDeletionUnavailable">Account deletion is not available in this build.</string>
+    <string name="settings_signInAgain">Sign in again</string>
     <string name="about_title">About app</string>
     <string name="about_appName">App name</string>
     <string name="about_version">Version</string>
