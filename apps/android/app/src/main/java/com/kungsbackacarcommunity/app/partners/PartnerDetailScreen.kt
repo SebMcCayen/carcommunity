@@ -358,6 +358,11 @@ private fun OfferCard(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                        Text(
+                            text = stringResource(R.string.partnerOffers_drivingSafetyWarning),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         Button(onClick = onShowCode, modifier = Modifier.fillMaxWidth()) {
                             Text(text = stringResource(R.string.partnerOffers_showCode))
                         }
