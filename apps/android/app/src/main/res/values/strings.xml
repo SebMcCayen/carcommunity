@@ -1544,6 +1544,7 @@
     <string name="openTickets_title">Öppna ärenden</string>
     <string name="openTickets_intro">Kända problem som andra har rapporterat. Har du samma problem? Ge det en tumme upp eller lägg till en kommentar.</string>
     <string name="openTickets_loading">Hämtar ärenden…</string>
+    <string name="openTickets_loadMore">Hämta fler ärenden</string>
     <string name="openTickets_empty">Det finns inga öppna ärenden just nu.</string>
     <string name="openTickets_error">Kunde inte hämta ärenden. Försök igen senare.</string>
     <string name="openTickets_plusOneCount">%1$d instämmer</string>

@@ -58,6 +58,7 @@ struct FeedbackScreen: View {
             Text("feedback.descriptionLabel")
                 .font(.subheadline.weight(.semibold))
             TextEditor(text: $form.description)
+                .accessibilityLabel(Text("feedback.descriptionLabel"))
                 .frame(minHeight: 150)
                 .padding(KccSpacing.s2)
                 .overlay {
@@ -169,21 +170,25 @@ struct OpenTicketsScreen: View {
                 if tickets.isEmpty {
                     ContentUnavailableView("openTickets.empty", systemImage: "checkmark.circle")
                 } else {
-                    List(tickets) { ticket in
-                        TicketCard(
-                            ticket: ticket,
-                            state: coordinator.interactions[ticket.number] ?? TicketInteractionState(),
-                            onPlusOne: {
-                                Task { await coordinator.plusOne(issueNumber: ticket.number) }
-                            },
-                            onComment: { text in
-                                Task {
-                                    await coordinator.comment(issueNumber: ticket.number, text: text)
-                                }
-                            },
-                            onCommentEdited: { coordinator.clearError(issueNumber: ticket.number) },
-                            onOpen: { openURL(ticket.htmlURL) }
-                        )
+                    List {
+                        ForEach(tickets) { ticket in
+                            TicketCard(
+                                ticket: ticket,
+                                state: coordinator.interactions[ticket.number] ?? TicketInteractionState(),
+                                onPlusOne: {
+                                    Task { await coordinator.plusOne(issueNumber: ticket.number) }
+                                },
+                                onComment: { text in
+                                    Task { await coordinator.comment(issueNumber: ticket.number, text: text) }
+                                },
+                                onCommentEdited: { coordinator.clearError(issueNumber: ticket.number) },
+                                onOpen: { openURL(ticket.htmlURL) }
+                            )
+                        }
+                        if coordinator.canLoadMore || coordinator.isLoadingMore {
+                            Button("openTickets.loadMore") { coordinator.loadMore() }
+                                .disabled(coordinator.isLoadingMore)
+                        }
                     }
                     .listStyle(.insetGrouped)
                 }

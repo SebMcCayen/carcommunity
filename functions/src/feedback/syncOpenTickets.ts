@@ -45,7 +45,7 @@ import { db } from '../firebase';
 import { listOpenIssues, type OpenIssuesResult } from '../shared/githubIssues';
 import {
   OPEN_TICKETS_COLLECTION,
-  OPEN_TICKETS_LABEL,
+  OPEN_TICKETS_LABELS,
   REPORT_TICKETS_FLAG_KEY,
   isMirrorableIssue,
   mapIssueToTicketFields,
@@ -72,6 +72,18 @@ export interface OpenTicketsSyncResult {
  * never deleted.
  */
 export type IssueFetcher = () => Promise<OpenIssuesResult | null>;
+
+async function fetchOpenFeedbackIssues(): Promise<OpenIssuesResult | null> {
+  const results = await Promise.all(
+    OPEN_TICKETS_LABELS.map((label) =>
+      listOpenIssues(label, GITHUB_ISSUE_TOKEN.value(), 'carcommunity-feedback-bot'),
+    ),
+  );
+  if (results.some((result) => result === null)) return null;
+  const completeResults = results as OpenIssuesResult[];
+  const issues = [...new Map(completeResults.flatMap((result) => result.issues).map((issue) => [issue.number, issue])).values()];
+  return { issues, complete: completeResults.every((result) => result.complete) };
+}
 
 /**
  * Upserts one ticket, preserving the live interaction tallies. `createdAt` is
@@ -105,8 +117,7 @@ async function upsertTicket(issue: MappableIssue): Promise<void> {
 }
 
 export async function runOpenTicketsSync(
-  fetchIssues: IssueFetcher = () =>
-    listOpenIssues(OPEN_TICKETS_LABEL, GITHUB_ISSUE_TOKEN.value(), 'carcommunity-feedback-bot'),
+  fetchIssues: IssueFetcher = fetchOpenFeedbackIssues,
 ): Promise<OpenTicketsSyncResult> {
   const result = await fetchIssues();
 

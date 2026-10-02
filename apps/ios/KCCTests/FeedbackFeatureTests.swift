@@ -16,16 +16,14 @@ final class FeedbackFeatureTests: XCTestCase {
     }
 
     private final class FakeTicketsRepository: OpenTicketsRepository, @unchecked Sendable {
-        var snapshots: [OpenTicketsSnapshot] = []
+        var pages: [OpenTicketsPageResult] = []
+        var pageCalls: [(Int?, Int)] = []
         var outcomes: [TicketInteractionOutcome] = []
         var calls: [(Int, TicketInteractionType, String?, String)] = []
 
-        func tickets() -> AsyncStream<OpenTicketsSnapshot> {
-            let snapshots = snapshots
-            return AsyncStream { continuation in
-                snapshots.forEach { continuation.yield($0) }
-                continuation.finish()
-            }
+        func tickets(afterNumber: Int?, limit: Int) async -> OpenTicketsPageResult {
+            pageCalls.append((afterNumber, limit))
+            return pages.isEmpty ? .failed : pages.removeFirst()
         }
 
         func interact(
@@ -69,11 +67,35 @@ final class FeedbackFeatureTests: XCTestCase {
 
     func testGitHubLinkGuardRejectsNonWebCredentialsPortsAndLookalikes() {
         XCTAssertNotNil(GitHubIssueLinks.safeURL("https://github.com/SebMcCayen/carcommunity/issues/1"))
-        XCTAssertNotNil(GitHubIssueLinks.safeURL("https://gist.github.com/example/1"))
+        XCTAssertNil(GitHubIssueLinks.safeURL("https://gist.github.com/example/1"))
+        XCTAssertNil(GitHubIssueLinks.safeURL("http://github.com/SebMcCayen/carcommunity/issues/1"))
+        XCTAssertNil(GitHubIssueLinks.safeURL("https://github.com/other/repo/issues/1"))
         XCTAssertNil(GitHubIssueLinks.safeURL("javascript:alert(1)"))
         XCTAssertNil(GitHubIssueLinks.safeURL("https://github.com.evil.test/issues/1"))
         XCTAssertNil(GitHubIssueLinks.safeURL("https://user@github.com/issues/1"))
         XCTAssertNil(GitHubIssueLinks.safeURL("https://github.com:8443/issues/1"))
+    }
+
+    @MainActor
+    func testTicketCoordinatorLoadsBoundedCursorPages() async {
+        let repository = FakeTicketsRepository()
+        let first = OpenTicket(number: 42, title: "First", summary: "", htmlURL: URL(string: "https://github.com/SebMcCayen/carcommunity/issues/42")!, plusOneCount: 0, commentCount: 0)
+        let second = OpenTicket(number: 41, title: "Second", summary: "", htmlURL: URL(string: "https://github.com/SebMcCayen/carcommunity/issues/41")!, plusOneCount: 0, commentCount: 0)
+        repository.pages = [
+            .loaded(OpenTicketsPage(tickets: [first], nextCursor: 42)),
+            .loaded(OpenTicketsPage(tickets: [second], nextCursor: nil))
+        ]
+        let coordinator = OpenTicketsCoordinator(repository: repository)
+        coordinator.start()
+        await Task.yield()
+        await Task.yield()
+        XCTAssertTrue(coordinator.canLoadMore)
+        coordinator.loadMore()
+        await Task.yield()
+        await Task.yield()
+        XCTAssertEqual(repository.pageCalls.map(\.0), [nil, 42])
+        XCTAssertEqual(repository.pageCalls.map(\.1), [25, 25])
+        XCTAssertEqual(coordinator.listState, .loaded([first, second]))
     }
 
     func testTicketDecodeRequiresPositiveNumberTitleAndSafeURL() {
@@ -162,4 +184,3 @@ final class FeedbackFeatureTests: XCTestCase {
         XCTAssertTrue(coordinator.interactions[9]?.canPlusOne == true)
     }
 }
-

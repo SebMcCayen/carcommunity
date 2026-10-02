@@ -27,7 +27,7 @@
  */
 
 import { z } from 'zod';
-import { boundText, FEEDBACK_ISSUE_LABEL } from './feedback-core';
+import { boundText, FEEDBACK_ISSUE_LABELS } from './feedback-core';
 import { neutralizeMentions } from '../shared/githubIssues';
 import {
   MODERATION_REPORT_INITIAL_STATUS,
@@ -340,4 +340,6 @@ export const INTERACT_RATE_LIMITED_MESSAGE =
   'Too many interactions — please wait a while before trying again.';
 
 /** The label the sync fetches (single source: feedback-core). */
-export const OPEN_TICKETS_LABEL = FEEDBACK_ISSUE_LABEL;
+export const OPEN_TICKETS_LABELS = Object.values(FEEDBACK_ISSUE_LABELS);
+/** Kept for source compatibility; new sync code consumes both labels. */
+export const OPEN_TICKETS_LABEL = FEEDBACK_ISSUE_LABELS.android;

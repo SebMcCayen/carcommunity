@@ -5,7 +5,7 @@ protocol FeedbackRepository: Sendable {
 }
 
 protocol OpenTicketsRepository: Sendable {
-    func tickets() -> AsyncStream<OpenTicketsSnapshot>
+    func tickets(afterNumber: Int?, limit: Int) async -> OpenTicketsPageResult
     func interact(
         issueNumber: Int,
         type: TicketInteractionType,
@@ -58,8 +58,13 @@ struct OpenTicket: Equatable, Identifiable, Sendable {
     }
 }
 
-enum OpenTicketsSnapshot: Equatable, Sendable {
-    case loaded([OpenTicket])
+struct OpenTicketsPage: Equatable, Sendable {
+    let tickets: [OpenTicket]
+    let nextCursor: Int?
+}
+
+enum OpenTicketsPageResult: Equatable, Sendable {
+    case loaded(OpenTicketsPage)
     case failed
 }
 
@@ -108,4 +113,3 @@ enum TicketComments {
         FeedbackText.boundMultiline(text, limit: maximumLength)
     }
 }
-

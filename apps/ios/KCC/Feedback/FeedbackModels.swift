@@ -133,12 +133,16 @@ enum GitHubIssueLinks {
         guard let rawValue,
               let components = URLComponents(string: rawValue),
               let scheme = components.scheme?.lowercased(),
-              scheme == "https" || scheme == "http",
+              scheme == "https",
               components.user == nil,
               components.password == nil,
               components.port == nil,
               let host = components.host?.lowercased(),
-              host == "github.com" || host.hasSuffix(".github.com"),
+              host == "github.com",
+              components.path.range(
+                of: #"^/SebMcCayen/carcommunity/issues/[1-9][0-9]*$"#,
+                options: [.regularExpression, .caseInsensitive]
+              ) != nil,
               let url = components.url
         else { return nil }
         return url

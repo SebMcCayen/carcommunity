@@ -26,6 +26,7 @@ import {
 const ZWSP = '\u200b';
 
 const report: FeedbackReport = {
+  platform: 'android',
   description: 'The map does not load after I open the app.',
   summary: 'Map fails to load',
   appVersion: '1.2.3',
@@ -112,6 +113,7 @@ describe('feedback-core public GitHub issue', () => {
 
   it('renders unknown for absent context fields', () => {
     const bare: FeedbackReport = {
+      platform: 'android',
       description: 'x',
       summary: null,
       appVersion: null,
@@ -135,6 +137,17 @@ describe('feedback-core public GitHub issue', () => {
     expect(serialized.toLowerCase()).not.toContain('@');
     expect(serialized.toLowerCase()).not.toContain('token');
     expect(payload.labels).toEqual([FEEDBACK_ISSUE_LABEL]);
+  });
+
+  it('routes iOS reports to the iOS title and label without trusting arbitrary platforms', () => {
+    const parsed = parseReportIssueInput({ description: 'Broken', platform: 'ios' });
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) throw new Error('expected ok');
+    const payload = buildGitHubIssuePayload(parsed.input, 'rep_ios', '2026-07-09T12:00:00.000Z');
+    expect(payload.title).toBe('[iOS] Broken');
+    expect(payload.labels).toEqual(['ios-issue']);
+    expect(buildFeedbackReportDocument(parsed.input, 'uid', () => 'TS').platform).toBe('ios');
+    expect(parseReportIssueInput({ description: 'Broken', platform: 'web' }).ok).toBe(false);
   });
 });
 

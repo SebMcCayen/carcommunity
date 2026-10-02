@@ -10,7 +10,7 @@ final class FirebaseFeedbackRepository: FeedbackRepository, @unchecked Sendable 
     }
 
     func report(_ input: FeedbackReportInput) async throws -> FeedbackSubmitResult {
-        var payload: [String: Any] = ["description": input.description]
+        var payload: [String: Any] = ["description": input.description, "platform": "ios"]
         if let summary = input.summary { payload["summary"] = summary }
         if let appVersion = input.appVersion { payload["appVersion"] = appVersion }
         if let osVersion = input.osVersion { payload["osVersion"] = osVersion }
@@ -56,23 +56,23 @@ final class FirebaseOpenTicketsRepository: OpenTicketsRepository, @unchecked Sen
         self.functions = functions
     }
 
-    func tickets() -> AsyncStream<OpenTicketsSnapshot> {
-        let query = firestore.collection(Self.collection).order(by: "number", descending: true)
-        return AsyncStream { continuation in
-            let state = OpenTicketsListenerState()
-            let registration = query.addSnapshotListener { snapshot, error in
-                if error != nil {
-                    if !state.hasLoaded { continuation.yield(.failed) }
-                    return
-                }
-                let tickets = (snapshot?.documents ?? []).compactMap {
-                    OpenTicket.decode(documentId: $0.documentID, fields: $0.data())
-                }
-                state.hasLoaded = true
-                continuation.yield(.loaded(tickets))
+    func tickets(afterNumber: Int?, limit: Int) async -> OpenTicketsPageResult {
+        guard limit > 0 else { return .loaded(OpenTicketsPage(tickets: [], nextCursor: nil)) }
+        var query: Query = firestore.collection(Self.collection)
+            .order(by: "number", descending: true)
+        if let afterNumber { query = query.whereField("number", isLessThan: afterNumber) }
+        do {
+            let snapshot = try await query.limit(to: limit + 1).getDocuments()
+            let pageDocuments = Array(snapshot.documents.prefix(limit))
+            let tickets = pageDocuments.compactMap {
+                OpenTicket.decode(documentId: $0.documentID, fields: $0.data())
             }
-            let box = FeedbackListenerBox(registration: registration)
-            continuation.onTermination = { _ in box.registration.remove() }
+            let cursor = snapshot.documents.count > limit
+                ? pageDocuments.last.flatMap { Self.positiveInteger($0.data()["number"]) }
+                : nil
+            return .loaded(OpenTicketsPage(tickets: tickets, nextCursor: cursor))
+        } catch {
+            return .failed
         }
     }
 
@@ -105,6 +105,15 @@ final class FirebaseOpenTicketsRepository: OpenTicketsRepository, @unchecked Sen
     private static let collection = "openTickets"
     private static let interactCallable = "feedback-interactWithIssue"
 
+    private static func positiveInteger(_ value: Any?) -> Int? {
+        guard let number = value as? NSNumber else { return nil }
+        let double = number.doubleValue
+        guard double.isFinite, double.rounded() == double,
+              double > 0, double <= Double(Int.max)
+        else { return nil }
+        return Int(double)
+    }
+
     static func createIfAvailable() -> OpenTicketsRepository? {
         guard FirebaseApp.app() != nil,
               let functions = KccFunctionsClient.createIfAvailable()
@@ -118,18 +127,3 @@ final class FirebaseOpenTicketsRepository: OpenTicketsRepository, @unchecked Sen
         return FirebaseOpenTicketsRepository(firestore: firestore, functions: functions)
     }
 }
-
-private final class OpenTicketsListenerState: @unchecked Sendable {
-    private let lock = NSLock()
-    private var storedHasLoaded = false
-
-    var hasLoaded: Bool {
-        get { lock.withLock { storedHasLoaded } }
-        set { lock.withLock { storedHasLoaded = newValue } }
-    }
-}
-
-private struct FeedbackListenerBox: @unchecked Sendable {
-    let registration: ListenerRegistration
-}
-

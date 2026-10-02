@@ -611,10 +611,12 @@ struct ShellView: View {
                     Label("shell.friendsTitle", systemImage: "person.2")
                 }
             }
-            Button {
-                routes = routes.opening(.feedback)
-            } label: {
-                Label("shell.moreFeedback", systemImage: "exclamationmark.bubble")
+            if feedbackCoordinator != nil {
+                Button {
+                    routes = routes.opening(.feedback)
+                } label: {
+                    Label("shell.moreFeedback", systemImage: "exclamationmark.bubble")
+                }
             }
         } label: {
             Label("shell.moreProfile", systemImage: "person.circle")
