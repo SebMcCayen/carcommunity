@@ -4,6 +4,29 @@ import XCTest
 @testable import KCC
 
 final class AccountDeletionTests: XCTestCase {
+    private final class FakeAuthRepository: AuthRepository, @unchecked Sendable {
+        var authState: AuthState
+        private(set) var signOutCount = 0
+
+        init(authState: AuthState) {
+            self.authState = authState
+        }
+
+        func authStateUpdates() -> AsyncStream<AuthState> {
+            let state = authState
+            return AsyncStream { continuation in
+                continuation.yield(state)
+                continuation.finish()
+            }
+        }
+
+        func signIn(with payload: AppleIDTokenPayload) async throws {}
+
+        func signOut() throws {
+            signOutCount += 1
+        }
+    }
+
     private final class FakeRepository: AccountDeletionRepository, @unchecked Sendable {
         private let lock = NSLock()
         private var storedReasons: [String?] = []
@@ -142,5 +165,19 @@ final class AccountDeletionTests: XCTestCase {
             XCTAssertEqual(error.code, .invalidArgument)
         }
         XCTAssertEqual(functions.calls.count, 1)
+    }
+
+    @MainActor
+    func testDeletionCompletionCannotSignOutReplacementIdentity() {
+        let repository = FakeAuthRepository(
+            authState: .signedIn(uid: "replacement", displayName: nil)
+        )
+        let session = AuthSession(repository: repository)
+
+        session.signOut(ifSignedInAs: "deletion-origin")
+        XCTAssertEqual(repository.signOutCount, 0)
+
+        session.signOut(ifSignedInAs: "replacement")
+        XCTAssertEqual(repository.signOutCount, 1)
     }
 }

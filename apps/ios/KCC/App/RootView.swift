@@ -35,7 +35,10 @@ struct RootView: View {
 
     @ViewBuilder
     private func authenticatedContent(uid: String, displayName: String?) -> some View {
-        switch accessSession.accountState {
+        // Fence the asynchronously refreshed access snapshot to the canonical
+        // Firebase identity. A deleted previous account must not sign out a
+        // replacement account during the frame before `.task(id:)` rebinds.
+        switch accessSession.accountState(for: uid) {
         case .loaded(let access) where access.deleted:
             // The callable disables the Auth user before marking the profile.
             // If the profile listener wins the race against the callable
@@ -47,7 +50,8 @@ struct RootView: View {
             RestrictedAccountScreen(
                 access: access,
                 privacyCoordinator: restrictedPrivacyCoordinator,
-                onSignOut: session.signOut
+                onSignOut: session.signOut,
+                onDeletionSessionEnd: { session.signOut(ifSignedInAs: uid) }
             )
         case .loaded(let access):
             AuthenticatedExperience(
@@ -76,7 +80,8 @@ struct RootView: View {
             RestrictedAccountScreen(
                 access: nil,
                 privacyCoordinator: restrictedPrivacyCoordinator,
-                onSignOut: session.signOut
+                onSignOut: session.signOut,
+                onDeletionSessionEnd: { session.signOut(ifSignedInAs: uid) }
             )
         }
     }

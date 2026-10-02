@@ -754,8 +754,8 @@ struct ShellView: View {
         case .accountDeletion:
             AccountDeletionScreen(
                 coordinator: accountDeletionCoordinator,
-                onDeleted: { session.signOut() },
-                onReauthenticate: { session.signOut() },
+                onDeleted: { endDeletionSession() },
+                onReauthenticate: { endDeletionSession() },
                 onBack: { routes = routes.poppingOne() }
             )
         case .friends:
@@ -855,6 +855,11 @@ struct ShellView: View {
             // trapping) keeps an unexpected value harmless.
             EmptyView()
         }
+    }
+
+    private func endDeletionSession() {
+        guard let authenticatedUid else { return }
+        session.signOut(ifSignedInAs: authenticatedUid)
     }
 
     private var routeBackButton: some View {
