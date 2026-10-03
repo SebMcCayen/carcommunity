@@ -44,13 +44,14 @@ struct RootView: View {
             // If the profile listener wins the race against the callable
             // response (or the app relaunches with a cached token), clear the
             // local Firebase session here as the lifecycle backstop.
-            ProgressView()
-                .task { session.signOut() }
+            DeletedAccountSessionEndView {
+                session.signOut(ifSignedInAs: uid)
+            }
         case .loaded(let access) where access.suspended:
             RestrictedAccountScreen(
                 access: access,
                 privacyCoordinator: restrictedPrivacyCoordinator,
-                onSignOut: session.signOut,
+                onSignOut: { session.signOut(ifSignedInAs: uid) },
                 onDeletionSessionEnd: { session.signOut(ifSignedInAs: uid) }
             )
         case .loaded(let access):
@@ -80,7 +81,7 @@ struct RootView: View {
             RestrictedAccountScreen(
                 access: nil,
                 privacyCoordinator: restrictedPrivacyCoordinator,
-                onSignOut: session.signOut,
+                onSignOut: { session.signOut(ifSignedInAs: uid) },
                 onDeletionSessionEnd: { session.signOut(ifSignedInAs: uid) }
             )
         }
@@ -89,5 +90,33 @@ struct RootView: View {
     private var signedInUid: String? {
         if case .signedIn(let uid, _) = session.state { return uid }
         return nil
+    }
+}
+
+private struct DeletedAccountSessionEndView: View {
+    let endSession: () -> Bool
+    @State private var failed = false
+
+    var body: some View {
+        Group {
+            if failed {
+                VStack(spacing: KccSpacing.s3) {
+                    Text("auth.signOutError")
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(KccPalette.errorRed)
+                    Button("auth.signOut", action: attempt)
+                        .buttonStyle(.borderedProminent)
+                }
+                .padding(KccSpacing.s6)
+            } else {
+                ProgressView()
+                    .accessibilityLabel(Text("auth.loading"))
+            }
+        }
+        .task { attempt() }
+    }
+
+    private func attempt() {
+        failed = !endSession()
     }
 }

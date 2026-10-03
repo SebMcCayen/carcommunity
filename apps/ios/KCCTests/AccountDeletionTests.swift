@@ -7,6 +7,7 @@ final class AccountDeletionTests: XCTestCase {
     private final class FakeAuthRepository: AuthRepository, @unchecked Sendable {
         var authState: AuthState
         private(set) var signOutCount = 0
+        var signOutError: Error?
 
         init(authState: AuthState) {
             self.authState = authState
@@ -24,6 +25,7 @@ final class AccountDeletionTests: XCTestCase {
 
         func signOut() throws {
             signOutCount += 1
+            if let signOutError { throw signOutError }
         }
     }
 
@@ -174,10 +176,42 @@ final class AccountDeletionTests: XCTestCase {
         )
         let session = AuthSession(repository: repository)
 
-        session.signOut(ifSignedInAs: "deletion-origin")
+        XCTAssertTrue(session.signOut(ifSignedInAs: "deletion-origin"))
         XCTAssertEqual(repository.signOutCount, 0)
 
-        session.signOut(ifSignedInAs: "replacement")
+        XCTAssertTrue(session.signOut(ifSignedInAs: "replacement"))
         XCTAssertEqual(repository.signOutCount, 1)
+    }
+
+    @MainActor
+    func testSignOutFailureIsReportedAndCanBeRetriedForTheSameIdentity() {
+        struct ExpectedFailure: Error {}
+        let repository = FakeAuthRepository(
+            authState: .signedIn(uid: "deletion-origin", displayName: nil)
+        )
+        repository.signOutError = ExpectedFailure()
+        let session = AuthSession(repository: repository)
+
+        XCTAssertFalse(session.signOut(ifSignedInAs: "deletion-origin"))
+        XCTAssertEqual(repository.signOutCount, 1)
+
+        repository.signOutError = nil
+        XCTAssertTrue(session.signOut(ifSignedInAs: "deletion-origin"))
+        XCTAssertEqual(repository.signOutCount, 2)
+    }
+
+    @MainActor
+    func testDeferredSignOutCannotAffectReplacementIdentityEvenAfterFailure() {
+        struct ExpectedFailure: Error {}
+        let repository = FakeAuthRepository(
+            authState: .signedIn(uid: "replacement", displayName: nil)
+        )
+        repository.signOutError = ExpectedFailure()
+        let session = AuthSession(repository: repository)
+
+        // A cancelled/deferred task from the deleted identity is treated as
+        // complete without touching the replacement account's credentials.
+        XCTAssertTrue(session.signOut(ifSignedInAs: "deleted-origin"))
+        XCTAssertEqual(repository.signOutCount, 0)
     }
 }

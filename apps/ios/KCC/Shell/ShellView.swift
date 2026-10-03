@@ -673,7 +673,7 @@ struct ShellView: View {
             ProfileScreen(
                 uid: signedInUid,
                 displayName: signedInDisplayName,
-                onSignOut: { session.signOut() },
+                onSignOut: { endDeletionSession() },
                 onBack: { routes = routes.poppingOne() },
                 onOpenPoints: { routes = routes.opening(.points) },
                 onOpenAccountDeletion: { routes = routes.opening(.accountDeletion) }
@@ -857,9 +857,9 @@ struct ShellView: View {
         }
     }
 
-    private func endDeletionSession() {
-        guard let authenticatedUid else { return }
-        session.signOut(ifSignedInAs: authenticatedUid)
+    private func endDeletionSession() -> Bool {
+        guard let authenticatedUid else { return true }
+        return session.signOut(ifSignedInAs: authenticatedUid)
     }
 
     private var routeBackButton: some View {

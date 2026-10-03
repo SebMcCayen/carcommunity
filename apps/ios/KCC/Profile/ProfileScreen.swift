@@ -6,7 +6,7 @@ import UIKit
 struct ProfileScreen: View {
     let uid: String?
     let displayName: String?
-    let onSignOut: () -> Void
+    let onSignOut: () -> Bool
     let onBack: () -> Void
     let onOpenPoints: (() -> Void)?
     let onOpenAccountDeletion: (() -> Void)?
@@ -19,9 +19,10 @@ struct ProfileScreen: View {
     @State private var validationError: ProfileValidationError?
     @State private var pickedPhoto: PhotosPickerItem?
     @State private var showsBlockedUsers = false
+    @State private var signOutFailed = false
 
     init(
-        uid: String?, displayName: String?, onSignOut: @escaping () -> Void,
+        uid: String?, displayName: String?, onSignOut: @escaping () -> Bool,
         onBack: @escaping () -> Void, onOpenPoints: @escaping () -> Void,
         onOpenAccountDeletion: @escaping () -> Void
     ) {
@@ -45,7 +46,7 @@ struct ProfileScreen: View {
     }
 
     init(
-        uid: String? = nil, displayName: String?, onSignOut: @escaping () -> Void,
+        uid: String? = nil, displayName: String?, onSignOut: @escaping () -> Bool,
         onBack: @escaping () -> Void,
         onOpenPoints: (() -> Void)? = nil,
         onOpenAccountDeletion: (() -> Void)? = nil,
@@ -144,7 +145,12 @@ struct ProfileScreen: View {
                     .accessibilityIdentifier("profile.accountDeletion")
                 }
 
-                Button(action: onSignOut) {
+                if signOutFailed {
+                    Text("auth.signOutError")
+                        .foregroundStyle(KccPalette.errorRed)
+                }
+
+                Button(action: attemptSignOut) {
                     Text("auth.signOut").frame(maxWidth: .infinity, minHeight: 44)
                 }
                 .buttonStyle(.bordered)
@@ -164,6 +170,10 @@ struct ProfileScreen: View {
         .fullScreenCover(isPresented: $showsBlockedUsers) {
             BlockedUsersScreen(uid: uid) { showsBlockedUsers = false }
         }
+    }
+
+    private func attemptSignOut() {
+        signOutFailed = !onSignOut()
     }
 
     private var canEdit: Bool {

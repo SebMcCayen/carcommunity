@@ -4,12 +4,13 @@ struct RestrictedAccountScreen: View {
     @Environment(\.openURL) private var openURL
     let access: AccountAccess?
     @Bindable var privacyCoordinator: LiveLocationCoordinator
-    let onSignOut: () -> Void
-    let onDeletionSessionEnd: () -> Void
+    let onSignOut: () -> Bool
+    let onDeletionSessionEnd: () -> Bool
     @State private var deletionCoordinator = AccountDeletionCoordinator(
         repository: FirebaseAccountDeletionRepository.createIfAvailable()
     )
     @State private var showsAccountDeletion = false
+    @State private var signOutFailed = false
 
     var body: some View {
         VStack(spacing: KccSpacing.s4) {
@@ -58,7 +59,13 @@ struct RestrictedAccountScreen: View {
                 .buttonStyle(.bordered)
             }
 
-            Button("auth.signOut", action: onSignOut)
+            if signOutFailed {
+                Text("auth.signOutError")
+                    .foregroundStyle(KccPalette.errorRed)
+                    .multilineTextAlignment(.center)
+            }
+
+            Button("auth.signOut", action: attemptSignOut)
                 .buttonStyle(.bordered)
         }
         .font(.system(size: KccTypeScale.bodyMd))
@@ -77,6 +84,10 @@ struct RestrictedAccountScreen: View {
                 onBack: { showsAccountDeletion = false }
             )
         }
+    }
+
+    private func attemptSignOut() {
+        signOutFailed = !onSignOut()
     }
 
     private var bodyKey: LocalizedStringKey {
