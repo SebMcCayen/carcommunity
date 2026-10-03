@@ -184,7 +184,7 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
         session = URLSession(configuration: configuration)
         monitor.pathUpdateHandler = { [weak self] path in
             guard let self else { return }
-            let (becameAvailable, taskToCancel) = self.lock.withLock {
+            let (shouldValidate, taskToCancel) = self.lock.withLock {
                 let available = path.status == .satisfied
                 let changed = self.pathAvailable != available
                 self.pathAvailable = available
@@ -196,14 +196,17 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
                     self.validationTask = nil
                     return (false, task)
                 }
-                if changed {
+                let retryAfterPathUpdate = self.state == .offline
+                if changed || retryAfterPathUpdate {
                     self.lastValidation = .distantPast
-                    self.state = .pending
+                    if self.state != .online {
+                        self.state = .pending
+                    }
                 }
-                return (changed, nil)
+                return (changed || retryAfterPathUpdate, nil)
             }
             taskToCancel?.cancel()
-            if becameAvailable {
+            if shouldValidate {
                 self.validateConnectivityIfNeeded()
             }
         }
@@ -240,9 +243,12 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
 
     private func validateConnectivityIfNeeded() {
         let generation = lock.withLock { () -> Int? in
-            guard pathAvailable,
-                  !validationInFlight,
-                  Date().timeIntervalSince(lastValidation) >= Self.validationInterval
+            guard Self.shouldStartConnectivityValidation(
+                pathAvailable: pathAvailable,
+                validationInFlight: validationInFlight,
+                state: state,
+                elapsedSinceLastValidation: Date().timeIntervalSince(lastValidation)
+            )
             else {
                 return nil
             }
@@ -284,6 +290,18 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
         } else {
             task.cancel()
         }
+    }
+
+    static func shouldStartConnectivityValidation(
+        pathAvailable: Bool,
+        validationInFlight: Bool,
+        state: NetworkValidationState,
+        elapsedSinceLastValidation: TimeInterval
+    ) -> Bool {
+        pathAvailable
+            && !validationInFlight
+            && state != .offline
+            && elapsedSinceLastValidation >= validationInterval
     }
 }
 

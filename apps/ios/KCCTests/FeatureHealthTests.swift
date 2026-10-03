@@ -186,6 +186,21 @@ final class FeatureHealthTests: XCTestCase {
         XCTAssertTrue(sink.entries.isEmpty)
     }
 
+    func testConfirmedOfflineStateDoesNotStartAnotherConnectivityValidation() {
+        XCTAssertFalse(SystemNetworkStatus.shouldStartConnectivityValidation(
+            pathAvailable: true,
+            validationInFlight: false,
+            state: .offline,
+            elapsedSinceLastValidation: 3_600
+        ))
+        XCTAssertTrue(SystemNetworkStatus.shouldStartConnectivityValidation(
+            pathAvailable: true,
+            validationInFlight: false,
+            state: .pending,
+            elapsedSinceLastValidation: 3_600
+        ))
+    }
+
     func testConnectivityProbeAcceptsAnyResponseFromMapboxHost() {
         let mapboxResponse = HTTPURLResponse(
             url: URL(string: "https://api.mapbox.com/")!,
