@@ -377,6 +377,16 @@ struct MapHomeView: View {
                 mapPlaceholder
             }
         }
+        .onAppear(perform: updateFeatureHealthConditions)
+        .onChange(of: scenePhase) { _, _ in
+            updateFeatureHealthConditions()
+        }
+        .onChange(of: surface.isActive) { _, _ in
+            updateFeatureHealthConditions()
+        }
+        .onDisappear {
+            featureHealthReporter?.updateConditions(foreground: false, surfaceShown: false)
+        }
         // Load-state chip, mirroring Android's `LoadingRoadsChip`: visible
         // while style/tiles load, gone once the map is interactive.
         .overlay(alignment: .top) {
@@ -429,6 +439,13 @@ struct MapHomeView: View {
                 .font(.system(size: KccTypeScale.titleMd, weight: KccTypeScale.medium))
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private func updateFeatureHealthConditions() {
+        featureHealthReporter?.updateConditions(
+            foreground: scenePhase == .active,
+            surfaceShown: surface.isActive
+        )
     }
 
     private var loadingRoadsChip: some View {

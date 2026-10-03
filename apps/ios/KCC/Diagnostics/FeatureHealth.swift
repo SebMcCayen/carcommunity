@@ -328,7 +328,8 @@ final class FeatureHealthReporter: @unchecked Sendable {
     private let errorReporter: any ClientErrorReporter
     private let networkStatus: any NetworkStatus
     private let pendingLock = NSLock()
-    private var pendingLoadingErrors: [FeatureHealthKind: FeatureHealthConditions] = [:]
+    private var pendingLoadingErrors: Set<FeatureHealthKind> = []
+    private var currentConditions: FeatureHealthConditions?
 
     init(
         gate: FeatureHealthGate,
@@ -357,11 +358,23 @@ final class FeatureHealthReporter: @unchecked Sendable {
             foreground: foreground,
             surfaceShown: surfaceShown
         )
-        if networkState == .pending,
-           kind == .mapStyleLoadFailed || kind == .mapResourceLoadError
-        {
-            pendingLock.withLock { pendingLoadingErrors[kind] = conditions }
+        let isLoadingError = kind == .mapStyleLoadFailed || kind == .mapResourceLoadError
+        let shouldDefer = pendingLock.withLock {
+            currentConditions = conditions
+            guard networkState == .pending, isLoadingError, foreground, surfaceShown else {
+                return false
+            }
+            pendingLoadingErrors.insert(kind)
+            return true
+        }
+        if shouldDefer {
+            if networkStatus.validationState() == .online {
+                flushPendingLoadingErrors()
+            }
             return .suppress(.connectivityPending)
+        }
+        if networkState == .pending, isLoadingError {
+            return gate.decide(kind, conditions: conditions)
         }
         let decision = gate.decide(kind, conditions: conditions)
         if case .report(let feature, let message, let code, let context) = decision {
@@ -370,14 +383,25 @@ final class FeatureHealthReporter: @unchecked Sendable {
         return decision
     }
 
-    private func flushPendingLoadingErrors() {
-        let pending = pendingLock.withLock {
-            let snapshot = pendingLoadingErrors
-            pendingLoadingErrors.removeAll()
-            return snapshot
+    func updateConditions(foreground: Bool, surfaceShown: Bool) {
+        pendingLock.withLock {
+            currentConditions = FeatureHealthConditions(
+                online: true,
+                foreground: foreground,
+                surfaceShown: surfaceShown
+            )
         }
-        for (kind, conditions) in pending {
-            let decision = gate.decide(kind, conditions: .init(
+    }
+
+    private func flushPendingLoadingErrors() {
+        let (pending, conditions) = pendingLock.withLock {
+            let snapshot = pendingLoadingErrors
+            pendingLoadingErrors = []
+            return (snapshot, currentConditions)
+        }
+        guard let conditions else { return }
+        for kind in pending {
+            let decision = gate.decide(kind, conditions: FeatureHealthConditions(
                 online: true,
                 foreground: conditions.foreground,
                 surfaceShown: conditions.surfaceShown

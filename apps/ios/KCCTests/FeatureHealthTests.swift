@@ -150,6 +150,42 @@ final class FeatureHealthTests: XCTestCase {
         XCTAssertEqual(sink.entries.count, 1)
     }
 
+    func testReporterRechecksCurrentConditionsBeforeFlushingPendingLoadingErrors() {
+        for (foreground, surfaceShown) in [(false, true), (true, false)] {
+            let sink = RecordingErrorReporter()
+            let network = ControlledNetwork()
+            let reporter = FeatureHealthReporter(
+                gate: gate(), errorReporter: sink, networkStatus: network
+            )
+
+            XCTAssertEqual(
+                reporter.report(.mapStyleLoadFailed, foreground: true, surfaceShown: true),
+                .suppress(.connectivityPending)
+            )
+            reporter.updateConditions(foreground: foreground, surfaceShown: surfaceShown)
+
+            network.completeOnline()
+            XCTAssertTrue(sink.entries.isEmpty)
+        }
+    }
+
+    func testReporterDoesNotQueueLoadingErrorsFromIneligibleSurfaces() {
+        let sink = RecordingErrorReporter()
+        let network = ControlledNetwork()
+        let reporter = FeatureHealthReporter(
+            gate: gate(), errorReporter: sink, networkStatus: network
+        )
+
+        XCTAssertEqual(
+            reporter.report(.mapStyleLoadFailed, foreground: true, surfaceShown: false),
+            .suppress(.surfaceNeverShown)
+        )
+        reporter.updateConditions(foreground: true, surfaceShown: true)
+
+        network.completeOnline()
+        XCTAssertTrue(sink.entries.isEmpty)
+    }
+
     func testConnectivityProbeAcceptsAnyResponseFromMapboxHost() {
         let mapboxResponse = HTTPURLResponse(
             url: URL(string: "https://api.mapbox.com/")!,
