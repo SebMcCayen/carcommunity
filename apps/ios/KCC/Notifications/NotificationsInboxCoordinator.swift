@@ -54,6 +54,7 @@ enum MarkReadStatus: Equatable, Sendable {
 final class NotificationsInboxCoordinator {
     private let repository: NotificationsRepository?
     private let uid: String?
+    private let errorReporter: any ClientErrorReporter
     /// The live stream-consuming task. `nonisolated(unsafe)` so the
     /// nonisolated deinit can cancel it — every mutation happens on the main
     /// actor, and by the time deinit runs no other reference exists, so the
@@ -70,6 +71,10 @@ final class NotificationsInboxCoordinator {
     /// snapshot, only when the newest item actually changes.
     @ObservationIgnored
     private var lastSeenMarkerNotificationId: String?
+    /// Prevents a noisy listener from consuming the reporting budget for the
+    /// same uninterrupted failure. A successful snapshot rearms reporting.
+    @ObservationIgnored
+    private var listenerFailureReported = false
 
     /// The number of unread notifications currently loaded — Android's
     /// `Notifications.unreadCount`, gating the "mark all read" affordance.
@@ -82,9 +87,14 @@ final class NotificationsInboxCoordinator {
     /// - Parameters:
     ///   - repository: nil when Firebase is not configured in this build.
     ///   - uid: the signed-in member's uid; nil when there is no session.
-    init(repository: NotificationsRepository?, uid: String?) {
+    init(
+        repository: NotificationsRepository?,
+        uid: String?,
+        errorReporter: any ClientErrorReporter = NoopClientErrorReporter()
+    ) {
         self.repository = repository
         self.uid = uid
+        self.errorReporter = errorReporter
         self.state = (repository == nil || uid == nil) ? .unavailable : .loading
     }
 
@@ -133,7 +143,10 @@ final class NotificationsInboxCoordinator {
     /// optimistically, so a refused mark-read never leaves a row falsely
     /// styled read.
     func markRead(notificationId: String) async {
-        await execute { repository in
+        await execute(
+            feature: "notifications.markRead",
+            message: "Updating notification read state failed"
+        ) { repository in
             try await repository.markRead(notificationId: notificationId)
         }
     }
@@ -141,7 +154,10 @@ final class NotificationsInboxCoordinator {
     /// Marks every unread notification read (`notifications-markAllRead`),
     /// tracking ``markReadStatus``.
     func markAllRead() async {
-        await execute { repository in
+        await execute(
+            feature: "notifications.markAllRead",
+            message: "Updating all notification read states failed"
+        ) { repository in
             try await repository.markAllRead()
         }
     }
@@ -155,7 +171,11 @@ final class NotificationsInboxCoordinator {
         markReadStatus = .idle
     }
 
-    private func execute(_ action: @escaping (NotificationsRepository) async throws -> Void) async {
+    private func execute(
+        feature: String,
+        message: String,
+        _ action: @escaping (NotificationsRepository) async throws -> Void
+    ) async {
         guard markReadStatus != .working, let repository else { return }
         markReadStatus = .working
         do {
@@ -165,8 +185,18 @@ final class NotificationsInboxCoordinator {
             markReadStatus = .idle
         } catch let error as KccFunctionsError {
             markReadStatus = .failed(code: error.code)
+            errorReporter.report(
+                feature: feature,
+                message: message,
+                code: error.code.rawValue
+            )
         } catch {
             markReadStatus = .failed(code: nil)
+            errorReporter.report(
+                feature: feature,
+                message: message,
+                code: nil
+            )
         }
     }
 
@@ -211,7 +241,16 @@ final class NotificationsInboxCoordinator {
         switch snapshot {
         case .failed(let code):
             state = .failed(code: code)
+            if !listenerFailureReported {
+                listenerFailureReported = true
+                errorReporter.report(
+                    feature: "notifications.inboxListener",
+                    message: "Notification inbox listener failed",
+                    code: code
+                )
+            }
         case .loaded(let items):
+            listenerFailureReported = false
             state = items.isEmpty ? .empty : .loaded(items)
             // `items` is already newest-first (Notifications.sortedForInbox),
             // so `.first` is the newest — Android's `items.firstOrNull()?.id`.
