@@ -63,13 +63,13 @@ struct PartnerApplicationScreen: View {
 
             if showValidationError, PartnerApplications.validate(form) != nil {
                 Text(validationMessage)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(KccPalette.errorRed)
                     .font(.footnote)
                     .accessibilityIdentifier("partnerApplication.validationError")
             }
             if case .failed(let failure) = coordinator.submission {
                 Text(failureMessage(failure))
-                    .foregroundStyle(.red)
+                    .foregroundStyle(KccPalette.errorRed)
                     .font(.footnote)
                     .accessibilityIdentifier("partnerApplication.submitError")
             }

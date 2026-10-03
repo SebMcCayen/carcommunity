@@ -40,6 +40,10 @@ final class PartnerApplicationTests: XCTestCase {
             "partners.submitErrorInvalid"
         )
         XCTAssertEqual(
+            PartnerApplicationValidationError.websiteURL.localizationKey,
+            "partners.submitErrorInvalid"
+        )
+        XCTAssertEqual(
             PartnerApplicationValidationError.fieldTooLong.localizationKey,
             "partners.submitErrorInvalid"
         )
@@ -70,6 +74,34 @@ final class PartnerApplicationTests: XCTestCase {
             "HTTPS://example.com"
         )
         XCTAssertNil(PartnerApplications.normalizedWebsiteURL("  "))
+    }
+
+    func testValidationRejectsBackendInvalidEmailAndWebsiteVectors() {
+        for invalidEmail in [
+            "a@.com",
+            "a@example.c",
+            ".a@example.com",
+            "a..b@example.com",
+            "a@b..com",
+            "a@localhost",
+        ] {
+            var form = validForm()
+            form.contactEmail = invalidEmail
+            XCTAssertEqual(
+                PartnerApplications.validate(form),
+                .contactEmail,
+                "Expected backend-invalid email to be rejected: \(invalidEmail)"
+            )
+        }
+
+        var form = validForm()
+        form.contactEmail = "ada+garage@example.co"
+        XCTAssertNil(PartnerApplications.validate(form))
+
+        form.websiteURL = "https://"
+        XCTAssertEqual(PartnerApplications.validate(form), .websiteURL)
+        form.websiteURL = "https://exa mple.com"
+        XCTAssertEqual(PartnerApplications.validate(form), .websiteURL)
     }
 
     func testValidationUsesBackendUTF16BoundariesAfterWebsiteNormalization() {

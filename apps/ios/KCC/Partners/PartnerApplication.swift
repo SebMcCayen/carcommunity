@@ -38,11 +38,11 @@ struct PartnerApplicationInput: Equatable, Sendable {
 }
 
 enum PartnerApplicationValidationError: Equatable, Sendable {
-    case companyName, category, contactName, contactEmail, fieldTooLong
+    case companyName, category, contactName, contactEmail, websiteURL, fieldTooLong
 
     var localizationKey: String {
         switch self {
-        case .contactEmail, .fieldTooLong:
+        case .contactEmail, .websiteURL, .fieldTooLong:
             "partners.submitErrorInvalid"
         case .companyName, .category, .contactName:
             "partners.fieldRequired"
@@ -66,6 +66,8 @@ enum PartnerApplications {
         guard form.category != nil else { return .category }
         guard !name.isEmpty else { return .contactName }
         guard looksLikeEmail(email) else { return .contactEmail }
+        let website = normalizedWebsiteURL(form.websiteURL)
+        guard website.map(isValidWebsiteURL) ?? true else { return .websiteURL }
         // Zod/JavaScript counts UTF-16 code units. Using the same measure
         // prevents emoji and composed characters from passing locally only
         // to be rejected by the callable's max-length validation.
@@ -73,7 +75,7 @@ enum PartnerApplications {
               name.utf16.count <= contactNameLimit,
               email.utf16.count <= emailLimit,
               form.contactPhone.partnerTrimmed.utf16.count <= phoneLimit,
-              (normalizedWebsiteURL(form.websiteURL)?.utf16.count ?? 0) <= websiteLimit,
+              (website?.utf16.count ?? 0) <= websiteLimit,
               form.message.partnerTrimmed.utf16.count <= messageLimit
         else { return .fieldTooLong }
         return nil
@@ -102,13 +104,19 @@ enum PartnerApplications {
     }
 
     private static func looksLikeEmail(_ value: String) -> Bool {
-        guard value.rangeOfCharacter(from: .whitespacesAndNewlines) == nil,
-              let at = value.firstIndex(of: "@"),
-              at != value.startIndex,
-              value[value.index(after: at)...].firstIndex(of: "@") == nil
+        // Mirrors Zod 4's default `email` pattern used by the callable.
+        let pattern = #"^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$"#
+        return value.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    private static func isValidWebsiteURL(_ value: String) -> Bool {
+        guard let components = URLComponents(string: value),
+              let scheme = components.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              let host = components.host,
+              !host.isEmpty
         else { return false }
-        let domain = value[value.index(after: at)...]
-        return domain.contains(".") && !domain.hasSuffix(".")
+        return true
     }
 }
 
