@@ -27,6 +27,8 @@ function sampleReport(overrides: Partial<ClientErrorReport> = {}): ClientErrorRe
     osVersion: 'Android 14',
     deviceModel: 'Pixel 7',
     platform: 'android',
+    buildNumber: '42',
+    sdkVersion: '11.26.0',
     fingerprint: computeClientErrorFingerprint(
       'messages.conversationList',
       'Conversation inbox listener failed',
@@ -44,12 +46,16 @@ describe('parseReportClientErrorInput', () => {
       code: 'failed_precondition',
       appVersion: '1.2.3',
       platform: 'android',
+      buildNumber: '42',
+      sdkVersion: '11.26.0',
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.input.feature).toBe('messages.conversationList');
     expect(result.input.code).toBe('failed_precondition');
     expect(result.input.platform).toBe('android');
+    expect(result.input.buildNumber).toBe('42');
+    expect(result.input.sdkVersion).toBe('11.26.0');
     expect(result.input.fingerprint).toHaveLength(64);
   });
 

@@ -85,6 +85,18 @@ struct DiagnosticsSignInFailureReporter: SignInFailureReporter {
 /// bounds every field before it can leave the device.
 protocol ClientErrorReporter: Sendable {
     func report(feature: String, message: String, code: String?)
+    func report(feature: String, message: String, code: String?, context: ClientErrorContext)
+}
+
+struct ClientErrorContext: Equatable, Sendable {
+    let buildNumber: String?
+    let sdkVersion: String?
+}
+
+extension ClientErrorReporter {
+    func report(feature: String, message: String, code: String?, context: ClientErrorContext) {
+        report(feature: feature, message: message, code: code)
+    }
 }
 
 struct NoopClientErrorReporter: ClientErrorReporter {
@@ -102,6 +114,10 @@ final class FirebaseClientErrorReporter: ClientErrorReporter, @unchecked Sendabl
     }
 
     func report(feature: String, message: String, code: String?) {
+        report(feature: feature, message: message, code: code, context: .init(buildNumber: nil, sdkVersion: nil))
+    }
+
+    func report(feature: String, message: String, code: String?, context: ClientErrorContext) {
         guard let feature = DiagnosticsSanitizer.feature(feature) else { return }
         var payload: [String: Any] = [
             "feature": feature,
@@ -112,10 +128,18 @@ final class FirebaseClientErrorReporter: ClientErrorReporter, @unchecked Sendabl
             "platform": "ios"
         ]
         if let code = DiagnosticsSanitizer.errorCode(code) { payload["code"] = code }
+        if let build = Self.safeVersion(context.buildNumber) { payload["buildNumber"] = build }
+        if let sdk = Self.safeVersion(context.sdkVersion) { payload["sdkVersion"] = sdk }
         let callablePayload = DiagnosticsCallablePayload(value: payload)
         Task { [client] in
             try? await client.call(Self.callable, payload: callablePayload)
         }
+    }
+
+    private static func safeVersion(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let kept = value.filter { $0.isASCII && ($0.isLetter || $0.isNumber || ".-_+".contains($0)) }
+        return kept.isEmpty ? nil : DiagnosticsSanitizer.prefixByUTF16(kept, maximum: 50)
     }
 
     @MainActor

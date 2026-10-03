@@ -39,6 +39,7 @@ const ZWSP = '​';
 const fingerprint = computeSignInFingerprint('GetCredentialException');
 
 const report: SignInFailureReport = {
+  platform: 'android',
   errorType: 'GetCredentialException',
   appVersion: '1.4.0',
   buildNumber: '42',
@@ -143,8 +144,11 @@ describe('extractSignInFailureReport', () => {
     expect(extractSignInFailureReport({ ...rawDoc, featureArea: 'auth' })).toBeNull();
   });
 
-  it('rejects a non-android platform (only the Android reporter may file issues)', () => {
-    expect(extractSignInFailureReport({ ...rawDoc, platform: 'ios' })).toBeNull();
+  it('accepts the iOS reporter and rejects unsupported platforms', () => {
+    expect(extractSignInFailureReport({ ...rawDoc, platform: 'ios' })).toEqual({
+      ...report,
+      platform: 'ios',
+    });
     expect(extractSignInFailureReport({ ...rawDoc, platform: 'web' })).toBeNull();
     expect(extractSignInFailureReport({ ...rawDoc, platform: undefined })).toBeNull();
   });
@@ -208,6 +212,7 @@ describe('extractSignInFailureReport', () => {
       safeMessage: 'Sign-in failed: SignInFailedException',
     });
     expect(result).toEqual({
+      platform: 'android',
       errorType: 'SignInFailedException',
       appVersion: null,
       buildNumber: null,

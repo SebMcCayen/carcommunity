@@ -169,7 +169,8 @@ final class DiagnosticsTests: XCTestCase {
         reporter.report(
             feature: "notifications.inboxListener",
             message: "Failed for user@example.com at 57.123 with token=secret",
-            code: "UNAVAILABLE!"
+            code: "UNAVAILABLE!",
+            context: .init(buildNumber: "42 beta", sdkVersion: "11.26.0")
         )
 
         let deadline = Date().addingTimeInterval(1)
@@ -179,6 +180,8 @@ final class DiagnosticsTests: XCTestCase {
         XCTAssertEqual(call?.1["feature"] as? String, "notifications.inboxListener")
         XCTAssertEqual(call?.1["platform"] as? String, "ios")
         XCTAssertEqual(call?.1["code"] as? String, "UNAVAILABLE")
+        XCTAssertEqual(call?.1["buildNumber"] as? String, "42beta")
+        XCTAssertEqual(call?.1["sdkVersion"] as? String, "11.26.0")
         let message = call?.1["message"] as? String
         XCTAssertFalse(message?.contains("user@example.com") == true)
         XCTAssertFalse(message?.contains("57.123") == true)

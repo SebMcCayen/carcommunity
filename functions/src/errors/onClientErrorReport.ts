@@ -76,6 +76,8 @@ function extractReport(data: Record<string, unknown> | undefined): ClientErrorRe
     osVersion: toStringOrNull(data.osVersion),
     deviceModel: toStringOrNull(data.deviceModel),
     platform: toStringOrNull(data.platform) ?? 'android',
+    buildNumber: toStringOrNull(data.buildNumber),
+    sdkVersion: toStringOrNull(data.sdkVersion),
     fingerprint: computeClientErrorFingerprint(feature, message, code),
   };
 }

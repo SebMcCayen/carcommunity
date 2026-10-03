@@ -84,6 +84,8 @@ export const MAX_APP_VERSION_LENGTH = 50;
 export const MAX_OS_VERSION_LENGTH = 100;
 export const MAX_DEVICE_MODEL_LENGTH = 100;
 export const MAX_PLATFORM_LENGTH = 20;
+export const MAX_BUILD_NUMBER_LENGTH = 50;
+export const MAX_SDK_VERSION_LENGTH = 50;
 
 // ---------------------------------------------------------------------------
 // Rate limit (per user) — mirrors feedback.reportIssue, higher cap because an
@@ -117,6 +119,8 @@ const reportClientErrorInputSchema = z
     osVersion: z.string().max(MAX_OS_VERSION_LENGTH).optional(),
     deviceModel: z.string().max(MAX_DEVICE_MODEL_LENGTH).optional(),
     platform: z.string().max(MAX_PLATFORM_LENGTH).optional(),
+    buildNumber: z.string().max(MAX_BUILD_NUMBER_LENGTH).optional(),
+    sdkVersion: z.string().max(MAX_SDK_VERSION_LENGTH).optional(),
   })
   .strict();
 
@@ -131,6 +135,8 @@ export interface ClientErrorReport {
   osVersion: string | null;
   deviceModel: string | null;
   platform: string;
+  buildNumber: string | null;
+  sdkVersion: string | null;
   /** Server-derived dedup key (feature + normalized signature). */
   fingerprint: string;
 }
@@ -138,7 +144,7 @@ export interface ClientErrorReport {
 export type ParseResult<T> = { ok: true; input: T } | { ok: false; message: string };
 
 export const REPORT_CLIENT_ERROR_EXPECTED =
-  'Expected { feature, message, code?, appVersion?, osVersion?, deviceModel?, platform? }.';
+  'Expected { feature, message, code?, appVersion?, osVersion?, deviceModel?, platform?, buildNumber?, sdkVersion? }.';
 
 /**
  * Parses + bounds a client-error submission. Returns a normalized report with a
@@ -173,6 +179,8 @@ export function parseReportClientErrorInput(data: unknown): ParseResult<ClientEr
       osVersion: boundContext(result.data.osVersion, MAX_OS_VERSION_LENGTH),
       deviceModel: boundContext(result.data.deviceModel, MAX_DEVICE_MODEL_LENGTH),
       platform,
+      buildNumber: boundContext(result.data.buildNumber, MAX_BUILD_NUMBER_LENGTH),
+      sdkVersion: boundContext(result.data.sdkVersion, MAX_SDK_VERSION_LENGTH),
       fingerprint: computeClientErrorFingerprint(feature, message, code),
     },
   };
@@ -244,6 +252,8 @@ export function buildClientErrorReportDocument(
     osVersion: report.osVersion,
     deviceModel: report.deviceModel,
     platform: report.platform,
+    buildNumber: report.buildNumber,
+    sdkVersion: report.sdkVersion,
     fingerprint: report.fingerprint,
     githubIssueStatus: 'pending' as GitHubIssueStatus,
     githubIssueNumber: null,
@@ -269,6 +279,8 @@ export function buildClientErrorAuditDetails(report: ClientErrorReport): Record<
     appVersion: report.appVersion,
     osVersion: report.osVersion,
     deviceModel: report.deviceModel,
+    buildNumber: report.buildNumber,
+    sdkVersion: report.sdkVersion,
     fingerprint: report.fingerprint,
   };
 }
@@ -407,6 +419,8 @@ export function buildClientErrorIssueBody(
     `- App version: ${field(report.appVersion)}`,
     `- OS version: ${field(report.osVersion)}`,
     `- Device model: ${field(report.deviceModel)}`,
+    `- Build number: ${field(report.buildNumber)}`,
+    `- SDK version: ${field(report.sdkVersion)}`,
     `- Fingerprint: ${report.fingerprint}`,
     `- First seen: ${meta.firstSeenIso}`,
     `- Occurrences: ${meta.count}`,

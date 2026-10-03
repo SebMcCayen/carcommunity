@@ -359,7 +359,10 @@ struct MapHomeView: View {
                 MapboxStandardMap(
                     accessToken: accessToken,
                     surface: surface,
-                    locationProvider: locationProvider
+                    locationProvider: locationProvider,
+                    onFullFrameRendered: {
+                        _ = renderWatchdog.tick(milliseconds: 0, eligible: false, rendered: true)
+                    }
                 ) {
                     _ = renderWatchdog.tick(milliseconds: 0, eligible: false, rendered: true)
                     surface.markLoaded()
@@ -445,6 +448,7 @@ struct MapHomeView: View {
 @MainActor
 private struct MapboxStandardMap: View {
     let onLoaded: @MainActor () -> Void
+    let onFullFrameRendered: @MainActor () -> Void
     let surface: StubMapSurface
     let locationProvider: any LocationProvider
     @State private var viewport: Viewport
@@ -466,12 +470,14 @@ private struct MapboxStandardMap: View {
         accessToken: String,
         surface: StubMapSurface,
         locationProvider: any LocationProvider,
+        onFullFrameRendered: @escaping @MainActor () -> Void,
         onLoaded: @escaping @MainActor () -> Void
     ) {
         MapboxOptions.accessToken = accessToken
         self.surface = surface
         self.locationProvider = locationProvider
         self.onLoaded = onLoaded
+        self.onFullFrameRendered = onFullFrameRendered
         _viewport = State(initialValue: .camera(
             center: .init(latitude: 57.4872, longitude: 12.0761),
             zoom: surface.browsingZoom,
@@ -519,6 +525,11 @@ private struct MapboxStandardMap: View {
                     meFollowEnabled: $meFollowEnabled,
                     meFollowSuspended: $meFollowSuspended
                 )
+            }
+            .onRenderFrameFinished { event in
+                if event.renderMode == .full {
+                    onFullFrameRendered()
+                }
             }
             .onCameraChanged { context in
                 let state = context.cameraState

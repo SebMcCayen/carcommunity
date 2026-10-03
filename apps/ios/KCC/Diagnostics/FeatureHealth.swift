@@ -56,7 +56,7 @@ enum FeatureHealthSuppression: Equatable, Sendable {
 }
 
 enum FeatureHealthDecision: Equatable, Sendable {
-    case report(feature: String, message: String, code: String)
+    case report(feature: String, message: String, code: String, context: ClientErrorContext)
     case suppress(FeatureHealthSuppression)
 }
 
@@ -85,15 +85,17 @@ final class FeatureHealthGate: @unchecked Sendable {
             let version = Self.sanitizedVersion(environment.appVersion)
             let message = [
                 kind.summary,
-                "maps=\(environment.mapboxSDKVersion)",
                 "os=\(DiagnosticsSanitizer.message(environment.osVersion))",
-                "build=\(DiagnosticsSanitizer.message(environment.buildNumber))",
                 "tokenPresent=\(environment.accessTokenPresent)"
             ].joined(separator: " | ")
             return .report(
                 feature: kind.feature,
                 message: message,
-                code: "\(kind.codePrefix)@\(version)"
+                code: "\(kind.codePrefix)@\(version)",
+                context: .init(
+                    buildNumber: environment.buildNumber,
+                    sdkVersion: environment.mapboxSDKVersion
+                )
             )
         }
     }
@@ -218,8 +220,8 @@ final class FeatureHealthReporter: @unchecked Sendable {
             foreground: foreground,
             surfaceShown: surfaceShown
         ))
-        if case .report(let feature, let message, let code) = decision {
-            errorReporter.report(feature: feature, message: message, code: code)
+        if case .report(let feature, let message, let code, let context) = decision {
+            errorReporter.report(feature: feature, message: message, code: code, context: context)
         }
         return decision
     }

@@ -39,13 +39,17 @@ final class FeatureHealthTests: XCTestCase {
             )),
             .suppress(.backgrounded)
         )
-        guard case .report(let feature, let message, let code) = gate.decide(
+        guard case .report(let feature, let message, let code, let context) = gate.decide(
             .mapRenderTimeout,
             conditions: .init(online: true, foreground: true, surfaceShown: true)
         ) else { return XCTFail("Expected a report") }
         XCTAssertEqual(feature, "mapHealth.renderTimeout")
         XCTAssertEqual(code, "MAP_RENDER_TIMEOUT@1.2.3beta")
         XCTAssertTrue(message.contains("tokenPresent=true"))
+        XCTAssertFalse(message.contains("maps="))
+        XCTAssertFalse(message.contains("build="))
+        XCTAssertEqual(context.buildNumber, "42")
+        XCTAssertEqual(context.sdkVersion, "11.26.0")
         XCTAssertFalse(message.contains("pk."))
     }
 
