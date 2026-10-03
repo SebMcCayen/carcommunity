@@ -26,11 +26,11 @@ final class UserDefaultsSavedPlacesStore: SavedPlacesStore {
     func load() -> [SavedPlace] {
         guard let data = defaults.data(forKey: key),
               let decoded = try? JSONDecoder().decode(
-                [LossyDecodable<SavedPlace>].self,
+                [LossyDecodable<PersistedSavedPlace>].self,
                 from: data
               )
         else { return [] }
-        return SavedPlacesPolicy.normalize(decoded.compactMap(\.value))
+        return SavedPlacesPolicy.normalize(decoded.compactMap { $0.value?.savedPlace })
     }
 
     func save(_ places: [SavedPlace]) {
@@ -40,8 +40,36 @@ final class UserDefaultsSavedPlacesStore: SavedPlacesStore {
     }
 }
 
-/// Decodes one array element independently so a stale future kind or a single
-/// malformed field cannot discard every valid saved place for the account.
+/// The on-device wire shape is intentionally more tolerant than the runtime
+/// model. Android preserves an otherwise valid place from a newer build by
+/// degrading an absent or unknown shortcut kind to Favourite; iOS must do the
+/// same so a future enum case cannot erase a member's saved location.
+private struct PersistedSavedPlace: Decodable {
+    let kind: SavedPlaceKind
+    let label: String
+    let place: PlaceSuggestion
+
+    private enum CodingKeys: String, CodingKey {
+        case kind
+        case label
+        case place
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        let rawKind = try values.decodeIfPresent(String.self, forKey: .kind)
+        kind = rawKind.flatMap(SavedPlaceKind.init(rawValue:)) ?? .favourite
+        label = try values.decode(String.self, forKey: .label)
+        place = try values.decode(PlaceSuggestion.self, forKey: .place)
+    }
+
+    var savedPlace: SavedPlace? {
+        SavedPlacesPolicy.create(kind: kind, place: place, label: label)
+    }
+}
+
+/// Decodes one array element independently so a single malformed field cannot
+/// discard every valid saved place for the account.
 private struct LossyDecodable<Value: Decodable>: Decodable {
     let value: Value?
 

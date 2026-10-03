@@ -1724,7 +1724,14 @@ struct ShellView: View {
         for await fix in locationProvider.fixes() {
             if Task.isCancelled { return }
             let point = MapPoint(longitude: fix.longitude, latitude: fix.latitude)
-            savedPlacesProximity = SavedPlacesPolicy.isValid(point: point) ? point : nil
+            guard SavedPlacesPolicy.isValid(point: point) else { continue }
+            savedPlacesProximity = point
+            if let savedPlacesCoordinator, !savedPlacesCoordinator.query.isEmpty {
+                savedPlacesCoordinator.updateQuery(savedPlacesCoordinator.query, proximity: point)
+            }
+            // One bias point is sufficient. Ending iteration releases this
+            // feature's location demand instead of running GPS for the route.
+            return
         }
     }
 

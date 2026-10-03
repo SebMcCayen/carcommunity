@@ -136,17 +136,40 @@ final class SavedPlacesTests: XCTestCase {
         let validHome = try JSONSerialization.jsonObject(with: encoder.encode(home))
         let validFavourite = try JSONSerialization.jsonObject(with: encoder.encode(favourite))
         let malformed: [String: Any] = [
-            "id": "future",
+            "label": "Malformed",
+            "place": ["id": "malformed"]
+        ]
+        let futureKind: [String: Any] = [
             "kind": "future_kind",
-            "label": "Unknown",
-            "place": ["id": "future"]
+            "label": "Future",
+            "place": [
+                "id": "future",
+                "name": "Future",
+                "point": ["longitude": 14, "latitude": 59]
+            ]
+        ]
+        let missingKind: [String: Any] = [
+            "label": "Legacy",
+            "place": [
+                "id": "legacy",
+                "name": "Legacy",
+                "point": ["longitude": 15, "latitude": 60]
+            ]
         ]
         defaults.set(
-            try JSONSerialization.data(withJSONObject: [validHome, malformed, validFavourite]),
+            try JSONSerialization.data(withJSONObject: [
+                validHome,
+                malformed,
+                futureKind,
+                missingKind,
+                validFavourite
+            ]),
             forKey: key
         )
 
-        XCTAssertEqual(store.load(), [home, favourite])
+        let recovered = store.load()
+        XCTAssertEqual(recovered.map(\.id), [home.id, "fav:future", "fav:legacy", favourite.id])
+        XCTAssertEqual(recovered.map(\.kind), [.home, .favourite, .favourite, .favourite])
     }
 
     func testShareURLIsHTTPSAndKeepsCoordinatesInQuery() throws {
