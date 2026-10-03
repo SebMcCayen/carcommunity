@@ -15,11 +15,13 @@ struct UnavailableAddressSearchClient: AddressSearchClient {
     }
 }
 
-/// Search Box compatible forward geocoding over the public Mapbox token already
+/// One-off text search through Mapbox Search Box `/forward`, which returns POIs
+/// and businesses as well as addresses. It uses the public Mapbox token already
 /// used by Mapbox Maps. A missing token never creates this client, preserving
 /// config-less builds and preventing accidental tokenless network traffic.
 struct MapboxAddressSearchClient: AddressSearchClient {
     static let maximumResponseBytes = 1_000_000
+    static let fallbackProximity = MapPoint(longitude: 12.0730, latitude: 57.4874)
 
     private let token: String
     private let language: String
@@ -52,22 +54,31 @@ struct MapboxAddressSearchClient: AddressSearchClient {
     }
 
     func requestURL(query: String, proximity: MapPoint?) -> URL? {
-        var components = URLComponents(string: "https://api.mapbox.com/search/geocode/v6/forward")
+        let query = SavedPlacesPolicy.normalizedQuery(query)
+        guard !query.isEmpty, token.hasPrefix("pk.") else { return nil }
+        var components = URLComponents(string: "https://api.mapbox.com/search/searchbox/v1/forward")
         var items = [
             URLQueryItem(name: "q", value: query),
             URLQueryItem(name: "access_token", value: token),
-            URLQueryItem(name: "autocomplete", value: "true"),
-            // Selected results are persisted as saved places. Mapbox requires
-            // permanent geocoding rather than its default temporary mode.
-            URLQueryItem(name: "permanent", value: "true"),
-            URLQueryItem(name: "limit", value: String(SavedPlacesPolicy.maximumSearchResults)),
-            URLQueryItem(name: "language", value: language)
+            URLQueryItem(name: "limit", value: String(SavedPlacesPolicy.maximumSearchResults))
         ]
-        if let proximity, SavedPlacesPolicy.isValid(point: proximity) {
-            items.append(URLQueryItem(
-                name: "proximity",
-                value: "\(proximity.longitude),\(proximity.latitude)"
-            ))
+        let language = SavedPlacesPolicy.bounded(
+            language.trimmingCharacters(in: .whitespacesAndNewlines),
+            to: 35
+        )
+        if !language.isEmpty {
+            items.append(URLQueryItem(name: "language", value: language))
+        }
+        let liveProximity = proximity.flatMap {
+            SavedPlacesPolicy.isValid(point: $0) ? $0 : nil
+        }
+        let bias = liveProximity ?? Self.fallbackProximity
+        items.append(URLQueryItem(
+            name: "proximity",
+            value: "\(bias.longitude),\(bias.latitude)"
+        ))
+        if liveProximity == nil {
+            items.append(URLQueryItem(name: "country", value: "SE"))
         }
         components?.queryItems = items
         return components?.url
@@ -75,7 +86,7 @@ struct MapboxAddressSearchClient: AddressSearchClient {
 
     static func decode(data: Data) throws -> [PlaceSuggestion] {
         guard data.count <= maximumResponseBytes else { throw AddressSearchError.invalidResponse }
-        let response = try JSONDecoder().decode(GeocodingResponse.self, from: data)
+        let response = try JSONDecoder().decode(SearchBoxResponse.self, from: data)
         var seen = Set<String>()
         var suggestions: [PlaceSuggestion] = []
         for feature in response.features {
@@ -117,21 +128,21 @@ struct MapboxAddressSearchClient: AddressSearchClient {
     }
 }
 
-private struct GeocodingResponse: Decodable {
-    let features: [GeocodingFeature]
+private struct SearchBoxResponse: Decodable {
+    let features: [SearchBoxFeature]
 }
 
-private struct GeocodingFeature: Decodable {
+private struct SearchBoxFeature: Decodable {
     let id: String?
-    let geometry: GeocodingGeometry
-    let properties: GeocodingProperties
+    let geometry: SearchBoxGeometry
+    let properties: SearchBoxProperties
 }
 
-private struct GeocodingGeometry: Decodable {
+private struct SearchBoxGeometry: Decodable {
     let coordinates: [Double]
 }
 
-private struct GeocodingProperties: Decodable {
+private struct SearchBoxProperties: Decodable {
     let mapboxID: String?
     let name: String?
     let fullAddress: String?

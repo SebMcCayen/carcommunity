@@ -125,18 +125,71 @@ final class SavedPlacesTests: XCTestCase {
         XCTAssertEqual(name, SavedPlacesPolicy.bounded(scalarHeavyName, to: 160))
     }
 
-    func testGeocoderRequestIsBoundedAndUsesValidProximity() throws {
+    func testSearchBoxRequestIsBoundedAndUsesValidProximity() throws {
         let client = MapboxAddressSearchClient(token: "pk.test", language: "sv")
         let url = try XCTUnwrap(client.requestURL(
-            query: "Kungsbacka",
+            query: String(repeating: "a", count: 500),
             proximity: MapPoint(longitude: 12.08, latitude: 57.49)
         ))
-        let items = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let items = try XCTUnwrap(components.queryItems)
 
+        XCTAssertEqual(components.path, "/search/searchbox/v1/forward")
+        XCTAssertEqual(
+            items.first(where: { $0.name == "q" })?.value?.unicodeScalars.count,
+            SavedPlacesPolicy.maximumQueryLength
+        )
         XCTAssertEqual(items.first(where: { $0.name == "limit" })?.value, "6")
-        XCTAssertEqual(items.first(where: { $0.name == "permanent" })?.value, "true")
         XCTAssertEqual(items.first(where: { $0.name == "proximity" })?.value, "12.08,57.49")
         XCTAssertEqual(items.first(where: { $0.name == "language" })?.value, "sv")
+        XCTAssertNil(items.first(where: { $0.name == "country" }))
+        XCTAssertNil(items.first(where: { $0.name == "types" }))
+        XCTAssertNil(items.first(where: { $0.name == "permanent" }))
+        XCTAssertNil(items.first(where: { $0.name == "autocomplete" }))
+    }
+
+    func testSearchBoxRequestUsesHomeBiasWithoutLiveProximity() throws {
+        let client = MapboxAddressSearchClient(token: "pk.test", language: "sv")
+        let url = try XCTUnwrap(client.requestURL(query: "Kungsmässan", proximity: nil))
+        let items = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+
+        XCTAssertEqual(items.first(where: { $0.name == "proximity" })?.value, "12.073,57.4874")
+        XCTAssertEqual(items.first(where: { $0.name == "country" })?.value, "SE")
+    }
+
+    func testSearchBoxDoesNotBuildTokenlessOrBlankRequests() {
+        let unavailable = MapboxAddressSearchClient(token: "", language: "sv")
+        let malformed = MapboxAddressSearchClient(token: "sk.secret", language: "sv")
+        let available = MapboxAddressSearchClient(token: "pk.test", language: "sv")
+
+        XCTAssertNil(unavailable.requestURL(query: "Kungsmässan", proximity: nil))
+        XCTAssertNil(malformed.requestURL(query: "Kungsmässan", proximity: nil))
+        XCTAssertNil(available.requestURL(query: "   ", proximity: nil))
+    }
+
+    func testSearchBoxDecodesPOIAndBusinessResult() throws {
+        let data = Data("""
+        {"type":"FeatureCollection","features":[{
+          "type":"Feature",
+          "geometry":{"type":"Point","coordinates":[12.0757,57.4874]},
+          "properties":{
+            "mapbox_id":"poi.kungsmassan",
+            "feature_type":"poi",
+            "name":"Kungsmässan",
+            "full_address":"Borgmästaregatan 5, 434 32 Kungsbacka",
+            "poi_category":["shopping_mall"]
+          }
+        }]}
+        """.utf8)
+
+        let decoded = try MapboxAddressSearchClient.decode(data: data)
+
+        XCTAssertEqual(decoded, [PlaceSuggestion(
+            id: "poi.kungsmassan",
+            name: "Kungsmässan",
+            address: "Borgmästaregatan 5, 434 32 Kungsbacka",
+            point: MapPoint(longitude: 12.0757, latitude: 57.4874)
+        )])
     }
 
     func testGeocoderDropsInvalidFeaturesAndCapsResults() throws {
