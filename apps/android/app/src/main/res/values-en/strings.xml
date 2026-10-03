@@ -212,6 +212,8 @@
     <string name="privacySettings_leaderboardExplainer">On: you appear on the leaderboard in the app and on the website. Off: you\'re hidden from both.</string>
     <string name="privacySettings_saveButton">Save</string>
     <string name="privacySettings_loading">Saving...</string>
+    <string name="privacySettings_unavailable">Privacy settings are unavailable right now.</string>
+    <string name="privacySettings_retry">Try again</string>
     <string name="privacySettings_error">Something went wrong. Please try again.</string>
     <string name="privacySettings_saved">Saved.</string>
     <string name="subscription_teaserTitle">Membership</string>

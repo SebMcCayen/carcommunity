@@ -62,6 +62,7 @@ struct ShellView: View {
     @State private var notificationSettingsCoordinator: NotificationSettingsCoordinator?
     @State private var notificationSettingsAvailable = false
     @State private var blockedUsersAvailable = false
+    @State private var privacySettingsCoordinator: PrivacySettingsCoordinator?
     @State private var friendsCoordinator: FriendsCoordinator?
     @State private var conversationsCoordinator: ConversationsCoordinator?
     @State private var chatHubCoordinator: ChatHubCoordinator?
@@ -132,10 +133,18 @@ struct ShellView: View {
             }
             .onChange(of: access) { _, access in
                 partnersCoordinator?.updateAccess(access)
+                if !partnerStatsEntryAvailable, routes.current == .partnerStats {
+                    routes = routes.poppingOne()
+                }
             }
             .onChange(of: featureFlags.isEnabled(.partners)) { _, enabled in
                 if !enabled, routes.current == .partners {
                     partnersCoordinator?.clearSensitiveOfferState()
+                    routes = routes.poppingOne()
+                }
+            }
+            .onChange(of: featureFlags.isEnabled(.partnerStats)) { _, enabled in
+                if !enabled, routes.current == .partnerStats {
                     routes = routes.poppingOne()
                 }
             }
@@ -611,6 +620,13 @@ struct ShellView: View {
             } label: {
                 Label("settingsMenu.title", systemImage: "gearshape")
             }
+            if partnerStatsEntryAvailable {
+                Button {
+                    routes = routes.opening(.partnerStats)
+                } label: {
+                    Label("shell.morePartnerStats", systemImage: "hand.raised")
+                }
+            }
         } label: {
             Label("shell.moreProfile", systemImage: "person.circle")
                 .labelStyle(.iconOnly)
@@ -760,6 +776,14 @@ struct ShellView: View {
         case .settings:
             routeNavigation {
                 SettingsScreen(actions: settingsActions)
+            }
+        case .partnerStats:
+            if partnerStatsEntryAvailable, let privacySettingsCoordinator {
+                routeNavigation {
+                    PrivacySettingsScreen(coordinator: privacySettingsCoordinator)
+                }
+            } else {
+                unavailableRoute
             }
         case .friends:
             routeNavigation {
@@ -1411,6 +1435,10 @@ struct ShellView: View {
             repository: notificationSettingsRepository,
             uid: uid
         )
+        privacySettingsCoordinator = PrivacySettingsCoordinator(
+            repository: FirebasePrivacySettingsRepository.createIfAvailable(),
+            uid: uid
+        )
         friendsCoordinator = friends.map {
             FriendsCoordinator(
                 repository: $0,
@@ -1698,6 +1726,14 @@ struct ShellView: View {
 
     private var liveLocationFeatureEnabled: Bool {
         crownHuntComposition?.flags.liveLocationEnabled == true
+    }
+
+    private var partnerStatsEntryAvailable: Bool {
+        ShellNavigation.partnerStatsEntryAvailable(
+            flags: featureFlags,
+            access: access,
+            repositoryAvailable: privacySettingsCoordinator?.isAvailable == true
+        )
     }
 
     private var convoyAwarenessTargetConvoy: ConvoyItem? {
