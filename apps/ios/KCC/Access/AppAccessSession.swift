@@ -74,6 +74,14 @@ final class AppAccessSession {
         }
     }
 
+    /// Returns access only when it belongs to the requested auth identity.
+    /// SwiftUI starts the bind task after rendering, so an account replacement
+    /// can otherwise render one frame of the previous user's access state.
+    func accountState(for uid: String) -> AccountAccessState {
+        guard self.uid == uid else { return .loading }
+        return accountState
+    }
+
     func refreshFlags() async {
         guard uid != nil, let flagsRepository else { return }
         do { flags = try await flagsRepository.fetch() } catch {
