@@ -20,6 +20,7 @@ struct ShellView: View {
     let authenticatedUid: String?
     let access: AccountAccess
     let featureFlags: FeatureFlags
+    let diagnostics: IOSDiagnosticsComposition
 
     @State private var selectedTab: ShellTab = .defaultTab
     /// The full-screen sub-route back-stack, held as the ONE pure value from
@@ -32,6 +33,7 @@ struct ShellView: View {
         authenticatedUid: String?,
         access: AccountAccess,
         featureFlags: FeatureFlags,
+        diagnostics: IOSDiagnosticsComposition,
         initialRoute: ShellRoute? = nil,
         initialTab: ShellTab? = nil
     ) {
@@ -39,6 +41,7 @@ struct ShellView: View {
         self.authenticatedUid = authenticatedUid
         self.access = access
         self.featureFlags = featureFlags
+        self.diagnostics = diagnostics
         _selectedTab = State(initialValue: initialTab ?? .defaultTab)
         _routes = State(initialValue: initialRoute.map { .empty.opening($0) } ?? .empty)
     }
@@ -51,7 +54,6 @@ struct ShellView: View {
     /// effect below), never recreate it.
     @State private var mapSurface = StubMapSurface()
     @State private var mapLayerPreferences = MapLayerPreferences()
-    @State private var diagnostics = IOSDiagnosticsComposition()
     @State private var showMapLayers = false
 
     /// Feature coordinators are composed once for the signed-in shell. Every
@@ -1791,6 +1793,7 @@ extension ShellTab {
         session: AuthSession(repository: nil),
         authenticatedUid: nil,
         access: .unrestrictedCommunity,
-        featureFlags: .contractDefaults
+        featureFlags: .contractDefaults,
+        diagnostics: IOSDiagnosticsComposition()
     )
 }

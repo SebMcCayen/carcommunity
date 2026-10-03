@@ -43,6 +43,9 @@ final class DiagnosticsTests: XCTestCase {
         var input: [String: DiagnosticsMetadataValue] = [
             "accessToken": .string("secret"),
             "latitude": .number(57.1),
+            "lat": .number(57.1),
+            "lng": .number(12.1),
+            "lon": .number(12.1),
             "stackSummary": .string("trace"),
             "safe": .string("person@example.com attempt 99"),
             "online": .bool(true),
@@ -54,10 +57,29 @@ final class DiagnosticsTests: XCTestCase {
         XCTAssertNotNil(sanitized)
         XCTAssertNil(sanitized?["accessToken"])
         XCTAssertNil(sanitized?["latitude"])
+        XCTAssertNil(sanitized?["lat"])
+        XCTAssertNil(sanitized?["lng"])
+        XCTAssertNil(sanitized?["lon"])
         XCTAssertNil(sanitized?["stackSummary"])
         XCTAssertNil(sanitized?["notFinite"])
         XCTAssertLessThanOrEqual(sanitized?.count ?? 0, 20)
         XCTAssertEqual(sanitized?["safe"], .string("<email> attempt <n>"))
+    }
+
+    func testBoundsMatchBackendUTF16LimitsWithoutSplittingScalars() {
+        let report = DiagnosticsReport(
+            severity: .error,
+            featureArea: .unknown,
+            safeMessage: String(repeating: "🚗", count: 1_100),
+            appVersion: String(repeating: "🚗", count: 40),
+            metadata: ["safe": .string(String(repeating: "🚗", count: 400))]
+        )
+        XCTAssertEqual(report.safeMessage.utf16.count, 2_000)
+        XCTAssertEqual(report.appVersion?.utf16.count, 50)
+        guard case .string(let metadataValue) = report.metadata?["safe"] else {
+            return XCTFail("Expected string metadata")
+        }
+        XCTAssertEqual(metadataValue.utf16.count, 500)
     }
 
     func testDiagnosticsPayloadMatchesCallableContract() {

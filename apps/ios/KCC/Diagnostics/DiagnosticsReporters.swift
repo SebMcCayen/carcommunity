@@ -106,9 +106,9 @@ final class FirebaseClientErrorReporter: ClientErrorReporter, @unchecked Sendabl
         var payload: [String: Any] = [
             "feature": feature,
             "message": DiagnosticsSanitizer.message(message),
-            "appVersion": String(environment.appVersion.prefix(50)),
-            "osVersion": String(environment.osVersion.prefix(100)),
-            "deviceModel": String(environment.deviceModel.prefix(100)),
+            "appVersion": DiagnosticsSanitizer.prefixByUTF16(environment.appVersion, maximum: 50),
+            "osVersion": DiagnosticsSanitizer.prefixByUTF16(environment.osVersion, maximum: 100),
+            "deviceModel": DiagnosticsSanitizer.prefixByUTF16(environment.deviceModel, maximum: 100),
             "platform": "ios"
         ]
         if let code = DiagnosticsSanitizer.errorCode(code) { payload["code"] = code }

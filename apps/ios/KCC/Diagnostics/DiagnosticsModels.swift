@@ -68,7 +68,7 @@ struct DiagnosticsEnvironment: Equatable, Sendable {
     }
 
     private static func bounded(_ value: String?, maximum: Int) -> String {
-        String((value ?? "unknown").prefix(maximum))
+        DiagnosticsSanitizer.prefixByUTF16(value ?? "unknown", maximum: maximum)
     }
 }
 
@@ -85,6 +85,22 @@ enum DiagnosticsSanitizer {
         "stack", "trace", "latitude", "longitude", "coords", "coordinates",
         "location", "position"
     ]
+    private static let blockedExactKeys: Set<String> = ["lat", "lng", "lon"]
+
+    /// JavaScript/Zod bounds strings in UTF-16 code units. Match that contract
+    /// without cutting a Unicode scalar in half.
+    static func prefixByUTF16(_ value: String, maximum: Int) -> String {
+        guard maximum > 0 else { return "" }
+        var result = ""
+        var used = 0
+        for scalar in value.unicodeScalars {
+            let width = scalar.value > 0xFFFF ? 2 : 1
+            guard used + width <= maximum else { break }
+            result.unicodeScalars.append(scalar)
+            used += width
+        }
+        return result
+    }
 
     /// Produces a bounded single-line message with common PII/secret carriers
     /// redacted. Digit runs are masked, which also prevents exact coordinates,
@@ -108,7 +124,10 @@ enum DiagnosticsSanitizer {
             )
         }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return String((trimmed.isEmpty ? fallback : trimmed).prefix(maximumMessageLength))
+        return prefixByUTF16(
+            trimmed.isEmpty ? fallback : trimmed,
+            maximum: maximumMessageLength
+        )
     }
 
     static func errorCode(_ raw: String?) -> String? {
@@ -131,14 +150,19 @@ enum DiagnosticsSanitizer {
         for key in input.keys.sorted() {
             guard result.count < maximumMetadataCount,
                 !key.isEmpty,
-                key.count <= maximumMetadataKeyLength
+                key.utf16.count <= maximumMetadataKeyLength
             else { continue }
             let lower = key.lowercased()
-            guard !blockedKeyFragments.contains(where: lower.contains) else { continue }
+            guard !blockedExactKeys.contains(lower),
+                  !blockedKeyFragments.contains(where: lower.contains)
+            else { continue }
             guard let value = input[key] else { continue }
             switch value {
             case .string(let raw):
-                result[key] = .string(String(message(raw).prefix(maximumMetadataValueLength)))
+                result[key] = .string(prefixByUTF16(
+                    message(raw),
+                    maximum: maximumMetadataValueLength
+                ))
             case .number(let number):
                 guard number.isFinite else { continue }
                 result[key] = .number(number)
@@ -175,9 +199,9 @@ struct DiagnosticsReport: Equatable, Sendable {
         self.featureArea = featureArea
         self.safeMessage = DiagnosticsSanitizer.message(safeMessage)
         self.errorCode = DiagnosticsSanitizer.errorCode(errorCode)
-        self.appVersion = appVersion.map { String($0.prefix(50)) }
-        self.buildNumber = buildNumber.map { String($0.prefix(50)) }
-        self.osVersion = osVersion.map { String($0.prefix(100)) }
+        self.appVersion = appVersion.map { DiagnosticsSanitizer.prefixByUTF16($0, maximum: 50) }
+        self.buildNumber = buildNumber.map { DiagnosticsSanitizer.prefixByUTF16($0, maximum: 50) }
+        self.osVersion = osVersion.map { DiagnosticsSanitizer.prefixByUTF16($0, maximum: 100) }
         self.metadata = DiagnosticsSanitizer.metadata(metadata)
     }
 
