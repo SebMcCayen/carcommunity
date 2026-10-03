@@ -23,7 +23,6 @@ private struct ChangelogDocument: Decodable {
 }
 
 enum Changelog {
-    static let pageEntryLimit = 10
     static let popupHighlightLimit = 3
 
     static func parse(_ data: Data) -> [ChangelogEntry] {
@@ -40,11 +39,6 @@ enum Changelog {
             }
             .filter { seen.insert($0.buildNumber).inserted }
         return uniqueEntries.sorted { $0.buildNumber > $1.buildNumber }
-    }
-
-    static func latestEntries(_ entries: [ChangelogEntry], limit: Int = pageEntryLimit) -> [ChangelogEntry] {
-        guard limit > 0 else { return [] }
-        return Array(entries.sorted { $0.buildNumber > $1.buildNumber }.prefix(limit))
     }
 
     static func announcement(
