@@ -226,15 +226,16 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
 
     static func acceptsMapboxConnectivityResponse(
         _ response: URLResponse?,
-        error: Error?
+        error _: Error?
     ) -> Bool {
-        guard error == nil,
-              let response = response as? HTTPURLResponse,
+        guard let response = response as? HTTPURLResponse,
               response.url?.host == "api.mapbox.com"
         else {
             return false
         }
-        return (200..<500).contains(response.statusCode)
+        // Any HTTP response from the expected host proves that the device reached the
+        // internet. Server errors must not suppress Mapbox outage diagnostics.
+        return true
     }
 
     private func validateConnectivityIfNeeded() {

@@ -141,7 +141,9 @@ enum DiagnosticsSanitizer {
 
     static func errorCode(_ raw: String?) -> String? {
         guard let raw else { return nil }
-        let kept = raw.filter { $0.isASCII && ($0.isLetter || $0.isNumber || "._-".contains($0)) }
+        let kept = raw.filter {
+            $0.isASCII && ($0.isLetter || $0.isNumber || "._-@".contains($0))
+        }
         return kept.isEmpty ? nil : String(kept.prefix(100))
     }
 

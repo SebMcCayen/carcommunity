@@ -121,6 +121,17 @@ final class DiagnosticsTests: XCTestCase {
         XCTAssertEqual((payload["metadata"] as? [String: Any])?["online"] as? Bool, false)
     }
 
+    func testDiagnosticsPayloadPreservesVersionedErrorCodeSeparator() {
+        let report = DiagnosticsReport(
+            severity: .error,
+            featureArea: .map,
+            safeMessage: "Map did not render",
+            errorCode: "MAP_RENDER_TIMEOUT@1.2.3"
+        )
+
+        XCTAssertEqual(report.payload["errorCode"] as? String, "MAP_RENDER_TIMEOUT@1.2.3")
+    }
+
     func testCrashReportNeverContainsRawDescriptionOrStackTrace() {
         let report = DiagnosticsReport.from(
             error: SensitiveError(),
@@ -186,6 +197,29 @@ final class DiagnosticsTests: XCTestCase {
         XCTAssertFalse(message?.contains("user@example.com") == true)
         XCTAssertFalse(message?.contains("57.123") == true)
         XCTAssertFalse(message?.contains("secret") == true)
+    }
+
+    func testAuthenticatedErrorReporterPreservesVersionedErrorCodeSeparator() async {
+        let callable = RecordingCallable()
+        let reporter = FirebaseClientErrorReporter(
+            client: callable,
+            environment: DiagnosticsEnvironment(
+                appVersion: "1.0", buildNumber: "2", osVersion: "iOS 18", deviceModel: "iPhone"
+            )
+        )
+
+        reporter.report(
+            feature: "mapHealth.renderTimeout",
+            message: "Map did not render",
+            code: "MAP_RENDER_TIMEOUT@1.2.3"
+        )
+
+        let deadline = Date().addingTimeInterval(1)
+        while callable.calls.isEmpty, Date() < deadline { await Task.yield() }
+        XCTAssertEqual(
+            callable.calls.first?.1["code"] as? String,
+            "MAP_RENDER_TIMEOUT@1.2.3"
+        )
     }
 
     func testNoopReportersAreSafe() {
