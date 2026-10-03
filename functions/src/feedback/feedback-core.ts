@@ -145,7 +145,8 @@ export function parseReportIssueInput(data: unknown): ParseResult<FeedbackReport
   if (!result.success) {
     return {
       ok: false,
-      message: 'Expected { description, summary?, appVersion?, osVersion?, deviceModel? }.',
+      message:
+        "Expected { description, summary?, appVersion?, osVersion?, deviceModel?, platform?: 'android'|'ios' }.",
     };
   }
 

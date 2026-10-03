@@ -41,10 +41,13 @@ struct FeedbackScreen: View {
                 Text("feedback.publicNotice")
                     .font(.subheadline)
             }
-            .foregroundStyle(.red)
+            .foregroundStyle(KccPalette.errorRed)
             .padding(KccSpacing.s4)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+            .background(
+                KccPalette.errorRed.opacity(0.1),
+                in: RoundedRectangle(cornerRadius: KccRadius.md)
+            )
 
             TextField("feedback.summaryLabel", text: $form.summary)
                 .textFieldStyle(.roundedBorder)

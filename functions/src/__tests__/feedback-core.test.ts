@@ -195,7 +195,12 @@ describe('feedback-core public GitHub issue', () => {
     expect(payload.title).toBe('[iOS] Broken');
     expect(payload.labels).toEqual(['ios-issue']);
     expect(buildFeedbackReportDocument(parsed.input, 'uid', () => 'TS').platform).toBe('ios');
-    expect(parseReportIssueInput({ description: 'Broken', platform: 'web' }).ok).toBe(false);
+    const unsupported = parseReportIssueInput({ description: 'Broken', platform: 'web' });
+    expect(unsupported).toEqual({
+      ok: false,
+      message:
+        "Expected { description, summary?, appVersion?, osVersion?, deviceModel?, platform?: 'android'|'ios' }.",
+    });
   });
 });
 
