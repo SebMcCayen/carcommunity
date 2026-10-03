@@ -889,7 +889,9 @@ struct ShellView: View {
             onNotificationSettings: notificationSettingsAvailable
                 ? { routes = routes.opening(.notificationSettings) } : nil,
             onBlockedUsers: blockedUsersAvailable
-                ? { routes = routes.opening(.blocked) } : nil
+                ? { routes = routes.opening(.blocked) } : nil,
+            onPartnerStats: partnerStatsEntryAvailable
+                ? { routes = routes.opening(.partnerStats) } : nil
         )
     }
 
