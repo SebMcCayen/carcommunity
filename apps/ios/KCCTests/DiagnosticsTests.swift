@@ -42,6 +42,10 @@ final class DiagnosticsTests: XCTestCase {
     func testMetadataDropsSensitiveKeysBoundsAndRedactsStringValues() {
         var input: [String: DiagnosticsMetadataValue] = [
             "accessToken": .string("secret"),
+            "apiKey": .string("secret"),
+            "api_key": .string("secret"),
+            "privateKey": .string("secret"),
+            "private_key": .string("secret"),
             "latitude": .number(57.1),
             "lat": .number(57.1),
             "lng": .number(12.1),
@@ -56,6 +60,10 @@ final class DiagnosticsTests: XCTestCase {
         let sanitized = DiagnosticsSanitizer.metadata(input)
         XCTAssertNotNil(sanitized)
         XCTAssertNil(sanitized?["accessToken"])
+        XCTAssertNil(sanitized?["apiKey"])
+        XCTAssertNil(sanitized?["api_key"])
+        XCTAssertNil(sanitized?["privateKey"])
+        XCTAssertNil(sanitized?["private_key"])
         XCTAssertNil(sanitized?["latitude"])
         XCTAssertNil(sanitized?["lat"])
         XCTAssertNil(sanitized?["lng"])
@@ -64,6 +72,18 @@ final class DiagnosticsTests: XCTestCase {
         XCTAssertNil(sanitized?["notFinite"])
         XCTAssertLessThanOrEqual(sanitized?.count ?? 0, 20)
         XCTAssertEqual(sanitized?["safe"], .string("<email> attempt <n>"))
+    }
+
+    func testMetadataCredentialKeyFilteringIsCaseInsensitive() {
+        let sanitized = DiagnosticsSanitizer.metadata([
+            "APIKEY": .string("secret"),
+            "API_KEY": .string("secret"),
+            "PRIVATEKEY": .string("secret"),
+            "PRIVATE_KEY": .string("secret"),
+            "safeKey": .string("safe")
+        ])
+
+        XCTAssertEqual(sanitized, ["safeKey": .string("safe")])
     }
 
     func testBoundsMatchBackendUTF16LimitsWithoutSplittingScalars() {

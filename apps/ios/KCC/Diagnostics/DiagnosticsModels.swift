@@ -85,7 +85,16 @@ enum DiagnosticsSanitizer {
         "stack", "trace", "latitude", "longitude", "coords", "coordinates",
         "location", "position"
     ]
-    private static let blockedExactKeys: Set<String> = ["lat", "lng", "lon"]
+    // Keep the backend's exact credential-key denylist at the client boundary
+    // too, so values never leave the device even when their key does not match
+    // one of the broader fragments above (notably apiKey and privateKey).
+    private static let blockedCredentialKeys: Set<String> = Set([
+        "token", "accessToken", "access_token", "refreshToken", "refresh_token",
+        "idToken", "id_token", "identityToken", "identity_token", "authorization",
+        "authorization_header", "cookie", "password", "secret", "apiKey", "api_key",
+        "privateKey", "private_key", "sessionToken", "session_token"
+    ].map { $0.lowercased() })
+    private static let blockedCoordinateKeys: Set<String> = ["lat", "lng", "lon"]
 
     /// JavaScript/Zod bounds strings in UTF-16 code units. Match that contract
     /// without cutting a Unicode scalar in half.
@@ -153,7 +162,8 @@ enum DiagnosticsSanitizer {
                 key.utf16.count <= maximumMetadataKeyLength
             else { continue }
             let lower = key.lowercased()
-            guard !blockedExactKeys.contains(lower),
+            guard !blockedCredentialKeys.contains(lower),
+                  !blockedCoordinateKeys.contains(lower),
                   !blockedKeyFragments.contains(where: lower.contains)
             else { continue }
             guard let value = input[key] else { continue }
