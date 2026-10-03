@@ -2,6 +2,10 @@ import XCTest
 @testable import KCC
 
 final class ChangelogTests: XCTestCase {
+    private struct FixedLoader: ChangelogLoading {
+        let entries: [ChangelogEntry]
+        func load() -> [ChangelogEntry] { entries }
+    }
     private func entry(_ build: Int) -> ChangelogEntry {
         ChangelogEntry(
             buildNumber: build,
@@ -45,6 +49,23 @@ final class ChangelogTests: XCTestCase {
         XCTAssertTrue(announcement.includesEarlierVersions)
     }
 
+    @MainActor
+    func testCoordinatorKeepsCompleteHistoryBeyondPageLimit() {
+        let suite = "ChangelogTests.completeHistory"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let expected = (1...12).reversed().map { entry($0) }
+        let coordinator = WhatsNewCoordinator(
+            loader: FixedLoader(entries: expected),
+            defaults: defaults,
+            currentBuild: 12
+        )
+
+        coordinator.start()
+
+        XCTAssertEqual(coordinator.entries, expected)
+    }
+
     func testBundledChangelogCoversShippingBuildAndVersion() throws {
         let testFile = URL(fileURLWithPath: #filePath)
         let module = testFile.deletingLastPathComponent().deletingLastPathComponent()
@@ -62,6 +83,19 @@ final class ChangelogTests: XCTestCase {
         XCTAssertFalse(shipping.highlightKeys.isEmpty)
         XCTAssertFalse(shipping.changeKeys.isEmpty)
         XCTAssertFalse(entries.contains { $0.buildNumber > build })
+
+        let catalogData = try Data(contentsOf: module.appendingPathComponent(
+            "KCC/Resources/Localizable.xcstrings"
+        ))
+        let catalog = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: catalogData) as? [String: Any]
+        )
+        let catalogKeys = try XCTUnwrap(catalog["strings"] as? [String: Any]).keys
+        let dynamicKeys = entries.flatMap { $0.highlightKeys + $0.changeKeys }
+        XCTAssertTrue(
+            dynamicKeys.allSatisfy { catalogKeys.contains($0) },
+            "Every dynamic changelog key must exist in Localizable.xcstrings"
+        )
     }
 }
 

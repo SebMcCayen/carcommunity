@@ -24447,6 +24447,23 @@
         }
       }
     },
+    "privacySettings.retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Försök igen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
+          }
+        }
+      }
+    },
     "privacySettings.saveButton": {
       "extractionState": "manual",
       "localizations": {
@@ -24494,6 +24511,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Privacy"
+          }
+        }
+      }
+    },
+    "privacySettings.unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Integritetsinställningarna är inte tillgängliga just nu."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacy settings are unavailable right now."
           }
         }
       }

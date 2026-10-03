@@ -31,15 +31,15 @@ enum Changelog {
             return []
         }
         var seen = Set<Int>()
-        return decoded.entries
+        let uniqueEntries = decoded.entries
             .filter {
                 $0.buildNumber > 0
                     && !$0.versionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     && !$0.releaseDate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     && !$0.changeKeys.isEmpty
             }
-            .sorted { $0.buildNumber > $1.buildNumber }
             .filter { seen.insert($0.buildNumber).inserted }
+        return uniqueEntries.sorted { $0.buildNumber > $1.buildNumber }
     }
 
     static func latestEntries(_ entries: [ChangelogEntry], limit: Int = pageEntryLimit) -> [ChangelogEntry] {
@@ -106,7 +106,7 @@ final class WhatsNewCoordinator {
     func start() {
         guard !started else { return }
         started = true
-        entries = Changelog.latestEntries(loader.load())
+        entries = loader.load()
         guard defaults.object(forKey: lastSeenKey) != nil else {
             defaults.set(currentBuild, forKey: lastSeenKey)
             return

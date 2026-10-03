@@ -240,6 +240,8 @@
     "leaderboardExplainer": "På: du visas på topplistan i appen och på webbplatsen. Av: du döljs på båda.",
     "saveButton": "Spara",
     "loading": "Sparar...",
+    "unavailable": "Integritetsinställningarna är inte tillgängliga just nu.",
+    "retry": "Försök igen",
     "error": "Något gick fel. Försök igen.",
     "saved": "Sparat."
   },
