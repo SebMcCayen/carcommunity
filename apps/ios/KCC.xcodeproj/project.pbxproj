@@ -319,6 +319,7 @@
 		FACE9EE74F3056EA7A628813 /* FriendsModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37C658B56DC49747902E120A /* FriendsModelsTests.swift */; };
 		FC445A8DCDA3904BB345B007 /* DriveRouteCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA32EA200DC4C0D1EB2B48C4 /* DriveRouteCodec.swift */; };
 		FD23EC6FF364E16C8D0A1F75 /* BadgesCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E7FE976EE5DC7267FA1B666 /* BadgesCoordinator.swift */; };
+		FDE3A9FBC027F6981371240C /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = AA77A62CE01440EDA8CC7227 /* FirebaseFunctions */; };
 		FE582215755EF34BD19A7EE7 /* MapSurfaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C0408D9A1BEFD4479399D14 /* MapSurfaceTests.swift */; };
 		FF36100B7B94F6556913B6C8 /* BlockingRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E99920BBC5150D83888EB05B /* BlockingRepository.swift */; };
 		FFAF1EAA160AFCF84E155B6C /* EventAttendeesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B00397E45AB94249025E8C0 /* EventAttendeesSheet.swift */; };
@@ -662,6 +663,14 @@
 				BF3D130F03E3B77E710907E7 /* FirebaseStorage in Frameworks */,
 				AFAB9CCD75BABA90B7C61130 /* FirebaseDatabase in Frameworks */,
 				613B8194B7824CF9011547F0 /* MapboxMaps in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C814E887867B1B6E616F4B83 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FDE3A9FBC027F6981371240C /* FirebaseFunctions in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1277,6 +1286,7 @@
 			buildConfigurationList = 69B0C4F08BB62A7ABA166EAF /* Build configuration list for PBXNativeTarget "KCCTests" */;
 			buildPhases = (
 				F4A1FD9246A22460A0BC78CE /* Sources */,
+				C814E887867B1B6E616F4B83 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -1285,6 +1295,7 @@
 			);
 			name = KCCTests;
 			packageProductDependencies = (
+				AA77A62CE01440EDA8CC7227 /* FirebaseFunctions */,
 			);
 			productName = KCCTests;
 			productReference = 5A1F61264065E19240C32A0D /* KCCTests.xctest */;
@@ -1946,6 +1957,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = C2463E4F930BC5BDBC34F663 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseStorage;
+		};
+		AA77A62CE01440EDA8CC7227 /* FirebaseFunctions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C2463E4F930BC5BDBC34F663 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFunctions;
 		};
 		B688C912C571A1CC3752D0B8 /* FirebaseFirestore */ = {
 			isa = XCSwiftPackageProductDependency;
