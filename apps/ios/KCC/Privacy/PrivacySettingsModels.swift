@@ -47,6 +47,21 @@ struct PrivacySettingsChoices: Equatable, Sendable {
 enum PrivacySettingsSnapshot: Equatable, Sendable {
     case loaded(PrivacySettingsChoices)
     case failed(code: String?)
+
+    /// Cache-only and locally pending snapshots are not authoritative privacy
+    /// state. Returning `nil` keeps the coordinator locked until Firestore has
+    /// confirmed the document with the server.
+    static func authoritative(
+        data: [String: Any]?,
+        isFromCache: Bool,
+        hasPendingWrites: Bool
+    ) -> PrivacySettingsSnapshot? {
+        guard !isFromCache, !hasPendingWrites else { return nil }
+        guard let choices = PrivacySettingsChoices.decode(data) else {
+            return .failed(code: nil)
+        }
+        return .loaded(choices)
+    }
 }
 
 /// PII-safe write failure. Firebase messages can contain project/document

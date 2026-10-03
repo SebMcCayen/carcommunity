@@ -15,18 +15,25 @@ final class FirebasePrivacySettingsRepository: PrivacySettingsRepository, @unche
     func settings(uid: String) -> AsyncStream<PrivacySettingsSnapshot> {
         let document = firestore.collection(Self.collection).document(uid)
         return AsyncStream { continuation in
-            let registration = document.addSnapshotListener { snapshot, error in
+            let registration = document.addSnapshotListener(
+                includeMetadataChanges: true
+            ) { snapshot, error in
                 if let error {
                     continuation.yield(
                         .failed(code: FirebaseEventsRepository.firestoreStatusName(error))
                     )
                     return
                 }
-                guard let choices = PrivacySettingsChoices.decode(snapshot?.data()) else {
+                guard let snapshot else {
                     continuation.yield(.failed(code: nil))
                     return
                 }
-                continuation.yield(.loaded(choices))
+                guard let authoritative = PrivacySettingsSnapshot.authoritative(
+                    data: snapshot.data(),
+                    isFromCache: snapshot.metadata.isFromCache,
+                    hasPendingWrites: snapshot.metadata.hasPendingWrites
+                ) else { return }
+                continuation.yield(authoritative)
             }
             let box = PrivacyListenerBox(registration: registration)
             continuation.onTermination = { _ in box.registration.remove() }

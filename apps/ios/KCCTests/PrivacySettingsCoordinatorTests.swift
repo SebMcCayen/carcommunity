@@ -78,6 +78,48 @@ final class PrivacySettingsCoordinatorTests: XCTestCase {
         XCTAssertNil(PrivacySettingsChoices.decode(["anonymousPartnerStatsOptIn": 1]))
     }
 
+    func testOnlyServerConfirmedSnapshotBecomesAuthoritative() {
+        let optedOut: [String: Any] = ["anonymousPartnerStatsOptIn": false]
+
+        XCTAssertNil(PrivacySettingsSnapshot.authoritative(
+            data: nil,
+            isFromCache: true,
+            hasPendingWrites: false
+        ))
+        XCTAssertNil(PrivacySettingsSnapshot.authoritative(
+            data: optedOut,
+            isFromCache: false,
+            hasPendingWrites: true
+        ))
+        XCTAssertEqual(
+            PrivacySettingsSnapshot.authoritative(
+                data: optedOut,
+                isFromCache: false,
+                hasPendingWrites: false
+            ),
+            .loaded(PrivacySettingsChoices(partnerStatsOptIn: false, leaderboardShown: true))
+        )
+    }
+
+    func testAuthoritativeMissingFieldsKeepBackendOptOutDefaultsButMalformedDataFails() {
+        XCTAssertEqual(
+            PrivacySettingsSnapshot.authoritative(
+                data: nil,
+                isFromCache: false,
+                hasPendingWrites: false
+            ),
+            .loaded(.contractDefaults)
+        )
+        XCTAssertEqual(
+            PrivacySettingsSnapshot.authoritative(
+                data: ["anonymousPartnerStatsOptIn": "false"],
+                isFromCache: false,
+                hasPendingWrites: false
+            ),
+            .failed(code: nil)
+        )
+    }
+
     @MainActor
     func testUnavailableWithoutRepositoryOrUid() {
         XCTAssertEqual(
