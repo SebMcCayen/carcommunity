@@ -35,20 +35,24 @@ struct SettingsActions {
     }
 
     var availableDestinations: Set<SettingsDestination> {
-        var destinations: Set<SettingsDestination> = []
-        if onManageSubscription != nil { destinations.insert(.subscription) }
-        if onSavedPlaces != nil { destinations.insert(.savedPlaces) }
-        if onNotificationSettings != nil { destinations.insert(.notificationSettings) }
-        if onBlockedUsers != nil { destinations.insert(.blockedUsers) }
-        if onPartnerStats != nil { destinations.insert(.partnerStats) }
-        if onFeedback != nil { destinations.insert(.feedback) }
-        if onDeleteAccount != nil { destinations.insert(.accountDeletion) }
-        if onWhatsNew != nil { destinations.insert(.whatsNew) }
-        return destinations
+        Set(SettingsDestination.allCases.filter { action(for: $0) != nil })
+    }
+
+    func action(for destination: SettingsDestination) -> (() -> Void)? {
+        switch destination {
+        case .subscription: return onManageSubscription
+        case .savedPlaces: return onSavedPlaces
+        case .notificationSettings: return onNotificationSettings
+        case .blockedUsers: return onBlockedUsers
+        case .partnerStats: return onPartnerStats
+        case .feedback: return onFeedback
+        case .accountDeletion: return onDeleteAccount
+        case .whatsNew: return onWhatsNew
+        }
     }
 }
 
-enum SettingsDestination: Hashable, Sendable {
+enum SettingsDestination: CaseIterable, Hashable, Sendable {
     case subscription
     case savedPlaces
     case notificationSettings
@@ -70,75 +74,79 @@ struct SettingsScreen: View {
             if !actions.availableDestinations.isDisjoint(with: accountDestinations) {
                 Section("settingsMenu.accountSection") {
                     destinationRow(
+                        destination: .subscription,
                         key: "settingsMenu.manageSubscription",
                         icon: "creditcard",
-                        identifier: "settings.subscription",
-                        action: actions.onManageSubscription
+                        identifier: "settings.subscription"
                     )
                     destinationRow(
+                        destination: .savedPlaces,
                         key: "settingsMenu.savedPlaces",
                         icon: "bookmark",
-                        identifier: "settings.savedPlaces",
-                        action: actions.onSavedPlaces
+                        identifier: "settings.savedPlaces"
                     )
                     destinationRow(
+                        destination: .notificationSettings,
                         key: "settingsMenu.notificationSettings",
                         icon: "bell.badge",
-                        identifier: "settings.notificationSettings",
-                        action: actions.onNotificationSettings
+                        identifier: "settings.notificationSettings"
                     )
                     destinationRow(
+                        destination: .blockedUsers,
                         key: "settings.blockedUsers",
                         icon: "person.crop.circle.badge.xmark",
-                        identifier: "settings.blockedUsers",
-                        action: actions.onBlockedUsers
+                        identifier: "settings.blockedUsers"
                     )
                     destinationRow(
+                        destination: .partnerStats,
                         key: "settingsMenu.partnerStats",
                         icon: "chart.bar",
-                        identifier: "settings.partnerStats",
-                        action: actions.onPartnerStats
+                        identifier: "settings.partnerStats"
                     )
                     destinationRow(
+                        destination: .feedback,
                         key: "settingsMenu.feedback",
                         icon: "exclamationmark.bubble",
-                        identifier: "settings.feedback",
-                        action: actions.onFeedback
+                        identifier: "settings.feedback"
                     )
                     destinationRow(
+                        destination: .accountDeletion,
                         key: "settingsMenu.deleteAccount",
                         icon: "trash",
                         identifier: "settings.accountDeletion",
-                        role: .destructive,
-                        action: actions.onDeleteAccount
+                        role: .destructive
                     )
                 }
             }
 
-            if actions.onWhatsNew != nil {
+            if actions.availableDestinations.contains(.whatsNew) {
                 Section("settingsMenu.aboutSection") {
                     destinationRow(
+                        destination: .whatsNew,
                         key: "settingsMenu.whatsNew",
                         icon: "sparkles",
-                        identifier: "settings.whatsNew",
-                        action: actions.onWhatsNew
+                        identifier: "settings.whatsNew"
                     )
                 }
             }
 
-            Section("settingsMenu.legalSection") {
+            Section {
                 legalLink(
                     title: "settingsMenu.privacy",
                     urlKey: "url.privacy",
+                    expectedPath: "/privacy",
                     icon: "lock.shield",
                     identifier: "settings.privacyPolicy"
                 )
                 legalLink(
                     title: "settingsMenu.terms",
                     urlKey: "url.terms",
+                    expectedPath: "/terms",
                     icon: "doc.text",
                     identifier: "settings.terms"
                 )
+            } header: {
+                Text("settingsMenu.legalSection")
             } footer: {
                 Text(versionText)
                     .frame(maxWidth: .infinity)
@@ -156,13 +164,13 @@ struct SettingsScreen: View {
 
     @ViewBuilder
     private func destinationRow(
+        destination: SettingsDestination,
         key: LocalizedStringKey,
         icon: String,
         identifier: String,
-        role: ButtonRole? = nil,
-        action: (() -> Void)?
+        role: ButtonRole? = nil
     ) -> some View {
-        if let action {
+        if let action = actions.action(for: destination) {
             Button(role: role, action: action) {
                 settingsLabel(key, icon: icon)
             }
@@ -174,11 +182,14 @@ struct SettingsScreen: View {
     private func legalLink(
         title: LocalizedStringKey,
         urlKey: String.LocalizationValue,
+        expectedPath: String,
         icon: String,
         identifier: String
     ) -> some View {
-        if let url = URL(string: String(localized: urlKey)),
-           let scheme = url.scheme?.lowercased(), ["https", "http"].contains(scheme) {
+        if let url = SettingsLegalLinkPolicy.validatedURL(
+            String(localized: urlKey),
+            expectedPath: expectedPath
+        ) {
             Link(destination: url) {
                 settingsLabel(title, icon: icon)
             }
@@ -200,6 +211,28 @@ struct SettingsScreen: View {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
             as? String ?? "–"
         return String(format: String(localized: "settingsMenu.version"), version)
+    }
+}
+
+enum SettingsLegalLinkPolicy {
+    private static let host = "kungsbacka-car-community.web.app"
+
+    /// Legal destinations are bundled localization data, but still cross an
+    /// app-to-browser trust boundary. Keep them on the canonical HTTPS origin
+    /// and exact document path so a malformed translation cannot create an
+    /// insecure or lookalike link.
+    static func validatedURL(_ raw: String, expectedPath: String) -> URL? {
+        guard let url = URL(string: raw),
+              url.scheme?.lowercased() == "https",
+              url.host?.lowercased() == host,
+              url.port == nil,
+              url.user == nil,
+              url.password == nil,
+              url.path == expectedPath,
+              url.query == nil,
+              url.fragment == nil
+        else { return nil }
+        return url
     }
 }
 
