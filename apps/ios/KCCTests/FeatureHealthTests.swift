@@ -109,4 +109,45 @@ final class FeatureHealthTests: XCTestCase {
         )
         XCTAssertTrue(offlineSink.entries.isEmpty)
     }
+
+    func testConnectivityProbeRequiresAUsableMapboxResponse() {
+        let mapboxResponse = HTTPURLResponse(
+            url: URL(string: "https://api.mapbox.com/")!,
+            statusCode: 404,
+            httpVersion: "HTTP/1.1",
+            headerFields: nil
+        )
+        let captivePortalResponse = HTTPURLResponse(
+            url: URL(string: "https://login.example/")!,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: nil
+        )
+        let serverErrorResponse = HTTPURLResponse(
+            url: URL(string: "https://api.mapbox.com/")!,
+            statusCode: 503,
+            httpVersion: "HTTP/1.1",
+            headerFields: nil
+        )
+
+        XCTAssertTrue(
+            SystemNetworkStatus.acceptsMapboxConnectivityResponse(mapboxResponse, error: nil)
+        )
+        XCTAssertFalse(
+            SystemNetworkStatus.acceptsMapboxConnectivityResponse(
+                captivePortalResponse,
+                error: nil
+            )
+        )
+        XCTAssertFalse(
+            SystemNetworkStatus.acceptsMapboxConnectivityResponse(
+                serverErrorResponse,
+                error: nil
+            )
+        )
+        XCTAssertFalse(SystemNetworkStatus.acceptsMapboxConnectivityResponse(
+            mapboxResponse,
+            error: URLError(.notConnectedToInternet)
+        ))
+    }
 }

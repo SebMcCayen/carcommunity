@@ -8,6 +8,7 @@
  * type and never echo client free-text (safeMessage) into the public issue.
  */
 
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   AUTO_GENERATED_LABEL,
@@ -112,6 +113,16 @@ describe('computeSignInFingerprint (dedup from validated type only)', () => {
     expect(computeSignInFingerprint('GetCredentialException')).not.toBe(
       computeSignInFingerprint('SignInException'),
     );
+  });
+
+  it('preserves historical Android fingerprints while separating iOS', () => {
+    const legacyAndroid = createHash('sha256')
+      .update(`${SIGN_IN_FEATURE_AREA}|GetCredentialException`)
+      .digest('hex')
+      .slice(0, 64);
+
+    expect(computeSignInFingerprint('GetCredentialException', 'android')).toBe(legacyAndroid);
+    expect(computeSignInFingerprint('GetCredentialException', 'ios')).not.toBe(legacyAndroid);
   });
 });
 

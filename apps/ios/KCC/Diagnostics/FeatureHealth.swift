@@ -1,4 +1,5 @@
 import Foundation
+import MapboxMaps
 import Network
 
 /// Stable silent-failure categories. Values are app-authored constants and can
@@ -145,22 +146,124 @@ protocol NetworkStatus: Sendable {
 /// Process-safe connectivity snapshot used only as a false-positive suppression
 /// gate. No interface, address, or network name is collected.
 final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
+    // This unauthenticated probe sends neither the Mapbox access token nor user data.
+    private static let connectivityProbeURL = URL(string: "https://api.mapbox.com/")!
+    private static let validationInterval: TimeInterval = 5
+
     private let monitor = NWPathMonitor()
     private let queue = DispatchQueue(label: "com.kungsbackacarcommunity.diagnostics.network")
+    private let session: URLSession
     private let lock = NSLock()
+    private var pathAvailable = false
     private var online = false
+    private var validationInFlight = false
+    private var lastValidation = Date.distantPast
+    private var validationGeneration = 0
+    private var validationTask: URLSessionDataTask?
 
     init() {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 4
+        configuration.timeoutIntervalForResource = 4
+        configuration.httpCookieStorage = nil
+        configuration.urlCache = nil
+        session = URLSession(configuration: configuration)
         monitor.pathUpdateHandler = { [weak self] path in
             guard let self else { return }
-            self.lock.withLock { self.online = path.status == .satisfied }
+            let (becameAvailable, taskToCancel) = self.lock.withLock {
+                let available = path.status == .satisfied
+                let changed = self.pathAvailable != available
+                self.pathAvailable = available
+                if !available {
+                    self.online = false
+                    self.validationInFlight = false
+                    self.validationGeneration += 1
+                    let task = self.validationTask
+                    self.validationTask = nil
+                    return (false, task)
+                }
+                if changed {
+                    self.lastValidation = .distantPast
+                }
+                return (changed, nil)
+            }
+            taskToCancel?.cancel()
+            if becameAvailable {
+                self.validateConnectivityIfNeeded()
+            }
         }
         monitor.start(queue: queue)
     }
 
-    deinit { monitor.cancel() }
+    deinit {
+        monitor.cancel()
+        session.invalidateAndCancel()
+    }
 
-    func isOnline() -> Bool { lock.withLock { online } }
+    func isOnline() -> Bool {
+        validateConnectivityIfNeeded()
+        return lock.withLock { pathAvailable && online }
+    }
+
+    static func acceptsMapboxConnectivityResponse(
+        _ response: URLResponse?,
+        error: Error?
+    ) -> Bool {
+        guard error == nil,
+              let response = response as? HTTPURLResponse,
+              response.url?.host == "api.mapbox.com"
+        else {
+            return false
+        }
+        return (200..<500).contains(response.statusCode)
+    }
+
+    private func validateConnectivityIfNeeded() {
+        let generation = lock.withLock { () -> Int? in
+            guard pathAvailable,
+                  !validationInFlight,
+                  Date().timeIntervalSince(lastValidation) >= Self.validationInterval
+            else {
+                return nil
+            }
+            validationInFlight = true
+            online = false
+            lastValidation = Date()
+            validationGeneration += 1
+            return validationGeneration
+        }
+        guard let generation else { return }
+
+        var request = URLRequest(url: Self.connectivityProbeURL)
+        request.httpMethod = "HEAD"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.timeoutInterval = 4
+        let task = session.dataTask(with: request) { [weak self] _, response, error in
+            guard let self else { return }
+            let validated = Self.acceptsMapboxConnectivityResponse(response, error: error)
+            self.lock.withLock {
+                guard self.validationGeneration == generation else { return }
+                self.online = self.pathAvailable && validated
+                self.validationInFlight = false
+                self.validationTask = nil
+            }
+        }
+        let shouldStart = lock.withLock {
+            guard pathAvailable,
+                  validationInFlight,
+                  validationGeneration == generation
+            else {
+                return false
+            }
+            validationTask = task
+            return true
+        }
+        if shouldStart {
+            task.resume()
+        } else {
+            task.cancel()
+        }
+    }
 }
 
 /// One process-lifetime diagnostics composition for the authenticated shell.
@@ -183,12 +286,19 @@ final class IOSDiagnosticsComposition {
                 appVersion: environment.appVersion,
                 buildNumber: environment.buildNumber,
                 osVersion: environment.osVersion,
-                mapboxSDKVersion: "11.26.0",
+                mapboxSDKVersion: Self.mapboxSDKVersion,
                 accessTokenPresent: accessTokenPresent
             )),
             errorReporter: clientReporter,
             networkStatus: SystemNetworkStatus()
         )
+    }
+}
+
+private extension IOSDiagnosticsComposition {
+    static var mapboxSDKVersion: String {
+        Bundle(for: MapView.self).infoDictionary?["CFBundleShortVersionString"] as? String
+            ?? "unknown"
     }
 }
 

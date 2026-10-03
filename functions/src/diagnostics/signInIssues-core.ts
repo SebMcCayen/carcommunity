@@ -230,13 +230,14 @@ function expectedSignInSafeMessage(errorCode: string): string {
 }
 
 /**
- * Dedup key for a sign-in failure, derived SERVER-SIDE from the fixed feature area + validated platform + the server-BUCKETED
- * exception type ONLY (see {@link bucketExceptionType})
- * — never from client free text (safeMessage / appVersion / etc). This keeps
- * dedup stable, unpollutable, AND bounded: there is at most ONE public issue per
- * ALLOWLISTED exception type, plus a SINGLE `Unknown` bucket into which every
- * other valid-but-unknown token collapses (so distinct fabricated tokens like
- * `A0Exception`, `A1Exception`, … all map to the same fingerprint/issue).
+ * Dedup key for a sign-in failure, derived SERVER-SIDE from the fixed feature
+ * area, validated platform and server-BUCKETED exception type ONLY (see
+ * {@link bucketExceptionType}) — never from client free text (safeMessage /
+ * appVersion / etc). Android keeps its historical key shape to avoid re-filing
+ * existing issues; iOS gets a separate namespace. This keeps dedup stable,
+ * unpollutable, AND bounded: there is at most ONE public issue per platform and
+ * ALLOWLISTED exception type, plus a SINGLE `Unknown` bucket per platform into
+ * which every other valid-but-unknown token collapses.
  * Tokens that are not valid class-name shapes are rejected OUTRIGHT upstream by
  * the extractor and never reach this function (no issue is filed for them).
  */
@@ -244,8 +245,9 @@ export function computeSignInFingerprint(
   errorType: string,
   platform: 'android' | 'ios' = 'android',
 ): string {
+  const platformScope = platform === 'ios' ? 'ios|' : '';
   return createHash('sha256')
-    .update(`${SIGN_IN_FEATURE_AREA}|${platform}|${errorType}`)
+    .update(`${SIGN_IN_FEATURE_AREA}|${platformScope}${errorType}`)
     .digest('hex')
     .slice(0, 64);
 }
