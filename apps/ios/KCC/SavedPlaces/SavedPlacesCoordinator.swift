@@ -23,21 +23,27 @@ final class SavedPlacesCoordinator {
     deinit { searchTask?.cancel() }
 
     func updateQuery(_ value: String, proximity: MapPoint?) {
-        query = SavedPlacesPolicy.normalizedQuery(value)
+        // Preserve inter-word spaces in the bound field while still bounding
+        // user-controlled text. Trimming on every edit makes `Main ` snap to
+        // `Main`, so the next typed word is incorrectly joined to it.
+        query = SavedPlacesPolicy.bounded(value, to: SavedPlacesPolicy.maximumQueryLength)
         searchTask?.cancel()
         searchFailed = false
-        guard query.count >= 2 else {
+        let requestQuery = SavedPlacesPolicy.normalizedQuery(query)
+        guard requestQuery.count >= 2 else {
             suggestions = []
             isSearching = false
             return
         }
-        let expectedQuery = query
+        let expectedQuery = requestQuery
         isSearching = true
         searchTask = Task { [weak self, searchClient] in
             do {
                 try await Task.sleep(for: .milliseconds(300))
                 let results = try await searchClient.search(query: expectedQuery, proximity: proximity)
-                guard !Task.isCancelled, let self, self.query == expectedQuery else { return }
+                guard !Task.isCancelled, let self,
+                      SavedPlacesPolicy.normalizedQuery(self.query) == expectedQuery
+                else { return }
                 self.suggestions = Array(
                     SavedPlacesPolicy.nearestFirst(results, from: proximity)
                         .prefix(SavedPlacesPolicy.maximumSearchResults)
@@ -46,7 +52,9 @@ final class SavedPlacesCoordinator {
             } catch is CancellationError {
                 return
             } catch {
-                guard !Task.isCancelled, let self, self.query == expectedQuery else { return }
+                guard !Task.isCancelled, let self,
+                      SavedPlacesPolicy.normalizedQuery(self.query) == expectedQuery
+                else { return }
                 self.suggestions = []
                 self.isSearching = false
                 self.searchFailed = true

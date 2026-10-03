@@ -64,7 +64,8 @@ struct AddressSearchOverlay: View {
 
     @ViewBuilder
     private var results: some View {
-        if coordinator.query.count < 2 {
+        let requestQuery = SavedPlacesPolicy.normalizedQuery(coordinator.query)
+        if requestQuery.count < 2 {
             List {
                 if !coordinator.places.isEmpty {
                     Section("addressSearch.savedTitle") {
@@ -97,7 +98,7 @@ struct AddressSearchOverlay: View {
             )
             .frame(minHeight: 180)
         } else if coordinator.suggestions.isEmpty {
-            ContentUnavailableView.search(text: coordinator.query)
+            ContentUnavailableView.search(text: requestQuery)
                 .frame(minHeight: 180)
         } else {
             List(coordinator.suggestions) { suggestion in

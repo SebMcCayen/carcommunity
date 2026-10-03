@@ -106,6 +106,20 @@ final class SavedPlacesTests: XCTestCase {
         )
     }
 
+    func testBoundQueryPreservesTrailingSpaceForMultiWordTyping() {
+        let store = UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults)
+        let coordinator = SavedPlacesCoordinator(
+            store: store,
+            searchClient: UnavailableAddressSearchClient()
+        )
+
+        coordinator.updateQuery("Main ", proximity: nil)
+
+        XCTAssertEqual(coordinator.query, "Main ")
+        XCTAssertEqual(SavedPlacesPolicy.normalizedQuery(coordinator.query), "Main")
+        coordinator.clearSearch()
+    }
+
     func testStoreIsIsolatedByAccountAndToleratesCorruptPayload() throws {
         let first = UserDefaultsSavedPlacesStore(uid: "member-a", defaults: defaults)
         let second = UserDefaultsSavedPlacesStore(uid: "member-b", defaults: defaults)
