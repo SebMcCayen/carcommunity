@@ -126,12 +126,13 @@ struct ShellView: View {
         shellPresentation
             .task(id: signedInUid) { await wireFeatures() }
             .task(id: crownFeatureWiringKey) { await wireCrownHunt() }
-            .task {
+            .task(id: signedInUid) {
                 whatsNewCoordinator.start()
+                guard signedInUid != nil else { return }
                 await appUpdateCoordinator.checkOnce()
             }
             .onChange(of: scenePhase) { _, phase in
-                guard phase == .active else { return }
+                guard phase == .active, signedInUid != nil else { return }
                 appUpdateCoordinator.scheduleRequiredUpdateRecheck()
             }
             .onChange(of: featureFlags.isEnabled(.liveLocation)) { _, enabled in
