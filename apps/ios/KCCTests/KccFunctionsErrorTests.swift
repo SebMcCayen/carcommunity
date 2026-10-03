@@ -1,3 +1,4 @@
+import FirebaseFunctions
 import XCTest
 
 @testable import KCC
@@ -32,6 +33,15 @@ final class KccFunctionsErrorTests: XCTestCase {
         XCTAssertEqual(KccFunctionsErrorCode.fromWire("INTERNAL"), .internalError)
         XCTAssertEqual(KccFunctionsErrorCode.fromWire("UNAVAILABLE"), .unavailable)
         XCTAssertEqual(KccFunctionsErrorCode.fromWire("INVALID_ARGUMENT"), .invalidArgument)
+    }
+
+    func testFirebaseAlreadyExistsErrorMapsThroughProductionSeam() {
+        let error = NSError(
+            domain: FunctionsErrorDomain,
+            code: FunctionsErrorCode.alreadyExists.rawValue
+        )
+
+        XCTAssertEqual(KccFunctionsClient.contractCode(from: error), .alreadyExists)
     }
 
     func testWhitespaceAndCaseAreTolerated() {
