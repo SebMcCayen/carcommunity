@@ -7,7 +7,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
+import com.kungsbackacarcommunity.app.diagnostics.ClientErrorReporter
 import com.kungsbackacarcommunity.app.diagnostics.FirebaseClientErrorReporter
+import com.kungsbackacarcommunity.app.diagnostics.rememberClientErrorReporter
 import com.kungsbackacarcommunity.app.friends.FriendsCoordinator
 import com.kungsbackacarcommunity.app.friends.FriendsRepository
 import com.kungsbackacarcommunity.app.friends.FriendsStatus
@@ -66,6 +68,7 @@ fun NotificationsRoute(
     // section; true for the standalone route, where the header is the only
     // thing that does. See [NotificationsScreen].
     showTitle: Boolean = true,
+    errorReporter: ClientErrorReporter? = rememberClientErrorReporter(),
 ) {
     val scope = rememberCoroutineScope()
     val serverState by
@@ -80,6 +83,15 @@ fun NotificationsRoute(
     val noDeleteError = remember { MutableStateFlow<NotificationDeleteError?>(null) }
     val pendingDeletes by (coordinator?.pendingDeletes ?: noPendingDeletes).collectAsState()
     val deleteError by (coordinator?.deleteError ?: noDeleteError).collectAsState()
+
+    LaunchedEffect(serverState, errorReporter) {
+        if (serverState is NotificationsState.Error) {
+            errorReporter?.report(
+                feature = "notifications.inboxListener",
+                message = "Notification inbox listener failed",
+            )
+        }
+    }
 
     // Every snapshot retires the ids whose delete has landed, so the hidden set
     // holds only rows that are still being hidden from something.

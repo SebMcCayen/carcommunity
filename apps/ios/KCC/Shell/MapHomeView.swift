@@ -360,6 +360,13 @@ struct MapHomeView: View {
                     accessToken: accessToken,
                     surface: surface,
                     locationProvider: locationProvider,
+                    onLoadingError: { kind in
+                        featureHealthReporter?.report(
+                            kind,
+                            foreground: scenePhase == .active,
+                            surfaceShown: surface.isActive
+                        )
+                    },
                     onFullFrameRendered: {
                         _ = renderWatchdog.tick(milliseconds: 0, eligible: false, rendered: true)
                     }
@@ -443,6 +450,7 @@ struct MapHomeView: View {
 private struct MapboxStandardMap: View {
     let onLoaded: @MainActor () -> Void
     let onFullFrameRendered: @MainActor () -> Void
+    let onLoadingError: @MainActor (FeatureHealthKind) -> Void
     let surface: StubMapSurface
     let locationProvider: any LocationProvider
     @State private var viewport: Viewport
@@ -464,6 +472,7 @@ private struct MapboxStandardMap: View {
         accessToken: String,
         surface: StubMapSurface,
         locationProvider: any LocationProvider,
+        onLoadingError: @escaping @MainActor (FeatureHealthKind) -> Void,
         onFullFrameRendered: @escaping @MainActor () -> Void,
         onLoaded: @escaping @MainActor () -> Void
     ) {
@@ -472,6 +481,7 @@ private struct MapboxStandardMap: View {
         self.locationProvider = locationProvider
         self.onLoaded = onLoaded
         self.onFullFrameRendered = onFullFrameRendered
+        self.onLoadingError = onLoadingError
         _viewport = State(initialValue: .camera(
             center: .init(latitude: 57.4872, longitude: 12.0761),
             zoom: surface.browsingZoom,
@@ -519,6 +529,13 @@ private struct MapboxStandardMap: View {
                     meFollowEnabled: $meFollowEnabled,
                     meFollowSuspended: $meFollowSuspended
                 )
+            }
+            .onMapLoadingError { event in
+                switch event.type {
+                case .style: onLoadingError(.mapStyleLoadFailed)
+                case .sprite, .glyphs: onLoadingError(.mapResourceLoadError)
+                default: break
+                }
             }
             .onRenderFrameFinished { event in
                 if event.renderMode == .full {

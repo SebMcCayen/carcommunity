@@ -68,6 +68,7 @@ function extractReport(data: Record<string, unknown> | undefined): ClientErrorRe
   const message = toStringOrNull(data.message);
   if (!feature || !message) return null;
   const code = toStringOrNull(data.code);
+  const platform = toStringOrNull(data.platform) ?? 'android';
   return {
     feature,
     message,
@@ -75,10 +76,10 @@ function extractReport(data: Record<string, unknown> | undefined): ClientErrorRe
     appVersion: toStringOrNull(data.appVersion),
     osVersion: toStringOrNull(data.osVersion),
     deviceModel: toStringOrNull(data.deviceModel),
-    platform: toStringOrNull(data.platform) ?? 'android',
+    platform,
     buildNumber: toStringOrNull(data.buildNumber),
     sdkVersion: toStringOrNull(data.sdkVersion),
-    fingerprint: computeClientErrorFingerprint(feature, message, code),
+    fingerprint: computeClientErrorFingerprint(feature, message, code, platform),
   };
 }
 

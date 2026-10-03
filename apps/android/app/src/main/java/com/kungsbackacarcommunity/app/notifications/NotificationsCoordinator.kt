@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.notifications
 
+import com.kungsbackacarcommunity.app.diagnostics.ClientErrorReporter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -43,6 +44,7 @@ enum class NotificationDeleteError {
  */
 class NotificationsCoordinator(
     private val repository: NotificationsRepository,
+    private val errorReporter: ClientErrorReporter? = null,
 ) {
     private val state = MutableStateFlow<MarkReadStatus>(MarkReadStatus.Idle)
     val status: StateFlow<MarkReadStatus> = state.asStateFlow()
@@ -57,9 +59,15 @@ class NotificationsCoordinator(
 
     private val deletingAll = MutableStateFlow(false)
 
-    suspend fun markRead(notificationId: String) = execute { repository.markRead(notificationId) }
+    suspend fun markRead(notificationId: String) =
+        execute("notifications.markRead", "Updating notification read state failed") {
+            repository.markRead(notificationId)
+        }
 
-    suspend fun markAllRead() = execute { repository.markAllRead() }
+    suspend fun markAllRead() =
+        execute("notifications.markAllRead", "Updating all notification read states failed") {
+            repository.markAllRead()
+        }
 
     /**
      * Hides [notificationId], deletes it, and puts it back if the server says
@@ -120,7 +128,11 @@ class NotificationsCoordinator(
         if (state.value == MarkReadStatus.Failed) state.value = MarkReadStatus.Idle
     }
 
-    private suspend fun execute(action: suspend () -> Unit) {
+    private suspend fun execute(
+        feature: String,
+        message: String,
+        action: suspend () -> Unit,
+    ) {
         if (state.value == MarkReadStatus.Working) return
         state.value = MarkReadStatus.Working
         try {
@@ -131,6 +143,7 @@ class NotificationsCoordinator(
             throw cancellation
         } catch (failure: Exception) {
             state.value = MarkReadStatus.Failed
+            errorReporter?.report(feature = feature, message = message)
         }
     }
 }

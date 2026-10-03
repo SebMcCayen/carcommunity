@@ -100,6 +100,9 @@ describe('fingerprint + signature', () => {
     expect(computeClientErrorFingerprint('a', 'm', 'X')).not.toBe(
       computeClientErrorFingerprint('a', 'm', 'Y'),
     );
+    expect(computeClientErrorFingerprint('a', 'm', 'X', 'android')).not.toBe(
+      computeClientErrorFingerprint('a', 'm', 'X', 'ios'),
+    );
   });
 });
 

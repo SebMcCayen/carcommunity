@@ -114,7 +114,7 @@ const reportClientErrorInputSchema = z
     appVersion: z.string().max(MAX_APP_VERSION_LENGTH).optional(),
     osVersion: z.string().max(MAX_OS_VERSION_LENGTH).optional(),
     deviceModel: z.string().max(MAX_DEVICE_MODEL_LENGTH).optional(),
-    platform: z.string().max(MAX_PLATFORM_LENGTH).optional(),
+    platform: z.enum(['android', 'ios']).optional(),
     buildNumber: z.string().max(MAX_BUILD_NUMBER_LENGTH).optional(),
     sdkVersion: z.string().max(MAX_SDK_VERSION_LENGTH).optional(),
   })
@@ -177,7 +177,7 @@ export function parseReportClientErrorInput(data: unknown): ParseResult<ClientEr
       platform,
       buildNumber: boundContext(result.data.buildNumber, MAX_BUILD_NUMBER_LENGTH),
       sdkVersion: boundContext(result.data.sdkVersion, MAX_SDK_VERSION_LENGTH),
-      fingerprint: computeClientErrorFingerprint(feature, message, code),
+      fingerprint: computeClientErrorFingerprint(feature, message, code, platform),
     },
   };
 }
@@ -216,9 +216,10 @@ export function computeClientErrorFingerprint(
   feature: string,
   message: string,
   code: string | null,
+  platform: string = DEFAULT_CLIENT_ERROR_PLATFORM,
 ): string {
   return createHash('sha256')
-    .update(`${feature}|${clientErrorSignature(message, code)}`)
+    .update(`${platform}|${feature}|${clientErrorSignature(message, code)}`)
     .digest('hex')
     .slice(0, 64);
 }

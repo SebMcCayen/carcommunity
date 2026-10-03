@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.notifications
 
+import com.kungsbackacarcommunity.app.diagnostics.ClientErrorReporter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -10,6 +11,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NotificationsCoordinatorTest {
+
+    private class RecordingReporter : ClientErrorReporter {
+        val reports = mutableListOf<Pair<String, String>>()
+        override fun report(feature: String, message: String, code: String?) {
+            reports += feature to message
+        }
+    }
 
     private class FakeRepo : NotificationsRepository {
         val read = mutableListOf<String>()
@@ -78,9 +86,14 @@ class NotificationsCoordinatorTest {
     @Test
     fun `a failure surfaces Failed and can reset`() = runTest {
         val repo = FakeRepo().apply { failWith = IllegalStateException("x") }
-        val coordinator = NotificationsCoordinator(repo)
+        val reporter = RecordingReporter()
+        val coordinator = NotificationsCoordinator(repo, reporter)
         coordinator.markRead("n1")
         assertEquals(MarkReadStatus.Failed, coordinator.status.value)
+        assertEquals(
+            listOf("notifications.markRead" to "Updating notification read state failed"),
+            reporter.reports,
+        )
         coordinator.reset()
         assertEquals(MarkReadStatus.Idle, coordinator.status.value)
     }
