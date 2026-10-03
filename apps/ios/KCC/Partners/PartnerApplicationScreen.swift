@@ -6,6 +6,7 @@ struct PartnerApplicationScreen: View {
 
     @State private var form = PartnerApplicationForm()
     @State private var showValidationError = false
+    @State private var presentationState = PartnerApplicationPresentationState()
 
     var body: some View {
         Group {
@@ -17,7 +18,10 @@ struct PartnerApplicationScreen: View {
         }
         .navigationTitle("partners.applicationTitle")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { coordinator.prepareForPresentation() }
+        .onAppear {
+            guard presentationState.consumePreparation() else { return }
+            coordinator.prepareForPresentation()
+        }
     }
 
     private var applicationForm: some View {
@@ -119,5 +123,18 @@ struct PartnerApplicationScreen: View {
         case .duplicate: "partners.submitErrorDuplicate"
         case .unknown: "partners.submitError"
         }
+    }
+}
+
+/// Keeps SwiftUI child replacement from preparing the same screen twice.
+/// `Group` is transparent, so switching from the form to success content may
+/// deliver another appearance callback without a new route presentation.
+struct PartnerApplicationPresentationState: Equatable, Sendable {
+    private(set) var hasPrepared = false
+
+    mutating func consumePreparation() -> Bool {
+        guard !hasPrepared else { return false }
+        hasPrepared = true
+        return true
     }
 }

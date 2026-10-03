@@ -72,6 +72,33 @@ final class PartnerApplicationTests: XCTestCase {
         XCTAssertNil(PartnerApplications.normalizedWebsiteURL("  "))
     }
 
+    func testValidationUsesBackendUTF16BoundariesAfterWebsiteNormalization() {
+        var form = validForm()
+
+        form.companyName = String(repeating: "😀", count: 75)
+        XCTAssertNil(PartnerApplications.validate(form))
+        form.companyName += "a"
+        XCTAssertEqual(PartnerApplications.validate(form), .fieldTooLong)
+
+        form = validForm()
+        let websiteAtLimit = "example.com/" + String(repeating: "😀", count: 240)
+        XCTAssertEqual(
+            PartnerApplications.normalizedWebsiteURL(websiteAtLimit)?.utf16.count,
+            PartnerApplications.websiteLimit
+        )
+        form.websiteURL = websiteAtLimit
+        XCTAssertNil(PartnerApplications.validate(form))
+        form.websiteURL += "a"
+        XCTAssertEqual(PartnerApplications.validate(form), .fieldTooLong)
+    }
+
+    func testPresentationPreparationIsConsumedOnlyOnce() {
+        var state = PartnerApplicationPresentationState()
+        XCTAssertTrue(state.consumePreparation())
+        XCTAssertFalse(state.consumePreparation())
+        XCTAssertTrue(state.hasPrepared)
+    }
+
     @MainActor
     func testCoordinatorCompletesAndMapsContractFailures() async throws {
         let repository = Repository()
