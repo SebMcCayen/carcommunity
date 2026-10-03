@@ -1,0 +1,12 @@
+{
+  "note": "Bundled iOS release notes. Every release PR that increments CURRENT_PROJECT_VERSION must add an entry for that build before shipping.",
+  "entries": [
+    {
+      "buildNumber": 1,
+      "versionName": "0.1.0",
+      "releaseDate": "2026-10-02",
+      "highlightKeys": ["whatsNew.release010Highlight"],
+      "changeKeys": ["whatsNew.release010Change"]
+    }
+  ]
+}

@@ -105,6 +105,9 @@ struct ShellView: View {
     @State private var pendingSessionCommand: SingleSessionCommand?
     @State private var sessionCommandTask: Task<Void, Never>?
     @State private var sessionActionError = false
+    @State private var whatsNewCoordinator = WhatsNewCoordinator()
+    @State private var appUpdateCoordinator = AppUpdateCoordinator()
+    @State private var appStoreUnavailable = false
 
     /// What is drawn over the shell's map right now — the ONE pure value
     /// every cover-derived decision reads. `navigating` / `navSearchOpen` are
@@ -122,6 +125,14 @@ struct ShellView: View {
         shellPresentation
             .task(id: signedInUid) { await wireFeatures() }
             .task(id: crownFeatureWiringKey) { await wireCrownHunt() }
+            .task {
+                whatsNewCoordinator.start()
+                await appUpdateCoordinator.checkOnce()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                appUpdateCoordinator.scheduleRequiredUpdateRecheck()
+            }
             .onChange(of: featureFlags.isEnabled(.liveLocation)) { _, enabled in
                 liveLocationCoordinator?.canShare = enabled && !access.isRestricted
             }
@@ -272,6 +283,18 @@ struct ShellView: View {
                 onBrowsingZoomChanged: mapSurface.setBrowsingZoom
             )
         }
+        .sheet(isPresented: whatsNewAnnouncementIsPresented) {
+            if let announcement = whatsNewCoordinator.announcement {
+                WhatsNewAnnouncementSheet(
+                    announcement: announcement,
+                    onShowAll: {
+                        whatsNewCoordinator.acknowledge()
+                        routes = routes.opening(.whatsNew)
+                    },
+                    onClose: whatsNewCoordinator.acknowledge
+                )
+            }
+        }
         .confirmationDialog(
             "liveLocation.stop",
             isPresented: $showStopConfirmation,
@@ -322,6 +345,19 @@ struct ShellView: View {
             Button("convoy.close", role: .cancel) {
                 convoyManagementCoordinator?.clearLeaveResult()
             }
+        }
+        .alert(appUpdateTitle, isPresented: appUpdateIsPresented) {
+            Button("appUpdate.update") { openAvailableUpdate() }
+            if appUpdateCoordinator.availability?.isRequired != true {
+                Button("appUpdate.dismiss", role: .cancel) {
+                    appUpdateCoordinator.dismiss()
+                }
+            }
+        } message: {
+            Text(appUpdateMessage)
+        }
+        .alert("appUpdate.iosStoreUnavailable", isPresented: $appStoreUnavailable) {
+            Button("notifications.errorDismiss", role: .cancel) {}
         }
     }
 
@@ -671,7 +707,8 @@ struct ShellView: View {
                 displayName: signedInDisplayName,
                 onSignOut: { session.signOut() },
                 onBack: { routes = routes.poppingOne() },
-                onOpenPoints: { routes = routes.opening(.points) }
+                onOpenPoints: { routes = routes.opening(.points) },
+                onOpenWhatsNew: { routes = routes.opening(.whatsNew) }
             )
         case .points:
             routeNavigation {
@@ -745,6 +782,10 @@ struct ShellView: View {
         case .notificationSettings:
             routeNavigation {
                 NotificationSettingsScreen(coordinator: notificationSettingsCoordinator)
+            }
+        case .whatsNew:
+            routeNavigation {
+                WhatsNewScreen(entries: whatsNewCoordinator.entries)
             }
         case .friends:
             routeNavigation {
@@ -887,6 +928,56 @@ struct ShellView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.background, ignoresSafeAreaEdges: .all)
+    }
+
+    private var whatsNewAnnouncementIsPresented: Binding<Bool> {
+        Binding(
+            get: { whatsNewCoordinator.announcement != nil },
+            set: { presented in
+                if !presented { whatsNewCoordinator.acknowledge() }
+            }
+        )
+    }
+
+    private var updatePromptSuppressedForDriving: Bool {
+        if liveLocationCoordinator?.isSharing == true { return true }
+        return driveRecordingCoordinator?.state.summary != nil
+    }
+
+    private var appUpdateIsPresented: Binding<Bool> {
+        Binding(
+            get: {
+                appUpdateCoordinator.shouldPresent(
+                    isDriving: updatePromptSuppressedForDriving,
+                    announcementIsPresented: whatsNewCoordinator.announcement != nil
+                )
+            },
+            set: { _ in }
+        )
+    }
+
+    private var appUpdateTitle: LocalizedStringKey {
+        appUpdateCoordinator.availability?.isRequired == true
+            ? "appUpdate.requiredTitle" : "appUpdate.title"
+    }
+
+    private var appUpdateMessage: LocalizedStringKey {
+        appUpdateCoordinator.availability?.isRequired == true
+            ? "appUpdate.iosRequiredMessage" : "appUpdate.iosMessage"
+    }
+
+    private func openAvailableUpdate() {
+        guard let url = appUpdateCoordinator.availability?.storeURL else {
+            appStoreUnavailable = true
+            return
+        }
+        openURL(url) { accepted in
+            if accepted {
+                appUpdateCoordinator.accepted()
+            } else {
+                appStoreUnavailable = true
+            }
+        }
     }
 
     private func routeNavigation<Content: View>(

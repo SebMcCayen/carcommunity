@@ -17,7 +17,10 @@
     "requiredMessage": "This update has to be installed before you can carry on. Google Play takes over while it installs.",
     "downloaded": "The update is downloaded and installs on restart.",
     "restart": "Restart",
-    "storeUnavailable": "The update could not be completed, and Google Play could not be opened on this device."
+    "storeUnavailable": "The update could not be completed, and Google Play could not be opened on this device.",
+    "iosMessage": "A newer version of the app is available in the App Store.",
+    "iosRequiredMessage": "This update has to be installed before you can carry on. Open the App Store to update.",
+    "iosStoreUnavailable": "The App Store listing could not be opened on this device."
   },
   "batteryOptimization": {
     "title": "Keep your drive recording",
@@ -2042,7 +2045,9 @@
     "dialogShowAll": "Show all updates",
     "dialogClose": "Close",
     "entryTitle": "Version %1$s · %2$s",
-    "empty": "No release notes yet."
+    "empty": "No release notes yet.",
+    "release010Highlight": "The first native iOS MVP is taking shape.",
+    "release010Change": "A native map-first experience with community, drive and profile features."
   },
   "moderation": {
     "messageActionsTitle": "Message from %1$s",
