@@ -364,7 +364,6 @@ struct MapHomeView: View {
                         _ = renderWatchdog.tick(milliseconds: 0, eligible: false, rendered: true)
                     }
                 ) {
-                    _ = renderWatchdog.tick(milliseconds: 0, eligible: false, rendered: true)
                     surface.markLoaded()
                 }
             } else {
@@ -385,8 +384,8 @@ struct MapHomeView: View {
             guard accessToken == nil else { return }
             await surface.simulateInitialLoadIfNeeded()
         }
-        // Detect the silent failure class where Mapbox never emits a load
-        // callback. Only foreground, uncovered, online time consumes the 12s
+        // Detect the silent failure class where Mapbox never completes a full
+        // frame. Only foreground, uncovered, online time consumes the 12s
         // budget; config-less placeholder builds never start the watchdog.
         .task(id: accessToken != nil) {
             guard accessToken != nil, let featureHealthReporter else { return }
@@ -396,18 +395,13 @@ struct MapHomeView: View {
                 } catch {
                     return
                 }
-                let rendered: Bool
-                switch surface.loadState {
-                case .loaded: rendered = true
-                case .loading: rendered = false
-                }
                 let surfaceShown = surface.isActive
                 let foreground = scenePhase == .active
                 let eligible = surfaceShown && foreground && featureHealthReporter.isOnline()
                 if renderWatchdog.tick(
                     milliseconds: 1_000,
                     eligible: eligible,
-                    rendered: rendered
+                    rendered: false
                 ) {
                     featureHealthReporter.report(
                         .mapRenderTimeout,
