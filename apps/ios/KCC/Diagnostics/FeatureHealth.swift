@@ -51,6 +51,7 @@ struct FeatureHealthConditions: Equatable, Sendable {
 
 enum FeatureHealthSuppression: Equatable, Sendable {
     case offline
+    case connectivityPending
     case backgrounded
     case surfaceNeverShown
     case alreadyReportedThisSession
@@ -139,8 +140,20 @@ final class MapRenderWatchdog: @unchecked Sendable {
     var isDisarmed: Bool { lock.withLock { disarmed } }
 }
 
+enum NetworkValidationState: Equatable, Sendable {
+    case pending
+    case online
+    case offline
+}
+
 protocol NetworkStatus: Sendable {
-    func isOnline() -> Bool
+    func validationState() -> NetworkValidationState
+    func setValidatedOnlineHandler(_ handler: (@Sendable () -> Void)?)
+}
+
+extension NetworkStatus {
+    func isOnline() -> Bool { validationState() == .online }
+    func setValidatedOnlineHandler(_ handler: (@Sendable () -> Void)?) {}
 }
 
 /// Process-safe connectivity snapshot used only as a false-positive suppression
@@ -155,11 +168,12 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
     private let session: URLSession
     private let lock = NSLock()
     private var pathAvailable = false
-    private var online = false
+    private var state: NetworkValidationState = .pending
     private var validationInFlight = false
     private var lastValidation = Date.distantPast
     private var validationGeneration = 0
     private var validationTask: URLSessionDataTask?
+    private var validatedOnlineHandler: (@Sendable () -> Void)?
 
     init() {
         let configuration = URLSessionConfiguration.ephemeral
@@ -175,7 +189,7 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
                 let changed = self.pathAvailable != available
                 self.pathAvailable = available
                 if !available {
-                    self.online = false
+                    self.state = .offline
                     self.validationInFlight = false
                     self.validationGeneration += 1
                     let task = self.validationTask
@@ -184,6 +198,7 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
                 }
                 if changed {
                     self.lastValidation = .distantPast
+                    self.state = .pending
                 }
                 return (changed, nil)
             }
@@ -200,9 +215,13 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
         session.invalidateAndCancel()
     }
 
-    func isOnline() -> Bool {
+    func validationState() -> NetworkValidationState {
         validateConnectivityIfNeeded()
-        return lock.withLock { pathAvailable && online }
+        return lock.withLock { state }
+    }
+
+    func setValidatedOnlineHandler(_ handler: (@Sendable () -> Void)?) {
+        lock.withLock { validatedOnlineHandler = handler }
     }
 
     static func acceptsMapboxConnectivityResponse(
@@ -227,7 +246,6 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
                 return nil
             }
             validationInFlight = true
-            online = false
             lastValidation = Date()
             validationGeneration += 1
             return validationGeneration
@@ -241,12 +259,14 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
         let task = session.dataTask(with: request) { [weak self] _, response, error in
             guard let self else { return }
             let validated = Self.acceptsMapboxConnectivityResponse(response, error: error)
-            self.lock.withLock {
-                guard self.validationGeneration == generation else { return }
-                self.online = self.pathAvailable && validated
+            let onlineHandler = self.lock.withLock { () -> (@Sendable () -> Void)? in
+                guard self.validationGeneration == generation else { return nil }
+                self.state = self.pathAvailable && validated ? .online : .offline
                 self.validationInFlight = false
                 self.validationTask = nil
+                return self.state == .online ? self.validatedOnlineHandler : nil
             }
+            onlineHandler?()
         }
         let shouldStart = lock.withLock {
             guard pathAvailable,
@@ -306,6 +326,8 @@ final class FeatureHealthReporter: @unchecked Sendable {
     private let gate: FeatureHealthGate
     private let errorReporter: any ClientErrorReporter
     private let networkStatus: any NetworkStatus
+    private let pendingLock = NSLock()
+    private var pendingLoadingErrors: [FeatureHealthKind: FeatureHealthConditions] = [:]
 
     init(
         gate: FeatureHealthGate,
@@ -315,6 +337,9 @@ final class FeatureHealthReporter: @unchecked Sendable {
         self.gate = gate
         self.errorReporter = errorReporter
         self.networkStatus = networkStatus
+        networkStatus.setValidatedOnlineHandler { [weak self] in
+            self?.flushPendingLoadingErrors()
+        }
     }
 
     func isOnline() -> Bool { networkStatus.isOnline() }
@@ -325,14 +350,40 @@ final class FeatureHealthReporter: @unchecked Sendable {
         foreground: Bool,
         surfaceShown: Bool
     ) -> FeatureHealthDecision {
-        let decision = gate.decide(kind, conditions: FeatureHealthConditions(
-            online: networkStatus.isOnline(),
+        let networkState = networkStatus.validationState()
+        let conditions = FeatureHealthConditions(
+            online: networkState == .online,
             foreground: foreground,
             surfaceShown: surfaceShown
-        ))
+        )
+        if networkState == .pending,
+           kind == .mapStyleLoadFailed || kind == .mapResourceLoadError
+        {
+            pendingLock.withLock { pendingLoadingErrors[kind] = conditions }
+            return .suppress(.connectivityPending)
+        }
+        let decision = gate.decide(kind, conditions: conditions)
         if case .report(let feature, let message, let code, let context) = decision {
             errorReporter.report(feature: feature, message: message, code: code, context: context)
         }
         return decision
+    }
+
+    private func flushPendingLoadingErrors() {
+        let pending = pendingLock.withLock {
+            let snapshot = pendingLoadingErrors
+            pendingLoadingErrors.removeAll()
+            return snapshot
+        }
+        for (kind, conditions) in pending {
+            let decision = gate.decide(kind, conditions: .init(
+                online: true,
+                foreground: conditions.foreground,
+                surfaceShown: conditions.surfaceShown
+            ))
+            if case .report(let feature, let message, let code, let context) = decision {
+                errorReporter.report(feature: feature, message: message, code: code, context: context)
+            }
+        }
     }
 }

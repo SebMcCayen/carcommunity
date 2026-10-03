@@ -13,7 +13,28 @@ final class FeatureHealthTests: XCTestCase {
         }
     }
 
-    private struct FixedNetwork: NetworkStatus { let online: Bool; func isOnline() -> Bool { online } }
+    private struct FixedNetwork: NetworkStatus {
+        let online: Bool
+        func validationState() -> NetworkValidationState { online ? .online : .offline }
+    }
+
+    private final class ControlledNetwork: NetworkStatus, @unchecked Sendable {
+        private let lock = NSLock()
+        private var state: NetworkValidationState = .pending
+        private var handler: (@Sendable () -> Void)?
+
+        func validationState() -> NetworkValidationState { lock.withLock { state } }
+        func setValidatedOnlineHandler(_ handler: (@Sendable () -> Void)?) {
+            lock.withLock { self.handler = handler }
+        }
+        func completeOnline() {
+            let callback = lock.withLock {
+                state = .online
+                return handler
+            }
+            callback?()
+        }
+    }
 
     private func gate() -> FeatureHealthGate {
         FeatureHealthGate(environment: FeatureHealthEnvironment(
@@ -108,6 +129,25 @@ final class FeatureHealthTests: XCTestCase {
             .suppress(.offline)
         )
         XCTAssertTrue(offlineSink.entries.isEmpty)
+    }
+
+    func testReporterRetriesOneShotLoadingErrorAfterConnectivityValidation() {
+        let sink = RecordingErrorReporter()
+        let network = ControlledNetwork()
+        let reporter = FeatureHealthReporter(
+            gate: gate(), errorReporter: sink, networkStatus: network
+        )
+
+        XCTAssertEqual(
+            reporter.report(.mapStyleLoadFailed, foreground: true, surfaceShown: true),
+            .suppress(.connectivityPending)
+        )
+        XCTAssertTrue(sink.entries.isEmpty)
+
+        network.completeOnline()
+        XCTAssertEqual(sink.entries.map(\.feature), ["mapHealth.styleLoad"])
+        network.completeOnline()
+        XCTAssertEqual(sink.entries.count, 1)
     }
 
     func testConnectivityProbeRequiresAUsableMapboxResponse() {

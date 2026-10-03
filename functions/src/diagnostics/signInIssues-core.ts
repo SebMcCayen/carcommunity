@@ -101,14 +101,18 @@ export const UNKNOWN_ERROR_TYPE = 'Unknown';
  * here as they are observed; unknown types are never lost, they simply share the
  * `Unknown` bucket.
  */
-export const KNOWN_SIGN_IN_EXCEPTION_TYPES: ReadonlySet<string> = new Set([
-  // App-defined sign-in wrappers (the dominant real-world types).
-  'SignInFailedException',
-  'SignInUnavailableException',
-  // iOS app-defined / AuthenticationServices failures.
+export const SHARED_SIGN_IN_EXCEPTION_TYPES: ReadonlySet<string> = new Set([]);
+
+export const IOS_SIGN_IN_EXCEPTION_TYPES: ReadonlySet<string> = new Set([
   'SignInFailedError',
   'NonceGenerationError',
   'ASAuthorizationError',
+]);
+
+export const ANDROID_SIGN_IN_EXCEPTION_TYPES: ReadonlySet<string> = new Set([
+  // App-defined sign-in wrappers (the dominant real-world types).
+  'SignInFailedException',
+  'SignInUnavailableException',
   // AndroidX Credential Manager.
   'GetCredentialException',
   // RETAINED DELIBERATELY, even though a current client never sends it.
@@ -171,9 +175,16 @@ export const KNOWN_SIGN_IN_EXCEPTION_TYPES: ReadonlySet<string> = new Set([
  * pure post-validation step: callers still reject non-class-name tokens BEFORE
  * bucketing (see strictExceptionType), so this never sees free text.
  */
-export function bucketExceptionType(validToken: string): string {
+export function bucketExceptionType(
+  validToken: string,
+  platform: 'android' | 'ios' = 'android',
+): string {
   const simpleName = validToken.slice(validToken.lastIndexOf('.') + 1);
-  return KNOWN_SIGN_IN_EXCEPTION_TYPES.has(simpleName) ? simpleName : UNKNOWN_ERROR_TYPE;
+  const platformTypes =
+    platform === 'ios' ? IOS_SIGN_IN_EXCEPTION_TYPES : ANDROID_SIGN_IN_EXCEPTION_TYPES;
+  return platformTypes.has(simpleName) || SHARED_SIGN_IN_EXCEPTION_TYPES.has(simpleName)
+    ? simpleName
+    : UNKNOWN_ERROR_TYPE;
 }
 
 /** Fixed, non-client reason line shown in the public issue. */
@@ -331,7 +342,8 @@ export function extractSignInFailureReport(
   // Anti-abuse: only the BUCKETED type (allowlisted known type, else the single
   // `Unknown` bucket) reaches the public issue + fingerprint. This bounds the
   // number of distinct public issues an unauthenticated caller can create.
-  const errorType = bucketExceptionType(rawToken);
+  const platform = data.platform as 'android' | 'ios';
+  const errorType = bucketExceptionType(rawToken, platform);
 
   const metadata =
     data.metadata && typeof data.metadata === 'object' && !Array.isArray(data.metadata)
@@ -339,13 +351,13 @@ export function extractSignInFailureReport(
       : null;
 
   return {
-    platform: data.platform as 'android' | 'ios',
+    platform,
     errorType,
     appVersion: boundedString(data.appVersion, MAX_CONTEXT_LENGTH),
     buildNumber: boundedString(data.buildNumber, MAX_CONTEXT_LENGTH),
     osVersion: boundedString(data.osVersion, MAX_CONTEXT_LENGTH),
     deviceModel: metadata ? boundedString(metadata.deviceModel, MAX_CONTEXT_LENGTH) : null,
-    fingerprint: computeSignInFingerprint(errorType, data.platform as 'android' | 'ios'),
+    fingerprint: computeSignInFingerprint(errorType, platform),
   };
 }
 

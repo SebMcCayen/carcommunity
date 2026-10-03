@@ -11,7 +11,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   AUTO_GENERATED_LABEL,
-  KNOWN_SIGN_IN_EXCEPTION_TYPES,
+  ANDROID_SIGN_IN_EXCEPTION_TYPES,
+  IOS_SIGN_IN_EXCEPTION_TYPES,
+  SHARED_SIGN_IN_EXCEPTION_TYPES,
   SIGN_IN_FEATURE_AREA,
   SIGN_IN_ISSUE_LABEL,
   SIGN_IN_ISSUE_STALE_CREATING_MS,
@@ -154,11 +156,19 @@ describe('extractSignInFailureReport', () => {
   });
 
   it('accepts the iOS reporter and rejects unsupported platforms', () => {
-    const ios = extractSignInFailureReport({ ...rawDoc, platform: 'ios' });
+    const ios = extractSignInFailureReport({
+      ...rawDoc,
+      platform: 'ios',
+      safeMessage: 'Sign-in failed: SignInFailedError',
+      errorCode: 'SignInFailedError',
+      osVersion: 'iOS 18.0',
+    });
     expect(ios).toEqual({
       ...report,
       platform: 'ios',
-      fingerprint: computeSignInFingerprint('GetCredentialException', 'ios'),
+      errorType: 'SignInFailedError',
+      osVersion: 'iOS 18.0',
+      fingerprint: computeSignInFingerprint('SignInFailedError', 'ios'),
     });
     expect(ios?.fingerprint).not.toBe(report.fingerprint);
     expect(extractSignInFailureReport({ ...rawDoc, platform: 'web' })).toBeNull();
@@ -318,10 +328,19 @@ describe('bucketExceptionType (anti-abuse allowlist + single bucket)', () => {
     expect(bucketExceptionType('com.evil.Nope')).toBe(UNKNOWN_ERROR_TYPE);
   });
 
-  it('the allowlist is non-empty and every entry buckets to itself', () => {
-    expect(KNOWN_SIGN_IN_EXCEPTION_TYPES.size).toBeGreaterThan(0);
-    for (const type of KNOWN_SIGN_IN_EXCEPTION_TYPES) {
-      expect(bucketExceptionType(type)).toBe(type);
+  it('buckets only platform-valid types and rejects impossible pairs', () => {
+    expect(bucketExceptionType('GetCredentialException', 'ios')).toBe(UNKNOWN_ERROR_TYPE);
+    expect(bucketExceptionType('ASAuthorizationError', 'android')).toBe(UNKNOWN_ERROR_TYPE);
+    expect(bucketExceptionType('ASAuthorizationError', 'ios')).toBe('ASAuthorizationError');
+    for (const type of ANDROID_SIGN_IN_EXCEPTION_TYPES) {
+      expect(bucketExceptionType(type, 'android')).toBe(type);
+    }
+    for (const type of IOS_SIGN_IN_EXCEPTION_TYPES) {
+      expect(bucketExceptionType(type, 'ios')).toBe(type);
+    }
+    for (const type of SHARED_SIGN_IN_EXCEPTION_TYPES) {
+      expect(bucketExceptionType(type, 'android')).toBe(type);
+      expect(bucketExceptionType(type, 'ios')).toBe(type);
     }
   });
 });
