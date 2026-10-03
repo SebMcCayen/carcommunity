@@ -81,6 +81,14 @@ final class FeatureHealthTests: XCTestCase {
         XCTAssertTrue(watchdog.isDisarmed)
     }
 
+    func testMapLoadWithoutFullFrameDoesNotDisarmWatchdog() {
+        let watchdog = MapRenderWatchdog(timeoutMilliseconds: 2_000)
+
+        XCTAssertFalse(watchdog.tick(milliseconds: 1_000, eligible: true, rendered: false))
+        XCTAssertFalse(watchdog.isDisarmed)
+        XCTAssertTrue(watchdog.tick(milliseconds: 1_000, eligible: true, rendered: false))
+    }
+
     func testReporterForwardsAllowedDecisionAndNoopsOffline() {
         let onlineSink = RecordingErrorReporter()
         let online = FeatureHealthReporter(
