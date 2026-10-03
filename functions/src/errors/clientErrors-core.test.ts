@@ -70,6 +70,9 @@ describe('parseReportClientErrorInput', () => {
     expect(parseReportClientErrorInput({ feature: '', message: 'y' }).ok).toBe(false);
     expect(parseReportClientErrorInput({ feature: 'x', message: '' }).ok).toBe(false);
     expect(parseReportClientErrorInput({ feature: 'x', message: 'y', extra: 1 }).ok).toBe(false);
+    expect(parseReportClientErrorInput({ feature: 'x', message: 'y', platform: 'web' }).ok).toBe(
+      false,
+    );
     expect(
       parseReportClientErrorInput({ feature: 'x', message: 'y', code: 'z'.repeat(200) }).ok,
     ).toBe(false);
@@ -103,6 +106,35 @@ describe('fingerprint + signature', () => {
     expect(computeClientErrorFingerprint('a', 'm', 'X', 'android')).not.toBe(
       computeClientErrorFingerprint('a', 'm', 'X', 'ios'),
     );
+  });
+
+  it('separates iOS from Android while preserving historical Android fingerprints', () => {
+    const android = computeClientErrorFingerprint('mapHealth.renderTimeout', 'failed', 'TIMEOUT');
+    expect(android).toBe(
+      computeClientErrorFingerprint('mapHealth.renderTimeout', 'failed', 'TIMEOUT', 'android'),
+    );
+    expect(android).not.toBe(
+      computeClientErrorFingerprint('mapHealth.renderTimeout', 'failed', 'TIMEOUT', 'ios'),
+    );
+  });
+
+  it('uses the validated platform when parsing submissions', () => {
+    const ios = parseReportClientErrorInput({
+      feature: 'mapHealth.renderTimeout',
+      message: 'Map did not render',
+      code: 'MAP_RENDER_TIMEOUT',
+      platform: 'ios',
+    });
+    const android = parseReportClientErrorInput({
+      feature: 'mapHealth.renderTimeout',
+      message: 'Map did not render',
+      code: 'MAP_RENDER_TIMEOUT',
+      platform: 'android',
+    });
+    expect(ios.ok && android.ok).toBe(true);
+    if (ios.ok && android.ok) {
+      expect(ios.input.fingerprint).not.toBe(android.input.fingerprint);
+    }
   });
 });
 

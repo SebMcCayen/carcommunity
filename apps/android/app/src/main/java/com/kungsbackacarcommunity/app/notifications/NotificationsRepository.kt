@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.Flow
 sealed interface NotificationsState {
     data object Loading : NotificationsState
 
-    data object Error : NotificationsState
+    data class Error(val code: String? = null) : NotificationsState
 
     data class Loaded(val items: List<AppNotification>) : NotificationsState
 }

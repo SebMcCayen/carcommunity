@@ -133,7 +133,7 @@ export interface ClientErrorReport {
   platform: string;
   buildNumber: string | null;
   sdkVersion: string | null;
-  /** Server-derived dedup key (feature + normalized signature). */
+  /** Server-derived dedup key (platform + feature + normalized signature). */
   fingerprint: string;
 }
 
@@ -208,9 +208,10 @@ export function clientErrorSignature(message: string, code: string | null): stri
 }
 
 /**
- * Dedup fingerprint, derived SERVER-SIDE from the feature + the stable
- * signature only (never volatile context like appVersion/deviceModel), so the
- * same error recurring across devices/versions maps to ONE issue.
+ * Dedup fingerprint, derived SERVER-SIDE from the platform, feature and stable
+ * signature (never volatile context like appVersion/deviceModel), so the same
+ * platform error recurring across devices/versions maps to ONE issue. Android
+ * keeps its historical key shape to avoid re-filing every existing issue.
  */
 export function computeClientErrorFingerprint(
   feature: string,
@@ -218,8 +219,9 @@ export function computeClientErrorFingerprint(
   code: string | null,
   platform: string = DEFAULT_CLIENT_ERROR_PLATFORM,
 ): string {
+  const platformScope = platform === 'ios' ? 'ios|' : '';
   return createHash('sha256')
-    .update(`${platform}|${feature}|${clientErrorSignature(message, code)}`)
+    .update(`${feature}|${platformScope}${clientErrorSignature(message, code)}`)
     .digest('hex')
     .slice(0, 64);
 }

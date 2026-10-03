@@ -59,6 +59,7 @@ final class FeatureHealthTests: XCTestCase {
         guard case .report = gate.decide(.mapStyleLoadFailed, conditions: conditions) else {
             return XCTFail("Expected first report")
         }
+
         XCTAssertEqual(
             gate.decide(.mapStyleLoadFailed, conditions: conditions),
             .suppress(.alreadyReportedThisSession)

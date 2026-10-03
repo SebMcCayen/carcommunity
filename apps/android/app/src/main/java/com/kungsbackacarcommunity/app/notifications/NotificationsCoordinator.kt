@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.notifications
 
+import com.google.firebase.functions.FirebaseFunctionsException
 import com.kungsbackacarcommunity.app.diagnostics.ClientErrorReporter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -58,6 +59,7 @@ class NotificationsCoordinator(
     val deleteError: StateFlow<NotificationDeleteError?> = deleteFailure.asStateFlow()
 
     private val deletingAll = MutableStateFlow(false)
+    private var listenerFailureReported = false
 
     suspend fun markRead(notificationId: String) =
         execute("notifications.markRead", "Updating notification read state failed") {
@@ -68,6 +70,22 @@ class NotificationsCoordinator(
         execute("notifications.markAllRead", "Updating all notification read states failed") {
             repository.markAllRead()
         }
+
+    fun reportInboxListenerFailure(code: String?) {
+        if (listenerFailureReported) return
+        listenerFailureReported = true
+        runCatching {
+            errorReporter?.report(
+                feature = "notifications.inboxListener",
+                message = "Notification inbox listener failed",
+                code = code,
+            )
+        }
+    }
+
+    fun onInboxLoaded() {
+        listenerFailureReported = false
+    }
 
     /**
      * Hides [notificationId], deletes it, and puts it back if the server says
@@ -143,7 +161,13 @@ class NotificationsCoordinator(
             throw cancellation
         } catch (failure: Exception) {
             state.value = MarkReadStatus.Failed
-            errorReporter?.report(feature = feature, message = message)
+            runCatching {
+                errorReporter?.report(
+                    feature = feature,
+                    message = message,
+                    code = (failure as? FirebaseFunctionsException)?.code?.name,
+                )
+            }
         }
     }
 }

@@ -68,7 +68,7 @@ function extractReport(data: Record<string, unknown> | undefined): ClientErrorRe
   const message = toStringOrNull(data.message);
   if (!feature || !message) return null;
   const code = toStringOrNull(data.code);
-  const platform = toStringOrNull(data.platform) ?? 'android';
+  const platform = data.platform === 'ios' ? 'ios' : 'android';
   return {
     feature,
     message,
