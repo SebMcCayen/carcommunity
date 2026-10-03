@@ -33,7 +33,7 @@ export { neutralizeMentions };
 // Limits
 // ---------------------------------------------------------------------------
 
-/** Title budget for the public issue summary (excludes the `[Android] ` tag). */
+/** Title budget for the public issue summary (excludes its platform tag). */
 export const MAX_SUMMARY_LENGTH = 80;
 /** Body budget for the user's typed description. */
 export const MAX_DESCRIPTION_LENGTH = 4000;
@@ -184,7 +184,7 @@ function firstLine(text: string): string {
 }
 
 /**
- * Public issue title: `[Android] ` + a bounded summary. Falls back to the
+ * Public issue title: the report's `[Android]` or `[iOS]` tag plus a bounded summary. Falls back to the
  * first line of the description, then to a generic label so the title is never
  * empty. Single-lined and capped at [MAX_SUMMARY_LENGTH].
  */
@@ -193,7 +193,7 @@ export function buildGitHubIssueTitle(report: FeedbackReport): string {
   const summary = source.replace(/\s+/g, ' ').trim().slice(0, MAX_SUMMARY_LENGTH);
   const safe = summary.length > 0 ? summary : 'Problem report';
   // Neutralize AFTER bounding so the visible summary stays within budget; the
-  // static `[Android]` tag is template text and left untouched.
+  // static platform tag is template text and left untouched.
   return `${FEEDBACK_TITLE_TAGS[report.platform]} ${neutralizeMentions(safe)}`;
 }
 

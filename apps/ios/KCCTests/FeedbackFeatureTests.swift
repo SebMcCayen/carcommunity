@@ -208,6 +208,29 @@ final class FeedbackFeatureTests: XCTestCase {
         XCTAssertEqual(coordinator.interactions[9]?.error, .rateLimited)
         XCTAssertTrue(coordinator.interactions[9]?.canPlusOne == true)
     }
+
+    func testTicketInteractionMapsOnlyExplicitDuplicateReasonToAlreadyDone() {
+        XCTAssertEqual(
+            FirebaseOpenTicketsRepository.interactionOutcome(from: KccFunctionsError(
+                code: .failedPrecondition,
+                reason: .ticketAlreadyInteracted
+            )),
+            .alreadyDone
+        )
+        XCTAssertEqual(
+            FirebaseOpenTicketsRepository.interactionOutcome(from: KccFunctionsError(
+                code: .failedPrecondition
+            )),
+            .failed
+        )
+        XCTAssertEqual(
+            FirebaseOpenTicketsRepository.interactionOutcome(from: KccFunctionsError(
+                code: .resourceExhausted
+            )),
+            .rateLimited
+        )
+    }
+
     @MainActor
     private func waitUntil(
         timeout: Duration = .seconds(3),

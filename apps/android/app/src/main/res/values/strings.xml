@@ -212,6 +212,8 @@
     <string name="privacySettings_leaderboardExplainer">På: du visas på topplistan i appen och på webbplatsen. Av: du döljs på båda.</string>
     <string name="privacySettings_saveButton">Spara</string>
     <string name="privacySettings_loading">Sparar...</string>
+    <string name="privacySettings_unavailable">Integritetsinställningarna är inte tillgängliga just nu.</string>
+    <string name="privacySettings_retry">Försök igen</string>
     <string name="privacySettings_error">Något gick fel. Försök igen.</string>
     <string name="privacySettings_saved">Sparat.</string>
     <string name="subscription_teaserTitle">Medlemskap</string>

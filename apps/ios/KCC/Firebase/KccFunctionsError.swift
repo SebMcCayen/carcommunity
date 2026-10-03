@@ -76,6 +76,8 @@ enum KccFunctionsFailureReason: String, Equatable, Sendable {
     case outOfRange = "out_of_range"
     case positionTooOld = "position_too_old"
     case voteNotCounted = "vote_not_counted"
+    /// The member already submitted this interaction type for this ticket.
+    case ticketAlreadyInteracted = "ticket_already_interacted"
 
     static func fromDetails(_ raw: Any?) -> Self? {
         guard let details = raw as? [String: Any],

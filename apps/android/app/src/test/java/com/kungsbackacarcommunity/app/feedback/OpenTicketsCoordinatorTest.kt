@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.feedback
 
+import com.google.firebase.functions.FirebaseFunctionsException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -159,5 +160,31 @@ class OpenTicketsCoordinatorTest {
     fun `client id matches the callable schema`() {
         val id = randomTicketClientId()
         assertTrue(Regex("^[A-Za-z0-9_-]{1,64}$").matches(id))
+    }
+
+    @Test
+    fun `only explicit duplicate precondition maps to already done`() {
+        assertEquals(
+            TicketInteractOutcome.ALREADY_DONE,
+            ticketInteractOutcome(
+                FirebaseFunctionsException.Code.FAILED_PRECONDITION,
+                mapOf("reason" to "ticket_already_interacted"),
+            ),
+        )
+        assertEquals(
+            TicketInteractOutcome.FAILED,
+            ticketInteractOutcome(
+                FirebaseFunctionsException.Code.FAILED_PRECONDITION,
+                mapOf("reason" to "issue_not_open"),
+            ),
+        )
+        assertEquals(
+            TicketInteractOutcome.FAILED,
+            ticketInteractOutcome(FirebaseFunctionsException.Code.FAILED_PRECONDITION, null),
+        )
+        assertEquals(
+            TicketInteractOutcome.RATE_LIMITED,
+            ticketInteractOutcome(FirebaseFunctionsException.Code.RESOURCE_EXHAUSTED, null),
+        )
     }
 }

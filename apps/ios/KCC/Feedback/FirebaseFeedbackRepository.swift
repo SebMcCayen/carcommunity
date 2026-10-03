@@ -92,14 +92,23 @@ final class FirebaseOpenTicketsRepository: OpenTicketsRepository, @unchecked Sen
             _ = try await functions.call(Self.interactCallable, payload: payload)
             return .posted
         } catch let error as KccFunctionsError {
-            switch error.code {
-            case .failedPrecondition: return .alreadyDone
-            case .resourceExhausted: return .rateLimited
-            default: return .failed
-            }
+            return Self.interactionOutcome(from: error)
         } catch {
             return .failed
         }
+    }
+
+    /// Only the backend's stable duplicate discriminator means the member has
+    /// already completed the action. Other failed preconditions include a
+    /// disabled feature and a closed ticket, so they remain generic failures.
+    static func interactionOutcome(from error: KccFunctionsError) -> TicketInteractionOutcome {
+        if error.code == .failedPrecondition, error.reason == .ticketAlreadyInteracted {
+            return .alreadyDone
+        }
+        if error.code == .resourceExhausted {
+            return .rateLimited
+        }
+        return .failed
     }
 
     private static let collection = "openTickets"
