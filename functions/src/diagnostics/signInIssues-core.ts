@@ -548,8 +548,7 @@ function inlineCodeScalar(value: string): string {
  * timestamp/count are left as-is.
  */
 export function buildSignInIssueBody(report: SignInFailureReport, meta: SignInIssueMeta): string {
-  const field = (value: string | null): string =>
-    value ? inlineCodeScalar(value) : 'unknown';
+  const field = (value: string | null): string => (value ? inlineCodeScalar(value) : 'unknown');
 
   const lines = [
     `Automatically filed from a ${report.platform === 'ios' ? 'iOS' : 'Android'} sign-in failure reported via the public diagnostics channel (pre-authentication — no account is associated).`,

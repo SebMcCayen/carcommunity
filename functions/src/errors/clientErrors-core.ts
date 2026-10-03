@@ -31,11 +31,7 @@
 
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import {
-  boundContext,
-  boundText,
-  neutralizeMentions,
-} from '../feedback/feedback-core';
+import { boundContext, boundText, neutralizeMentions } from '../feedback/feedback-core';
 import { AUTO_GENERATED_LABEL } from '../diagnostics/signInIssues-core';
 import type { GitHubIssuePayload } from '../shared/githubIssues';
 import {
@@ -385,10 +381,7 @@ export interface ClientErrorIssueMeta {
  * sign-in path.
  */
 function inlineCodeScalar(value: string): string {
-  const safe = neutralizeMentions(value)
-    .replace(/`/g, "'")
-    .replace(/\s+/g, ' ')
-    .trim();
+  const safe = neutralizeMentions(value).replace(/`/g, "'").replace(/\s+/g, ' ').trim();
   return `\`${safe}\``;
 }
 

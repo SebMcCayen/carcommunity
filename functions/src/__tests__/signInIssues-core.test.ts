@@ -383,9 +383,9 @@ describe('decideSignInIssueAction (dedup)', () => {
       }),
     ).toBe('create');
     // No timestamp available → treated as fresh (never re-file on garbage).
-    expect(
-      decideSignInIssueAction(creating, { nowMs: now, lastActivityMs: null }),
-    ).toBe('increment');
+    expect(decideSignInIssueAction(creating, { nowMs: now, lastActivityMs: null })).toBe(
+      'increment',
+    );
     // No context at all (pure default) → creating is always an increment.
     expect(decideSignInIssueAction(creating)).toBe('increment');
   });
@@ -469,7 +469,13 @@ describe('buildSignInIssueBody', () => {
 
   it('renders Unknown/unknown for an absent type and context', () => {
     const body = buildSignInIssueBody(
-      { ...report, errorType: UNKNOWN_ERROR_TYPE, appVersion: null, osVersion: null, deviceModel: null },
+      {
+        ...report,
+        errorType: UNKNOWN_ERROR_TYPE,
+        appVersion: null,
+        osVersion: null,
+        deviceModel: null,
+      },
       meta,
     );
     expect(body).toContain('- Error type: Unknown');

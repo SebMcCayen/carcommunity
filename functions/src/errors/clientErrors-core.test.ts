@@ -70,15 +70,17 @@ describe('parseReportClientErrorInput', () => {
     expect(parseReportClientErrorInput({ feature: '', message: 'y' }).ok).toBe(false);
     expect(parseReportClientErrorInput({ feature: 'x', message: '' }).ok).toBe(false);
     expect(parseReportClientErrorInput({ feature: 'x', message: 'y', extra: 1 }).ok).toBe(false);
-    expect(parseReportClientErrorInput({ feature: 'x', message: 'y', code: 'z'.repeat(200) }).ok).toBe(
-      false,
-    );
+    expect(
+      parseReportClientErrorInput({ feature: 'x', message: 'y', code: 'z'.repeat(200) }).ok,
+    ).toBe(false);
   });
 });
 
 describe('fingerprint + signature', () => {
   it('prefers the code, upper-cased, for the signature', () => {
-    expect(clientErrorSignature('anything at all', 'failed_precondition')).toBe('FAILED_PRECONDITION');
+    expect(clientErrorSignature('anything at all', 'failed_precondition')).toBe(
+      'FAILED_PRECONDITION',
+    );
   });
 
   it('normalizes volatile tokens in the message when no code is present', () => {
@@ -86,9 +88,9 @@ describe('fingerprint + signature', () => {
     const a = clientErrorSignature('load failed after 3 retries', null);
     const b = clientErrorSignature('load failed after 17 retries', null);
     expect(a).toBe(b);
-    expect(
-      computeClientErrorFingerprint('f', 'load failed after 3 retries', null),
-    ).toBe(computeClientErrorFingerprint('f', 'load failed after 17 retries', null));
+    expect(computeClientErrorFingerprint('f', 'load failed after 3 retries', null)).toBe(
+      computeClientErrorFingerprint('f', 'load failed after 17 retries', null),
+    );
   });
 
   it('distinguishes different features and different codes', () => {
@@ -176,9 +178,7 @@ describe('public issue payload', () => {
       sampleReport({ message: 'line one\n- injected: bullet\tafter\ttab\nline three' }),
       { firstSeenIso: '2026-07-15T00:00:00.000Z', count: 1 },
     );
-    const messageLine = payload.body
-      .split('\n')
-      .find((line) => line.startsWith('- Message:'));
+    const messageLine = payload.body.split('\n').find((line) => line.startsWith('- Message:'));
     expect(messageLine).toBeDefined();
     // The whole (whitespace-collapsed) message stays on the one bullet line.
     expect(messageLine).toBe('- Message: `line one - injected: bullet after tab line three`');
