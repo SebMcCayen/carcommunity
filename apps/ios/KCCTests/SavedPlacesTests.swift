@@ -98,6 +98,34 @@ final class SavedPlacesTests: XCTestCase {
         XCTAssertTrue(first.load().isEmpty)
     }
 
+    func testStorePreservesValidEntriesAroundMalformedElements() throws {
+        let store = UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults)
+        let home = try XCTUnwrap(makeSaved(.home, id: "home-address", latitude: 57))
+        let favourite = try XCTUnwrap(makeSaved(.favourite, id: "cafe", latitude: 58))
+
+        // Seed once to discover this account's private, encoded key without
+        // exposing persistence details through the production API.
+        store.save([home])
+        let key = try XCTUnwrap(defaults.dictionaryRepresentation().keys.first {
+            $0.hasPrefix("ios.savedPlaces.v1.")
+        })
+        let encoder = JSONEncoder()
+        let validHome = try JSONSerialization.jsonObject(with: encoder.encode(home))
+        let validFavourite = try JSONSerialization.jsonObject(with: encoder.encode(favourite))
+        let malformed: [String: Any] = [
+            "id": "future",
+            "kind": "future_kind",
+            "label": "Unknown",
+            "place": ["id": "future"]
+        ]
+        defaults.set(
+            try JSONSerialization.data(withJSONObject: [validHome, malformed, validFavourite]),
+            forKey: key
+        )
+
+        XCTAssertEqual(store.load(), [home, favourite])
+    }
+
     func testShareURLIsHTTPSAndKeepsCoordinatesInQuery() throws {
         let saved = try XCTUnwrap(makeSaved(.favourite, id: "lake", latitude: 57.49))
         let url = try XCTUnwrap(SavedPlaceShare.url(for: saved))

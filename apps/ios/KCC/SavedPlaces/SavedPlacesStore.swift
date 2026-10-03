@@ -25,14 +25,27 @@ final class UserDefaultsSavedPlacesStore: SavedPlacesStore {
 
     func load() -> [SavedPlace] {
         guard let data = defaults.data(forKey: key),
-              let decoded = try? JSONDecoder().decode([SavedPlace].self, from: data)
+              let decoded = try? JSONDecoder().decode(
+                [LossyDecodable<SavedPlace>].self,
+                from: data
+              )
         else { return [] }
-        return SavedPlacesPolicy.normalize(decoded)
+        return SavedPlacesPolicy.normalize(decoded.compactMap(\.value))
     }
 
     func save(_ places: [SavedPlace]) {
         let normalized = SavedPlacesPolicy.normalize(places)
         guard let data = try? JSONEncoder().encode(normalized) else { return }
         defaults.set(data, forKey: key)
+    }
+}
+
+/// Decodes one array element independently so a stale future kind or a single
+/// malformed field cannot discard every valid saved place for the account.
+private struct LossyDecodable<Value: Decodable>: Decodable {
+    let value: Value?
+
+    init(from decoder: Decoder) throws {
+        value = try? Value(from: decoder)
     }
 }
