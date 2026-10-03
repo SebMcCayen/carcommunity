@@ -1671,6 +1671,7 @@
     "commentSubmit": "Send comment",
     "commentDone": "Comment sent",
     "publicNotice": "Your comment is posted publicly on GitHub. Do not include personal or sensitive information.",
+    "deliveryFailed": "Your interaction was recorded, but could not be published to GitHub. It cannot be retried.",
     "alreadyDone": "You have already done this on this ticket.",
     "rateLimited": "Too many interactions. Please wait a while and try again.",
     "genericError": "Something went wrong. Please try again.",

@@ -89,13 +89,20 @@ final class FirebaseOpenTicketsRepository: OpenTicketsRepository, @unchecked Sen
         ]
         if type == .comment, let text { payload["text"] = text }
         do {
-            _ = try await functions.call(Self.interactCallable, payload: payload)
-            return .posted
+            let response = try await functions.call(Self.interactCallable, payload: payload)
+            return Self.interactionOutcome(from: response)
         } catch let error as KccFunctionsError {
             return Self.interactionOutcome(from: error)
         } catch {
             return .failed
         }
+    }
+
+    static func interactionOutcome(from response: Any?) -> TicketInteractionOutcome {
+        guard let response = response as? [String: Any],
+              let posted = response["posted"] as? Bool
+        else { return .failed }
+        return posted ? .posted : .deliveryFailed
     }
 
     /// Only the backend's stable duplicate discriminator means the member has

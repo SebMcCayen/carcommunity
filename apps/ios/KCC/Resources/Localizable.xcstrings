@@ -21999,6 +21999,23 @@
         }
       }
     },
+    "openTickets.deliveryFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Din interaktion registrerades, men kunde inte publiceras på GitHub. Den kan inte skickas igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your interaction was recorded, but could not be published to GitHub. It cannot be retried."
+          }
+        }
+      }
+    },
     "openTickets.empty": {
       "extractionState": "manual",
       "localizations": {

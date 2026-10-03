@@ -50,6 +50,25 @@ class OpenTicketsCoordinatorTest {
     }
 
     @Test
+    fun `undelivered interactions are recorded and cannot be retried`() = runTest {
+        val repo = FakeRepo(TicketInteractOutcome.DELIVERY_FAILED)
+        val coordinator = OpenTicketsCoordinator(repo)
+
+        coordinator.plusOne(7)
+        coordinator.plusOne(7)
+        coordinator.comment(7, "Same issue")
+        coordinator.comment(7, "Retry")
+
+        val state = coordinator.stateFor(7)
+        assertTrue(state.plusOneDeliveryFailed)
+        assertTrue(state.commentDeliveryFailed)
+        assertFalse(state.canPlusOne)
+        assertFalse(state.canComment)
+        assertNull(state.submitting)
+        assertEquals(2, repo.calls.size)
+    }
+
+    @Test
     fun `plus one already-done also disables and notes it`() = runTest {
         val coordinator = OpenTicketsCoordinator(FakeRepo(TicketInteractOutcome.ALREADY_DONE))
 
@@ -184,6 +203,22 @@ class OpenTicketsCoordinatorTest {
         assertEquals(
             TicketInteractOutcome.RATE_LIMITED,
             ticketInteractOutcome("RESOURCE_EXHAUSTED", null),
+        )
+    }
+
+    @Test
+    fun `callable delivery result distinguishes published from reserved but undelivered`() {
+        assertEquals(
+            TicketInteractOutcome.POSTED,
+            ticketOutcomeFromResponse(mapOf("posted" to true)),
+        )
+        assertEquals(
+            TicketInteractOutcome.DELIVERY_FAILED,
+            ticketOutcomeFromResponse(mapOf("posted" to false)),
+        )
+        assertEquals(
+            TicketInteractOutcome.FAILED,
+            ticketOutcomeFromResponse(emptyMap<String, Any>()),
         )
     }
 }

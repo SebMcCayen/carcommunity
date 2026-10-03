@@ -161,6 +161,14 @@ final class OpenTicketsCoordinator {
             if type == .plusOne { state.plusOneDone = true } else { state.commentDone = true }
             state.error = nil
             incrementDisplayedCount(issueNumber: issueNumber, type: type)
+        case .deliveryFailed:
+            if type == .plusOne {
+                state.plusOneDeliveryFailed = true
+            } else {
+                state.commentDeliveryFailed = true
+            }
+            state.error = nil
+            incrementDisplayedCount(issueNumber: issueNumber, type: type)
         case .alreadyDone:
             if type == .plusOne { state.plusOneDone = true } else { state.commentDone = true }
             state.error = .alreadyDone

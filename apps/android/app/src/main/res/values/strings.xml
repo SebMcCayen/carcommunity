@@ -1560,6 +1560,7 @@
     <string name="openTickets_commentSubmit">Skicka kommentar</string>
     <string name="openTickets_commentDone">Kommentar skickad</string>
     <string name="openTickets_publicNotice">Din kommentar publiceras offentligt på GitHub. Skriv inte med personlig eller känslig information.</string>
+    <string name="openTickets_deliveryFailed">Din interaktion registrerades, men kunde inte publiceras på GitHub. Den kan inte skickas igen.</string>
     <string name="openTickets_alreadyDone">Du har redan gjort detta för det här ärendet.</string>
     <string name="openTickets_rateLimited">För många interaktioner. Vänta en stund och försök igen.</string>
     <string name="openTickets_genericError">Något gick fel. Försök igen.</string>

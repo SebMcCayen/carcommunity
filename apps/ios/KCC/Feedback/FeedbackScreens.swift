@@ -254,8 +254,18 @@ private struct TicketCard: View {
                     .accessibilityHint(Text("openTickets.openInGitHubDescription"))
             }
 
+            if state.plusOneDeliveryFailed {
+                Text("openTickets.deliveryFailed")
+                    .font(.caption)
+                    .foregroundStyle(KccPalette.errorRed)
+            }
+
             if state.commentDone {
                 Text("openTickets.commentDone").font(.subheadline).foregroundStyle(.green)
+            } else if state.commentDeliveryFailed {
+                Text("openTickets.deliveryFailed")
+                    .font(.subheadline)
+                    .foregroundStyle(KccPalette.errorRed)
             } else {
                 Text("openTickets.publicNotice").font(.caption).foregroundStyle(.red)
                 TextField("openTickets.commentLabel", text: $comment, axis: .vertical)

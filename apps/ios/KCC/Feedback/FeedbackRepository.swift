@@ -99,6 +99,7 @@ enum TicketInteractionType: Equatable, Sendable {
 
 enum TicketInteractionOutcome: Equatable, Sendable {
     case posted
+    case deliveryFailed
     case alreadyDone
     case rateLimited
     case failed
@@ -114,11 +115,13 @@ enum TicketInteractionError: Equatable, Sendable {
 struct TicketInteractionState: Equatable, Sendable {
     var plusOneDone = false
     var commentDone = false
+    var plusOneDeliveryFailed = false
+    var commentDeliveryFailed = false
     var submitting: TicketInteractionType?
     var error: TicketInteractionError?
 
-    var canPlusOne: Bool { !plusOneDone && submitting == nil }
-    var canComment: Bool { !commentDone && submitting == nil }
+    var canPlusOne: Bool { !plusOneDone && !plusOneDeliveryFailed && submitting == nil }
+    var canComment: Bool { !commentDone && !commentDeliveryFailed && submitting == nil }
 }
 
 enum TicketComments {

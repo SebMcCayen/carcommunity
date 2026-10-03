@@ -195,6 +195,40 @@ final class FeedbackFeatureTests: XCTestCase {
     }
 
     @MainActor
+    func testUndeliveredInteractionsAreRecordedAndCannotBeRetried() async {
+        let repository = FakeTicketsRepository()
+        let ticket = OpenTicket(
+            number: 7,
+            title: "Ticket",
+            summary: "",
+            htmlURL: URL(string: "https://github.com/SebMcCayen/carcommunity/issues/7")!,
+            plusOneCount: 3,
+            commentCount: 4
+        )
+        repository.pages = [.loaded(OpenTicketsPage(tickets: [ticket], nextCursor: nil))]
+        repository.outcomes = [.deliveryFailed, .deliveryFailed]
+        let coordinator = OpenTicketsCoordinator(repository: repository)
+        coordinator.start()
+        await waitUntil { coordinator.listState == .loaded([ticket]) }
+
+        await coordinator.plusOne(issueNumber: 7)
+        await coordinator.plusOne(issueNumber: 7)
+        await coordinator.comment(issueNumber: 7, text: "Same issue")
+        await coordinator.comment(issueNumber: 7, text: "Retry")
+
+        XCTAssertEqual(repository.calls.count, 2)
+        XCTAssertTrue(coordinator.interactions[7]?.plusOneDeliveryFailed == true)
+        XCTAssertTrue(coordinator.interactions[7]?.commentDeliveryFailed == true)
+        XCTAssertFalse(coordinator.interactions[7]?.canPlusOne == true)
+        XCTAssertFalse(coordinator.interactions[7]?.canComment == true)
+        guard case .loaded(let tickets) = coordinator.listState else {
+            return XCTFail("Expected loaded tickets")
+        }
+        XCTAssertEqual(tickets.first?.plusOneCount, 4)
+        XCTAssertEqual(tickets.first?.commentCount, 5)
+    }
+
+    @MainActor
     func testTicketCoordinatorSurfacesEmptyAndRateLimitedWithoutRawErrors() async {
         let repository = FakeTicketsRepository()
         repository.outcomes = [.rateLimited]
@@ -228,6 +262,21 @@ final class FeedbackFeatureTests: XCTestCase {
                 code: .resourceExhausted
             )),
             .rateLimited
+        )
+    }
+
+    func testTicketInteractionUsesCallableDeliveryResult() {
+        XCTAssertEqual(
+            FirebaseOpenTicketsRepository.interactionOutcome(from: ["posted": true]),
+            .posted
+        )
+        XCTAssertEqual(
+            FirebaseOpenTicketsRepository.interactionOutcome(from: ["posted": false]),
+            .deliveryFailed
+        )
+        XCTAssertEqual(
+            FirebaseOpenTicketsRepository.interactionOutcome(from: [:]),
+            .failed
         )
     }
 

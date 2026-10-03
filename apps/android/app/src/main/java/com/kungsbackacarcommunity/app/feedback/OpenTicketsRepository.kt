@@ -109,7 +109,7 @@ class FirebaseOpenTicketsRepository private constructor(
                 .addOnCompleteListener { task ->
                     if (!continuation.isActive) return@addOnCompleteListener
                     if (task.isSuccessful) {
-                        continuation.resume(TicketInteractOutcome.POSTED)
+                        continuation.resume(ticketOutcomeFromResponse(task.result?.data))
                         return@addOnCompleteListener
                     }
                     val error = task.exception as? FirebaseFunctionsException

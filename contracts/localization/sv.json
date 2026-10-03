@@ -1671,6 +1671,7 @@
     "commentSubmit": "Skicka kommentar",
     "commentDone": "Kommentar skickad",
     "publicNotice": "Din kommentar publiceras offentligt på GitHub. Skriv inte med personlig eller känslig information.",
+    "deliveryFailed": "Din interaktion registrerades, men kunde inte publiceras på GitHub. Den kan inte skickas igen.",
     "alreadyDone": "Du har redan gjort detta för det här ärendet.",
     "rateLimited": "För många interaktioner. Vänta en stund och försök igen.",
     "genericError": "Något gick fel. Försök igen.",
