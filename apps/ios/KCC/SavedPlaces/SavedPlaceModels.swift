@@ -141,7 +141,7 @@ enum SavedPlacesPolicy {
         bounded(label.trimmingCharacters(in: .whitespacesAndNewlines), to: maximumLabelLength)
     }
 
-    private static func bounded(_ value: String, to maximumScalars: Int) -> String {
+    static func bounded(_ value: String, to maximumScalars: Int) -> String {
         String(value.unicodeScalars.prefix(maximumScalars))
     }
 
@@ -170,7 +170,7 @@ enum SavedPlaceShare {
         components.path = "/"
         components.queryItems = [
             URLQueryItem(name: "ll", value: "\(point.latitude),\(point.longitude)"),
-            URLQueryItem(name: "q", value: String(name.prefix(160)))
+            URLQueryItem(name: "q", value: SavedPlacesPolicy.bounded(name, to: 160))
         ]
         return components.url
     }

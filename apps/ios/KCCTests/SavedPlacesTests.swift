@@ -108,6 +108,23 @@ final class SavedPlacesTests: XCTestCase {
         XCTAssertEqual(components.queryItems?.first(where: { $0.name == "ll" })?.value, "57.49,12.0")
     }
 
+    func testShareURLBoundsDisplayNameByUnicodeScalars() throws {
+        let scalarHeavyName = "a" + String(repeating: "\u{0301}", count: 400)
+        let url = try XCTUnwrap(SavedPlaceShare.url(
+            name: scalarHeavyName,
+            point: MapPoint(longitude: 12, latitude: 57)
+        ))
+        let name = try XCTUnwrap(
+            URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?
+                .first(where: { $0.name == "q" })?
+                .value
+        )
+
+        XCTAssertEqual(name.unicodeScalars.count, 160)
+        XCTAssertEqual(name, SavedPlacesPolicy.bounded(scalarHeavyName, to: 160))
+    }
+
     func testGeocoderRequestIsBoundedAndUsesValidProximity() throws {
         let client = MapboxAddressSearchClient(token: "pk.test", language: "sv")
         let url = try XCTUnwrap(client.requestURL(
@@ -151,6 +168,29 @@ final class SavedPlacesTests: XCTestCase {
         let decoded = try MapboxAddressSearchClient.decode(data: data)
 
         XCTAssertEqual(decoded.map(\.name), ["First"])
+    }
+
+    func testGeocoderBoundsDecodedTextByUnicodeScalars() throws {
+        let scalarHeavyText = "a" + String(repeating: "\u{0301}", count: 400)
+        let payload: [String: Any] = [
+            "features": [[
+                "id": "fallback",
+                "geometry": ["coordinates": [12, 57]],
+                "properties": [
+                    "mapbox_id": scalarHeavyText,
+                    "name": scalarHeavyText,
+                    "full_address": scalarHeavyText
+                ]
+            ]]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+
+        let suggestion = try XCTUnwrap(MapboxAddressSearchClient.decode(data: data).first)
+
+        XCTAssertEqual(suggestion.id.unicodeScalars.count, 256)
+        XCTAssertEqual(suggestion.name.unicodeScalars.count, 160)
+        XCTAssertEqual(suggestion.address?.unicodeScalars.count, 240)
+        XCTAssertEqual(suggestion.id, SavedPlacesPolicy.bounded(scalarHeavyText, to: 256))
     }
 
     func testGeocoderRejectsOversizedResponseBeforeDecoding() {

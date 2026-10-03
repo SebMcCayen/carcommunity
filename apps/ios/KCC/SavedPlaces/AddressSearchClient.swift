@@ -92,12 +92,15 @@ struct MapboxAddressSearchClient: AddressSearchClient {
             guard !name.isEmpty else { continue }
             let address = properties.fullAddress ?? properties.placeFormatted
             let rawID = properties.mapboxID ?? feature.id ?? "\(point.longitude),\(point.latitude)"
-            let id = String(rawID.trimmingCharacters(in: .whitespacesAndNewlines).prefix(256))
+            let id = SavedPlacesPolicy.bounded(
+                rawID.trimmingCharacters(in: .whitespacesAndNewlines),
+                to: 256
+            )
             guard !id.isEmpty, seen.insert(id).inserted else { continue }
             suggestions.append(PlaceSuggestion(
                 id: id,
-                name: String(name.prefix(160)),
-                address: address.map { String($0.prefix(240)) },
+                name: SavedPlacesPolicy.bounded(name, to: 160),
+                address: address.map { SavedPlacesPolicy.bounded($0, to: 240) },
                 point: point
             ))
             if suggestions.count == SavedPlacesPolicy.maximumSearchResults { break }
