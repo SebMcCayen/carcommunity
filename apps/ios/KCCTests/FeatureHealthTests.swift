@@ -21,16 +21,27 @@ final class FeatureHealthTests: XCTestCase {
     private final class ControlledNetwork: NetworkStatus, @unchecked Sendable {
         private let lock = NSLock()
         private var state: NetworkValidationState = .pending
-        private var handler: (@Sendable () -> Void)?
+        private var onlineHandler: (@Sendable () -> Void)?
+        private var offlineHandler: (@Sendable () -> Void)?
 
         func validationState() -> NetworkValidationState { lock.withLock { state } }
         func setValidatedOnlineHandler(_ handler: (@Sendable () -> Void)?) {
-            lock.withLock { self.handler = handler }
+            lock.withLock { onlineHandler = handler }
+        }
+        func setValidatedOfflineHandler(_ handler: (@Sendable () -> Void)?) {
+            lock.withLock { offlineHandler = handler }
         }
         func completeOnline() {
             let callback = lock.withLock {
                 state = .online
-                return handler
+                return onlineHandler
+            }
+            callback?()
+        }
+        func completeOffline() {
+            let callback = lock.withLock {
+                state = .offline
+                return offlineHandler
             }
             callback?()
         }
@@ -183,6 +194,24 @@ final class FeatureHealthTests: XCTestCase {
         reporter.updateConditions(foreground: true, surfaceShown: true)
 
         network.completeOnline()
+        XCTAssertTrue(sink.entries.isEmpty)
+    }
+
+    func testReporterDiscardsPendingLoadingErrorAfterOfflineValidation() {
+        let sink = RecordingErrorReporter()
+        let network = ControlledNetwork()
+        let reporter = FeatureHealthReporter(
+            gate: gate(), errorReporter: sink, networkStatus: network
+        )
+
+        XCTAssertEqual(
+            reporter.report(.mapStyleLoadFailed, foreground: true, surfaceShown: true),
+            .suppress(.connectivityPending)
+        )
+
+        network.completeOffline()
+        network.completeOnline()
+
         XCTAssertTrue(sink.entries.isEmpty)
     }
 

@@ -149,11 +149,13 @@ enum NetworkValidationState: Equatable, Sendable {
 protocol NetworkStatus: Sendable {
     func validationState() -> NetworkValidationState
     func setValidatedOnlineHandler(_ handler: (@Sendable () -> Void)?)
+    func setValidatedOfflineHandler(_ handler: (@Sendable () -> Void)?)
 }
 
 extension NetworkStatus {
     func isOnline() -> Bool { validationState() == .online }
     func setValidatedOnlineHandler(_ handler: (@Sendable () -> Void)?) {}
+    func setValidatedOfflineHandler(_ handler: (@Sendable () -> Void)?) {}
 }
 
 /// Process-safe connectivity snapshot used only as a false-positive suppression
@@ -174,6 +176,7 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
     private var validationGeneration = 0
     private var validationTask: URLSessionDataTask?
     private var validatedOnlineHandler: (@Sendable () -> Void)?
+    private var validatedOfflineHandler: (@Sendable () -> Void)?
 
     init() {
         let configuration = URLSessionConfiguration.ephemeral
@@ -184,7 +187,7 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
         session = URLSession(configuration: configuration)
         monitor.pathUpdateHandler = { [weak self] path in
             guard let self else { return }
-            let (shouldValidate, taskToCancel) = self.lock.withLock {
+            let (shouldValidate, taskToCancel, offlineHandler) = self.lock.withLock {
                 let available = path.status == .satisfied
                 let changed = self.pathAvailable != available
                 self.pathAvailable = available
@@ -194,7 +197,7 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
                     self.validationGeneration += 1
                     let task = self.validationTask
                     self.validationTask = nil
-                    return (false, task)
+                    return (false, task, self.validatedOfflineHandler)
                 }
                 let retryAfterPathUpdate = self.state == .offline
                 if changed || retryAfterPathUpdate {
@@ -203,9 +206,10 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
                         self.state = .pending
                     }
                 }
-                return (changed || retryAfterPathUpdate, nil)
+                return (changed || retryAfterPathUpdate, nil, nil)
             }
             taskToCancel?.cancel()
+            offlineHandler?()
             if shouldValidate {
                 self.validateConnectivityIfNeeded()
             }
@@ -225,6 +229,10 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
 
     func setValidatedOnlineHandler(_ handler: (@Sendable () -> Void)?) {
         lock.withLock { validatedOnlineHandler = handler }
+    }
+
+    func setValidatedOfflineHandler(_ handler: (@Sendable () -> Void)?) {
+        lock.withLock { validatedOfflineHandler = handler }
     }
 
     static func acceptsMapboxConnectivityResponse(
@@ -266,14 +274,16 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
         let task = session.dataTask(with: request) { [weak self] _, response, error in
             guard let self else { return }
             let validated = Self.acceptsMapboxConnectivityResponse(response, error: error)
-            let onlineHandler = self.lock.withLock { () -> (@Sendable () -> Void)? in
+            let validationHandler = self.lock.withLock { () -> (@Sendable () -> Void)? in
                 guard self.validationGeneration == generation else { return nil }
                 self.state = self.pathAvailable && validated ? .online : .offline
                 self.validationInFlight = false
                 self.validationTask = nil
-                return self.state == .online ? self.validatedOnlineHandler : nil
+                return self.state == .online
+                    ? self.validatedOnlineHandler
+                    : self.validatedOfflineHandler
             }
-            onlineHandler?()
+            validationHandler?()
         }
         let shouldStart = lock.withLock {
             guard pathAvailable,
@@ -360,6 +370,9 @@ final class FeatureHealthReporter: @unchecked Sendable {
         networkStatus.setValidatedOnlineHandler { [weak self] in
             self?.flushPendingLoadingErrors()
         }
+        networkStatus.setValidatedOfflineHandler { [weak self] in
+            self?.discardPendingLoadingErrors()
+        }
     }
 
     func isOnline() -> Bool { networkStatus.isOnline() }
@@ -386,8 +399,13 @@ final class FeatureHealthReporter: @unchecked Sendable {
             return true
         }
         if shouldDefer {
-            if networkStatus.validationState() == .online {
+            switch networkStatus.validationState() {
+            case .online:
                 flushPendingLoadingErrors()
+            case .offline:
+                discardPendingLoadingErrors()
+            case .pending:
+                break
             }
             return .suppress(.connectivityPending)
         }
@@ -428,5 +446,9 @@ final class FeatureHealthReporter: @unchecked Sendable {
                 errorReporter.report(feature: feature, message: message, code: code, context: context)
             }
         }
+    }
+
+    private func discardPendingLoadingErrors() {
+        pendingLock.withLock { pendingLoadingErrors.removeAll() }
     }
 }
