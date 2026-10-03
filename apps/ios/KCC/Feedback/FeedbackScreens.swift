@@ -246,7 +246,9 @@ private struct TicketCard: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(!state.canPlusOne)
-                .accessibilityLabel(Text("openTickets.plusOneDescription"))
+                .accessibilityLabel(Text(state.plusOneDone
+                    ? LocalizedStringKey("openTickets.plusOneDone")
+                    : LocalizedStringKey("openTickets.plusOneDescription")))
 
                 Button("openTickets.openInGitHub", action: onOpen)
                     .accessibilityHint(Text("openTickets.openInGitHubDescription"))
