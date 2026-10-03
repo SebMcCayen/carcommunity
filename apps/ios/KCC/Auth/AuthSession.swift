@@ -48,10 +48,13 @@ final class AuthSession {
     /// that authenticated while the request was in flight.
     @discardableResult
     func signOut(ifSignedInAs expectedUid: String) -> Bool {
-        guard case .signedIn(let currentUid, _) = state,
-              currentUid == expectedUid
-        else { return true }
-        return signOut()
+        guard let repository else { return true }
+        do {
+            try repository.signOut(ifCurrentUidIs: expectedUid)
+            return true
+        } catch {
+            return false
+        }
     }
 
     deinit {

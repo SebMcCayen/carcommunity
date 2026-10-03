@@ -91,4 +91,6 @@ private final class UnavailableAuthRepository: AuthRepository {
     }
 
     func signOut() throws {}
+
+    func signOut(ifCurrentUidIs expectedUid: String) throws {}
 }

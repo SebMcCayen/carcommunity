@@ -6,11 +6,21 @@ import XCTest
 final class AccountDeletionTests: XCTestCase {
     private final class FakeAuthRepository: AuthRepository, @unchecked Sendable {
         var authState: AuthState
+        private var authoritativeUid: String?
         private(set) var signOutCount = 0
         var signOutError: Error?
 
         init(authState: AuthState) {
             self.authState = authState
+            if case .signedIn(let uid, _) = authState {
+                authoritativeUid = uid
+            } else {
+                authoritativeUid = nil
+            }
+        }
+
+        func replaceAuthoritativeIdentityWithoutPublishing(uid: String?) {
+            authoritativeUid = uid
         }
 
         func authStateUpdates() -> AsyncStream<AuthState> {
@@ -26,6 +36,11 @@ final class AccountDeletionTests: XCTestCase {
         func signOut() throws {
             signOutCount += 1
             if let signOutError { throw signOutError }
+        }
+
+        func signOut(ifCurrentUidIs expectedUid: String) throws {
+            guard authoritativeUid == expectedUid else { return }
+            try signOut()
         }
     }
 
@@ -212,6 +227,22 @@ final class AccountDeletionTests: XCTestCase {
         // A cancelled/deferred task from the deleted identity is treated as
         // complete without touching the replacement account's credentials.
         XCTAssertTrue(session.signOut(ifSignedInAs: "deleted-origin"))
+        XCTAssertEqual(repository.signOutCount, 0)
+    }
+
+    @MainActor
+    func testDeferredSignOutReadsAuthoritativeIdentityBeforeObserverConsumesReplacement() {
+        let repository = FakeAuthRepository(
+            authState: .signedIn(uid: "deletion-origin", displayName: nil)
+        )
+        let session = AuthSession(repository: repository)
+
+        // Firebase has already switched accounts, but the listener-backed
+        // repository/session state has not published or consumed that update.
+        repository.replaceAuthoritativeIdentityWithoutPublishing(uid: "replacement")
+
+        XCTAssertEqual(session.state, .signedIn(uid: "deletion-origin", displayName: nil))
+        XCTAssertTrue(session.signOut(ifSignedInAs: "deletion-origin"))
         XCTAssertEqual(repository.signOutCount, 0)
     }
 }
