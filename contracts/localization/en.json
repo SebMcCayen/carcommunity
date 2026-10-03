@@ -243,6 +243,8 @@
     "leaderboardExplainer": "On: you appear on the leaderboard in the app and on the website. Off: you're hidden from both.",
     "saveButton": "Save",
     "loading": "Saving...",
+    "unavailable": "Privacy settings are unavailable right now.",
+    "retry": "Try again",
     "error": "Something went wrong. Please try again.",
     "saved": "Saved."
   },

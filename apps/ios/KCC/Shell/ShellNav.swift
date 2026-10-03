@@ -235,6 +235,21 @@ enum ShellNavigation {
     static func chatHubEntryAvailable(flags _: FeatureFlags, access: AccountAccess) -> Bool {
         ChatFeatureGate.channelAndDirectChatEnabled(access: access)
     }
+
+    /// The privacy screen's partner-statistics control is governed by the
+    /// shared partnerStats rollout flag on both mobile platforms.
+    static func partnerStatsEntryAvailable(
+        flags: FeatureFlags,
+        access: AccountAccess,
+        repositoryAvailable: Bool
+    ) -> Bool {
+        repositoryAvailable && FeatureGate.isAvailable(
+            flags: flags,
+            flag: .partnerStats,
+            memberGated: false,
+            access: access
+        )
+    }
 }
 
 /// What tapping the floating live-location-share toggle should do.
