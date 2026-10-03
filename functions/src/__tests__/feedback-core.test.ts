@@ -87,9 +87,14 @@ describe('feedback-core input parsing', () => {
     const result = parseReportIssueInput({ description: '  Something broke  ' });
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('expected ok');
+    expect(result.input.platform).toBe('android');
     expect(result.input.description).toBe('Something broke');
     expect(result.input.summary).toBeNull();
     expect(result.input.appVersion).toBeNull();
+
+    const payload = buildGitHubIssuePayload(result.input, 'rep_android', '2026-07-09T12:00:00.000Z');
+    expect(payload.title).toBe('[Android] Something broke');
+    expect(payload.labels).toEqual([FEEDBACK_ISSUE_LABEL]);
   });
 
   it('rejects empty/oversized description and unknown keys', () => {
