@@ -55,6 +55,7 @@ struct ShellView: View {
     @State private var navSearchOpen = false
     @State private var showSavedPlacesPicker = false
     @State private var savedPlacesCoordinator: SavedPlacesCoordinator?
+    @State private var savedPlacesProximity: MapPoint?
 
     /// Feature coordinators are composed once for the signed-in shell. Every
     /// factory is config-safe, so a build without GoogleService-Info.plist
@@ -143,6 +144,9 @@ struct ShellView: View {
         shellPresentation
             .task(id: signedInUid) { await wireFeatures() }
             .task(id: crownFeatureWiringKey) { await wireCrownHunt() }
+            .task(id: savedPlacesLocationSubscriptionKey) {
+                await observeSavedPlacesLocation()
+            }
             .onChange(of: featureFlags.isEnabled(.liveLocation)) { _, enabled in
                 liveLocationCoordinator?.canShare = enabled && !access.isRestricted
             }
@@ -215,7 +219,7 @@ struct ShellView: View {
             if addressSearchPresented, let savedPlacesCoordinator {
                 AddressSearchOverlay(
                     coordinator: savedPlacesCoordinator,
-                    proximity: currentMapCenter,
+                    proximity: savedPlacesProximity,
                     onSelect: showPlaceOnMap,
                     onManage: {
                         navSearchOpen = false
@@ -855,7 +859,7 @@ struct ShellView: View {
                 routeNavigation {
                     SavedPlacesScreen(
                         coordinator: savedPlacesCoordinator,
-                        proximity: currentMapCenter
+                        proximity: savedPlacesProximity
                     )
                 }
             } else {
@@ -1704,6 +1708,23 @@ struct ShellView: View {
     private var currentMapCenter: MapPoint? {
         mapSurface.cameraSnapshot.map {
             MapPoint(longitude: $0.longitude, latitude: $0.latitude)
+        }
+    }
+
+    private var savedPlacesLocationSubscriptionKey: String {
+        let needed = addressSearchPresented || routes.current == .savedPlaces
+        return "\(needed)|\(locationProvider.authorization)"
+    }
+
+    private func observeSavedPlacesLocation() async {
+        savedPlacesProximity = nil
+        guard (addressSearchPresented || routes.current == .savedPlaces),
+              locationProvider.authorization.isAuthorized
+        else { return }
+        for await fix in locationProvider.fixes() {
+            if Task.isCancelled { return }
+            let point = MapPoint(longitude: fix.longitude, latitude: fix.latitude)
+            savedPlacesProximity = SavedPlacesPolicy.isValid(point: point) ? point : nil
         }
     }
 

@@ -98,6 +98,30 @@ enum SavedPlacesPolicy {
         existing.filter { $0.id != id }
     }
 
+    static func refersToSamePlace(_ candidate: PlaceSuggestion, as target: PlaceSuggestion) -> Bool {
+        let candidateID = candidate.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        let targetID = target.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !candidateID.isEmpty, !targetID.isEmpty {
+            return candidateID == targetID
+        }
+        return candidate.point == target.point
+    }
+
+    /// Distance ranks only when a real device fix is available. Equal-distance
+    /// candidates retain Mapbox's relevance order.
+    static func nearestFirst(
+        _ results: [PlaceSuggestion],
+        from origin: MapPoint?
+    ) -> [PlaceSuggestion] {
+        guard let origin, isValid(point: origin) else { return results }
+        return results.enumerated().sorted { first, second in
+            let firstDistance = distanceMeters(from: origin, to: first.element.point)
+            let secondDistance = distanceMeters(from: origin, to: second.element.point)
+            if firstDistance == secondDistance { return first.offset < second.offset }
+            return firstDistance < secondDistance
+        }.map(\.element)
+    }
+
     static func normalize(_ raw: [SavedPlace]) -> [SavedPlace] {
         var seen = Set<String>()
         var valid: [SavedPlace] = []
@@ -143,6 +167,16 @@ enum SavedPlacesPolicy {
 
     static func bounded(_ value: String, to maximumScalars: Int) -> String {
         String(value.unicodeScalars.prefix(maximumScalars))
+    }
+
+    private static func distanceMeters(from first: MapPoint, to second: MapPoint) -> Double {
+        let latitude1 = first.latitude * .pi / 180
+        let latitude2 = second.latitude * .pi / 180
+        let latitudeDelta = latitude2 - latitude1
+        let longitudeDelta = (second.longitude - first.longitude) * .pi / 180
+        let haversine = pow(sin(latitudeDelta / 2), 2)
+            + cos(latitude1) * cos(latitude2) * pow(sin(longitudeDelta / 2), 2)
+        return 2 * 6_371_000 * asin(min(1, sqrt(haversine)))
     }
 
     private static func sorted(_ items: [SavedPlace]) -> [SavedPlace] {

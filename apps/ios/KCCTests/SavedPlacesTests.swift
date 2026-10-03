@@ -83,6 +83,29 @@ final class SavedPlacesTests: XCTestCase {
         XCTAssertEqual(SavedPlacesPolicy.normalize([saved]), [saved])
     }
 
+    func testSuggestionsSortNearestFirstOnlyWithARealFixAndRemainStable() {
+        let farther = suggestion(id: "farther", latitude: 58)
+        let nearFirst = suggestion(id: "near-first", latitude: 57.1)
+        let nearSecond = suggestion(id: "near-second", latitude: 57.1)
+        let apiOrder = [farther, nearFirst, nearSecond]
+
+        XCTAssertEqual(SavedPlacesPolicy.nearestFirst(apiOrder, from: nil), apiOrder)
+        XCTAssertEqual(
+            SavedPlacesPolicy.nearestFirst(
+                apiOrder,
+                from: MapPoint(longitude: .nan, latitude: 57)
+            ),
+            apiOrder
+        )
+        XCTAssertEqual(
+            SavedPlacesPolicy.nearestFirst(
+                apiOrder,
+                from: MapPoint(longitude: 12, latitude: 57)
+            ).map(\.id),
+            ["near-first", "near-second", "farther"]
+        )
+    }
+
     func testStoreIsIsolatedByAccountAndToleratesCorruptPayload() throws {
         let first = UserDefaultsSavedPlacesStore(uid: "member-a", defaults: defaults)
         let second = UserDefaultsSavedPlacesStore(uid: "member-b", defaults: defaults)
@@ -323,6 +346,45 @@ final class SavedPlacesTests: XCTestCase {
         XCTAssertTrue(coordinator.places.contains { $0.id == "fav:f0" })
         XCTAssertFalse(coordinator.places.contains { $0.id == "fav:f5" })
         XCTAssertTrue(coordinator.places.contains { $0.id == "fav:replacement" })
+    }
+
+    func testChangingKindRemovesEveryOtherEntryForTheSamePlace() throws {
+        let store = UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults)
+        let shared = suggestion(id: "shared", latitude: 57)
+        let favourite = try XCTUnwrap(
+            SavedPlacesPolicy.create(kind: .favourite, place: shared, label: "Shared")
+        )
+        let unrelated = try XCTUnwrap(makeSaved(.favourite, id: "other", latitude: 58))
+        store.save([favourite, unrelated])
+        let coordinator = SavedPlacesCoordinator(
+            store: store,
+            searchClient: UnavailableAddressSearchClient()
+        )
+
+        coordinator.save(kind: .home, place: shared, label: "Shared")
+
+        XCTAssertEqual(coordinator.places.map(\.id), ["home", "fav:other"])
+    }
+
+    func testSamePlaceFallsBackToCoordinatesWhenEitherIDIsBlank() {
+        let withID = suggestion(id: "known", latitude: 57)
+        let withoutID = PlaceSuggestion(
+            id: "",
+            name: "Dropped pin",
+            address: nil,
+            point: withID.point
+        )
+
+        XCTAssertTrue(SavedPlacesPolicy.refersToSamePlace(withID, as: withoutID))
+        XCTAssertFalse(SavedPlacesPolicy.refersToSamePlace(
+            withID,
+            as: PlaceSuggestion(
+                id: "",
+                name: "Other pin",
+                address: nil,
+                point: MapPoint(longitude: 13, latitude: 57)
+            )
+        ))
     }
 
     private func suggestion(id: String, latitude: Double) -> PlaceSuggestion {

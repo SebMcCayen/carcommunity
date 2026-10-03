@@ -38,7 +38,10 @@ final class SavedPlacesCoordinator {
                 try await Task.sleep(for: .milliseconds(300))
                 let results = try await searchClient.search(query: expectedQuery, proximity: proximity)
                 guard !Task.isCancelled, let self, self.query == expectedQuery else { return }
-                self.suggestions = Array(results.prefix(SavedPlacesPolicy.maximumSearchResults))
+                self.suggestions = Array(
+                    SavedPlacesPolicy.nearestFirst(results, from: proximity)
+                        .prefix(SavedPlacesPolicy.maximumSearchResults)
+                )
                 self.isSearching = false
             } catch is CancellationError {
                 return
@@ -53,7 +56,9 @@ final class SavedPlacesCoordinator {
 
     func save(kind: SavedPlaceKind, place: PlaceSuggestion, label: String, replacingID: String? = nil) {
         guard let saved = SavedPlacesPolicy.create(kind: kind, place: place, label: label) else { return }
-        var updated = places
+        var updated = places.filter {
+            $0.id == saved.id || !SavedPlacesPolicy.refersToSamePlace($0.place, as: saved.place)
+        }
         if let replacingID, replacingID != saved.id {
             updated = SavedPlacesPolicy.remove(id: replacingID, from: updated)
         }
