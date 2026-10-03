@@ -1,6 +1,5 @@
 package com.kungsbackacarcommunity.app.feedback
 
-import com.google.firebase.functions.FirebaseFunctionsException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -167,24 +166,24 @@ class OpenTicketsCoordinatorTest {
         assertEquals(
             TicketInteractOutcome.ALREADY_DONE,
             ticketInteractOutcome(
-                FirebaseFunctionsException.Code.FAILED_PRECONDITION,
-                mapOf("reason" to "ticket_already_interacted"),
+                "FAILED_PRECONDITION",
+                "ticket_already_interacted",
             ),
         )
         assertEquals(
             TicketInteractOutcome.FAILED,
             ticketInteractOutcome(
-                FirebaseFunctionsException.Code.FAILED_PRECONDITION,
-                mapOf("reason" to "issue_not_open"),
+                "FAILED_PRECONDITION",
+                "issue_not_open",
             ),
         )
         assertEquals(
             TicketInteractOutcome.FAILED,
-            ticketInteractOutcome(FirebaseFunctionsException.Code.FAILED_PRECONDITION, null),
+            ticketInteractOutcome("FAILED_PRECONDITION", null),
         )
         assertEquals(
             TicketInteractOutcome.RATE_LIMITED,
-            ticketInteractOutcome(FirebaseFunctionsException.Code.RESOURCE_EXHAUSTED, null),
+            ticketInteractOutcome("RESOURCE_EXHAUSTED", null),
         )
     }
 }

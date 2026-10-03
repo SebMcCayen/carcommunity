@@ -113,7 +113,8 @@ class FirebaseOpenTicketsRepository private constructor(
                         return@addOnCompleteListener
                     }
                     val error = task.exception as? FirebaseFunctionsException
-                    val outcome = ticketInteractOutcome(error?.code, error?.details)
+                    val reason = (error?.details as? Map<*, *>)?.get("reason") as? String
+                    val outcome = ticketInteractOutcome(error?.code?.name, reason)
                     continuation.resume(outcome)
                 }
         }
@@ -136,15 +137,14 @@ class FirebaseOpenTicketsRepository private constructor(
 
 /** Maps only the backend's stable duplicate discriminator to already-done. */
 internal fun ticketInteractOutcome(
-    code: FirebaseFunctionsException.Code?,
-    details: Any?,
+    code: String?,
+    reason: String?,
 ): TicketInteractOutcome =
     when {
-        code == FirebaseFunctionsException.Code.FAILED_PRECONDITION &&
-            (details as? Map<*, *>)?.get("reason") == "ticket_already_interacted" ->
+        code == "FAILED_PRECONDITION" && reason == "ticket_already_interacted" ->
             TicketInteractOutcome.ALREADY_DONE
 
-        code == FirebaseFunctionsException.Code.RESOURCE_EXHAUSTED ->
+        code == "RESOURCE_EXHAUSTED" ->
             TicketInteractOutcome.RATE_LIMITED
 
         else -> TicketInteractOutcome.FAILED
