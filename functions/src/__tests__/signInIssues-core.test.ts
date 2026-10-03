@@ -145,10 +145,13 @@ describe('extractSignInFailureReport', () => {
   });
 
   it('accepts the iOS reporter and rejects unsupported platforms', () => {
-    expect(extractSignInFailureReport({ ...rawDoc, platform: 'ios' })).toEqual({
+    const ios = extractSignInFailureReport({ ...rawDoc, platform: 'ios' });
+    expect(ios).toEqual({
       ...report,
       platform: 'ios',
+      fingerprint: computeSignInFingerprint('GetCredentialException', 'ios'),
     });
+    expect(ios?.fingerprint).not.toBe(report.fingerprint);
     expect(extractSignInFailureReport({ ...rawDoc, platform: 'web' })).toBeNull();
     expect(extractSignInFailureReport({ ...rawDoc, platform: undefined })).toBeNull();
   });

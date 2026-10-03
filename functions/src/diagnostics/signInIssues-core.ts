@@ -230,8 +230,8 @@ function expectedSignInSafeMessage(errorCode: string): string {
 }
 
 /**
- * Dedup key for a sign-in failure, derived SERVER-SIDE from the fixed feature
- * area + the server-BUCKETED exception type ONLY (see {@link bucketExceptionType})
+ * Dedup key for a sign-in failure, derived SERVER-SIDE from the fixed feature area + validated platform + the server-BUCKETED
+ * exception type ONLY (see {@link bucketExceptionType})
  * — never from client free text (safeMessage / appVersion / etc). This keeps
  * dedup stable, unpollutable, AND bounded: there is at most ONE public issue per
  * ALLOWLISTED exception type, plus a SINGLE `Unknown` bucket into which every
@@ -240,9 +240,12 @@ function expectedSignInSafeMessage(errorCode: string): string {
  * Tokens that are not valid class-name shapes are rejected OUTRIGHT upstream by
  * the extractor and never reach this function (no issue is filed for them).
  */
-export function computeSignInFingerprint(errorType: string): string {
+export function computeSignInFingerprint(
+  errorType: string,
+  platform: 'android' | 'ios' = 'android',
+): string {
   return createHash('sha256')
-    .update(`${SIGN_IN_FEATURE_AREA}|${errorType}`)
+    .update(`${SIGN_IN_FEATURE_AREA}|${platform}|${errorType}`)
     .digest('hex')
     .slice(0, 64);
 }
@@ -266,7 +269,7 @@ export interface SignInFailureReport {
   osVersion: string | null;
   /** Device model, carried via sanitized metadata.deviceModel; may be absent. */
   deviceModel: string | null;
-  /** Server-derived dedup fingerprint over the VALIDATED exception type only. */
+  /** Server-derived dedup fingerprint over the validated platform and exception type. */
   fingerprint: string;
 }
 
@@ -300,7 +303,7 @@ function boundedString(value: unknown, max: number): string | null {
  * a shape/consistency gate against the RAW client `errorCode` (proving the report
  * came from the real reporter); its content is never surfaced into the public
  * issue (it stays in the private diagnosticsReports doc). The dedup fingerprint is
- * recomputed server-side from the BUCKETED type — the raw `data.fingerprint`
+ * recomputed server-side from the validated platform and BUCKETED type — the raw `data.fingerprint`
  * (which upstream folds in client free text) is intentionally ignored so a
  * malicious caller cannot pollute dedup.
  */
@@ -340,7 +343,7 @@ export function extractSignInFailureReport(
     buildNumber: boundedString(data.buildNumber, MAX_CONTEXT_LENGTH),
     osVersion: boundedString(data.osVersion, MAX_CONTEXT_LENGTH),
     deviceModel: metadata ? boundedString(metadata.deviceModel, MAX_CONTEXT_LENGTH) : null,
-    fingerprint: computeSignInFingerprint(errorType),
+    fingerprint: computeSignInFingerprint(errorType, data.platform as 'android' | 'ios'),
   };
 }
 
