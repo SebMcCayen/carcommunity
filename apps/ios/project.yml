@@ -55,6 +55,9 @@ targets:
       # through callables.
       - package: Firebase
         product: FirebaseDatabase
+      # App Check attestation: install DeviceCheck before Firebase configuration.
+      - package: Firebase
+        product: FirebaseAppCheck
       - package: MapboxMaps
         product: MapboxMaps
     info:

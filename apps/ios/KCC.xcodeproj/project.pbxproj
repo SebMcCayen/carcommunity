@@ -209,6 +209,7 @@
 		A8DF9C1186FD8E20EE6F290E /* VehiclesRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B7C0CD35CB1F73D575829AE /* VehiclesRepository.swift */; };
 		A97B00551DC3EE20B429DACA /* PartnersModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9791A5716F88255A07D026EB /* PartnersModelTests.swift */; };
 		AA22DC3DAB81A8F3F18803E4 /* FriendsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F7188138F4EE7E96F48A73E /* FriendsModels.swift */; };
+		AB9F71D2CC6D4A20A4CC6151 /* FirebaseAppCheck in Frameworks */ = {isa = PBXBuildFile; productRef = D420FC2A18D54586A6D56109 /* FirebaseAppCheck */; };
 		AC245CB0453DBCA55B7811BA /* PrivacySettingsCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 465A3971FEE522A7D43D6AE6 /* PrivacySettingsCoordinator.swift */; };
 		AC3BCAB811380E6D84DD28BD /* ChatHubCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E98570104B738C06FC25CF1 /* ChatHubCoordinatorTests.swift */; };
 		AC4D11BD0682A76D8402A9C7 /* FirebaseConvoyCreateRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46FAF37A9FD3D1525B551ABC /* FirebaseConvoyCreateRepository.swift */; };
@@ -665,6 +666,7 @@
 				2EC5800FD4E02C0186D0E3E2 /* FirebaseFunctions in Frameworks */,
 				BF3D130F03E3B77E710907E7 /* FirebaseStorage in Frameworks */,
 				AFAB9CCD75BABA90B7C61130 /* FirebaseDatabase in Frameworks */,
+				AB9F71D2CC6D4A20A4CC6151 /* FirebaseAppCheck in Frameworks */,
 				613B8194B7824CF9011547F0 /* MapboxMaps in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1972,6 +1974,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = C2463E4F930BC5BDBC34F663 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseAuth;
+		};
+		D420FC2A18D54586A6D56109 /* FirebaseAppCheck */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C2463E4F930BC5BDBC34F663 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAppCheck;
 		};
 		F9CC24020F8667EB5E289AB3 /* FirebaseDatabase */ = {
 			isa = XCSwiftPackageProductDependency;
