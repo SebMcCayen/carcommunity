@@ -184,6 +184,25 @@ final class AccountDeletionTests: XCTestCase {
         XCTAssertEqual(functions.calls.count, 1)
     }
 
+    func testRepositoryMatchesBackendUTF16ReasonBoundary() async throws {
+        let functions = FakeFunctions()
+        let repository = FirebaseAccountDeletionRepository(functions: functions)
+
+        // Emoji are one Swift Character but two UTF-16 code units, matching
+        // JavaScript/Zod string-length validation in the callable backend.
+        let accepted = String(repeating: "😀", count: 250)
+        try await repository.deleteAccount(reason: accepted)
+        XCTAssertEqual(functions.calls[0].1["reason"] as? String, accepted)
+
+        do {
+            try await repository.deleteAccount(reason: accepted + "a")
+            XCTFail("Expected a 501-code-unit reason to fail locally")
+        } catch let error as KccFunctionsError {
+            XCTAssertEqual(error.code, .invalidArgument)
+        }
+        XCTAssertEqual(functions.calls.count, 1)
+    }
+
     @MainActor
     func testDeletionCompletionCannotSignOutReplacementIdentity() {
         let repository = FakeAuthRepository(

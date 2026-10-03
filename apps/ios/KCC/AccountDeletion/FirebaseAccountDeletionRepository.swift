@@ -25,7 +25,9 @@ final class FirebaseAccountDeletionRepository: AccountDeletionRepository, @unche
     func deleteAccount(reason: String?) async throws {
         var payload: [String: Any] = [:]
         if let reason = Self.normalizedReason(reason) {
-            guard reason.count <= Self.maximumReasonLength else {
+            // The Functions backend validates JavaScript string length, which
+            // is measured in UTF-16 code units rather than grapheme clusters.
+            guard reason.utf16.count <= Self.maximumReasonLength else {
                 throw KccFunctionsError(code: .invalidArgument)
             }
             payload["reason"] = reason
