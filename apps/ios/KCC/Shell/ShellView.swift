@@ -60,6 +60,7 @@ struct ShellView: View {
     @State private var leaderboardCoordinator: LeaderboardCoordinator?
     @State private var notificationsCoordinator: NotificationsInboxCoordinator?
     @State private var notificationSettingsCoordinator: NotificationSettingsCoordinator?
+    @State private var privacySettingsCoordinator: PrivacySettingsCoordinator?
     @State private var friendsCoordinator: FriendsCoordinator?
     @State private var conversationsCoordinator: ConversationsCoordinator?
     @State private var chatHubCoordinator: ChatHubCoordinator?
@@ -131,10 +132,18 @@ struct ShellView: View {
             }
             .onChange(of: access) { _, access in
                 partnersCoordinator?.updateAccess(access)
+                if !partnerStatsEntryAvailable, routes.current == .partnerStats {
+                    routes = routes.poppingOne()
+                }
             }
             .onChange(of: featureFlags.isEnabled(.partners)) { _, enabled in
                 if !enabled, routes.current == .partners {
                     partnersCoordinator?.clearSensitiveOfferState()
+                    routes = routes.poppingOne()
+                }
+            }
+            .onChange(of: featureFlags.isEnabled(.partnerStats)) { _, enabled in
+                if !enabled, routes.current == .partnerStats {
                     routes = routes.poppingOne()
                 }
             }
@@ -612,6 +621,13 @@ struct ShellView: View {
                     Label("shell.morePartnerApplication", systemImage: "briefcase")
                 }
             }
+            if partnerStatsEntryAvailable {
+                Button {
+                    routes = routes.opening(.partnerStats)
+                } label: {
+                    Label("shell.morePartnerStats", systemImage: "hand.raised")
+                }
+            }
         } label: {
             Label("shell.moreProfile", systemImage: "person.circle")
                 .labelStyle(.iconOnly)
@@ -764,6 +780,15 @@ struct ShellView: View {
         case .notificationSettings:
             routeNavigation {
                 NotificationSettingsScreen(coordinator: notificationSettingsCoordinator)
+            }
+        case .partnerStats:
+            if partnerStatsEntryAvailable, let privacySettingsCoordinator
+            {
+                routeNavigation {
+                    PrivacySettingsScreen(coordinator: privacySettingsCoordinator)
+                }
+            } else {
+                unavailableRoute
             }
         case .friends:
             routeNavigation {
@@ -1406,6 +1431,10 @@ struct ShellView: View {
             repository: FirebaseNotificationSettingsRepository.createIfAvailable(),
             uid: uid
         )
+        privacySettingsCoordinator = PrivacySettingsCoordinator(
+            repository: FirebasePrivacySettingsRepository.createIfAvailable(),
+            uid: uid
+        )
         friendsCoordinator = friends.map {
             FriendsCoordinator(
                 repository: $0,
@@ -1693,6 +1722,14 @@ struct ShellView: View {
 
     private var liveLocationFeatureEnabled: Bool {
         crownHuntComposition?.flags.liveLocationEnabled == true
+    }
+
+    private var partnerStatsEntryAvailable: Bool {
+        ShellNavigation.partnerStatsEntryAvailable(
+            flags: featureFlags,
+            access: access,
+            repositoryAvailable: privacySettingsCoordinator?.isAvailable == true
+        )
     }
 
     private var convoyAwarenessTargetConvoy: ConvoyItem? {
