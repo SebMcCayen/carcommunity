@@ -853,7 +853,7 @@ struct ShellView: View {
             }
         case .feedback:
             if let feedbackCoordinator {
-                routeNavigation {
+                routeNavigation(onBack: feedbackCoordinator.reset) {
                     FeedbackScreen(
                         coordinator: feedbackCoordinator,
                         openTicketsEnabled: featureFlags.isEnabled(.reportTicketsBrowser),
@@ -925,13 +925,24 @@ struct ShellView: View {
     }
 
     private func routeNavigation<Content: View>(
+        onBack: (() -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
         NavigationStack {
             content()
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        routeBackButton
+                        if let onBack {
+                            Button {
+                                onBack()
+                                routes = routes.poppingOne()
+                            } label: {
+                                Label("shell.back", systemImage: "chevron.backward")
+                            }
+                            .padding(KccSpacing.s4)
+                        } else {
+                            routeBackButton
+                        }
                     }
                 }
         }

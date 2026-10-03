@@ -160,6 +160,7 @@ final class OpenTicketsCoordinator {
         case .posted:
             if type == .plusOne { state.plusOneDone = true } else { state.commentDone = true }
             state.error = nil
+            incrementDisplayedCount(issueNumber: issueNumber, type: type)
         case .alreadyDone:
             if type == .plusOne { state.plusOneDone = true } else { state.commentDone = true }
             state.error = .alreadyDone
@@ -169,6 +170,15 @@ final class OpenTicketsCoordinator {
             state.error = .unknown
         }
         interactions[issueNumber] = state
+    }
+
+    private func incrementDisplayedCount(issueNumber: Int, type: TicketInteractionType) {
+        guard case .loaded(let tickets) = listState,
+              tickets.contains(where: { $0.number == issueNumber })
+        else { return }
+        listState = .loaded(tickets.map {
+            $0.number == issueNumber ? $0.incrementing(type) : $0
+        })
     }
 
     private static func clientId() -> String {

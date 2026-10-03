@@ -24,6 +24,21 @@ struct OpenTicket: Equatable, Identifiable, Sendable {
 
     var id: Int { number }
 
+    func incrementing(_ type: TicketInteractionType) -> OpenTicket {
+        let nextPlusOne = type == .plusOne && plusOneCount < Int.max
+            ? plusOneCount + 1 : plusOneCount
+        let nextComment = type == .comment && commentCount < Int.max
+            ? commentCount + 1 : commentCount
+        return OpenTicket(
+            number: number,
+            title: title,
+            summary: summary,
+            htmlURL: htmlURL,
+            plusOneCount: nextPlusOne,
+            commentCount: nextComment
+        )
+    }
+
     static func decode(documentId: String, fields: [String: Any]) -> OpenTicket? {
         let number = Self.integer(fields["number"]) ?? Int(documentId)
         guard let number, number > 0,

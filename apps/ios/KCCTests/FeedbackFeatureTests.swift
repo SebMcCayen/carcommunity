@@ -87,12 +87,10 @@ final class FeedbackFeatureTests: XCTestCase {
         ]
         let coordinator = OpenTicketsCoordinator(repository: repository)
         coordinator.start()
-        await Task.yield()
-        await Task.yield()
+        await waitUntil { coordinator.canLoadMore }
         XCTAssertTrue(coordinator.canLoadMore)
         coordinator.loadMore()
-        await Task.yield()
-        await Task.yield()
+        await waitUntil { coordinator.listState == .loaded([first, second]) }
         XCTAssertEqual(repository.pageCalls.map(\.0), [nil, 42])
         XCTAssertEqual(repository.pageCalls.map(\.1), [25, 25])
         XCTAssertEqual(coordinator.listState, .loaded([first, second]))
@@ -170,6 +168,33 @@ final class FeedbackFeatureTests: XCTestCase {
     }
 
     @MainActor
+    func testPostedInteractionsIncrementTheVisibleTicketCounts() async {
+        let repository = FakeTicketsRepository()
+        let ticket = OpenTicket(
+            number: 7,
+            title: "Ticket",
+            summary: "",
+            htmlURL: URL(string: "https://github.com/SebMcCayen/carcommunity/issues/7")!,
+            plusOneCount: 3,
+            commentCount: 4
+        )
+        repository.pages = [.loaded(OpenTicketsPage(tickets: [ticket], nextCursor: nil))]
+        repository.outcomes = [.posted, .posted]
+        let coordinator = OpenTicketsCoordinator(repository: repository)
+        coordinator.start()
+        await waitUntil { coordinator.listState == .loaded([ticket]) }
+
+        await coordinator.plusOne(issueNumber: 7)
+        await coordinator.comment(issueNumber: 7, text: "Same issue")
+
+        guard case .loaded(let tickets) = coordinator.listState else {
+            return XCTFail("Expected loaded tickets")
+        }
+        XCTAssertEqual(tickets.first?.plusOneCount, 4)
+        XCTAssertEqual(tickets.first?.commentCount, 5)
+    }
+
+    @MainActor
     func testTicketCoordinatorSurfacesEmptyAndRateLimitedWithoutRawErrors() async {
         let repository = FakeTicketsRepository()
         repository.outcomes = [.rateLimited]
@@ -182,5 +207,17 @@ final class FeedbackFeatureTests: XCTestCase {
         await coordinator.plusOne(issueNumber: 9)
         XCTAssertEqual(coordinator.interactions[9]?.error, .rateLimited)
         XCTAssertTrue(coordinator.interactions[9]?.canPlusOne == true)
+    }
+    @MainActor
+    private func waitUntil(
+        timeout: Duration = .seconds(3),
+        _ condition: @escaping @MainActor () -> Bool
+    ) async {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while !condition(), clock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(condition(), "Timed out waiting for asynchronous coordinator state")
     }
 }
