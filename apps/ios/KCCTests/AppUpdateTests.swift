@@ -141,9 +141,45 @@ final class AppUpdateTests: XCTestCase {
         XCTAssertNil(coordinator.availability)
     }
 
+    @MainActor
+    func testNewestRequiredOfferRecheckWinsWhenResponsesCompleteOutOfOrder() async {
+        let original = requiredAvailability("3.0")
+        let stale = requiredAvailability("3.1")
+        let newest = requiredAvailability("4.0")
+        let source = ControlledAppUpdateSource()
+        let coordinator = AppUpdateCoordinator(source: source)
+
+        let initialCheck = Task { await coordinator.checkOnce() }
+        await source.waitForRequestCount(1)
+        await source.resolveRequest(at: 0, with: original)
+        await initialCheck.value
+
+        let olderRecheck = Task { await coordinator.recheckRequiredUpdate() }
+        await source.waitForRequestCount(2)
+        let newerRecheck = Task { await coordinator.recheckRequiredUpdate() }
+        await source.waitForRequestCount(3)
+
+        await source.resolveRequest(at: 2, with: newest)
+        await newerRecheck.value
+        XCTAssertEqual(coordinator.availability, newest)
+
+        await source.resolveRequest(at: 1, with: stale)
+        await olderRecheck.value
+        XCTAssertEqual(coordinator.availability, newest)
+    }
+
     private func availability(_ identifier: String) -> AppUpdateAvailability {
         AppUpdateAvailability(
             identifier: identifier, version: identifier, storeURL: storeURL, isRequired: false
+        )
+    }
+
+    private func requiredAvailability(_ identifier: String) -> AppUpdateAvailability {
+        AppUpdateAvailability(
+            identifier: identifier,
+            version: identifier,
+            storeURL: storeURL,
+            isRequired: true
         )
     }
 }
@@ -158,5 +194,29 @@ private actor StubAppUpdateSource: AppUpdateSource {
     func fetch() async -> AppUpdateAvailability? {
         guard !responses.isEmpty else { return nil }
         return responses.removeFirst()
+    }
+}
+
+private actor ControlledAppUpdateSource: AppUpdateSource {
+    private var requests: [CheckedContinuation<AppUpdateAvailability?, Never>?] = []
+    private var countWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+
+    func fetch() async -> AppUpdateAvailability? {
+        await withCheckedContinuation { continuation in
+            requests.append(continuation)
+            let ready = countWaiters.filter { requests.count >= $0.0 }
+            countWaiters.removeAll { requests.count >= $0.0 }
+            ready.forEach { $0.1.resume() }
+        }
+    }
+
+    func waitForRequestCount(_ count: Int) async {
+        guard requests.count < count else { return }
+        await withCheckedContinuation { countWaiters.append((count, $0)) }
+    }
+
+    func resolveRequest(at index: Int, with value: AppUpdateAvailability?) {
+        requests[index]?.resume(returning: value)
+        requests[index] = nil
     }
 }

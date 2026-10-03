@@ -131,7 +131,7 @@ struct ShellView: View {
             }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
-                Task { await appUpdateCoordinator.recheckRequiredUpdate() }
+                appUpdateCoordinator.scheduleRequiredUpdateRecheck()
             }
             .onChange(of: featureFlags.isEnabled(.liveLocation)) { _, enabled in
                 liveLocationCoordinator?.canShare = enabled && !access.isRestricted

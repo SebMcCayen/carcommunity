@@ -211,6 +211,8 @@ final class AppUpdateCoordinator {
     private let now: () -> Date
     private(set) var availability: AppUpdateAvailability?
     private var checked = false
+    @ObservationIgnored private var recheckTask: Task<Void, Never>?
+    @ObservationIgnored private var recheckGeneration = 0
 
     init(
         source: any AppUpdateSource = AppStoreLookupSource(),
@@ -233,8 +235,22 @@ final class AppUpdateCoordinator {
     /// Required offers stay active after App Store handoff. Recheck them when
     /// the app returns so a policy source can lift or replace the gate.
     func recheckRequiredUpdate() async {
-        guard availability?.isRequired == true else { return }
-        availability = await source.fetch()
+        guard !Task.isCancelled, availability?.isRequired == true else { return }
+        recheckGeneration &+= 1
+        let generation = recheckGeneration
+        let refreshed = await source.fetch()
+        guard !Task.isCancelled, generation == recheckGeneration else { return }
+        availability = refreshed
+    }
+
+    /// Foreground transitions may arrive faster than a policy fetch can
+    /// complete. Cancel the previous task and let the generation guard above
+    /// reject a source that ignores cooperative cancellation.
+    func scheduleRequiredUpdateRecheck() {
+        recheckTask?.cancel()
+        recheckTask = Task { [weak self] in
+            await self?.recheckRequiredUpdate()
+        }
     }
 
     func shouldPresent(isDriving: Bool, announcementIsPresented: Bool) -> Bool {
