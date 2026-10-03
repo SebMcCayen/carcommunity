@@ -52,6 +52,9 @@ struct ShellView: View {
     @State private var mapSurface = StubMapSurface()
     @State private var mapLayerPreferences = MapLayerPreferences()
     @State private var showMapLayers = false
+    @State private var navSearchOpen = false
+    @State private var showSavedPlacesPicker = false
+    @State private var savedPlacesCoordinator: SavedPlacesCoordinator?
 
     /// Feature coordinators are composed once for the signed-in shell. Every
     /// factory is config-safe, so a build without GoogleService-Info.plist
@@ -107,14 +110,23 @@ struct ShellView: View {
     @State private var sessionActionError = false
 
     /// What is drawn over the shell's map right now — the ONE pure value
-    /// every cover-derived decision reads. `navigating` / `navSearchOpen` are
-    /// hard false until turn-by-turn and the address search are ported.
+    /// every cover-derived decision reads. Turn-by-turn remains deliberately
+    /// false per ADR-002; address search keeps the retained map live beneath
+    /// its translucent chrome.
     private var mapCover: MapCover {
         ShellNavigation.mapCover(
             tab: selectedTab,
             route: routes.current,
             navigating: false,
-            navSearchOpen: false
+            navSearchOpen: addressSearchPresented
+        )
+    }
+
+    private var addressSearchPresented: Bool {
+        ShellNavigation.addressSearchPresented(
+            tab: selectedTab,
+            route: routes.current,
+            requested: navSearchOpen
         )
     }
 
@@ -130,6 +142,9 @@ struct ShellView: View {
             }
             .onChange(of: access) { _, access in
                 partnersCoordinator?.updateAccess(access)
+            }
+            .onChange(of: routes.current) { _, route in
+                if route != nil { closeAddressSearch() }
             }
             .onChange(of: featureFlags.isEnabled(.partners)) { _, enabled in
                 if !enabled, routes.current == .partners {
@@ -179,6 +194,20 @@ struct ShellView: View {
                 routeHost(for: route)
             }
         }
+        .overlay {
+            if addressSearchPresented, let savedPlacesCoordinator {
+                AddressSearchOverlay(
+                    coordinator: savedPlacesCoordinator,
+                    proximity: currentMapCenter,
+                    onSelect: showPlaceOnMap,
+                    onManage: {
+                        navSearchOpen = false
+                        routes = routes.opening(.savedPlaces)
+                    },
+                    onClose: { navSearchOpen = false }
+                )
+            }
+        }
         // Drive the surface's liveness from the SAME pure cover value the
         // pages derive from — the iOS counterpart of Android's
         // `LaunchedEffect(mapCover) { mapSurface.setActive(...) }`:
@@ -195,6 +224,7 @@ struct ShellView: View {
             applyMapLayerPreferences()
         }
         .onChange(of: selectedTab) { _, tab in
+            if tab != .map { closeAddressSearch() }
             if tab != .map, routes.current == .chatHub {
                 routes = routes.poppingOne()
             }
@@ -272,6 +302,21 @@ struct ShellView: View {
                 onBrowsingZoomChanged: mapSurface.setBrowsingZoom
             )
         }
+        .sheet(isPresented: $showSavedPlacesPicker) {
+            if let savedPlacesCoordinator {
+                SavedPlacesPickerSheet(
+                    places: savedPlacesCoordinator.places,
+                    onSelect: { saved in
+                        showSavedPlacesPicker = false
+                        showPlaceOnMap(saved.place)
+                    },
+                    onManage: {
+                        showSavedPlacesPicker = false
+                        routes = routes.opening(.savedPlaces)
+                    }
+                )
+            }
+        }
         .confirmationDialog(
             "liveLocation.stop",
             isPresented: $showStopConfirmation,
@@ -337,12 +382,12 @@ struct ShellView: View {
                 // profile menu button). Only when a session actually exists —
                 // the unavailable shell has no one to show or sign out.
                 .overlay(alignment: .topTrailing) {
-                    if case .signedIn = session.state {
+                    if case .signedIn = session.state, !navSearchOpen {
                         profileButton
                     }
                 }
                 .overlay(alignment: .bottomTrailing) {
-                    if case .signedIn = session.state {
+                    if case .signedIn = session.state, !navSearchOpen {
                         mapCommunicationControls
                     }
                 }
@@ -350,8 +395,10 @@ struct ShellView: View {
                     // Viewing preferences are device-local and do not require
                     // an account. Keep the control in the config-less shell so
                     // clone-and-run builds exercise the same stub seam as CI.
-                    MapLayersButton(isPresented: $showMapLayers)
-                        .padding(KccSpacing.s4)
+                    if !navSearchOpen {
+                        MapLayersButton(isPresented: $showMapLayers)
+                            .padding(KccSpacing.s4)
+                    }
                 }
                 .overlay(alignment: .bottom) {
                     if let coordinator = crownHuntComposition?.perkMapCoordinator,
@@ -604,6 +651,13 @@ struct ShellView: View {
                     Label("shell.friendsTitle", systemImage: "person.2")
                 }
             }
+            if savedPlacesCoordinator != nil {
+                Button {
+                    routes = routes.opening(.savedPlaces)
+                } label: {
+                    Label("settingsMenu.savedPlaces", systemImage: "bookmark")
+                }
+            }
         } label: {
             Label("shell.moreProfile", systemImage: "person.circle")
                 .labelStyle(.iconOnly)
@@ -614,6 +668,26 @@ struct ShellView: View {
 
     private var mapCommunicationControls: some View {
         VStack(spacing: KccSpacing.s3) {
+            if savedPlacesCoordinator != nil {
+                Button {
+                    navSearchOpen = true
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                        .frame(width: 48, height: 48)
+                        .background(.regularMaterial, in: Circle())
+                }
+                .accessibilityLabel(Text("addressSearch.searchPlaceholder"))
+
+                Button {
+                    showSavedPlacesPicker = true
+                } label: {
+                    Image(systemName: "bookmark.fill")
+                        .frame(width: 48, height: 48)
+                        .background(.regularMaterial, in: Circle())
+                }
+                .accessibilityLabel(Text("shell.savedPlacesButton"))
+            }
+
             if incidentMapCoordinator?.available == true {
                 Button {
                     incidentMapCoordinator?.reportSheetPresented = true
@@ -745,6 +819,17 @@ struct ShellView: View {
         case .notificationSettings:
             routeNavigation {
                 NotificationSettingsScreen(coordinator: notificationSettingsCoordinator)
+            }
+        case .savedPlaces:
+            if let savedPlacesCoordinator {
+                routeNavigation {
+                    SavedPlacesScreen(
+                        coordinator: savedPlacesCoordinator,
+                        proximity: currentMapCenter
+                    )
+                }
+            } else {
+                unavailableRoute
             }
         case .friends:
             routeNavigation {
@@ -1339,6 +1424,9 @@ struct ShellView: View {
         crownHuntComposition = nil
         partnersCoordinator?.clearSensitiveOfferState()
         partnersCoordinator = nil
+        savedPlacesCoordinator = nil
+        navSearchOpen = false
+        showSavedPlacesPicker = false
 
         let friends = FirebaseFriendsRepository.createIfAvailable()
         let conversations = FirebaseConversationsRepository.createIfAvailable()
@@ -1383,6 +1471,21 @@ struct ShellView: View {
             repository: FirebaseNotificationSettingsRepository.createIfAvailable(),
             uid: uid
         )
+        if let uid, !uid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let searchClient: AddressSearchClient
+            if let token = MapboxConfiguration.accessToken() {
+                searchClient = MapboxAddressSearchClient(
+                    token: token,
+                    language: Locale.current.language.languageCode?.identifier ?? "sv"
+                )
+            } else {
+                searchClient = UnavailableAddressSearchClient()
+            }
+            savedPlacesCoordinator = SavedPlacesCoordinator(
+                store: UserDefaultsSavedPlacesStore(uid: uid),
+                searchClient: searchClient
+            )
+        }
         friendsCoordinator = friends.map {
             FriendsCoordinator(
                 repository: $0,
@@ -1559,6 +1662,19 @@ struct ShellView: View {
         mapSurface.cameraSnapshot.map {
             MapPoint(longitude: $0.longitude, latitude: $0.latitude)
         }
+    }
+
+    private func showPlaceOnMap(_ place: PlaceSuggestion) {
+        guard SavedPlacesPolicy.isValid(point: place.point) else { return }
+        savedPlacesCoordinator?.clearSearch()
+        navSearchOpen = false
+        selectedTab = .map
+        mapSurface.centerOn(place.point)
+    }
+
+    private func closeAddressSearch() {
+        savedPlacesCoordinator?.clearSearch()
+        navSearchOpen = false
     }
 
     private func submitMapCenterIncident() {

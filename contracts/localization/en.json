@@ -1909,7 +1909,7 @@
   },
   "savedPlaces": {
     "title": "Saved places",
-    "intro": "Your one-tap destinations. Home, Work and favourites show up in the search bar for instant routing.",
+    "intro": "Your one-tap destinations. Home, Work and favourites appear in search so you can quickly center them on the map.",
     "addAction": "Add a place",
     "emptyTitle": "No saved places yet",
     "emptyBody": "Save your home, work and the places you drive to most, so they're one tap away when you search.",
