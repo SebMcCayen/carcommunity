@@ -159,6 +159,21 @@ enum ShellNavigation {
         requested && tab == .map && route == nil
     }
 
+    /// Map buttons, banners, and action controls must not compete with the
+    /// address-search card. Map markers remain visible beneath the translucent
+    /// overlay; only the interactive chrome is suppressed.
+    static func mapHomeChromeVisible(
+        tab: ShellTab,
+        route: ShellRoute?,
+        addressSearchRequested: Bool
+    ) -> Bool {
+        !addressSearchPresented(
+            tab: tab,
+            route: route,
+            requested: addressSearchRequested
+        )
+    }
+
     /// Resolves a system-Back gesture given the current `tab` and open `route`.
     /// An open route always closes first — which, with a route back-stack,
     /// means popping ONE level (see ``popRoute(parents:)``); otherwise a
@@ -245,6 +260,21 @@ enum ShellNavigation {
     /// does not participate in this presentation decision.
     static func chatHubEntryAvailable(flags _: FeatureFlags, access: AccountAccess) -> Bool {
         ChatFeatureGate.channelAndDirectChatEnabled(access: access)
+    }
+
+    /// The privacy screen's partner-statistics control is governed by the
+    /// shared partnerStats rollout flag on both mobile platforms.
+    static func partnerStatsEntryAvailable(
+        flags: FeatureFlags,
+        access: AccountAccess,
+        repositoryAvailable: Bool
+    ) -> Bool {
+        repositoryAvailable && FeatureGate.isAvailable(
+            flags: flags,
+            flag: .partnerStats,
+            memberGated: false,
+            access: access
+        )
     }
 }
 

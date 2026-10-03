@@ -63,6 +63,7 @@ struct ShellView: View {
     @State private var leaderboardCoordinator: LeaderboardCoordinator?
     @State private var notificationsCoordinator: NotificationsInboxCoordinator?
     @State private var notificationSettingsCoordinator: NotificationSettingsCoordinator?
+    @State private var privacySettingsCoordinator: PrivacySettingsCoordinator?
     @State private var friendsCoordinator: FriendsCoordinator?
     @State private var conversationsCoordinator: ConversationsCoordinator?
     @State private var chatHubCoordinator: ChatHubCoordinator?
@@ -130,6 +131,14 @@ struct ShellView: View {
         )
     }
 
+    private var mapHomeChromeVisible: Bool {
+        ShellNavigation.mapHomeChromeVisible(
+            tab: selectedTab,
+            route: routes.current,
+            addressSearchRequested: navSearchOpen
+        )
+    }
+
     var body: some View {
         shellPresentation
             .task(id: signedInUid) { await wireFeatures() }
@@ -142,6 +151,9 @@ struct ShellView: View {
             }
             .onChange(of: access) { _, access in
                 partnersCoordinator?.updateAccess(access)
+                if !partnerStatsEntryAvailable, routes.current == .partnerStats {
+                    routes = routes.poppingOne()
+                }
             }
             .onChange(of: routes.current) { _, route in
                 if route != nil { closeAddressSearch() }
@@ -149,6 +161,11 @@ struct ShellView: View {
             .onChange(of: featureFlags.isEnabled(.partners)) { _, enabled in
                 if !enabled, routes.current == .partners {
                     partnersCoordinator?.clearSensitiveOfferState()
+                    routes = routes.poppingOne()
+                }
+            }
+            .onChange(of: featureFlags.isEnabled(.partnerStats)) { _, enabled in
+                if !enabled, routes.current == .partnerStats {
                     routes = routes.poppingOne()
                 }
             }
@@ -382,12 +399,12 @@ struct ShellView: View {
                 // profile menu button). Only when a session actually exists —
                 // the unavailable shell has no one to show or sign out.
                 .overlay(alignment: .topTrailing) {
-                    if case .signedIn = session.state, !navSearchOpen {
+                    if case .signedIn = session.state, mapHomeChromeVisible {
                         profileButton
                     }
                 }
                 .overlay(alignment: .bottomTrailing) {
-                    if case .signedIn = session.state, !navSearchOpen {
+                    if case .signedIn = session.state, mapHomeChromeVisible {
                         mapCommunicationControls
                     }
                 }
@@ -395,13 +412,14 @@ struct ShellView: View {
                     // Viewing preferences are device-local and do not require
                     // an account. Keep the control in the config-less shell so
                     // clone-and-run builds exercise the same stub seam as CI.
-                    if !navSearchOpen {
+                    if mapHomeChromeVisible {
                         MapLayersButton(isPresented: $showMapLayers)
                             .padding(KccSpacing.s4)
                     }
                 }
                 .overlay(alignment: .bottom) {
-                    if let coordinator = crownHuntComposition?.perkMapCoordinator,
+                    if mapHomeChromeVisible,
+                       let coordinator = crownHuntComposition?.perkMapCoordinator,
                        coordinator.isAvailable {
                         CrownPerkMapControl(coordinator: coordinator)
                             .padding(.bottom, KccSpacing.s4)
@@ -440,7 +458,9 @@ struct ShellView: View {
                     }
                 }
                 .overlay {
-                    if convoyReactionTargetId != nil, let convoyReactionCoordinator {
+                    if mapHomeChromeVisible,
+                       convoyReactionTargetId != nil,
+                       let convoyReactionCoordinator {
                         ConvoyReactionControls(
                             coordinator: convoyReactionCoordinator,
                             followMeCoordinator: convoyFollowMeCoordinator
@@ -448,7 +468,8 @@ struct ShellView: View {
                     }
                 }
                 .overlay(alignment: .top) {
-                    if let coordinator = convoyManagementCoordinator,
+                    if mapHomeChromeVisible,
+                       let coordinator = convoyManagementCoordinator,
                        let convoy = coordinator.activeConvoy {
                         ConvoyStatusBar(
                             coordinator: coordinator,
@@ -465,7 +486,8 @@ struct ShellView: View {
                     }
                 }
                 .overlay {
-                    if incidentMapCoordinator?.pendingMapReportType != nil {
+                    if mapHomeChromeVisible,
+                       incidentMapCoordinator?.pendingMapReportType != nil {
                         IncidentLocationPickerControls(
                             canConfirm: currentMapCenter != nil,
                             confirm: submitMapCenterIncident,
@@ -474,7 +496,8 @@ struct ShellView: View {
                     }
                 }
                 .overlay(alignment: .top) {
-                    if incidentMapCoordinator?.proximityAlert != nil {
+                    if mapHomeChromeVisible,
+                       incidentMapCoordinator?.proximityAlert != nil {
                         PoliceProximityBanner {
                             incidentMapCoordinator?.dismissProximityAlert()
                         }
@@ -658,6 +681,13 @@ struct ShellView: View {
                     Label("settingsMenu.savedPlaces", systemImage: "bookmark")
                 }
             }
+            if partnerStatsEntryAvailable {
+                Button {
+                    routes = routes.opening(.partnerStats)
+                } label: {
+                    Label("shell.morePartnerStats", systemImage: "hand.raised")
+                }
+            }
         } label: {
             Label("shell.moreProfile", systemImage: "person.circle")
                 .labelStyle(.iconOnly)
@@ -827,6 +857,15 @@ struct ShellView: View {
                         coordinator: savedPlacesCoordinator,
                         proximity: currentMapCenter
                     )
+                }
+            } else {
+                unavailableRoute
+            }
+        case .partnerStats:
+            if partnerStatsEntryAvailable, let privacySettingsCoordinator
+            {
+                routeNavigation {
+                    PrivacySettingsScreen(coordinator: privacySettingsCoordinator)
                 }
             } else {
                 unavailableRoute
@@ -1486,6 +1525,10 @@ struct ShellView: View {
                 searchClient: searchClient
             )
         }
+        privacySettingsCoordinator = PrivacySettingsCoordinator(
+            repository: FirebasePrivacySettingsRepository.createIfAvailable(),
+            uid: uid
+        )
         friendsCoordinator = friends.map {
             FriendsCoordinator(
                 repository: $0,
@@ -1786,6 +1829,14 @@ struct ShellView: View {
 
     private var liveLocationFeatureEnabled: Bool {
         crownHuntComposition?.flags.liveLocationEnabled == true
+    }
+
+    private var partnerStatsEntryAvailable: Bool {
+        ShellNavigation.partnerStatsEntryAvailable(
+            flags: featureFlags,
+            access: access,
+            repositoryAvailable: privacySettingsCoordinator?.isAvailable == true
+        )
     }
 
     private var convoyAwarenessTargetConvoy: ConvoyItem? {
