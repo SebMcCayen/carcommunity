@@ -35,6 +35,9 @@ enum AppUpdatePolicy {
 }
 
 struct AppStoreLookupSource: AppUpdateSource {
+    static let maximumResponseBytes = 128 * 1_024
+    static let maximumResultCount = 50
+
     private let bundleIdentifier: String?
     private let currentVersion: String
     private let countryCode: String?
@@ -65,33 +68,71 @@ struct AppStoreLookupSource: AppUpdateSource {
               var components = URLComponents(string: "https://itunes.apple.com/lookup")
         else { return nil }
         var query = [URLQueryItem(name: "bundleId", value: bundleIdentifier)]
-        if let countryCode, countryCode.count == 2 {
+        if let countryCode,
+           countryCode.unicodeScalars.count == 2,
+           countryCode.unicodeScalars.allSatisfy({
+               (65...90).contains($0.value) || (97...122).contains($0.value)
+           }) {
             query.append(URLQueryItem(name: "country", value: countryCode.lowercased()))
         }
         components.queryItems = query
         guard let url = components.url else { return nil }
 
         do {
-            let (data, response) = try await session.data(from: url)
+            var request = URLRequest(url: url)
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            request.timeoutInterval = 15
+            let (bytes, response) = try await session.bytes(for: request)
             guard (response as? HTTPURLResponse)?.statusCode == 200,
-                  let lookup = try? JSONDecoder().decode(LookupResponse.self, from: data),
-                  let result = lookup.results.first(where: { $0.bundleId == bundleIdentifier }),
-                  let offered = VersionNumber(result.version),
-                  let installed = VersionNumber(currentVersion),
-                  offered > installed,
-                  let storeURL = Self.safeStoreURL(trackViewURL: result.trackViewUrl, trackID: result.trackId)
+                  response.expectedContentLength <= Int64(Self.maximumResponseBytes)
+                      || response.expectedContentLength == NSURLSessionTransferSizeUnknown
             else { return nil }
-            return AppUpdateAvailability(
-                identifier: result.version,
-                version: result.version,
-                storeURL: storeURL,
-                isRequired: false
-            )
+            var data = Data()
+            data.reserveCapacity(min(
+                max(Int(response.expectedContentLength), 0),
+                Self.maximumResponseBytes
+            ))
+            for try await byte in bytes {
+                guard data.count < Self.maximumResponseBytes else { return nil }
+                data.append(byte)
+            }
+            guard
+                  let availability = Self.availability(
+                      from: data,
+                      bundleIdentifier: bundleIdentifier,
+                      currentVersion: currentVersion
+                  )
+            else { return nil }
+            return availability
         } catch {
             // Offline, missing listing, malformed response and cancellation all
             // degrade to no prompt. Updating must never block app startup.
             return nil
         }
+    }
+
+    static func availability(
+        from data: Data,
+        bundleIdentifier: String,
+        currentVersion: String
+    ) -> AppUpdateAvailability? {
+        guard data.count <= maximumResponseBytes,
+              let lookup = try? JSONDecoder().decode(LookupResponse.self, from: data),
+              lookup.results.count <= maximumResultCount,
+              let result = lookup.results.first(where: { $0.bundleId == bundleIdentifier }),
+              result.bundleId.utf8.count <= 255,
+              result.version.utf8.count <= 100,
+              let offered = VersionNumber(result.version),
+              let installed = VersionNumber(currentVersion),
+              offered > installed,
+              let storeURL = safeStoreURL(trackViewURL: result.trackViewUrl, trackID: result.trackId)
+        else { return nil }
+        return AppUpdateAvailability(
+            identifier: result.version,
+            version: result.version,
+            storeURL: storeURL,
+            isRequired: false
+        )
     }
 
     static func safeStoreURL(trackViewURL: String?, trackID: Int?) -> URL? {
@@ -100,10 +141,14 @@ struct AppStoreLookupSource: AppUpdateSource {
             return native
         }
         guard let trackViewURL,
+              trackViewURL.utf8.count <= 2_048,
               let url = URL(string: trackViewURL),
               url.scheme?.lowercased() == "https",
               let host = url.host?.lowercased(),
-              host == "apps.apple.com" || host == "itunes.apple.com"
+              host == "apps.apple.com" || host == "itunes.apple.com",
+              url.user == nil,
+              url.password == nil,
+              url.port == nil
         else { return nil }
         return url
     }
@@ -125,20 +170,35 @@ struct VersionNumber: Comparable, Sendable {
 
     init?(_ raw: String) {
         let pieces = raw.split(separator: ".", omittingEmptySubsequences: false)
-        guard !pieces.isEmpty,
-              pieces.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isNumber) })
-        else { return nil }
-        components = pieces.map { Int($0)! }
+        guard !pieces.isEmpty, pieces.count <= 16, raw.utf8.count <= 100 else { return nil }
+        var parsed: [Int] = []
+        parsed.reserveCapacity(pieces.count)
+        for piece in pieces {
+            guard !piece.isEmpty,
+                  piece.unicodeScalars.allSatisfy({ (48...57).contains($0.value) }),
+                  let value = Int(piece)
+            else { return nil }
+            parsed.append(value)
+        }
+        components = parsed
+    }
+
+    static func == (lhs: VersionNumber, rhs: VersionNumber) -> Bool {
+        compare(lhs, rhs) == 0
     }
 
     static func < (lhs: VersionNumber, rhs: VersionNumber) -> Bool {
+        compare(lhs, rhs) < 0
+    }
+
+    private static func compare(_ lhs: VersionNumber, _ rhs: VersionNumber) -> Int {
         let count = max(lhs.components.count, rhs.components.count)
         for index in 0..<count {
             let left = index < lhs.components.count ? lhs.components[index] : 0
             let right = index < rhs.components.count ? rhs.components[index] : 0
-            if left != right { return left < right }
+            if left != right { return left < right ? -1 : 1 }
         }
-        return false
+        return 0
     }
 }
 
@@ -170,6 +230,13 @@ final class AppUpdateCoordinator {
         availability = await source.fetch()
     }
 
+    /// Required offers stay active after App Store handoff. Recheck them when
+    /// the app returns so a policy source can lift or replace the gate.
+    func recheckRequiredUpdate() async {
+        guard availability?.isRequired == true else { return }
+        availability = await source.fetch()
+    }
+
     func shouldPresent(isDriving: Bool, announcementIsPresented: Bool) -> Bool {
         AppUpdatePolicy.shouldPresent(
             availability,
@@ -190,7 +257,9 @@ final class AppUpdateCoordinator {
     }
 
     func accepted() {
-        availability = nil
+        if availability?.isRequired != true {
+            availability = nil
+        }
     }
 
     private var dismissal: AppUpdateDismissal? {

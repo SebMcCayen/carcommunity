@@ -129,6 +129,10 @@ struct ShellView: View {
                 whatsNewCoordinator.start()
                 await appUpdateCoordinator.checkOnce()
             }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                Task { await appUpdateCoordinator.recheckRequiredUpdate() }
+            }
             .onChange(of: featureFlags.isEnabled(.liveLocation)) { _, enabled in
                 liveLocationCoordinator?.canShare = enabled && !access.isRestricted
             }
@@ -964,13 +968,15 @@ struct ShellView: View {
 
     private func openAvailableUpdate() {
         guard let url = appUpdateCoordinator.availability?.storeURL else {
-            appUpdateCoordinator.accepted()
             appStoreUnavailable = true
             return
         }
-        appUpdateCoordinator.accepted()
         openURL(url) { accepted in
-            if !accepted { appStoreUnavailable = true }
+            if accepted {
+                appUpdateCoordinator.accepted()
+            } else {
+                appStoreUnavailable = true
+            }
         }
     }
 

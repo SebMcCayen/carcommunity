@@ -8,6 +8,8 @@ final class AppUpdateTests: XCTestCase {
         XCTAssertLessThan(try XCTUnwrap(VersionNumber("1.9")), try XCTUnwrap(VersionNumber("1.10.0")))
         XCTAssertEqual(VersionNumber("2.0"), VersionNumber("2.0.0"))
         XCTAssertNil(VersionNumber("2.beta"))
+        XCTAssertNil(VersionNumber("1.\(String(repeating: "9", count: 100))"))
+        XCTAssertNil(VersionNumber("١.٢"))
     }
 
     func testSafeStoreURLPrefersNumericNativeLinkAndRejectsUntrustedHosts() {
@@ -15,6 +17,12 @@ final class AppUpdateTests: XCTestCase {
             AppStoreLookupSource.safeStoreURL(trackViewURL: "https://evil.example/app", trackID: 42),
             URL(string: "itms-apps://itunes.apple.com/app/id42")
         )
+        XCTAssertNil(AppStoreLookupSource.safeStoreURL(
+            trackViewURL: "https://user@apps.apple.com/se/app/example/id42", trackID: nil
+        ))
+        XCTAssertNil(AppStoreLookupSource.safeStoreURL(
+            trackViewURL: "https://apps.apple.com:444/se/app/example/id42", trackID: nil
+        ))
         XCTAssertNil(AppStoreLookupSource.safeStoreURL(
             trackViewURL: "https://evil.example/app", trackID: nil
         ))
@@ -47,6 +55,34 @@ final class AppUpdateTests: XCTestCase {
         ))
     }
 
+    func testLookupResponseIsBoundedAndMatchesBundle() throws {
+        let valid = Data("""
+        {"results":[{"bundleId":"se.kcc.app","version":"2.0.0","trackViewUrl":null,"trackId":42}]}
+        """.utf8)
+        XCTAssertEqual(
+            AppStoreLookupSource.availability(
+                from: valid, bundleIdentifier: "se.kcc.app", currentVersion: "1.9"
+            )?.version,
+            "2.0.0"
+        )
+        XCTAssertNil(AppStoreLookupSource.availability(
+            from: valid, bundleIdentifier: "se.other.app", currentVersion: "1.9"
+        ))
+
+        let oversized = Data(repeating: 0x20, count: AppStoreLookupSource.maximumResponseBytes + 1)
+        XCTAssertNil(AppStoreLookupSource.availability(
+            from: oversized, bundleIdentifier: "se.kcc.app", currentVersion: "1.9"
+        ))
+
+        let result = "{\"bundleId\":\"se.other.app\",\"version\":\"2.0\",\"trackViewUrl\":null,\"trackId\":42}"
+        let tooManyResults = Data(
+            "{\"results\":[\(Array(repeating: result, count: AppStoreLookupSource.maximumResultCount + 1).joined(separator: ","))]}".utf8
+        )
+        XCTAssertNil(AppStoreLookupSource.availability(
+            from: tooManyResults, bundleIdentifier: "se.kcc.app", currentVersion: "1.9"
+        ))
+    }
+
     func testPolicySuppressesPromptsWhileDrivingOrWhatsNewIsOpen() {
         XCTAssertFalse(AppUpdatePolicy.shouldPresent(
             availability("2.0"), dismissal: nil, now: .now,
@@ -73,9 +109,54 @@ final class AppUpdateTests: XCTestCase {
         ))
     }
 
+    @MainActor
+    func testAcceptedHandoffClearsOnlyOptionalOffer() async {
+        let optional = availability("2.0")
+        let required = AppUpdateAvailability(
+            identifier: "3.0", version: "3.0", storeURL: storeURL, isRequired: true
+        )
+
+        let optionalCoordinator = AppUpdateCoordinator(source: StubAppUpdateSource([optional]))
+        await optionalCoordinator.checkOnce()
+        optionalCoordinator.accepted()
+        XCTAssertNil(optionalCoordinator.availability)
+
+        let requiredCoordinator = AppUpdateCoordinator(source: StubAppUpdateSource([required]))
+        await requiredCoordinator.checkOnce()
+        requiredCoordinator.accepted()
+        XCTAssertEqual(requiredCoordinator.availability, required)
+    }
+
+    @MainActor
+    func testRequiredOfferIsRecheckedWhenAppReturns() async {
+        let required = AppUpdateAvailability(
+            identifier: "3.0", version: "3.0", storeURL: storeURL, isRequired: true
+        )
+        let source = StubAppUpdateSource([required, nil])
+        let coordinator = AppUpdateCoordinator(source: source)
+
+        await coordinator.checkOnce()
+        XCTAssertEqual(coordinator.availability, required)
+        await coordinator.recheckRequiredUpdate()
+        XCTAssertNil(coordinator.availability)
+    }
+
     private func availability(_ identifier: String) -> AppUpdateAvailability {
         AppUpdateAvailability(
             identifier: identifier, version: identifier, storeURL: storeURL, isRequired: false
         )
+    }
+}
+
+private actor StubAppUpdateSource: AppUpdateSource {
+    private var responses: [AppUpdateAvailability?]
+
+    init(_ responses: [AppUpdateAvailability?]) {
+        self.responses = responses
+    }
+
+    func fetch() async -> AppUpdateAvailability? {
+        guard !responses.isEmpty else { return nil }
+        return responses.removeFirst()
     }
 }
