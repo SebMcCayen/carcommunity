@@ -98,7 +98,7 @@
       "default": false,
       "label": "Report a problem — open-tickets browser",
       "sensitivity": "standard",
-      "description": "In-app 'open tickets' browser on the Report-a-problem page. On lets members read the openTickets Firestore mirror of open public GitHub issues (labelled android-issue, refreshed by the scheduled feedback-syncOpenTickets job) and, once each per issue, +1 or add a comment via feedback.interactWithIssue — the +1 posts a fixed 'Another user is affected by this issue.' comment and a member comment is neutralised, length-bounded, posted to the public repo AND mirrored to the moderationReports admin queue. Default OFF: while off the callable rejects (failed-precondition) so nothing is posted publicly and the client draws no ticket list. Stays dark until the browser UI ships."
+      "description": "In-app 'open tickets' browser on the Report-a-problem page. On lets members read the openTickets Firestore mirror of open public GitHub issues (labelled android-issue or ios-issue, refreshed by the scheduled feedback-syncOpenTickets job) and, once each per issue, +1 or add a comment via feedback.interactWithIssue — the +1 posts a fixed 'Another user is affected by this issue.' comment and a member comment is neutralised, length-bounded, posted to the public repo AND mirrored to the moderationReports admin queue. Default OFF: while off the callable rejects (failed-precondition) so nothing is posted publicly and the client draws no ticket list. Stays dark until the browser UI ships."
     },
     {
       "key": "chatReplies",

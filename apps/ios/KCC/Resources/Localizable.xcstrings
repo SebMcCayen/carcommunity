@@ -22084,6 +22084,23 @@
         }
       }
     },
+    "openTickets.loadMore": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hämta fler ärenden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Load more tickets"
+          }
+        }
+      }
+    },
     "openTickets.loading": {
       "extractionState": "manual",
       "localizations": {

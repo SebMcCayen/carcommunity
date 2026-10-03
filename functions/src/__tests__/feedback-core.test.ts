@@ -22,16 +22,65 @@ import {
   parseReportIssueInput,
   type FeedbackReport,
 } from '../feedback/feedback-core';
+import { OPEN_TICKETS_LABELS, fetchAllOpenTicketLabels } from '../feedback/openTickets-core';
+import type { GitHubOpenIssue } from '../shared/githubIssues';
 
 const ZWSP = '\u200b';
 
 const report: FeedbackReport = {
+  platform: 'android',
   description: 'The map does not load after I open the app.',
   summary: 'Map fails to load',
   appVersion: '1.2.3',
   osVersion: 'Android 14',
   deviceModel: 'Pixel 8',
 };
+
+function openIssue(number: number): GitHubOpenIssue {
+  return {
+    number,
+    title: `Issue ${number}`,
+    body: null,
+    html_url: `https://github.com/SebMcCayen/carcommunity/issues/${number}`,
+    created_at: '2026-10-01T00:00:00.000Z',
+    state: 'open',
+    comments: 0,
+  };
+}
+
+describe('open-ticket production label aggregation', () => {
+  it('requests both platform labels and deduplicates issue numbers', async () => {
+    const labels: string[] = [];
+    const result = await fetchAllOpenTicketLabels(async (label) => {
+      labels.push(label);
+      return {
+        issues:
+          label === OPEN_TICKETS_LABELS[0]
+            ? [openIssue(1), openIssue(2)]
+            : [openIssue(2), openIssue(3)],
+        complete: true,
+      };
+    });
+
+    expect(labels.sort()).toEqual([...OPEN_TICKETS_LABELS].sort());
+    expect(result?.issues.map((issue) => issue.number).sort()).toEqual([1, 2, 3]);
+    expect(result?.complete).toBe(true);
+  });
+
+  it('fails closed on a missing label and preserves incomplete reconciliation safety', async () => {
+    const missing = await fetchAllOpenTicketLabels(async (label) =>
+      label === OPEN_TICKETS_LABELS[0] ? { issues: [openIssue(1)], complete: true } : null,
+    );
+    expect(missing).toBeNull();
+
+    const incomplete = await fetchAllOpenTicketLabels(async (label) => ({
+      issues: [openIssue(label === OPEN_TICKETS_LABELS[0] ? 1 : 2)],
+      complete: label === OPEN_TICKETS_LABELS[0],
+    }));
+    expect(incomplete?.issues.map((issue) => issue.number).sort()).toEqual([1, 2]);
+    expect(incomplete?.complete).toBe(false);
+  });
+});
 
 describe('feedback-core input parsing', () => {
   it('accepts a minimal valid report and bounds fields', () => {
@@ -50,9 +99,9 @@ describe('feedback-core input parsing', () => {
       false,
     );
     expect(parseReportIssueInput({ description: 'ok', uid: 'sneaky' }).ok).toBe(false);
-    expect(parseReportIssueInput({ description: 'ok', summary: 'x'.repeat(MAX_SUMMARY_LENGTH + 1) }).ok).toBe(
-      false,
-    );
+    expect(
+      parseReportIssueInput({ description: 'ok', summary: 'x'.repeat(MAX_SUMMARY_LENGTH + 1) }).ok,
+    ).toBe(false);
   });
 
   it('strips control characters and collapses context whitespace', () => {
@@ -112,6 +161,7 @@ describe('feedback-core public GitHub issue', () => {
 
   it('renders unknown for absent context fields', () => {
     const bare: FeedbackReport = {
+      platform: 'android',
       description: 'x',
       summary: null,
       appVersion: null,
@@ -135,6 +185,17 @@ describe('feedback-core public GitHub issue', () => {
     expect(serialized.toLowerCase()).not.toContain('@');
     expect(serialized.toLowerCase()).not.toContain('token');
     expect(payload.labels).toEqual([FEEDBACK_ISSUE_LABEL]);
+  });
+
+  it('routes iOS reports to the iOS title and label without trusting arbitrary platforms', () => {
+    const parsed = parseReportIssueInput({ description: 'Broken', platform: 'ios' });
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) throw new Error('expected ok');
+    const payload = buildGitHubIssuePayload(parsed.input, 'rep_ios', '2026-07-09T12:00:00.000Z');
+    expect(payload.title).toBe('[iOS] Broken');
+    expect(payload.labels).toEqual(['ios-issue']);
+    expect(buildFeedbackReportDocument(parsed.input, 'uid', () => 'TS').platform).toBe('ios');
+    expect(parseReportIssueInput({ description: 'Broken', platform: 'web' }).ok).toBe(false);
   });
 });
 

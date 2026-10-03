@@ -1655,6 +1655,7 @@
     "title": "Open tickets",
     "intro": "Known problems others have reported. Have the same problem? Give it a thumbs up or add a comment.",
     "loading": "Loading tickets…",
+    "loadMore": "Load more tickets",
     "empty": "There are no open tickets right now.",
     "error": "Could not load tickets. Please try again later.",
     "plusOneCount": "%1$d agree",

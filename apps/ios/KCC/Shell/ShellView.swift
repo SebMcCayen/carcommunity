@@ -65,6 +65,8 @@ struct ShellView: View {
     @State private var chatHubCoordinator: ChatHubCoordinator?
     @State private var crownHuntComposition: CrownHuntComposition?
     @State private var partnersCoordinator: PartnersCoordinator?
+    @State private var feedbackCoordinator: FeedbackCoordinator?
+    @State private var openTicketsCoordinator: OpenTicketsCoordinator?
     @State private var liveLocationCoordinator: LiveLocationCoordinator?
     @State private var driveRecordingCoordinator: DriveRecordingCoordinator?
     @State private var locationPermissionCoordinator: LocationPermissionCoordinator?
@@ -134,6 +136,11 @@ struct ShellView: View {
             .onChange(of: featureFlags.isEnabled(.partners)) { _, enabled in
                 if !enabled, routes.current == .partners {
                     partnersCoordinator?.clearSensitiveOfferState()
+                    routes = routes.poppingOne()
+                }
+            }
+            .onChange(of: featureFlags.isEnabled(.reportTicketsBrowser)) { _, enabled in
+                if !enabled, routes.current == .openTickets {
                     routes = routes.poppingOne()
                 }
             }
@@ -604,6 +611,13 @@ struct ShellView: View {
                     Label("shell.friendsTitle", systemImage: "person.2")
                 }
             }
+            if feedbackCoordinator != nil {
+                Button {
+                    routes = routes.opening(.feedback)
+                } label: {
+                    Label("shell.moreFeedback", systemImage: "exclamationmark.bubble")
+                }
+            }
         } label: {
             Label("shell.moreProfile", systemImage: "person.circle")
                 .labelStyle(.iconOnly)
@@ -837,6 +851,27 @@ struct ShellView: View {
             } else {
                 unavailableRoute
             }
+        case .feedback:
+            if let feedbackCoordinator {
+                routeNavigation(onBack: feedbackCoordinator.reset) {
+                    FeedbackScreen(
+                        coordinator: feedbackCoordinator,
+                        openTicketsEnabled: featureFlags.isEnabled(.reportTicketsBrowser),
+                        onOpenTickets: { routes = routes.opening(.openTickets) },
+                        onClose: { routes = routes.poppingOne() }
+                    )
+                }
+            } else {
+                unavailableRoute
+            }
+        case .openTickets:
+            if featureFlags.isEnabled(.reportTicketsBrowser), let openTicketsCoordinator {
+                routeNavigation {
+                    OpenTicketsScreen(coordinator: openTicketsCoordinator)
+                }
+            } else {
+                unavailableRoute
+            }
         default:
             // No other route is reachable yet — each renders here as its
             // feature is ported. Falling back to nothing (rather than
@@ -890,13 +925,24 @@ struct ShellView: View {
     }
 
     private func routeNavigation<Content: View>(
+        onBack: (() -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
         NavigationStack {
             content()
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        routeBackButton
+                        if let onBack {
+                            Button {
+                                onBack()
+                                routes = routes.poppingOne()
+                            } label: {
+                                Label("shell.back", systemImage: "chevron.backward")
+                            }
+                            .padding(KccSpacing.s4)
+                        } else {
+                            routeBackButton
+                        }
                     }
                 }
         }
@@ -1339,6 +1385,9 @@ struct ShellView: View {
         crownHuntComposition = nil
         partnersCoordinator?.clearSensitiveOfferState()
         partnersCoordinator = nil
+        openTicketsCoordinator?.stop()
+        feedbackCoordinator = nil
+        openTicketsCoordinator = nil
 
         let friends = FirebaseFriendsRepository.createIfAvailable()
         let conversations = FirebaseConversationsRepository.createIfAvailable()
@@ -1378,6 +1427,12 @@ struct ShellView: View {
                 access: access
             )
         }
+        feedbackCoordinator = FeedbackCoordinator(
+            repository: FirebaseFeedbackRepository.createIfAvailable()
+        )
+        openTicketsCoordinator = OpenTicketsCoordinator(
+            repository: FirebaseOpenTicketsRepository.createIfAvailable()
+        )
         notificationsCoordinator = NotificationsInboxCoordinator(repository: notifications, uid: uid)
         notificationSettingsCoordinator = NotificationSettingsCoordinator(
             repository: FirebaseNotificationSettingsRepository.createIfAvailable(),
