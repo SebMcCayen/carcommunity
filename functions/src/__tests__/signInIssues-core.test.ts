@@ -8,7 +8,6 @@
  * type and never echo client free-text (safeMessage) into the public issue.
  */
 
-import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   AUTO_GENERATED_LABEL,
@@ -116,10 +115,9 @@ describe('computeSignInFingerprint (dedup from validated type only)', () => {
   });
 
   it('preserves historical Android fingerprints while separating iOS', () => {
-    const legacyAndroid = createHash('sha256')
-      .update(`${SIGN_IN_FEATURE_AREA}|GetCredentialException`)
-      .digest('hex')
-      .slice(0, 64);
+    // Immutable migration sentinel for SHA-256("sign_in|GetCredentialException").
+    // Changing this value would orphan the existing signInIssueLinks record.
+    const legacyAndroid = 'a13aae343c980cf9bc9d60b81bce006e0aae2af6d69da3b33fb6b39c081a58ca';
 
     expect(computeSignInFingerprint('GetCredentialException', 'android')).toBe(legacyAndroid);
     expect(computeSignInFingerprint('GetCredentialException', 'ios')).not.toBe(legacyAndroid);
