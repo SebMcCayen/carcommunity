@@ -23,6 +23,7 @@ final class FeatureHealthTests: XCTestCase {
         private var state: NetworkValidationState = .pending
         private var onlineHandler: (@Sendable () -> Void)?
         private var offlineHandler: (@Sendable () -> Void)?
+        private var serializedStateHandlers: [@Sendable (NetworkValidationState) -> Void] = []
 
         func validationState() -> NetworkValidationState { lock.withLock { state } }
         func setValidatedOnlineHandler(_ handler: (@Sendable () -> Void)?) {
@@ -30,6 +31,11 @@ final class FeatureHealthTests: XCTestCase {
         }
         func setValidatedOfflineHandler(_ handler: (@Sendable () -> Void)?) {
             lock.withLock { offlineHandler = handler }
+        }
+        func withSerializedValidationState(
+            _ handler: @escaping @Sendable (NetworkValidationState) -> Void
+        ) {
+            lock.withLock { serializedStateHandlers.append(handler) }
         }
         func completeOnline() {
             let callback = lock.withLock {
@@ -51,6 +57,15 @@ final class FeatureHealthTests: XCTestCase {
                 return onlineHandler
             }
             callback?()
+        }
+        func transitionOfflineBeforeSerializedRecheck() {
+            let callbacks = lock.withLock {
+                state = .offline
+                let callbacks = serializedStateHandlers
+                serializedStateHandlers.removeAll()
+                return callbacks
+            }
+            callbacks.forEach { $0(.offline) }
         }
     }
 
@@ -256,6 +271,23 @@ final class FeatureHealthTests: XCTestCase {
         )
 
         network.invokeStaleOnlineCallbackWhileOffline()
+
+        XCTAssertTrue(sink.entries.isEmpty)
+    }
+
+    func testReporterSerializesQueueTimeRecheckWithOfflineTransition() {
+        let sink = RecordingErrorReporter()
+        let network = ControlledNetwork()
+        let reporter = FeatureHealthReporter(
+            gate: gate(), errorReporter: sink, networkStatus: network
+        )
+
+        XCTAssertEqual(
+            reporter.report(.mapStyleLoadFailed, foreground: true, surfaceShown: true),
+            .suppress(.connectivityPending)
+        )
+
+        network.transitionOfflineBeforeSerializedRecheck()
 
         XCTAssertTrue(sink.entries.isEmpty)
     }

@@ -150,12 +150,20 @@ protocol NetworkStatus: Sendable {
     func validationState() -> NetworkValidationState
     func setValidatedOnlineHandler(_ handler: (@Sendable () -> Void)?)
     func setValidatedOfflineHandler(_ handler: (@Sendable () -> Void)?)
+    func withSerializedValidationState(
+        _ handler: @escaping @Sendable (NetworkValidationState) -> Void
+    )
 }
 
 extension NetworkStatus {
     func isOnline() -> Bool { validationState() == .online }
     func setValidatedOnlineHandler(_ handler: (@Sendable () -> Void)?) {}
     func setValidatedOfflineHandler(_ handler: (@Sendable () -> Void)?) {}
+    func withSerializedValidationState(
+        _ handler: @escaping @Sendable (NetworkValidationState) -> Void
+    ) {
+        handler(validationState())
+    }
 }
 
 /// Process-safe connectivity snapshot used only as a false-positive suppression
@@ -240,6 +248,15 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
 
     func setValidatedOfflineHandler(_ handler: (@Sendable () -> Void)?) {
         lock.withLock { validatedOfflineHandler = handler }
+    }
+
+    func withSerializedValidationState(
+        _ handler: @escaping @Sendable (NetworkValidationState) -> Void
+    ) {
+        queue.async { [weak self] in
+            guard let self else { return }
+            handler(self.lock.withLock { self.state })
+        }
     }
 
     static func acceptsConnectivityResponse(
@@ -439,13 +456,16 @@ final class FeatureHealthReporter: @unchecked Sendable {
             return true
         }
         if shouldDefer {
-            switch networkStatus.validationState() {
-            case .online:
-                flushPendingLoadingErrors()
-            case .offline:
-                discardPendingLoadingErrors()
-            case .pending:
-                break
+            networkStatus.withSerializedValidationState { [weak self] state in
+                guard let self else { return }
+                switch state {
+                case .online:
+                    self.flushPendingLoadingErrors()
+                case .offline:
+                    self.discardPendingLoadingErrors()
+                case .pending:
+                    break
+                }
             }
             return .suppress(.connectivityPending)
         }
