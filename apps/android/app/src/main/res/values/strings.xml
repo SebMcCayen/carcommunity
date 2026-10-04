@@ -1782,7 +1782,7 @@
     <string name="addressSearch_unitMinutes">min</string>
     <string name="addressSearch_unitHours">tim</string>
     <string name="savedPlaces_title">Sparade platser</string>
-    <string name="savedPlaces_intro">Dina destinationer med ett tryck. Hem, Jobbet och favoriter visas i sökningen så att du snabbt kan centrera dem på kartan.</string>
+    <string name="savedPlaces_intro">Dina destinationer med ett tryck. Hem, Jobbet och favoriter visas i sökningen så att du snabbt kan öppna dem på kartan.</string>
     <string name="savedPlaces_addAction">Lägg till en plats</string>
     <string name="savedPlaces_emptyTitle">Inga sparade platser än</string>
     <string name="savedPlaces_emptyBody">Spara ditt hem, jobbet och platserna du kör till oftast, så finns de ett tryck bort när du söker.</string>

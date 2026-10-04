@@ -1782,7 +1782,7 @@
     <string name="addressSearch_unitMinutes">min</string>
     <string name="addressSearch_unitHours">h</string>
     <string name="savedPlaces_title">Saved places</string>
-    <string name="savedPlaces_intro">Your one-tap destinations. Home, Work and favourites appear in search so you can quickly center them on the map.</string>
+    <string name="savedPlaces_intro">Your one-tap destinations. Home, Work and favourites appear in search so you can quickly open them on the map.</string>
     <string name="savedPlaces_addAction">Add a place</string>
     <string name="savedPlaces_emptyTitle">No saved places yet</string>
     <string name="savedPlaces_emptyBody">Save your home, work and the places you drive to most, so they\'re one tap away when you search.</string>

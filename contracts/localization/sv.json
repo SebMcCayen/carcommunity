@@ -1911,7 +1911,7 @@
   },
   "savedPlaces": {
     "title": "Sparade platser",
-    "intro": "Dina destinationer med ett tryck. Hem, Jobbet och favoriter visas i sökningen så att du snabbt kan centrera dem på kartan.",
+    "intro": "Dina destinationer med ett tryck. Hem, Jobbet och favoriter visas i sökningen så att du snabbt kan öppna dem på kartan.",
     "addAction": "Lägg till en plats",
     "emptyTitle": "Inga sparade platser än",
     "emptyBody": "Spara ditt hem, jobbet och platserna du kör till oftast, så finns de ett tryck bort när du söker.",
