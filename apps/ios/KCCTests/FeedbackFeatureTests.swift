@@ -128,6 +128,8 @@ final class FeedbackFeatureTests: XCTestCase {
         let outOfRange = NSNumber(value: Double(Int.max))
         XCTAssertNil(FirebaseFeedbackRepository.positiveInteger(outOfRange))
         XCTAssertNil(FirebaseOpenTicketsRepository.positiveInteger(outOfRange))
+        XCTAssertEqual(FirebaseFeedbackRepository.positiveInteger(NSNumber(value: Int.max)), Int.max)
+        XCTAssertEqual(FirebaseOpenTicketsRepository.positiveInteger(NSNumber(value: Int.max)), Int.max)
 
         let ticket = OpenTicket.decode(documentId: "42", fields: [
             "number": outOfRange, "title": "Problem",

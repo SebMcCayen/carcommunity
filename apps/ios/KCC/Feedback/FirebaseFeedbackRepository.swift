@@ -29,12 +29,7 @@ final class FirebaseFeedbackRepository: FeedbackRepository, @unchecked Sendable 
     }
 
     static func positiveInteger(_ value: Any?) -> Int? {
-        guard let number = value as? NSNumber else { return nil }
-        guard CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
-        let double = number.doubleValue
-        guard double.isFinite, double.rounded() == double,
-              let integer = Int(exactly: double), integer > 0
-        else { return nil }
+        guard let integer = FeedbackNumber.integer(value), integer > 0 else { return nil }
         return integer
     }
 
@@ -123,12 +118,7 @@ final class FirebaseOpenTicketsRepository: OpenTicketsRepository, @unchecked Sen
     private static let interactCallable = "feedback-interactWithIssue"
 
     static func positiveInteger(_ value: Any?) -> Int? {
-        guard let number = value as? NSNumber else { return nil }
-        guard CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
-        let double = number.doubleValue
-        guard double.isFinite, double.rounded() == double,
-              let integer = Int(exactly: double), integer > 0
-        else { return nil }
+        guard let integer = FeedbackNumber.integer(value), integer > 0 else { return nil }
         return integer
     }
 

@@ -1,5 +1,31 @@
 import Foundation
 
+enum FeedbackNumber {
+    private static let integerEncodings: Set<String> = [
+        "c", "s", "i", "l", "q", "C", "S", "I", "L", "Q"
+    ]
+
+    static func integer(_ value: Any?) -> Int? {
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID()
+        else { return nil }
+
+        // Preserve integer-backed NSNumber values without first converting them
+        // through Double, which cannot represent Int.max exactly.
+        if integerEncodings.contains(String(cString: number.objCType)) {
+            return Int(number.stringValue)
+        }
+
+        let double = number.doubleValue
+        guard double.isFinite,
+              double.rounded() == double,
+              double >= Double(Int.min),
+              double < Double(Int.max)
+        else { return nil }
+        return Int(exactly: double)
+    }
+}
+
 protocol FeedbackRepository: Sendable {
     func report(_ input: FeedbackReportInput) async throws -> FeedbackSubmitResult
 }
@@ -59,17 +85,7 @@ struct OpenTicket: Equatable, Identifiable, Sendable {
     }
 
     private static func integer(_ value: Any?) -> Int? {
-        if let number = value as? NSNumber,
-           CFGetTypeID(number) == CFBooleanGetTypeID() { return nil }
-        if let value = value as? Int { return value }
-        if let value = value as? Int64,
-           value <= Int64(Int.max), value >= Int64(Int.min) { return Int(value) }
-        if let value = value as? NSNumber {
-            let double = value.doubleValue
-            guard double.isFinite, double.rounded() == double else { return nil }
-            return Int(exactly: double)
-        }
-        return nil
+        FeedbackNumber.integer(value)
     }
 }
 
