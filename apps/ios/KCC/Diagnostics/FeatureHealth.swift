@@ -164,6 +164,7 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
     // This unauthenticated probe sends neither the Mapbox access token nor user data.
     private static let connectivityProbeURL = URL(string: "https://api.mapbox.com/")!
     private static let validationInterval: TimeInterval = 5
+    private static let maximumValidationFailuresPerPath = 3
 
     private let monitor = NWPathMonitor()
     private let queue = DispatchQueue(label: "com.kungsbackacarcommunity.diagnostics.network")
@@ -173,6 +174,7 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
     private var state: NetworkValidationState = .pending
     private var validationInFlight = false
     private var lastValidation = Date.distantPast
+    private var consecutiveValidationFailures = 0
     private var validationGeneration = 0
     private var validationTask: URLSessionDataTask?
     private var validatedOnlineHandler: (@Sendable () -> Void)?
@@ -202,6 +204,7 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
                 let retryAfterPathUpdate = self.state == .offline
                 if changed || retryAfterPathUpdate {
                     self.lastValidation = .distantPast
+                    self.consecutiveValidationFailures = 0
                     if self.state != .online {
                         self.state = .pending
                     }
@@ -255,6 +258,7 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
                 pathAvailable: pathAvailable,
                 validationInFlight: validationInFlight,
                 state: state,
+                consecutiveFailures: consecutiveValidationFailures,
                 elapsedSinceLastValidation: Date().timeIntervalSince(lastValidation)
             )
             else {
@@ -277,6 +281,11 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
             let validationHandler = self.lock.withLock { () -> (@Sendable () -> Void)? in
                 guard self.validationGeneration == generation else { return nil }
                 self.state = self.pathAvailable && validated ? .online : .offline
+                if self.state == .online {
+                    self.consecutiveValidationFailures = 0
+                } else {
+                    self.consecutiveValidationFailures += 1
+                }
                 self.validationInFlight = false
                 self.validationTask = nil
                 return self.state == .online
@@ -306,12 +315,14 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
         pathAvailable: Bool,
         validationInFlight: Bool,
         state: NetworkValidationState,
+        consecutiveFailures: Int,
         elapsedSinceLastValidation: TimeInterval
     ) -> Bool {
+        let retryInterval = validationInterval * pow(2, Double(consecutiveFailures))
         pathAvailable
             && !validationInFlight
-            && state != .offline
-            && elapsedSinceLastValidation >= validationInterval
+            && (state != .offline || consecutiveFailures < maximumValidationFailuresPerPath)
+            && elapsedSinceLastValidation >= retryInterval
     }
 }
 

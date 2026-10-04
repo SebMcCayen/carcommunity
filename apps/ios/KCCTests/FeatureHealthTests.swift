@@ -215,17 +215,33 @@ final class FeatureHealthTests: XCTestCase {
         XCTAssertTrue(sink.entries.isEmpty)
     }
 
-    func testConfirmedOfflineStateDoesNotStartAnotherConnectivityValidation() {
+    func testOfflineConnectivityValidationUsesBoundedExponentialRetries() {
         XCTAssertFalse(SystemNetworkStatus.shouldStartConnectivityValidation(
             pathAvailable: true,
             validationInFlight: false,
             state: .offline,
+            consecutiveFailures: 1,
+            elapsedSinceLastValidation: 9
+        ))
+        XCTAssertTrue(SystemNetworkStatus.shouldStartConnectivityValidation(
+            pathAvailable: true,
+            validationInFlight: false,
+            state: .offline,
+            consecutiveFailures: 1,
+            elapsedSinceLastValidation: 10
+        ))
+        XCTAssertFalse(SystemNetworkStatus.shouldStartConnectivityValidation(
+            pathAvailable: true,
+            validationInFlight: false,
+            state: .offline,
+            consecutiveFailures: 3,
             elapsedSinceLastValidation: 3_600
         ))
         XCTAssertTrue(SystemNetworkStatus.shouldStartConnectivityValidation(
             pathAvailable: true,
             validationInFlight: false,
             state: .pending,
+            consecutiveFailures: 0,
             elapsedSinceLastValidation: 3_600
         ))
     }
