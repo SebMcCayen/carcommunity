@@ -59,6 +59,8 @@ struct OpenTicket: Equatable, Identifiable, Sendable {
     }
 
     private static func integer(_ value: Any?) -> Int? {
+        if let number = value as? NSNumber,
+           CFGetTypeID(number) == CFBooleanGetTypeID() { return nil }
         if let value = value as? Int { return value }
         if let value = value as? Int64,
            value <= Int64(Int.max), value >= Int64(Int.min) { return Int(value) }

@@ -28,8 +28,9 @@ final class FirebaseFeedbackRepository: FeedbackRepository, @unchecked Sendable 
         )
     }
 
-    private static func positiveInteger(_ value: Any?) -> Int? {
+    static func positiveInteger(_ value: Any?) -> Int? {
         guard let number = value as? NSNumber else { return nil }
+        guard CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
         let double = number.doubleValue
         guard double.isFinite, double.rounded() == double,
               double > 0, double <= Double(Int.max)

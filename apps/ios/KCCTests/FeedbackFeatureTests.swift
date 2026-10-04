@@ -105,6 +105,14 @@ final class FeedbackFeatureTests: XCTestCase {
         XCTAssertEqual(valid?.number, 42)
         XCTAssertEqual(valid?.plusOneCount, 0)
         XCTAssertEqual(valid?.commentCount, 3)
+        let boolNumber = OpenTicket.decode(documentId: "42", fields: [
+            "number": true, "title": "Problem",
+            "htmlUrl": "https://github.com/SebMcCayen/carcommunity/issues/42",
+            "plusOneCount": true, "commentCount": false
+        ])
+        XCTAssertEqual(boolNumber?.number, 42)
+        XCTAssertEqual(boolNumber?.plusOneCount, 0)
+        XCTAssertEqual(boolNumber?.commentCount, 0)
         XCTAssertNil(OpenTicket.decode(documentId: "0", fields: [
             "title": "Problem", "htmlUrl": "https://github.com/issues/0"
         ]))
@@ -114,6 +122,12 @@ final class FeedbackFeatureTests: XCTestCase {
         XCTAssertNil(OpenTicket.decode(documentId: "44", fields: [
             "title": "Problem", "htmlUrl": "https://github.com/issues/44", "state": "closed"
         ]))
+    }
+
+    func testCallableIssueNumberRejectsBridgedBooleans() {
+        XCTAssertNil(FirebaseFeedbackRepository.positiveInteger(true))
+        XCTAssertNil(FirebaseFeedbackRepository.positiveInteger(false))
+        XCTAssertEqual(FirebaseFeedbackRepository.positiveInteger(NSNumber(value: 42)), 42)
     }
 
     @MainActor

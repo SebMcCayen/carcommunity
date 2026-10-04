@@ -320,6 +320,7 @@ private extension TicketInteractionError {
 }
 
 private extension FeedbackClientContext {
+    @MainActor
     static var current: FeedbackClientContext {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         return .sanitized(
