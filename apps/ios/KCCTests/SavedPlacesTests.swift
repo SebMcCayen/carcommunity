@@ -253,6 +253,21 @@ final class SavedPlacesTests: XCTestCase {
         )])
     }
 
+    func testGeocoderPreservesValidFeaturesAroundMalformedElements() throws {
+        let data = Data("""
+        {"features":[
+          {"id":"valid.1","geometry":{"coordinates":[12,57]},"properties":{"name":"First"}},
+          {"id":"malformed","properties":{"name":"Missing geometry"}},
+          {"id":"valid.2","geometry":{"coordinates":[13,58]},"properties":{"name":"Second"}}
+        ]}
+        """.utf8)
+
+        XCTAssertEqual(
+            try MapboxAddressSearchClient.decode(data: data).map(\.name),
+            ["First", "Second"]
+        )
+    }
+
     func testGeocoderDropsInvalidFeaturesAndCapsResults() throws {
         let features = (0..<8).map { index in
             """
@@ -313,6 +328,106 @@ final class SavedPlacesTests: XCTestCase {
         XCTAssertThrowsError(try MapboxAddressSearchClient.decode(data: data)) { error in
             XCTAssertEqual(error as? AddressSearchError, .invalidResponse)
         }
+    }
+
+    func testCoordinatorDebouncesToLatestQuery() async throws {
+        let calls = AddressSearchCalls()
+        let client = ClosureAddressSearchClient { query, _ in
+            await calls.append(query)
+            return [PlaceSuggestion(
+                id: query,
+                name: query,
+                address: nil,
+                point: MapPoint(longitude: 12, latitude: 57)
+            )]
+        }
+        let coordinator = SavedPlacesCoordinator(
+            store: UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults),
+            searchClient: client
+        )
+
+        coordinator.updateQuery("first", proximity: nil)
+        try await Task.sleep(for: .milliseconds(100))
+        coordinator.updateQuery("second", proximity: nil)
+        try await Task.sleep(for: .milliseconds(400))
+
+        let recorded = await calls.values()
+        XCTAssertEqual(recorded, ["second"])
+        XCTAssertEqual(coordinator.suggestions.map(\.id), ["second"])
+        XCTAssertFalse(coordinator.isSearching)
+        XCTAssertFalse(coordinator.searchFailed)
+    }
+
+    func testCoordinatorCancelledResponseCannotOverwriteLatestQuery() async throws {
+        let calls = AddressSearchCalls()
+        let client = ClosureAddressSearchClient { query, _ in
+            await calls.append(query)
+            if query == "older" {
+                // Deliberately return a result after cancellation to prove the
+                // coordinator's stale-result guard, not the client, protects UI state.
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+            return [PlaceSuggestion(
+                id: query,
+                name: query,
+                address: nil,
+                point: MapPoint(longitude: 12, latitude: 57)
+            )]
+        }
+        let coordinator = SavedPlacesCoordinator(
+            store: UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults),
+            searchClient: client
+        )
+
+        coordinator.updateQuery("older", proximity: nil)
+        try await Task.sleep(for: .milliseconds(350))
+        coordinator.updateQuery("newer", proximity: nil)
+        try await Task.sleep(for: .milliseconds(400))
+
+        let recorded = await calls.values()
+        XCTAssertEqual(recorded, ["older", "newer"])
+        XCTAssertEqual(coordinator.suggestions.map(\.id), ["newer"])
+        XCTAssertFalse(coordinator.isSearching)
+    }
+
+    func testCoordinatorOrdersSuccessAndClearsSuggestionsOnFailure() async throws {
+        let calls = AddressSearchCalls()
+        let client = ClosureAddressSearchClient { query, _ in
+            await calls.append(query)
+            if query == "failure" { throw AddressSearchError.invalidResponse }
+            return [
+                PlaceSuggestion(
+                    id: "far",
+                    name: "Far",
+                    address: nil,
+                    point: MapPoint(longitude: 12, latitude: 58)
+                ),
+                PlaceSuggestion(
+                    id: "near",
+                    name: "Near",
+                    address: nil,
+                    point: MapPoint(longitude: 12, latitude: 57.1)
+                )
+            ]
+        }
+        let coordinator = SavedPlacesCoordinator(
+            store: UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults),
+            searchClient: client
+        )
+
+        coordinator.updateQuery(
+            "success",
+            proximity: MapPoint(longitude: 12, latitude: 57)
+        )
+        try await Task.sleep(for: .milliseconds(400))
+        XCTAssertEqual(coordinator.suggestions.map(\.id), ["near", "far"])
+        XCTAssertFalse(coordinator.searchFailed)
+
+        coordinator.updateQuery("failure", proximity: nil)
+        try await Task.sleep(for: .milliseconds(400))
+        XCTAssertTrue(coordinator.suggestions.isEmpty)
+        XCTAssertTrue(coordinator.searchFailed)
+        XCTAssertFalse(coordinator.isSearching)
     }
 
     func testRepointingFavouriteRemovesOldCoordinateIdentity() throws {
@@ -451,4 +566,25 @@ final class SavedPlacesTests: XCTestCase {
     ) -> SavedPlace? {
         SavedPlacesPolicy.create(kind: kind, place: suggestion(id: id, latitude: latitude), label: id)
     }
+}
+
+private struct ClosureAddressSearchClient: AddressSearchClient {
+    let handler: @Sendable (String, MapPoint?) async throws -> [PlaceSuggestion]
+
+    init(
+        handler: @escaping @Sendable (String, MapPoint?) async throws -> [PlaceSuggestion]
+    ) {
+        self.handler = handler
+    }
+
+    func search(query: String, proximity: MapPoint?) async throws -> [PlaceSuggestion] {
+        try await handler(query, proximity)
+    }
+}
+
+private actor AddressSearchCalls {
+    private var recorded: [String] = []
+
+    func append(_ query: String) { recorded.append(query) }
+    func values() -> [String] { recorded }
 }

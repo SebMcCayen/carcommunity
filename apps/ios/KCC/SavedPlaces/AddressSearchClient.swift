@@ -89,7 +89,7 @@ struct MapboxAddressSearchClient: AddressSearchClient {
         let response = try JSONDecoder().decode(SearchBoxResponse.self, from: data)
         var seen = Set<String>()
         var suggestions: [PlaceSuggestion] = []
-        for feature in response.features {
+        for feature in response.features.compactMap(\.value) {
             guard feature.geometry.coordinates.count >= 2 else { continue }
             let point = MapPoint(
                 longitude: feature.geometry.coordinates[0],
@@ -129,7 +129,17 @@ struct MapboxAddressSearchClient: AddressSearchClient {
 }
 
 private struct SearchBoxResponse: Decodable {
-    let features: [SearchBoxFeature]
+    let features: [LossySearchFeature]
+}
+
+/// One malformed or future feature must not discard valid search results from
+/// the same response.
+private struct LossySearchFeature: Decodable {
+    let value: SearchBoxFeature?
+
+    init(from decoder: Decoder) throws {
+        value = try? SearchBoxFeature(from: decoder)
+    }
 }
 
 private struct SearchBoxFeature: Decodable {

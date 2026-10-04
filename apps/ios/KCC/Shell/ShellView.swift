@@ -1721,17 +1721,27 @@ struct ShellView: View {
         guard (addressSearchPresented || routes.current == .savedPlaces),
               locationProvider.authorization.isAuthorized
         else { return }
-        for await fix in locationProvider.fixes() {
-            if Task.isCancelled { return }
-            let point = MapPoint(longitude: fix.longitude, latitude: fix.latitude)
-            guard SavedPlacesPolicy.isValid(point: point) else { continue }
-            savedPlacesProximity = point
-            if let savedPlacesCoordinator, !savedPlacesCoordinator.query.isEmpty {
-                savedPlacesCoordinator.updateQuery(savedPlacesCoordinator.query, proximity: point)
+        let stream = locationProvider.fixes()
+        let point = await withTaskGroup(of: MapPoint?.self) { group in
+            group.addTask {
+                for await fix in stream {
+                    let point = MapPoint(longitude: fix.longitude, latitude: fix.latitude)
+                    if SavedPlacesPolicy.isValid(point: point) { return point }
+                }
+                return nil
             }
-            // One bias point is sufficient. Ending iteration releases this
-            // feature's location demand instead of running GPS for the route.
-            return
+            group.addTask {
+                try? await Task.sleep(for: .seconds(3))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+        guard !Task.isCancelled, let point else { return }
+        savedPlacesProximity = point
+        if let savedPlacesCoordinator, !savedPlacesCoordinator.query.isEmpty {
+            savedPlacesCoordinator.updateQuery(savedPlacesCoordinator.query, proximity: point)
         }
     }
 
