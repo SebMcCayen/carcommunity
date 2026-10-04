@@ -186,33 +186,6 @@ final class SavedPlacesTests: XCTestCase {
         XCTAssertEqual(recovered.map(\.kind), [.home, .favourite, .favourite, .favourite])
     }
 
-    func testShareURLIsHTTPSAndKeepsCoordinatesInQuery() throws {
-        let saved = try XCTUnwrap(makeSaved(.favourite, id: "lake", latitude: 57.49))
-        let url = try XCTUnwrap(SavedPlaceShare.url(for: saved))
-        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
-
-        XCTAssertEqual(components.scheme, "https")
-        XCTAssertEqual(components.host, "maps.apple.com")
-        XCTAssertEqual(components.queryItems?.first(where: { $0.name == "ll" })?.value, "57.49,12.0")
-    }
-
-    func testShareURLBoundsDisplayNameByUnicodeScalars() throws {
-        let scalarHeavyName = "a" + String(repeating: "\u{0301}", count: 400)
-        let url = try XCTUnwrap(SavedPlaceShare.url(
-            name: scalarHeavyName,
-            point: MapPoint(longitude: 12, latitude: 57)
-        ))
-        let name = try XCTUnwrap(
-            URLComponents(url: url, resolvingAgainstBaseURL: false)?
-                .queryItems?
-                .first(where: { $0.name == "q" })?
-                .value
-        )
-
-        XCTAssertEqual(name.unicodeScalars.count, 160)
-        XCTAssertEqual(name, SavedPlacesPolicy.bounded(scalarHeavyName, to: 160))
-    }
-
     func testSearchBoxRequestIsBoundedAndUsesValidProximity() throws {
         let client = MapboxAddressSearchClient(token: "pk.test", language: "sv")
         let url = try XCTUnwrap(client.requestURL(

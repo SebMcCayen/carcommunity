@@ -249,11 +249,6 @@ struct SavedPlacesScreen: View {
                 Button("savedPlaces.changeAddress", systemImage: "mappin.and.ellipse") {
                     picker = saved
                 }
-                if let url = SavedPlaceShare.url(for: saved) {
-                    ShareLink(item: url) {
-                        Label("savedPlaces.share", systemImage: "square.and.arrow.up")
-                    }
-                }
                 Button("savedPlaces.delete", systemImage: "trash", role: .destructive) {
                     deleting = saved
                 }

@@ -197,22 +197,3 @@ enum SavedPlacesPolicy {
 private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
 }
-
-enum SavedPlaceShare {
-    static func url(for savedPlace: SavedPlace) -> URL? {
-        url(name: savedPlace.displayLabel, point: savedPlace.place.point)
-    }
-
-    static func url(name: String, point: MapPoint) -> URL? {
-        guard SavedPlacesPolicy.isValid(point: point) else { return nil }
-        var components = URLComponents()
-        components.scheme = "https"
-        components.host = "maps.apple.com"
-        components.path = "/"
-        components.queryItems = [
-            URLQueryItem(name: "ll", value: "\(point.latitude),\(point.longitude)"),
-            URLQueryItem(name: "q", value: SavedPlacesPolicy.bounded(name, to: 160))
-        ]
-        return components.url
-    }
-}
