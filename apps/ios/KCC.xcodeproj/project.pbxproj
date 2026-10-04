@@ -38,6 +38,7 @@
 		13D59B678BA7758DD88C0863 /* MapSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF81B13C98719E049F390996 /* MapSurface.swift */; };
 		13F4A99C1761787E34F42A45 /* FirebaseConvoyReactionRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D078D5979DD1ACCE12DB1B9 /* FirebaseConvoyReactionRepository.swift */; };
 		15F365792E4CEB78754C9312 /* LiveLocationScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36B73725FF334E4EAEA7D54B /* LiveLocationScreen.swift */; };
+		167A1B26D3004A20C1C07DE5 /* FirebaseAppCheck in Frameworks */ = {isa = PBXBuildFile; productRef = 9C0445899ADF1536AA9888D7 /* FirebaseAppCheck */; };
 		17E534749AC4E00E377A3E6B /* PerkShopCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D123BF9682E0A7A2684BA376 /* PerkShopCoordinatorTests.swift */; };
 		18C9F40C2A35E8C26C9EA32F /* BadgesRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58003A940AECB933074E31FF /* BadgesRepository.swift */; };
 		18F392488ADE5F64038B4509 /* PartnersRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E9868905C82763C67898D28 /* PartnersRepository.swift */; };
@@ -659,6 +660,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				796D4208F306EAFA0B940C3E /* FirebaseAuth in Frameworks */,
+				167A1B26D3004A20C1C07DE5 /* FirebaseAppCheck in Frameworks */,
 				8D0B56DF9BD0EB28E457338C /* FirebaseFirestore in Frameworks */,
 				2EC5800FD4E02C0186D0E3E2 /* FirebaseFunctions in Frameworks */,
 				BF3D130F03E3B77E710907E7 /* FirebaseStorage in Frameworks */,
@@ -1273,6 +1275,7 @@
 			name = KCC;
 			packageProductDependencies = (
 				C10372A5B1FF04CFD7520C67 /* FirebaseAuth */,
+				9C0445899ADF1536AA9888D7 /* FirebaseAppCheck */,
 				B688C912C571A1CC3752D0B8 /* FirebaseFirestore */,
 				FD0E994263AEF5E23FE59538 /* FirebaseFunctions */,
 				35ECF01C5EE3E57259D5C48F /* FirebaseStorage */,
@@ -1958,6 +1961,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = C2463E4F930BC5BDBC34F663 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseStorage;
+		};
+		9C0445899ADF1536AA9888D7 /* FirebaseAppCheck */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C2463E4F930BC5BDBC34F663 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAppCheck;
 		};
 		B688C912C571A1CC3752D0B8 /* FirebaseFirestore */ = {
 			isa = XCSwiftPackageProductDependency;

@@ -1,3 +1,4 @@
+import FirebaseAppCheck
 import FirebaseCore
 import Foundation
 
@@ -17,6 +18,12 @@ enum FirebaseBootstrap {
     private(set) static var isConfigured = false
 
     static func configureIfAvailable() {
+        #if DEBUG
+        AppCheck.setAppCheckProviderFactory(AppCheckDebugProviderFactory())
+        #else
+        AppCheck.setAppCheckProviderFactory(AppAttestProviderFactory())
+        #endif
+
         guard FirebaseApp.app() == nil else {
             isConfigured = true
             return

@@ -36,6 +36,8 @@ targets:
     dependencies:
       - package: Firebase
         product: FirebaseAuth
+      - package: Firebase
+        product: FirebaseAppCheck
       # Events read path: direct Firestore snapshot listeners, mirroring
       # Android's FirebaseEventsRepository.
       - package: Firebase

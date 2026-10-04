@@ -7,12 +7,12 @@
 | Functions | built-in v2 enforcement | Every callable sets `enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true'` (guard test: `functions/src/__tests__/appcheck-guard.test.ts`) |
 | Android  | Play Integrity (release) / debug provider (debug builds) | Registered in `KccApplication`; no-op until `google-services.json` is provisioned. Debug builds can pin a stable debug secret — see below |
 | Admin web | reCAPTCHA Enterprise   | Registered in `apps/admin/src/lib/firebase.ts`; no-op until `VITE_APPCHECK_SITE_KEY` is configured |
-| iOS      | App Attest              | Descoped with the iOS app (2026-07-02 decision)                   |
+| iOS      | App Attest (release) / debug provider (debug builds) | Configured in `FirebaseBootstrap` before Firebase startup; production registration requires the iOS production cutover |
 
 Emulator/CI: the Functions emulator runs with enforcement DISABLED (the
 `FUNCTIONS_EMULATOR` guard); clients use debug providers
 (`VITE_APPCHECK_DEBUG_TOKEN` on web, `DebugAppCheckProviderFactory` on
-Android debug builds).
+Android debug builds, and `AppCheckDebugProviderFactory` on iOS debug builds).
 
 ## Android debug builds — stable debug token (one-time setup)
 
