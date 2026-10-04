@@ -147,6 +147,12 @@ enum DiagnosticsSanitizer {
         return kept.isEmpty ? nil : String(kept.prefix(100))
     }
 
+    static func signInErrorType(_ raw: String) -> String {
+        let kept = raw.filter { $0.isASCII && ($0.isLetter || $0.isNumber) }
+        guard let first = kept.first, first.isLetter else { return "UnknownError" }
+        return String(kept.prefix(100))
+    }
+
     static func feature(_ raw: String) -> String? {
         let kept = raw.filter { $0.isASCII && ($0.isLetter || $0.isNumber || "._-".contains($0)) }
         return kept.isEmpty ? nil : String(kept.prefix(120))
@@ -214,6 +220,25 @@ struct DiagnosticsReport: Equatable, Sendable {
         self.appVersion = appVersion.map { DiagnosticsSanitizer.prefixByUTF16($0, maximum: 50) }
         self.buildNumber = buildNumber.map { DiagnosticsSanitizer.prefixByUTF16($0, maximum: 50) }
         self.osVersion = osVersion.map { DiagnosticsSanitizer.prefixByUTF16($0, maximum: 100) }
+        self.metadata = DiagnosticsSanitizer.metadata(metadata)
+    }
+
+    init(
+        signInFailureErrorType rawErrorType: String,
+        environment: DiagnosticsEnvironment,
+        metadata: [String: DiagnosticsMetadataValue]? = nil
+    ) {
+        let errorType = DiagnosticsSanitizer.signInErrorType(rawErrorType)
+        severity = .error
+        featureArea = .signIn
+        // The fixed prefix plus the strictly alphanumeric type is already a
+        // bounded, non-identifying message. Preserve digits so it remains
+        // byte-for-byte consistent with errorCode for backend validation.
+        safeMessage = "Sign-in failed: \(errorType)"
+        errorCode = errorType
+        appVersion = DiagnosticsSanitizer.prefixByUTF16(environment.appVersion, maximum: 50)
+        buildNumber = DiagnosticsSanitizer.prefixByUTF16(environment.buildNumber, maximum: 50)
+        osVersion = DiagnosticsSanitizer.prefixByUTF16(environment.osVersion, maximum: 100)
         self.metadata = DiagnosticsSanitizer.metadata(metadata)
     }
 

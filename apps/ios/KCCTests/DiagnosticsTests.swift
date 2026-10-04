@@ -169,6 +169,25 @@ final class DiagnosticsTests: XCTestCase {
         XCTAssertEqual(report?.metadata?["errorStatus"], .string("invalid-credential"))
     }
 
+    func testSignInAdapterPreservesDigitsInValidatedErrorType() {
+        let sink = RecordingDiagnosticsReporter()
+        let reporter = DiagnosticsSignInFailureReporter(
+            reporter: sink,
+            environment: DiagnosticsEnvironment(
+                appVersion: "1.0", buildNumber: "2", osVersion: "iOS", deviceModel: "iPhone"
+            )
+        )
+
+        reporter.reportSignInFailure(SignInFailureDetails(
+            errorType: "A0Exception",
+            step: .credentialFetch,
+            statusCode: nil
+        ))
+
+        XCTAssertEqual(sink.reports.first?.safeMessage, "Sign-in failed: A0Exception")
+        XCTAssertEqual(sink.reports.first?.errorCode, "A0Exception")
+    }
+
     func testAuthenticatedErrorReporterUsesContractAndRedactsBeforeTransport() async {
         let callable = RecordingCallable()
         let reporter = FirebaseClientErrorReporter(

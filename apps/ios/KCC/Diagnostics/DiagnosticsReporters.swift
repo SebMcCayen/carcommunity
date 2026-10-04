@@ -59,7 +59,6 @@ struct DiagnosticsSignInFailureReporter: SignInFailureReporter {
     let environment: DiagnosticsEnvironment
 
     func reportSignInFailure(_ details: SignInFailureDetails) {
-        let errorType = DiagnosticsSanitizer.errorCode(details.errorType) ?? "UnknownError"
         var metadata: [String: DiagnosticsMetadataValue] = [
             "signInStep": .string(details.step.rawValue),
             "deviceModel": .string(environment.deviceModel)
@@ -68,13 +67,8 @@ struct DiagnosticsSignInFailureReporter: SignInFailureReporter {
             metadata["errorStatus"] = .string(statusCode)
         }
         reporter.report(DiagnosticsReport(
-            severity: .error,
-            featureArea: .signIn,
-            safeMessage: "Sign-in failed: \(errorType)",
-            errorCode: errorType,
-            appVersion: environment.appVersion,
-            buildNumber: environment.buildNumber,
-            osVersion: environment.osVersion,
+            signInFailureErrorType: details.errorType,
+            environment: environment,
             metadata: metadata
         ))
     }
