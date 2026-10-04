@@ -124,6 +124,21 @@ final class FeedbackFeatureTests: XCTestCase {
         ]))
     }
 
+    func testTicketDecodersRejectOutOfRangeDoubleIntegers() {
+        let outOfRange = NSNumber(value: Double(Int.max))
+        XCTAssertNil(FirebaseFeedbackRepository.positiveInteger(outOfRange))
+        XCTAssertNil(FirebaseOpenTicketsRepository.positiveInteger(outOfRange))
+
+        let ticket = OpenTicket.decode(documentId: "42", fields: [
+            "number": outOfRange, "title": "Problem",
+            "htmlUrl": "https://github.com/SebMcCayen/carcommunity/issues/42",
+            "plusOneCount": outOfRange, "commentCount": outOfRange
+        ])
+        XCTAssertEqual(ticket?.number, 42)
+        XCTAssertEqual(ticket?.plusOneCount, 0)
+        XCTAssertEqual(ticket?.commentCount, 0)
+    }
+
     func testCallableIssueNumberRejectsBridgedBooleans() {
         XCTAssertNil(FirebaseFeedbackRepository.positiveInteger(true))
         XCTAssertNil(FirebaseFeedbackRepository.positiveInteger(false))

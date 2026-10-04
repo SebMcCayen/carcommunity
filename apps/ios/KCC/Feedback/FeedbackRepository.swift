@@ -66,10 +66,8 @@ struct OpenTicket: Equatable, Identifiable, Sendable {
            value <= Int64(Int.max), value >= Int64(Int.min) { return Int(value) }
         if let value = value as? NSNumber {
             let double = value.doubleValue
-            guard double.isFinite, double.rounded() == double,
-                  double <= Double(Int.max), double >= Double(Int.min)
-            else { return nil }
-            return Int(double)
+            guard double.isFinite, double.rounded() == double else { return nil }
+            return Int(exactly: double)
         }
         return nil
     }

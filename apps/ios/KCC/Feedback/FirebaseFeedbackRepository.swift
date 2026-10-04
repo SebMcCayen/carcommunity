@@ -33,9 +33,9 @@ final class FirebaseFeedbackRepository: FeedbackRepository, @unchecked Sendable 
         guard CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
         let double = number.doubleValue
         guard double.isFinite, double.rounded() == double,
-              double > 0, double <= Double(Int.max)
+              let integer = Int(exactly: double), integer > 0
         else { return nil }
-        return Int(double)
+        return integer
     }
 
     private static let callable = "feedback-reportIssue"
@@ -127,9 +127,9 @@ final class FirebaseOpenTicketsRepository: OpenTicketsRepository, @unchecked Sen
         guard CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
         let double = number.doubleValue
         guard double.isFinite, double.rounded() == double,
-              double > 0, double <= Double(Int.max)
+              let integer = Int(exactly: double), integer > 0
         else { return nil }
-        return Int(double)
+        return integer
     }
 
     static func createIfAvailable() -> OpenTicketsRepository? {
