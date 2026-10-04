@@ -3,6 +3,21 @@ import XCTest
 @testable import KCC
 
 final class DiagnosticsTests: XCTestCase {
+    func testAppCheckProviderSelectionUsesDebugOnlyForDevelopment() {
+        XCTAssertEqual(
+            FirebaseAppCheckProviderKind.select(isDebugBuild: true, appAttestSupported: true),
+            .debug
+        )
+        XCTAssertEqual(
+            FirebaseAppCheckProviderKind.select(isDebugBuild: false, appAttestSupported: true),
+            .appAttest
+        )
+        XCTAssertEqual(
+            FirebaseAppCheckProviderKind.select(isDebugBuild: false, appAttestSupported: false),
+            .deviceCheck
+        )
+    }
+
     private final class RecordingCallable: DiagnosticsCallableClient, @unchecked Sendable {
         private let lock = NSLock()
         private var stored: [(String, [String: Any])] = []

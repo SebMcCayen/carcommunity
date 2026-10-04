@@ -34,10 +34,12 @@ targets:
     sources:
       - path: KCC
     dependencies:
-      - package: Firebase
-        product: FirebaseAuth
+      # App Check protects authenticated callables. Its provider factory is
+      # installed before FirebaseApp.configure in FirebaseBootstrap.
       - package: Firebase
         product: FirebaseAppCheck
+      - package: Firebase
+        product: FirebaseAuth
       # Events read path: direct Firestore snapshot listeners, mirroring
       # Android's FirebaseEventsRepository.
       - package: Firebase

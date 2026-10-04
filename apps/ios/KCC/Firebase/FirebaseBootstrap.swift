@@ -1,6 +1,43 @@
+import DeviceCheck
 import FirebaseAppCheck
 import FirebaseCore
 import Foundation
+
+enum FirebaseAppCheckProviderKind: Equatable {
+    case debug
+    case appAttest
+    case deviceCheck
+
+    static func select(isDebugBuild: Bool, appAttestSupported: Bool) -> Self {
+        if isDebugBuild { return .debug }
+        return appAttestSupported ? .appAttest : .deviceCheck
+    }
+}
+
+private final class KCCAppCheckProviderFactory: NSObject, AppCheckProviderFactory {
+    func createProvider(with app: FirebaseApp) -> (any AppCheckProvider)? {
+        #if DEBUG
+        let kind = FirebaseAppCheckProviderKind.select(
+            isDebugBuild: true,
+            appAttestSupported: false
+        )
+        #else
+        let kind = FirebaseAppCheckProviderKind.select(
+            isDebugBuild: false,
+            appAttestSupported: DCAppAttestService.shared.isSupported
+        )
+        #endif
+
+        switch kind {
+        case .debug:
+            return AppCheckDebugProviderFactory().createProvider(with: app)
+        case .appAttest:
+            return AppAttestProviderFactory().createProvider(with: app)
+        case .deviceCheck:
+            return DeviceCheckProviderFactory().createProvider(with: app)
+        }
+    }
+}
 
 /// Configures Firebase only when a `GoogleService-Info.plist` is present in
 /// the app bundle.
@@ -18,12 +55,6 @@ enum FirebaseBootstrap {
     private(set) static var isConfigured = false
 
     static func configureIfAvailable() {
-        #if DEBUG
-        AppCheck.setAppCheckProviderFactory(AppCheckDebugProviderFactory())
-        #else
-        AppCheck.setAppCheckProviderFactory(AppAttestProviderFactory())
-        #endif
-
         guard FirebaseApp.app() == nil else {
             isConfigured = true
             return
@@ -35,6 +66,10 @@ enum FirebaseBootstrap {
             // No config bundled — a config-less build. Not an error.
             return
         }
+        // App Check must be installed before Firebase configures its component
+        // graph. Debug builds emit a registrable development token; release
+        // builds prefer App Attest and fall back to DeviceCheck where needed.
+        AppCheck.setAppCheckProviderFactory(KCCAppCheckProviderFactory())
         FirebaseApp.configure(options: options)
         isConfigured = true
     }
