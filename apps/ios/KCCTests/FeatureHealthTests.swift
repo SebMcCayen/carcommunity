@@ -45,6 +45,13 @@ final class FeatureHealthTests: XCTestCase {
             }
             callback?()
         }
+        func invokeStaleOnlineCallbackWhileOffline() {
+            let callback = lock.withLock {
+                state = .offline
+                return onlineHandler
+            }
+            callback?()
+        }
     }
 
     private func gate() -> FeatureHealthGate {
@@ -211,6 +218,23 @@ final class FeatureHealthTests: XCTestCase {
 
         network.completeOffline()
         network.completeOnline()
+
+        XCTAssertTrue(sink.entries.isEmpty)
+    }
+
+    func testReporterRejectsStaleOnlineCallbackAfterOfflineTransition() {
+        let sink = RecordingErrorReporter()
+        let network = ControlledNetwork()
+        let reporter = FeatureHealthReporter(
+            gate: gate(), errorReporter: sink, networkStatus: network
+        )
+
+        XCTAssertEqual(
+            reporter.report(.mapStyleLoadFailed, foreground: true, surfaceShown: true),
+            .suppress(.connectivityPending)
+        )
+
+        network.invokeStaleOnlineCallbackWhileOffline()
 
         XCTAssertTrue(sink.entries.isEmpty)
     }

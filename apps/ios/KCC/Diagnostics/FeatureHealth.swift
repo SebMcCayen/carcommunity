@@ -278,21 +278,12 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
         let task = session.dataTask(with: request) { [weak self] _, response, error in
             guard let self else { return }
             let validated = Self.acceptsMapboxConnectivityResponse(response, error: error)
-            let validationHandler = self.lock.withLock { () -> (@Sendable () -> Void)? in
-                guard self.validationGeneration == generation else { return nil }
-                self.state = self.pathAvailable && validated ? .online : .offline
-                if self.state == .online {
-                    self.consecutiveValidationFailures = 0
-                } else {
-                    self.consecutiveValidationFailures += 1
-                }
-                self.validationInFlight = false
-                self.validationTask = nil
-                return self.state == .online
-                    ? self.validatedOnlineHandler
-                    : self.validatedOfflineHandler
+            self.queue.async { [weak self] in
+                self?.completeConnectivityValidation(
+                    generation: generation,
+                    validated: validated
+                )
             }
-            validationHandler?()
         }
         let shouldStart = lock.withLock {
             guard pathAvailable,
@@ -309,6 +300,24 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
         } else {
             task.cancel()
         }
+    }
+
+    private func completeConnectivityValidation(generation: Int, validated: Bool) {
+        let validationHandler = lock.withLock { () -> (@Sendable () -> Void)? in
+            guard validationGeneration == generation else { return nil }
+            state = pathAvailable && validated ? .online : .offline
+            if state == .online {
+                consecutiveValidationFailures = 0
+            } else {
+                consecutiveValidationFailures += 1
+            }
+            validationInFlight = false
+            validationTask = nil
+            return state == .online ? validatedOnlineHandler : validatedOfflineHandler
+        }
+        // Probe completions and NWPath changes run on the same serial queue, so
+        // their callbacks cannot observe or publish connectivity out of order.
+        validationHandler?()
     }
 
     static func shouldStartConnectivityValidation(
@@ -441,6 +450,10 @@ final class FeatureHealthReporter: @unchecked Sendable {
     }
 
     private func flushPendingLoadingErrors() {
+        guard networkStatus.validationState() == .online else {
+            discardPendingLoadingErrors()
+            return
+        }
         let (pending, conditions) = pendingLock.withLock {
             let snapshot = pendingLoadingErrors
             pendingLoadingErrors = []
