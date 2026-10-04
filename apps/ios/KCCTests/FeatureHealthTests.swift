@@ -292,9 +292,12 @@ final class FeatureHealthTests: XCTestCase {
     }
 
     func testConnectivityProbeUsesIndependentVerifiedHost() {
+        let successBody = Data(
+            "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>".utf8
+        )
         let appleResponse = HTTPURLResponse(
             url: URL(string: "https://captive.apple.com/hotspot-detect.html")!,
-            statusCode: 404,
+            statusCode: 200,
             httpVersion: "HTTP/1.1",
             headerFields: nil
         )
@@ -318,30 +321,47 @@ final class FeatureHealthTests: XCTestCase {
         )
 
         XCTAssertTrue(
-            SystemNetworkStatus.acceptsConnectivityResponse(appleResponse, error: nil)
+            SystemNetworkStatus.acceptsConnectivityResponse(
+                data: successBody,
+                appleResponse,
+                error: nil
+            )
         )
         XCTAssertFalse(
             SystemNetworkStatus.acceptsConnectivityResponse(
+                data: successBody,
                 captivePortalResponse,
                 error: nil
             )
         )
         XCTAssertFalse(
-            SystemNetworkStatus.acceptsConnectivityResponse(mapboxResponse, error: nil)
-        )
-        XCTAssertTrue(
             SystemNetworkStatus.acceptsConnectivityResponse(
+                data: successBody,
+                mapboxResponse,
+                error: nil
+            )
+        )
+        XCTAssertFalse(
+            SystemNetworkStatus.acceptsConnectivityResponse(
+                data: successBody,
                 serverErrorResponse,
                 error: nil
             )
         )
-        XCTAssertTrue(SystemNetworkStatus.acceptsConnectivityResponse(
+        XCTAssertFalse(SystemNetworkStatus.acceptsConnectivityResponse(
+            data: successBody,
             appleResponse,
             error: URLError(.notConnectedToInternet)
         ))
         XCTAssertFalse(SystemNetworkStatus.acceptsConnectivityResponse(
+            data: nil,
             nil,
             error: URLError(.notConnectedToInternet)
+        ))
+        XCTAssertFalse(SystemNetworkStatus.acceptsConnectivityResponse(
+            data: Data("<HTML><BODY>Sign in to Wi-Fi</BODY></HTML>".utf8),
+            appleResponse,
+            error: nil
         ))
     }
 }

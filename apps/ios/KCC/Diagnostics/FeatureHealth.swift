@@ -243,17 +243,21 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
     }
 
     static func acceptsConnectivityResponse(
+        data: Data?,
         _ response: URLResponse?,
-        error _: Error?
+        error: Error?
     ) -> Bool {
-        guard let response = response as? HTTPURLResponse,
-              response.url?.host == "captive.apple.com"
+        guard error == nil,
+              let response = response as? HTTPURLResponse,
+              response.url?.host == "captive.apple.com",
+              response.statusCode == 200,
+              let data,
+              let body = String(data: data, encoding: .utf8)
         else {
             return false
         }
-        // Any HTTP response from the expected host proves that the device reached the
-        // internet. Server errors must not suppress Mapbox outage diagnostics.
-        return true
+        return body.contains("<TITLE>Success</TITLE>")
+            && body.contains("<BODY>Success</BODY>")
     }
 
     private func validateConnectivityIfNeeded() {
@@ -276,12 +280,16 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
         guard let generation else { return }
 
         var request = URLRequest(url: Self.connectivityProbeURL)
-        request.httpMethod = "HEAD"
+        request.httpMethod = "GET"
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.timeoutInterval = 4
-        let task = session.dataTask(with: request) { [weak self] _, response, error in
+        let task = session.dataTask(with: request) { [weak self] data, response, error in
             guard let self else { return }
-            let validated = Self.acceptsConnectivityResponse(response, error: error)
+            let validated = Self.acceptsConnectivityResponse(
+                data: data,
+                response,
+                error: error
+            )
             self.queue.async { [weak self] in
                 self?.completeConnectivityValidation(
                     generation: generation,
