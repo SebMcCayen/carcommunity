@@ -1582,6 +1582,23 @@
         }
       }
     },
+    "auth.signOutError": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det gick inte att logga ut. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not sign out. Please try again."
+          }
+        }
+      }
+    },
     "badgeShowcase.awardedOn": {
       "extractionState": "manual",
       "localizations": {
@@ -27847,6 +27864,57 @@
         }
       }
     },
+    "settings.accountDeletionAuthenticationRequired": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Din session har gått ut. Logga in igen innan du tar bort kontot."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your session has expired. Sign in again before deleting your account."
+          }
+        }
+      }
+    },
+    "settings.accountDeletionConfirmBody": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åtkomsten avslutas direkt. Efter en lagringstid på 30 dagar rensar en begränsad daglig körning data som får tas bort; omförsök eller kö kan fördröja slutförandet. Raderingsbevis och vissa modererings-, revisions-, avidentifierade insikts- och belöningsanspråksposter, konvojers ägarnycklar samt eventchatt- och OSA-poster behålls."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Access ends immediately. After a 30-day retention period, a bounded daily purge removes eligible account data; retries or backlog may delay completion. A deletion proof and certain moderation, audit, de-identified insight and claim, convoy ownership, event chat and RSVP records are retained."
+          }
+        }
+      }
+    },
+    "settings.accountDeletionConfirmTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ta bort ditt konto?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete your account?"
+          }
+        }
+      }
+    },
     "settings.accountDeletionError": {
       "extractionState": "manual",
       "localizations": {
@@ -27864,19 +27932,53 @@
         }
       }
     },
+    "settings.accountDeletionTemporaryError": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontot kan inte tas bort just nu. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account deletion is temporarily unavailable. Please try again."
+          }
+        }
+      }
+    },
+    "settings.accountDeletionUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontoborttagning är inte tillgänglig i den här versionen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account deletion is not available in this build."
+          }
+        }
+      }
+    },
     "settings.accountDeletionWarning": {
       "extractionState": "manual",
       "localizations": {
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Om du raderar ditt konto tas din profil och dina data bort. Detta kan inte ångras."
+            "value": "Om du raderar kontot avslutas åtkomsten och data som får raderas schemaläggs för borttagning. Vissa poster måste behållas. Detta kan inte ångras."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Deleting your account removes your profile and data. This cannot be undone."
+            "value": "Deleting your account ends access and schedules eligible data for deletion. Some records must be retained. This cannot be undone."
           }
         }
       }
@@ -28064,6 +28166,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Report a bug"
+          }
+        }
+      }
+    },
+    "settings.signInAgain": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Logga in igen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in again"
           }
         }
       }

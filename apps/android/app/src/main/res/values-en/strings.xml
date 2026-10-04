@@ -64,8 +64,14 @@
     <string name="settings_about">About app</string>
     <string name="settings_github">GitHub / Open Source</string>
     <string name="settings_blockedUsers">Blocked users</string>
-    <string name="settings_accountDeletionWarning">Deleting your account removes your profile and data. This cannot be undone.</string>
+    <string name="settings_accountDeletionWarning">Deleting your account ends access and schedules eligible data for deletion. Some records must be retained. This cannot be undone.</string>
     <string name="settings_accountDeletionError">Could not delete your account. Please try again.</string>
+    <string name="settings_accountDeletionConfirmTitle">Delete your account?</string>
+    <string name="settings_accountDeletionConfirmBody">Access ends immediately. After a 30-day retention period, a bounded daily purge removes eligible account data; retries or backlog may delay completion. A deletion proof and certain moderation, audit, de-identified insight and claim, convoy ownership, event chat and RSVP records are retained.</string>
+    <string name="settings_accountDeletionAuthenticationRequired">Your session has expired. Sign in again before deleting your account.</string>
+    <string name="settings_accountDeletionTemporaryError">Account deletion is temporarily unavailable. Please try again.</string>
+    <string name="settings_accountDeletionUnavailable">Account deletion is not available in this build.</string>
+    <string name="settings_signInAgain">Sign in again</string>
     <string name="about_title">About app</string>
     <string name="about_appName">App name</string>
     <string name="about_version">Version</string>
@@ -521,6 +527,7 @@
     <string name="auth_addGoogleAccountButton">Add a Google account</string>
     <string name="auth_loggedInAs">Signed in</string>
     <string name="auth_signOut">Sign out</string>
+    <string name="auth_signOutError">Could not sign out. Please try again.</string>
     <string name="auth_devLoginLabel">[DEV] Placeholder login (not production)</string>
     <string name="auth_carQuote01">\"Any customer can have a car painted any color that he wants so long as it is black.\" –Henry Ford</string>
     <string name="auth_carQuote02">\"Aerodynamics are for people who can\'t build engines.\" –Enzo Ferrari</string>
