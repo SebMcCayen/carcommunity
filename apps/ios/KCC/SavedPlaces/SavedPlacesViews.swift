@@ -113,8 +113,9 @@ struct AddressSearchOverlay: View {
                     .buttonStyle(.plain)
                     Spacer(minLength: KccSpacing.s2)
                     Button {
-                        let existing = SavedPlacesPolicy.existingPlace(
-                            matching: suggestion,
+                        let existing = SavedPlacesPolicy.editorSeed(
+                            for: suggestion,
+                            replacing: nil,
                             in: coordinator.places
                         )
                         editor = PlaceEditorContext(
@@ -128,6 +129,9 @@ struct AddressSearchOverlay: View {
                             .frame(width: 44, height: 44)
                     }
                 }
+                // Keep both controls scoped to their own hit areas inside the
+                // List row; the primary button's .plain style still wins.
+                .buttonStyle(.borderless)
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
@@ -343,10 +347,15 @@ private struct AddressPlacePicker: View {
                 }
             }
             .sheet(item: $selected) { suggestion in
+                let seed = SavedPlacesPolicy.editorSeed(
+                    for: suggestion,
+                    replacing: replacing,
+                    in: coordinator.places
+                )
                 SavedPlaceEditorSheet(
                     place: suggestion,
-                    initialKind: replacing?.kind ?? .favourite,
-                    initialLabel: replacing?.label ?? suggestion.name,
+                    initialKind: seed?.kind ?? .favourite,
+                    initialLabel: seed?.label ?? suggestion.name,
                     onSave: { kind, label in
                         coordinator.save(
                             kind: kind,

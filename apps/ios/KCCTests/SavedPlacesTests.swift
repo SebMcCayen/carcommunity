@@ -403,13 +403,36 @@ final class SavedPlacesTests: XCTestCase {
             SavedPlacesPolicy.create(kind: .home, place: suggestion, label: "My home")
         )
 
-        let existing = SavedPlacesPolicy.existingPlace(
-            matching: suggestion,
+        let existing = SavedPlacesPolicy.editorSeed(
+            for: suggestion,
+            replacing: nil,
             in: [home]
         )
 
         XCTAssertEqual(existing?.kind, .home)
         XCTAssertEqual(existing?.label, "My home")
+    }
+
+    func testExplicitReplacementTakesPriorityOverMatchingSuggestion() throws {
+        let suggestion = suggestion(id: "shared", latitude: 57)
+        let matched = try XCTUnwrap(
+            SavedPlacesPolicy.create(kind: .home, place: suggestion, label: "Home")
+        )
+        let replacement = try XCTUnwrap(
+            SavedPlacesPolicy.create(
+                kind: .work,
+                place: self.suggestion(id: "office", latitude: 58),
+                label: "Office"
+            )
+        )
+
+        let seed = SavedPlacesPolicy.editorSeed(
+            for: suggestion,
+            replacing: replacement,
+            in: [matched, replacement]
+        )
+
+        XCTAssertEqual(seed, replacement)
     }
 
     private func suggestion(id: String, latitude: Double) -> PlaceSuggestion {

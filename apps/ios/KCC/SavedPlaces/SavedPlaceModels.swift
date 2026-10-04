@@ -114,6 +114,14 @@ enum SavedPlacesPolicy {
         savedPlaces.first { refersToSamePlace($0.place, as: place) }
     }
 
+    static func editorSeed(
+        for place: PlaceSuggestion,
+        replacing: SavedPlace?,
+        in savedPlaces: [SavedPlace]
+    ) -> SavedPlace? {
+        replacing ?? existingPlace(matching: place, in: savedPlaces)
+    }
+
     /// Distance ranks only when a real device fix is available. Equal-distance
     /// candidates retain Mapbox's relevance order.
     static func nearestFirst(
