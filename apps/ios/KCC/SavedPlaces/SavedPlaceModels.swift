@@ -107,6 +107,13 @@ enum SavedPlacesPolicy {
         return candidate.point == target.point
     }
 
+    static func existingPlace(
+        matching place: PlaceSuggestion,
+        in savedPlaces: [SavedPlace]
+    ) -> SavedPlace? {
+        savedPlaces.first { refersToSamePlace($0.place, as: place) }
+    }
+
     /// Distance ranks only when a real device fix is available. Equal-distance
     /// candidates retain Mapbox's relevance order.
     static func nearestFirst(

@@ -43,7 +43,7 @@ struct AddressSearchOverlay: View {
             results
         }
         .frame(maxWidth: 620, maxHeight: 560, alignment: .top)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: KccRadius.lg))
         .padding(.horizontal, KccSpacing.s3)
         .padding(.top, KccSpacing.s8)
         .frame(maxHeight: .infinity, alignment: .top)
@@ -113,10 +113,14 @@ struct AddressSearchOverlay: View {
                     .buttonStyle(.plain)
                     Spacer(minLength: KccSpacing.s2)
                     Button {
+                        let existing = SavedPlacesPolicy.existingPlace(
+                            matching: suggestion,
+                            in: coordinator.places
+                        )
                         editor = PlaceEditorContext(
                             place: suggestion,
-                            kind: .favourite,
-                            label: suggestion.name
+                            kind: existing?.kind ?? .favourite,
+                            label: existing?.label ?? suggestion.name
                         )
                     } label: {
                         Label("addressSearch.savedAdd", systemImage: "bookmark")
@@ -214,6 +218,13 @@ struct SavedPlacesScreen: View {
                 deleting = nil
             }
             Button("savedPlaces.cancel", role: .cancel) { deleting = nil }
+        } message: {
+            if let deleting {
+                Text(String.localizedStringWithFormat(
+                    String(localized: "savedPlaces.deleteMessage"),
+                    deleting.displayLabel
+                ))
+            }
         }
     }
 

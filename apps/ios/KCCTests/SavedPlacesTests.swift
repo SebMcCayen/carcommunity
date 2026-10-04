@@ -424,6 +424,21 @@ final class SavedPlacesTests: XCTestCase {
         ))
     }
 
+    func testExistingSuggestionKeepsItsSavedKindAndCustomLabel() throws {
+        let suggestion = suggestion(id: "shared", latitude: 57)
+        let home = try XCTUnwrap(
+            SavedPlacesPolicy.create(kind: .home, place: suggestion, label: "My home")
+        )
+
+        let existing = SavedPlacesPolicy.existingPlace(
+            matching: suggestion,
+            in: [home]
+        )
+
+        XCTAssertEqual(existing?.kind, .home)
+        XCTAssertEqual(existing?.label, "My home")
+    }
+
     private func suggestion(id: String, latitude: Double) -> PlaceSuggestion {
         PlaceSuggestion(
             id: id,
