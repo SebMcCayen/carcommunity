@@ -128,6 +128,9 @@ final class FeedbackFeatureTests: XCTestCase {
         XCTAssertNil(FirebaseFeedbackRepository.positiveInteger(true))
         XCTAssertNil(FirebaseFeedbackRepository.positiveInteger(false))
         XCTAssertEqual(FirebaseFeedbackRepository.positiveInteger(NSNumber(value: 42)), 42)
+        XCTAssertNil(FirebaseOpenTicketsRepository.positiveInteger(true))
+        XCTAssertNil(FirebaseOpenTicketsRepository.positiveInteger(false))
+        XCTAssertEqual(FirebaseOpenTicketsRepository.positiveInteger(NSNumber(value: 42)), 42)
     }
 
     @MainActor
