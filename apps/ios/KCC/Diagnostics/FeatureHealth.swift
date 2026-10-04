@@ -161,8 +161,12 @@ extension NetworkStatus {
 /// Process-safe connectivity snapshot used only as a false-positive suppression
 /// gate. No interface, address, or network name is collected.
 final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
-    // This unauthenticated probe sends neither the Mapbox access token nor user data.
-    private static let connectivityProbeURL = URL(string: "https://api.mapbox.com/")!
+    // Use an independent connectivity endpoint so a Mapbox DNS/TLS outage is
+    // still eligible to produce a Mapbox health diagnostic. The request sends
+    // no token or user data.
+    private static let connectivityProbeURL = URL(
+        string: "https://captive.apple.com/hotspot-detect.html"
+    )!
     private static let validationInterval: TimeInterval = 5
     private static let maximumValidationFailuresPerPath = 3
 
@@ -238,12 +242,12 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
         lock.withLock { validatedOfflineHandler = handler }
     }
 
-    static func acceptsMapboxConnectivityResponse(
+    static func acceptsConnectivityResponse(
         _ response: URLResponse?,
         error _: Error?
     ) -> Bool {
         guard let response = response as? HTTPURLResponse,
-              response.url?.host == "api.mapbox.com"
+              response.url?.host == "captive.apple.com"
         else {
             return false
         }
@@ -277,7 +281,7 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
         request.timeoutInterval = 4
         let task = session.dataTask(with: request) { [weak self] _, response, error in
             guard let self else { return }
-            let validated = Self.acceptsMapboxConnectivityResponse(response, error: error)
+            let validated = Self.acceptsConnectivityResponse(response, error: error)
             self.queue.async { [weak self] in
                 self?.completeConnectivityValidation(
                     generation: generation,

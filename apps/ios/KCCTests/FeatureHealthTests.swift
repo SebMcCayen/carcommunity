@@ -291,9 +291,9 @@ final class FeatureHealthTests: XCTestCase {
         ))
     }
 
-    func testConnectivityProbeAcceptsAnyResponseFromMapboxHost() {
-        let mapboxResponse = HTTPURLResponse(
-            url: URL(string: "https://api.mapbox.com/")!,
+    func testConnectivityProbeUsesIndependentVerifiedHost() {
+        let appleResponse = HTTPURLResponse(
+            url: URL(string: "https://captive.apple.com/hotspot-detect.html")!,
             statusCode: 404,
             httpVersion: "HTTP/1.1",
             headerFields: nil
@@ -304,33 +304,42 @@ final class FeatureHealthTests: XCTestCase {
             httpVersion: "HTTP/1.1",
             headerFields: nil
         )
-        let serverErrorResponse = HTTPURLResponse(
+        let mapboxResponse = HTTPURLResponse(
             url: URL(string: "https://api.mapbox.com/")!,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: nil
+        )
+        let serverErrorResponse = HTTPURLResponse(
+            url: URL(string: "https://captive.apple.com/hotspot-detect.html")!,
             statusCode: 503,
             httpVersion: "HTTP/1.1",
             headerFields: nil
         )
 
         XCTAssertTrue(
-            SystemNetworkStatus.acceptsMapboxConnectivityResponse(mapboxResponse, error: nil)
+            SystemNetworkStatus.acceptsConnectivityResponse(appleResponse, error: nil)
         )
         XCTAssertFalse(
-            SystemNetworkStatus.acceptsMapboxConnectivityResponse(
+            SystemNetworkStatus.acceptsConnectivityResponse(
                 captivePortalResponse,
                 error: nil
             )
         )
+        XCTAssertFalse(
+            SystemNetworkStatus.acceptsConnectivityResponse(mapboxResponse, error: nil)
+        )
         XCTAssertTrue(
-            SystemNetworkStatus.acceptsMapboxConnectivityResponse(
+            SystemNetworkStatus.acceptsConnectivityResponse(
                 serverErrorResponse,
                 error: nil
             )
         )
-        XCTAssertTrue(SystemNetworkStatus.acceptsMapboxConnectivityResponse(
-            mapboxResponse,
+        XCTAssertTrue(SystemNetworkStatus.acceptsConnectivityResponse(
+            appleResponse,
             error: URLError(.notConnectedToInternet)
         ))
-        XCTAssertFalse(SystemNetworkStatus.acceptsMapboxConnectivityResponse(
+        XCTAssertFalse(SystemNetworkStatus.acceptsConnectivityResponse(
             nil,
             error: URLError(.notConnectedToInternet)
         ))
