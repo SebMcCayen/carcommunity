@@ -397,6 +397,14 @@ final class FeatureHealthReporter: @unchecked Sendable {
 
     func isOnline() -> Bool { networkStatus.isOnline() }
 
+    static func whenAuthenticated(
+        _ reporter: FeatureHealthReporter,
+        uid: String?
+    ) -> FeatureHealthReporter? {
+        guard let uid, !uid.isEmpty else { return nil }
+        return reporter
+    }
+
     @discardableResult
     func report(
         _ kind: FeatureHealthKind,

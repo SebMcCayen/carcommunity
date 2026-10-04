@@ -149,6 +149,27 @@ final class FeatureHealthTests: XCTestCase {
         XCTAssertTrue(offlineSink.entries.isEmpty)
     }
 
+    func testPreAuthShellCannotConsumePostSignInReportSlot() {
+        let sink = RecordingErrorReporter()
+        let reporter = FeatureHealthReporter(
+            gate: gate(), errorReporter: sink, networkStatus: FixedNetwork(online: true)
+        )
+
+        let preAuthReporter = FeatureHealthReporter.whenAuthenticated(reporter, uid: nil)
+        XCTAssertNil(preAuthReporter)
+
+        guard let postSignInReporter = FeatureHealthReporter.whenAuthenticated(
+            reporter,
+            uid: "member-1"
+        ) else { return XCTFail("Expected reporter after sign-in") }
+        guard case .report = postSignInReporter.report(
+            .mapRenderTimeout,
+            foreground: true,
+            surfaceShown: true
+        ) else { return XCTFail("Expected the post-sign-in report slot to remain available") }
+        XCTAssertEqual(sink.entries.count, 1)
+    }
+
     func testReporterRetriesOneShotLoadingErrorAfterConnectivityValidation() {
         let sink = RecordingErrorReporter()
         let network = ControlledNetwork()

@@ -171,7 +171,10 @@ struct ShellView: View {
             MapHomeView(
                 surface: mapSurface,
                 locationProvider: locationProvider,
-                featureHealthReporter: diagnostics.featureHealthReporter
+                featureHealthReporter: FeatureHealthReporter.whenAuthenticated(
+                    diagnostics.featureHealthReporter,
+                    uid: signedInUid
+                )
             )
 
             TabView(selection: tabSelection) {
