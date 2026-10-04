@@ -365,6 +365,7 @@
 		19B57EE605EF799F982EBDDA /* NotificationSettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSettingsScreen.swift; sourceTree = "<group>"; };
 		1A240814194538E5F33BD391 /* KCCApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KCCApp.swift; sourceTree = "<group>"; };
 		1ADA4273944D1E94AC6D82A4 /* MapLayerPreferencesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapLayerPreferencesTests.swift; sourceTree = "<group>"; };
+		1B4532D3799C9910574152D2 /* KCC.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = KCC.entitlements; sourceTree = "<group>"; };
 		1D6838666A82B7A2863EFC02 /* IncidentModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncidentModels.swift; sourceTree = "<group>"; };
 		1FDCD5467CC28087B5AAECB1 /* EventDetailCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailCoordinator.swift; sourceTree = "<group>"; };
 		214FBC24826233C7A95CFF50 /* CrownHuntPerkNames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrownHuntPerkNames.swift; sourceTree = "<group>"; };
@@ -862,6 +863,7 @@
 			isa = PBXGroup;
 			children = (
 				690A7983868C88E10091C89A /* Info.plist */,
+				1B4532D3799C9910574152D2 /* KCC.entitlements */,
 				5351C73ED96E7C164CF4F6EC /* Access */,
 				07E79EF0F21135E662C9816C /* App */,
 				9469984432E4AD2C953FD6CF /* Auth */,
@@ -1809,7 +1811,9 @@
 		A1F5D105FE331C928752309F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APP_ATTEST_ENVIRONMENT = development;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = KCC/KCC.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -1828,7 +1832,9 @@
 		DE6FC946F4B77D4082E244F3 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APP_ATTEST_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = KCC/KCC.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
