@@ -249,6 +249,9 @@ struct SavedPlacesScreen: View {
                 Button("savedPlaces.changeAddress", systemImage: "mappin.and.ellipse") {
                     picker = saved
                 }
+                // Keep coordinates inside the app until iOS has Android's
+                // private saved-place friend/DM sharing path. A ShareLink here
+                // would expose home/work through a different privacy outcome.
                 Button("savedPlaces.delete", systemImage: "trash", role: .destructive) {
                     deleting = saved
                 }
