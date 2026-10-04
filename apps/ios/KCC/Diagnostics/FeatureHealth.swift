@@ -328,7 +328,7 @@ final class SystemNetworkStatus: NetworkStatus, @unchecked Sendable {
         elapsedSinceLastValidation: TimeInterval
     ) -> Bool {
         let retryInterval = validationInterval * pow(2, Double(consecutiveFailures))
-        pathAvailable
+        return pathAvailable
             && !validationInFlight
             && (state != .offline || consecutiveFailures < maximumValidationFailuresPerPath)
             && elapsedSinceLastValidation >= retryInterval
