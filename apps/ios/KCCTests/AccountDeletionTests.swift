@@ -113,6 +113,8 @@ final class AccountDeletionTests: XCTestCase {
             (.resourceExhausted, .temporarilyUnavailable),
             (.permissionDenied, .notPermitted),
             (.failedPrecondition, .notPermitted),
+            (.notFound, .generic),
+            (.alreadyExists, .generic),
             (.internalError, .generic),
             (.unknown, .generic),
         ]

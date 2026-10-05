@@ -1,3 +1,4 @@
+import FirebaseFunctions
 import XCTest
 
 @testable import KCC
@@ -15,6 +16,7 @@ final class KccFunctionsErrorTests: XCTestCase {
         XCTAssertEqual(KccFunctionsErrorCode.fromWire("permission-denied"), .permissionDenied)
         XCTAssertEqual(KccFunctionsErrorCode.fromWire("invalid-argument"), .invalidArgument)
         XCTAssertEqual(KccFunctionsErrorCode.fromWire("not-found"), .notFound)
+        XCTAssertEqual(KccFunctionsErrorCode.fromWire("already-exists"), .alreadyExists)
         XCTAssertEqual(KccFunctionsErrorCode.fromWire("resource-exhausted"), .resourceExhausted)
         XCTAssertEqual(KccFunctionsErrorCode.fromWire("failed-precondition"), .failedPrecondition)
         XCTAssertEqual(KccFunctionsErrorCode.fromWire("internal"), .internalError)
@@ -27,9 +29,19 @@ final class KccFunctionsErrorTests: XCTestCase {
         XCTAssertEqual(KccFunctionsErrorCode.fromWire("RESOURCE_EXHAUSTED"), .resourceExhausted)
         XCTAssertEqual(KccFunctionsErrorCode.fromWire("UNAUTHENTICATED"), .unauthenticated)
         XCTAssertEqual(KccFunctionsErrorCode.fromWire("NOT_FOUND"), .notFound)
+        XCTAssertEqual(KccFunctionsErrorCode.fromWire("ALREADY_EXISTS"), .alreadyExists)
         XCTAssertEqual(KccFunctionsErrorCode.fromWire("INTERNAL"), .internalError)
         XCTAssertEqual(KccFunctionsErrorCode.fromWire("UNAVAILABLE"), .unavailable)
         XCTAssertEqual(KccFunctionsErrorCode.fromWire("INVALID_ARGUMENT"), .invalidArgument)
+    }
+
+    func testFirebaseAlreadyExistsErrorMapsThroughProductionSeam() {
+        let error = NSError(
+            domain: FunctionsErrorDomain,
+            code: FunctionsErrorCode.alreadyExists.rawValue
+        )
+
+        XCTAssertEqual(KccFunctionsClient.contractCode(from: error), .alreadyExists)
     }
 
     func testWhitespaceAndCaseAreTolerated() {
