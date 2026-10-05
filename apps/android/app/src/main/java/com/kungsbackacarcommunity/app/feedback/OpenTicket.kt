@@ -32,19 +32,26 @@ enum class TicketInteractionType {
 }
 
 /**
- * Outcome of a `feedback-interactWithIssue` call, collapsed from the callable's
- * HttpsError CODE (never its text — the backend documents that clients branch on
- * the code). `failed-precondition` covers duplicate / issue-closed / feature-off;
- * all three are "this can't be done now, stop offering it", so they collapse to
- * [ALREADY_DONE] which disables the control. `resource-exhausted` is the per-user
- * hourly cap; everything else (auth, network, unknown) is [FAILED].
+ * Outcome of a `feedback-interactWithIssue` call. The callable's `posted` response
+ * distinguishes successful GitHub delivery from a committed interaction whose
+ * comment could not be published. HttpsErrors are mapped from stable codes and
+ * details, never their text.
  */
 enum class TicketInteractOutcome {
     POSTED,
+    DELIVERY_FAILED,
     ALREADY_DONE,
     RATE_LIMITED,
     FAILED,
 }
+
+/** Maps the callable's delivery result; a reserved interaction cannot be retried. */
+internal fun ticketOutcomeFromResponse(response: Any?): TicketInteractOutcome =
+    when ((response as? Map<*, *>)?.get("posted") as? Boolean) {
+        true -> TicketInteractOutcome.POSTED
+        false -> TicketInteractOutcome.DELIVERY_FAILED
+        null -> TicketInteractOutcome.FAILED
+    }
 
 /** Why an interaction control shows an inline error (drives which string). */
 enum class TicketInteractionError {
@@ -60,21 +67,24 @@ enum class TicketInteractionError {
  * a control is marked done after a successful (or already-done) call and stays
  * disabled for the rest of the session. A duplicate that slips through across a
  * cold start is caught by the backend and reported back as [TicketInteractOutcome.ALREADY_DONE],
- * which also flips the flag — so the disable is eventually consistent without a
- * readable per-user signal.
+ * which also flips the flag. If the backend reserved an interaction but could not
+ * publish it to GitHub, that control is also disabled and the delivery failure is
+ * shown instead of offering a retry.
  */
 data class TicketInteractionState(
     val plusOneDone: Boolean = false,
     val commentDone: Boolean = false,
+    val plusOneDeliveryFailed: Boolean = false,
+    val commentDeliveryFailed: Boolean = false,
     /** The control currently mid-flight, or null when idle. */
     val submitting: TicketInteractionType? = null,
     val error: TicketInteractionError? = null,
 ) {
     /** A +1 may be offered only when it is not already done and nothing is in flight. */
-    val canPlusOne: Boolean get() = !plusOneDone && submitting == null
+    val canPlusOne: Boolean get() = !plusOneDone && !plusOneDeliveryFailed && submitting == null
 
     /** A comment may be submitted only when not already done and nothing is in flight. */
-    val canComment: Boolean get() = !commentDone && submitting == null
+    val canComment: Boolean get() = !commentDone && !commentDeliveryFailed && submitting == null
 
     val isPlusOneSubmitting: Boolean get() = submitting == TicketInteractionType.PLUS_ONE
     val isCommentSubmitting: Boolean get() = submitting == TicketInteractionType.COMMENT

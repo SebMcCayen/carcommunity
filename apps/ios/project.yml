@@ -148,3 +148,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: KCC
+      # KccFunctionsErrorTests exercises the SDK-to-contract error seam with
+      # a real FunctionsErrorDomain NSError.
+      - package: Firebase
+        product: FirebaseFunctions

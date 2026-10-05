@@ -32,6 +32,14 @@ protocol AuthRepository: AnyObject, Sendable {
 
     /// Clears the Firebase session. Safe to call when already signed out.
     func signOut() throws
+
+    /// Clears the Firebase session only when the SDK's current identity still
+    /// matches `expectedUid`.
+    ///
+    /// Implementations must read the identity from their authoritative SDK
+    /// and perform the conditional sign-out synchronously, without consulting
+    /// a listener-maintained snapshot or suspending between the two steps.
+    func signOut(ifCurrentUidIs expectedUid: String) throws
 }
 
 /// Fetches an Apple identity token — the iOS analog of Android's
