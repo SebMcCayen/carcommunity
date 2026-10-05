@@ -112,7 +112,7 @@ struct MapUserMarker: Equatable, Sendable {
 }
 
 /// A single lng/lat vertex of a drawn route line.
-struct MapPoint: Equatable, Sendable {
+struct MapPoint: Codable, Equatable, Sendable {
     let longitude: Double
     let latitude: Double
     /// Stable identity for camera-fit membership comparisons. General map
