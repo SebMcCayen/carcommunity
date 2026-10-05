@@ -55,6 +55,9 @@ targets:
       # through callables.
       - package: Firebase
         product: FirebaseDatabase
+      # App Check attestation: install DeviceCheck before Firebase configuration.
+      - package: Firebase
+        product: FirebaseAppCheck
       - package: MapboxMaps
         product: MapboxMaps
     info:
@@ -138,3 +141,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: KCC
+      # KccFunctionsErrorTests exercises the SDK-to-contract error seam with
+      # a real FunctionsErrorDomain NSError.
+      - package: Firebase
+        product: FirebaseFunctions

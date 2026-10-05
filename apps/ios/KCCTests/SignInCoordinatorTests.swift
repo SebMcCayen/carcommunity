@@ -36,6 +36,8 @@ final class SignInCoordinatorTests: XCTestCase {
         }
 
         func signOut() throws {}
+
+        func signOut(ifCurrentUidIs expectedUid: String) throws {}
     }
 
     private final class RecordingReporter: SignInFailureReporter, @unchecked Sendable {

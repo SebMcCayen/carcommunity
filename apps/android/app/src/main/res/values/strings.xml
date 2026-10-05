@@ -64,8 +64,14 @@
     <string name="settings_about">Om appen</string>
     <string name="settings_github">GitHub / Open Source</string>
     <string name="settings_blockedUsers">Blockerade användare</string>
-    <string name="settings_accountDeletionWarning">Om du raderar ditt konto tas din profil och dina data bort. Detta kan inte ångras.</string>
+    <string name="settings_accountDeletionWarning">Om du raderar kontot avslutas åtkomsten och data som får raderas schemaläggs för borttagning. Vissa poster måste behållas. Detta kan inte ångras.</string>
     <string name="settings_accountDeletionError">Kunde inte radera ditt konto. Försök igen.</string>
+    <string name="settings_accountDeletionConfirmTitle">Ta bort ditt konto?</string>
+    <string name="settings_accountDeletionConfirmBody">Åtkomsten avslutas direkt. Efter en lagringstid på 30 dagar rensar en begränsad daglig körning data som får tas bort; omförsök eller kö kan fördröja slutförandet. Raderingsbevis och vissa modererings-, revisions-, avidentifierade insikts- och belöningsanspråksposter, konvojers ägarnycklar samt eventchatt- och OSA-poster behålls.</string>
+    <string name="settings_accountDeletionAuthenticationRequired">Din session har gått ut. Logga in igen innan du tar bort kontot.</string>
+    <string name="settings_accountDeletionTemporaryError">Kontot kan inte tas bort just nu. Försök igen.</string>
+    <string name="settings_accountDeletionUnavailable">Kontoborttagning är inte tillgänglig i den här versionen.</string>
+    <string name="settings_signInAgain">Logga in igen</string>
     <string name="about_title">Om appen</string>
     <string name="about_appName">Appnamn</string>
     <string name="about_version">Version</string>
@@ -521,6 +527,7 @@
     <string name="auth_addGoogleAccountButton">Lägg till Google-konto</string>
     <string name="auth_loggedInAs">Inloggad</string>
     <string name="auth_signOut">Logga ut</string>
+    <string name="auth_signOutError">Det gick inte att logga ut. Försök igen.</string>
     <string name="auth_devLoginLabel">[DEV] Platshållar-inloggning (ej produktion)</string>
     <string name="auth_carQuote01">\"Any customer can have a car painted any color that he wants so long as it is black.\" –Henry Ford</string>
     <string name="auth_carQuote02">\"Aerodynamics are for people who can\'t build engines.\" –Enzo Ferrari</string>
@@ -1387,7 +1394,7 @@
     <string name="partners_duplicateApplication">Du har redan en aktiv ansökan.</string>
     <string name="partners_submitError">Kunde inte skicka ansökan. Försök igen.</string>
     <string name="partners_submitErrorInvalid">Kontrollera att alla uppgifter är korrekt ifyllda.</string>
-    <string name="partners_submitErrorDuplicate">En ansökan för denna e-post granskas redan.</string>
+    <string name="partners_submitErrorDuplicate">En ansökan granskas redan.</string>
     <string name="partners_submitting">Skickar...</string>
     <string name="partners_close">Stäng</string>
     <string name="partners_applicationEntryLabel">För företag</string>
@@ -1546,6 +1553,7 @@
     <string name="openTickets_title">Öppna ärenden</string>
     <string name="openTickets_intro">Kända problem som andra har rapporterat. Har du samma problem? Ge det en tumme upp eller lägg till en kommentar.</string>
     <string name="openTickets_loading">Hämtar ärenden…</string>
+    <string name="openTickets_loadMore">Hämta fler ärenden</string>
     <string name="openTickets_empty">Det finns inga öppna ärenden just nu.</string>
     <string name="openTickets_error">Kunde inte hämta ärenden. Försök igen senare.</string>
     <string name="openTickets_plusOneCount">%1$d instämmer</string>
@@ -1559,6 +1567,7 @@
     <string name="openTickets_commentSubmit">Skicka kommentar</string>
     <string name="openTickets_commentDone">Kommentar skickad</string>
     <string name="openTickets_publicNotice">Din kommentar publiceras offentligt på GitHub. Skriv inte med personlig eller känslig information.</string>
+    <string name="openTickets_deliveryFailed">Din interaktion registrerades, men kunde inte publiceras på GitHub. Den kan inte skickas igen.</string>
     <string name="openTickets_alreadyDone">Du har redan gjort detta för det här ärendet.</string>
     <string name="openTickets_rateLimited">För många interaktioner. Vänta en stund och försök igen.</string>
     <string name="openTickets_genericError">Något gick fel. Försök igen.</string>

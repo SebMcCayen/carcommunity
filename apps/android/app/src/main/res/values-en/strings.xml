@@ -64,8 +64,14 @@
     <string name="settings_about">About app</string>
     <string name="settings_github">GitHub / Open Source</string>
     <string name="settings_blockedUsers">Blocked users</string>
-    <string name="settings_accountDeletionWarning">Deleting your account removes your profile and data. This cannot be undone.</string>
+    <string name="settings_accountDeletionWarning">Deleting your account ends access and schedules eligible data for deletion. Some records must be retained. This cannot be undone.</string>
     <string name="settings_accountDeletionError">Could not delete your account. Please try again.</string>
+    <string name="settings_accountDeletionConfirmTitle">Delete your account?</string>
+    <string name="settings_accountDeletionConfirmBody">Access ends immediately. After a 30-day retention period, a bounded daily purge removes eligible account data; retries or backlog may delay completion. A deletion proof and certain moderation, audit, de-identified insight and claim, convoy ownership, event chat and RSVP records are retained.</string>
+    <string name="settings_accountDeletionAuthenticationRequired">Your session has expired. Sign in again before deleting your account.</string>
+    <string name="settings_accountDeletionTemporaryError">Account deletion is temporarily unavailable. Please try again.</string>
+    <string name="settings_accountDeletionUnavailable">Account deletion is not available in this build.</string>
+    <string name="settings_signInAgain">Sign in again</string>
     <string name="about_title">About app</string>
     <string name="about_appName">App name</string>
     <string name="about_version">Version</string>
@@ -521,6 +527,7 @@
     <string name="auth_addGoogleAccountButton">Add a Google account</string>
     <string name="auth_loggedInAs">Signed in</string>
     <string name="auth_signOut">Sign out</string>
+    <string name="auth_signOutError">Could not sign out. Please try again.</string>
     <string name="auth_devLoginLabel">[DEV] Placeholder login (not production)</string>
     <string name="auth_carQuote01">\"Any customer can have a car painted any color that he wants so long as it is black.\" –Henry Ford</string>
     <string name="auth_carQuote02">\"Aerodynamics are for people who can\'t build engines.\" –Enzo Ferrari</string>
@@ -1387,7 +1394,7 @@
     <string name="partners_duplicateApplication">You already have an active application.</string>
     <string name="partners_submitError">Could not submit your application. Please try again.</string>
     <string name="partners_submitErrorInvalid">Please check that all details are filled in correctly.</string>
-    <string name="partners_submitErrorDuplicate">An application for this email is already under review.</string>
+    <string name="partners_submitErrorDuplicate">An application is already under review.</string>
     <string name="partners_submitting">Submitting...</string>
     <string name="partners_close">Close</string>
     <string name="partners_applicationEntryLabel">For businesses</string>
@@ -1546,6 +1553,7 @@
     <string name="openTickets_title">Open tickets</string>
     <string name="openTickets_intro">Known problems others have reported. Have the same problem? Give it a thumbs up or add a comment.</string>
     <string name="openTickets_loading">Loading tickets…</string>
+    <string name="openTickets_loadMore">Load more tickets</string>
     <string name="openTickets_empty">There are no open tickets right now.</string>
     <string name="openTickets_error">Could not load tickets. Please try again later.</string>
     <string name="openTickets_plusOneCount">%1$d agree</string>
@@ -1559,6 +1567,7 @@
     <string name="openTickets_commentSubmit">Send comment</string>
     <string name="openTickets_commentDone">Comment sent</string>
     <string name="openTickets_publicNotice">Your comment is posted publicly on GitHub. Do not include personal or sensitive information.</string>
+    <string name="openTickets_deliveryFailed">Your interaction was recorded, but could not be published to GitHub. It cannot be retried.</string>
     <string name="openTickets_alreadyDone">You have already done this on this ticket.</string>
     <string name="openTickets_rateLimited">Too many interactions. Please wait a while and try again.</string>
     <string name="openTickets_genericError">Something went wrong. Please try again.</string>

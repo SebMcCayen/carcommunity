@@ -4,7 +4,13 @@ struct RestrictedAccountScreen: View {
     @Environment(\.openURL) private var openURL
     let access: AccountAccess?
     @Bindable var privacyCoordinator: LiveLocationCoordinator
-    let onSignOut: () -> Void
+    let onSignOut: () -> Bool
+    let onDeletionSessionEnd: () -> Bool
+    @State private var deletionCoordinator = AccountDeletionCoordinator(
+        repository: FirebaseAccountDeletionRepository.createIfAvailable()
+    )
+    @State private var showsAccountDeletion = false
+    @State private var signOutFailed = false
 
     var body: some View {
         VStack(spacing: KccSpacing.s4) {
@@ -42,12 +48,24 @@ struct RestrictedAccountScreen: View {
                     .foregroundStyle(KccPalette.errorRed)
             }
 
-            // These remain visible but disabled until their dedicated iOS
-            // slices land, matching Android's existing status placeholders.
+            // Subscription management remains a later production-cutover
+            // milestone. Account deletion is always reachable while suspended.
             Text("accountStatus.subscriptionManagementPlaceholder")
-            Text("accountStatus.accountDeletionPlaceholder")
 
-            Button("auth.signOut", action: onSignOut)
+            if deletionCoordinator.isAvailable {
+                Button("settings.accountDeletion", role: .destructive) {
+                    showsAccountDeletion = true
+                }
+                .buttonStyle(.bordered)
+            }
+
+            if signOutFailed {
+                Text("auth.signOutError")
+                    .foregroundStyle(KccPalette.errorRed)
+                    .multilineTextAlignment(.center)
+            }
+
+            Button("auth.signOut", action: attemptSignOut)
                 .buttonStyle(.bordered)
         }
         .font(.system(size: KccTypeScale.bodyMd))
@@ -58,6 +76,18 @@ struct RestrictedAccountScreen: View {
             privacyCoordinator.canShare = false
             privacyCoordinator.start()
         }
+        .fullScreenCover(isPresented: $showsAccountDeletion) {
+            AccountDeletionScreen(
+                coordinator: deletionCoordinator,
+                onDeleted: onDeletionSessionEnd,
+                onReauthenticate: onDeletionSessionEnd,
+                onBack: { showsAccountDeletion = false }
+            )
+        }
+    }
+
+    private func attemptSignOut() {
+        signOutFailed = !onSignOut()
     }
 
     private var bodyKey: LocalizedStringKey {
