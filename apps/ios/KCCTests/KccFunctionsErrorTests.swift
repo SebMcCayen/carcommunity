@@ -64,6 +64,10 @@ final class KccFunctionsErrorTests: XCTestCase {
             KccFunctionsFailureReason.fromDetails(["reason": "no_valid_convoy_invitees"]),
             .noValidConvoyInvitees
         )
+        XCTAssertEqual(
+            KccFunctionsFailureReason.fromDetails(["reason": "ticket_already_interacted"]),
+            .ticketAlreadyInteracted
+        )
         XCTAssertNil(KccFunctionsFailureReason.fromDetails(["reason": "private-user-data"]))
         XCTAssertNil(KccFunctionsFailureReason.fromDetails(["message": "not a reason"]))
     }

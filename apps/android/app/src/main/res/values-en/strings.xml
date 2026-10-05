@@ -1553,6 +1553,7 @@
     <string name="openTickets_title">Open tickets</string>
     <string name="openTickets_intro">Known problems others have reported. Have the same problem? Give it a thumbs up or add a comment.</string>
     <string name="openTickets_loading">Loading tickets…</string>
+    <string name="openTickets_loadMore">Load more tickets</string>
     <string name="openTickets_empty">There are no open tickets right now.</string>
     <string name="openTickets_error">Could not load tickets. Please try again later.</string>
     <string name="openTickets_plusOneCount">%1$d agree</string>
@@ -1566,6 +1567,7 @@
     <string name="openTickets_commentSubmit">Send comment</string>
     <string name="openTickets_commentDone">Comment sent</string>
     <string name="openTickets_publicNotice">Your comment is posted publicly on GitHub. Do not include personal or sensitive information.</string>
+    <string name="openTickets_deliveryFailed">Your interaction was recorded, but could not be published to GitHub. It cannot be retried.</string>
     <string name="openTickets_alreadyDone">You have already done this on this ticket.</string>
     <string name="openTickets_rateLimited">Too many interactions. Please wait a while and try again.</string>
     <string name="openTickets_genericError">Something went wrong. Please try again.</string>

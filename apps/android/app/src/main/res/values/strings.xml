@@ -1553,6 +1553,7 @@
     <string name="openTickets_title">Öppna ärenden</string>
     <string name="openTickets_intro">Kända problem som andra har rapporterat. Har du samma problem? Ge det en tumme upp eller lägg till en kommentar.</string>
     <string name="openTickets_loading">Hämtar ärenden…</string>
+    <string name="openTickets_loadMore">Hämta fler ärenden</string>
     <string name="openTickets_empty">Det finns inga öppna ärenden just nu.</string>
     <string name="openTickets_error">Kunde inte hämta ärenden. Försök igen senare.</string>
     <string name="openTickets_plusOneCount">%1$d instämmer</string>
@@ -1566,6 +1567,7 @@
     <string name="openTickets_commentSubmit">Skicka kommentar</string>
     <string name="openTickets_commentDone">Kommentar skickad</string>
     <string name="openTickets_publicNotice">Din kommentar publiceras offentligt på GitHub. Skriv inte med personlig eller känslig information.</string>
+    <string name="openTickets_deliveryFailed">Din interaktion registrerades, men kunde inte publiceras på GitHub. Den kan inte skickas igen.</string>
     <string name="openTickets_alreadyDone">Du har redan gjort detta för det här ärendet.</string>
     <string name="openTickets_rateLimited">För många interaktioner. Vänta en stund och försök igen.</string>
     <string name="openTickets_genericError">Något gick fel. Försök igen.</string>

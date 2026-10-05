@@ -62,6 +62,10 @@ import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 /** Fine-grained GitHub token (`issues: write` → covers list + comment). */
 const GITHUB_ISSUE_TOKEN = defineSecret('GITHUB_ISSUE_TOKEN');
 
+const REASON_TICKETS_DISABLED = 'tickets_disabled';
+const REASON_ISSUE_NOT_OPEN = 'issue_not_open';
+const REASON_ALREADY_INTERACTED = 'ticket_already_interacted';
+
 const CALLABLE_OPTS = {
   region: 'europe-west1',
   maxInstances: MAX_INSTANCES_MEMBER,
@@ -90,7 +94,9 @@ export const interactWithIssue = onCall(
 
     // Flag gate BEFORE any work — while off, nothing may reach the public repo.
     if (!(await readFeatureFlag(REPORT_TICKETS_FLAG_KEY))) {
-      throw new HttpsError('failed-precondition', TICKETS_DISABLED_MESSAGE);
+      throw new HttpsError('failed-precondition', TICKETS_DISABLED_MESSAGE, {
+        reason: REASON_TICKETS_DISABLED,
+      });
     }
 
     const parsed = parseInteractInput(request.data);
@@ -114,13 +120,17 @@ export const interactWithIssue = onCall(
       // makes the openness check and the tally increment consistent.
       const ticketSnap = await tx.get(ticketRef);
       if (!ticketSnap.exists || ticketSnap.data()?.state !== 'open') {
-        throw new HttpsError('failed-precondition', ISSUE_NOT_OPEN_MESSAGE);
+        throw new HttpsError('failed-precondition', ISSUE_NOT_OPEN_MESSAGE, {
+          reason: REASON_ISSUE_NOT_OPEN,
+        });
       }
 
       // Dedup: a repeat of this exact (issue, user, type) is rejected.
       const existing = await tx.get(interactionRef);
       if (existing.exists) {
-        throw new HttpsError('failed-precondition', ALREADY_INTERACTED_MESSAGE);
+        throw new HttpsError('failed-precondition', ALREADY_INTERACTED_MESSAGE, {
+          reason: REASON_ALREADY_INTERACTED,
+        });
       }
 
       // Per-user windowed cap (5/hour across all issues+types) — count() read
@@ -135,7 +145,12 @@ export const interactWithIssue = onCall(
       tx.set(
         interactionRef,
         buildInteractionDocument(
-          { issueNumber: input.issueNumber, uid: actor.uid, type: input.type, clientId: input.clientId },
+          {
+            issueNumber: input.issueNumber,
+            uid: actor.uid,
+            type: input.type,
+            clientId: input.clientId,
+          },
           () => FieldValue.serverTimestamp(),
         ),
       );

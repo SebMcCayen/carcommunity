@@ -33,7 +33,7 @@ export { neutralizeMentions };
 // Limits
 // ---------------------------------------------------------------------------
 
-/** Title budget for the public issue summary (excludes the `[Android] ` tag). */
+/** Title budget for the public issue summary (excludes its platform tag). */
 export const MAX_SUMMARY_LENGTH = 80;
 /** Body budget for the user's typed description. */
 export const MAX_DESCRIPTION_LENGTH = 4000;
@@ -42,9 +42,19 @@ export const MAX_OS_VERSION_LENGTH = 100;
 export const MAX_DEVICE_MODEL_LENGTH = 100;
 
 /** GitHub label applied to every issue (must already exist on the repo). */
-export const FEEDBACK_ISSUE_LABEL = 'android-issue';
-/** Title tag identifying the source platform. */
-export const FEEDBACK_TITLE_TAG = '[Android]';
+export const FEEDBACK_PLATFORMS = ['android', 'ios'] as const;
+export type FeedbackPlatform = (typeof FEEDBACK_PLATFORMS)[number];
+export const FEEDBACK_ISSUE_LABELS: Record<FeedbackPlatform, string> = {
+  android: 'android-issue',
+  ios: 'ios-issue',
+};
+export const FEEDBACK_TITLE_TAGS: Record<FeedbackPlatform, string> = {
+  android: '[Android]',
+  ios: '[iOS]',
+};
+/** Backwards-compatible Android constants used by older callers/tests. */
+export const FEEDBACK_ISSUE_LABEL = FEEDBACK_ISSUE_LABELS.android;
+export const FEEDBACK_TITLE_TAG = FEEDBACK_TITLE_TAGS.android;
 
 // ---------------------------------------------------------------------------
 // Rate limit (per user)
@@ -112,6 +122,7 @@ const reportIssueInputSchema = z
     appVersion: z.string().max(MAX_APP_VERSION_LENGTH).optional(),
     osVersion: z.string().max(MAX_OS_VERSION_LENGTH).optional(),
     deviceModel: z.string().max(MAX_DEVICE_MODEL_LENGTH).optional(),
+    platform: z.enum(FEEDBACK_PLATFORMS).optional().default('android'),
   })
   .strict();
 
@@ -119,6 +130,7 @@ export type ReportIssueInput = z.infer<typeof reportIssueInputSchema>;
 
 /** Normalized, bounded report fields used by both builders. */
 export interface FeedbackReport {
+  platform: FeedbackPlatform;
   description: string;
   summary: string | null;
   appVersion: string | null;
@@ -133,7 +145,8 @@ export function parseReportIssueInput(data: unknown): ParseResult<FeedbackReport
   if (!result.success) {
     return {
       ok: false,
-      message: 'Expected { description, summary?, appVersion?, osVersion?, deviceModel? }.',
+      message:
+        "Expected { description, summary?, appVersion?, osVersion?, deviceModel?, platform?: 'android'|'ios' }.",
     };
   }
 
@@ -147,6 +160,7 @@ export function parseReportIssueInput(data: unknown): ParseResult<FeedbackReport
   return {
     ok: true,
     input: {
+      platform: result.data.platform,
       description,
       summary: summaryRaw.length > 0 ? summaryRaw : null,
       appVersion: boundContext(result.data.appVersion, MAX_APP_VERSION_LENGTH),
@@ -171,7 +185,7 @@ function firstLine(text: string): string {
 }
 
 /**
- * Public issue title: `[Android] ` + a bounded summary. Falls back to the
+ * Public issue title: the report's `[Android]` or `[iOS]` tag plus a bounded summary. Falls back to the
  * first line of the description, then to a generic label so the title is never
  * empty. Single-lined and capped at [MAX_SUMMARY_LENGTH].
  */
@@ -180,8 +194,8 @@ export function buildGitHubIssueTitle(report: FeedbackReport): string {
   const summary = source.replace(/\s+/g, ' ').trim().slice(0, MAX_SUMMARY_LENGTH);
   const safe = summary.length > 0 ? summary : 'Problem report';
   // Neutralize AFTER bounding so the visible summary stays within budget; the
-  // static `[Android]` tag is template text and left untouched.
-  return `${FEEDBACK_TITLE_TAG} ${neutralizeMentions(safe)}`;
+  // static platform tag is template text and left untouched.
+  return `${FEEDBACK_TITLE_TAGS[report.platform]} ${neutralizeMentions(safe)}`;
 }
 
 /**
@@ -234,7 +248,7 @@ export function buildGitHubIssuePayload(
   return {
     title: buildGitHubIssueTitle(report),
     body: buildGitHubIssueBody(report, reportId, submittedAtIso),
-    labels: [FEEDBACK_ISSUE_LABEL],
+    labels: [FEEDBACK_ISSUE_LABELS[report.platform]],
   };
 }
 
@@ -257,7 +271,7 @@ export function buildFeedbackReportDocument(
 ): Record<string, unknown> {
   return {
     uid,
-    platform: 'android',
+    platform: report.platform,
     summary: report.summary,
     description: report.description,
     appVersion: report.appVersion,

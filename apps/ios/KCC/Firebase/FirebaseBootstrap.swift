@@ -1,4 +1,5 @@
 import FirebaseCore
+import FirebaseAppCheck
 import Foundation
 
 /// Configures Firebase only when a `GoogleService-Info.plist` is present in
@@ -28,6 +29,7 @@ enum FirebaseBootstrap {
             // No config bundled — a config-less build. Not an error.
             return
         }
+        AppCheck.setAppCheckProviderFactory(DeviceCheckProviderFactory())
         FirebaseApp.configure(options: options)
         isConfigured = true
     }
