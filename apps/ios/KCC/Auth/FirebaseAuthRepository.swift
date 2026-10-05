@@ -87,6 +87,14 @@ final class FirebaseAuthRepository: AuthRepository, @unchecked Sendable {
         try auth.signOut()
     }
 
+    func signOut(ifCurrentUidIs expectedUid: String) throws {
+        // Read Firebase's authoritative identity at the mutation boundary.
+        // The listener-backed `state` can lag behind an account replacement,
+        // so it must not authorize a delayed destructive-flow callback.
+        guard auth.currentUser?.uid == expectedUid else { return }
+        try auth.signOut()
+    }
+
     private static func toAuthState(_ user: User?) -> AuthState {
         guard let user else { return .signedOut }
         return .signedIn(uid: user.uid, displayName: user.displayName)

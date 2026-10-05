@@ -41,6 +41,9 @@ struct ShellView: View {
         self.featureFlags = featureFlags
         _selectedTab = State(initialValue: initialTab ?? .defaultTab)
         _routes = State(initialValue: initialRoute.map { .empty.opening($0) } ?? .empty)
+        _accountDeletionCoordinator = State(initialValue: AccountDeletionCoordinator(
+            repository: FirebaseAccountDeletionRepository.createIfAvailable()
+        ))
     }
 
     /// The shell's SINGLE map surface, composed once for the whole signed-in
@@ -68,6 +71,8 @@ struct ShellView: View {
     @State private var partnersCoordinator: PartnersCoordinator?
     @State private var feedbackCoordinator: FeedbackCoordinator?
     @State private var openTicketsCoordinator: OpenTicketsCoordinator?
+    @State private var partnerApplicationCoordinator: PartnerApplicationCoordinator?
+    @State private var accountDeletionCoordinator: AccountDeletionCoordinator
     @State private var liveLocationCoordinator: LiveLocationCoordinator?
     @State private var driveRecordingCoordinator: DriveRecordingCoordinator?
     @State private var locationPermissionCoordinator: LocationPermissionCoordinator?
@@ -627,6 +632,13 @@ struct ShellView: View {
                     Label("shell.moreFeedback", systemImage: "exclamationmark.bubble")
                 }
             }
+            if partnerApplicationCoordinator != nil {
+                Button {
+                    routes = routes.opening(.partnerApplication)
+                } label: {
+                    Label("shell.morePartnerApplication", systemImage: "briefcase")
+                }
+            }
             if partnerStatsEntryAvailable {
                 Button {
                     routes = routes.opening(.partnerStats)
@@ -699,9 +711,10 @@ struct ShellView: View {
             ProfileScreen(
                 uid: signedInUid,
                 displayName: signedInDisplayName,
-                onSignOut: { session.signOut() },
+                onSignOut: { endDeletionSession() },
                 onBack: { routes = routes.poppingOne() },
-                onOpenPoints: { routes = routes.opening(.points) }
+                onOpenPoints: { routes = routes.opening(.points) },
+                onOpenAccountDeletion: { routes = routes.opening(.accountDeletion) }
             )
         case .points:
             routeNavigation {
@@ -737,6 +750,17 @@ struct ShellView: View {
                     coordinator: partnersCoordinator,
                     onBack: { routes = routes.poppingOne() }
                 )
+            } else {
+                unavailableRoute
+            }
+        case .partnerApplication:
+            if let partnerApplicationCoordinator {
+                routeNavigation {
+                    PartnerApplicationScreen(
+                        coordinator: partnerApplicationCoordinator,
+                        onClose: { routes = routes.poppingOne() }
+                    )
+                }
             } else {
                 unavailableRoute
             }
@@ -776,6 +800,13 @@ struct ShellView: View {
             routeNavigation {
                 NotificationSettingsScreen(coordinator: notificationSettingsCoordinator)
             }
+        case .accountDeletion:
+            AccountDeletionScreen(
+                coordinator: accountDeletionCoordinator,
+                onDeleted: { endDeletionSession() },
+                onReauthenticate: { endDeletionSession() },
+                onBack: { routes = routes.poppingOne() }
+            )
         case .partnerStats:
             if partnerStatsEntryAvailable, let privacySettingsCoordinator
             {
@@ -903,6 +934,11 @@ struct ShellView: View {
             // trapping) keeps an unexpected value harmless.
             EmptyView()
         }
+    }
+
+    private func endDeletionSession() -> Bool {
+        guard let authenticatedUid else { return true }
+        return session.signOut(ifSignedInAs: authenticatedUid)
     }
 
     private var routeBackButton: some View {
@@ -1413,6 +1449,7 @@ struct ShellView: View {
         openTicketsCoordinator?.stop()
         feedbackCoordinator = nil
         openTicketsCoordinator = nil
+        partnerApplicationCoordinator = nil
 
         let friends = FirebaseFriendsRepository.createIfAvailable()
         let conversations = FirebaseConversationsRepository.createIfAvailable()
@@ -1458,6 +1495,9 @@ struct ShellView: View {
         openTicketsCoordinator = OpenTicketsCoordinator(
             repository: FirebaseOpenTicketsRepository.createIfAvailable()
         )
+        partnerApplicationCoordinator = FirebasePartnerApplicationRepository.createIfAvailable().map {
+            PartnerApplicationCoordinator(repository: $0)
+        }
         notificationsCoordinator = NotificationsInboxCoordinator(repository: notifications, uid: uid)
         notificationSettingsCoordinator = NotificationSettingsCoordinator(
             repository: FirebaseNotificationSettingsRepository.createIfAvailable(),

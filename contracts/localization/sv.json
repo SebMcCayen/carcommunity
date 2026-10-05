@@ -73,8 +73,14 @@
     "about": "Om appen",
     "github": "GitHub / Open Source",
     "blockedUsers": "Blockerade användare",
-    "accountDeletionWarning": "Om du raderar ditt konto tas din profil och dina data bort. Detta kan inte ångras.",
-    "accountDeletionError": "Kunde inte radera ditt konto. Försök igen."
+    "accountDeletionWarning": "Om du raderar kontot avslutas åtkomsten och data som får raderas schemaläggs för borttagning. Vissa poster måste behållas. Detta kan inte ångras.",
+    "accountDeletionError": "Kunde inte radera ditt konto. Försök igen.",
+    "accountDeletionConfirmTitle": "Ta bort ditt konto?",
+    "accountDeletionConfirmBody": "Åtkomsten avslutas direkt. Efter en lagringstid på 30 dagar rensar en begränsad daglig körning data som får tas bort; omförsök eller kö kan fördröja slutförandet. Raderingsbevis och vissa modererings-, revisions-, avidentifierade insikts- och belöningsanspråksposter, konvojers ägarnycklar samt eventchatt- och OSA-poster behålls.",
+    "accountDeletionAuthenticationRequired": "Din session har gått ut. Logga in igen innan du tar bort kontot.",
+    "accountDeletionTemporaryError": "Kontot kan inte tas bort just nu. Försök igen.",
+    "accountDeletionUnavailable": "Kontoborttagning är inte tillgänglig i den här versionen.",
+    "signInAgain": "Logga in igen"
   },
   "about": {
     "title": "Om appen",
@@ -566,6 +572,7 @@
     "addGoogleAccountButton": "Lägg till Google-konto",
     "loggedInAs": "Inloggad",
     "signOut": "Logga ut",
+    "signOutError": "Det gick inte att logga ut. Försök igen.",
     "devLoginLabel": "[DEV] Platshållar-inloggning (ej produktion)",
     "carQuote01": "\"Any customer can have a car painted any color that he wants so long as it is black.\" –Henry Ford",
     "carQuote02": "\"Aerodynamics are for people who can't build engines.\" –Enzo Ferrari",
@@ -1488,7 +1495,7 @@
     "duplicateApplication": "Du har redan en aktiv ansökan.",
     "submitError": "Kunde inte skicka ansökan. Försök igen.",
     "submitErrorInvalid": "Kontrollera att alla uppgifter är korrekt ifyllda.",
-    "submitErrorDuplicate": "En ansökan för denna e-post granskas redan.",
+    "submitErrorDuplicate": "En ansökan granskas redan.",
     "submitting": "Skickar...",
     "close": "Stäng",
     "applicationEntryLabel": "För företag",

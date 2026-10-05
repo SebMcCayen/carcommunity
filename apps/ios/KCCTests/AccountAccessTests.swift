@@ -38,4 +38,13 @@ final class AccountAccessTests: XCTestCase {
         XCTAssertFalse(MemberGating.enabled)
         XCTAssertTrue(MemberGating.allows(access: .unrestrictedCommunity))
     }
+
+    @MainActor
+    func testAccessStateIsFencedToBoundIdentity() {
+        let session = AppAccessSession(accessRepository: nil, flagsRepository: nil)
+        session.bind(uid: "first")
+
+        XCTAssertEqual(session.accountState(for: "first"), .unavailable)
+        XCTAssertEqual(session.accountState(for: "replacement"), .loading)
+    }
 }
