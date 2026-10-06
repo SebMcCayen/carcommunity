@@ -70,6 +70,8 @@ struct ShellView: View {
     @State private var leaderboardCoordinator: LeaderboardCoordinator?
     @State private var notificationsCoordinator: NotificationsInboxCoordinator?
     @State private var notificationSettingsCoordinator: NotificationSettingsCoordinator?
+    @State private var notificationSettingsAvailable = false
+    @State private var blockedUsersAvailable = false
     @State private var privacySettingsCoordinator: PrivacySettingsCoordinator?
     @State private var friendsCoordinator: FriendsCoordinator?
     @State private var conversationsCoordinator: ConversationsCoordinator?
@@ -700,6 +702,11 @@ struct ShellView: View {
                     Label("shell.friendsTitle", systemImage: "person.2")
                 }
             }
+            Button {
+                routes = routes.opening(.settings)
+            } label: {
+                Label("settingsMenu.title", systemImage: "gearshape")
+            }
             if savedPlacesCoordinator != nil {
                 Button {
                     routes = routes.opening(.savedPlaces)
@@ -902,6 +909,14 @@ struct ShellView: View {
             routeNavigation {
                 NotificationSettingsScreen(coordinator: notificationSettingsCoordinator)
             }
+        case .blocked:
+            BlockedUsersScreen(uid: signedInUid) {
+                routes = routes.poppingOne()
+            }
+        case .settings:
+            routeNavigation {
+                SettingsScreen(actions: settingsActions)
+            }
         case .savedPlaces:
             if let savedPlacesCoordinator {
                 routeNavigation {
@@ -921,8 +936,7 @@ struct ShellView: View {
                 onBack: { routes = routes.poppingOne() }
             )
         case .partnerStats:
-            if partnerStatsEntryAvailable, let privacySettingsCoordinator
-            {
+            if partnerStatsEntryAvailable, let privacySettingsCoordinator {
                 routeNavigation {
                     PrivacySettingsScreen(coordinator: privacySettingsCoordinator)
                 }
@@ -1047,6 +1061,23 @@ struct ShellView: View {
             // trapping) keeps an unexpected value harmless.
             EmptyView()
         }
+    }
+
+    private var settingsActions: SettingsActions {
+        SettingsActions(
+            onSavedPlaces: savedPlacesCoordinator != nil
+                ? { routes = routes.opening(.savedPlaces) } : nil,
+            onNotificationSettings: notificationSettingsAvailable
+                ? { routes = routes.opening(.notificationSettings) } : nil,
+            onBlockedUsers: blockedUsersAvailable
+                ? { routes = routes.opening(.blocked) } : nil,
+            onPartnerStats: partnerStatsEntryAvailable
+                ? { routes = routes.opening(.partnerStats) } : nil,
+            onFeedback: feedbackCoordinator != nil
+                ? { routes = routes.opening(.feedback) } : nil,
+            onDeleteAccount: authenticatedUid != nil
+                ? { routes = routes.opening(.accountDeletion) } : nil
+        )
     }
 
     private func endDeletionSession() -> Bool {
@@ -1605,6 +1636,10 @@ struct ShellView: View {
                 access: access
             )
         }
+        let notificationSettingsRepository =
+            FirebaseNotificationSettingsRepository.createIfAvailable()
+        notificationSettingsAvailable = notificationSettingsRepository != nil && uid != nil
+        blockedUsersAvailable = FirebaseBlockingRepository.createIfAvailable() != nil && uid != nil
         feedbackCoordinator = FeedbackCoordinator(
             repository: FirebaseFeedbackRepository.createIfAvailable()
         )
@@ -1620,7 +1655,7 @@ struct ShellView: View {
             errorReporter: diagnostics.clientErrorReporter
         )
         notificationSettingsCoordinator = NotificationSettingsCoordinator(
-            repository: FirebaseNotificationSettingsRepository.createIfAvailable(),
+            repository: notificationSettingsRepository,
             uid: uid
         )
         if let uid, !uid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
