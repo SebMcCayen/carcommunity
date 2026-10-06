@@ -9,6 +9,14 @@ import XCTest
 /// No Firebase — the repository is a scripted fake.
 final class NotificationsInboxCoordinatorTests: XCTestCase {
 
+    private final class RecordingErrorReporter: ClientErrorReporter, @unchecked Sendable {
+        struct Entry: Equatable { let feature: String; let message: String; let code: String? }
+        private(set) var entries: [Entry] = []
+        func report(feature: String, message: String, code: String?) {
+            entries.append(.init(feature: feature, message: message, code: code))
+        }
+    }
+
     // MARK: - fake
 
     private final class FakeNotificationsRepository: NotificationsRepository, @unchecked Sendable {
@@ -152,11 +160,30 @@ final class NotificationsInboxCoordinatorTests: XCTestCase {
     @MainActor
     func testListenerFailureCarriesTheBareStatusCode() async {
         let repository = FakeNotificationsRepository()
+        let reporter = RecordingErrorReporter()
         repository.script([.failed(code: "PERMISSION_DENIED")])
-        let coordinator = NotificationsInboxCoordinator(repository: repository, uid: "me-uid")
+        let coordinator = NotificationsInboxCoordinator(
+            repository: repository, uid: "me-uid", errorReporter: reporter
+        )
 
         coordinator.start()
         await waitFor(coordinator) { $0.state == .failed(code: "PERMISSION_DENIED") }
+        XCTAssertEqual(reporter.entries, [.init(
+            feature: "notifications.inboxListener",
+            message: "Notification inbox listener failed",
+            code: "PERMISSION_DENIED"
+        )])
+
+        // The same uninterrupted listener fault is reported once, then a
+        // successful snapshot rearms a later failure.
+        repository.emit(.failed(code: "PERMISSION_DENIED"))
+        await Task.yield()
+        XCTAssertEqual(reporter.entries.count, 1)
+        repository.emit(.loaded([]))
+        await waitFor(coordinator) { $0.state == .empty }
+        repository.emit(.failed(code: "UNAVAILABLE"))
+        await waitFor(coordinator) { $0.state == .failed(code: "UNAVAILABLE") }
+        XCTAssertEqual(reporter.entries.count, 2)
     }
 
     @MainActor
@@ -318,11 +345,19 @@ final class NotificationsInboxCoordinatorTests: XCTestCase {
     @MainActor
     func testMarkReadFailureCarriesTheContractCode() async {
         let repository = FakeNotificationsRepository()
+        let reporter = RecordingErrorReporter()
         repository.markError = KccFunctionsError(code: .unavailable)
-        let coordinator = NotificationsInboxCoordinator(repository: repository, uid: "me-uid")
+        let coordinator = NotificationsInboxCoordinator(
+            repository: repository, uid: "me-uid", errorReporter: reporter
+        )
 
         await coordinator.markRead(notificationId: "n1")
         XCTAssertEqual(coordinator.markReadStatus, .failed(code: .unavailable))
+        XCTAssertEqual(reporter.entries.first, .init(
+            feature: "notifications.markRead",
+            message: "Updating notification read state failed",
+            code: "unavailable"
+        ))
     }
 
     @MainActor

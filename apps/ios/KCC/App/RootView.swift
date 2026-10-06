@@ -10,6 +10,7 @@ struct RootView: View {
     let signInCoordinator: SignInCoordinator
     @Bindable var accessSession: AppAccessSession
     @Bindable var restrictedPrivacyCoordinator: LiveLocationCoordinator
+    let diagnostics: IOSDiagnosticsComposition
 
     var body: some View {
         Group {
@@ -21,7 +22,8 @@ struct RootView: View {
                     session: session,
                     authenticatedUid: nil,
                     access: .unrestrictedCommunity,
-                    featureFlags: .contractDefaults
+                    featureFlags: .contractDefaults,
+                    diagnostics: diagnostics
                 )
             case .signedIn(let uid, let displayName):
                 authenticatedContent(uid: uid, displayName: displayName)
@@ -60,7 +62,8 @@ struct RootView: View {
                 displayName: displayName,
                 session: session,
                 access: access,
-                featureFlags: accessSession.flags
+                featureFlags: accessSession.flags,
+                diagnostics: diagnostics
             )
             .id(uid)
         case .unavailable:
@@ -69,7 +72,8 @@ struct RootView: View {
                 displayName: displayName,
                 session: session,
                 access: .unrestrictedCommunity,
-                featureFlags: accessSession.flags
+                featureFlags: accessSession.flags,
+                diagnostics: diagnostics
             )
             .id(uid)
         case .loading:

@@ -20,6 +20,7 @@ struct ShellView: View {
     let authenticatedUid: String?
     let access: AccountAccess
     let featureFlags: FeatureFlags
+    let diagnostics: IOSDiagnosticsComposition
 
     @State private var selectedTab: ShellTab = .defaultTab
     /// The full-screen sub-route back-stack, held as the ONE pure value from
@@ -32,6 +33,7 @@ struct ShellView: View {
         authenticatedUid: String?,
         access: AccountAccess,
         featureFlags: FeatureFlags,
+        diagnostics: IOSDiagnosticsComposition,
         initialRoute: ShellRoute? = nil,
         initialTab: ShellTab? = nil
     ) {
@@ -39,6 +41,7 @@ struct ShellView: View {
         self.authenticatedUid = authenticatedUid
         self.access = access
         self.featureFlags = featureFlags
+        self.diagnostics = diagnostics
         _selectedTab = State(initialValue: initialTab ?? .defaultTab)
         _routes = State(initialValue: initialRoute.map { .empty.opening($0) } ?? .empty)
         _accountDeletionCoordinator = State(initialValue: AccountDeletionCoordinator(
@@ -204,7 +207,14 @@ struct ShellView: View {
         ZStack {
             // Exactly one native Mapbox view for the signed-in shell. Tabs and
             // routes cover it instead of recreating its Metal render surface.
-            MapHomeView(surface: mapSurface, locationProvider: locationProvider)
+            MapHomeView(
+                surface: mapSurface,
+                locationProvider: locationProvider,
+                featureHealthReporter: FeatureHealthReporter.whenAuthenticated(
+                    diagnostics.featureHealthReporter,
+                    uid: signedInUid
+                )
+            )
 
             TabView(selection: tabSelection) {
                 ForEach(ShellTab.allCases, id: \.self) { tab in
@@ -1604,7 +1614,11 @@ struct ShellView: View {
         partnerApplicationCoordinator = FirebasePartnerApplicationRepository.createIfAvailable().map {
             PartnerApplicationCoordinator(repository: $0)
         }
-        notificationsCoordinator = NotificationsInboxCoordinator(repository: notifications, uid: uid)
+        notificationsCoordinator = NotificationsInboxCoordinator(
+            repository: notifications,
+            uid: uid,
+            errorReporter: diagnostics.clientErrorReporter
+        )
         notificationSettingsCoordinator = NotificationSettingsCoordinator(
             repository: FirebaseNotificationSettingsRepository.createIfAvailable(),
             uid: uid
@@ -2082,6 +2096,7 @@ extension ShellTab {
         session: AuthSession(repository: nil),
         authenticatedUid: nil,
         access: .unrestrictedCommunity,
-        featureFlags: .contractDefaults
+        featureFlags: .contractDefaults,
+        diagnostics: IOSDiagnosticsComposition()
     )
 }
