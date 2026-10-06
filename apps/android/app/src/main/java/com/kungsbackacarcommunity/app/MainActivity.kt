@@ -42,6 +42,7 @@ import com.kungsbackacarcommunity.app.auth.NoopSignInFailureReporter
 import com.kungsbackacarcommunity.app.auth.SignInCoordinator
 import com.kungsbackacarcommunity.app.auth.SignInStatus
 import com.kungsbackacarcommunity.app.diagnostics.DiagnosticsSignInFailureReporter
+import com.kungsbackacarcommunity.app.diagnostics.FirebaseClientErrorReporter
 import com.kungsbackacarcommunity.app.diagnostics.FirebaseDiagnosticsReporter
 import com.kungsbackacarcommunity.app.config.FeatureFlagsStore
 import com.kungsbackacarcommunity.app.config.FirebaseFeatureFlagsRepository
@@ -230,7 +231,12 @@ class MainActivity : ComponentActivity() {
         val notificationsRepository =
             FirebaseNotificationsRepository.createIfAvailable(applicationContext)
         val notificationsCoordinator =
-            notificationsRepository?.let { NotificationsCoordinator(it) }
+            notificationsRepository?.let {
+                NotificationsCoordinator(
+                    it,
+                    FirebaseClientErrorReporter.createIfAvailable(applicationContext),
+                )
+            }
         val notificationSettingsRepository =
             FirebaseNotificationSettingsRepository.createIfAvailable(applicationContext)
         val notificationSettingsCoordinator =

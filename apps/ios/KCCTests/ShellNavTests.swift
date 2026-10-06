@@ -184,6 +184,52 @@ final class ShellNavTests: XCTestCase {
         XCTAssertEqual(ShellTab.defaultTab, .map)
     }
 
+    func testAddressSearchOnlyPresentsOnUnobstructedMapTab() {
+        XCTAssertTrue(ShellNavigation.addressSearchPresented(
+            tab: .map,
+            route: nil,
+            requested: true
+        ))
+        XCTAssertFalse(ShellNavigation.addressSearchPresented(
+            tab: .history,
+            route: nil,
+            requested: true
+        ))
+        XCTAssertFalse(ShellNavigation.addressSearchPresented(
+            tab: .map,
+            route: .savedPlaces,
+            requested: true
+        ))
+        XCTAssertFalse(ShellNavigation.addressSearchPresented(
+            tab: .map,
+            route: nil,
+            requested: false
+        ))
+    }
+
+    func testAddressSearchHidesAllMapHomeChromeOnlyWhilePresented() {
+        XCTAssertFalse(ShellNavigation.mapHomeChromeVisible(
+            tab: .map,
+            route: nil,
+            addressSearchRequested: true
+        ))
+        XCTAssertTrue(ShellNavigation.mapHomeChromeVisible(
+            tab: .map,
+            route: nil,
+            addressSearchRequested: false
+        ))
+        XCTAssertTrue(ShellNavigation.mapHomeChromeVisible(
+            tab: .map,
+            route: .savedPlaces,
+            addressSearchRequested: true
+        ))
+        XCTAssertTrue(ShellNavigation.mapHomeChromeVisible(
+            tab: .social,
+            route: nil,
+            addressSearchRequested: true
+        ))
+    }
+
     // MARK: - live-share toggle decision
 
     func testToggleOpensTheScreenWhenNotWired() {

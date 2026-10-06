@@ -80,6 +80,14 @@ describe('support module — list', () => {
     expect(page.reports[0]!.id).toBe('canonical');
   });
 
+  it('preserves iOS as a supported report platform', async () => {
+    getDocsMock.mockResolvedValue({
+      docs: [{ id: 'ios-report', data: () => reportData({ platform: 'ios' }) }],
+    });
+    const page = await adminListFeedbackReports();
+    expect(page.reports[0]).toMatchObject({ id: 'ios-report', platform: 'ios' });
+  });
+
   it('queries newest-first with the page limit (never the whole collection)', async () => {
     getDocsMock.mockResolvedValue({ docs: [] });
     await adminListFeedbackReports();
@@ -127,7 +135,7 @@ describe('support module — list', () => {
         },
         {
           id: 'r2',
-          data: () => reportData({ githubIssueStatus: 'failed', platform: 'android' }),
+          data: () => reportData({ githubIssueStatus: 'created', platform: 'ios' }),
         },
       ],
     });
