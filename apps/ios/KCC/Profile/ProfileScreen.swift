@@ -6,10 +6,11 @@ import UIKit
 struct ProfileScreen: View {
     let uid: String?
     let displayName: String?
-    let onSignOut: () -> Void
+    let onSignOut: () -> Bool
     let onBack: () -> Void
     let onOpenPoints: (() -> Void)?
     let onOpenWhatsNew: (() -> Void)?
+    let onOpenAccountDeletion: (() -> Void)?
     @State private var coordinator: ProfileCoordinator
     @State private var editor: ProfileEditCoordinator
     @State private var pointsCoordinator: PointsCoordinator
@@ -19,11 +20,13 @@ struct ProfileScreen: View {
     @State private var validationError: ProfileValidationError?
     @State private var pickedPhoto: PhotosPickerItem?
     @State private var showsBlockedUsers = false
+    @State private var signOutFailed = false
 
     init(
-        uid: String?, displayName: String?, onSignOut: @escaping () -> Void,
+        uid: String?, displayName: String?, onSignOut: @escaping () -> Bool,
         onBack: @escaping () -> Void, onOpenPoints: @escaping () -> Void,
-        onOpenWhatsNew: (() -> Void)? = nil
+        onOpenWhatsNew: (() -> Void)? = nil,
+        onOpenAccountDeletion: @escaping () -> Void
     ) {
         let repository = FirebaseUserProfileRepository.createIfAvailable()
         let pointsRepository = FirebasePointsRepository.createIfAvailable()
@@ -34,6 +37,8 @@ struct ProfileScreen: View {
             onBack: onBack,
             onOpenPoints: pointsRepository == nil ? nil : onOpenPoints,
             onOpenWhatsNew: onOpenWhatsNew,
+            onOpenAccountDeletion: FirebaseAccountDeletionRepository.createIfAvailable() == nil
+                ? nil : onOpenAccountDeletion,
             coordinator: ProfileCoordinator(repository: repository, uid: uid),
             editor: ProfileEditCoordinator(repository: repository, uid: uid),
             pointsCoordinator: PointsCoordinator(repository: pointsRepository, uid: uid),
@@ -44,10 +49,11 @@ struct ProfileScreen: View {
     }
 
     init(
-        uid: String? = nil, displayName: String?, onSignOut: @escaping () -> Void,
+        uid: String? = nil, displayName: String?, onSignOut: @escaping () -> Bool,
         onBack: @escaping () -> Void,
         onOpenPoints: (() -> Void)? = nil,
         onOpenWhatsNew: (() -> Void)? = nil,
+        onOpenAccountDeletion: (() -> Void)? = nil,
         coordinator: ProfileCoordinator,
         editor: ProfileEditCoordinator? = nil,
         pointsCoordinator: PointsCoordinator? = nil,
@@ -59,6 +65,7 @@ struct ProfileScreen: View {
         self.onBack = onBack
         self.onOpenPoints = onOpenPoints
         self.onOpenWhatsNew = onOpenWhatsNew
+        self.onOpenAccountDeletion = onOpenAccountDeletion
         _coordinator = State(initialValue: coordinator)
         _editor = State(initialValue: editor ?? ProfileEditCoordinator(repository: nil, uid: nil))
         _pointsCoordinator = State(initialValue: pointsCoordinator ?? PointsCoordinator(
@@ -143,7 +150,26 @@ struct ProfileScreen: View {
                     .accessibilityIdentifier("profile.whatsNew")
                 }
 
-                Button(action: onSignOut) {
+                if let onOpenAccountDeletion {
+                    Button(role: .destructive, action: onOpenAccountDeletion) {
+                        HStack {
+                            Label("settings.accountDeletion", systemImage: "trash")
+                            Spacer()
+                            Image(systemName: "chevron.forward")
+                                .accessibilityHidden(true)
+                        }
+                        .frame(minHeight: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("profile.accountDeletion")
+                }
+
+                if signOutFailed {
+                    Text("auth.signOutError")
+                        .foregroundStyle(KccPalette.errorRed)
+                }
+
+                Button(action: attemptSignOut) {
                     Text("auth.signOut").frame(maxWidth: .infinity, minHeight: 44)
                 }
                 .buttonStyle(.bordered)
@@ -163,6 +189,10 @@ struct ProfileScreen: View {
         .fullScreenCover(isPresented: $showsBlockedUsers) {
             BlockedUsersScreen(uid: uid) { showsBlockedUsers = false }
         }
+    }
+
+    private func attemptSignOut() {
+        signOutFailed = !onSignOut()
     }
 
     private var canEdit: Bool {

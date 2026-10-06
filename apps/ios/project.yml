@@ -34,6 +34,10 @@ targets:
     sources:
       - path: KCC
     dependencies:
+      # App Check protects authenticated callables. Its provider factory is
+      # installed before FirebaseApp.configure in FirebaseBootstrap.
+      - package: Firebase
+        product: FirebaseAppCheck
       - package: Firebase
         product: FirebaseAuth
       # Events read path: direct Firestore snapshot listeners, mirroring
@@ -95,10 +99,16 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.kungsbackacarcommunity.app
         MARKETING_VERSION: 0.1.0
         CURRENT_PROJECT_VERSION: 1
+        CODE_SIGN_ENTITLEMENTS: KCC/KCC.entitlements
         # Keep script phases sandboxed; the GoogleService-Info.plist embedding
         # phase below declares its input/output files so the sandbox permits
         # exactly that copy and nothing else.
         ENABLE_USER_SCRIPT_SANDBOXING: YES
+      configs:
+        Debug:
+          APP_ATTEST_ENVIRONMENT: development
+        Release:
+          APP_ATTEST_ENVIRONMENT: production
     postBuildScripts:
       # The config-less-build seam (parity with Android's gitignored
       # google-services.json): GoogleService-Info.plist is NOT referenced by the
@@ -138,3 +148,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: KCC
+      # KccFunctionsErrorTests exercises the SDK-to-contract error seam with
+      # a real FunctionsErrorDomain NSError.
+      - package: Firebase
+        product: FirebaseFunctions

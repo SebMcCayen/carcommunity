@@ -31,11 +31,7 @@
 
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import {
-  boundContext,
-  boundText,
-  neutralizeMentions,
-} from '../feedback/feedback-core';
+import { boundContext, boundText, neutralizeMentions } from '../feedback/feedback-core';
 import { AUTO_GENERATED_LABEL } from '../diagnostics/signInIssues-core';
 import type { GitHubIssuePayload } from '../shared/githubIssues';
 import {
@@ -84,6 +80,8 @@ export const MAX_APP_VERSION_LENGTH = 50;
 export const MAX_OS_VERSION_LENGTH = 100;
 export const MAX_DEVICE_MODEL_LENGTH = 100;
 export const MAX_PLATFORM_LENGTH = 20;
+export const MAX_BUILD_NUMBER_LENGTH = 50;
+export const MAX_SDK_VERSION_LENGTH = 50;
 
 // ---------------------------------------------------------------------------
 // Rate limit (per user) — mirrors feedback.reportIssue, higher cap because an
@@ -116,7 +114,9 @@ const reportClientErrorInputSchema = z
     appVersion: z.string().max(MAX_APP_VERSION_LENGTH).optional(),
     osVersion: z.string().max(MAX_OS_VERSION_LENGTH).optional(),
     deviceModel: z.string().max(MAX_DEVICE_MODEL_LENGTH).optional(),
-    platform: z.string().max(MAX_PLATFORM_LENGTH).optional(),
+    platform: z.enum(['android', 'ios']).optional(),
+    buildNumber: z.string().max(MAX_BUILD_NUMBER_LENGTH).optional(),
+    sdkVersion: z.string().max(MAX_SDK_VERSION_LENGTH).optional(),
   })
   .strict();
 
@@ -131,14 +131,16 @@ export interface ClientErrorReport {
   osVersion: string | null;
   deviceModel: string | null;
   platform: string;
-  /** Server-derived dedup key (feature + normalized signature). */
+  buildNumber: string | null;
+  sdkVersion: string | null;
+  /** Server-derived dedup key (platform + feature + normalized signature). */
   fingerprint: string;
 }
 
 export type ParseResult<T> = { ok: true; input: T } | { ok: false; message: string };
 
 export const REPORT_CLIENT_ERROR_EXPECTED =
-  'Expected { feature, message, code?, appVersion?, osVersion?, deviceModel?, platform? }.';
+  'Expected { feature, message, code?, appVersion?, osVersion?, deviceModel?, platform?, buildNumber?, sdkVersion? }.';
 
 /**
  * Parses + bounds a client-error submission. Returns a normalized report with a
@@ -173,7 +175,9 @@ export function parseReportClientErrorInput(data: unknown): ParseResult<ClientEr
       osVersion: boundContext(result.data.osVersion, MAX_OS_VERSION_LENGTH),
       deviceModel: boundContext(result.data.deviceModel, MAX_DEVICE_MODEL_LENGTH),
       platform,
-      fingerprint: computeClientErrorFingerprint(feature, message, code),
+      buildNumber: boundContext(result.data.buildNumber, MAX_BUILD_NUMBER_LENGTH),
+      sdkVersion: boundContext(result.data.sdkVersion, MAX_SDK_VERSION_LENGTH),
+      fingerprint: computeClientErrorFingerprint(feature, message, code, platform),
     },
   };
 }
@@ -204,17 +208,20 @@ export function clientErrorSignature(message: string, code: string | null): stri
 }
 
 /**
- * Dedup fingerprint, derived SERVER-SIDE from the feature + the stable
- * signature only (never volatile context like appVersion/deviceModel), so the
- * same error recurring across devices/versions maps to ONE issue.
+ * Dedup fingerprint, derived SERVER-SIDE from the platform, feature and stable
+ * signature (never volatile context like appVersion/deviceModel), so the same
+ * platform error recurring across devices/versions maps to ONE issue. Android
+ * keeps its historical key shape to avoid re-filing every existing issue.
  */
 export function computeClientErrorFingerprint(
   feature: string,
   message: string,
   code: string | null,
+  platform: string = DEFAULT_CLIENT_ERROR_PLATFORM,
 ): string {
+  const platformScope = platform === 'ios' ? 'ios|' : '';
   return createHash('sha256')
-    .update(`${feature}|${clientErrorSignature(message, code)}`)
+    .update(`${feature}|${platformScope}${clientErrorSignature(message, code)}`)
     .digest('hex')
     .slice(0, 64);
 }
@@ -244,6 +251,8 @@ export function buildClientErrorReportDocument(
     osVersion: report.osVersion,
     deviceModel: report.deviceModel,
     platform: report.platform,
+    buildNumber: report.buildNumber,
+    sdkVersion: report.sdkVersion,
     fingerprint: report.fingerprint,
     githubIssueStatus: 'pending' as GitHubIssueStatus,
     githubIssueNumber: null,
@@ -269,6 +278,8 @@ export function buildClientErrorAuditDetails(report: ClientErrorReport): Record<
     appVersion: report.appVersion,
     osVersion: report.osVersion,
     deviceModel: report.deviceModel,
+    buildNumber: report.buildNumber,
+    sdkVersion: report.sdkVersion,
     fingerprint: report.fingerprint,
   };
 }
@@ -373,10 +384,7 @@ export interface ClientErrorIssueMeta {
  * sign-in path.
  */
 function inlineCodeScalar(value: string): string {
-  const safe = neutralizeMentions(value)
-    .replace(/`/g, "'")
-    .replace(/\s+/g, ' ')
-    .trim();
+  const safe = neutralizeMentions(value).replace(/`/g, "'").replace(/\s+/g, ' ').trim();
   return `\`${safe}\``;
 }
 
@@ -407,6 +415,8 @@ export function buildClientErrorIssueBody(
     `- App version: ${field(report.appVersion)}`,
     `- OS version: ${field(report.osVersion)}`,
     `- Device model: ${field(report.deviceModel)}`,
+    `- Build number: ${field(report.buildNumber)}`,
+    `- SDK version: ${field(report.sdkVersion)}`,
     `- Fingerprint: ${report.fingerprint}`,
     `- First seen: ${meta.firstSeenIso}`,
     `- Occurrences: ${meta.count}`,

@@ -1,7 +1,7 @@
 /**
  * Sign-in-failure → public GitHub issue: pure domain logic.
  *
- * The Android app reports pre-authentication Google Sign-In failures through
+ * The Android and iOS apps report pre-authentication sign-in failures through
  * the PUBLIC, unauthenticated `diagnostics.submitReport` callable (the only
  * telemetry path that works before auth). Those reports land in
  * `diagnosticsReports/{id}` with featureArea `sign_in`, carrying ONLY a
@@ -67,7 +67,7 @@ const MAX_ERROR_TYPE_LENGTH = 100;
 const MAX_CONTEXT_LENGTH = 120;
 
 /**
- * The ONLY shape the Android reporter ever sends for the error type:
+ * The only shape the mobile reporters send for the error type:
  * `throwable.javaClass.simpleName` (optionally fully-qualified). Anchored, no
  * whitespace, and none of `@ # : / " '` or `.@`-style separators, so a token
  * that matches CANNOT carry an email, an @mention/#ref, or free-text PII.
@@ -82,7 +82,7 @@ const EXCEPTION_TYPE_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0
 export const UNKNOWN_ERROR_TYPE = 'Unknown';
 
 /**
- * Server-side allowlist of KNOWN Google/Firebase Android sign-in exception
+ * Server-side allowlist of KNOWN mobile sign-in exception
  * SIMPLE class names. This is the anti-abuse gate: because
  * `diagnostics.submitReport` is unauthenticated, a caller who passes App Check
  * could otherwise mint an unbounded number of distinct public GitHub issues by
@@ -101,7 +101,15 @@ export const UNKNOWN_ERROR_TYPE = 'Unknown';
  * here as they are observed; unknown types are never lost, they simply share the
  * `Unknown` bucket.
  */
-export const KNOWN_SIGN_IN_EXCEPTION_TYPES: ReadonlySet<string> = new Set([
+export const SHARED_SIGN_IN_EXCEPTION_TYPES: ReadonlySet<string> = new Set([]);
+
+export const IOS_SIGN_IN_EXCEPTION_TYPES: ReadonlySet<string> = new Set([
+  'SignInFailedError',
+  'NonceGenerationError',
+  'ASAuthorizationError',
+]);
+
+export const ANDROID_SIGN_IN_EXCEPTION_TYPES: ReadonlySet<string> = new Set([
   // App-defined sign-in wrappers (the dominant real-world types).
   'SignInFailedException',
   'SignInUnavailableException',
@@ -167,9 +175,16 @@ export const KNOWN_SIGN_IN_EXCEPTION_TYPES: ReadonlySet<string> = new Set([
  * pure post-validation step: callers still reject non-class-name tokens BEFORE
  * bucketing (see strictExceptionType), so this never sees free text.
  */
-export function bucketExceptionType(validToken: string): string {
+export function bucketExceptionType(
+  validToken: string,
+  platform: 'android' | 'ios' = 'android',
+): string {
   const simpleName = validToken.slice(validToken.lastIndexOf('.') + 1);
-  return KNOWN_SIGN_IN_EXCEPTION_TYPES.has(simpleName) ? simpleName : UNKNOWN_ERROR_TYPE;
+  const platformTypes =
+    platform === 'ios' ? IOS_SIGN_IN_EXCEPTION_TYPES : ANDROID_SIGN_IN_EXCEPTION_TYPES;
+  return platformTypes.has(simpleName) || SHARED_SIGN_IN_EXCEPTION_TYPES.has(simpleName)
+    ? simpleName
+    : UNKNOWN_ERROR_TYPE;
 }
 
 /** Fixed, non-client reason line shown in the public issue. */
@@ -209,16 +224,15 @@ function strictExceptionType(value: unknown): string | null {
 }
 
 /**
- * Diagnostics platform reserved for the Android sign-in reporter (the ONLY
- * client that files these). Matches DIAGNOSTICS_PLATFORMS in diagnostics-core.
+ * Diagnostics platforms used by the mobile sign-in reporters. Matches DIAGNOSTICS_PLATFORMS in diagnostics-core.
  */
-const ANDROID_PLATFORM = 'android';
+const SIGN_IN_PLATFORMS = new Set(['android', 'ios']);
 
 /** Diagnostics severity the sign-in reporter always sends. Matches DIAGNOSTICS_SEVERITIES. */
 const ERROR_SEVERITY = 'error';
 
 /**
- * Exact `safeMessage` the Android reporter emits for a sign-in failure, given
+ * Exact `safeMessage` the mobile reporters emit for a sign-in failure, given
  * the validated `errorCode`. Mirrors DiagnosticsSignInFailureReporter.kt:
  * `safeMessage = "Sign-in failed: $errorType"` with `errorCode = errorType`.
  */
@@ -228,18 +242,23 @@ function expectedSignInSafeMessage(errorCode: string): string {
 
 /**
  * Dedup key for a sign-in failure, derived SERVER-SIDE from the fixed feature
- * area + the server-BUCKETED exception type ONLY (see {@link bucketExceptionType})
- * — never from client free text (safeMessage / appVersion / etc). This keeps
- * dedup stable, unpollutable, AND bounded: there is at most ONE public issue per
- * ALLOWLISTED exception type, plus a SINGLE `Unknown` bucket into which every
- * other valid-but-unknown token collapses (so distinct fabricated tokens like
- * `A0Exception`, `A1Exception`, … all map to the same fingerprint/issue).
+ * area, validated platform and server-BUCKETED exception type ONLY (see
+ * {@link bucketExceptionType}) — never from client free text (safeMessage /
+ * appVersion / etc). Android keeps its historical key shape to avoid re-filing
+ * existing issues; iOS gets a separate namespace. This keeps dedup stable,
+ * unpollutable, AND bounded: there is at most ONE public issue per platform and
+ * ALLOWLISTED exception type, plus a SINGLE `Unknown` bucket per platform into
+ * which every other valid-but-unknown token collapses.
  * Tokens that are not valid class-name shapes are rejected OUTRIGHT upstream by
  * the extractor and never reach this function (no issue is filed for them).
  */
-export function computeSignInFingerprint(errorType: string): string {
+export function computeSignInFingerprint(
+  errorType: string,
+  platform: 'android' | 'ios' = 'android',
+): string {
+  const platformScope = platform === 'ios' ? 'ios|' : '';
   return createHash('sha256')
-    .update(`${SIGN_IN_FEATURE_AREA}|${errorType}`)
+    .update(`${SIGN_IN_FEATURE_AREA}|${platformScope}${errorType}`)
     .digest('hex')
     .slice(0, 64);
 }
@@ -250,6 +269,7 @@ export function computeSignInFingerprint(errorType: string): string {
 
 /** The sign-in-failure fields lifted out of a `diagnosticsReports/{id}` doc. */
 export interface SignInFailureReport {
+  platform: 'android' | 'ios';
   /**
    * The server-BUCKETED exception type — an allowlisted known class-name token,
    * or `Unknown` when the (valid) reported token is not on the allowlist. This
@@ -262,7 +282,7 @@ export interface SignInFailureReport {
   osVersion: string | null;
   /** Device model, carried via sanitized metadata.deviceModel; may be absent. */
   deviceModel: string | null;
-  /** Server-derived dedup fingerprint over the VALIDATED exception type only. */
+  /** Server-derived dedup fingerprint over the validated platform and exception type. */
   fingerprint: string;
 }
 
@@ -279,11 +299,11 @@ function boundedString(value: unknown, max: number): string | null {
  *
  * `diagnostics.submitReport` is UNAUTHENTICATED, so any caller that passes App
  * Check can craft an arbitrary report. To shrink that abuse surface (public
- * issue spam, non-Android/non-error reports filing issues), extraction is
- * STRICT: it returns `null` UNLESS the doc matches EXACTLY what the real Android
+ * issue spam, unsupported-platform/non-error reports filing issues), extraction is
+ * STRICT: it returns `null` UNLESS the doc matches exactly what a real mobile
  * sign-in reporter (DiagnosticsSignInFailureReporter.kt) sends —
  *   - `featureArea === 'sign_in'`,
- *   - `platform === 'android'`,
+ *   - `platform` is `android` or `ios`,
  *   - `severity === 'error'`,
  *   - `errorCode` is a strictly-shaped simple/qualified class-name token, AND
  *   - `safeMessage` is exactly `Sign-in failed: <errorCode>`.
@@ -296,7 +316,7 @@ function boundedString(value: unknown, max: number): string | null {
  * a shape/consistency gate against the RAW client `errorCode` (proving the report
  * came from the real reporter); its content is never surfaced into the public
  * issue (it stays in the private diagnosticsReports doc). The dedup fingerprint is
- * recomputed server-side from the BUCKETED type — the raw `data.fingerprint`
+ * recomputed server-side from the validated platform and BUCKETED type — the raw `data.fingerprint`
  * (which upstream folds in client free text) is intentionally ignored so a
  * malicious caller cannot pollute dedup.
  */
@@ -305,7 +325,7 @@ export function extractSignInFailureReport(
 ): SignInFailureReport | null {
   if (!data) return null;
   if (data.featureArea !== SIGN_IN_FEATURE_AREA) return null;
-  if (data.platform !== ANDROID_PLATFORM) return null;
+  if (typeof data.platform !== 'string' || !SIGN_IN_PLATFORMS.has(data.platform)) return null;
   if (data.severity !== ERROR_SEVERITY) return null;
 
   // errorCode must be the exact class-name shape the client sends; anything else
@@ -322,7 +342,8 @@ export function extractSignInFailureReport(
   // Anti-abuse: only the BUCKETED type (allowlisted known type, else the single
   // `Unknown` bucket) reaches the public issue + fingerprint. This bounds the
   // number of distinct public issues an unauthenticated caller can create.
-  const errorType = bucketExceptionType(rawToken);
+  const platform = data.platform as 'android' | 'ios';
+  const errorType = bucketExceptionType(rawToken, platform);
 
   const metadata =
     data.metadata && typeof data.metadata === 'object' && !Array.isArray(data.metadata)
@@ -330,12 +351,13 @@ export function extractSignInFailureReport(
       : null;
 
   return {
+    platform,
     errorType,
     appVersion: boundedString(data.appVersion, MAX_CONTEXT_LENGTH),
     buildNumber: boundedString(data.buildNumber, MAX_CONTEXT_LENGTH),
     osVersion: boundedString(data.osVersion, MAX_CONTEXT_LENGTH),
     deviceModel: metadata ? boundedString(metadata.deviceModel, MAX_CONTEXT_LENGTH) : null,
-    fingerprint: computeSignInFingerprint(errorType),
+    fingerprint: computeSignInFingerprint(errorType, platform),
   };
 }
 
@@ -540,13 +562,13 @@ function inlineCodeScalar(value: string): string {
  * timestamp/count are left as-is.
  */
 export function buildSignInIssueBody(report: SignInFailureReport, meta: SignInIssueMeta): string {
-  const field = (value: string | null): string =>
-    value ? inlineCodeScalar(value) : 'unknown';
+  const field = (value: string | null): string => (value ? inlineCodeScalar(value) : 'unknown');
 
   const lines = [
-    'Automatically filed from an Android sign-in failure reported via the public diagnostics channel (pre-authentication — no account is associated).',
+    `Automatically filed from a ${report.platform === 'ios' ? 'iOS' : 'Android'} sign-in failure reported via the public diagnostics channel (pre-authentication — no account is associated).`,
     '',
     `- Error type: ${neutralizeMentions(report.errorType)}`,
+    `- Platform: ${report.platform}`,
     `- Reason: ${SIGN_IN_PUBLIC_REASON}`,
     `- App version: ${field(report.appVersion)}`,
     `- Build number: ${field(report.buildNumber)}`,

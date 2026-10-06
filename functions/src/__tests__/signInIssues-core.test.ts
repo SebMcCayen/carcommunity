@@ -11,7 +11,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   AUTO_GENERATED_LABEL,
-  KNOWN_SIGN_IN_EXCEPTION_TYPES,
+  ANDROID_SIGN_IN_EXCEPTION_TYPES,
+  IOS_SIGN_IN_EXCEPTION_TYPES,
+  SHARED_SIGN_IN_EXCEPTION_TYPES,
   SIGN_IN_FEATURE_AREA,
   SIGN_IN_ISSUE_LABEL,
   SIGN_IN_ISSUE_STALE_CREATING_MS,
@@ -39,6 +41,7 @@ const ZWSP = '​';
 const fingerprint = computeSignInFingerprint('GetCredentialException');
 
 const report: SignInFailureReport = {
+  platform: 'android',
   errorType: 'GetCredentialException',
   appVersion: '1.4.0',
   buildNumber: '42',
@@ -112,6 +115,15 @@ describe('computeSignInFingerprint (dedup from validated type only)', () => {
       computeSignInFingerprint('SignInException'),
     );
   });
+
+  it('preserves historical Android fingerprints while separating iOS', () => {
+    // Immutable migration sentinel for SHA-256("sign_in|GetCredentialException").
+    // Changing this value would orphan the existing signInIssueLinks record.
+    const legacyAndroid = 'a13aae343c980cf9bc9d60b81bce006e0aae2af6d69da3b33fb6b39c081a58ca';
+
+    expect(computeSignInFingerprint('GetCredentialException', 'android')).toBe(legacyAndroid);
+    expect(computeSignInFingerprint('GetCredentialException', 'ios')).not.toBe(legacyAndroid);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -143,8 +155,22 @@ describe('extractSignInFailureReport', () => {
     expect(extractSignInFailureReport({ ...rawDoc, featureArea: 'auth' })).toBeNull();
   });
 
-  it('rejects a non-android platform (only the Android reporter may file issues)', () => {
-    expect(extractSignInFailureReport({ ...rawDoc, platform: 'ios' })).toBeNull();
+  it('accepts the iOS reporter and rejects unsupported platforms', () => {
+    const ios = extractSignInFailureReport({
+      ...rawDoc,
+      platform: 'ios',
+      safeMessage: 'Sign-in failed: SignInFailedError',
+      errorCode: 'SignInFailedError',
+      osVersion: 'iOS 18.0',
+    });
+    expect(ios).toEqual({
+      ...report,
+      platform: 'ios',
+      errorType: 'SignInFailedError',
+      osVersion: 'iOS 18.0',
+      fingerprint: computeSignInFingerprint('SignInFailedError', 'ios'),
+    });
+    expect(ios?.fingerprint).not.toBe(report.fingerprint);
     expect(extractSignInFailureReport({ ...rawDoc, platform: 'web' })).toBeNull();
     expect(extractSignInFailureReport({ ...rawDoc, platform: undefined })).toBeNull();
   });
@@ -208,6 +234,7 @@ describe('extractSignInFailureReport', () => {
       safeMessage: 'Sign-in failed: SignInFailedException',
     });
     expect(result).toEqual({
+      platform: 'android',
       errorType: 'SignInFailedException',
       appVersion: null,
       buildNumber: null,
@@ -301,10 +328,19 @@ describe('bucketExceptionType (anti-abuse allowlist + single bucket)', () => {
     expect(bucketExceptionType('com.evil.Nope')).toBe(UNKNOWN_ERROR_TYPE);
   });
 
-  it('the allowlist is non-empty and every entry buckets to itself', () => {
-    expect(KNOWN_SIGN_IN_EXCEPTION_TYPES.size).toBeGreaterThan(0);
-    for (const type of KNOWN_SIGN_IN_EXCEPTION_TYPES) {
-      expect(bucketExceptionType(type)).toBe(type);
+  it('buckets only platform-valid types and rejects impossible pairs', () => {
+    expect(bucketExceptionType('GetCredentialException', 'ios')).toBe(UNKNOWN_ERROR_TYPE);
+    expect(bucketExceptionType('ASAuthorizationError', 'android')).toBe(UNKNOWN_ERROR_TYPE);
+    expect(bucketExceptionType('ASAuthorizationError', 'ios')).toBe('ASAuthorizationError');
+    for (const type of ANDROID_SIGN_IN_EXCEPTION_TYPES) {
+      expect(bucketExceptionType(type, 'android')).toBe(type);
+    }
+    for (const type of IOS_SIGN_IN_EXCEPTION_TYPES) {
+      expect(bucketExceptionType(type, 'ios')).toBe(type);
+    }
+    for (const type of SHARED_SIGN_IN_EXCEPTION_TYPES) {
+      expect(bucketExceptionType(type, 'android')).toBe(type);
+      expect(bucketExceptionType(type, 'ios')).toBe(type);
     }
   });
 });
@@ -375,9 +411,9 @@ describe('decideSignInIssueAction (dedup)', () => {
       }),
     ).toBe('create');
     // No timestamp available → treated as fresh (never re-file on garbage).
-    expect(
-      decideSignInIssueAction(creating, { nowMs: now, lastActivityMs: null }),
-    ).toBe('increment');
+    expect(decideSignInIssueAction(creating, { nowMs: now, lastActivityMs: null })).toBe(
+      'increment',
+    );
     // No context at all (pure default) → creating is always an increment.
     expect(decideSignInIssueAction(creating)).toBe('increment');
   });
@@ -461,7 +497,13 @@ describe('buildSignInIssueBody', () => {
 
   it('renders Unknown/unknown for an absent type and context', () => {
     const body = buildSignInIssueBody(
-      { ...report, errorType: UNKNOWN_ERROR_TYPE, appVersion: null, osVersion: null, deviceModel: null },
+      {
+        ...report,
+        errorType: UNKNOWN_ERROR_TYPE,
+        appVersion: null,
+        osVersion: null,
+        deviceModel: null,
+      },
       meta,
     );
     expect(body).toContain('- Error type: Unknown');

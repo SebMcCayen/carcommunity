@@ -307,7 +307,9 @@ final class NearbyLiveCoordinatorTests: XCTestCase {
                 return AsyncStream { continuation in
                     controlledContinuations[uid] = continuation
                     continuation.onTermination = { [weak self] _ in
-                        self?.terminationCounts[uid, default: 0] += 1
+                        Task { @MainActor [weak self] in
+                            self?.terminationCounts[uid, default: 0] += 1
+                        }
                     }
                 }
             }
