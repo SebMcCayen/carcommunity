@@ -868,6 +868,57 @@
         }
       }
     },
+    "appUpdate.iosMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det finns en nyare version av appen i App Store."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A newer version of the app is available in the App Store."
+          }
+        }
+      }
+    },
+    "appUpdate.iosRequiredMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Den här uppdateringen måste installeras innan du kan fortsätta. Öppna App Store för att uppdatera."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This update has to be installed before you can carry on. Open the App Store to update."
+          }
+        }
+      }
+    },
+    "appUpdate.iosStoreUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det gick inte att öppna appens sida i App Store på den här enheten."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The App Store listing could not be opened on this device."
+          }
+        }
+      }
+    },
     "appUpdate.message": {
       "extractionState": "manual",
       "localizations": {
@@ -32518,6 +32569,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Version %1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "whatsNew.release010Change": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En inbyggd kartbaserad upplevelse med community-, kör- och profilfunktioner."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A native map-first experience with community, drive and profile features."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Highlight": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Den första inbyggda iOS-MVP:n tar form."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The first native iOS MVP is taking shape."
           }
         }
       }

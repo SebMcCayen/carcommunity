@@ -122,6 +122,9 @@ struct ShellView: View {
     @State private var pendingSessionCommand: SingleSessionCommand?
     @State private var sessionCommandTask: Task<Void, Never>?
     @State private var sessionActionError = false
+    @State private var whatsNewCoordinator = WhatsNewCoordinator()
+    @State private var appUpdateCoordinator = AppUpdateCoordinator()
+    @State private var appStoreUnavailable = false
 
     /// What is drawn over the shell's map right now — the ONE pure value
     /// every cover-derived decision reads. Turn-by-turn remains deliberately
@@ -156,8 +159,17 @@ struct ShellView: View {
         shellPresentation
             .task(id: signedInUid) { await wireFeatures() }
             .task(id: crownFeatureWiringKey) { await wireCrownHunt() }
+            .task(id: signedInUid) {
+                whatsNewCoordinator.start()
+                guard signedInUid != nil else { return }
+                await appUpdateCoordinator.checkOnce()
+            }
             .task(id: savedPlacesLocationSubscriptionKey) {
                 await observeSavedPlacesLocation()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active, signedInUid != nil else { return }
+                appUpdateCoordinator.scheduleRequiredUpdateRecheck()
             }
             .onChange(of: featureFlags.isEnabled(.liveLocation)) { _, enabled in
                 liveLocationCoordinator?.canShare = enabled && !access.isRestricted
@@ -205,7 +217,7 @@ struct ShellView: View {
             }
     }
 
-    private var shellPresentation: some View {
+    private var shellBase: some View {
         ZStack {
             // Exactly one native Mapbox view for the signed-in shell. Tabs and
             // routes cover it instead of recreating its Metal render surface.
@@ -253,6 +265,10 @@ struct ShellView: View {
                 )
             }
         }
+    }
+
+    private var shellInteractions: some View {
+        shellBase
         // Drive the surface's liveness from the SAME pure cover value the
         // pages derive from — the iOS counterpart of Android's
         // `LaunchedEffect(mapCover) { mapSurface.setActive(...) }`:
@@ -290,6 +306,10 @@ struct ShellView: View {
         .onChange(of: liveLocationCoordinator?.sessionSnapshotRevision, initial: true) { _, _ in
             reconcileDriveRecording()
         }
+    }
+
+    private var shellSheets: some View {
+        shellInteractions
         .sheet(isPresented: $showStartDriving, onDismiss: releaseStartDrivingGarage) {
             if let startDrivingGarage {
                 StartDrivingSheet(
@@ -362,6 +382,22 @@ struct ShellView: View {
                 )
             }
         }
+        .sheet(isPresented: whatsNewAnnouncementIsPresented) {
+            if let announcement = whatsNewCoordinator.announcement {
+                WhatsNewAnnouncementSheet(
+                    announcement: announcement,
+                    onShowAll: {
+                        whatsNewCoordinator.acknowledge()
+                        routes = routes.opening(.whatsNew)
+                    },
+                    onClose: whatsNewCoordinator.acknowledge
+                )
+            }
+        }
+    }
+
+    private var shellPresentation: some View {
+        shellSheets
         .confirmationDialog(
             "liveLocation.stop",
             isPresented: $showStopConfirmation,
@@ -412,6 +448,19 @@ struct ShellView: View {
             Button("convoy.close", role: .cancel) {
                 convoyManagementCoordinator?.clearLeaveResult()
             }
+        }
+        .alert(appUpdateTitle, isPresented: appUpdateIsPresented) {
+            Button("appUpdate.update") { openAvailableUpdate() }
+            if appUpdateCoordinator.availability?.isRequired != true {
+                Button("appUpdate.dismiss", role: .cancel) {
+                    appUpdateCoordinator.dismiss()
+                }
+            }
+        } message: {
+            Text(appUpdateMessage)
+        }
+        .alert("appUpdate.iosStoreUnavailable", isPresented: $appStoreUnavailable) {
+            Button("notifications.errorDismiss", role: .cancel) {}
         }
     }
 
@@ -823,6 +872,7 @@ struct ShellView: View {
                 onSignOut: { endDeletionSession() },
                 onBack: { routes = routes.poppingOne() },
                 onOpenPoints: { routes = routes.opening(.points) },
+                onOpenWhatsNew: { routes = routes.opening(.whatsNew) },
                 onOpenAccountDeletion: { routes = routes.opening(.accountDeletion) }
             )
         case .points:
@@ -916,6 +966,10 @@ struct ShellView: View {
         case .settings:
             routeNavigation {
                 SettingsScreen(actions: settingsActions)
+            }
+        case .whatsNew:
+            routeNavigation {
+                WhatsNewScreen(entries: whatsNewCoordinator.entries)
             }
         case .savedPlaces:
             if let savedPlacesCoordinator {
@@ -1076,13 +1130,64 @@ struct ShellView: View {
             onFeedback: feedbackCoordinator != nil
                 ? { routes = routes.opening(.feedback) } : nil,
             onDeleteAccount: authenticatedUid != nil
-                ? { routes = routes.opening(.accountDeletion) } : nil
+                ? { routes = routes.opening(.accountDeletion) } : nil,
+            onWhatsNew: { routes = routes.opening(.whatsNew) }
         )
     }
 
     private func endDeletionSession() -> Bool {
         guard let authenticatedUid else { return true }
         return session.signOut(ifSignedInAs: authenticatedUid)
+    }
+
+    private var whatsNewAnnouncementIsPresented: Binding<Bool> {
+        Binding(
+            get: { whatsNewCoordinator.announcement != nil },
+            set: { presented in
+                if !presented { whatsNewCoordinator.acknowledge() }
+            }
+        )
+    }
+
+    private var updatePromptSuppressedForDriving: Bool {
+        if liveLocationCoordinator?.isSharing == true { return true }
+        return driveRecordingCoordinator?.state.summary != nil
+    }
+
+    private var appUpdateIsPresented: Binding<Bool> {
+        Binding(
+            get: {
+                !appStoreUnavailable && appUpdateCoordinator.shouldPresent(
+                    isDriving: updatePromptSuppressedForDriving,
+                    announcementIsPresented: whatsNewCoordinator.announcement != nil
+                )
+            },
+            set: { _ in }
+        )
+    }
+
+    private var appUpdateTitle: LocalizedStringKey {
+        appUpdateCoordinator.availability?.isRequired == true
+            ? "appUpdate.requiredTitle" : "appUpdate.title"
+    }
+
+    private var appUpdateMessage: LocalizedStringKey {
+        appUpdateCoordinator.availability?.isRequired == true
+            ? "appUpdate.iosRequiredMessage" : "appUpdate.iosMessage"
+    }
+
+    private func openAvailableUpdate() {
+        guard let url = appUpdateCoordinator.availability?.storeURL else {
+            appStoreUnavailable = true
+            return
+        }
+        openURL(url) { accepted in
+            if accepted {
+                appUpdateCoordinator.accepted()
+            } else {
+                appStoreUnavailable = true
+            }
+        }
     }
 
     private var routeBackButton: some View {
