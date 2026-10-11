@@ -14,6 +14,8 @@ protocol SavedPlacesStore: AnyObject {
 /// payload is migrated only after the protected write succeeds.
 @MainActor
 final class ProtectedFileSavedPlacesStore: SavedPlacesStore {
+    static let fileProtection: FileProtectionType = .complete
+
     private let defaults: UserDefaults
     private let fileManager: FileManager
     private let legacyKey: String
@@ -100,7 +102,7 @@ final class ProtectedFileSavedPlacesStore: SavedPlacesStore {
         do {
             try data.write(to: stagedURL, options: [.atomic, .completeFileProtection])
             try fileManager.setAttributes(
-                [.protectionKey: FileProtectionType.complete],
+                [.protectionKey: Self.fileProtection],
                 ofItemAtPath: stagedURL.path
             )
             var values = URLResourceValues()
@@ -129,10 +131,10 @@ final class ProtectedFileSavedPlacesStore: SavedPlacesStore {
             try fileManager.createDirectory(
                 at: directoryURL,
                 withIntermediateDirectories: true,
-                attributes: [.protectionKey: FileProtectionType.complete]
+                attributes: [.protectionKey: Self.fileProtection]
             )
             try fileManager.setAttributes(
-                [.protectionKey: FileProtectionType.complete],
+                [.protectionKey: Self.fileProtection],
                 ofItemAtPath: directoryURL.path
             )
             var values = URLResourceValues()

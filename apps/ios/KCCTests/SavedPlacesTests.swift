@@ -197,7 +197,13 @@ final class SavedPlacesTests: XCTestCase {
 
         let fileURL = try XCTUnwrap(store.storageURL)
         let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
-        XCTAssertEqual(attributes[.protectionKey] as? FileProtectionType, .complete)
+        XCTAssertEqual(ProtectedFileSavedPlacesStore.fileProtection, .complete)
+        // CoreSimulator may omit NSFileProtectionKey even when the production
+        // write requests it. When the platform reports the attribute, verify
+        // it matches the same value used by the store.
+        if let reportedProtection = attributes[.protectionKey] as? FileProtectionType {
+            XCTAssertEqual(reportedProtection, .complete)
+        }
         XCTAssertEqual(
             try fileURL.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup,
             true
@@ -221,6 +227,10 @@ final class SavedPlacesTests: XCTestCase {
     }
 
     func testFailedMigrationKeepsLegacyPayloadForRetry() throws {
+        try FileManager.default.createDirectory(
+            at: storageDirectory,
+            withIntermediateDirectories: true
+        )
         let blockedParent = storageDirectory.appendingPathComponent("not-a-directory")
         try Data("blocked".utf8).write(to: blockedParent)
         let unavailableDirectory = blockedParent.appendingPathComponent("SavedPlaces")
