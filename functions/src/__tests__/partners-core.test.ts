@@ -77,6 +77,7 @@ describe('partners-core inputs', () => {
 
   it('suppresses unsafe legacy websites at approval and activation boundaries', () => {
     expect(normalizePartnerWebsiteUrl('http://legacy.example.com')).toBeNull();
+    expect(normalizePartnerWebsiteUrl('https://user:password@legacy.example.com')).toBeNull();
     expect(normalizePartnerWebsiteUrl('legacy.example.com')).toBe('https://legacy.example.com');
     expect(normalizePartnerWebsiteUrl('https://legacy.example.com')).toBe(
       'https://legacy.example.com',

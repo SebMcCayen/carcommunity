@@ -52,6 +52,18 @@ describe('parseSubmitApplicationInput websiteUrl normalization', () => {
     );
   });
 
+  it('rejects credential-bearing HTTPS application URLs', () => {
+    expect(
+      parseSubmitApplicationInput({
+        ...base,
+        websiteUrl: 'https://user:password@example.com',
+      }).ok,
+    ).toBe(false);
+    expect(
+      parseSubmitApplicationInput({ ...base, websiteUrl: 'https://user@example.com' }).ok,
+    ).toBe(false);
+  });
+
   it('accepts the application when websiteUrl is omitted (optional)', () => {
     const result = parseSubmitApplicationInput({ ...base });
     expect(result.ok).toBe(true);
@@ -104,9 +116,25 @@ describe('partner company website HTTPS boundary', () => {
     );
   });
 
+  it('rejects credential-bearing HTTPS at direct company ingestion', () => {
+    expect(
+      parseCreateCompanyInput({
+        ...company,
+        website: 'https://user:password@example.com',
+      }).ok,
+    ).toBe(false);
+    expect(
+      parseUpdateCompanyInput({
+        companyId: 'c1',
+        website: 'https://user@example.com',
+      }).ok,
+    ).toBe(false);
+  });
+
   it('suppresses unsafe legacy values and upgrades legacy scheme-less domains', () => {
     expect(normalizePartnerWebsiteUrl('http://example.com')).toBeNull();
     expect(normalizePartnerWebsiteUrl('javascript:alert(1)')).toBeNull();
+    expect(normalizePartnerWebsiteUrl('https://user:password@example.com')).toBeNull();
     expect(normalizePartnerWebsiteUrl('legacy.example.com')).toBe('https://legacy.example.com');
     expect(normalizePartnerWebsiteUrl('https://example.com')).toBe('https://example.com');
   });

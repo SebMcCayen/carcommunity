@@ -78,6 +78,10 @@ final class PartnerApplicationTests: XCTestCase {
         XCTAssertEqual(PartnerApplications.validate(form), .websiteURL)
         form.websiteURL = "ftp://example.com"
         XCTAssertEqual(PartnerApplications.validate(form), .websiteURL)
+        form.websiteURL = "https://user:password@example.com"
+        XCTAssertEqual(PartnerApplications.validate(form), .websiteURL)
+        form.websiteURL = "https://user@example.com"
+        XCTAssertEqual(PartnerApplications.validate(form), .websiteURL)
         XCTAssertNil(PartnerApplications.normalizedWebsiteURL("  "))
     }
 

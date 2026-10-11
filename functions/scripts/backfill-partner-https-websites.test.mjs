@@ -8,6 +8,8 @@ describe('partner HTTPS website backfill', () => {
     assert.equal(normalizeHttpsWebsite('HTTP://example.com'), null);
     assert.equal(normalizeHttpsWebsite('javascript:alert(1)'), null);
     assert.equal(normalizeHttpsWebsite('not a url'), null);
+    assert.equal(normalizeHttpsWebsite('https://user:password@example.com'), null);
+    assert.equal(normalizeHttpsWebsite('https://user@example.com'), null);
   });
 
   it('preserves HTTPS and upgrades scheme-less legacy domains', () => {

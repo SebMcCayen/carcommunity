@@ -117,7 +117,9 @@ enum PartnerApplications {
               let scheme = components.scheme?.lowercased(),
               scheme == "https",
               let host = components.host,
-              !host.isEmpty
+              !host.isEmpty,
+              components.user == nil,
+              components.password == nil
         else { return false }
         return true
     }

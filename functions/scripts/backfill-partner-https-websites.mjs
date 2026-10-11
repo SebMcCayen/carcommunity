@@ -31,7 +31,12 @@ export function normalizeHttpsWebsite(value) {
   if (candidate.length > MAX_PARTNER_WEBSITE_URL_LENGTH) return null;
   try {
     const url = new URL(candidate);
-    return url.protocol === 'https:' && url.hostname !== '' ? candidate : null;
+    return url.protocol === 'https:' &&
+      url.hostname !== '' &&
+      url.username === '' &&
+      url.password === ''
+      ? candidate
+      : null;
   } catch {
     return null;
   }

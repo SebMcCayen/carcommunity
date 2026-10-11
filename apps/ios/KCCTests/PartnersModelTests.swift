@@ -59,6 +59,7 @@ final class PartnersModelTests: XCTestCase {
         XCTAssertNil(PartnerExternalDestination.website("HTTP://example.com"))
         XCTAssertNil(PartnerExternalDestination.website("example.com"))
         XCTAssertNil(PartnerExternalDestination.website("https://user:pass@example.com/path"))
+        XCTAssertNil(PartnerExternalDestination.website("https://user@example.com/path"))
         XCTAssertEqual(
             PartnerExternalDestination.website("https://example.com/path#fragment")?.absoluteString,
             "https://example.com/path"
