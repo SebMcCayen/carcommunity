@@ -1940,7 +1940,10 @@
     "deleteTitle": "Ta bort sparad plats?",
     "deleteMessage": "%1$s tas bort från dina sparade platser. Dina senaste sökningar påverkas inte.",
     "deleteConfirm": "Ta bort",
-    "deviceLocalNote": "Sparade platser lagras endast på den här enheten och synkas inte till andra enheter."
+    "deviceLocalNote": "Sparade platser lagras endast på den här enheten och synkas inte till andra enheter.",
+    "persistenceErrorTitle": "Det gick inte att spara ändringarna",
+    "persistenceErrorBody": "Dina sparade platser ändrades inte. Försök igen.",
+    "retry": "Försök igen"
   },
   "shareLocation": {
     "title": "Dela plats",

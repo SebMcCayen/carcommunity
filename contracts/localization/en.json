@@ -1940,7 +1940,10 @@
     "deleteTitle": "Delete saved place?",
     "deleteMessage": "%1$s will be removed from your saved places. Your recent searches aren't affected.",
     "deleteConfirm": "Delete",
-    "deviceLocalNote": "Saved places are stored on this device only and don't sync to other devices."
+    "deviceLocalNote": "Saved places are stored on this device only and don't sync to other devices.",
+    "persistenceErrorTitle": "Couldn't save changes",
+    "persistenceErrorBody": "Your saved places weren't changed. Try again.",
+    "retry": "Try again"
   },
   "shareLocation": {
     "title": "Share location",

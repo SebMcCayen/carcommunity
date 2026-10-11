@@ -185,6 +185,22 @@ final class SavedPlacesTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(store.storageURL).path))
     }
 
+    func testCorruptProtectedPayloadKeepsAndRecoversLegacyPayload() throws {
+        let store = ProtectedFileSavedPlacesStore(
+            uid: "member",
+            defaults: defaults,
+            storageDirectory: storageDirectory
+        )
+        let home = try XCTUnwrap(makeSaved(.home, id: "home-address", latitude: 57))
+        defaults.set(try JSONEncoder().encode([home]), forKey: legacyKey(uid: "member"))
+        try FileManager.default.createDirectory(at: storageDirectory, withIntermediateDirectories: true)
+        try Data("not-json".utf8).write(to: try XCTUnwrap(store.storageURL))
+
+        XCTAssertEqual(store.load(), [home])
+        XCTAssertNil(defaults.object(forKey: legacyKey(uid: "member")))
+        XCTAssertEqual(store.load(), [home])
+    }
+
     func testStoreUsesCompleteProtectionAndExcludesFileFromBackup() throws {
         let store = ProtectedFileSavedPlacesStore(
             uid: "member",
@@ -245,6 +261,47 @@ final class SavedPlacesTests: XCTestCase {
         XCTAssertEqual(store.load(), [home])
         XCTAssertNotNil(defaults.data(forKey: legacyKey(uid: "member")))
         XCTAssertFalse(store.save([home]))
+    }
+
+    func testFailedSaveKeepsVisiblePlacesAndRetryCommitsPendingChange() throws {
+        let home = try XCTUnwrap(makeSaved(.home, id: "home", latitude: 57))
+        let workSuggestion = suggestion(id: "work", latitude: 58)
+        let store = FlakySavedPlacesStore(stored: [home], shouldFail: true)
+        let coordinator = SavedPlacesCoordinator(
+            store: store,
+            searchClient: UnavailableAddressSearchClient()
+        )
+
+        coordinator.save(kind: .work, place: workSuggestion, label: "Work")
+
+        XCTAssertEqual(coordinator.places, [home])
+        XCTAssertTrue(coordinator.persistenceFailed)
+        XCTAssertEqual(store.stored, [home])
+
+        store.shouldFail = false
+        coordinator.retryPersistence()
+
+        XCTAssertEqual(coordinator.places.map(\.id), ["home", "work"])
+        XCTAssertFalse(coordinator.persistenceFailed)
+        XCTAssertEqual(store.stored, coordinator.places)
+    }
+
+    func testFailedRemoveCanBeDismissedWithoutChangingVisiblePlaces() throws {
+        let home = try XCTUnwrap(makeSaved(.home, id: "home", latitude: 57))
+        let store = FlakySavedPlacesStore(stored: [home], shouldFail: true)
+        let coordinator = SavedPlacesCoordinator(
+            store: store,
+            searchClient: UnavailableAddressSearchClient()
+        )
+
+        coordinator.remove(id: home.id)
+        XCTAssertEqual(coordinator.places, [home])
+        XCTAssertTrue(coordinator.persistenceFailed)
+
+        coordinator.dismissPersistenceFailure()
+        XCTAssertFalse(coordinator.persistenceFailed)
+        XCTAssertEqual(coordinator.places, [home])
+        XCTAssertEqual(store.stored, [home])
     }
 
     func testSearchBoxRequestIsBoundedAndUsesValidProximity() throws {
@@ -648,6 +705,31 @@ private struct ClosureAddressSearchClient: AddressSearchClient {
 
     func search(query: String, proximity: MapPoint?) async throws -> [PlaceSuggestion] {
         try await handler(query, proximity)
+    }
+}
+
+@MainActor
+private final class FlakySavedPlacesStore: SavedPlacesStore {
+    var stored: [SavedPlace]
+    var shouldFail: Bool
+
+    init(stored: [SavedPlace], shouldFail: Bool) {
+        self.stored = stored
+        self.shouldFail = shouldFail
+    }
+
+    func load() -> [SavedPlace] { stored }
+
+    func save(_ places: [SavedPlace]) -> Bool {
+        guard !shouldFail else { return false }
+        stored = places
+        return true
+    }
+
+    func clear() -> Bool {
+        guard !shouldFail else { return false }
+        stored = []
+        return true
     }
 }
 

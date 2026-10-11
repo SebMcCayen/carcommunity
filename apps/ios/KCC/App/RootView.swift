@@ -97,8 +97,7 @@ struct RootView: View {
     }
 
     private func endSession(uid: String) -> Bool {
-        guard ProtectedFileSavedPlacesStore(uid: uid).clear() else { return false }
-        return session.signOut(ifSignedInAs: uid)
+        session.signOut(ifSignedInAs: uid)
     }
 }
 

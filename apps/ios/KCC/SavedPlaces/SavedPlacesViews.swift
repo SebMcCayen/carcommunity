@@ -60,6 +60,7 @@ struct AddressSearchOverlay: View {
             )
             .presentationDetents([.medium])
         }
+        .savedPlacesPersistenceAlert(coordinator: coordinator)
     }
 
     @ViewBuilder
@@ -230,6 +231,7 @@ struct SavedPlacesScreen: View {
                 ))
             }
         }
+        .savedPlacesPersistenceAlert(coordinator: coordinator)
     }
 
     private func savedRow(_ saved: SavedPlace) -> some View {
@@ -267,6 +269,24 @@ struct SavedPlacesScreen: View {
             .accessibilityLabel(String.localizedStringWithFormat(
                 String(localized: "savedPlaces.moreActions"), saved.displayLabel
             ))
+        }
+    }
+}
+
+private extension View {
+    func savedPlacesPersistenceAlert(
+        coordinator: SavedPlacesCoordinator
+    ) -> some View {
+        alert("savedPlaces.persistenceErrorTitle", isPresented: Binding(
+            get: { coordinator.persistenceFailed },
+            set: { if !$0 { coordinator.dismissPersistenceFailure() } }
+        )) {
+            Button("savedPlaces.retry") { coordinator.retryPersistence() }
+            Button("savedPlaces.cancel", role: .cancel) {
+                coordinator.dismissPersistenceFailure()
+            }
+        } message: {
+            Text("savedPlaces.persistenceErrorBody")
         }
     }
 }

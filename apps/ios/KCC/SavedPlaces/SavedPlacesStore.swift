@@ -49,15 +49,19 @@ final class ProtectedFileSavedPlacesStore: SavedPlacesStore {
 
     func load() -> [SavedPlace] {
         if let storageURL, fileManager.fileExists(atPath: storageURL.path) {
-            guard let data = try? Data(contentsOf: storageURL) else { return [] }
-            let decoded = decode(data)
-            // Complete a migration interrupted after its atomic file write.
-            defaults.removeObject(forKey: legacyKey)
-            return decoded
+            if let data = try? Data(contentsOf: storageURL),
+               let decoded = decode(data) {
+                // Complete a migration interrupted after its atomic file
+                // write only after the protected payload is verified.
+                defaults.removeObject(forKey: legacyKey)
+                return decoded
+            }
+            // A legacy payload may still be the only readable copy when a
+            // protected write was interrupted or later became corrupt.
         }
 
         guard let legacyData = defaults.data(forKey: legacyKey) else { return [] }
-        let migrated = decode(legacyData)
+        guard let migrated = decode(legacyData) else { return [] }
         guard !migrated.isEmpty else {
             defaults.removeObject(forKey: legacyKey)
             return []
@@ -147,11 +151,11 @@ final class ProtectedFileSavedPlacesStore: SavedPlacesStore {
         }
     }
 
-    private func decode(_ data: Data) -> [SavedPlace] {
+    private func decode(_ data: Data) -> [SavedPlace]? {
         guard let decoded = try? JSONDecoder().decode(
             [LossyDecodable<PersistedSavedPlace>].self,
             from: data
-        ) else { return [] }
+        ) else { return nil }
         return SavedPlacesPolicy.normalize(decoded.compactMap { $0.value?.savedPlace })
     }
 }

@@ -1137,7 +1137,6 @@ struct ShellView: View {
 
     private func endDeletionSession() -> Bool {
         guard let authenticatedUid else { return true }
-        guard ProtectedFileSavedPlacesStore(uid: authenticatedUid).clear() else { return false }
         return session.signOut(ifSignedInAs: authenticatedUid)
     }
 
