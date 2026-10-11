@@ -29,7 +29,7 @@ enum EventsListUiState: Equatable, Sendable {
 @Observable
 final class EventsCoordinator {
     private let repository: EventsRepository
-    private let eventChatRepository: EventChatRepository?
+    private var eventChatRepository: EventChatRepository?
     private weak var locationProvider: (any LocationProvider)?
     private let subscriptionRepository: SubscriptionStateRepository?
     private let uid: String?
@@ -113,6 +113,13 @@ final class EventsCoordinator {
             locationProvider: locationProvider,
             subscriptionRepository: subscriptionRepository
         )
+    }
+
+    /// Applies a live event-chat gate change without discarding the events
+    /// list subscription. Future detail routes receive the newly composed
+    /// repository; the shell resets an already-open detail NavigationStack.
+    func updateEventChatRepository(_ repository: EventChatRepository?) {
+        eventChatRepository = repository
     }
 
     private func subscribeToTierIfNeeded() {

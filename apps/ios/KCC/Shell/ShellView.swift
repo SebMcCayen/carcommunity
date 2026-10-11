@@ -583,7 +583,7 @@ struct ShellView: View {
                     }
                 }
                 .task(id: incidentMapLifecycleKey) {
-                    guard let incidentMapCoordinator else { return }
+                    guard foregroundMapWorkActive, let incidentMapCoordinator else { return }
                     incidentMapCoordinator.start(
                         surface: mapSurface,
                         provider: locationProvider
@@ -592,7 +592,8 @@ struct ShellView: View {
                     incidentMapCoordinator.stop()
                 }
                 .task(id: crownMapLifecycleKey) {
-                    guard let coordinator = crownHuntComposition?.mapCoordinator else { return }
+                    guard foregroundMapWorkActive,
+                          let coordinator = crownHuntComposition?.mapCoordinator else { return }
                     let perkCoordinator = crownHuntComposition?.perkMapCoordinator
                     coordinator.start()
                     perkCoordinator?.start()
@@ -604,15 +605,16 @@ struct ShellView: View {
                     coordinator.stop()
                     perkCoordinator?.stop()
                 }
-                .task(id: mapSurface.cameraSnapshot) {
-                    guard let incidentMapCoordinator else { return }
+                .task(id: incidentMapRefreshKey) {
+                    guard foregroundMapWorkActive, let incidentMapCoordinator else { return }
                     // Camera snapshots update while panning. Cancellation turns
                     // this into a trailing-edge debounce, avoiding callable spam.
                     do { try await Task.sleep(for: .milliseconds(700)) } catch { return }
                     await incidentMapCoordinator.refresh(surface: mapSurface)
                 }
                 .task(id: crownMapRefreshKey) {
-                    guard let coordinator = crownHuntComposition?.mapCoordinator else { return }
+                    guard foregroundMapWorkActive,
+                          let coordinator = crownHuntComposition?.mapCoordinator else { return }
                     do { try await Task.sleep(for: .milliseconds(700)) } catch { return }
                     await coordinator.refresh(
                         camera: mapSurface.cameraSnapshot,
@@ -971,6 +973,10 @@ struct ShellView: View {
             routeNavigation {
                 WhatsNewScreen(entries: whatsNewCoordinator.entries)
             }
+        case .subscription:
+            routeNavigation {
+                MembershipScreen(access: access)
+            }
         case .savedPlaces:
             if let savedPlacesCoordinator {
                 routeNavigation {
@@ -1119,6 +1125,7 @@ struct ShellView: View {
 
     private var settingsActions: SettingsActions {
         SettingsActions(
+            onManageSubscription: { routes = routes.opening(.subscription) },
             onSavedPlaces: savedPlacesCoordinator != nil
                 ? { routes = routes.opening(.savedPlaces) } : nil,
             onNotificationSettings: notificationSettingsAvailable
@@ -1888,19 +1895,12 @@ struct ShellView: View {
                 ? FirebaseConvoyChatRepository.createIfAvailable() : nil,
             chatRepliesEnabled: featureFlags.isEnabled(.chatReplies)
         )
-        // Event detail/chat lives under its own NavigationStack. Rebuild the
-        // list composition as well; the view identity key above pops any
-        // already-open detail/chat destination before the old repository can
-        // be used again.
-        eventsCoordinator = FirebaseEventsRepository.createIfAvailable().map {
-            EventsCoordinator(
-                repository: $0,
-                eventChatRepository: eventChatEnabled
-                    ? FirebaseEventChatRepository.createIfAvailable() : nil,
-                locationProvider: locationProvider,
-                subscriptionRepository: FirebaseSubscriptionStateRepository.createIfAvailable()
-            )
-        }
+        // Keep the loaded events list and its listener, but replace the
+        // repository captured by future detail routes. The view identity key
+        // above resets an already-open detail/chat destination.
+        eventsCoordinator?.updateEventChatRepository(
+            eventChatEnabled ? FirebaseEventChatRepository.createIfAvailable() : nil
+        )
     }
 
     private var driveSummaryIsPresented: Binding<Bool> {
@@ -2016,14 +2016,22 @@ struct ShellView: View {
     }
 
     private var incidentMapLifecycleKey: String {
-        "\(signedInUid ?? "unavailable")|\(incidentMapCoordinator == nil ? "off" : "on")"
+        "\(signedInUid ?? "unavailable")|\(incidentMapCoordinator == nil ? "off" : "on")|\(foregroundMapWorkActive)"
     }
 
     private var crownMapLifecycleKey: String {
         [
             signedInUid ?? "unavailable",
             crownHuntComposition?.mapCoordinator?.isAvailable == true ? "on" : "off",
-            selectedTab == .map ? "visible" : "covered"
+            foregroundMapWorkActive ? "active" : "inactive"
+        ].joined(separator: "|")
+    }
+
+    private var incidentMapRefreshKey: String {
+        let camera = mapSurface.cameraSnapshot
+        return [
+            incidentMapLifecycleKey,
+            camera.map { "\($0.latitude)|\($0.longitude)|\($0.zoom)" } ?? "no-camera"
         ].joined(separator: "|")
     }
 
@@ -2107,7 +2115,14 @@ struct ShellView: View {
     }
 
     private var chatFeatureWiringKey: String {
-        "\(featureFlags.isEnabled(.chat))|\(featureFlags.isEnabled(.chatReplies))"
+        "\(featureFlags.isEnabled(.chat))|\(featureFlags.isEnabled(.chatReplies))|\(access.isRestricted)"
+    }
+
+    private var foregroundMapWorkActive: Bool {
+        ShellMapHost.foregroundMapWorkActive(
+            cover: mapCover,
+            sceneIsActive: scenePhase == .active
+        )
     }
 
     private var eventChatFeatureWiringKey: String {

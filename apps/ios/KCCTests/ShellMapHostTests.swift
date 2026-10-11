@@ -27,6 +27,16 @@ final class ShellMapHostTests: XCTestCase {
         XCTAssertFalse(ShellMapHost.surfaceActive(cover: .opaque))
     }
 
+    // MARK: - foreground-only location and polling work
+
+    func testForegroundMapWorkRunsForVisibleCoversOnlyWhileSceneIsActive() {
+        XCTAssertTrue(ShellMapHost.foregroundMapWorkActive(cover: .none, sceneIsActive: true))
+        XCTAssertTrue(ShellMapHost.foregroundMapWorkActive(cover: .transparent, sceneIsActive: true))
+        XCTAssertFalse(ShellMapHost.foregroundMapWorkActive(cover: .opaque, sceneIsActive: true))
+        XCTAssertFalse(ShellMapHost.foregroundMapWorkActive(cover: .none, sceneIsActive: false))
+        XCTAssertFalse(ShellMapHost.foregroundMapWorkActive(cover: .transparent, sceneIsActive: false))
+    }
+
     // MARK: - decision table, composed with mapCover (the actual wiring)
 
     private func active(
