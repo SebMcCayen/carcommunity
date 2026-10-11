@@ -168,6 +168,37 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
         XCTAssertEqual(repository.uploads[0].1, repository.uploads[1].1)
     }
 
+    func testSignOutRetainsPendingUploadButAccountDeletionPurgesIt() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let journal = FileDriveRecordingJournal(
+            fileURL: directory.appendingPathComponent("active.routejournal")
+        )
+        let spool = journal.routeUploadSpool
+        let upload = PendingDriveRouteUpload(
+            path: "rideRoutes/u/ride-1/route.bin",
+            points: [RecordedDrivePoint(latitude: 57, longitude: 12, timestampMilliseconds: 123)]
+        )
+        XCTAssertTrue(spool.store(path: upload.path, points: upload.points))
+        let coordinator = DriveRecordingCoordinator(
+            repository: nil,
+            provider: StubLocationProvider(authorization: .denied),
+            journal: journal,
+            uploadSpool: spool
+        )
+
+        coordinator.reset()
+        XCTAssertEqual(spool.pendingUploads(), [upload])
+
+        journal.begin(context: context(), startedAt: Date(timeIntervalSince1970: 100))
+        journal.append(upload.points[0])
+        coordinator.purgeForAccountDeletion()
+
+        XCTAssertTrue(spool.pendingUploads().isEmpty)
+        XCTAssertNil(journal.restore(sessionId: nil))
+    }
+
     func testTransientAutoSaveRetriesThenFailureRetainsIdempotentDraft() async {
         let start = Date(timeIntervalSince1970: 1_700_000_000)
         let clock = Clock(start)

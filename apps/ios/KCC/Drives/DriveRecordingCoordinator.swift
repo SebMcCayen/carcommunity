@@ -221,6 +221,25 @@ final class DriveRecordingCoordinator {
         state = .idle
     }
 
+    /// Account deletion is the sole lifecycle event that destroys routes
+    /// already attached to saved summaries. Normal sign-out deliberately keeps
+    /// the owner-scoped spool so reauthentication can resume failed uploads.
+    func purgeForAccountDeletion() {
+        fixesTask?.cancel()
+        expiryTask?.cancel()
+        saveTask?.cancel()
+        for task in uploadTasks.values { task.cancel() }
+        fixesTask = nil
+        expiryTask = nil
+        saveTask = nil
+        uploadTasks.removeAll()
+        desiredContext = nil
+        journalBackedUpload = nil
+        releaseRecording(clearJournal: true)
+        uploadSpool?.removeAll()
+        state = .idle
+    }
+
     /// Retries owner-scoped routes after launch, foregrounding, or another
     /// session event. Entries remain on disk until Storage confirms success.
     func retryPendingRouteUploads() {

@@ -13,6 +13,7 @@ protocol DriveRouteUploadSpool: AnyObject {
     func store(path: String, points: [RecordedDrivePoint]) -> Bool
     func pendingUploads() -> [PendingDriveRouteUpload]
     func remove(path: String)
+    func removeAll()
 }
 
 /// Owner-scoped, file-protected route upload spool. Each Storage path owns one
@@ -80,6 +81,10 @@ final class FileDriveRouteUploadSpool: DriveRouteUploadSpool {
         if (try? fileManager.contentsOfDirectory(atPath: directoryURL.path).isEmpty) == true {
             try? fileManager.removeItem(at: directoryURL)
         }
+    }
+
+    func removeAll() {
+        try? fileManager.removeItem(at: directoryURL)
     }
 
     private func fileURL(for path: String) -> URL {

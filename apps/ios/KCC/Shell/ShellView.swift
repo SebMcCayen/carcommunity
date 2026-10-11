@@ -986,8 +986,8 @@ struct ShellView: View {
         case .accountDeletion:
             AccountDeletionScreen(
                 coordinator: accountDeletionCoordinator,
-                onDeleted: { endDeletionSession() },
-                onReauthenticate: { endDeletionSession() },
+                onDeleted: { endDeletionSession(purgeRoutes: true) },
+                onReauthenticate: { endDeletionSession(purgeRoutes: false) },
                 onBack: { routes = routes.poppingOne() }
             )
         case .partnerStats:
@@ -1136,8 +1136,13 @@ struct ShellView: View {
         )
     }
 
-    private func endDeletionSession() -> Bool {
+    private func endDeletionSession(purgeRoutes: Bool = false) -> Bool {
         guard let authenticatedUid else { return true }
+        if purgeRoutes {
+            driveRecordingCoordinator?.purgeForAccountDeletion()
+            // Also cover deletion before feature wiring creates the coordinator.
+            FileDriveRecordingJournal.purgeOwnerData(ownerId: authenticatedUid)
+        }
         return session.signOut(ifSignedInAs: authenticatedUid)
     }
 

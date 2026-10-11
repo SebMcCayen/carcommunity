@@ -43,6 +43,15 @@ final class FileDriveRecordingJournal: DriveRecordingJournal {
         self.init(fileManager: fileManager, fileName: "active-\(key)-v1.routejournal")
     }
 
+    /// Removes every locally retained exact route for an account after the
+    /// backend has accepted its irreversible deletion request.
+    static func purgeOwnerData(ownerId: String, fileManager: FileManager = .default) {
+        guard let journal = FileDriveRecordingJournal(ownerId: ownerId, fileManager: fileManager)
+        else { return }
+        journal.clear()
+        journal.routeUploadSpool.removeAll()
+    }
+
     private convenience init?(fileManager: FileManager, fileName: String) {
         guard let root = try? fileManager.url(
             for: .applicationSupportDirectory,

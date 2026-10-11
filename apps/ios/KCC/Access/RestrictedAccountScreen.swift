@@ -5,7 +5,8 @@ struct RestrictedAccountScreen: View {
     let access: AccountAccess?
     @Bindable var privacyCoordinator: LiveLocationCoordinator
     let onSignOut: () -> Bool
-    let onDeletionSessionEnd: () -> Bool
+    let onDeleted: () -> Bool
+    let onReauthenticate: () -> Bool
     @State private var deletionCoordinator = AccountDeletionCoordinator(
         repository: FirebaseAccountDeletionRepository.createIfAvailable()
     )
@@ -79,8 +80,8 @@ struct RestrictedAccountScreen: View {
         .fullScreenCover(isPresented: $showsAccountDeletion) {
             AccountDeletionScreen(
                 coordinator: deletionCoordinator,
-                onDeleted: onDeletionSessionEnd,
-                onReauthenticate: onDeletionSessionEnd,
+                onDeleted: onDeleted,
+                onReauthenticate: onReauthenticate,
                 onBack: { showsAccountDeletion = false }
             )
         }
