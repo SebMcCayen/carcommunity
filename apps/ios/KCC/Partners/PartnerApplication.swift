@@ -97,7 +97,10 @@ enum PartnerApplications {
     static func normalizedWebsiteURL(_ raw: String) -> String? {
         let value = raw.partnerTrimmed
         guard !value.isEmpty else { return nil }
-        if value.lowercased().hasPrefix("http://") || value.lowercased().hasPrefix("https://") {
+        if value.range(
+            of: #"^[A-Za-z][A-Za-z0-9+.-]*:"#,
+            options: .regularExpression
+        ) != nil {
             return value
         }
         return "https://\(value)"
@@ -112,7 +115,7 @@ enum PartnerApplications {
     private static func isValidWebsiteURL(_ value: String) -> Bool {
         guard let components = URLComponents(string: value),
               let scheme = components.scheme?.lowercased(),
-              scheme == "http" || scheme == "https",
+              scheme == "https",
               let host = components.host,
               !host.isEmpty
         else { return false }

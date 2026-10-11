@@ -68,11 +68,16 @@ final class PartnerApplicationTests: XCTestCase {
         XCTAssertEqual(input?.payload["category"] as? String, "workshop")
     }
 
-    func testExistingHttpSchemeIsPreservedCaseInsensitively() {
+    func testExplicitSchemesArePreservedForValidationAndOnlyHTTPSIsAccepted() {
         XCTAssertEqual(
             PartnerApplications.normalizedWebsiteURL("HTTPS://example.com"),
             "HTTPS://example.com"
         )
+        var form = validForm()
+        form.websiteURL = "HTTP://example.com"
+        XCTAssertEqual(PartnerApplications.validate(form), .websiteURL)
+        form.websiteURL = "ftp://example.com"
+        XCTAssertEqual(PartnerApplications.validate(form), .websiteURL)
         XCTAssertNil(PartnerApplications.normalizedWebsiteURL("  "))
     }
 
