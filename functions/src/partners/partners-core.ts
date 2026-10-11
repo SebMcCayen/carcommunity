@@ -114,7 +114,7 @@ const partnerWebsiteUrlSchema = z.preprocess(
     .refine((value) => {
       try {
         const url = new URL(value);
-        return url.protocol === 'https:' && url.hostname.includes('.');
+        return url.protocol === 'https:' && url.hostname !== '';
       } catch {
         return false;
       }

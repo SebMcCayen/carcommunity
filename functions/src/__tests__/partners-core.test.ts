@@ -38,13 +38,14 @@ describe('partners-core inputs', () => {
     expect(parseCreateCompanyInput(valid).ok).toBe(true);
     expect(parseCreateCompanyInput({ ...valid, name: 'x'.repeat(151) }).ok).toBe(false);
     expect(parseCreateCompanyInput({ ...valid, category: 'casino' }).ok).toBe(false);
-    expect(parseCreateCompanyInput({ ...valid, website: 'not-a-url' }).ok).toBe(false);
+    expect(parseCreateCompanyInput({ ...valid, website: 'not a url' }).ok).toBe(false);
     expect(parseCreateCompanyInput({ ...valid, website: 'http://example.com' }).ok).toBe(false);
     const normalizedWebsite = parseCreateCompanyInput({ ...valid, website: 'example.com' });
     expect(normalizedWebsite.ok).toBe(true);
     if (normalizedWebsite.ok) {
       expect(normalizedWebsite.input.website).toBe('https://example.com');
     }
+    expect(parseCreateCompanyInput({ ...valid, website: 'https://[2001:db8::1]/' }).ok).toBe(true);
     expect(parseUpdateCompanyInput({ companyId: 'c1', website: 'http://example.com' }).ok).toBe(
       false,
     );

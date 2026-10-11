@@ -30,6 +30,14 @@ describe('parseSubmitApplicationInput websiteUrl normalization', () => {
     }
   });
 
+  it('accepts valid HTTPS IPv6 and single-label hosts consistently with iOS', () => {
+    for (const websiteUrl of ['https://[2001:db8::1]/', 'https://intranet/']) {
+      const result = parseSubmitApplicationInput({ ...base, websiteUrl });
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.input.websiteUrl).toBe(websiteUrl);
+    }
+  });
+
   it('rejects an explicit cleartext URL (scheme match is case-insensitive)', () => {
     const result = parseSubmitApplicationInput({ ...base, websiteUrl: 'HTTP://example.com' });
     expect(result.ok).toBe(false);
