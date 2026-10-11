@@ -1469,6 +1469,7 @@
     <string name="notifications_title">Notifications</string>
     <string name="notifications_empty">No notifications yet.</string>
     <string name="notifications_loadError">Could not load notifications. Try again.</string>
+    <string name="notifications_markReadError">Could not update notification read status. Try again.</string>
     <string name="notifications_retry">Try again</string>
     <string name="notifications_markAllRead">Mark all as read</string>
     <string name="notifications_deleteAll">Delete all notifications</string>
@@ -1518,6 +1519,7 @@
     <string name="notifications_settingsPush">Push</string>
     <string name="notifications_settingsEssential">Always on</string>
     <string name="notifications_settingsSaving">Saving...</string>
+    <string name="notifications_settingsLoadError">Could not load notification settings. Try again.</string>
     <string name="notifications_permissionRationale">Receive reminders about events and important messages.</string>
     <string name="notifications_permissionOptional">Notifications are optional.</string>
     <string name="notifications_permissionChangeHint">You can change your preferences later under Settings.</string>

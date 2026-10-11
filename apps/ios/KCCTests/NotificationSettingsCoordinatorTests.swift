@@ -108,6 +108,36 @@ final class NotificationSettingsCoordinatorTests: XCTestCase {
         XCTAssertTrue(prefs.effective(.convoyChat).inApp)
     }
 
+    @MainActor
+    func testListenerFailureDoesNotExposeWritableDefaults() async {
+        let repository = FakeSettingsRepository()
+        repository.script([.failed(code: "UNAVAILABLE")])
+        let coordinator = NotificationSettingsCoordinator(repository: repository, uid: "me-uid")
+
+        coordinator.start()
+        await waitFor(coordinator) { $0.state == .failed(code: "UNAVAILABLE") }
+        await coordinator.toggle(.directMessage, channel: .push, enabled: false)
+
+        XCTAssertTrue(repository.saved.isEmpty)
+        XCTAssertEqual(coordinator.saveStatus, .idle)
+    }
+
+    @MainActor
+    func testSuccessfulSnapshotAfterFailureRestoresWritableState() async {
+        let repository = FakeSettingsRepository()
+        repository.script([.failed(code: "UNAVAILABLE")])
+        let coordinator = NotificationSettingsCoordinator(repository: repository, uid: "me-uid")
+
+        coordinator.start()
+        await waitFor(coordinator) { if case .failed = $0.state { return true }; return false }
+        repository.emit(.loaded(.allEnabled))
+        await waitFor(coordinator) { $0.state == .loaded(.allEnabled) }
+
+        await coordinator.toggle(.directMessage, channel: .push, enabled: false)
+        XCTAssertEqual(repository.saved.count, 1)
+        XCTAssertEqual(coordinator.saveStatus, .saved)
+    }
+
     // MARK: - toggle → save
 
     @MainActor

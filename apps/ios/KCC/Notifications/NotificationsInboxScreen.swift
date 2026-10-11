@@ -28,6 +28,29 @@ struct NotificationsInboxScreen: View {
         titledContent
             .task { coordinator?.start() }
             .toolbar { toolbarContent }
+            .alert(
+                Text("notifications.markReadError"),
+                isPresented: markReadFailurePresented
+            ) {
+                Button("notifications.errorDismiss") {
+                    coordinator?.resetMarkReadStatus()
+                }
+            }
+    }
+
+    private var markReadFailurePresented: Binding<Bool> {
+        Binding(
+            get: {
+                guard let coordinator else { return false }
+                if case .failed = coordinator.markReadStatus { return true }
+                return false
+            },
+            set: { isPresented in
+                if !isPresented {
+                    coordinator?.resetMarkReadStatus()
+                }
+            }
+        )
     }
 
     @ViewBuilder

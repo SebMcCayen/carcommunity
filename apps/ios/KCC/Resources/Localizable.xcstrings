@@ -21234,6 +21234,23 @@
         }
       }
     },
+    "notifications.markReadError": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kunde inte uppdatera notisens lässtatus. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not update notification read status. Try again."
+          }
+        }
+      }
+    },
     "notifications.permissionChangeHint": {
       "extractionState": "manual",
       "localizations": {
@@ -21349,6 +21366,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "In-app"
+          }
+        }
+      }
+    },
+    "notifications.settingsLoadError": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kunde inte hämta notisinställningarna. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not load notification settings. Try again."
           }
         }
       }

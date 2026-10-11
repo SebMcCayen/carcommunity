@@ -1469,6 +1469,7 @@
     <string name="notifications_title">Notiser</string>
     <string name="notifications_empty">Inga notiser ännu.</string>
     <string name="notifications_loadError">Kunde inte hämta notiser. Försök igen.</string>
+    <string name="notifications_markReadError">Kunde inte uppdatera notisens lässtatus. Försök igen.</string>
     <string name="notifications_retry">Försök igen</string>
     <string name="notifications_markAllRead">Markera alla som lästa</string>
     <string name="notifications_deleteAll">Ta bort alla notiser</string>
@@ -1518,6 +1519,7 @@
     <string name="notifications_settingsPush">Push</string>
     <string name="notifications_settingsEssential">Alltid aktivt</string>
     <string name="notifications_settingsSaving">Sparar...</string>
+    <string name="notifications_settingsLoadError">Kunde inte hämta notisinställningarna. Försök igen.</string>
     <string name="notifications_permissionRationale">Få påminnelser om event och viktiga meddelanden.</string>
     <string name="notifications_permissionOptional">Notiser är valfria.</string>
     <string name="notifications_permissionChangeHint">Du kan ändra dina val senare under Inställningar.</string>
