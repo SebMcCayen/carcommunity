@@ -43,6 +43,11 @@ final class ProfileCoordinator {
     nonisolated(unsafe) private var avatarResolution: Task<Void, Never>?
 
     private(set) var state: ProfileUiState
+    /// Sticky only for this coordinator (and therefore this signed-in
+    /// identity/session). A transient listener failure may keep an already
+    /// verified member in the shell, but a fresh session can never inherit
+    /// that decision.
+    private(set) var hasVerifiedOnboarding = false
     /// The resolved avatar download URL, nil while unresolved / when the
     /// profile has no avatar / when resolution failed (placeholder renders).
     private(set) var avatarURL: URL?
@@ -84,6 +89,16 @@ final class ProfileCoordinator {
         }
     }
 
+    /// Replaces a failed listener with a fresh subscription. The verified
+    /// completion bit deliberately remains sticky for this session.
+    func retry() {
+        guard repository != nil, uid != nil else { return }
+        subscription?.cancel()
+        subscription = nil
+        state = .loading
+        start()
+    }
+
     private func apply(_ snapshot: UserProfileSnapshot) {
         switch snapshot {
         case .failed(let code):
@@ -91,6 +106,9 @@ final class ProfileCoordinator {
             // must not blank a picture that was fine a snapshot ago.
             state = .failed(code: code)
         case .loaded(let profile):
+            if profile?.onboardingComplete == true {
+                hasVerifiedOnboarding = true
+            }
             state = .loaded(profile)
             resolveAvatarIfNeeded(profile?.avatarPath)
         }

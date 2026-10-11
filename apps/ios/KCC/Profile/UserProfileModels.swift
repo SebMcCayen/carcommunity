@@ -52,11 +52,16 @@ struct UserProfile: Equatable, Sendable {
     /// the contract marks displayName required, but a partially-provisioned
     /// document must still render.
     static func fromMap(_ map: [String: Any]) -> UserProfile {
-        UserProfile(
+        // Firestore represents an explicitly-null field as NSNull. The
+        // provisioning trigger writes onboardingCompletedAt: null, so field
+        // presence alone is not evidence that onboarding completed.
+        let onboardingCompletedAt = map["onboardingCompletedAt"]
+        return UserProfile(
             displayName: map["displayName"] as? String,
             bio: map["bio"] as? String,
             avatarPath: map["avatarPath"] as? String,
-            onboardingComplete: map["onboardingCompletedAt"] != nil,
+            onboardingComplete: onboardingCompletedAt != nil
+                && !(onboardingCompletedAt is NSNull),
             facebook: map["facebook"] as? String,
             instagram: map["instagram"] as? String,
             youtube: map["youtube"] as? String
