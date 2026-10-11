@@ -48,7 +48,7 @@ struct RootView: View {
             // local Firebase session here as the lifecycle backstop.
             DeletedAccountSessionEndView {
                 FileDriveRecordingJournal.purgeOwnerData(ownerId: uid)
-                session.signOut(ifSignedInAs: uid)
+                return session.signOut(ifSignedInAs: uid)
             }
         case .loaded(let access) where access.suspended:
             RestrictedAccountScreen(
