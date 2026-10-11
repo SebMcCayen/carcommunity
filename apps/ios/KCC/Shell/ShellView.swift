@@ -1137,6 +1137,7 @@ struct ShellView: View {
 
     private func endDeletionSession() -> Bool {
         guard let authenticatedUid else { return true }
+        guard ProtectedFileSavedPlacesStore(uid: authenticatedUid).clear() else { return false }
         return session.signOut(ifSignedInAs: authenticatedUid)
     }
 
@@ -1774,7 +1775,7 @@ struct ShellView: View {
                 searchClient = UnavailableAddressSearchClient()
             }
             savedPlacesCoordinator = SavedPlacesCoordinator(
-                store: UserDefaultsSavedPlacesStore(uid: uid),
+                store: ProtectedFileSavedPlacesStore(uid: uid),
                 searchClient: searchClient
             )
         }
