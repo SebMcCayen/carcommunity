@@ -170,6 +170,7 @@ struct ShellView: View {
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active, signedInUid != nil else { return }
                 appUpdateCoordinator.scheduleRequiredUpdateRecheck()
+                driveRecordingCoordinator?.retryPendingRouteUploads()
             }
             .onChange(of: featureFlags.isEnabled(.liveLocation)) { _, enabled in
                 liveLocationCoordinator?.canShare = enabled && !access.isRestricted
@@ -1839,10 +1840,12 @@ struct ShellView: View {
         // Hide access. Starting this listener does not request GPS permission.
         liveLocation.start()
         liveLocationCoordinator = liveLocation
+        let driveJournal = uid.flatMap { FileDriveRecordingJournal(ownerId: $0) }
         driveRecordingCoordinator = DriveRecordingCoordinator(
             repository: FirebaseDriveRecordingRepository.createIfAvailable(),
             provider: driveLocationProvider,
-            journal: uid.flatMap { FileDriveRecordingJournal(ownerId: $0) }
+            journal: driveJournal,
+            uploadSpool: driveJournal?.routeUploadSpool
         )
         if pendingCreateIntent?.belongs(to: uid) == true {
             pendingCreateIntent = nil

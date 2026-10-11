@@ -8,6 +8,7 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
         var requests: [DriveSaveRequest] = []
         var uploads: [(String, [RecordedDrivePoint])] = []
         var failures: [Error] = []
+        var uploadFailures: [Error] = []
         var delayNextSave = false
         private var delayedSaveContinuation: CheckedContinuation<Void, Never>?
 
@@ -27,6 +28,7 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
 
         func uploadRoute(_ points: [RecordedDrivePoint], to path: String) async throws {
             uploads.append((path, points))
+            if !uploadFailures.isEmpty { throw uploadFailures.removeFirst() }
         }
 
         func resolveDelayedSave() {
@@ -119,6 +121,51 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
         await waitUntil { repository.uploads.count == 1 }
         XCTAssertEqual(repository.uploads.first?.1, repository.requests.first?.points)
         await waitUntil { provider.activeFixStreamCount == 0 }
+    }
+
+    func testFailedRouteUploadPersistsAndRetriesOnNextCoordinatorStartup() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let journal = FileDriveRecordingJournal(
+            fileURL: directory.appendingPathComponent("active.routejournal")
+        )
+        let spool = journal.routeUploadSpool
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let repository = FakeRepository()
+        repository.uploadFailures = [KccFunctionsError(code: .unavailable)]
+        let coordinator = DriveRecordingCoordinator(
+            repository: repository,
+            provider: provider,
+            journal: journal,
+            uploadSpool: spool,
+            now: { start.addingTimeInterval(10) },
+            retryWait: { _ in await Task.yield() }
+        )
+        coordinator.start(context: context())
+        await waitUntil { provider.activeFixStreamCount == 1 }
+        provider.emitFix(fix(start, offset: 1))
+        await waitUntil { coordinator.state.summary?.pointCount == 1 }
+
+        coordinator.endSession(context: context())
+
+        await waitUntil { repository.uploads.count == 1 }
+        XCTAssertNil(journal.restore(sessionId: nil))
+        XCTAssertEqual(spool.pendingUploads().count, 1)
+
+        let retryCoordinator = DriveRecordingCoordinator(
+            repository: repository,
+            provider: StubLocationProvider(authorization: .denied),
+            journal: journal,
+            uploadSpool: spool
+        )
+
+        await waitUntil { repository.uploads.count == 2 }
+        await waitUntil { spool.pendingUploads().isEmpty }
+        withExtendedLifetime(retryCoordinator) {}
+        XCTAssertEqual(repository.uploads[0].0, repository.uploads[1].0)
+        XCTAssertEqual(repository.uploads[0].1, repository.uploads[1].1)
     }
 
     func testTransientAutoSaveRetriesThenFailureRetainsIdempotentDraft() async {

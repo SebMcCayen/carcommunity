@@ -24,6 +24,12 @@ protocol DriveRecordingJournal: AnyObject {
 final class FileDriveRecordingJournal: DriveRecordingJournal {
     private let fileURL: URL
 
+    var routeUploadSpool: FileDriveRouteUploadSpool {
+        FileDriveRouteUploadSpool(
+            directoryURL: fileURL.appendingPathExtension("pending-uploads")
+        )
+    }
+
     init(fileURL: URL) {
         self.fileURL = fileURL
     }
