@@ -109,22 +109,12 @@ class FirebaseOpenTicketsRepository private constructor(
                 .addOnCompleteListener { task ->
                     if (!continuation.isActive) return@addOnCompleteListener
                     if (task.isSuccessful) {
-                        continuation.resume(TicketInteractOutcome.POSTED)
+                        continuation.resume(ticketOutcomeFromResponse(task.result?.data))
                         return@addOnCompleteListener
                     }
-                    val code = (task.exception as? FirebaseFunctionsException)?.code
-                    val outcome =
-                        when (code) {
-                            // Duplicate / issue-closed / feature-off all arrive as
-                            // failed-precondition and all mean "stop offering this".
-                            FirebaseFunctionsException.Code.FAILED_PRECONDITION ->
-                                TicketInteractOutcome.ALREADY_DONE
-
-                            FirebaseFunctionsException.Code.RESOURCE_EXHAUSTED ->
-                                TicketInteractOutcome.RATE_LIMITED
-
-                            else -> TicketInteractOutcome.FAILED
-                        }
+                    val error = task.exception as? FirebaseFunctionsException
+                    val reason = (error?.details as? Map<*, *>)?.get("reason") as? String
+                    val outcome = ticketInteractOutcome(error?.code?.name, reason)
                     continuation.resume(outcome)
                 }
         }
@@ -144,3 +134,18 @@ class FirebaseOpenTicketsRepository private constructor(
         }
     }
 }
+
+/** Maps only the backend's stable duplicate discriminator to already-done. */
+internal fun ticketInteractOutcome(
+    code: String?,
+    reason: String?,
+): TicketInteractOutcome =
+    when {
+        code == "FAILED_PRECONDITION" && reason == "ticket_already_interacted" ->
+            TicketInteractOutcome.ALREADY_DONE
+
+        code == "RESOURCE_EXHAUSTED" ->
+            TicketInteractOutcome.RATE_LIMITED
+
+        else -> TicketInteractOutcome.FAILED
+    }

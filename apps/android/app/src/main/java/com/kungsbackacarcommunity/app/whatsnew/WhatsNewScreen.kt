@@ -30,7 +30,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * The "Vad är nytt" (changelog) page reached from Settings: the
- * [Changelog.PAGE_ENTRY_LIMIT] most recent releases, newest first — each as a
+ * complete release history, newest first — each as a
  * frosted Aero card with the version + release date and a bulleted list of that
  * update's changes. Data comes from the bundled `res/raw/changelog.json`.
  */

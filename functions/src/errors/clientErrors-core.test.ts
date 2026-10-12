@@ -27,6 +27,8 @@ function sampleReport(overrides: Partial<ClientErrorReport> = {}): ClientErrorRe
     osVersion: 'Android 14',
     deviceModel: 'Pixel 7',
     platform: 'android',
+    buildNumber: '42',
+    sdkVersion: '11.26.0',
     fingerprint: computeClientErrorFingerprint(
       'messages.conversationList',
       'Conversation inbox listener failed',
@@ -44,12 +46,16 @@ describe('parseReportClientErrorInput', () => {
       code: 'failed_precondition',
       appVersion: '1.2.3',
       platform: 'android',
+      buildNumber: '42',
+      sdkVersion: '11.26.0',
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.input.feature).toBe('messages.conversationList');
     expect(result.input.code).toBe('failed_precondition');
     expect(result.input.platform).toBe('android');
+    expect(result.input.buildNumber).toBe('42');
+    expect(result.input.sdkVersion).toBe('11.26.0');
     expect(result.input.fingerprint).toHaveLength(64);
   });
 
@@ -64,15 +70,20 @@ describe('parseReportClientErrorInput', () => {
     expect(parseReportClientErrorInput({ feature: '', message: 'y' }).ok).toBe(false);
     expect(parseReportClientErrorInput({ feature: 'x', message: '' }).ok).toBe(false);
     expect(parseReportClientErrorInput({ feature: 'x', message: 'y', extra: 1 }).ok).toBe(false);
-    expect(parseReportClientErrorInput({ feature: 'x', message: 'y', code: 'z'.repeat(200) }).ok).toBe(
+    expect(parseReportClientErrorInput({ feature: 'x', message: 'y', platform: 'web' }).ok).toBe(
       false,
     );
+    expect(
+      parseReportClientErrorInput({ feature: 'x', message: 'y', code: 'z'.repeat(200) }).ok,
+    ).toBe(false);
   });
 });
 
 describe('fingerprint + signature', () => {
   it('prefers the code, upper-cased, for the signature', () => {
-    expect(clientErrorSignature('anything at all', 'failed_precondition')).toBe('FAILED_PRECONDITION');
+    expect(clientErrorSignature('anything at all', 'failed_precondition')).toBe(
+      'FAILED_PRECONDITION',
+    );
   });
 
   it('normalizes volatile tokens in the message when no code is present', () => {
@@ -80,9 +91,9 @@ describe('fingerprint + signature', () => {
     const a = clientErrorSignature('load failed after 3 retries', null);
     const b = clientErrorSignature('load failed after 17 retries', null);
     expect(a).toBe(b);
-    expect(
-      computeClientErrorFingerprint('f', 'load failed after 3 retries', null),
-    ).toBe(computeClientErrorFingerprint('f', 'load failed after 17 retries', null));
+    expect(computeClientErrorFingerprint('f', 'load failed after 3 retries', null)).toBe(
+      computeClientErrorFingerprint('f', 'load failed after 17 retries', null),
+    );
   });
 
   it('distinguishes different features and different codes', () => {
@@ -92,6 +103,38 @@ describe('fingerprint + signature', () => {
     expect(computeClientErrorFingerprint('a', 'm', 'X')).not.toBe(
       computeClientErrorFingerprint('a', 'm', 'Y'),
     );
+    expect(computeClientErrorFingerprint('a', 'm', 'X', 'android')).not.toBe(
+      computeClientErrorFingerprint('a', 'm', 'X', 'ios'),
+    );
+  });
+
+  it('separates iOS from Android while preserving historical Android fingerprints', () => {
+    const android = computeClientErrorFingerprint('mapHealth.renderTimeout', 'failed', 'TIMEOUT');
+    expect(android).toBe(
+      computeClientErrorFingerprint('mapHealth.renderTimeout', 'failed', 'TIMEOUT', 'android'),
+    );
+    expect(android).not.toBe(
+      computeClientErrorFingerprint('mapHealth.renderTimeout', 'failed', 'TIMEOUT', 'ios'),
+    );
+  });
+
+  it('uses the validated platform when parsing submissions', () => {
+    const ios = parseReportClientErrorInput({
+      feature: 'mapHealth.renderTimeout',
+      message: 'Map did not render',
+      code: 'MAP_RENDER_TIMEOUT',
+      platform: 'ios',
+    });
+    const android = parseReportClientErrorInput({
+      feature: 'mapHealth.renderTimeout',
+      message: 'Map did not render',
+      code: 'MAP_RENDER_TIMEOUT',
+      platform: 'android',
+    });
+    expect(ios.ok && android.ok).toBe(true);
+    if (ios.ok && android.ok) {
+      expect(ios.input.fingerprint).not.toBe(android.input.fingerprint);
+    }
   });
 });
 
@@ -170,9 +213,7 @@ describe('public issue payload', () => {
       sampleReport({ message: 'line one\n- injected: bullet\tafter\ttab\nline three' }),
       { firstSeenIso: '2026-07-15T00:00:00.000Z', count: 1 },
     );
-    const messageLine = payload.body
-      .split('\n')
-      .find((line) => line.startsWith('- Message:'));
+    const messageLine = payload.body.split('\n').find((line) => line.startsWith('- Message:'));
     expect(messageLine).toBeDefined();
     // The whole (whitespace-collapsed) message stays on the one bullet line.
     expect(messageLine).toBe('- Message: `line one - injected: bullet after tab line three`');

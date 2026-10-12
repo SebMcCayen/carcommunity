@@ -17,7 +17,10 @@
     "requiredMessage": "This update has to be installed before you can carry on. Google Play takes over while it installs.",
     "downloaded": "The update is downloaded and installs on restart.",
     "restart": "Restart",
-    "storeUnavailable": "The update could not be completed, and Google Play could not be opened on this device."
+    "storeUnavailable": "The update could not be completed, and Google Play could not be opened on this device.",
+    "iosMessage": "A newer version of the app is available in the App Store.",
+    "iosRequiredMessage": "This update has to be installed before you can carry on. Open the App Store to update.",
+    "iosStoreUnavailable": "The App Store listing could not be opened on this device."
   },
   "batteryOptimization": {
     "title": "Keep your drive recording",
@@ -1495,7 +1498,7 @@
     "duplicateApplication": "You already have an active application.",
     "submitError": "Could not submit your application. Please try again.",
     "submitErrorInvalid": "Please check that all details are filled in correctly.",
-    "submitErrorDuplicate": "An application for this email is already under review.",
+    "submitErrorDuplicate": "An application is already under review.",
     "submitting": "Submitting...",
     "close": "Close",
     "applicationEntryLabel": "For businesses",
@@ -1664,6 +1667,7 @@
     "title": "Open tickets",
     "intro": "Known problems others have reported. Have the same problem? Give it a thumbs up or add a comment.",
     "loading": "Loading tickets…",
+    "loadMore": "Load more tickets",
     "empty": "There are no open tickets right now.",
     "error": "Could not load tickets. Please try again later.",
     "plusOneCount": "%1$d agree",
@@ -1677,6 +1681,7 @@
     "commentSubmit": "Send comment",
     "commentDone": "Comment sent",
     "publicNotice": "Your comment is posted publicly on GitHub. Do not include personal or sensitive information.",
+    "deliveryFailed": "Your interaction was recorded, but could not be published to GitHub. It cannot be retried.",
     "alreadyDone": "You have already done this on this ticket.",
     "rateLimited": "Too many interactions. Please wait a while and try again.",
     "genericError": "Something went wrong. Please try again.",
@@ -1918,7 +1923,7 @@
   },
   "savedPlaces": {
     "title": "Saved places",
-    "intro": "Your one-tap destinations. Home, Work and favourites show up in the search bar for instant routing.",
+    "intro": "Your one-tap destinations. Home, Work and favourites appear in search so you can quickly open them on the map.",
     "addAction": "Add a place",
     "emptyTitle": "No saved places yet",
     "emptyBody": "Save your home, work and the places you drive to most, so they're one tap away when you search.",
@@ -2051,7 +2056,9 @@
     "dialogShowAll": "Show all updates",
     "dialogClose": "Close",
     "entryTitle": "Version %1$s · %2$s",
-    "empty": "No release notes yet."
+    "empty": "No release notes yet.",
+    "release010Highlight": "The first native iOS MVP is taking shape.",
+    "release010Change": "A native map-first experience with community, drive and profile features."
   },
   "moderation": {
     "messageActionsTitle": "Message from %1$s",

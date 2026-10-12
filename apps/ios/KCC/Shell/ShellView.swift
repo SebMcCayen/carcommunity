@@ -20,6 +20,7 @@ struct ShellView: View {
     let authenticatedUid: String?
     let access: AccountAccess
     let featureFlags: FeatureFlags
+    let diagnostics: IOSDiagnosticsComposition
 
     @State private var selectedTab: ShellTab = .defaultTab
     /// The full-screen sub-route back-stack, held as the ONE pure value from
@@ -32,6 +33,7 @@ struct ShellView: View {
         authenticatedUid: String?,
         access: AccountAccess,
         featureFlags: FeatureFlags,
+        diagnostics: IOSDiagnosticsComposition,
         initialRoute: ShellRoute? = nil,
         initialTab: ShellTab? = nil
     ) {
@@ -39,6 +41,7 @@ struct ShellView: View {
         self.authenticatedUid = authenticatedUid
         self.access = access
         self.featureFlags = featureFlags
+        self.diagnostics = diagnostics
         _selectedTab = State(initialValue: initialTab ?? .defaultTab)
         _routes = State(initialValue: initialRoute.map { .empty.opening($0) } ?? .empty)
         _accountDeletionCoordinator = State(initialValue: AccountDeletionCoordinator(
@@ -55,6 +58,10 @@ struct ShellView: View {
     @State private var mapSurface = StubMapSurface()
     @State private var mapLayerPreferences = MapLayerPreferences()
     @State private var showMapLayers = false
+    @State private var navSearchOpen = false
+    @State private var showSavedPlacesPicker = false
+    @State private var savedPlacesCoordinator: SavedPlacesCoordinator?
+    @State private var savedPlacesProximity: MapPoint?
 
     /// Feature coordinators are composed once for the signed-in shell. Every
     /// factory is config-safe, so a build without GoogleService-Info.plist
@@ -63,12 +70,17 @@ struct ShellView: View {
     @State private var leaderboardCoordinator: LeaderboardCoordinator?
     @State private var notificationsCoordinator: NotificationsInboxCoordinator?
     @State private var notificationSettingsCoordinator: NotificationSettingsCoordinator?
+    @State private var notificationSettingsAvailable = false
+    @State private var blockedUsersAvailable = false
     @State private var privacySettingsCoordinator: PrivacySettingsCoordinator?
     @State private var friendsCoordinator: FriendsCoordinator?
     @State private var conversationsCoordinator: ConversationsCoordinator?
     @State private var chatHubCoordinator: ChatHubCoordinator?
     @State private var crownHuntComposition: CrownHuntComposition?
     @State private var partnersCoordinator: PartnersCoordinator?
+    @State private var feedbackCoordinator: FeedbackCoordinator?
+    @State private var openTicketsCoordinator: OpenTicketsCoordinator?
+    @State private var partnerApplicationCoordinator: PartnerApplicationCoordinator?
     @State private var accountDeletionCoordinator: AccountDeletionCoordinator
     @State private var liveLocationCoordinator: LiveLocationCoordinator?
     @State private var driveRecordingCoordinator: DriveRecordingCoordinator?
@@ -110,16 +122,36 @@ struct ShellView: View {
     @State private var pendingSessionCommand: SingleSessionCommand?
     @State private var sessionCommandTask: Task<Void, Never>?
     @State private var sessionActionError = false
+    @State private var whatsNewCoordinator = WhatsNewCoordinator()
+    @State private var appUpdateCoordinator = AppUpdateCoordinator()
+    @State private var appStoreUnavailable = false
 
     /// What is drawn over the shell's map right now — the ONE pure value
-    /// every cover-derived decision reads. `navigating` / `navSearchOpen` are
-    /// hard false until turn-by-turn and the address search are ported.
+    /// every cover-derived decision reads. Turn-by-turn remains deliberately
+    /// false per ADR-002; address search keeps the retained map live beneath
+    /// its translucent chrome.
     private var mapCover: MapCover {
         ShellNavigation.mapCover(
             tab: selectedTab,
             route: routes.current,
             navigating: false,
-            navSearchOpen: false
+            navSearchOpen: addressSearchPresented
+        )
+    }
+
+    private var addressSearchPresented: Bool {
+        ShellNavigation.addressSearchPresented(
+            tab: selectedTab,
+            route: routes.current,
+            requested: navSearchOpen
+        )
+    }
+
+    private var mapHomeChromeVisible: Bool {
+        ShellNavigation.mapHomeChromeVisible(
+            tab: selectedTab,
+            route: routes.current,
+            addressSearchRequested: navSearchOpen
         )
     }
 
@@ -127,6 +159,18 @@ struct ShellView: View {
         shellPresentation
             .task(id: signedInUid) { await wireFeatures() }
             .task(id: crownFeatureWiringKey) { await wireCrownHunt() }
+            .task(id: signedInUid) {
+                whatsNewCoordinator.start()
+                guard signedInUid != nil else { return }
+                await appUpdateCoordinator.checkOnce()
+            }
+            .task(id: savedPlacesLocationSubscriptionKey) {
+                await observeSavedPlacesLocation()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active, signedInUid != nil else { return }
+                appUpdateCoordinator.scheduleRequiredUpdateRecheck()
+            }
             .onChange(of: featureFlags.isEnabled(.liveLocation)) { _, enabled in
                 liveLocationCoordinator?.canShare = enabled && !access.isRestricted
             }
@@ -139,9 +183,17 @@ struct ShellView: View {
                     routes = routes.poppingOne()
                 }
             }
+            .onChange(of: routes.current) { _, route in
+                if route != nil { closeAddressSearch() }
+            }
             .onChange(of: featureFlags.isEnabled(.partners)) { _, enabled in
                 if !enabled, routes.current == .partners {
                     partnersCoordinator?.clearSensitiveOfferState()
+                    routes = routes.poppingOne()
+                }
+            }
+            .onChange(of: featureFlags.isEnabled(.reportTicketsBrowser)) { _, enabled in
+                if !enabled, routes.current == .openTickets {
                     routes = routes.poppingOne()
                 }
             }
@@ -165,11 +217,18 @@ struct ShellView: View {
             }
     }
 
-    private var shellPresentation: some View {
+    private var shellBase: some View {
         ZStack {
             // Exactly one native Mapbox view for the signed-in shell. Tabs and
             // routes cover it instead of recreating its Metal render surface.
-            MapHomeView(surface: mapSurface, locationProvider: locationProvider)
+            MapHomeView(
+                surface: mapSurface,
+                locationProvider: locationProvider,
+                featureHealthReporter: FeatureHealthReporter.whenAuthenticated(
+                    diagnostics.featureHealthReporter,
+                    uid: signedInUid
+                )
+            )
 
             TabView(selection: tabSelection) {
                 ForEach(ShellTab.allCases, id: \.self) { tab in
@@ -192,6 +251,24 @@ struct ShellView: View {
                 routeHost(for: route)
             }
         }
+        .overlay {
+            if addressSearchPresented, let savedPlacesCoordinator {
+                AddressSearchOverlay(
+                    coordinator: savedPlacesCoordinator,
+                    proximity: savedPlacesProximity,
+                    onSelect: showPlaceOnMap,
+                    onManage: {
+                        navSearchOpen = false
+                        routes = routes.opening(.savedPlaces)
+                    },
+                    onClose: { navSearchOpen = false }
+                )
+            }
+        }
+    }
+
+    private var shellInteractions: some View {
+        shellBase
         // Drive the surface's liveness from the SAME pure cover value the
         // pages derive from — the iOS counterpart of Android's
         // `LaunchedEffect(mapCover) { mapSurface.setActive(...) }`:
@@ -208,6 +285,7 @@ struct ShellView: View {
             applyMapLayerPreferences()
         }
         .onChange(of: selectedTab) { _, tab in
+            if tab != .map { closeAddressSearch() }
             if tab != .map, routes.current == .chatHub {
                 routes = routes.poppingOne()
             }
@@ -228,6 +306,10 @@ struct ShellView: View {
         .onChange(of: liveLocationCoordinator?.sessionSnapshotRevision, initial: true) { _, _ in
             reconcileDriveRecording()
         }
+    }
+
+    private var shellSheets: some View {
+        shellInteractions
         .sheet(isPresented: $showStartDriving, onDismiss: releaseStartDrivingGarage) {
             if let startDrivingGarage {
                 StartDrivingSheet(
@@ -285,6 +367,37 @@ struct ShellView: View {
                 onBrowsingZoomChanged: mapSurface.setBrowsingZoom
             )
         }
+        .sheet(isPresented: $showSavedPlacesPicker) {
+            if let savedPlacesCoordinator {
+                SavedPlacesPickerSheet(
+                    places: savedPlacesCoordinator.places,
+                    onSelect: { saved in
+                        showSavedPlacesPicker = false
+                        showPlaceOnMap(saved.place)
+                    },
+                    onManage: {
+                        showSavedPlacesPicker = false
+                        routes = routes.opening(.savedPlaces)
+                    }
+                )
+            }
+        }
+        .sheet(isPresented: whatsNewAnnouncementIsPresented) {
+            if let announcement = whatsNewCoordinator.announcement {
+                WhatsNewAnnouncementSheet(
+                    announcement: announcement,
+                    onShowAll: {
+                        whatsNewCoordinator.acknowledge()
+                        routes = routes.opening(.whatsNew)
+                    },
+                    onClose: whatsNewCoordinator.acknowledge
+                )
+            }
+        }
+    }
+
+    private var shellPresentation: some View {
+        shellSheets
         .confirmationDialog(
             "liveLocation.stop",
             isPresented: $showStopConfirmation,
@@ -336,6 +449,19 @@ struct ShellView: View {
                 convoyManagementCoordinator?.clearLeaveResult()
             }
         }
+        .alert(appUpdateTitle, isPresented: appUpdateIsPresented) {
+            Button("appUpdate.update") { openAvailableUpdate() }
+            if appUpdateCoordinator.availability?.isRequired != true {
+                Button("appUpdate.dismiss", role: .cancel) {
+                    appUpdateCoordinator.dismiss()
+                }
+            }
+        } message: {
+            Text(appUpdateMessage)
+        }
+        .alert("appUpdate.iosStoreUnavailable", isPresented: $appStoreUnavailable) {
+            Button("notifications.errorDismiss", role: .cancel) {}
+        }
     }
 
     /// Per-tab foreground content. The persistent map is owned by `body`, so
@@ -350,12 +476,12 @@ struct ShellView: View {
                 // profile menu button). Only when a session actually exists —
                 // the unavailable shell has no one to show or sign out.
                 .overlay(alignment: .topTrailing) {
-                    if case .signedIn = session.state {
+                    if case .signedIn = session.state, mapHomeChromeVisible {
                         profileButton
                     }
                 }
                 .overlay(alignment: .bottomTrailing) {
-                    if case .signedIn = session.state {
+                    if case .signedIn = session.state, mapHomeChromeVisible {
                         mapCommunicationControls
                     }
                 }
@@ -363,11 +489,14 @@ struct ShellView: View {
                     // Viewing preferences are device-local and do not require
                     // an account. Keep the control in the config-less shell so
                     // clone-and-run builds exercise the same stub seam as CI.
-                    MapLayersButton(isPresented: $showMapLayers)
-                        .padding(KccSpacing.s4)
+                    if mapHomeChromeVisible {
+                        MapLayersButton(isPresented: $showMapLayers)
+                            .padding(KccSpacing.s4)
+                    }
                 }
                 .overlay(alignment: .bottom) {
-                    if let coordinator = crownHuntComposition?.perkMapCoordinator,
+                    if mapHomeChromeVisible,
+                       let coordinator = crownHuntComposition?.perkMapCoordinator,
                        coordinator.isAvailable {
                         CrownPerkMapControl(coordinator: coordinator)
                             .padding(.bottom, KccSpacing.s4)
@@ -406,7 +535,9 @@ struct ShellView: View {
                     }
                 }
                 .overlay {
-                    if convoyReactionTargetId != nil, let convoyReactionCoordinator {
+                    if mapHomeChromeVisible,
+                       convoyReactionTargetId != nil,
+                       let convoyReactionCoordinator {
                         ConvoyReactionControls(
                             coordinator: convoyReactionCoordinator,
                             followMeCoordinator: convoyFollowMeCoordinator
@@ -414,7 +545,8 @@ struct ShellView: View {
                     }
                 }
                 .overlay(alignment: .top) {
-                    if let coordinator = convoyManagementCoordinator,
+                    if mapHomeChromeVisible,
+                       let coordinator = convoyManagementCoordinator,
                        let convoy = coordinator.activeConvoy {
                         ConvoyStatusBar(
                             coordinator: coordinator,
@@ -431,7 +563,8 @@ struct ShellView: View {
                     }
                 }
                 .overlay {
-                    if incidentMapCoordinator?.pendingMapReportType != nil {
+                    if mapHomeChromeVisible,
+                       incidentMapCoordinator?.pendingMapReportType != nil {
                         IncidentLocationPickerControls(
                             canConfirm: currentMapCenter != nil,
                             confirm: submitMapCenterIncident,
@@ -440,7 +573,8 @@ struct ShellView: View {
                     }
                 }
                 .overlay(alignment: .top) {
-                    if incidentMapCoordinator?.proximityAlert != nil {
+                    if mapHomeChromeVisible,
+                       incidentMapCoordinator?.proximityAlert != nil {
                         PoliceProximityBanner {
                             incidentMapCoordinator?.dismissProximityAlert()
                         }
@@ -617,6 +751,32 @@ struct ShellView: View {
                     Label("shell.friendsTitle", systemImage: "person.2")
                 }
             }
+            Button {
+                routes = routes.opening(.settings)
+            } label: {
+                Label("settingsMenu.title", systemImage: "gearshape")
+            }
+            if savedPlacesCoordinator != nil {
+                Button {
+                    routes = routes.opening(.savedPlaces)
+                } label: {
+                    Label("settingsMenu.savedPlaces", systemImage: "bookmark")
+                }
+            }
+            if feedbackCoordinator != nil {
+                Button {
+                    routes = routes.opening(.feedback)
+                } label: {
+                    Label("shell.moreFeedback", systemImage: "exclamationmark.bubble")
+                }
+            }
+            if partnerApplicationCoordinator != nil {
+                Button {
+                    routes = routes.opening(.partnerApplication)
+                } label: {
+                    Label("shell.morePartnerApplication", systemImage: "briefcase")
+                }
+            }
             if partnerStatsEntryAvailable {
                 Button {
                     routes = routes.opening(.partnerStats)
@@ -634,6 +794,26 @@ struct ShellView: View {
 
     private var mapCommunicationControls: some View {
         VStack(spacing: KccSpacing.s3) {
+            if savedPlacesCoordinator != nil {
+                Button {
+                    navSearchOpen = true
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                        .frame(width: 48, height: 48)
+                        .background(.regularMaterial, in: Circle())
+                }
+                .accessibilityLabel(Text("addressSearch.searchPlaceholder"))
+
+                Button {
+                    showSavedPlacesPicker = true
+                } label: {
+                    Image(systemName: "bookmark.fill")
+                        .frame(width: 48, height: 48)
+                        .background(.regularMaterial, in: Circle())
+                }
+                .accessibilityLabel(Text("shell.savedPlacesButton"))
+            }
+
             if incidentMapCoordinator?.available == true {
                 Button {
                     incidentMapCoordinator?.reportSheetPresented = true
@@ -692,6 +872,7 @@ struct ShellView: View {
                 onSignOut: { endDeletionSession() },
                 onBack: { routes = routes.poppingOne() },
                 onOpenPoints: { routes = routes.opening(.points) },
+                onOpenWhatsNew: { routes = routes.opening(.whatsNew) },
                 onOpenAccountDeletion: { routes = routes.opening(.accountDeletion) }
             )
         case .points:
@@ -731,6 +912,17 @@ struct ShellView: View {
             } else {
                 unavailableRoute
             }
+        case .partnerApplication:
+            if let partnerApplicationCoordinator {
+                routeNavigation {
+                    PartnerApplicationScreen(
+                        coordinator: partnerApplicationCoordinator,
+                        onClose: { routes = routes.poppingOne() }
+                    )
+                }
+            } else {
+                unavailableRoute
+            }
         case .crownHunt:
             if let composition = crownHuntComposition {
                 CrownHuntHubView(
@@ -767,6 +959,29 @@ struct ShellView: View {
             routeNavigation {
                 NotificationSettingsScreen(coordinator: notificationSettingsCoordinator)
             }
+        case .blocked:
+            BlockedUsersScreen(uid: signedInUid) {
+                routes = routes.poppingOne()
+            }
+        case .settings:
+            routeNavigation {
+                SettingsScreen(actions: settingsActions)
+            }
+        case .whatsNew:
+            routeNavigation {
+                WhatsNewScreen(entries: whatsNewCoordinator.entries)
+            }
+        case .savedPlaces:
+            if let savedPlacesCoordinator {
+                routeNavigation {
+                    SavedPlacesScreen(
+                        coordinator: savedPlacesCoordinator,
+                        proximity: savedPlacesProximity
+                    )
+                }
+            } else {
+                unavailableRoute
+            }
         case .accountDeletion:
             AccountDeletionScreen(
                 coordinator: accountDeletionCoordinator,
@@ -775,8 +990,7 @@ struct ShellView: View {
                 onBack: { routes = routes.poppingOne() }
             )
         case .partnerStats:
-            if partnerStatsEntryAvailable, let privacySettingsCoordinator
-            {
+            if partnerStatsEntryAvailable, let privacySettingsCoordinator {
                 routeNavigation {
                     PrivacySettingsScreen(coordinator: privacySettingsCoordinator)
                 }
@@ -874,6 +1088,27 @@ struct ShellView: View {
             } else {
                 unavailableRoute
             }
+        case .feedback:
+            if let feedbackCoordinator {
+                routeNavigation(onBack: feedbackCoordinator.reset) {
+                    FeedbackScreen(
+                        coordinator: feedbackCoordinator,
+                        openTicketsEnabled: featureFlags.isEnabled(.reportTicketsBrowser),
+                        onOpenTickets: { routes = routes.opening(.openTickets) },
+                        onClose: { routes = routes.poppingOne() }
+                    )
+                }
+            } else {
+                unavailableRoute
+            }
+        case .openTickets:
+            if featureFlags.isEnabled(.reportTicketsBrowser), let openTicketsCoordinator {
+                routeNavigation {
+                    OpenTicketsScreen(coordinator: openTicketsCoordinator)
+                }
+            } else {
+                unavailableRoute
+            }
         default:
             // No other route is reachable yet — each renders here as its
             // feature is ported. Falling back to nothing (rather than
@@ -882,9 +1117,77 @@ struct ShellView: View {
         }
     }
 
+    private var settingsActions: SettingsActions {
+        SettingsActions(
+            onSavedPlaces: savedPlacesCoordinator != nil
+                ? { routes = routes.opening(.savedPlaces) } : nil,
+            onNotificationSettings: notificationSettingsAvailable
+                ? { routes = routes.opening(.notificationSettings) } : nil,
+            onBlockedUsers: blockedUsersAvailable
+                ? { routes = routes.opening(.blocked) } : nil,
+            onPartnerStats: partnerStatsEntryAvailable
+                ? { routes = routes.opening(.partnerStats) } : nil,
+            onFeedback: feedbackCoordinator != nil
+                ? { routes = routes.opening(.feedback) } : nil,
+            onDeleteAccount: authenticatedUid != nil
+                ? { routes = routes.opening(.accountDeletion) } : nil,
+            onWhatsNew: { routes = routes.opening(.whatsNew) }
+        )
+    }
+
     private func endDeletionSession() -> Bool {
         guard let authenticatedUid else { return true }
         return session.signOut(ifSignedInAs: authenticatedUid)
+    }
+
+    private var whatsNewAnnouncementIsPresented: Binding<Bool> {
+        Binding(
+            get: { whatsNewCoordinator.announcement != nil },
+            set: { presented in
+                if !presented { whatsNewCoordinator.acknowledge() }
+            }
+        )
+    }
+
+    private var updatePromptSuppressedForDriving: Bool {
+        if liveLocationCoordinator?.isSharing == true { return true }
+        return driveRecordingCoordinator?.state.summary != nil
+    }
+
+    private var appUpdateIsPresented: Binding<Bool> {
+        Binding(
+            get: {
+                !appStoreUnavailable && appUpdateCoordinator.shouldPresent(
+                    isDriving: updatePromptSuppressedForDriving,
+                    announcementIsPresented: whatsNewCoordinator.announcement != nil
+                )
+            },
+            set: { _ in }
+        )
+    }
+
+    private var appUpdateTitle: LocalizedStringKey {
+        appUpdateCoordinator.availability?.isRequired == true
+            ? "appUpdate.requiredTitle" : "appUpdate.title"
+    }
+
+    private var appUpdateMessage: LocalizedStringKey {
+        appUpdateCoordinator.availability?.isRequired == true
+            ? "appUpdate.iosRequiredMessage" : "appUpdate.iosMessage"
+    }
+
+    private func openAvailableUpdate() {
+        guard let url = appUpdateCoordinator.availability?.storeURL else {
+            appStoreUnavailable = true
+            return
+        }
+        openURL(url) { accepted in
+            if accepted {
+                appUpdateCoordinator.accepted()
+            } else {
+                appStoreUnavailable = true
+            }
+        }
     }
 
     private var routeBackButton: some View {
@@ -932,13 +1235,24 @@ struct ShellView: View {
     }
 
     private func routeNavigation<Content: View>(
+        onBack: (() -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
         NavigationStack {
             content()
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        routeBackButton
+                        if let onBack {
+                            Button {
+                                onBack()
+                                routes = routes.poppingOne()
+                            } label: {
+                                Label("shell.back", systemImage: "chevron.backward")
+                            }
+                            .padding(KccSpacing.s4)
+                        } else {
+                            routeBackButton
+                        }
                     }
                 }
         }
@@ -1381,6 +1695,13 @@ struct ShellView: View {
         crownHuntComposition = nil
         partnersCoordinator?.clearSensitiveOfferState()
         partnersCoordinator = nil
+        savedPlacesCoordinator = nil
+        navSearchOpen = false
+        showSavedPlacesPicker = false
+        openTicketsCoordinator?.stop()
+        feedbackCoordinator = nil
+        openTicketsCoordinator = nil
+        partnerApplicationCoordinator = nil
 
         let friends = FirebaseFriendsRepository.createIfAvailable()
         let conversations = FirebaseConversationsRepository.createIfAvailable()
@@ -1420,11 +1741,43 @@ struct ShellView: View {
                 access: access
             )
         }
-        notificationsCoordinator = NotificationsInboxCoordinator(repository: notifications, uid: uid)
+        let notificationSettingsRepository =
+            FirebaseNotificationSettingsRepository.createIfAvailable()
+        notificationSettingsAvailable = notificationSettingsRepository != nil && uid != nil
+        blockedUsersAvailable = FirebaseBlockingRepository.createIfAvailable() != nil && uid != nil
+        feedbackCoordinator = FeedbackCoordinator(
+            repository: FirebaseFeedbackRepository.createIfAvailable()
+        )
+        openTicketsCoordinator = OpenTicketsCoordinator(
+            repository: FirebaseOpenTicketsRepository.createIfAvailable()
+        )
+        partnerApplicationCoordinator = FirebasePartnerApplicationRepository.createIfAvailable().map {
+            PartnerApplicationCoordinator(repository: $0)
+        }
+        notificationsCoordinator = NotificationsInboxCoordinator(
+            repository: notifications,
+            uid: uid,
+            errorReporter: diagnostics.clientErrorReporter
+        )
         notificationSettingsCoordinator = NotificationSettingsCoordinator(
-            repository: FirebaseNotificationSettingsRepository.createIfAvailable(),
+            repository: notificationSettingsRepository,
             uid: uid
         )
+        if let uid, !uid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let searchClient: AddressSearchClient
+            if let token = MapboxConfiguration.accessToken() {
+                searchClient = MapboxAddressSearchClient(
+                    token: token,
+                    language: Locale.current.language.languageCode?.identifier ?? "sv"
+                )
+            } else {
+                searchClient = UnavailableAddressSearchClient()
+            }
+            savedPlacesCoordinator = SavedPlacesCoordinator(
+                store: UserDefaultsSavedPlacesStore(uid: uid),
+                searchClient: searchClient
+            )
+        }
         privacySettingsCoordinator = PrivacySettingsCoordinator(
             repository: FirebasePrivacySettingsRepository.createIfAvailable(),
             uid: uid
@@ -1605,6 +1958,53 @@ struct ShellView: View {
         mapSurface.cameraSnapshot.map {
             MapPoint(longitude: $0.longitude, latitude: $0.latitude)
         }
+    }
+
+    private var savedPlacesLocationSubscriptionKey: String {
+        let needed = addressSearchPresented || routes.current == .savedPlaces
+        return "\(needed)|\(locationProvider.authorization)"
+    }
+
+    private func observeSavedPlacesLocation() async {
+        savedPlacesProximity = nil
+        guard (addressSearchPresented || routes.current == .savedPlaces),
+              locationProvider.authorization.isAuthorized
+        else { return }
+        let stream = locationProvider.fixes()
+        let point = await withTaskGroup(of: MapPoint?.self) { group in
+            group.addTask {
+                for await fix in stream {
+                    let point = MapPoint(longitude: fix.longitude, latitude: fix.latitude)
+                    if SavedPlacesPolicy.isValid(point: point) { return point }
+                }
+                return nil
+            }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(3))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+        guard !Task.isCancelled, let point else { return }
+        savedPlacesProximity = point
+        if let savedPlacesCoordinator, !savedPlacesCoordinator.query.isEmpty {
+            savedPlacesCoordinator.updateQuery(savedPlacesCoordinator.query, proximity: point)
+        }
+    }
+
+    private func showPlaceOnMap(_ place: PlaceSuggestion) {
+        guard SavedPlacesPolicy.isValid(point: place.point) else { return }
+        savedPlacesCoordinator?.clearSearch()
+        navSearchOpen = false
+        selectedTab = .map
+        mapSurface.centerOn(place.point)
+    }
+
+    private func closeAddressSearch() {
+        savedPlacesCoordinator?.clearSearch()
+        navSearchOpen = false
     }
 
     private func submitMapCenterIncident() {
@@ -1836,6 +2236,7 @@ extension ShellTab {
         session: AuthSession(repository: nil),
         authenticatedUid: nil,
         access: .unrestrictedCommunity,
-        featureFlags: .contractDefaults
+        featureFlags: .contractDefaults,
+        diagnostics: IOSDiagnosticsComposition()
     )
 }

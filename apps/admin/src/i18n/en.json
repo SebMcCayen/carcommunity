@@ -1340,7 +1340,8 @@
       "pending": "Pending"
     },
     "platform": {
-      "android": "Android"
+      "android": "Android",
+      "ios": "iOS"
     },
     "columns": {
       "status": "GitHub issue",

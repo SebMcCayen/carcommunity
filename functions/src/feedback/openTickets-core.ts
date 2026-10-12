@@ -5,8 +5,8 @@
  *
  * TWO backend surfaces sit on top of this module:
  *
- *  - feedback-syncOpenTickets (scheduled): fetches OPEN issues labelled
- *    `android-issue` from the PUBLIC repo and mirrors each into
+ *  - feedback-syncOpenTickets (scheduled): fetches OPEN issues carrying either
+ *    supported feedback-platform label from the PUBLIC repo and mirrors each into
  *    `openTickets/{issueNumber}` (member-readable) so the app reads Firestore
  *    rather than making a GitHub call per open. [mapIssueToTicketFields] does
  *    the shape conversion; the sync fn adds the timestamps + tally transforms.
@@ -27,8 +27,12 @@
  */
 
 import { z } from 'zod';
-import { boundText, FEEDBACK_ISSUE_LABEL } from './feedback-core';
-import { neutralizeMentions } from '../shared/githubIssues';
+import { boundText, FEEDBACK_ISSUE_LABELS } from './feedback-core';
+import {
+  neutralizeMentions,
+  type GitHubOpenIssue,
+  type OpenIssuesResult,
+} from '../shared/githubIssues';
 import {
   MODERATION_REPORT_INITIAL_STATUS,
   MODERATION_REPORTS_COLLECTION,
@@ -94,16 +98,17 @@ export const PLUS_ONE_COMMENT_BODY = 'Another user is affected by this issue.';
  * (issue, uid, type) triple is). Bounded so it can never be a path-injection or
  * an unbounded write.
  */
-const clientIdSchema = z
-  .string()
-  .regex(/^[A-Za-z0-9_-]{1,64}$/);
+const clientIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 
 const interactInputSchema = z
   .object({
     // GitHub issue numbers are positive integers; the doc id is String(number).
     issueNumber: z.number().int().positive(),
     type: z.enum(INTERACTION_TYPES),
-    text: z.string().max(MAX_TICKET_COMMENT_LENGTH * 2).optional(),
+    text: z
+      .string()
+      .max(MAX_TICKET_COMMENT_LENGTH * 2)
+      .optional(),
     clientId: clientIdSchema,
   })
   .strict();
@@ -340,4 +345,28 @@ export const INTERACT_RATE_LIMITED_MESSAGE =
   'Too many interactions — please wait a while before trying again.';
 
 /** The label the sync fetches (single source: feedback-core). */
-export const OPEN_TICKETS_LABEL = FEEDBACK_ISSUE_LABEL;
+export const OPEN_TICKETS_LABELS = Object.values(FEEDBACK_ISSUE_LABELS);
+/** Kept for source compatibility; new sync code consumes both labels. */
+export const OPEN_TICKETS_LABEL = FEEDBACK_ISSUE_LABELS.android;
+
+/**
+ * Production multi-label aggregation seam. The scheduled sync supplies the
+ * real GitHub list call; unit tests supply a deterministic label fetcher.
+ * Any failed label fails the whole aggregate closed, while any truncated label
+ * keeps `complete:false` so the caller may upsert but must not reconcile.
+ */
+export async function fetchAllOpenTicketLabels(
+  fetchLabel: (label: string) => Promise<OpenIssuesResult | null>,
+): Promise<OpenIssuesResult | null> {
+  const results = await Promise.all(OPEN_TICKETS_LABELS.map(fetchLabel));
+  if (results.some((result) => result === null)) return null;
+  const completeResults = results as OpenIssuesResult[];
+  const byNumber = new Map<number, GitHubOpenIssue>();
+  for (const result of completeResults) {
+    for (const issue of result.issues) byNumber.set(issue.number, issue);
+  }
+  return {
+    issues: [...byNumber.values()],
+    complete: completeResults.every((result) => result.complete),
+  };
+}

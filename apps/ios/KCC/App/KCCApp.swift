@@ -6,6 +6,7 @@ struct KCCApp: App {
     private let signInCoordinator: SignInCoordinator
     private let accessSession: AppAccessSession
     private let restrictedPrivacyCoordinator: LiveLocationCoordinator
+    private let diagnostics: IOSDiagnosticsComposition
 
     init() {
         // Null-safe: a checkout without the gitignored GoogleService-Info.plist
@@ -15,6 +16,10 @@ struct KCCApp: App {
         FirebaseBootstrap.configureIfAvailable()
 
         let repository = FirebaseAuthRepository.createIfAvailable()
+        let diagnosticsReporter = FirebaseDiagnosticsReporter.createIfAvailable()
+            ?? NoopDiagnosticsReporter()
+        let diagnosticsEnvironment = DiagnosticsEnvironment.current()
+        diagnostics = IOSDiagnosticsComposition(environment: diagnosticsEnvironment)
         session = AuthSession(repository: repository)
         accessSession = AppAccessSession(
             accessRepository: FirebaseAccountAccessRepository.createIfAvailable(),
@@ -33,7 +38,11 @@ struct KCCApp: App {
             tokenProvider: repository == nil
                 ? UnavailableTokenProvider()
                 : Self.makeTokenProvider(),
-            repository: repository ?? UnavailableAuthRepository()
+            repository: repository ?? UnavailableAuthRepository(),
+            failureReporter: DiagnosticsSignInFailureReporter(
+                reporter: diagnosticsReporter,
+                environment: diagnosticsEnvironment
+            )
         )
     }
 
@@ -43,7 +52,8 @@ struct KCCApp: App {
                 session: session,
                 signInCoordinator: signInCoordinator,
                 accessSession: accessSession,
-                restrictedPrivacyCoordinator: restrictedPrivacyCoordinator
+                restrictedPrivacyCoordinator: restrictedPrivacyCoordinator,
+                diagnostics: diagnostics
             )
         }
     }

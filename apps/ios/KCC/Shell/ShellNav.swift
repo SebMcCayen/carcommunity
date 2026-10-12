@@ -148,6 +148,32 @@ extension ShellRouteStack {
 }
 
 enum ShellNavigation {
+    /// Address search belongs to the unobstructed Map tab. Keeping this
+    /// decision beside `mapCover` prevents its overlay and map liveness from
+    /// drifting when a tab or full-screen route changes.
+    static func addressSearchPresented(
+        tab: ShellTab,
+        route: ShellRoute?,
+        requested: Bool
+    ) -> Bool {
+        requested && tab == .map && route == nil
+    }
+
+    /// Map buttons, banners, and action controls must not compete with the
+    /// address-search card. Map markers remain visible beneath the translucent
+    /// overlay; only the interactive chrome is suppressed.
+    static func mapHomeChromeVisible(
+        tab: ShellTab,
+        route: ShellRoute?,
+        addressSearchRequested: Bool
+    ) -> Bool {
+        !addressSearchPresented(
+            tab: tab,
+            route: route,
+            requested: addressSearchRequested
+        )
+    }
+
     /// Resolves a system-Back gesture given the current `tab` and open `route`.
     /// An open route always closes first — which, with a route back-stack,
     /// means popping ONE level (see ``popRoute(parents:)``); otherwise a

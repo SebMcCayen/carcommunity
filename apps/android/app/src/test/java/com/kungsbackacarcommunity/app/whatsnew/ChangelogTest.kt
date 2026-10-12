@@ -105,17 +105,17 @@ class ChangelogTest {
         assertTrue(Changelog.parse("""{"note": "x"}""").isEmpty())
     }
 
-    // --- page selection (last 10 updates, newest first) --------------------
+    // --- complete history selection (newest first) -------------------------
 
     @Test
-    fun `latestEntries keeps only the newest ten releases`() {
+    fun `latestEntries keeps the complete release history`() {
         val twelve = (1..12).map { entry(it) }.shuffled()
         val page = Changelog.latestEntries(twelve)
-        assertEquals((12 downTo 3).toList(), page.map { it.versionCode })
+        assertEquals((12 downTo 1).toList(), page.map { it.versionCode })
     }
 
     @Test
-    fun `latestEntries returns everything when fewer than the limit exist`() {
+    fun `latestEntries sorts a shorter history newest first`() {
         val six = listOf(1, 2, 3, 5, 6, 7).map { entry(it) }
         assertEquals(
             listOf(7, 6, 5, 3, 2, 1),

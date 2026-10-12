@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.notifications
 
+import com.kungsbackacarcommunity.app.diagnostics.ClientErrorReporter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -10,6 +11,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NotificationsCoordinatorTest {
+
+    private class RecordingErrorReporter : ClientErrorReporter {
+        data class Entry(val feature: String, val message: String, val code: String?)
+
+        val entries = mutableListOf<Entry>()
+
+        override fun report(feature: String, message: String, code: String?) {
+            entries += Entry(feature, message, code)
+        }
+    }
 
     private class FakeRepo : NotificationsRepository {
         val read = mutableListOf<String>()
@@ -78,11 +89,73 @@ class NotificationsCoordinatorTest {
     @Test
     fun `a failure surfaces Failed and can reset`() = runTest {
         val repo = FakeRepo().apply { failWith = IllegalStateException("x") }
-        val coordinator = NotificationsCoordinator(repo)
+        val reporter = RecordingErrorReporter()
+        val coordinator = NotificationsCoordinator(repo, reporter)
         coordinator.markRead("n1")
         assertEquals(MarkReadStatus.Failed, coordinator.status.value)
+        assertEquals(
+            listOf(
+                RecordingErrorReporter.Entry(
+                    "notifications.markRead",
+                    "Updating notification read state failed",
+                    null,
+                ),
+            ),
+            reporter.entries,
+        )
         coordinator.reset()
         assertEquals(MarkReadStatus.Idle, coordinator.status.value)
+    }
+
+    @Test
+    fun `mark action failures report app-authored summaries only`() = runTest {
+        val reporter = RecordingErrorReporter()
+        val repo = FakeRepo().apply { failWith = IllegalStateException("private user data") }
+        val coordinator = NotificationsCoordinator(repo, reporter)
+
+        coordinator.markRead("notification-id")
+        coordinator.reset()
+        coordinator.markAllRead()
+
+        assertEquals(
+            listOf(
+                RecordingErrorReporter.Entry(
+                    "notifications.markRead",
+                    "Updating notification read state failed",
+                    null,
+                ),
+                RecordingErrorReporter.Entry(
+                    "notifications.markAllRead",
+                    "Updating all notification read states failed",
+                    null,
+                ),
+            ),
+            reporter.entries,
+        )
+        assertTrue(reporter.entries.none { it.message.contains("private user data") })
+    }
+
+    @Test
+    fun `listener failures report once until a loaded snapshot recovers`() {
+        val reporter = RecordingErrorReporter()
+        val coordinator = NotificationsCoordinator(FakeRepo(), reporter)
+
+        coordinator.reportInboxListenerFailure("PERMISSION_DENIED")
+        coordinator.reportInboxListenerFailure("PERMISSION_DENIED")
+        assertEquals(1, reporter.entries.size)
+        assertEquals(
+            RecordingErrorReporter.Entry(
+                "notifications.inboxListener",
+                "Notification inbox listener failed",
+                "PERMISSION_DENIED",
+            ),
+            reporter.entries.single(),
+        )
+
+        coordinator.onInboxLoaded()
+        coordinator.reportInboxListenerFailure("UNAVAILABLE")
+        assertEquals(2, reporter.entries.size)
+        assertEquals("UNAVAILABLE", reporter.entries.last().code)
     }
 
     @Test

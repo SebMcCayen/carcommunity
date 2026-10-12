@@ -84,7 +84,14 @@ fun NotificationsRoute(
     // Every snapshot retires the ids whose delete has landed, so the hidden set
     // holds only rows that are still being hidden from something.
     LaunchedEffect(serverState, coordinator) {
-        (serverState as? NotificationsState.Loaded)?.let { coordinator?.onSnapshot(it.items) }
+        when (val current = serverState) {
+            is NotificationsState.Error -> coordinator?.reportInboxListenerFailure(current.code)
+            is NotificationsState.Loaded -> {
+                coordinator?.onInboxLoaded()
+                coordinator?.onSnapshot(current.items)
+            }
+            NotificationsState.Loading -> Unit
+        }
     }
 
     // Clear the red dot: stamp the last-seen marker when the inbox opens, and

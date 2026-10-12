@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import java.net.URI
 
 /**
  * Shared, privileged "open a GitHub issue in the phone browser" helper.
@@ -15,8 +16,8 @@ import android.net.Uri
  */
 
 /**
- * Launches [url] in the browser, but ONLY when it is an http(s) URL on
- * github.com. These are privileged in-app flows, so a malformed or compromised
+ * Launches [url] in the browser, but ONLY when it is an HTTPS issue URL for
+ * this repository on github.com. These are privileged in-app flows, so a malformed or compromised
  * backend/Firestore value must not be able to launch a non-web intent
  * (file:/intent:/javascript: …). Anything that fails validation is silently
  * skipped — the caller's work (the report, the interaction) is already done.
@@ -32,11 +33,17 @@ internal fun openGitHubUrl(context: Context, url: String) {
     }
 }
 
-/** True only for an http(s) URL on github.com (or a *.github.com subdomain). */
+/** True only for an HTTPS issue URL in the canonical carcommunity repository. */
 internal fun isGitHubWebUrl(url: String): Boolean {
-    val uri = Uri.parse(url)
-    val scheme = uri.scheme?.lowercase()
-    if (scheme != "http" && scheme != "https") return false
-    val host = uri.host?.lowercase() ?: return false
-    return host == "github.com" || host.endsWith(".github.com")
+    val uri = runCatching { URI(url) }.getOrNull() ?: return false
+    if (!uri.scheme.equals("https", ignoreCase = true)) return false
+    if (uri.rawUserInfo != null || uri.port != -1) return false
+    if (!uri.host.equals("github.com", ignoreCase = true)) return false
+    return ISSUE_PATH.matches(uri.path.orEmpty())
 }
+
+private val ISSUE_PATH =
+    Regex(
+        "^/SebMcCayen/carcommunity/issues/[1-9][0-9]*$",
+        RegexOption.IGNORE_CASE,
+    )

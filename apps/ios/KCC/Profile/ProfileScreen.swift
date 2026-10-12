@@ -9,6 +9,7 @@ struct ProfileScreen: View {
     let onSignOut: () -> Bool
     let onBack: () -> Void
     let onOpenPoints: (() -> Void)?
+    let onOpenWhatsNew: (() -> Void)?
     let onOpenAccountDeletion: (() -> Void)?
     @State private var coordinator: ProfileCoordinator
     @State private var editor: ProfileEditCoordinator
@@ -24,6 +25,7 @@ struct ProfileScreen: View {
     init(
         uid: String?, displayName: String?, onSignOut: @escaping () -> Bool,
         onBack: @escaping () -> Void, onOpenPoints: @escaping () -> Void,
+        onOpenWhatsNew: (() -> Void)? = nil,
         onOpenAccountDeletion: @escaping () -> Void
     ) {
         let repository = FirebaseUserProfileRepository.createIfAvailable()
@@ -34,6 +36,7 @@ struct ProfileScreen: View {
             onSignOut: onSignOut,
             onBack: onBack,
             onOpenPoints: pointsRepository == nil ? nil : onOpenPoints,
+            onOpenWhatsNew: onOpenWhatsNew,
             onOpenAccountDeletion: FirebaseAccountDeletionRepository.createIfAvailable() == nil
                 ? nil : onOpenAccountDeletion,
             coordinator: ProfileCoordinator(repository: repository, uid: uid),
@@ -49,6 +52,7 @@ struct ProfileScreen: View {
         uid: String? = nil, displayName: String?, onSignOut: @escaping () -> Bool,
         onBack: @escaping () -> Void,
         onOpenPoints: (() -> Void)? = nil,
+        onOpenWhatsNew: (() -> Void)? = nil,
         onOpenAccountDeletion: (() -> Void)? = nil,
         coordinator: ProfileCoordinator,
         editor: ProfileEditCoordinator? = nil,
@@ -60,6 +64,7 @@ struct ProfileScreen: View {
         self.onSignOut = onSignOut
         self.onBack = onBack
         self.onOpenPoints = onOpenPoints
+        self.onOpenWhatsNew = onOpenWhatsNew
         self.onOpenAccountDeletion = onOpenAccountDeletion
         _coordinator = State(initialValue: coordinator)
         _editor = State(initialValue: editor ?? ProfileEditCoordinator(repository: nil, uid: nil))
@@ -130,6 +135,20 @@ struct ProfileScreen: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("profile.blockedUsers")
+
+                if let onOpenWhatsNew {
+                    Button(action: onOpenWhatsNew) {
+                        HStack {
+                            Label("whatsNew.title", systemImage: "sparkles")
+                            Spacer()
+                            Image(systemName: "chevron.forward")
+                                .accessibilityHidden(true)
+                        }
+                        .frame(minHeight: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("profile.whatsNew")
+                }
 
                 if let onOpenAccountDeletion {
                     Button(role: .destructive, action: onOpenAccountDeletion) {

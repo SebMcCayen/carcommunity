@@ -17,6 +17,9 @@
     <string name="appUpdate_downloaded">Uppdateringen är nedladdad och installeras vid omstart.</string>
     <string name="appUpdate_restart">Starta om</string>
     <string name="appUpdate_storeUnavailable">Uppdateringen kunde inte slutföras, och Google Play gick inte att öppna på den här enheten.</string>
+    <string name="appUpdate_iosMessage">Det finns en nyare version av appen i App Store.</string>
+    <string name="appUpdate_iosRequiredMessage">Den här uppdateringen måste installeras innan du kan fortsätta. Öppna App Store för att uppdatera.</string>
+    <string name="appUpdate_iosStoreUnavailable">Det gick inte att öppna appens sida i App Store på den här enheten.</string>
     <string name="batteryOptimization_title">Låt din körning spelas in</string>
     <string name="batteryOptimization_body">För att din körning ska fortsätta spelas in när skärmen är av eller appen körs i bakgrunden, tillåt att appen körs utan batteribegränsningar. På Samsung-telefoner: ställ även in appens batterianvändning på \"Obegränsad\" (Inställningar › Batteri › Gränser för bakgrundsanvändning) så att den inte försätts i viloläge.</string>
     <string name="batteryOptimization_allow">Tillåt</string>
@@ -1394,7 +1397,7 @@
     <string name="partners_duplicateApplication">Du har redan en aktiv ansökan.</string>
     <string name="partners_submitError">Kunde inte skicka ansökan. Försök igen.</string>
     <string name="partners_submitErrorInvalid">Kontrollera att alla uppgifter är korrekt ifyllda.</string>
-    <string name="partners_submitErrorDuplicate">En ansökan för denna e-post granskas redan.</string>
+    <string name="partners_submitErrorDuplicate">En ansökan granskas redan.</string>
     <string name="partners_submitting">Skickar...</string>
     <string name="partners_close">Stäng</string>
     <string name="partners_applicationEntryLabel">För företag</string>
@@ -1553,6 +1556,7 @@
     <string name="openTickets_title">Öppna ärenden</string>
     <string name="openTickets_intro">Kända problem som andra har rapporterat. Har du samma problem? Ge det en tumme upp eller lägg till en kommentar.</string>
     <string name="openTickets_loading">Hämtar ärenden…</string>
+    <string name="openTickets_loadMore">Hämta fler ärenden</string>
     <string name="openTickets_empty">Det finns inga öppna ärenden just nu.</string>
     <string name="openTickets_error">Kunde inte hämta ärenden. Försök igen senare.</string>
     <string name="openTickets_plusOneCount">%1$d instämmer</string>
@@ -1566,6 +1570,7 @@
     <string name="openTickets_commentSubmit">Skicka kommentar</string>
     <string name="openTickets_commentDone">Kommentar skickad</string>
     <string name="openTickets_publicNotice">Din kommentar publiceras offentligt på GitHub. Skriv inte med personlig eller känslig information.</string>
+    <string name="openTickets_deliveryFailed">Din interaktion registrerades, men kunde inte publiceras på GitHub. Den kan inte skickas igen.</string>
     <string name="openTickets_alreadyDone">Du har redan gjort detta för det här ärendet.</string>
     <string name="openTickets_rateLimited">För många interaktioner. Vänta en stund och försök igen.</string>
     <string name="openTickets_genericError">Något gick fel. Försök igen.</string>
@@ -1789,7 +1794,7 @@
     <string name="addressSearch_unitMinutes">min</string>
     <string name="addressSearch_unitHours">tim</string>
     <string name="savedPlaces_title">Sparade platser</string>
-    <string name="savedPlaces_intro">Dina destinationer med ett tryck. Hem, Jobbet och favoriter dyker upp i sökfältet för snabb vägbeskrivning.</string>
+    <string name="savedPlaces_intro">Dina destinationer med ett tryck. Hem, Jobbet och favoriter visas i sökningen så att du snabbt kan öppna dem på kartan.</string>
     <string name="savedPlaces_addAction">Lägg till en plats</string>
     <string name="savedPlaces_emptyTitle">Inga sparade platser än</string>
     <string name="savedPlaces_emptyBody">Spara ditt hem, jobbet och platserna du kör till oftast, så finns de ett tryck bort när du söker.</string>
@@ -1909,6 +1914,8 @@
     <string name="whatsNew_dialogClose">Stäng</string>
     <string name="whatsNew_entryTitle">Version %1$s · %2$s</string>
     <string name="whatsNew_empty">Inga uppdateringsanteckningar ännu.</string>
+    <string name="whatsNew_release010Highlight">Den första inbyggda iOS-MVP:n tar form.</string>
+    <string name="whatsNew_release010Change">En inbyggd kartbaserad upplevelse med community-, kör- och profilfunktioner.</string>
     <string name="moderation_messageActionsTitle">Meddelande från %1$s</string>
     <string name="moderation_reply">Svara</string>
     <string name="moderation_blockMember">Blockera %1$s</string>

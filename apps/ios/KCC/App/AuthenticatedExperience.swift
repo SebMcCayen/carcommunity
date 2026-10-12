@@ -9,6 +9,7 @@ struct AuthenticatedExperience: View {
     @Bindable var session: AuthSession
     let access: AccountAccess
     let featureFlags: FeatureFlags
+    let diagnostics: IOSDiagnosticsComposition
     @State private var profile: ProfileCoordinator
     @State private var onboarding: OnboardingCoordinator
 
@@ -17,13 +18,15 @@ struct AuthenticatedExperience: View {
         displayName: String?,
         session: AuthSession,
         access: AccountAccess,
-        featureFlags: FeatureFlags
+        featureFlags: FeatureFlags,
+        diagnostics: IOSDiagnosticsComposition
     ) {
         self.uid = uid
         self.displayName = displayName
         self.session = session
         self.access = access
         self.featureFlags = featureFlags
+        self.diagnostics = diagnostics
         let repository = FirebaseUserProfileRepository.createIfAvailable()
         _profile = State(initialValue: ProfileCoordinator(repository: repository, uid: uid))
         _onboarding = State(initialValue: OnboardingCoordinator(
@@ -43,7 +46,8 @@ struct AuthenticatedExperience: View {
                         uid: uid,
                         session: session,
                         access: access,
-                        featureFlags: featureFlags
+                        featureFlags: featureFlags,
+                        diagnostics: diagnostics
                     )
                     .id(uid)
                 } else {
@@ -54,7 +58,8 @@ struct AuthenticatedExperience: View {
                     session: session,
                     authenticatedUid: uid,
                     access: access,
-                    featureFlags: featureFlags
+                    featureFlags: featureFlags,
+                    diagnostics: diagnostics
                 )
             }
         }

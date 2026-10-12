@@ -5,6 +5,7 @@ struct WelcomeGateView: View {
     @Bindable var session: AuthSession
     let access: AccountAccess
     let featureFlags: FeatureFlags
+    let diagnostics: IOSDiagnosticsComposition
     let store: WelcomeStoring
     @State private var seen: Bool
     @State private var initialRoute: ShellRoute?
@@ -14,12 +15,14 @@ struct WelcomeGateView: View {
         session: AuthSession,
         access: AccountAccess,
         featureFlags: FeatureFlags,
+        diagnostics: IOSDiagnosticsComposition,
         store: WelcomeStoring = WelcomeStore()
     ) {
         self.uid = uid
         self.session = session
         self.access = access
         self.featureFlags = featureFlags
+        self.diagnostics = diagnostics
         self.store = store
         _seen = State(initialValue: store.hasSeenWelcome(uid: uid))
         _initialRoute = State(initialValue: nil)
@@ -32,6 +35,7 @@ struct WelcomeGateView: View {
                 authenticatedUid: uid,
                 access: access,
                 featureFlags: featureFlags,
+                diagnostics: diagnostics,
                 initialRoute: initialRoute,
                 initialTab: initialTab
             )

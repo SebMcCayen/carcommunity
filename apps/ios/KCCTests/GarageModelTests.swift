@@ -123,7 +123,7 @@ final class GarageModelTests: XCTestCase {
             XCTAssertTrue(VehiclePhotoUploadCleanup.shouldDelete(after: code))
         }
         for code in [
-            KccFunctionsErrorCode.internalError, .unavailable, .unknown,
+            KccFunctionsErrorCode.alreadyExists, .internalError, .unavailable, .unknown,
         ] {
             XCTAssertFalse(VehiclePhotoUploadCleanup.shouldDelete(after: code))
         }

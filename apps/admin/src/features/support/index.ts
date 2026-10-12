@@ -1,7 +1,7 @@
 /**
  * Admin support / feedback-inbox feature module (Phase 13r — Firebase).
  *
- * The admin-side view of the Android "Report a problem" flow. Backed by
+ * The admin-side view of the Android and iOS "Report a problem" flows. Backed by
  * Firebase:
  *  - List/detail READS are direct rules-gated SDK reads on
  *    `feedbackReports/{reportId}` (`isAdmin()` in firestore.rules; the
@@ -14,7 +14,7 @@
  *    therefore exposes no mutations whatsoever.
  *
  * Data shape (functions/src/feedback/feedback-core.ts,
- * buildFeedbackReportDocument): uid, platform ('android'), summary (nullable),
+ * buildFeedbackReportDocument): uid, platform ('android' | 'ios'), summary (nullable),
  * description, appVersion/osVersion/deviceModel (nullable context scalars),
  * githubIssueStatus ('pending' | 'created' | 'failed'), githubIssueNumber
  * (number | null), githubIssueUrl (string | null), createdAt (server ts).
@@ -60,8 +60,8 @@ export const SUPPORT_PAGE_SIZE = 50;
 export const FEEDBACK_GITHUB_STATUSES = ['created', 'failed', 'pending'] as const;
 export type FeedbackGithubStatus = (typeof FEEDBACK_GITHUB_STATUSES)[number];
 
-/** Source platforms. Only `android` is written today (the sole reporter). */
-export const FEEDBACK_PLATFORMS = ['android'] as const;
+/** Source platforms accepted from the shared Android/iOS report contract. */
+export const FEEDBACK_PLATFORMS = ['android', 'ios'] as const;
 export type FeedbackPlatform = (typeof FEEDBACK_PLATFORMS)[number];
 
 // ---------------------------------------------------------------------------

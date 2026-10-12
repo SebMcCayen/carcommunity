@@ -331,20 +331,26 @@ private final class ConvoyViewportInteractionObserver: @preconcurrency ViewportS
 /// renderer without changing the shell-facing ``MapSurface`` seam.
 @MainActor
 struct MapHomeView: View {
+    @Environment(\.scenePhase) private var scenePhase
     /// The shell's one surface instance, owned by ``ShellView`` — composed
     /// once for the whole signed-in shell and never disposed.
     let surface: StubMapSurface
     let locationProvider: any LocationProvider
     private let accessToken: String?
+    private let featureHealthReporter: FeatureHealthReporter?
+    @State private var renderWatchdog: MapRenderWatchdog
 
     init(
         surface: StubMapSurface,
         locationProvider: any LocationProvider,
-        accessToken: String? = MapboxConfiguration.accessToken()
+        accessToken: String? = MapboxConfiguration.accessToken(),
+        featureHealthReporter: FeatureHealthReporter? = nil
     ) {
         self.surface = surface
         self.locationProvider = locationProvider
         self.accessToken = accessToken
+        self.featureHealthReporter = featureHealthReporter
+        _renderWatchdog = State(initialValue: MapRenderWatchdog())
     }
 
     var body: some View {
@@ -353,13 +359,33 @@ struct MapHomeView: View {
                 MapboxStandardMap(
                     accessToken: accessToken,
                     surface: surface,
-                    locationProvider: locationProvider
+                    locationProvider: locationProvider,
+                    onLoadingError: { kind in
+                        featureHealthReporter?.report(
+                            kind,
+                            foreground: scenePhase == .active,
+                            surfaceShown: surface.isActive
+                        )
+                    },
+                    onFullFrameRendered: {
+                        _ = renderWatchdog.tick(milliseconds: 0, eligible: false, rendered: true)
+                    }
                 ) {
                     surface.markLoaded()
                 }
             } else {
                 mapPlaceholder
             }
+        }
+        .onAppear(perform: updateFeatureHealthConditions)
+        .onChange(of: scenePhase) { _, _ in
+            updateFeatureHealthConditions()
+        }
+        .onChange(of: surface.isActive) { _, _ in
+            updateFeatureHealthConditions()
+        }
+        .onDisappear {
+            featureHealthReporter?.updateConditions(foreground: false, surfaceShown: false)
         }
         // Load-state chip, mirroring Android's `LoadingRoadsChip`: visible
         // while style/tiles load, gone once the map is interactive.
@@ -375,6 +401,34 @@ struct MapHomeView: View {
             guard accessToken == nil else { return }
             await surface.simulateInitialLoadIfNeeded()
         }
+        // Detect the silent failure class where Mapbox never completes a full
+        // frame. Only foreground, uncovered, online time consumes the 12s
+        // budget; config-less placeholder builds never start the watchdog.
+        .task(id: accessToken != nil) {
+            guard accessToken != nil, let featureHealthReporter else { return }
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(1))
+                } catch {
+                    return
+                }
+                let surfaceShown = surface.isActive
+                let foreground = scenePhase == .active
+                let eligible = surfaceShown && foreground && featureHealthReporter.isOnline()
+                if renderWatchdog.tick(
+                    milliseconds: 1_000,
+                    eligible: eligible,
+                    rendered: false
+                ) {
+                    featureHealthReporter.report(
+                        .mapRenderTimeout,
+                        foreground: foreground,
+                        surfaceShown: surfaceShown
+                    )
+                }
+                if renderWatchdog.isDisarmed { return }
+            }
+        }
     }
 
     private var mapPlaceholder: some View {
@@ -385,6 +439,13 @@ struct MapHomeView: View {
                 .font(.system(size: KccTypeScale.titleMd, weight: KccTypeScale.medium))
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private func updateFeatureHealthConditions() {
+        featureHealthReporter?.updateConditions(
+            foreground: scenePhase == .active,
+            surfaceShown: surface.isActive
+        )
     }
 
     private var loadingRoadsChip: some View {
@@ -405,6 +466,8 @@ struct MapHomeView: View {
 @MainActor
 private struct MapboxStandardMap: View {
     let onLoaded: @MainActor () -> Void
+    let onFullFrameRendered: @MainActor () -> Void
+    let onLoadingError: @MainActor (FeatureHealthKind) -> Void
     let surface: StubMapSurface
     let locationProvider: any LocationProvider
     @State private var viewport: Viewport
@@ -426,12 +489,16 @@ private struct MapboxStandardMap: View {
         accessToken: String,
         surface: StubMapSurface,
         locationProvider: any LocationProvider,
+        onLoadingError: @escaping @MainActor (FeatureHealthKind) -> Void,
+        onFullFrameRendered: @escaping @MainActor () -> Void,
         onLoaded: @escaping @MainActor () -> Void
     ) {
         MapboxOptions.accessToken = accessToken
         self.surface = surface
         self.locationProvider = locationProvider
         self.onLoaded = onLoaded
+        self.onFullFrameRendered = onFullFrameRendered
+        self.onLoadingError = onLoadingError
         _viewport = State(initialValue: .camera(
             center: .init(latitude: 57.4872, longitude: 12.0761),
             zoom: surface.browsingZoom,
@@ -479,6 +546,18 @@ private struct MapboxStandardMap: View {
                     meFollowEnabled: $meFollowEnabled,
                     meFollowSuspended: $meFollowSuspended
                 )
+            }
+            .onMapLoadingError { event in
+                switch event.type {
+                case .style: onLoadingError(.mapStyleLoadFailed)
+                case .sprite, .glyphs: onLoadingError(.mapResourceLoadError)
+                default: break
+                }
+            }
+            .onRenderFrameFinished { event in
+                if event.renderMode == .full {
+                    onFullFrameRendered()
+                }
             }
             .onCameraChanged { context in
                 let state = context.cameraState

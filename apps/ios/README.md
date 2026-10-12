@@ -115,3 +115,18 @@ When changing shell behaviour here, port the change (and its tests) to
 `apps/android/.../shell/ShellNav.kt`, and vice versa. Intentional differences
 must be documented per the parity instructions — currently: Sign in with Apple
 only, and no turn-by-turn navigation in v1 (both recorded in ADR-002).
+
+## Release notes and App Store update checks
+
+`KCC/Updates/changelog.json` is the bundled source for the first-launch-after-update
+announcement and the **What’s New** screen. Every release PR that increments
+`CURRENT_PROJECT_VERSION` must add an entry for that build and localized release-note
+keys under `whatsNew` in both localization contracts. `ChangelogTests` enforces that
+the shipping build and marketing version are covered.
+
+The update prompt asks Apple's public lookup service for this bundle identifier once
+per authenticated app session. It remains silently disabled until a matching App Store
+listing returns a newer semantic version; no App Store ID or credential is committed.
+Tapping **Not now** defers that exact version for seven days, while a newer version can
+prompt immediately. Prompts wait until live sharing/drive recording and the bundled
+What's New announcement have finished.

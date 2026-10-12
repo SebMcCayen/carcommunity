@@ -1415,7 +1415,8 @@
       "pending": "Väntar"
     },
     "platform": {
-      "android": "Android"
+      "android": "Android",
+      "ios": "iOS"
     },
     "columns": {
       "status": "GitHub-ärende",

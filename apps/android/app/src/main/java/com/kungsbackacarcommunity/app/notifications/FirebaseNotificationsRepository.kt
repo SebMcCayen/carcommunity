@@ -37,7 +37,8 @@ class FirebaseNotificationsRepository private constructor(
                 .limit(Notifications.INBOX_QUERY_LIMIT)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
-                        trySend(NotificationsState.Error)
+                        val code = (error as? FirebaseFirestoreException)?.code?.name
+                        trySend(NotificationsState.Error(code))
                         return@addSnapshotListener
                     }
                     val items = snapshot?.documents?.mapNotNull { it.toNotification() } ?: emptyList()

@@ -29,7 +29,7 @@ enum AccountDeletionFailure: Equatable, Sendable {
             return .temporarilyUnavailable
         case .permissionDenied, .failedPrecondition:
             return .notPermitted
-        case .notFound, .internalError, .unknown:
+        case .notFound, .alreadyExists, .internalError, .unknown:
             return .generic
         }
     }

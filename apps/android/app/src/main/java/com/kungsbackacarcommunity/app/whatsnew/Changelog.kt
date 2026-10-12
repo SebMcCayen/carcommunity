@@ -38,9 +38,6 @@ data class UpdateAnnouncement(
  * Context/IO so it is JVM-unit-testable (mirrors [ShellNavigation]).
  */
 object Changelog {
-    /** The "Vad är nytt" page shows at most this many releases, newest first. */
-    const val PAGE_ENTRY_LIMIT = 10
-
     /** The popup shows at most this many highlight lines. */
     const val POPUP_HIGHLIGHT_LIMIT = 3
 
@@ -88,13 +85,10 @@ object Changelog {
     }
 
     /**
-     * The releases the "Vad är nytt" page lists: the [limit] most recent
-     * entries, newest first (tolerates unsorted input).
+     * The complete "Vad är nytt" history, newest first (tolerates unsorted input).
      */
-    fun latestEntries(
-        entries: List<ChangelogEntry>,
-        limit: Int = PAGE_ENTRY_LIMIT,
-    ): List<ChangelogEntry> = entries.sortedByDescending { it.versionCode }.take(limit)
+    fun latestEntries(entries: List<ChangelogEntry>): List<ChangelogEntry> =
+        entries.sortedByDescending { it.versionCode }
 
     /**
      * Decides what the after-update popup announces, or null to stay silent.

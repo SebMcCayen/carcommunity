@@ -1,0 +1,590 @@
+import XCTest
+
+@testable import KCC
+
+@MainActor
+final class SavedPlacesTests: XCTestCase {
+    private var suiteName: String!
+    private var defaults: UserDefaults!
+
+    override func setUp() {
+        super.setUp()
+        suiteName = "SavedPlacesTests.\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    override func tearDown() {
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults = nil
+        suiteName = nil
+        super.tearDown()
+    }
+
+    func testHomeAndWorkAreSingletonsSortedBeforeFavourites() throws {
+        let firstHome = try XCTUnwrap(makeSaved(.home, id: "one", latitude: 57))
+        let favourite = try XCTUnwrap(makeSaved(.favourite, id: "cafe", latitude: 58))
+        let secondHome = try XCTUnwrap(makeSaved(.home, id: "two", latitude: 59))
+
+        let places = SavedPlacesPolicy.upsert(
+            secondHome,
+            into: SavedPlacesPolicy.upsert(favourite, into: [firstHome])
+        )
+
+        XCTAssertEqual(places.map(\.id), ["home", "fav:cafe"])
+        XCTAssertEqual(places.first?.place.point.latitude, 59)
+    }
+
+    func testCapEvictsOldestFavouriteWithoutDroppingHomeOrWork() throws {
+        var places = [
+            try XCTUnwrap(makeSaved(.home, id: "h", latitude: 50)),
+            try XCTUnwrap(makeSaved(.work, id: "w", latitude: 51))
+        ]
+        for index in 0..<5 {
+            let saved = try XCTUnwrap(makeSaved(.favourite, id: "f\(index)", latitude: 52 + Double(index)))
+            places = SavedPlacesPolicy.upsert(saved, into: places)
+        }
+
+        XCTAssertEqual(places.count, 6)
+        XCTAssertTrue(places.contains { $0.id == "home" })
+        XCTAssertTrue(places.contains { $0.id == "work" })
+        XCTAssertFalse(places.contains { $0.id == "fav:f0" })
+        XCTAssertTrue(places.contains { $0.id == "fav:f4" })
+    }
+
+    func testRejectsInvalidCoordinatesAndBoundsLabels() {
+        let invalid = PlaceSuggestion(
+            id: "bad",
+            name: "Bad",
+            address: nil,
+            point: MapPoint(longitude: 12, latitude: .nan)
+        )
+        XCTAssertNil(SavedPlacesPolicy.create(kind: .favourite, place: invalid, label: "Bad"))
+
+        let saved = SavedPlacesPolicy.create(
+            kind: .favourite,
+            place: suggestion(id: "ok", latitude: 57),
+            label: String(repeating: "a", count: 100)
+        )
+        XCTAssertEqual(saved?.label.count, SavedPlacesPolicy.maximumLabelLength)
+    }
+
+    func testQueryAndPersistedIdentityUseScalarBounds() throws {
+        let combiningQuery = "a" + String(repeating: "\u{0301}", count: 500)
+        XCTAssertEqual(
+            SavedPlacesPolicy.normalizedQuery(combiningQuery).unicodeScalars.count,
+            SavedPlacesPolicy.maximumQueryLength
+        )
+
+        let longID = String(repeating: "x", count: 500)
+        let saved = try XCTUnwrap(makeSaved(.favourite, id: longID, latitude: 57))
+        XCTAssertEqual(saved.place.id.unicodeScalars.count, 256)
+        XCTAssertEqual(saved.id, "fav:\(saved.place.id)")
+        XCTAssertEqual(SavedPlacesPolicy.normalize([saved]), [saved])
+    }
+
+    func testSuggestionsSortNearestFirstOnlyWithARealFixAndRemainStable() {
+        let farther = suggestion(id: "farther", latitude: 58)
+        let nearFirst = suggestion(id: "near-first", latitude: 57.1)
+        let nearSecond = suggestion(id: "near-second", latitude: 57.1)
+        let apiOrder = [farther, nearFirst, nearSecond]
+
+        XCTAssertEqual(SavedPlacesPolicy.nearestFirst(apiOrder, from: nil), apiOrder)
+        XCTAssertEqual(
+            SavedPlacesPolicy.nearestFirst(
+                apiOrder,
+                from: MapPoint(longitude: .nan, latitude: 57)
+            ),
+            apiOrder
+        )
+        XCTAssertEqual(
+            SavedPlacesPolicy.nearestFirst(
+                apiOrder,
+                from: MapPoint(longitude: 12, latitude: 57)
+            ).map(\.id),
+            ["near-first", "near-second", "farther"]
+        )
+    }
+
+    func testBoundQueryPreservesTrailingSpaceForMultiWordTyping() {
+        let store = UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults)
+        let coordinator = SavedPlacesCoordinator(
+            store: store,
+            searchClient: UnavailableAddressSearchClient()
+        )
+
+        coordinator.updateQuery("Main ", proximity: nil)
+
+        XCTAssertEqual(coordinator.query, "Main ")
+        XCTAssertEqual(SavedPlacesPolicy.normalizedQuery(coordinator.query), "Main")
+        coordinator.clearSearch()
+    }
+
+    func testStoreIsIsolatedByAccountAndToleratesCorruptPayload() throws {
+        let first = UserDefaultsSavedPlacesStore(uid: "member-a", defaults: defaults)
+        let second = UserDefaultsSavedPlacesStore(uid: "member-b", defaults: defaults)
+        let saved = try XCTUnwrap(makeSaved(.home, id: "home-address", latitude: 57))
+        first.save([saved])
+
+        XCTAssertEqual(first.load(), [saved])
+        XCTAssertTrue(second.load().isEmpty)
+
+        for (key, _) in defaults.dictionaryRepresentation() where key.hasPrefix("ios.savedPlaces.v1.") {
+            defaults.set(Data("not-json".utf8), forKey: key)
+        }
+        XCTAssertTrue(first.load().isEmpty)
+    }
+
+    func testStorePreservesValidEntriesAroundMalformedElements() throws {
+        let store = UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults)
+        let home = try XCTUnwrap(makeSaved(.home, id: "home-address", latitude: 57))
+        let favourite = try XCTUnwrap(makeSaved(.favourite, id: "cafe", latitude: 58))
+
+        // Seed once to discover this account's private, encoded key without
+        // exposing persistence details through the production API.
+        store.save([home])
+        let key = try XCTUnwrap(defaults.dictionaryRepresentation().keys.first {
+            $0.hasPrefix("ios.savedPlaces.v1.")
+        })
+        let encoder = JSONEncoder()
+        let validHome = try JSONSerialization.jsonObject(with: encoder.encode(home))
+        let validFavourite = try JSONSerialization.jsonObject(with: encoder.encode(favourite))
+        let malformed: [String: Any] = [
+            "label": "Malformed",
+            "place": ["id": "malformed"]
+        ]
+        let futureKind: [String: Any] = [
+            "kind": "future_kind",
+            "label": "Future",
+            "place": [
+                "id": "future",
+                "name": "Future",
+                "point": ["longitude": 14, "latitude": 59]
+            ]
+        ]
+        let missingKind: [String: Any] = [
+            "label": "Legacy",
+            "place": [
+                "id": "legacy",
+                "name": "Legacy",
+                "point": ["longitude": 15, "latitude": 60]
+            ]
+        ]
+        defaults.set(
+            try JSONSerialization.data(withJSONObject: [
+                validHome,
+                malformed,
+                futureKind,
+                missingKind,
+                validFavourite
+            ]),
+            forKey: key
+        )
+
+        let recovered = store.load()
+        XCTAssertEqual(recovered.map(\.id), [home.id, "fav:future", "fav:legacy", favourite.id])
+        XCTAssertEqual(recovered.map(\.kind), [.home, .favourite, .favourite, .favourite])
+    }
+
+    func testSearchBoxRequestIsBoundedAndUsesValidProximity() throws {
+        let client = MapboxAddressSearchClient(token: "pk.test", language: "sv")
+        let url = try XCTUnwrap(client.requestURL(
+            query: String(repeating: "a", count: 500),
+            proximity: MapPoint(longitude: 12.08, latitude: 57.49)
+        ))
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let items = try XCTUnwrap(components.queryItems)
+
+        XCTAssertEqual(components.path, "/search/searchbox/v1/forward")
+        XCTAssertEqual(
+            items.first(where: { $0.name == "q" })?.value?.unicodeScalars.count,
+            SavedPlacesPolicy.maximumQueryLength
+        )
+        XCTAssertEqual(items.first(where: { $0.name == "limit" })?.value, "6")
+        XCTAssertEqual(items.first(where: { $0.name == "proximity" })?.value, "12.08,57.49")
+        XCTAssertEqual(items.first(where: { $0.name == "language" })?.value, "sv")
+        XCTAssertNil(items.first(where: { $0.name == "country" }))
+        XCTAssertNil(items.first(where: { $0.name == "types" }))
+        XCTAssertNil(items.first(where: { $0.name == "permanent" }))
+        XCTAssertNil(items.first(where: { $0.name == "autocomplete" }))
+    }
+
+    func testSearchBoxRequestUsesHomeBiasWithoutLiveProximity() throws {
+        let client = MapboxAddressSearchClient(token: "pk.test", language: "sv")
+        let url = try XCTUnwrap(client.requestURL(query: "Kungsmässan", proximity: nil))
+        let items = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+
+        XCTAssertEqual(items.first(where: { $0.name == "proximity" })?.value, "12.073,57.4874")
+        XCTAssertEqual(items.first(where: { $0.name == "country" })?.value, "SE")
+    }
+
+    func testSearchBoxDoesNotBuildTokenlessOrBlankRequests() {
+        let unavailable = MapboxAddressSearchClient(token: "", language: "sv")
+        let malformed = MapboxAddressSearchClient(token: "sk.secret", language: "sv")
+        let available = MapboxAddressSearchClient(token: "pk.test", language: "sv")
+
+        XCTAssertNil(unavailable.requestURL(query: "Kungsmässan", proximity: nil))
+        XCTAssertNil(malformed.requestURL(query: "Kungsmässan", proximity: nil))
+        XCTAssertNil(available.requestURL(query: "   ", proximity: nil))
+    }
+
+    func testSearchBoxDecodesPOIAndBusinessResult() throws {
+        let data = Data("""
+        {"type":"FeatureCollection","features":[{
+          "type":"Feature",
+          "geometry":{"type":"Point","coordinates":[12.0757,57.4874]},
+          "properties":{
+            "mapbox_id":"poi.kungsmassan",
+            "feature_type":"poi",
+            "name":"Kungsmässan",
+            "full_address":"Borgmästaregatan 5, 434 32 Kungsbacka",
+            "poi_category":["shopping_mall"]
+          }
+        }]}
+        """.utf8)
+
+        let decoded = try MapboxAddressSearchClient.decode(data: data)
+
+        XCTAssertEqual(decoded, [PlaceSuggestion(
+            id: "poi.kungsmassan",
+            name: "Kungsmässan",
+            address: "Borgmästaregatan 5, 434 32 Kungsbacka",
+            point: MapPoint(longitude: 12.0757, latitude: 57.4874)
+        )])
+    }
+
+    func testGeocoderPreservesValidFeaturesAroundMalformedElements() throws {
+        let data = Data("""
+        {"features":[
+          {"id":"valid.1","geometry":{"coordinates":[12,57]},"properties":{"name":"First"}},
+          {"id":"malformed","properties":{"name":"Missing geometry"}},
+          {"id":"valid.2","geometry":{"coordinates":[13,58]},"properties":{"name":"Second"}}
+        ]}
+        """.utf8)
+
+        XCTAssertEqual(
+            try MapboxAddressSearchClient.decode(data: data).map(\.name),
+            ["First", "Second"]
+        )
+    }
+
+    func testGeocoderDropsInvalidFeaturesAndCapsResults() throws {
+        let features = (0..<8).map { index in
+            """
+            {"id":"feature.\(index)","geometry":{"coordinates":[12.0,57.\(index)]},"properties":{"name":"Place \(index)","mapbox_id":"id.\(index)"}}
+            """
+        } + [
+            """
+            {"id":"bad","geometry":{"coordinates":[999,999]},"properties":{"name":"Bad"}}
+            """
+        ]
+        let data = Data("{\"features\":[\(features.joined(separator: ","))]}".utf8)
+
+        let decoded = try MapboxAddressSearchClient.decode(data: data)
+
+        XCTAssertEqual(decoded.count, SavedPlacesPolicy.maximumSearchResults)
+        XCTAssertEqual(decoded.first?.name, "Place 0")
+    }
+
+    func testGeocoderDeduplicatesStableFeatureIdentity() throws {
+        let data = Data("""
+        {"features":[
+          {"id":"feature.1","geometry":{"coordinates":[12,57]},"properties":{"name":"First","mapbox_id":"same"}},
+          {"id":"feature.2","geometry":{"coordinates":[13,58]},"properties":{"name":"Duplicate","mapbox_id":"same"}}
+        ]}
+        """.utf8)
+
+        let decoded = try MapboxAddressSearchClient.decode(data: data)
+
+        XCTAssertEqual(decoded.map(\.name), ["First"])
+    }
+
+    func testGeocoderBoundsDecodedTextByUnicodeScalars() throws {
+        let scalarHeavyText = "a" + String(repeating: "\u{0301}", count: 400)
+        let payload: [String: Any] = [
+            "features": [[
+                "id": "fallback",
+                "geometry": ["coordinates": [12, 57]],
+                "properties": [
+                    "mapbox_id": scalarHeavyText,
+                    "name": scalarHeavyText,
+                    "full_address": scalarHeavyText
+                ]
+            ]]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+
+        let suggestion = try XCTUnwrap(MapboxAddressSearchClient.decode(data: data).first)
+
+        XCTAssertEqual(suggestion.id.unicodeScalars.count, 256)
+        XCTAssertEqual(suggestion.name.unicodeScalars.count, 160)
+        XCTAssertEqual(suggestion.address?.unicodeScalars.count, 240)
+        XCTAssertEqual(suggestion.id, SavedPlacesPolicy.bounded(scalarHeavyText, to: 256))
+    }
+
+    func testGeocoderRejectsOversizedResponseBeforeDecoding() {
+        let data = Data(repeating: 0x20, count: MapboxAddressSearchClient.maximumResponseBytes + 1)
+
+        XCTAssertThrowsError(try MapboxAddressSearchClient.decode(data: data)) { error in
+            XCTAssertEqual(error as? AddressSearchError, .invalidResponse)
+        }
+    }
+
+    func testCoordinatorDebouncesToLatestQuery() async throws {
+        let calls = AddressSearchCalls()
+        let client = ClosureAddressSearchClient { query, _ in
+            await calls.append(query)
+            return [PlaceSuggestion(
+                id: query,
+                name: query,
+                address: nil,
+                point: MapPoint(longitude: 12, latitude: 57)
+            )]
+        }
+        let coordinator = SavedPlacesCoordinator(
+            store: UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults),
+            searchClient: client
+        )
+
+        coordinator.updateQuery("first", proximity: nil)
+        try await Task.sleep(for: .milliseconds(100))
+        coordinator.updateQuery("second", proximity: nil)
+        try await Task.sleep(for: .milliseconds(400))
+
+        let recorded = await calls.values()
+        XCTAssertEqual(recorded, ["second"])
+        XCTAssertEqual(coordinator.suggestions.map(\.id), ["second"])
+        XCTAssertFalse(coordinator.isSearching)
+        XCTAssertFalse(coordinator.searchFailed)
+    }
+
+    func testCoordinatorCancelledResponseCannotOverwriteLatestQuery() async throws {
+        let calls = AddressSearchCalls()
+        let client = ClosureAddressSearchClient { query, _ in
+            await calls.append(query)
+            if query == "older" {
+                // Deliberately return a result after cancellation to prove the
+                // coordinator's stale-result guard, not the client, protects UI state.
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+            return [PlaceSuggestion(
+                id: query,
+                name: query,
+                address: nil,
+                point: MapPoint(longitude: 12, latitude: 57)
+            )]
+        }
+        let coordinator = SavedPlacesCoordinator(
+            store: UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults),
+            searchClient: client
+        )
+
+        coordinator.updateQuery("older", proximity: nil)
+        try await Task.sleep(for: .milliseconds(350))
+        coordinator.updateQuery("newer", proximity: nil)
+        try await Task.sleep(for: .milliseconds(400))
+
+        let recorded = await calls.values()
+        XCTAssertEqual(recorded, ["older", "newer"])
+        XCTAssertEqual(coordinator.suggestions.map(\.id), ["newer"])
+        XCTAssertFalse(coordinator.isSearching)
+    }
+
+    func testCoordinatorOrdersSuccessAndClearsSuggestionsOnFailure() async throws {
+        let calls = AddressSearchCalls()
+        let client = ClosureAddressSearchClient { query, _ in
+            await calls.append(query)
+            if query == "failure" { throw AddressSearchError.invalidResponse }
+            return [
+                PlaceSuggestion(
+                    id: "far",
+                    name: "Far",
+                    address: nil,
+                    point: MapPoint(longitude: 12, latitude: 58)
+                ),
+                PlaceSuggestion(
+                    id: "near",
+                    name: "Near",
+                    address: nil,
+                    point: MapPoint(longitude: 12, latitude: 57.1)
+                )
+            ]
+        }
+        let coordinator = SavedPlacesCoordinator(
+            store: UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults),
+            searchClient: client
+        )
+
+        coordinator.updateQuery(
+            "success",
+            proximity: MapPoint(longitude: 12, latitude: 57)
+        )
+        try await Task.sleep(for: .milliseconds(400))
+        XCTAssertEqual(coordinator.suggestions.map(\.id), ["near", "far"])
+        XCTAssertFalse(coordinator.searchFailed)
+
+        coordinator.updateQuery("failure", proximity: nil)
+        try await Task.sleep(for: .milliseconds(400))
+        XCTAssertTrue(coordinator.suggestions.isEmpty)
+        XCTAssertTrue(coordinator.searchFailed)
+        XCTAssertFalse(coordinator.isSearching)
+    }
+
+    func testRepointingFavouriteRemovesOldCoordinateIdentity() throws {
+        let old = try XCTUnwrap(makeSaved(.favourite, id: "old", latitude: 57))
+        let store = UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults)
+        store.save([old])
+        let coordinator = SavedPlacesCoordinator(
+            store: store,
+            searchClient: UnavailableAddressSearchClient()
+        )
+
+        coordinator.save(
+            kind: .favourite,
+            place: suggestion(id: "new", latitude: 58),
+            label: "New",
+            replacingID: old.id
+        )
+
+        XCTAssertEqual(coordinator.places.map(\.id), ["fav:new"])
+    }
+
+    func testRepointingFavouriteAtCapacityOnlyReplacesThatFavourite() throws {
+        let store = UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults)
+        let existing = try (0..<SavedPlacesPolicy.maximumCount).map { index in
+            try XCTUnwrap(makeSaved(.favourite, id: "f\(index)", latitude: 50 + Double(index)))
+        }
+        store.save(existing)
+        let coordinator = SavedPlacesCoordinator(
+            store: store,
+            searchClient: UnavailableAddressSearchClient()
+        )
+
+        coordinator.save(
+            kind: .favourite,
+            place: suggestion(id: "replacement", latitude: 60),
+            label: "Replacement",
+            replacingID: "fav:f5"
+        )
+
+        XCTAssertEqual(coordinator.places.count, SavedPlacesPolicy.maximumCount)
+        XCTAssertTrue(coordinator.places.contains { $0.id == "fav:f0" })
+        XCTAssertFalse(coordinator.places.contains { $0.id == "fav:f5" })
+        XCTAssertTrue(coordinator.places.contains { $0.id == "fav:replacement" })
+    }
+
+    func testChangingKindRemovesEveryOtherEntryForTheSamePlace() throws {
+        let store = UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults)
+        let shared = suggestion(id: "shared", latitude: 57)
+        let favourite = try XCTUnwrap(
+            SavedPlacesPolicy.create(kind: .favourite, place: shared, label: "Shared")
+        )
+        let unrelated = try XCTUnwrap(makeSaved(.favourite, id: "other", latitude: 58))
+        store.save([favourite, unrelated])
+        let coordinator = SavedPlacesCoordinator(
+            store: store,
+            searchClient: UnavailableAddressSearchClient()
+        )
+
+        coordinator.save(kind: .home, place: shared, label: "Shared")
+
+        XCTAssertEqual(coordinator.places.map(\.id), ["home", "fav:other"])
+    }
+
+    func testSamePlaceFallsBackToCoordinatesWhenEitherIDIsBlank() {
+        let withID = suggestion(id: "known", latitude: 57)
+        let withoutID = PlaceSuggestion(
+            id: "",
+            name: "Dropped pin",
+            address: nil,
+            point: withID.point
+        )
+
+        XCTAssertTrue(SavedPlacesPolicy.refersToSamePlace(withID, as: withoutID))
+        XCTAssertFalse(SavedPlacesPolicy.refersToSamePlace(
+            withID,
+            as: PlaceSuggestion(
+                id: "",
+                name: "Other pin",
+                address: nil,
+                point: MapPoint(longitude: 13, latitude: 57)
+            )
+        ))
+    }
+
+    func testExistingSuggestionKeepsItsSavedKindAndCustomLabel() throws {
+        let suggestion = suggestion(id: "shared", latitude: 57)
+        let home = try XCTUnwrap(
+            SavedPlacesPolicy.create(kind: .home, place: suggestion, label: "My home")
+        )
+
+        let existing = SavedPlacesPolicy.editorSeed(
+            for: suggestion,
+            replacing: nil,
+            in: [home]
+        )
+
+        XCTAssertEqual(existing?.kind, .home)
+        XCTAssertEqual(existing?.label, "My home")
+    }
+
+    func testExplicitReplacementTakesPriorityOverMatchingSuggestion() throws {
+        let suggestion = suggestion(id: "shared", latitude: 57)
+        let matched = try XCTUnwrap(
+            SavedPlacesPolicy.create(kind: .home, place: suggestion, label: "Home")
+        )
+        let replacement = try XCTUnwrap(
+            SavedPlacesPolicy.create(
+                kind: .work,
+                place: self.suggestion(id: "office", latitude: 58),
+                label: "Office"
+            )
+        )
+
+        let seed = SavedPlacesPolicy.editorSeed(
+            for: suggestion,
+            replacing: replacement,
+            in: [matched, replacement]
+        )
+
+        XCTAssertEqual(seed, replacement)
+    }
+
+    private func suggestion(id: String, latitude: Double) -> PlaceSuggestion {
+        PlaceSuggestion(
+            id: id,
+            name: "Place \(id)",
+            address: "Address \(id)",
+            point: MapPoint(longitude: 12, latitude: latitude)
+        )
+    }
+
+    private func makeSaved(
+        _ kind: SavedPlaceKind,
+        id: String,
+        latitude: Double
+    ) -> SavedPlace? {
+        SavedPlacesPolicy.create(kind: kind, place: suggestion(id: id, latitude: latitude), label: id)
+    }
+}
+
+private struct ClosureAddressSearchClient: AddressSearchClient {
+    let handler: @Sendable (String, MapPoint?) async throws -> [PlaceSuggestion]
+
+    init(
+        handler: @escaping @Sendable (String, MapPoint?) async throws -> [PlaceSuggestion]
+    ) {
+        self.handler = handler
+    }
+
+    func search(query: String, proximity: MapPoint?) async throws -> [PlaceSuggestion] {
+        try await handler(query, proximity)
+    }
+}
+
+private actor AddressSearchCalls {
+    private var recorded: [String] = []
+
+    func append(_ query: String) { recorded.append(query) }
+    func values() -> [String] { recorded }
+}

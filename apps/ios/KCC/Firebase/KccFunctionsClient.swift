@@ -58,6 +58,7 @@ final class KccFunctionsClient: @unchecked Sendable {
         case .permissionDenied: return .permissionDenied
         case .invalidArgument: return .invalidArgument
         case .notFound: return .notFound
+        case .alreadyExists: return .alreadyExists
         case .resourceExhausted: return .resourceExhausted
         case .failedPrecondition: return .failedPrecondition
         case .internal: return .internalError

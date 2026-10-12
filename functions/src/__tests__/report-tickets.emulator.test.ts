@@ -50,7 +50,8 @@ const EMULATOR_HOST = '127.0.0.1';
 const REGION = 'europe-west1';
 
 const adminApp =
-  getAdminApps()[0] ?? initializeAdminApp({ projectId: PROJECT_ID }, 'report-tickets-emulator-tests');
+  getAdminApps()[0] ??
+  initializeAdminApp({ projectId: PROJECT_ID }, 'report-tickets-emulator-tests');
 const adminDb = getAdminFirestore(adminApp);
 
 let app: FirebaseApp;
@@ -63,7 +64,11 @@ interface TestUser {
   password: string;
 }
 
-async function pollUntil<T>(read: () => Promise<T | undefined>, timeoutMs = 30_000, intervalMs = 250): Promise<T> {
+async function pollUntil<T>(
+  read: () => Promise<T | undefined>,
+  timeoutMs = 30_000,
+  intervalMs = 250,
+): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const value = await read();
@@ -73,14 +78,28 @@ async function pollUntil<T>(read: () => Promise<T | undefined>, timeoutMs = 30_0
   }
 }
 
-async function callableErrorCode(promise: Promise<unknown>): Promise<string> {
+interface CallableErrorSnapshot {
+  code: string;
+  details: unknown;
+}
+
+async function callableError(promise: Promise<unknown>): Promise<CallableErrorSnapshot> {
   try {
     await promise;
-    return 'no-error';
+    return { code: 'no-error', details: undefined };
   } catch (error) {
-    if (error instanceof FirebaseError) return error.code;
+    if (error instanceof FirebaseError) {
+      return {
+        code: error.code,
+        details: (error as FirebaseError & { details?: unknown }).details,
+      };
+    }
     throw error;
   }
+}
+
+async function callableErrorCode(promise: Promise<unknown>): Promise<string> {
+  return (await callableError(promise)).code;
 }
 
 async function createProvisionedUser(prefix: string): Promise<TestUser> {
@@ -103,13 +122,13 @@ async function signInAs(user: TestUser): Promise<void> {
 const call = (name: string, data: unknown) => httpsCallable(functions, name)(data);
 
 async function setFlag(enabled: boolean): Promise<void> {
-  await adminDb.collection('config').doc('featureFlags').set({ reportTicketsBrowser: enabled }, { merge: true });
+  await adminDb
+    .collection('config')
+    .doc('featureFlags')
+    .set({ reportTicketsBrowser: enabled }, { merge: true });
 }
 
-async function seedOpenTicket(
-  number: number,
-  fields: Record<string, unknown> = {},
-): Promise<void> {
+async function seedOpenTicket(number: number, fields: Record<string, unknown> = {}): Promise<void> {
   await adminDb
     .collection('openTickets')
     .doc(String(number))
@@ -164,7 +183,9 @@ describe('feedback-interactWithIssue', () => {
   it('rejects unauthenticated callers', async () => {
     await auth.signOut();
     expect(
-      await callableErrorCode(call('feedback-interactWithIssue', { issueNumber: 1, type: 'plus_one', clientId: 'c1' })),
+      await callableErrorCode(
+        call('feedback-interactWithIssue', { issueNumber: 1, type: 'plus_one', clientId: 'c1' }),
+      ),
     ).toBe('functions/unauthenticated');
   });
 
@@ -173,20 +194,37 @@ describe('feedback-interactWithIssue', () => {
     await seedOpenTicket(8001);
     await signInAs(reporter);
     expect(
-      await callableErrorCode(call('feedback-interactWithIssue', { issueNumber: 8001, type: 'plus_one', clientId: 'c1' })),
-    ).toBe('functions/failed-precondition');
+      await callableError(
+        call('feedback-interactWithIssue', {
+          issueNumber: 8001,
+          type: 'plus_one',
+          clientId: 'c1',
+        }),
+      ),
+    ).toEqual({
+      code: 'functions/failed-precondition',
+      details: { reason: 'tickets_disabled' },
+    });
   });
 
   it('rejects a missing or non-open issue when enabled', async () => {
     await setFlag(true);
     await signInAs(reporter);
     await seedOpenTicket(8002, { state: 'closed' });
-    expect(
-      await callableErrorCode(call('feedback-interactWithIssue', { issueNumber: 8002, type: 'plus_one', clientId: 'c1' })),
-    ).toBe('functions/failed-precondition');
-    expect(
-      await callableErrorCode(call('feedback-interactWithIssue', { issueNumber: 999999, type: 'plus_one', clientId: 'c1' })),
-    ).toBe('functions/failed-precondition');
+    for (const issueNumber of [8002, 999999]) {
+      expect(
+        await callableError(
+          call('feedback-interactWithIssue', {
+            issueNumber,
+            type: 'plus_one',
+            clientId: 'c1',
+          }),
+        ),
+      ).toEqual({
+        code: 'functions/failed-precondition',
+        details: { reason: 'issue_not_open' },
+      });
+    }
   });
 
   it('records a +1 once, bumps the tally, and rejects a repeat +1', async () => {
@@ -194,19 +232,36 @@ describe('feedback-interactWithIssue', () => {
     await signInAs(reporter);
     await seedOpenTicket(8001);
 
-    const res = (await call('feedback-interactWithIssue', { issueNumber: 8001, type: 'plus_one', clientId: 'c1' }))
-      .data as { issueNumber: number; type: string; posted: boolean };
+    const res = (
+      await call('feedback-interactWithIssue', {
+        issueNumber: 8001,
+        type: 'plus_one',
+        clientId: 'c1',
+      })
+    ).data as { issueNumber: number; type: string; posted: boolean };
     expect(res).toMatchObject({ issueNumber: 8001, type: 'plus_one', posted: false });
 
-    const dedup = await adminDb.collection('issueInteractions').doc(`8001__${reporter.uid}__plus_one`).get();
+    const dedup = await adminDb
+      .collection('issueInteractions')
+      .doc(`8001__${reporter.uid}__plus_one`)
+      .get();
     expect(dedup.exists).toBe(true);
     const ticket = (await adminDb.collection('openTickets').doc('8001').get()).data()!;
     expect(ticket.plusOneCount).toBe(1);
 
     // A second +1 on the same issue by the same user is rejected.
     expect(
-      await callableErrorCode(call('feedback-interactWithIssue', { issueNumber: 8001, type: 'plus_one', clientId: 'c2' })),
-    ).toBe('functions/failed-precondition');
+      await callableError(
+        call('feedback-interactWithIssue', {
+          issueNumber: 8001,
+          type: 'plus_one',
+          clientId: 'c2',
+        }),
+      ),
+    ).toEqual({
+      code: 'functions/failed-precondition',
+      details: { reason: 'ticket_already_interacted' },
+    });
     const ticketAfter = (await adminDb.collection('openTickets').doc('8001').get()).data()!;
     expect(ticketAfter.plusOneCount).toBe(1); // unchanged
   });
@@ -216,15 +271,20 @@ describe('feedback-interactWithIssue', () => {
     await signInAs(reporter);
     // reporter already +1'd 8001 above — a comment is a distinct type, so allowed.
 
-    const res = (await call('feedback-interactWithIssue', {
-      issueNumber: 8001,
-      type: 'comment',
-      text: 'I have the same problem here.',
-      clientId: 'c3',
-    })).data as { type: string; posted: boolean };
+    const res = (
+      await call('feedback-interactWithIssue', {
+        issueNumber: 8001,
+        type: 'comment',
+        text: 'I have the same problem here.',
+        clientId: 'c3',
+      })
+    ).data as { type: string; posted: boolean };
     expect(res).toMatchObject({ type: 'comment', posted: false });
 
-    const dedup = await adminDb.collection('issueInteractions').doc(`8001__${reporter.uid}__comment`).get();
+    const dedup = await adminDb
+      .collection('issueInteractions')
+      .doc(`8001__${reporter.uid}__comment`)
+      .get();
     expect(dedup.exists).toBe(true);
     const ticket = (await adminDb.collection('openTickets').doc('8001').get()).data()!;
     expect(ticket.commentCount).toBe(1);
@@ -245,7 +305,14 @@ describe('feedback-interactWithIssue', () => {
 
     // A second comment on the same issue by the same user is rejected.
     expect(
-      await callableErrorCode(call('feedback-interactWithIssue', { issueNumber: 8001, type: 'comment', text: 'again', clientId: 'c4' })),
+      await callableErrorCode(
+        call('feedback-interactWithIssue', {
+          issueNumber: 8001,
+          type: 'comment',
+          text: 'again',
+          clientId: 'c4',
+        }),
+      ),
     ).toBe('functions/failed-precondition');
     const ticketAfter = (await adminDb.collection('openTickets').doc('8001').get()).data()!;
     expect(ticketAfter.commentCount).toBe(1); // unchanged
@@ -259,11 +326,17 @@ describe('feedback-interactWithIssue', () => {
 
     // Five distinct (issue, +1) interactions succeed.
     for (let n = 8101; n <= 8105; n += 1) {
-      await call('feedback-interactWithIssue', { issueNumber: n, type: 'plus_one', clientId: `b${n}` });
+      await call('feedback-interactWithIssue', {
+        issueNumber: n,
+        type: 'plus_one',
+        clientId: `b${n}`,
+      });
     }
     // The sixth in the window is rate-limited.
     expect(
-      await callableErrorCode(call('feedback-interactWithIssue', { issueNumber: 8106, type: 'plus_one', clientId: 'b6' })),
+      await callableErrorCode(
+        call('feedback-interactWithIssue', { issueNumber: 8106, type: 'plus_one', clientId: 'b6' }),
+      ),
     ).toBe('functions/resource-exhausted');
   });
 });
@@ -305,7 +378,9 @@ describe('runOpenTicketsSync', () => {
     // A stale doc left over from the run above (8299 already deleted) — assert
     // every one of the 150 is present.
     const present = await Promise.all(
-      many.map(async (i) => (await adminDb.collection('openTickets').doc(String(i.number)).get()).exists),
+      many.map(
+        async (i) => (await adminDb.collection('openTickets').doc(String(i.number)).get()).exists,
+      ),
     );
     expect(present.every(Boolean)).toBe(true);
   });

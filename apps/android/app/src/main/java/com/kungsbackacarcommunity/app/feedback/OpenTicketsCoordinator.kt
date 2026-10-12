@@ -87,10 +87,18 @@ class OpenTicketsCoordinator(
             }
         update(issueNumber) { row ->
             when (outcome) {
-                // POSTED and ALREADY_DONE both disable the control; ALREADY_DONE
-                // additionally shows a brief "already marked" note.
+                // POSTED and ALREADY_DONE mark the control done; ALREADY_DONE
+                // additionally shows a brief "already marked" note. Delivery
+                // failure also disables its reserved action without claiming it posted.
                 TicketInteractOutcome.POSTED ->
                     row.markDone(true).copy(submitting = null, error = null)
+
+                TicketInteractOutcome.DELIVERY_FAILED ->
+                    if (type == TicketInteractionType.PLUS_ONE) {
+                        row.copy(submitting = null, plusOneDeliveryFailed = true, error = null)
+                    } else {
+                        row.copy(submitting = null, commentDeliveryFailed = true, error = null)
+                    }
 
                 TicketInteractOutcome.ALREADY_DONE ->
                     row.markDone(true)

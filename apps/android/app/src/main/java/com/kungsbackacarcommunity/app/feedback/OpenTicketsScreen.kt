@@ -200,6 +200,14 @@ private fun TicketCard(
                 }
             }
 
+            if (state.plusOneDeliveryFailed || state.commentDeliveryFailed) {
+                Text(
+                    text = stringResource(R.string.openTickets_deliveryFailed),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+
             // One comment per issue.
             if (state.commentDone) {
                 Text(
@@ -207,7 +215,7 @@ private fun TicketCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
-            } else {
+            } else if (!state.commentDeliveryFailed) {
                 // A comment is posted to a PUBLIC GitHub issue — warn before the
                 // user types, same spirit as the report form's public-tracker card.
                 Text(

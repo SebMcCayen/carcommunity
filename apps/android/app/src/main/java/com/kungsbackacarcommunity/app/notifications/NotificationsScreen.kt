@@ -193,7 +193,7 @@ fun NotificationsScreen(
                         CircularProgressIndicator()
                     }
 
-                NotificationsState.Error ->
+                is NotificationsState.Error ->
                     item {
                         Text(
                             text = stringResource(R.string.notifications_loadError),

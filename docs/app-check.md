@@ -2,17 +2,19 @@
 
 ## Current state
 
-| Surface  | Provider                | Status                                                            |
-| -------- | ----------------------- | ----------------------------------------------------------------- |
+| Surface   | Provider                                             | Status                                                                                                                                 |
+| --------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | Functions | built-in v2 enforcement | Every callable sets `enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true'` (guard test: `functions/src/__tests__/appcheck-guard.test.ts`) |
 | Android  | Play Integrity (release) / debug provider (debug builds) | Registered in `KccApplication`; no-op until `google-services.json` is provisioned. Debug builds can pin a stable debug secret — see below |
 | Admin web | reCAPTCHA Enterprise   | Registered in `apps/admin/src/lib/firebase.ts`; no-op until `VITE_APPCHECK_SITE_KEY` is configured |
-| iOS      | App Attest              | Descoped with the iOS app (2026-07-02 decision)                   |
+| iOS      | App Attest with DeviceCheck fallback (release) / debug provider (debug builds) | Configured in `FirebaseBootstrap` before Firebase startup; skipped when `GoogleService-Info.plist` is absent. Production registration requires the iOS production cutover |
 
 Emulator/CI: the Functions emulator runs with enforcement DISABLED (the
 `FUNCTIONS_EMULATOR` guard); clients use debug providers
 (`VITE_APPCHECK_DEBUG_TOKEN` on web, `DebugAppCheckProviderFactory` on
-Android debug builds).
+Android debug builds, and `AppCheckDebugProviderFactory` on iOS debug builds).
+Config-less iOS validation builds skip Firebase and App Check initialization
+entirely.
 
 ## Android debug builds — stable debug token (one-time setup)
 
@@ -111,8 +113,9 @@ the public internet.
 ## Production rollout (at cutover, per the migration plan)
 
 1. Provision providers in the Firebase console: Play Integrity for the
-   Android app id, reCAPTCHA Enterprise for the admin hosting domain. Configure
-   `VITE_APPCHECK_SITE_KEY` in the admin build environment.
+   Android app id, App Attest and DeviceCheck for the iOS app id, and reCAPTCHA
+   Enterprise for the admin hosting domain. Configure `VITE_APPCHECK_SITE_KEY`
+   in the admin build environment.
 2. **Monitor-only window (min. 1 week):** keep console enforcement OFF for
    Firestore/RTDB/Storage and rely on the callables' built-in enforcement
    being observable in Cloud Monitoring (`verified` vs `unverified`

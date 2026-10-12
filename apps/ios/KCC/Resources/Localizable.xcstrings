@@ -868,6 +868,57 @@
         }
       }
     },
+    "appUpdate.iosMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det finns en nyare version av appen i App Store."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A newer version of the app is available in the App Store."
+          }
+        }
+      }
+    },
+    "appUpdate.iosRequiredMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Den här uppdateringen måste installeras innan du kan fortsätta. Öppna App Store för att uppdatera."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This update has to be installed before you can carry on. Open the App Store to update."
+          }
+        }
+      }
+    },
+    "appUpdate.iosStoreUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det gick inte att öppna appens sida i App Store på den här enheten."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The App Store listing could not be opened on this device."
+          }
+        }
+      }
+    },
     "appUpdate.message": {
       "extractionState": "manual",
       "localizations": {
@@ -22016,6 +22067,23 @@
         }
       }
     },
+    "openTickets.deliveryFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Din interaktion registrerades, men kunde inte publiceras på GitHub. Den kan inte skickas igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your interaction was recorded, but could not be published to GitHub. It cannot be retried."
+          }
+        }
+      }
+    },
     "openTickets.empty": {
       "extractionState": "manual",
       "localizations": {
@@ -22097,6 +22165,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Known problems others have reported. Have the same problem? Give it a thumbs up or add a comment."
+          }
+        }
+      }
+    },
+    "openTickets.loadMore": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hämta fler ärenden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Load more tickets"
           }
         }
       }
@@ -23620,13 +23705,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "En ansökan för denna e-post granskas redan."
+            "value": "En ansökan granskas redan."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "An application for this email is already under review."
+            "value": "An application is already under review."
           }
         }
       }
@@ -27700,13 +27785,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Dina destinationer med ett tryck. Hem, Jobbet och favoriter dyker upp i sökfältet för snabb vägbeskrivning."
+            "value": "Dina destinationer med ett tryck. Hem, Jobbet och favoriter visas i sökningen så att du snabbt kan öppna dem på kartan."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your one-tap destinations. Home, Work and favourites show up in the search bar for instant routing."
+            "value": "Your one-tap destinations. Home, Work and favourites appear in search so you can quickly open them on the map."
           }
         }
       }
@@ -32484,6 +32569,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Version %1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "whatsNew.release010Change": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En inbyggd kartbaserad upplevelse med community-, kör- och profilfunktioner."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A native map-first experience with community, drive and profile features."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Highlight": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Den första inbyggda iOS-MVP:n tar form."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The first native iOS MVP is taking shape."
           }
         }
       }
