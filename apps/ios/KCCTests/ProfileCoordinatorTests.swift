@@ -212,6 +212,39 @@ final class ProfileCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testCompletedOnboardingRemainsVerifiedAcrossListenerFailure() async {
+        let repository = FakeUserProfileRepository()
+        let complete = UserProfile(
+            displayName: "Sebbe", bio: nil, avatarPath: nil, onboardingComplete: true
+        )
+        repository.script([.loaded(complete)])
+        let coordinator = ProfileCoordinator(repository: repository, uid: "uid-1")
+
+        coordinator.start()
+        await wait { coordinator.state == .loaded(complete) }
+        XCTAssertTrue(coordinator.hasVerifiedOnboarding)
+
+        repository.emit(.failed(code: "UNAVAILABLE"))
+        await wait { coordinator.state == .failed(code: "UNAVAILABLE") }
+        XCTAssertTrue(coordinator.hasVerifiedOnboarding)
+    }
+
+    @MainActor
+    func testRetryReplacesFailedListener() async {
+        let repository = FakeUserProfileRepository()
+        repository.script([.failed(code: "UNAVAILABLE")])
+        let coordinator = ProfileCoordinator(repository: repository, uid: "uid-1")
+
+        coordinator.start()
+        await wait { coordinator.state == .failed(code: "UNAVAILABLE") }
+        repository.script([.loaded(Self.profile)])
+        coordinator.retry()
+
+        await wait { coordinator.state == .loaded(Self.profile) }
+        XCTAssertEqual(repository.subscribeCount, 2)
+    }
+
+    @MainActor
     func testStartIsIdempotent() async {
         let repository = FakeUserProfileRepository()
         repository.script([.loaded(Self.profile)])

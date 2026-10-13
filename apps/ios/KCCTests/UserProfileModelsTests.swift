@@ -25,6 +25,48 @@ final class UserProfileModelsTests: XCTestCase {
         XCTAssertEqual(profile.avatarPath, "profileImages/uid-1/avatar-1.jpg")
     }
 
+    func testRealOnboardingCompletionValueMarksProfileComplete() {
+        let profile = UserProfile.fromMap(["onboardingCompletedAt": Date()])
+        XCTAssertTrue(profile.onboardingComplete)
+    }
+
+    func testExplicitNullOnboardingCompletionDoesNotMarkProfileComplete() {
+        let profile = UserProfile.fromMap(["onboardingCompletedAt": NSNull()])
+        XCTAssertFalse(profile.onboardingComplete)
+    }
+
+    func testMissingOnboardingCompletionDoesNotMarkProfileComplete() {
+        let profile = UserProfile.fromMap([:])
+        XCTAssertFalse(profile.onboardingComplete)
+    }
+
+    func testExperienceRouteFailsClosedUntilCompletionWasVerified() {
+        XCTAssertEqual(
+            AuthenticatedExperienceRoute.resolve(
+                profileState: .failed(code: "UNAVAILABLE"),
+                hasVerifiedOnboarding: false
+            ),
+            .recovery(canRetry: true)
+        )
+        XCTAssertEqual(
+            AuthenticatedExperienceRoute.resolve(
+                profileState: .unavailable,
+                hasVerifiedOnboarding: false
+            ),
+            .recovery(canRetry: false)
+        )
+    }
+
+    func testExperienceRoutePreservesShellAfterCompletionWasVerified() {
+        XCTAssertEqual(
+            AuthenticatedExperienceRoute.resolve(
+                profileState: .failed(code: "UNAVAILABLE"),
+                hasVerifiedOnboarding: true
+            ),
+            .shell
+        )
+    }
+
     func testEmptyMapDecodesToAllNil() {
         let profile = UserProfile.fromMap([:])
         XCTAssertNil(profile.displayName)
