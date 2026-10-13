@@ -10,12 +10,19 @@ import Observation
 final class AuthSession {
     private(set) var state: AuthState
     private let repository: AuthRepository?
+    private let clearSavedPlaces: (String) -> Bool
     @ObservationIgnored private var observation: Task<Void, Never>?
 
     /// - Parameter repository: nil when Firebase is not configured in this
     ///   build; the state is then permanently ``AuthState/unavailable``.
-    init(repository: AuthRepository?) {
+    init(
+        repository: AuthRepository?,
+        clearSavedPlaces: @escaping (String) -> Bool = {
+            ProtectedFileSavedPlacesStore(uid: $0).clear()
+        }
+    ) {
         self.repository = repository
+        self.clearSavedPlaces = clearSavedPlaces
         self.state = repository?.authState ?? .unavailable
         if let repository {
             observation = Task { [weak self] in
@@ -34,6 +41,10 @@ final class AuthSession {
             if case .signedIn = state { return false }
             return true
         }
+        if case .signedIn(let uid, _) = state,
+           !clearSavedPlaces(uid) {
+            return false
+        }
         do {
             try repository.signOut()
             return true
@@ -49,6 +60,9 @@ final class AuthSession {
     @discardableResult
     func signOut(ifSignedInAs expectedUid: String) -> Bool {
         guard let repository else { return true }
+        if case .signedIn(let currentUid, _) = state,
+           currentUid != expectedUid { return true }
+        guard clearSavedPlaces(expectedUid) else { return false }
         do {
             try repository.signOut(ifCurrentUidIs: expectedUid)
             return true

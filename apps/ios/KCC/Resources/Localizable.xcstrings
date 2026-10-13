@@ -27813,6 +27813,40 @@
         }
       }
     },
+    "savedPlaces.persistenceErrorBody": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dina sparade platser ändrades inte. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your saved places weren't changed. Try again."
+          }
+        }
+      }
+    },
+    "savedPlaces.persistenceErrorTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det gick inte att spara ändringarna"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't save changes"
+          }
+        }
+      }
+    },
     "savedPlaces.rename": {
       "extractionState": "manual",
       "localizations": {
@@ -27877,6 +27911,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rename place"
+          }
+        }
+      }
+    },
+    "savedPlaces.retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Försök igen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
           }
         }
       }

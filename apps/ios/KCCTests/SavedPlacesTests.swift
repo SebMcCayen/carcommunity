@@ -6,16 +6,21 @@ import XCTest
 final class SavedPlacesTests: XCTestCase {
     private var suiteName: String!
     private var defaults: UserDefaults!
+    private var storageDirectory: URL!
 
     override func setUp() {
         super.setUp()
         suiteName = "SavedPlacesTests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
         defaults.removePersistentDomain(forName: suiteName)
+        storageDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SavedPlacesTests.\(UUID().uuidString)", isDirectory: true)
     }
 
     override func tearDown() {
         defaults.removePersistentDomain(forName: suiteName)
+        if let storageDirectory { try? FileManager.default.removeItem(at: storageDirectory) }
+        storageDirectory = nil
         defaults = nil
         suiteName = nil
         super.tearDown()
@@ -107,7 +112,7 @@ final class SavedPlacesTests: XCTestCase {
     }
 
     func testBoundQueryPreservesTrailingSpaceForMultiWordTyping() {
-        let store = UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults)
+        let store = ProtectedFileSavedPlacesStore(uid: "member", defaults: defaults, storageDirectory: storageDirectory)
         let coordinator = SavedPlacesCoordinator(
             store: store,
             searchClient: UnavailableAddressSearchClient()
@@ -121,31 +126,23 @@ final class SavedPlacesTests: XCTestCase {
     }
 
     func testStoreIsIsolatedByAccountAndToleratesCorruptPayload() throws {
-        let first = UserDefaultsSavedPlacesStore(uid: "member-a", defaults: defaults)
-        let second = UserDefaultsSavedPlacesStore(uid: "member-b", defaults: defaults)
+        let first = ProtectedFileSavedPlacesStore(uid: "member-a", defaults: defaults, storageDirectory: storageDirectory)
+        let second = ProtectedFileSavedPlacesStore(uid: "member-b", defaults: defaults, storageDirectory: storageDirectory)
         let saved = try XCTUnwrap(makeSaved(.home, id: "home-address", latitude: 57))
-        first.save([saved])
+        XCTAssertTrue(first.save([saved]))
 
         XCTAssertEqual(first.load(), [saved])
         XCTAssertTrue(second.load().isEmpty)
 
-        for (key, _) in defaults.dictionaryRepresentation() where key.hasPrefix("ios.savedPlaces.v1.") {
-            defaults.set(Data("not-json".utf8), forKey: key)
-        }
+        try Data("not-json".utf8).write(to: try XCTUnwrap(first.storageURL), options: .atomic)
         XCTAssertTrue(first.load().isEmpty)
     }
 
-    func testStorePreservesValidEntriesAroundMalformedElements() throws {
-        let store = UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults)
+    func testStoreMigratesLegacyPayloadAndPreservesValidEntriesAroundMalformedElements() throws {
+        let store = ProtectedFileSavedPlacesStore(uid: "member", defaults: defaults, storageDirectory: storageDirectory)
         let home = try XCTUnwrap(makeSaved(.home, id: "home-address", latitude: 57))
         let favourite = try XCTUnwrap(makeSaved(.favourite, id: "cafe", latitude: 58))
 
-        // Seed once to discover this account's private, encoded key without
-        // exposing persistence details through the production API.
-        store.save([home])
-        let key = try XCTUnwrap(defaults.dictionaryRepresentation().keys.first {
-            $0.hasPrefix("ios.savedPlaces.v1.")
-        })
         let encoder = JSONEncoder()
         let validHome = try JSONSerialization.jsonObject(with: encoder.encode(home))
         let validFavourite = try JSONSerialization.jsonObject(with: encoder.encode(favourite))
@@ -178,12 +175,133 @@ final class SavedPlacesTests: XCTestCase {
                 missingKind,
                 validFavourite
             ]),
-            forKey: key
+            forKey: legacyKey(uid: "member")
         )
 
         let recovered = store.load()
         XCTAssertEqual(recovered.map(\.id), [home.id, "fav:future", "fav:legacy", favourite.id])
         XCTAssertEqual(recovered.map(\.kind), [.home, .favourite, .favourite, .favourite])
+        XCTAssertNil(defaults.object(forKey: legacyKey(uid: "member")))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(store.storageURL).path))
+    }
+
+    func testCorruptProtectedPayloadKeepsAndRecoversLegacyPayload() throws {
+        let store = ProtectedFileSavedPlacesStore(
+            uid: "member",
+            defaults: defaults,
+            storageDirectory: storageDirectory
+        )
+        let home = try XCTUnwrap(makeSaved(.home, id: "home-address", latitude: 57))
+        defaults.set(try JSONEncoder().encode([home]), forKey: legacyKey(uid: "member"))
+        try FileManager.default.createDirectory(at: storageDirectory, withIntermediateDirectories: true)
+        try Data("not-json".utf8).write(to: try XCTUnwrap(store.storageURL))
+
+        XCTAssertEqual(store.load(), [home])
+        XCTAssertNil(defaults.object(forKey: legacyKey(uid: "member")))
+        XCTAssertEqual(store.load(), [home])
+    }
+
+    func testStoreUsesCompleteProtectionAndExcludesFileFromBackup() throws {
+        let store = ProtectedFileSavedPlacesStore(
+            uid: "member",
+            defaults: defaults,
+            storageDirectory: storageDirectory
+        )
+        let home = try XCTUnwrap(makeSaved(.home, id: "home-address", latitude: 57))
+
+        XCTAssertTrue(store.save([home]))
+
+        let fileURL = try XCTUnwrap(store.storageURL)
+        let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
+        XCTAssertEqual(ProtectedFileSavedPlacesStore.fileProtection, .complete)
+        // CoreSimulator may omit NSFileProtectionKey even when the production
+        // write requests it. When the platform reports the attribute, verify
+        // it matches the same value used by the store.
+        if let reportedProtection = attributes[.protectionKey] as? FileProtectionType {
+            XCTAssertEqual(reportedProtection, .complete)
+        }
+        XCTAssertEqual(
+            try fileURL.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup,
+            true
+        )
+    }
+
+    func testStoreClearRemovesProtectedAndLegacyCopies() throws {
+        let store = ProtectedFileSavedPlacesStore(
+            uid: "member",
+            defaults: defaults,
+            storageDirectory: storageDirectory
+        )
+        let home = try XCTUnwrap(makeSaved(.home, id: "home-address", latitude: 57))
+        XCTAssertTrue(store.save([home]))
+        defaults.set(try JSONEncoder().encode([home]), forKey: legacyKey(uid: "member"))
+
+        XCTAssertTrue(store.clear())
+        XCTAssertTrue(store.load().isEmpty)
+        XCTAssertNil(defaults.object(forKey: legacyKey(uid: "member")))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: try XCTUnwrap(store.storageURL).path))
+    }
+
+    func testFailedMigrationKeepsLegacyPayloadForRetry() throws {
+        try FileManager.default.createDirectory(
+            at: storageDirectory,
+            withIntermediateDirectories: true
+        )
+        let blockedParent = storageDirectory.appendingPathComponent("not-a-directory")
+        try Data("blocked".utf8).write(to: blockedParent)
+        let unavailableDirectory = blockedParent.appendingPathComponent("SavedPlaces")
+        let store = ProtectedFileSavedPlacesStore(
+            uid: "member",
+            defaults: defaults,
+            storageDirectory: unavailableDirectory
+        )
+        let home = try XCTUnwrap(makeSaved(.home, id: "home-address", latitude: 57))
+        defaults.set(try JSONEncoder().encode([home]), forKey: legacyKey(uid: "member"))
+
+        XCTAssertEqual(store.load(), [home])
+        XCTAssertNotNil(defaults.data(forKey: legacyKey(uid: "member")))
+        XCTAssertFalse(store.save([home]))
+    }
+
+    func testFailedSaveKeepsVisiblePlacesAndRetryCommitsPendingChange() throws {
+        let home = try XCTUnwrap(makeSaved(.home, id: "home", latitude: 57))
+        let workSuggestion = suggestion(id: "work", latitude: 58)
+        let store = FlakySavedPlacesStore(stored: [home], shouldFail: true)
+        let coordinator = SavedPlacesCoordinator(
+            store: store,
+            searchClient: UnavailableAddressSearchClient()
+        )
+
+        coordinator.save(kind: .work, place: workSuggestion, label: "Work")
+
+        XCTAssertEqual(coordinator.places, [home])
+        XCTAssertTrue(coordinator.persistenceFailed)
+        XCTAssertEqual(store.stored, [home])
+
+        store.shouldFail = false
+        coordinator.retryPersistence()
+
+        XCTAssertEqual(coordinator.places.map(\.id), ["home", "work"])
+        XCTAssertFalse(coordinator.persistenceFailed)
+        XCTAssertEqual(store.stored, coordinator.places)
+    }
+
+    func testFailedRemoveCanBeDismissedWithoutChangingVisiblePlaces() throws {
+        let home = try XCTUnwrap(makeSaved(.home, id: "home", latitude: 57))
+        let store = FlakySavedPlacesStore(stored: [home], shouldFail: true)
+        let coordinator = SavedPlacesCoordinator(
+            store: store,
+            searchClient: UnavailableAddressSearchClient()
+        )
+
+        coordinator.remove(id: home.id)
+        XCTAssertEqual(coordinator.places, [home])
+        XCTAssertTrue(coordinator.persistenceFailed)
+
+        coordinator.dismissPersistenceFailure()
+        XCTAssertFalse(coordinator.persistenceFailed)
+        XCTAssertEqual(coordinator.places, [home])
+        XCTAssertEqual(store.stored, [home])
     }
 
     func testSearchBoxRequestIsBoundedAndUsesValidProximity() throws {
@@ -342,7 +460,7 @@ final class SavedPlacesTests: XCTestCase {
             )]
         }
         let coordinator = SavedPlacesCoordinator(
-            store: UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults),
+            store: ProtectedFileSavedPlacesStore(uid: "member", defaults: defaults, storageDirectory: storageDirectory),
             searchClient: client
         )
 
@@ -375,7 +493,7 @@ final class SavedPlacesTests: XCTestCase {
             )]
         }
         let coordinator = SavedPlacesCoordinator(
-            store: UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults),
+            store: ProtectedFileSavedPlacesStore(uid: "member", defaults: defaults, storageDirectory: storageDirectory),
             searchClient: client
         )
 
@@ -411,7 +529,7 @@ final class SavedPlacesTests: XCTestCase {
             ]
         }
         let coordinator = SavedPlacesCoordinator(
-            store: UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults),
+            store: ProtectedFileSavedPlacesStore(uid: "member", defaults: defaults, storageDirectory: storageDirectory),
             searchClient: client
         )
 
@@ -432,7 +550,7 @@ final class SavedPlacesTests: XCTestCase {
 
     func testRepointingFavouriteRemovesOldCoordinateIdentity() throws {
         let old = try XCTUnwrap(makeSaved(.favourite, id: "old", latitude: 57))
-        let store = UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults)
+        let store = ProtectedFileSavedPlacesStore(uid: "member", defaults: defaults, storageDirectory: storageDirectory)
         store.save([old])
         let coordinator = SavedPlacesCoordinator(
             store: store,
@@ -450,7 +568,7 @@ final class SavedPlacesTests: XCTestCase {
     }
 
     func testRepointingFavouriteAtCapacityOnlyReplacesThatFavourite() throws {
-        let store = UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults)
+        let store = ProtectedFileSavedPlacesStore(uid: "member", defaults: defaults, storageDirectory: storageDirectory)
         let existing = try (0..<SavedPlacesPolicy.maximumCount).map { index in
             try XCTUnwrap(makeSaved(.favourite, id: "f\(index)", latitude: 50 + Double(index)))
         }
@@ -474,7 +592,7 @@ final class SavedPlacesTests: XCTestCase {
     }
 
     func testChangingKindRemovesEveryOtherEntryForTheSamePlace() throws {
-        let store = UserDefaultsSavedPlacesStore(uid: "member", defaults: defaults)
+        let store = ProtectedFileSavedPlacesStore(uid: "member", defaults: defaults, storageDirectory: storageDirectory)
         let shared = suggestion(id: "shared", latitude: 57)
         let favourite = try XCTUnwrap(
             SavedPlacesPolicy.create(kind: .favourite, place: shared, label: "Shared")
@@ -566,6 +684,14 @@ final class SavedPlacesTests: XCTestCase {
     ) -> SavedPlace? {
         SavedPlacesPolicy.create(kind: kind, place: suggestion(id: id, latitude: latitude), label: id)
     }
+
+    private func legacyKey(uid: String) -> String {
+        let accountKey = Data(uid.utf8).base64EncodedString()
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "=", with: "")
+        return "ios.savedPlaces.v1.\(accountKey)"
+    }
 }
 
 private struct ClosureAddressSearchClient: AddressSearchClient {
@@ -579,6 +705,31 @@ private struct ClosureAddressSearchClient: AddressSearchClient {
 
     func search(query: String, proximity: MapPoint?) async throws -> [PlaceSuggestion] {
         try await handler(query, proximity)
+    }
+}
+
+@MainActor
+private final class FlakySavedPlacesStore: SavedPlacesStore {
+    var stored: [SavedPlace]
+    var shouldFail: Bool
+
+    init(stored: [SavedPlace], shouldFail: Bool) {
+        self.stored = stored
+        self.shouldFail = shouldFail
+    }
+
+    func load() -> [SavedPlace] { stored }
+
+    func save(_ places: [SavedPlace]) -> Bool {
+        guard !shouldFail else { return false }
+        stored = places
+        return true
+    }
+
+    func clear() -> Bool {
+        guard !shouldFail else { return false }
+        stored = []
+        return true
     }
 }
 

@@ -47,14 +47,14 @@ struct RootView: View {
             // response (or the app relaunches with a cached token), clear the
             // local Firebase session here as the lifecycle backstop.
             DeletedAccountSessionEndView {
-                session.signOut(ifSignedInAs: uid)
+                endSession(uid: uid)
             }
         case .loaded(let access) where access.suspended:
             RestrictedAccountScreen(
                 access: access,
                 privacyCoordinator: restrictedPrivacyCoordinator,
-                onSignOut: { session.signOut(ifSignedInAs: uid) },
-                onDeletionSessionEnd: { session.signOut(ifSignedInAs: uid) }
+                onSignOut: { endSession(uid: uid) },
+                onDeletionSessionEnd: { endSession(uid: uid) }
             )
         case .loaded(let access):
             AuthenticatedExperience(
@@ -85,8 +85,8 @@ struct RootView: View {
             RestrictedAccountScreen(
                 access: nil,
                 privacyCoordinator: restrictedPrivacyCoordinator,
-                onSignOut: { session.signOut(ifSignedInAs: uid) },
-                onDeletionSessionEnd: { session.signOut(ifSignedInAs: uid) }
+                onSignOut: { endSession(uid: uid) },
+                onDeletionSessionEnd: { endSession(uid: uid) }
             )
         }
     }
@@ -94,6 +94,10 @@ struct RootView: View {
     private var signedInUid: String? {
         if case .signedIn(let uid, _) = session.state { return uid }
         return nil
+    }
+
+    private func endSession(uid: String) -> Bool {
+        session.signOut(ifSignedInAs: uid)
     }
 }
 

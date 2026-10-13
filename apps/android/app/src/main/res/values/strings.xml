@@ -1812,6 +1812,9 @@
     <string name="savedPlaces_deleteMessage">%1$s tas bort från dina sparade platser. Dina senaste sökningar påverkas inte.</string>
     <string name="savedPlaces_deleteConfirm">Ta bort</string>
     <string name="savedPlaces_deviceLocalNote">Sparade platser lagras endast på den här enheten och synkas inte till andra enheter.</string>
+    <string name="savedPlaces_persistenceErrorTitle">Det gick inte att spara ändringarna</string>
+    <string name="savedPlaces_persistenceErrorBody">Dina sparade platser ändrades inte. Försök igen.</string>
+    <string name="savedPlaces_retry">Försök igen</string>
     <string name="shareLocation_title">Dela plats</string>
     <string name="shareLocation_subtitle">Välj en vän att dela %1$s med</string>
     <string name="shareLocation_empty">Du har inte lagt till några vänner än. Lägg till vänner för att dela platser med dem.</string>
