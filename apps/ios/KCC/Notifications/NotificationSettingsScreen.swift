@@ -36,10 +36,27 @@ struct NotificationSettingsScreen: View {
                 placeholder
             case .loaded(let preferences):
                 form(preferences: preferences, coordinator: coordinator)
+            case .failed:
+                loadErrorState
             }
         } else {
             placeholder
         }
+    }
+
+    private var loadErrorState: some View {
+        VStack(spacing: KccSpacing.s3) {
+            Text("notifications.settingsLoadError")
+                .multilineTextAlignment(.center)
+            Button {
+                coordinator?.reload()
+            } label: {
+                Text("notifications.retry")
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(KccSpacing.s4)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     /// Config-less build / no session: the shared cross-feature unavailable

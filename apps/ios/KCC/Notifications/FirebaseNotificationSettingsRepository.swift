@@ -8,8 +8,9 @@ import Foundation
 ///
 /// Preferences are a DIRECT rules-validated write (no callable): the
 /// `notificationPreferences` map plus an `updatedAt` server timestamp. Reads
-/// degrade to ``NotificationPreferences/allEnabled`` on an absent doc or a
-/// transient error — a missing map means "nothing opted out", not an error.
+/// default to ``NotificationPreferences/allEnabled`` only after a successful
+/// read with no stored map. Listener failures remain unverified and therefore
+/// cannot enable writes based on invented defaults.
 ///
 /// Construction is guarded (``createIfAvailable()`` returns nil without
 /// Firebase config), mirroring ``FirebaseEventsRepository``.
@@ -23,18 +24,21 @@ final class FirebaseNotificationSettingsRepository: NotificationSettingsReposito
     func preferences(uid: String) -> AsyncStream<NotificationSettingsSnapshot> {
         let document = firestore.collection(Self.userPrivateCollection).document(uid)
         return AsyncStream { continuation in
-            let registration = document.addSnapshotListener { snapshot, _ in
-                // A listener error can arrive WITH a usable cached snapshot; in
-                // that case decode the snapshot rather than flip the UI back to
-                // "all enabled", so a transient error never makes a user's
-                // saved opt-outs appear cleared. Fall back to defaults (all
-                // enabled — Android's `observePreferences` fallback) only when
-                // there is no snapshot at all.
-                // NOTE: Android's observePreferences resets to defaults on any
-                // error; this is the more robust behavior and Android should
-                // follow (cross-platform follow-up).
+            let registration = document.addSnapshotListener { snapshot, error in
+                // Firestore may supply cached data alongside an error, but that
+                // snapshot is not a verified listener result. Do not expose it
+                // as writable state: a toggle derived from stale/invented data
+                // could overwrite an opt-out stored on the server.
+                if let error {
+                    continuation.yield(.failed(
+                        code: FirebaseEventsRepository.firestoreStatusName(error)
+                    ))
+                    return
+                }
                 guard let snapshot else {
-                    continuation.yield(.loaded(.allEnabled))
+                    // Defensive: a successful callback should carry a snapshot.
+                    // Treat an impossible nil as unverified rather than default.
+                    continuation.yield(.failed(code: nil))
                     return
                 }
                 let raw = snapshot.get(Self.preferencesField) as? [String: Any]
