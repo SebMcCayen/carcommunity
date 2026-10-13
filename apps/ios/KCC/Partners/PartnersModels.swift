@@ -223,7 +223,7 @@ enum PartnerExternalDestination {
         guard let rawValue = rawValue?.trimmedNonempty,
               var components = URLComponents(string: rawValue),
               let scheme = components.scheme?.lowercased(),
-              scheme == "https" || scheme == "http",
+              scheme == "https",
               components.host?.isEmpty == false,
               components.user == nil,
               components.password == nil

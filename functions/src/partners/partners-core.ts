@@ -95,27 +95,54 @@ const firestoreIdSchema = z
   .refine((id) => id !== '.' && id !== '..');
 
 /**
- * Partner-application website field. Accepts a scheme-less domain like
- * `www.foretag.se` by prepending `https://` before URL validation — zod
- * `.url()` rejects bare domains, which used to make the callable reject a
- * perfectly reasonable value with a misleading `invalid-argument`. A
- * blank/whitespace-only string is treated as missing (normalized to
- * `undefined`) so an accidental "" from any client stays optional rather
- * than triggering `invalid-argument`; max-length is enforced on the
- * normalized value. Wrapped with `.nullable().optional()` at the call site.
+ * Partner website fields are public external-navigation targets. Accept a
+ * scheme-less domain by prepending `https://`, but reject every explicit
+ * non-HTTPS scheme. A blank string stays equivalent to an omitted optional
+ * field; callers can use `null` when they intentionally clear a website.
  */
-const partnerWebsiteUrlSchema = z.preprocess((v) => {
-  if (typeof v !== 'string') return v;
-  const trimmed = v.trim();
-  if (trimmed === '') return undefined;
-  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-}, z.string().url().max(MAX_PARTNER_WEBSITE_URL_LENGTH).optional());
+const partnerWebsiteUrlSchema = z.preprocess(
+  (v) => {
+    if (typeof v !== 'string') return v;
+    const trimmed = v.trim();
+    if (trimmed === '') return undefined;
+    return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(trimmed) ? trimmed : `https://${trimmed}`;
+  },
+  z
+    .string()
+    .url()
+    .max(MAX_PARTNER_WEBSITE_URL_LENGTH)
+    .refine((value) => {
+      try {
+        const url = new URL(value);
+        return (
+          url.protocol === 'https:' &&
+          url.hostname !== '' &&
+          url.username === '' &&
+          url.password === ''
+        );
+      } catch {
+        return false;
+      }
+    })
+    .optional(),
+);
+
+/**
+ * Sanitizes legacy Firestore values before they cross an approval/activation
+ * boundary. Invalid and cleartext values are suppressed instead of being
+ * copied into a public company document; valid scheme-less values retain the
+ * historical convenience normalization.
+ */
+export function normalizePartnerWebsiteUrl(value: unknown): string | null {
+  const parsed = partnerWebsiteUrlSchema.safeParse(value);
+  return parsed.success && typeof parsed.data === 'string' ? parsed.data : null;
+}
 
 const companyFieldsSchema = z.object({
   name: z.string().trim().min(1).max(MAX_PARTNER_COMPANY_NAME_LENGTH),
   category: z.enum(PARTNER_CATEGORIES),
   description: z.string().max(MAX_PARTNER_DESCRIPTION_LENGTH).nullable().optional(),
-  website: z.string().trim().url().max(MAX_PARTNER_WEBSITE_URL_LENGTH).nullable().optional(),
+  website: partnerWebsiteUrlSchema.nullable().optional(),
   phone: z.string().trim().max(MAX_PARTNER_PHONE_LENGTH).nullable().optional(),
   address: z.string().max(MAX_PARTNER_ADDRESS_LENGTH).nullable().optional(),
   latitude: z.number().min(-90).max(90).nullable().optional(),

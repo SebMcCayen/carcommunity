@@ -25,6 +25,7 @@ import { buildAdminAuditEvent } from '../admin/claims-core';
 import { requireActiveActor } from '../shared/memberActor';
 import {
   buildApplicationDocument,
+  normalizePartnerWebsiteUrl,
   parseReviewApplicationInput,
   parseSubmitApplicationInput,
 } from './partners-core';
@@ -168,7 +169,9 @@ export const reviewApplication = onCall(
           name: application.companyName,
           category: application.category,
           description: application.proposedDescription ?? null,
-          website: application.websiteUrl ?? null,
+          // Older applications may predate the HTTPS-only ingestion rule.
+          // Do not publish their cleartext/invalid URL during approval.
+          website: normalizePartnerWebsiteUrl(application.websiteUrl),
           phone: application.contactPhone ?? null,
           address: application.proposedAddress ?? null,
           latitude: null,
