@@ -83,6 +83,23 @@ final class EventsCoordinatorTests: XCTestCase {
         func currentUserId() -> String? { nil }
     }
 
+    private final class FakeEventChatRepository: EventChatRepository, @unchecked Sendable {
+        func messages(eventId: String) -> AsyncStream<EventChatMessagesState> {
+            AsyncStream { $0.finish() }
+        }
+
+        func enabled() -> AsyncStream<Bool> {
+            AsyncStream { continuation in
+                continuation.yield(true)
+                continuation.finish()
+            }
+        }
+
+        func post(eventId: String, message: String) async throws {}
+        func report(eventId: String, messageId: String, reason: ChatReportReason) async throws {}
+        func currentUserId() -> String? { "me" }
+    }
+
     // MARK: - fixtures
 
     private static func event(
@@ -234,5 +251,18 @@ final class EventsCoordinatorTests: XCTestCase {
         coordinator.reload()
         await waitForState(of: coordinator) { $0 == .loaded(events) }
         XCTAssertEqual(repository.subscribeCount, 2)
+    }
+
+    @MainActor
+    func testEventChatCanBecomeEnabledWithoutRebuildingTheEventsList() {
+        let repository = FakeEventsRepository()
+        let coordinator = EventsCoordinator(repository: repository)
+
+        XCTAssertFalse(coordinator.makeDetailCoordinator(eventId: "event").eventChatEnabled)
+
+        coordinator.updateEventChatRepository(FakeEventChatRepository())
+
+        XCTAssertTrue(coordinator.makeDetailCoordinator(eventId: "event").eventChatEnabled)
+        XCTAssertEqual(repository.subscribeCount, 0)
     }
 }

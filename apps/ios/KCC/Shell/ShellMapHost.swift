@@ -25,4 +25,11 @@ enum ShellMapHost {
     static func surfaceActive(cover: MapCover) -> Bool {
         cover != .opaque
     }
+
+    /// Whether foreground-only map work may consume location or poll the
+    /// backend. A transparent cover still exposes the map, but an opaque
+    /// route or an inactive scene must cancel this work immediately.
+    static func foregroundMapWorkActive(cover: MapCover, sceneIsActive: Bool) -> Bool {
+        sceneIsActive && cover != .opaque
+    }
 }

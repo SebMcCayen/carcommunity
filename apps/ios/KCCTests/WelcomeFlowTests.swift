@@ -22,4 +22,10 @@ final class WelcomeFlowTests: XCTestCase {
         XCTAssertTrue(store.hasSeenWelcome(uid: "a"))
         XCTAssertFalse(store.hasSeenWelcome(uid: "b"))
     }
+
+    func testMembershipWelcomeDestinationHasABackPath() {
+        let stack = ShellRouteStack.empty.opening(.subscription)
+        XCTAssertEqual(stack.current, .subscription)
+        XCTAssertEqual(stack.poppingOne(), .empty)
+    }
 }

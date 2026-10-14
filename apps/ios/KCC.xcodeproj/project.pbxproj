@@ -75,6 +75,7 @@
 		2D7FCA2CE821940AE06067BE /* DmModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5BBD1E508F841E0873D4137 /* DmModelsTests.swift */; };
 		2DB20A847548F70E78F62F6E /* OnboardingModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 176E2BE7351D24B97D0596D7 /* OnboardingModels.swift */; };
 		2DC0460E003F97750680CC4D /* LocationPermissionCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D564C07DEB7807D86E0DBE40 /* LocationPermissionCoordinatorTests.swift */; };
+		2DE84CDBF1D7FCFFF8AE2925 /* MembershipScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA17CDE68C688BB3DF03B54 /* MembershipScreen.swift */; };
 		2E2CE7745CDC1502CD28A236 /* EventDetailCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44A7962A316651E6D91C1FA7 /* EventDetailCoordinatorTests.swift */; };
 		2EC5800FD4E02C0186D0E3E2 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = B688C912C571A1CC3752D0B8 /* FirebaseFirestore */; };
 		2EF6D76E76BA6D95F7F70503 /* AppAccessSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEE267B626CBCA7F0EE420C2 /* AppAccessSession.swift */; };
@@ -448,6 +449,7 @@
 		3E779154B4369CD7688C5153 /* CrownHuntHomeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrownHuntHomeScreen.swift; sourceTree = "<group>"; };
 		3E7AA0EF6560E5A030A2AC96 /* CrownHuntClaimsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrownHuntClaimsRepository.swift; sourceTree = "<group>"; };
 		3EB71A805F62274D65250E5B /* ConvoyReactionModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyReactionModelsTests.swift; sourceTree = "<group>"; };
+		3FA17CDE68C688BB3DF03B54 /* MembershipScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembershipScreen.swift; sourceTree = "<group>"; };
 		3FF7E3BFE7F8C80149FC411F /* ChatHubScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHubScreen.swift; sourceTree = "<group>"; };
 		4107009CDC9C1A6EB3679B91 /* FirebaseCrownHuntStatsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseCrownHuntStatsRepository.swift; sourceTree = "<group>"; };
 		41CE2F8F631ED4927075CCE9 /* CrownHuntFirestoreSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrownHuntFirestoreSupport.swift; sourceTree = "<group>"; };
@@ -975,6 +977,7 @@
 				302931D52817C2F9D2C31146 /* Settings */,
 				99C0A5D5154EEC666ADC0211 /* Shell */,
 				2F8FCAE0BF889E3229931984 /* Social */,
+				E9923769F6FA8D54DEE7519E /* Subscription */,
 				BF72BBEBC180B113B9C92CF3 /* Updates */,
 				2DDDA6F735D6CD5A68390F13 /* Welcome */,
 			);
@@ -1282,6 +1285,14 @@
 				D4F35987BC9FD30A65AF082E /* FirebaseBadgesRepository.swift */,
 			);
 			path = Badges;
+			sourceTree = "<group>";
+		};
+		E9923769F6FA8D54DEE7519E /* Subscription */ = {
+			isa = PBXGroup;
+			children = (
+				3FA17CDE68C688BB3DF03B54 /* MembershipScreen.swift */,
+			);
+			path = Subscription;
 			sourceTree = "<group>";
 		};
 		EF108D173C02293016E81C0D /* Firebase */ = {
@@ -1716,6 +1727,7 @@
 				246CCAE8AA61256321C06F29 /* MemberProfileModels.swift in Sources */,
 				0EEE001EB7EA82536E26BC68 /* MemberProfileRepository.swift in Sources */,
 				243B1F9F45B32CE5993A9BF8 /* MemberProfileScreen.swift in Sources */,
+				2DE84CDBF1D7FCFFF8AE2925 /* MembershipScreen.swift in Sources */,
 				019741D1421051BBD5C5A283 /* NearbyLiveCoordinator.swift in Sources */,
 				64A9BA56F2104F08DFA33183 /* NearbyLiveModels.swift in Sources */,
 				3C51DBE096C361EA21E9B7E4 /* NearbyLiveOverlay.swift in Sources */,
