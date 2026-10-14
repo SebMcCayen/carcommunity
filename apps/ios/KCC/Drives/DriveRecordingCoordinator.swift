@@ -38,6 +38,7 @@ final class DriveRecordingCoordinator {
     private let provider: LocationProvider
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private let journal: DriveRecordingJournal?
+    @ObservationIgnored private let uploadSpool: DriveRouteUploadSpool?
     @ObservationIgnored private let expiryTickWait: @Sendable () async throws -> Void
     @ObservationIgnored private let retryWait: @Sendable (Int) async throws -> Void
 
@@ -49,12 +50,14 @@ final class DriveRecordingCoordinator {
     @ObservationIgnored nonisolated(unsafe) private var authorizationTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var expiryTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var saveTask: Task<Void, Never>?
-    @ObservationIgnored nonisolated(unsafe) private var uploadTasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored nonisolated(unsafe) private var uploadTasks: [String: Task<Void, Never>] = [:]
+    @ObservationIgnored private var journalBackedUpload: PendingDriveRouteUpload?
 
     init(
         repository: DriveRecordingRepository?,
         provider: LocationProvider,
         journal: DriveRecordingJournal? = nil,
+        uploadSpool: DriveRouteUploadSpool? = nil,
         now: @escaping @Sendable () -> Date = { Date() },
         expiryTickWait: @escaping @Sendable () async throws -> Void = {
             try await Task.sleep(for: .seconds(1))
@@ -66,6 +69,7 @@ final class DriveRecordingCoordinator {
         self.repository = repository
         self.provider = provider
         self.journal = journal
+        self.uploadSpool = uploadSpool
         self.now = now
         self.expiryTickWait = expiryTickWait
         self.retryWait = retryWait
@@ -78,6 +82,7 @@ final class DriveRecordingCoordinator {
                 if authorization.isAuthorized { self.beginDesiredRecordingIfPossible() }
             }
         }
+        retryPendingRouteUploads()
     }
 
     deinit {
@@ -110,6 +115,12 @@ final class DriveRecordingCoordinator {
     /// starts (or resumes) this same session without requiring an RTDB change.
     func start(context: DriveRecordingContext) {
         guard repository != nil else { return }
+        retryPendingRouteUploads()
+        if journalBackedUpload != nil {
+            desiredContext = context
+            scheduleExpiry(for: context)
+            return
+        }
         switch state {
         case .kept, .discarded: state = .idle
         default: break
@@ -194,7 +205,8 @@ final class DriveRecordingCoordinator {
         reconcileDesiredAfterGateRelease()
     }
 
-    /// Drops all exact route data on sign-out/account switch.
+    /// Stops capture on sign-out/account switch. Routes already attached to a
+    /// saved summary remain owner-scoped on disk for a later authenticated retry.
     func reset() {
         fixesTask?.cancel()
         expiryTask?.cancel()
@@ -205,8 +217,39 @@ final class DriveRecordingCoordinator {
         saveTask = nil
         uploadTasks.removeAll()
         desiredContext = nil
-        releaseRecording(clearJournal: true)
+        releaseRecording(clearJournal: journalBackedUpload == nil)
         state = .idle
+    }
+
+    /// Account deletion is the sole lifecycle event that destroys routes
+    /// already attached to saved summaries. Normal sign-out deliberately keeps
+    /// the owner-scoped spool so reauthentication can resume failed uploads.
+    func purgeForAccountDeletion() {
+        fixesTask?.cancel()
+        expiryTask?.cancel()
+        saveTask?.cancel()
+        for task in uploadTasks.values { task.cancel() }
+        fixesTask = nil
+        expiryTask = nil
+        saveTask = nil
+        uploadTasks.removeAll()
+        desiredContext = nil
+        journalBackedUpload = nil
+        releaseRecording(clearJournal: true)
+        uploadSpool?.removeAll()
+        state = .idle
+    }
+
+    /// Retries owner-scoped routes after launch, foregrounding, or another
+    /// session event. Entries remain on disk until Storage confirms success.
+    func retryPendingRouteUploads() {
+        guard repository != nil else { return }
+        if let journalBackedUpload {
+            scheduleRouteUpload(journalBackedUpload, clearsJournalOnSuccess: true)
+        }
+        for upload in uploadSpool?.pendingUploads() ?? [] {
+            scheduleRouteUpload(upload)
+        }
     }
 
     private func beginDesiredRecordingIfPossible() {
@@ -264,15 +307,38 @@ final class DriveRecordingCoordinator {
                 // then let the route upload finish independently. A slow or failed
                 // Storage write must never hold the saved drive in a pending state.
                 self.saveTask = nil
-                self.releaseRecording(clearJournal: true)
-                self.state = .kept(rideId: result.rideId)
-                self.reconcileDesiredAfterGateRelease()
+                var routeUpload: PendingDriveRouteUpload?
+                var clearsJournalOnUploadSuccess = false
+                var canReleaseJournal = request.points.isEmpty || result.routePath == nil
                 if let path = result.routePath, !request.points.isEmpty {
-                    let uploadId = UUID()
-                    self.uploadTasks[uploadId] = Task { [weak self] in
-                        defer { self?.uploadTasks[uploadId] = nil }
-                        try? await repository.uploadRoute(request.points, to: path)
+                    let pending = PendingDriveRouteUpload(path: path, points: request.points)
+                    if let uploadSpool {
+                        // Do not remove the crash journal until another
+                        // file-protected copy owns the route upload.
+                        if uploadSpool.store(path: path, points: request.points) {
+                            routeUpload = pending
+                            canReleaseJournal = true
+                        } else {
+                            // Disk-full/protection failures retain the original
+                            // journal as the durable copy and gate a newer drive
+                            // until this route eventually uploads.
+                            self.journalBackedUpload = pending
+                            routeUpload = pending
+                            clearsJournalOnUploadSuccess = true
+                        }
+                    } else {
+                        routeUpload = pending
+                        canReleaseJournal = true
                     }
+                }
+                self.releaseRecording(clearJournal: canReleaseJournal)
+                self.state = .kept(rideId: result.rideId)
+                if self.journalBackedUpload == nil { self.reconcileDesiredAfterGateRelease() }
+                if let routeUpload {
+                    self.scheduleRouteUpload(
+                        routeUpload,
+                        clearsJournalOnSuccess: clearsJournalOnUploadSuccess
+                    )
                 }
             } catch is CancellationError {
                 // reset/sign-out owns cleanup and state.
@@ -318,6 +384,30 @@ final class DriveRecordingCoordinator {
             }
         }
         throw DriveRecordingRepositoryError.malformedResponse
+    }
+
+    private func scheduleRouteUpload(
+        _ upload: PendingDriveRouteUpload,
+        clearsJournalOnSuccess: Bool = false
+    ) {
+        guard let repository, uploadTasks[upload.path] == nil else { return }
+        uploadTasks[upload.path] = Task { [weak self] in
+            do {
+                try await repository.uploadRoute(upload.points, to: upload.path)
+                guard !Task.isCancelled else { return }
+                self?.uploadSpool?.remove(path: upload.path)
+                if clearsJournalOnSuccess,
+                   self?.journalBackedUpload?.path == upload.path {
+                    self?.journal?.clear()
+                    self?.journalBackedUpload = nil
+                    self?.reconcileDesiredAfterGateRelease()
+                }
+            } catch {
+                // A durable spool entry is intentionally retained for the next
+                // launch/foreground/session retry opportunity.
+            }
+            self?.uploadTasks[upload.path] = nil
+        }
     }
 
     private func releaseRecording(clearJournal: Bool) {

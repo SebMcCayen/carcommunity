@@ -24,6 +24,12 @@ protocol DriveRecordingJournal: AnyObject {
 final class FileDriveRecordingJournal: DriveRecordingJournal {
     private let fileURL: URL
 
+    var routeUploadSpool: FileDriveRouteUploadSpool {
+        FileDriveRouteUploadSpool(
+            directoryURL: fileURL.appendingPathExtension("pending-uploads")
+        )
+    }
+
     init(fileURL: URL) {
         self.fileURL = fileURL
     }
@@ -35,6 +41,15 @@ final class FileDriveRecordingJournal: DriveRecordingJournal {
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "=", with: "")
         self.init(fileManager: fileManager, fileName: "active-\(key)-v1.routejournal")
+    }
+
+    /// Removes every locally retained exact route for an account after the
+    /// backend has accepted its irreversible deletion request.
+    static func purgeOwnerData(ownerId: String, fileManager: FileManager = .default) {
+        guard let journal = FileDriveRecordingJournal(ownerId: ownerId, fileManager: fileManager)
+        else { return }
+        journal.clear()
+        journal.routeUploadSpool.removeAll()
     }
 
     private convenience init?(fileManager: FileManager, fileName: String) {

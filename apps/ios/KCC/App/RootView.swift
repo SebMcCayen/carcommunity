@@ -47,14 +47,15 @@ struct RootView: View {
             // response (or the app relaunches with a cached token), clear the
             // local Firebase session here as the lifecycle backstop.
             DeletedAccountSessionEndView {
-                endSession(uid: uid)
+                endSession(uid: uid, purgeRoutes: true)
             }
         case .loaded(let access) where access.suspended:
             RestrictedAccountScreen(
                 access: access,
                 privacyCoordinator: restrictedPrivacyCoordinator,
                 onSignOut: { endSession(uid: uid) },
-                onDeletionSessionEnd: { endSession(uid: uid) }
+                onDeleted: { endSession(uid: uid, purgeRoutes: true) },
+                onReauthenticate: { endSession(uid: uid) }
             )
         case .loaded(let access):
             AuthenticatedExperience(
@@ -86,7 +87,8 @@ struct RootView: View {
                 access: nil,
                 privacyCoordinator: restrictedPrivacyCoordinator,
                 onSignOut: { endSession(uid: uid) },
-                onDeletionSessionEnd: { endSession(uid: uid) }
+                onDeleted: { endSession(uid: uid, purgeRoutes: true) },
+                onReauthenticate: { endSession(uid: uid) }
             )
         }
     }
@@ -96,8 +98,11 @@ struct RootView: View {
         return nil
     }
 
-    private func endSession(uid: String) -> Bool {
-        session.signOut(ifSignedInAs: uid)
+    private func endSession(uid: String, purgeRoutes: Bool = false) -> Bool {
+        if purgeRoutes {
+            FileDriveRecordingJournal.purgeOwnerData(ownerId: uid)
+        }
+        return session.signOut(ifSignedInAs: uid)
     }
 }
 

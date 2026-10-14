@@ -3,6 +3,27 @@ import XCTest
 @testable import KCC
 
 final class DriveRecordingJournalTests: XCTestCase {
+    func testRouteUploadSpoolSurvivesRecreationAndRemovesOnlyRequestedPath() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let spoolURL = directory.appendingPathComponent("pending", isDirectory: true)
+        let point = RecordedDrivePoint(latitude: 57, longitude: 12, timestampMilliseconds: 123)
+        let firstPath = "rideRoutes/u/ride-1/route.bin"
+        let secondPath = "rideRoutes/u/ride-2/route.bin"
+        let spool = FileDriveRouteUploadSpool(directoryURL: spoolURL)
+
+        XCTAssertTrue(spool.store(path: firstPath, points: [point]))
+        XCTAssertTrue(spool.store(path: secondPath, points: [point]))
+
+        let restored = FileDriveRouteUploadSpool(directoryURL: spoolURL)
+        XCTAssertEqual(Set(restored.pendingUploads().map(\.path)), Set([firstPath, secondPath]))
+        restored.remove(path: firstPath)
+        XCTAssertEqual(restored.pendingUploads(), [
+            PendingDriveRouteUpload(path: secondPath, points: [point]),
+        ])
+    }
+
     func testJournalRestoresMatchingSessionAndIgnoresPartialLastLine() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

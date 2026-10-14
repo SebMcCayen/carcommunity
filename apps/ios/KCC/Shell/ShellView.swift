@@ -170,6 +170,7 @@ struct ShellView: View {
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active, signedInUid != nil else { return }
                 appUpdateCoordinator.scheduleRequiredUpdateRecheck()
+                driveRecordingCoordinator?.retryPendingRouteUploads()
             }
             .onChange(of: featureFlags.isEnabled(.liveLocation)) { _, enabled in
                 liveLocationCoordinator?.canShare = enabled && !access.isRestricted
@@ -985,8 +986,8 @@ struct ShellView: View {
         case .accountDeletion:
             AccountDeletionScreen(
                 coordinator: accountDeletionCoordinator,
-                onDeleted: { endDeletionSession() },
-                onReauthenticate: { endDeletionSession() },
+                onDeleted: { endDeletionSession(purgeRoutes: true) },
+                onReauthenticate: { endDeletionSession(purgeRoutes: false) },
                 onBack: { routes = routes.poppingOne() }
             )
         case .partnerStats:
@@ -1135,8 +1136,13 @@ struct ShellView: View {
         )
     }
 
-    private func endDeletionSession() -> Bool {
+    private func endDeletionSession(purgeRoutes: Bool = false) -> Bool {
         guard let authenticatedUid else { return true }
+        if purgeRoutes {
+            driveRecordingCoordinator?.purgeForAccountDeletion()
+            // Also cover deletion before feature wiring creates the coordinator.
+            FileDriveRecordingJournal.purgeOwnerData(ownerId: authenticatedUid)
+        }
         return session.signOut(ifSignedInAs: authenticatedUid)
     }
 
@@ -1839,10 +1845,12 @@ struct ShellView: View {
         // Hide access. Starting this listener does not request GPS permission.
         liveLocation.start()
         liveLocationCoordinator = liveLocation
+        let driveJournal = uid.flatMap { FileDriveRecordingJournal(ownerId: $0) }
         driveRecordingCoordinator = DriveRecordingCoordinator(
             repository: FirebaseDriveRecordingRepository.createIfAvailable(),
             provider: driveLocationProvider,
-            journal: uid.flatMap { FileDriveRecordingJournal(ownerId: $0) }
+            journal: driveJournal,
+            uploadSpool: driveJournal?.routeUploadSpool
         )
         if pendingCreateIntent?.belongs(to: uid) == true {
             pendingCreateIntent = nil
