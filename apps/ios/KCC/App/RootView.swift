@@ -47,19 +47,15 @@ struct RootView: View {
             // response (or the app relaunches with a cached token), clear the
             // local Firebase session here as the lifecycle backstop.
             DeletedAccountSessionEndView {
-                FileDriveRecordingJournal.purgeOwnerData(ownerId: uid)
-                return session.signOut(ifSignedInAs: uid)
+                endSession(uid: uid, purgeRoutes: true)
             }
         case .loaded(let access) where access.suspended:
             RestrictedAccountScreen(
                 access: access,
                 privacyCoordinator: restrictedPrivacyCoordinator,
-                onSignOut: { session.signOut(ifSignedInAs: uid) },
-                onDeleted: {
-                    FileDriveRecordingJournal.purgeOwnerData(ownerId: uid)
-                    return session.signOut(ifSignedInAs: uid)
-                },
-                onReauthenticate: { session.signOut(ifSignedInAs: uid) }
+                onSignOut: { endSession(uid: uid) },
+                onDeleted: { endSession(uid: uid, purgeRoutes: true) },
+                onReauthenticate: { endSession(uid: uid) }
             )
         case .loaded(let access):
             AuthenticatedExperience(
@@ -90,12 +86,9 @@ struct RootView: View {
             RestrictedAccountScreen(
                 access: nil,
                 privacyCoordinator: restrictedPrivacyCoordinator,
-                onSignOut: { session.signOut(ifSignedInAs: uid) },
-                onDeleted: {
-                    FileDriveRecordingJournal.purgeOwnerData(ownerId: uid)
-                    return session.signOut(ifSignedInAs: uid)
-                },
-                onReauthenticate: { session.signOut(ifSignedInAs: uid) }
+                onSignOut: { endSession(uid: uid) },
+                onDeleted: { endSession(uid: uid, purgeRoutes: true) },
+                onReauthenticate: { endSession(uid: uid) }
             )
         }
     }
@@ -103,6 +96,13 @@ struct RootView: View {
     private var signedInUid: String? {
         if case .signedIn(let uid, _) = session.state { return uid }
         return nil
+    }
+
+    private func endSession(uid: String, purgeRoutes: Bool = false) -> Bool {
+        if purgeRoutes {
+            FileDriveRecordingJournal.purgeOwnerData(ownerId: uid)
+        }
+        return session.signOut(ifSignedInAs: uid)
     }
 }
 

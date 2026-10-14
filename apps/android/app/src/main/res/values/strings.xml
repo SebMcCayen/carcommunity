@@ -1469,6 +1469,7 @@
     <string name="notifications_title">Notiser</string>
     <string name="notifications_empty">Inga notiser ännu.</string>
     <string name="notifications_loadError">Kunde inte hämta notiser. Försök igen.</string>
+    <string name="notifications_markReadError">Kunde inte uppdatera notisens lässtatus. Försök igen.</string>
     <string name="notifications_retry">Försök igen</string>
     <string name="notifications_markAllRead">Markera alla som lästa</string>
     <string name="notifications_deleteAll">Ta bort alla notiser</string>
@@ -1518,6 +1519,7 @@
     <string name="notifications_settingsPush">Push</string>
     <string name="notifications_settingsEssential">Alltid aktivt</string>
     <string name="notifications_settingsSaving">Sparar...</string>
+    <string name="notifications_settingsLoadError">Kunde inte hämta notisinställningarna. Försök igen.</string>
     <string name="notifications_permissionRationale">Få påminnelser om event och viktiga meddelanden.</string>
     <string name="notifications_permissionOptional">Notiser är valfria.</string>
     <string name="notifications_permissionChangeHint">Du kan ändra dina val senare under Inställningar.</string>
@@ -1812,6 +1814,9 @@
     <string name="savedPlaces_deleteMessage">%1$s tas bort från dina sparade platser. Dina senaste sökningar påverkas inte.</string>
     <string name="savedPlaces_deleteConfirm">Ta bort</string>
     <string name="savedPlaces_deviceLocalNote">Sparade platser lagras endast på den här enheten och synkas inte till andra enheter.</string>
+    <string name="savedPlaces_persistenceErrorTitle">Det gick inte att spara ändringarna</string>
+    <string name="savedPlaces_persistenceErrorBody">Dina sparade platser ändrades inte. Försök igen.</string>
+    <string name="savedPlaces_retry">Försök igen</string>
     <string name="shareLocation_title">Dela plats</string>
     <string name="shareLocation_subtitle">Välj en vän att dela %1$s med</string>
     <string name="shareLocation_empty">Du har inte lagt till några vänner än. Lägg till vänner för att dela platser med dem.</string>

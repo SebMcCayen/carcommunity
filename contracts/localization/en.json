@@ -1576,6 +1576,7 @@
     "title": "Notifications",
     "empty": "No notifications yet.",
     "loadError": "Could not load notifications. Try again.",
+    "markReadError": "Could not update notification read status. Try again.",
     "retry": "Try again",
     "markAllRead": "Mark all as read",
     "deleteAll": "Delete all notifications",
@@ -1625,6 +1626,7 @@
     "settingsPush": "Push",
     "settingsEssential": "Always on",
     "settingsSaving": "Saving...",
+    "settingsLoadError": "Could not load notification settings. Try again.",
     "permissionRationale": "Receive reminders about events and important messages.",
     "permissionOptional": "Notifications are optional.",
     "permissionChangeHint": "You can change your preferences later under Settings.",
@@ -1940,7 +1942,10 @@
     "deleteTitle": "Delete saved place?",
     "deleteMessage": "%1$s will be removed from your saved places. Your recent searches aren't affected.",
     "deleteConfirm": "Delete",
-    "deviceLocalNote": "Saved places are stored on this device only and don't sync to other devices."
+    "deviceLocalNote": "Saved places are stored on this device only and don't sync to other devices.",
+    "persistenceErrorTitle": "Couldn't save changes",
+    "persistenceErrorBody": "Your saved places weren't changed. Try again.",
+    "retry": "Try again"
   },
   "shareLocation": {
     "title": "Share location",

@@ -1469,6 +1469,7 @@
     <string name="notifications_title">Notifications</string>
     <string name="notifications_empty">No notifications yet.</string>
     <string name="notifications_loadError">Could not load notifications. Try again.</string>
+    <string name="notifications_markReadError">Could not update notification read status. Try again.</string>
     <string name="notifications_retry">Try again</string>
     <string name="notifications_markAllRead">Mark all as read</string>
     <string name="notifications_deleteAll">Delete all notifications</string>
@@ -1518,6 +1519,7 @@
     <string name="notifications_settingsPush">Push</string>
     <string name="notifications_settingsEssential">Always on</string>
     <string name="notifications_settingsSaving">Saving...</string>
+    <string name="notifications_settingsLoadError">Could not load notification settings. Try again.</string>
     <string name="notifications_permissionRationale">Receive reminders about events and important messages.</string>
     <string name="notifications_permissionOptional">Notifications are optional.</string>
     <string name="notifications_permissionChangeHint">You can change your preferences later under Settings.</string>
@@ -1812,6 +1814,9 @@
     <string name="savedPlaces_deleteMessage">%1$s will be removed from your saved places. Your recent searches aren\'t affected.</string>
     <string name="savedPlaces_deleteConfirm">Delete</string>
     <string name="savedPlaces_deviceLocalNote">Saved places are stored on this device only and don\'t sync to other devices.</string>
+    <string name="savedPlaces_persistenceErrorTitle">Couldn\'t save changes</string>
+    <string name="savedPlaces_persistenceErrorBody">Your saved places weren\'t changed. Try again.</string>
+    <string name="savedPlaces_retry">Try again</string>
     <string name="shareLocation_title">Share location</string>
     <string name="shareLocation_subtitle">Choose a friend to share %1$s with</string>
     <string name="shareLocation_empty">You haven\'t added any friends yet. Add friends to share locations with them.</string>

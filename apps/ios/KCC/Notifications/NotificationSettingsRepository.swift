@@ -5,12 +5,15 @@ import Foundation
 /// only ever emits a SETTLED result, and the coordinator supplies the loading
 /// state before the first emission.
 ///
-/// There is no `failed` case: an absent `userPrivate/{uid}` document or a
-/// transient read error degrades to ``NotificationPreferences/allEnabled``
-/// (the enabled default), exactly as Android's `observePreferences` does —
-/// missing preferences mean "nothing opted out", not an error to surface.
+/// A successful read with no stored preferences emits the enabled default.
+/// Listener failures are distinct so callers never treat an unverified read
+/// as permission to overwrite a member's stored opt-outs.
 enum NotificationSettingsSnapshot: Equatable, Sendable {
     case loaded(NotificationPreferences)
+    /// The listener failed. `code` is the bare Firestore status name when one
+    /// was available; exception text is deliberately not carried because it
+    /// can contain project and document identifiers.
+    case failed(code: String?)
 }
 
 /// A preferences-write failure carrying ONLY the bare Firestore status name

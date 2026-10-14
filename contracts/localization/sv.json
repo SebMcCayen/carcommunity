@@ -1576,6 +1576,7 @@
     "title": "Notiser",
     "empty": "Inga notiser ännu.",
     "loadError": "Kunde inte hämta notiser. Försök igen.",
+    "markReadError": "Kunde inte uppdatera notisens lässtatus. Försök igen.",
     "retry": "Försök igen",
     "markAllRead": "Markera alla som lästa",
     "deleteAll": "Ta bort alla notiser",
@@ -1625,6 +1626,7 @@
     "settingsPush": "Push",
     "settingsEssential": "Alltid aktivt",
     "settingsSaving": "Sparar...",
+    "settingsLoadError": "Kunde inte hämta notisinställningarna. Försök igen.",
     "permissionRationale": "Få påminnelser om event och viktiga meddelanden.",
     "permissionOptional": "Notiser är valfria.",
     "permissionChangeHint": "Du kan ändra dina val senare under Inställningar.",
@@ -1940,7 +1942,10 @@
     "deleteTitle": "Ta bort sparad plats?",
     "deleteMessage": "%1$s tas bort från dina sparade platser. Dina senaste sökningar påverkas inte.",
     "deleteConfirm": "Ta bort",
-    "deviceLocalNote": "Sparade platser lagras endast på den här enheten och synkas inte till andra enheter."
+    "deviceLocalNote": "Sparade platser lagras endast på den här enheten och synkas inte till andra enheter.",
+    "persistenceErrorTitle": "Det gick inte att spara ändringarna",
+    "persistenceErrorBody": "Dina sparade platser ändrades inte. Försök igen.",
+    "retry": "Försök igen"
   },
   "shareLocation": {
     "title": "Dela plats",

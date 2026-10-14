@@ -11,10 +11,12 @@ import {
   guardAvailabilityWindow,
   guardEditableStatus,
   guardStatusTransition,
+  normalizePartnerWebsiteUrl,
   statusActionPastTense,
   parseCreateCompanyInput,
   parseCreateOfferInput,
   parseSubmitApplicationInput,
+  parseUpdateCompanyInput,
   parseUpdateOfferInput,
 } from '../partners/partners-core';
 
@@ -36,7 +38,17 @@ describe('partners-core inputs', () => {
     expect(parseCreateCompanyInput(valid).ok).toBe(true);
     expect(parseCreateCompanyInput({ ...valid, name: 'x'.repeat(151) }).ok).toBe(false);
     expect(parseCreateCompanyInput({ ...valid, category: 'casino' }).ok).toBe(false);
-    expect(parseCreateCompanyInput({ ...valid, website: 'not-a-url' }).ok).toBe(false);
+    expect(parseCreateCompanyInput({ ...valid, website: 'not a url' }).ok).toBe(false);
+    expect(parseCreateCompanyInput({ ...valid, website: 'http://example.com' }).ok).toBe(false);
+    const normalizedWebsite = parseCreateCompanyInput({ ...valid, website: 'example.com' });
+    expect(normalizedWebsite.ok).toBe(true);
+    if (normalizedWebsite.ok) {
+      expect(normalizedWebsite.input.website).toBe('https://example.com');
+    }
+    expect(parseCreateCompanyInput({ ...valid, website: 'https://[2001:db8::1]/' }).ok).toBe(true);
+    expect(parseUpdateCompanyInput({ companyId: 'c1', website: 'http://example.com' }).ok).toBe(
+      false,
+    );
     expect(
       parseCreateCompanyInput({ ...valid, logoPath: 'profileImages/u1/x.jpg' }).ok,
     ).toBe(false);
@@ -61,6 +73,15 @@ describe('partners-core inputs', () => {
     expect(parseSubmitApplicationInput(app).ok).toBe(true);
     expect(parseSubmitApplicationInput({ ...app, contactEmail: 'nope' }).ok).toBe(false);
     expect(parseSubmitApplicationInput({ ...app, extra: 1 }).ok).toBe(false);
+  });
+
+  it('suppresses unsafe legacy websites at approval and activation boundaries', () => {
+    expect(normalizePartnerWebsiteUrl('http://legacy.example.com')).toBeNull();
+    expect(normalizePartnerWebsiteUrl('https://user:password@legacy.example.com')).toBeNull();
+    expect(normalizePartnerWebsiteUrl('legacy.example.com')).toBe('https://legacy.example.com');
+    expect(normalizePartnerWebsiteUrl('https://legacy.example.com')).toBe(
+      'https://legacy.example.com',
+    );
   });
 });
 

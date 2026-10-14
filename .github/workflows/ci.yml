@@ -19,11 +19,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9
+          run_install: false
+
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
+
+      - name: Validate pnpm lockfile
+        # Firebase deploy workflows install with pnpm, while the web CI below
+        # installs with npm. Validate pnpm's override metadata before merge so
+        # a text-valid Dependabot lockfile cannot break production deploys.
+        run: pnpm install --frozen-lockfile --lockfile-only --ignore-scripts
 
       - name: Install dependencies
         run: |

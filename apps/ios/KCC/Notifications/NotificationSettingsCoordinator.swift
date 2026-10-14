@@ -11,6 +11,9 @@ enum NotificationSettingsUiState: Equatable, Sendable {
     case unavailable
     /// The owner's preferences (all-enabled when nothing is stored).
     case loaded(NotificationPreferences)
+    /// The listener failed, so no preference value is verified and writes are
+    /// disabled until reload or a later successful listener emission.
+    case failed(code: String?)
 }
 
 /// UI-facing status of a preferences save — Android's
@@ -126,6 +129,8 @@ final class NotificationSettingsCoordinator {
         switch snapshot {
         case .loaded(let preferences):
             state = .loaded(preferences)
+        case .failed(let code):
+            state = .failed(code: code)
         }
     }
 }

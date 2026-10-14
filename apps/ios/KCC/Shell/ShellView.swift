@@ -1780,7 +1780,7 @@ struct ShellView: View {
                 searchClient = UnavailableAddressSearchClient()
             }
             savedPlacesCoordinator = SavedPlacesCoordinator(
-                store: UserDefaultsSavedPlacesStore(uid: uid),
+                store: ProtectedFileSavedPlacesStore(uid: uid),
                 searchClient: searchClient
             )
         }

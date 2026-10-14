@@ -210,13 +210,16 @@ final class AccountDeletionTests: XCTestCase {
         let repository = FakeAuthRepository(
             authState: .signedIn(uid: "replacement", displayName: nil)
         )
-        let session = AuthSession(repository: repository)
+        var clearedUids: [String] = []
+        let session = AuthSession(repository: repository) { clearedUids.append($0); return true }
 
         XCTAssertTrue(session.signOut(ifSignedInAs: "deletion-origin"))
         XCTAssertEqual(repository.signOutCount, 0)
+        XCTAssertTrue(clearedUids.isEmpty)
 
         XCTAssertTrue(session.signOut(ifSignedInAs: "replacement"))
         XCTAssertEqual(repository.signOutCount, 1)
+        XCTAssertEqual(clearedUids, ["replacement"])
     }
 
     @MainActor
@@ -226,7 +229,7 @@ final class AccountDeletionTests: XCTestCase {
             authState: .signedIn(uid: "deletion-origin", displayName: nil)
         )
         repository.signOutError = ExpectedFailure()
-        let session = AuthSession(repository: repository)
+        let session = AuthSession(repository: repository, clearSavedPlaces: { _ in true })
 
         XCTAssertFalse(session.signOut(ifSignedInAs: "deletion-origin"))
         XCTAssertEqual(repository.signOutCount, 1)
@@ -243,12 +246,14 @@ final class AccountDeletionTests: XCTestCase {
             authState: .signedIn(uid: "replacement", displayName: nil)
         )
         repository.signOutError = ExpectedFailure()
-        let session = AuthSession(repository: repository)
+        var clearedUids: [String] = []
+        let session = AuthSession(repository: repository) { clearedUids.append($0); return true }
 
         // A cancelled/deferred task from the deleted identity is treated as
         // complete without touching the replacement account's credentials.
         XCTAssertTrue(session.signOut(ifSignedInAs: "deleted-origin"))
         XCTAssertEqual(repository.signOutCount, 0)
+        XCTAssertTrue(clearedUids.isEmpty)
     }
 
     @MainActor
@@ -256,7 +261,8 @@ final class AccountDeletionTests: XCTestCase {
         let repository = FakeAuthRepository(
             authState: .signedIn(uid: "deletion-origin", displayName: nil)
         )
-        let session = AuthSession(repository: repository)
+        var clearedUids: [String] = []
+        let session = AuthSession(repository: repository) { clearedUids.append($0); return true }
 
         // Firebase has already switched accounts, but the listener-backed
         // repository/session state has not published or consumed that update.
@@ -265,5 +271,29 @@ final class AccountDeletionTests: XCTestCase {
         XCTAssertEqual(session.state, .signedIn(uid: "deletion-origin", displayName: nil))
         XCTAssertTrue(session.signOut(ifSignedInAs: "deletion-origin"))
         XCTAssertEqual(repository.signOutCount, 0)
+        XCTAssertEqual(clearedUids, ["deletion-origin"])
+    }
+
+    @MainActor
+    func testSavedPlacesCleanupFailureBlocksSignOutAndCanBeRetried() {
+        let repository = FakeAuthRepository(
+            authState: .signedIn(uid: "member", displayName: nil)
+        )
+        var cleanupSucceeds = false
+        var cleanupCount = 0
+        let session = AuthSession(repository: repository) { uid in
+            XCTAssertEqual(uid, "member")
+            cleanupCount += 1
+            return cleanupSucceeds
+        }
+
+        XCTAssertFalse(session.signOut())
+        XCTAssertEqual(cleanupCount, 1)
+        XCTAssertEqual(repository.signOutCount, 0)
+
+        cleanupSucceeds = true
+        XCTAssertTrue(session.signOut())
+        XCTAssertEqual(cleanupCount, 2)
+        XCTAssertEqual(repository.signOutCount, 1)
     }
 }

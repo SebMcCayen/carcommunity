@@ -18,6 +18,7 @@
     "backfill:display-name-lower": "node scripts/backfill-display-name-lower.mjs",
     "backfill:block-visibility": "node scripts/backfill-block-visibility.mjs",
     "backfill:partner-offer-status": "node scripts/backfill-partner-offer-status.mjs",
+    "backfill:partner-https-websites": "node scripts/backfill-partner-https-websites.mjs",
     "backfill:partner-stats-optin": "node scripts/backfill-partner-stats-optin.mjs",
     "set-first-admin": "node scripts/set-first-admin.mjs",
     "lockfile:check": "node scripts/deploy-lockfile.mjs check",
@@ -39,12 +40,12 @@
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.2",
-    "@types/node": "^24.13.6",
+    "@types/node": "^24.19.1",
     "eslint": "^10.11.0",
     "firebase": "^12.19.0",
-    "firebase-tools": "^15.31.0",
+    "firebase-tools": "^15.32.1",
     "typescript": "~6.0.3",
-    "typescript-eslint": "^8.70.1",
-    "vitest": "^5.0.1"
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^5.0.3"
   }
 }

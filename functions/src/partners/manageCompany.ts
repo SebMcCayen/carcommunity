@@ -18,6 +18,7 @@ import {
   buildCompanyDocument,
   guardEditableStatus,
   guardStatusTransition,
+  normalizePartnerWebsiteUrl,
   statusActionPastTense,
   parseCreateCompanyInput,
   parseSetCompanyStatusInput,
@@ -174,7 +175,16 @@ export const setCompanyStatus = onCall(
           'Pause active offers before changing this company status.',
         );
       }
-      tx.update(companyRef, { status: guard.nextStatus, updatedAt: serverTimestamp() });
+      const companyUpdate: Record<string, unknown> = {
+        status: guard.nextStatus,
+        updatedAt: serverTimestamp(),
+      };
+      if (guard.nextStatus === 'active' && snap.data()!.website != null) {
+        // A legacy draft may predate HTTPS-only validation. Normalize a bare
+        // domain and suppress invalid/HTTP values before making it public.
+        companyUpdate.website = normalizePartnerWebsiteUrl(snap.data()!.website);
+      }
+      tx.update(companyRef, companyUpdate);
       const cascadedOfferStatus = guard.nextStatus === 'ended' ? 'ended' : 'paused';
       activeOffers?.docs.forEach((offer) => {
         tx.update(offer.ref, {

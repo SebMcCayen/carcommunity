@@ -7,11 +7,13 @@ final class SavedPlacesCoordinator {
     private let store: SavedPlacesStore
     private let searchClient: AddressSearchClient
     @ObservationIgnored nonisolated(unsafe) private var searchTask: Task<Void, Never>?
+    @ObservationIgnored private var pendingPlaces: [SavedPlace]?
 
     private(set) var places: [SavedPlace]
     private(set) var suggestions: [PlaceSuggestion] = []
     private(set) var isSearching = false
     private(set) var searchFailed = false
+    private(set) var persistenceFailed = false
     var query = ""
 
     init(store: SavedPlacesStore, searchClient: AddressSearchClient) {
@@ -71,8 +73,7 @@ final class SavedPlacesCoordinator {
             updated = SavedPlacesPolicy.remove(id: replacingID, from: updated)
         }
         updated = SavedPlacesPolicy.upsert(saved, into: updated)
-        places = SavedPlacesPolicy.normalize(updated)
-        store.save(places)
+        persist(updated)
     }
 
     func rename(_ place: SavedPlace, label: String) {
@@ -80,8 +81,20 @@ final class SavedPlacesCoordinator {
     }
 
     func remove(id: String) {
-        places = SavedPlacesPolicy.remove(id: id, from: places)
-        store.save(places)
+        persist(SavedPlacesPolicy.remove(id: id, from: places))
+    }
+
+    func retryPersistence() {
+        guard let pendingPlaces else {
+            persistenceFailed = false
+            return
+        }
+        persist(pendingPlaces)
+    }
+
+    func dismissPersistenceFailure() {
+        pendingPlaces = nil
+        persistenceFailed = false
     }
 
     func clearSearch() {
@@ -90,5 +103,17 @@ final class SavedPlacesCoordinator {
         suggestions = []
         isSearching = false
         searchFailed = false
+    }
+
+    private func persist(_ updated: [SavedPlace]) {
+        let normalized = SavedPlacesPolicy.normalize(updated)
+        guard store.save(normalized) else {
+            pendingPlaces = normalized
+            persistenceFailed = true
+            return
+        }
+        places = normalized
+        pendingPlaces = nil
+        persistenceFailed = false
     }
 }
