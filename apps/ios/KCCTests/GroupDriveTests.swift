@@ -36,7 +36,11 @@ final class GroupDriveTests: XCTestCase {
         ]))
         repository.emitStatus(.loaded(.joined))
 
-        await waitFor { !coordinator.isLoading && coordinator.isParticipating }
+        await waitFor {
+            !coordinator.isLoading
+                && coordinator.isParticipating
+                && coordinator.activeParticipantUids == ["me"]
+        }
         XCTAssertEqual(coordinator.activeParticipantUids, ["me"])
     }
 
