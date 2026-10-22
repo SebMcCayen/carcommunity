@@ -256,7 +256,7 @@
     "teaserBody": "Explore Plus benefits or support the community with Supporter.",
     "memberMonthlyTitle": "Monthly Membership",
     "memberRequiredBody": "Event details, RSVP, social features and driving statistics are free. Plus and Supporter include event check-in, attendee names and member partner offers.",
-    "purchaseHandledExternally": "Purchases are handled via the App Store or Google Play in a later version.",
+    "purchaseHandledExternally": "Subscriptions are purchased through the App Store or Google Play.",
     "accessLimitedBySuspension": "Your access may be restricted in the event of suspension or violations.",
     "currentEntitlementMember": "You have an active membership.",
     "currentEntitlementPlus": "You have an active Plus membership.",
@@ -283,13 +283,14 @@
     "statusPurchasing": "Completing purchase…",
     "statusVerifying": "Verifying your purchase…",
     "statusSuccess": "Purchase verified. Membership is active.",
-    "statusPending": "Google Play is processing the payment. No member benefits are enabled until it completes.",
+    "statusPending": "Your app store is processing the payment. No member benefits are enabled until it completes.",
     "statusUnavailable": "Subscriptions are unavailable on this device.",
     "errorConnection": "Could not connect to the store. Try again later.",
     "errorProductUnavailable": "This membership product is not available right now.",
     "errorPurchase": "The purchase could not be completed.",
     "errorVerification": "We could not verify your purchase. It has not been activated as a membership.",
-    "errorInactivePurchase": "Google Play did not confirm an active membership for this purchase."
+    "errorInactivePurchase": "Your app store did not confirm an active membership for this purchase.",
+    "restoreAction": "Restore purchases"
   },
   "profile": {
     "title": "Profile",

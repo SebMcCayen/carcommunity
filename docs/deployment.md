@@ -297,7 +297,7 @@ GitHub environment.
 
 See the [Google Cloud documentation](https://cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines) for background.
 
-## Google Play subscription verification (disabled by default)
+## Store subscription verification (disabled by default)
 
 `subscription-verify` is the only function that runs as the dedicated runtime
 identity below; `subscription-grantEntitlement` and every other function keep
@@ -329,13 +329,19 @@ Credentials with the Android Publisher OAuth scope. One-time console setup:
    `member_monthly`.
 
 Provider activation is a backend-only Firestore switch. Missing config and
-`enabled: false` both fail closed:
+`enabled: false` both fail closed. Apple additionally requires an explicit
+environment; production verification also requires the numeric App Store app
+ID from App Store Connect:
 
 ```json
 // config/subscriptionProviders
 {
   "google": { "enabled": false },
-  "apple": { "enabled": false }
+  "apple": {
+    "enabled": false,
+    "environment": "sandbox",
+    "appAppleId": 1234567890
+  }
 }
 ```
 
@@ -343,11 +349,25 @@ Deploy backend + Android with the Google flag still false. For a controlled
 Internal Testing purchase, set `google.enabled` true immediately before the
 test, buy each plan with a license tester, verify the entitlement/token-hash
 record and Play acknowledgement, then turn it false again if testing is done.
-Do not enable Apple in this slice. This is the temporary platform exception
-approved by ADR-002 under "Milestones gated on the Apple Developer Program
-membership": StoreKit 2/App Store Connect purchases and Apple transaction
-verification remain deferred until paid membership exists. The Apple path must
-remain disabled and fail closed.
+
+For Apple, create the `plus_monthly` and `supporter_monthly` auto-renewable
+subscriptions in one App Store Connect subscription group, complete their
+agreements, tax, banking, localization, pricing and review metadata, and use a
+Sandbox Apple Account for validation. Deploy with `apple.enabled: false`, set
+`environment: sandbox`, then enable the provider only for the controlled test.
+The callable verifies the StoreKit 2 signed transaction with Apple's official
+server library, the bundled Apple Root CA G3 certificate, bundle ID
+`com.kungsbackacarcommunity.app`, and online revocation checks. It also requires
+the verified `appAccountToken` to match the signed-in Firebase UID's one-way
+UUID binding. TestFlight transactions still use Apple's sandbox environment;
+set `environment: production` and the real numeric `appAppleId` only for live
+App Store transactions. A malformed or incomplete configuration fails closed.
+
+The app displays StoreKit's localized price, supports purchase and restore,
+and finishes a verified StoreKit transaction only after the backend applies the
+entitlement. A backend failure leaves it unfinished for StoreKit redelivery.
+The stable, verified `originalTransactionId` hash owns the subscription chain;
+the signed JWS itself is never logged or stored.
 
 The verified internal first-purchase path is safe: the client sends a SHA-256
 obfuscated Firebase UID, the backend compares it with Play's external account
@@ -376,6 +396,15 @@ Keep `google.enabled` **false for public rollout** until all of these land:
 Route-open `queryPurchasesAsync` reconciliation is intentionally included now
 for interrupted callbacks, renewal visibility, and reinstall. It is not a
 replacement for RTDN or multi-token effective-tier recomputation.
+
+Keep `apple.enabled` **false for public rollout** until App Store Server
+Notifications V2 has been configured and its signed notifications are handled
+server-side for renewals, refunds, revocations and billing-state changes. The
+current iOS app reconciles verified current entitlements when Membership opens,
+and the expiry sweep removes stale access, but those are recovery paths rather
+than real-time lifecycle delivery. Before enabling production, exercise first
+purchase, restore/reinstall, upgrade, downgrade, cancellation, expiry and
+cross-account replay in the StoreKit sandbox.
 
 ## Android Releases and the In-App Update Prompt
 

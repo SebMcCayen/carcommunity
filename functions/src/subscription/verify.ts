@@ -57,6 +57,9 @@ import {
 } from './purchase-token-ownership';
 import { PurchaseTokenOwnershipError } from './purchase-token-ownership-core';
 import { isSubscriptionProviderEnabled } from './provider-config';
+import { getAppleSubscriptionProviderConfig } from './provider-config';
+import { AppleVerificationError, appleAppAccountTokenForUid } from './apple-store-core';
+import { AppleSignedDataError, verifyAppleTransaction } from './apple-store';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -96,17 +99,85 @@ export const verify = onCall(
       );
     }
 
-    if (parsed.input.platform !== 'google') {
-      // TEMPORARY PLATFORM EXCEPTION — ADR-002, "Milestones gated on the
-      // Apple Developer Program membership": StoreKit 2 against App Store
-      // Connect and Apple transaction verification are deferred until paid
-      // membership exists. Apple therefore remains disabled and fail-closed
-      // in this Google Play Internal Testing slice.
-      logger.error('Subscription provider enabled but adapter is unavailable', {
-        platform: parsed.input.platform,
-        uid: actor.uid,
-      });
-      throw new HttpsError('unimplemented', 'Receipt verification adapter not available.');
+    if (parsed.input.platform === 'apple') {
+      const config = await getAppleSubscriptionProviderConfig();
+      if (config === null) {
+        throw new HttpsError(
+          'failed-precondition',
+          'Apple transaction verification is not configured correctly.',
+        );
+      }
+      let appleReservationId: string | null = null;
+      let appleTokenHash: string | null = null;
+      try {
+        const verificationNow = new Date();
+        const outcome = await verifyAppleTransaction(
+          parsed.input.purchaseToken,
+          appleAppAccountTokenForUid(actor.uid),
+          config,
+          verificationNow,
+        );
+        // The signed JWS changes on renewal. Ownership therefore uses Apple's
+        // verified, stable subscription-chain identifier, never the raw JWS.
+        appleTokenHash = hashPurchaseToken(outcome.originalTransactionId);
+        appleReservationId = await reservePurchaseVerification(
+          appleTokenHash,
+          { uid: actor.uid, productId: outcome.productId },
+          verificationNow,
+        );
+        await applyEntitlement({
+          userId: actor.uid,
+          platform: 'apple',
+          status: outcome.status,
+          entitlement: outcome.entitlement,
+          tier: outcome.tier,
+          purchaseTokenHash: appleTokenHash,
+          startsAt: outcome.startsAt,
+          expiresAt: outcome.expiresAt,
+        });
+        return {
+          entitlement: outcome.entitlement,
+          status: outcome.status,
+          tier: outcome.tier,
+        };
+      } catch (error) {
+        if (error instanceof AppleVerificationError || error instanceof AppleSignedDataError) {
+          logger.warn('Apple subscription verification rejected', {
+            reason: 'code' in error ? error.code : error.reason,
+            uid: actor.uid,
+          });
+          if (error instanceof AppleSignedDataError && error.reason === 'unavailable') {
+            throw new HttpsError('unavailable', 'Apple verification is temporarily unavailable.');
+          }
+          throw new HttpsError('failed-precondition', 'Apple purchase is not valid.');
+        }
+        if (error instanceof PurchaseTokenOwnershipError) {
+          logger.warn('Apple purchase ownership rejected', {
+            reason: error.reason,
+            uid: actor.uid,
+          });
+          if (error.reason === 'different_user') {
+            throw new HttpsError('already-exists', 'Apple purchase belongs to another account.');
+          }
+          if (error.reason === 'verification_in_progress') {
+            throw new HttpsError('aborted', 'Subscription verification is already in progress.');
+          }
+          throw new HttpsError(
+            'failed-precondition',
+            'Apple purchase conflicts with active access.',
+          );
+        }
+        logger.error('Apple subscription verification failed unexpectedly', { uid: actor.uid });
+        throw new HttpsError('internal', 'Apple verification failed.');
+      } finally {
+        if (appleReservationId !== null && appleTokenHash !== null) {
+          try {
+            await releasePurchaseVerification(actor.uid, appleTokenHash, appleReservationId);
+          } catch {
+            logger.warn('Apple verification lease release failed', { uid: actor.uid });
+          }
+        }
+      }
     }
 
     const client = new AdcGooglePlaySubscriptionClient();

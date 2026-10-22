@@ -229,7 +229,7 @@
     <string name="subscription_teaserBody">Explore Plus benefits or support the community with Supporter.</string>
     <string name="subscription_memberMonthlyTitle">Monthly Membership</string>
     <string name="subscription_memberRequiredBody">Event details, RSVP, social features and driving statistics are free. Plus and Supporter include event check-in, attendee names and member partner offers.</string>
-    <string name="subscription_purchaseHandledExternally">Purchases are handled via the App Store or Google Play in a later version.</string>
+    <string name="subscription_purchaseHandledExternally">Subscriptions are purchased through the App Store or Google Play.</string>
     <string name="subscription_accessLimitedBySuspension">Your access may be restricted in the event of suspension or violations.</string>
     <string name="subscription_currentEntitlementMember">You have an active membership.</string>
     <string name="subscription_currentEntitlementPlus">You have an active Plus membership.</string>
@@ -256,13 +256,14 @@
     <string name="subscription_statusPurchasing">Completing purchase…</string>
     <string name="subscription_statusVerifying">Verifying your purchase…</string>
     <string name="subscription_statusSuccess">Purchase verified. Membership is active.</string>
-    <string name="subscription_statusPending">Google Play is processing the payment. No member benefits are enabled until it completes.</string>
+    <string name="subscription_statusPending">Your app store is processing the payment. No member benefits are enabled until it completes.</string>
     <string name="subscription_statusUnavailable">Subscriptions are unavailable on this device.</string>
     <string name="subscription_errorConnection">Could not connect to the store. Try again later.</string>
     <string name="subscription_errorProductUnavailable">This membership product is not available right now.</string>
     <string name="subscription_errorPurchase">The purchase could not be completed.</string>
     <string name="subscription_errorVerification">We could not verify your purchase. It has not been activated as a membership.</string>
-    <string name="subscription_errorInactivePurchase">Google Play did not confirm an active membership for this purchase.</string>
+    <string name="subscription_errorInactivePurchase">Your app store did not confirm an active membership for this purchase.</string>
+    <string name="subscription_restoreAction">Restore purchases</string>
     <string name="profile_title">Profile</string>
     <string name="profile_openSettings">Open settings</string>
     <string name="profile_openAbout">Open about app</string>

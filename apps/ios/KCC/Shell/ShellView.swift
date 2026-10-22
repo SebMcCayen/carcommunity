@@ -47,6 +47,11 @@ struct ShellView: View {
         _accountDeletionCoordinator = State(initialValue: AccountDeletionCoordinator(
             repository: FirebaseAccountDeletionRepository.createIfAvailable()
         ))
+        _subscriptionCoordinator = State(initialValue: SubscriptionCoordinator(
+            uid: authenticatedUid,
+            store: StoreKitSubscriptionStore(),
+            verifier: FirebaseAppleSubscriptionVerifier.createIfAvailable()
+        ))
     }
 
     /// The shell's SINGLE map surface, composed once for the whole signed-in
@@ -83,6 +88,7 @@ struct ShellView: View {
     @State private var openTicketsCoordinator: OpenTicketsCoordinator?
     @State private var partnerApplicationCoordinator: PartnerApplicationCoordinator?
     @State private var accountDeletionCoordinator: AccountDeletionCoordinator
+    @State private var subscriptionCoordinator: SubscriptionCoordinator
     @State private var liveLocationCoordinator: LiveLocationCoordinator?
     @State private var driveRecordingCoordinator: DriveRecordingCoordinator?
     @State private var locationPermissionCoordinator: LocationPermissionCoordinator?
@@ -1031,7 +1037,7 @@ struct ShellView: View {
             }
         case .subscription:
             routeNavigation {
-                MembershipScreen(access: access)
+                MembershipScreen(access: access, coordinator: subscriptionCoordinator)
             }
         case .savedPlaces:
             if let savedPlacesCoordinator {

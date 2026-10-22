@@ -1,9 +1,9 @@
 /**
  * Global purchase-token ownership.
  *
- * A Play purchase token may be verified repeatedly by its original Firebase
+ * A store purchase identity may be verified repeatedly by its original Firebase
  * UID (restore/reinstall/retry), but never claimed by another UID. The document
- * id is only the SHA-256 token hash; raw tokens never reach Firestore.
+ * id is only its SHA-256 hash; raw tokens and transaction ids never reach Firestore.
  */
 
 import { randomUUID } from 'node:crypto';
