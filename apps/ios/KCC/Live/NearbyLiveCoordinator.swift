@@ -52,6 +52,30 @@ final class NearbyLiveCoordinator {
         reconcileSubscriptions(with: crossesAuthorizationBoundary ? [] : orderedUids)
     }
 
+    /// Shows a caller-supplied, already-authorized roster (for example an
+    /// event group drive) without performing nearby discovery. Each uid still
+    /// gets its own rules-gated RTDB listener; absent or denied markers remain
+    /// invisible, so roster membership never implies location sharing.
+    func activateRoster(
+        repository: LiveLocationRepository?,
+        currentUid: String?,
+        participantUids: [String],
+        excludedUids: Set<String>
+    ) {
+        let crossesAuthorizationBoundary = self.currentUid != currentUid
+            || !Self.sameRepository(self.repository, repository)
+        if crossesAuthorizationBoundary { resetAuthorizationBoundary() }
+        self.repository = repository
+        self.currentUid = currentUid
+        self.excludedUids = excludedUids
+        guard repository != nil, currentUid != nil else { deactivate(); return }
+        var seen = Set<String>()
+        let roster = participantUids.filter {
+            !$0.isEmpty && seen.insert($0).inserted
+        }
+        reconcileSubscriptions(with: Array(roster.prefix(maximumNearbyLiveMarkers)))
+    }
+
     /// A user or repository identity change invalidates every value obtained
     /// through the previous authorization context, even when discovery later
     /// returns the same uid roster. Clear before installing the new identity

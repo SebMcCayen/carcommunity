@@ -7,8 +7,8 @@ import UIKit
 /// membership gate, and — for gate-passers on a published event — the RSVP
 /// row plus the public counts breakdown, eligible event-chat entry,
 /// paid/admin attendee roster, paid geofenced check-in, and creator
-/// edit/remove. Share/calendar and event-linked group driving remain separate
-/// slices.
+/// edit/remove and the event-linked group-drive roster. Share/calendar remain
+/// separate slices.
 ///
 /// A dumb switch over the coordinator's state: all decisions live in the pure
 /// ``EventDetailCoordinator``. The coordinator is created lazily on first
@@ -27,6 +27,7 @@ struct EventDetailScreen: View {
     /// config-less build.
     let makeCoordinator: @MainActor () -> EventDetailCoordinator?
     let locationProvider: any LocationProvider
+    let onShowGroupDriveOnMap: (([String]) -> Void)?
 
     @State private var coordinator: EventDetailCoordinator?
     @State private var permissionCoordinator: LocationPermissionCoordinator
@@ -41,10 +42,12 @@ struct EventDetailScreen: View {
 
     init(
         makeCoordinator: @escaping @MainActor () -> EventDetailCoordinator?,
-        locationProvider: any LocationProvider
+        locationProvider: any LocationProvider,
+        onShowGroupDriveOnMap: (([String]) -> Void)? = nil
     ) {
         self.makeCoordinator = makeCoordinator
         self.locationProvider = locationProvider
+        self.onShowGroupDriveOnMap = onShowGroupDriveOnMap
         _permissionCoordinator = State(
             initialValue: LocationPermissionCoordinator(provider: locationProvider)
         )
@@ -247,6 +250,24 @@ struct EventDetailScreen: View {
                         }
                     } label: {
                         Label("chat.eventChatTitle", systemImage: "bubble.left.and.bubble.right")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .frame(minHeight: 44)
+                }
+
+                if coordinator.canOpenGroupDrive {
+                    NavigationLink {
+                        if let groupDrive = coordinator.makeGroupDriveCoordinator() {
+                            GroupDriveScreen(
+                                coordinator: groupDrive,
+                                onShowOnMap: onShowGroupDriveOnMap
+                            )
+                        } else {
+                            Text("groupDrive.error").foregroundStyle(.secondary)
+                        }
+                    } label: {
+                        Label("groupDrive.screenTitle", systemImage: "car.2")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)

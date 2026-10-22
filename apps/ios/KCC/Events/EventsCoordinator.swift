@@ -30,6 +30,7 @@ enum EventsListUiState: Equatable, Sendable {
 final class EventsCoordinator {
     private let repository: EventsRepository
     private var eventChatRepository: EventChatRepository?
+    private let groupDriveRepository: GroupDriveRepository?
     private weak var locationProvider: (any LocationProvider)?
     private let subscriptionRepository: SubscriptionStateRepository?
     private let uid: String?
@@ -48,11 +49,13 @@ final class EventsCoordinator {
     init(
         repository: EventsRepository,
         eventChatRepository: EventChatRepository? = nil,
+        groupDriveRepository: GroupDriveRepository? = nil,
         locationProvider: (any LocationProvider)? = nil,
         subscriptionRepository: SubscriptionStateRepository? = nil
     ) {
         self.repository = repository
         self.eventChatRepository = eventChatRepository
+        self.groupDriveRepository = groupDriveRepository
         self.locationProvider = locationProvider
         self.subscriptionRepository = subscriptionRepository
         self.uid = repository.currentUserId()
@@ -110,6 +113,7 @@ final class EventsCoordinator {
             repository: repository,
             eventId: eventId,
             eventChatRepository: eventChatRepository,
+            groupDriveRepository: groupDriveRepository,
             locationProvider: locationProvider,
             subscriptionRepository: subscriptionRepository
         )
