@@ -18,6 +18,7 @@ struct EventsScreen: View {
     /// Nil in a config-less build; the screen degrades to a placeholder.
     let coordinator: EventsCoordinator?
     let locationProvider: any LocationProvider
+    let onShowGroupDriveOnMap: (([String]) -> Void)?
     @State private var createCoordinator: EventFormCoordinator?
 
     var body: some View {
@@ -47,7 +48,9 @@ struct EventsScreen: View {
             .navigationDestination(for: EventDetailRoute.self) { route in
                 EventDetailScreen(makeCoordinator: { [weak coordinator] in
                     coordinator?.makeDetailCoordinator(eventId: route.eventId)
-                }, locationProvider: locationProvider)
+                }, locationProvider: locationProvider,
+                   onShowGroupDriveOnMap: coordinator?.isPaidSubscriber == true
+                       ? onShowGroupDriveOnMap : nil)
             }
     }
 
@@ -185,7 +188,11 @@ private struct EventRow: View {
 
 #Preview {
     NavigationStack {
-        EventsScreen(coordinator: nil, locationProvider: StubLocationProvider())
+        EventsScreen(
+            coordinator: nil,
+            locationProvider: StubLocationProvider(),
+            onShowGroupDriveOnMap: nil
+        )
     }
 }
 

@@ -89,6 +89,7 @@ struct ShellView: View {
     @State private var convoyManagementCoordinator: ConvoyManagementCoordinator?
     @State private var convoyAwareness = ConvoyAwarenessCoordinator()
     @State private var nearbyLive = NearbyLiveCoordinator()
+    @State private var groupDriveMapUids: [String] = []
     @State private var convoyReactionCoordinator: ConvoyReactionCoordinator?
     @State private var convoyFollowMeCoordinator: ConvoyFollowMeCoordinator?
     @State private var liveLocationRepository: LiveLocationRepository?
@@ -481,6 +482,24 @@ struct ShellView: View {
                         profileButton
                     }
                 }
+                .overlay(alignment: .top) {
+                    if !groupDriveMapUids.isEmpty, mapHomeChromeVisible {
+                        HStack(spacing: KccSpacing.s2) {
+                            Label("groupDrive.mapTitle", systemImage: "car.2")
+                            Button {
+                                closeGroupDriveMap()
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                            }
+                            .accessibilityLabel(Text("events.attendeesClose"))
+                        }
+                        .font(.system(size: KccTypeScale.bodySm, weight: KccTypeScale.semibold))
+                        .padding(.horizontal, KccSpacing.s3)
+                        .padding(.vertical, KccSpacing.s2)
+                        .background(.regularMaterial, in: Capsule())
+                        .padding(.top, KccSpacing.s4)
+                    }
+                }
                 .overlay(alignment: .bottomTrailing) {
                     if case .signedIn = session.state, mapHomeChromeVisible {
                         mapCommunicationControls
@@ -639,10 +658,18 @@ struct ShellView: View {
                         return
                     }
                     nearbyLive.activate(
-                        repository: repository,
-                        currentUid: uid,
-                        excludedUids: nearbyLiveExcludedUids
-                    )
+                        repository: repository, currentUid: uid,
+                        excludedUids: nearbyLiveExcludedUids)
+                    if !groupDriveMapUids.isEmpty {
+                        nearbyLive.activateRoster(
+                            repository: repository,
+                            currentUid: uid,
+                            participantUids: groupDriveMapUids,
+                            excludedUids: nearbyLiveExcludedUids
+                        )
+                        do { try await Task.sleep(for: .seconds(86_400)) } catch {}
+                        return
+                    }
                     // This lifecycle task deliberately does not depend on the
                     // camera. Each cadence tick reads the latest settled view,
                     // so rapid pans cannot restart discovery or compress its
@@ -668,11 +695,20 @@ struct ShellView: View {
                 }
                 .onChange(of: nearbyLiveExcludedUids) { _, excludedUids in
                     guard nearbyLiveShouldRun else { return }
-                    nearbyLive.activate(
-                        repository: liveLocationRepository,
-                        currentUid: signedInUid,
-                        excludedUids: excludedUids
-                    )
+                    if groupDriveMapUids.isEmpty {
+                        nearbyLive.activate(
+                            repository: liveLocationRepository,
+                            currentUid: signedInUid,
+                            excludedUids: excludedUids
+                        )
+                    } else {
+                        nearbyLive.activateRoster(
+                            repository: liveLocationRepository,
+                            currentUid: signedInUid,
+                            participantUids: groupDriveMapUids,
+                            excludedUids: excludedUids
+                        )
+                    }
                 }
                 .onChange(of: convoyAwareness.focusMode) { _, _ in applyConvoyFocus() }
                 .onChange(of: convoyAwareness.positions) { _, _ in
@@ -887,7 +923,11 @@ struct ShellView: View {
             // NavigationStack hosts the screen's `navigationTitle`; Back pops
             // one level via the pure stack, like every route.
             NavigationStack {
-                EventsScreen(coordinator: eventsCoordinator, locationProvider: locationProvider)
+                EventsScreen(
+                    coordinator: eventsCoordinator,
+                    locationProvider: locationProvider,
+                    onShowGroupDriveOnMap: showGroupDriveOnMap
+                )
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
                             Button {
@@ -1687,6 +1727,7 @@ struct ShellView: View {
         convoyManagementCoordinator = nil
         convoyAwareness.sync(convoy: nil, repository: nil, currentUid: nil)
         nearbyLive.deactivate()
+        groupDriveMapUids = []
         convoyReactionCoordinator?.sync(convoyId: nil)
         convoyReactionCoordinator = nil
         convoyFollowMeCoordinator?.stop()
@@ -1739,6 +1780,7 @@ struct ShellView: View {
             EventsCoordinator(
                 repository: $0,
                 eventChatRepository: eventChat,
+                groupDriveRepository: FirebaseGroupDriveRepository.createIfAvailable(),
                 locationProvider: locationProvider,
                 subscriptionRepository: FirebaseSubscriptionStateRepository.createIfAvailable()
             )
@@ -2175,7 +2217,22 @@ struct ShellView: View {
     }
 
     private var nearbyLiveTaskKey: String {
-        "\(nearbyLiveShouldRun)|\(signedInUid ?? "")"
+        "\(nearbyLiveShouldRun)|\(signedInUid ?? "")|\(groupDriveMapUids.joined(separator: ","))"
+    }
+
+    private func showGroupDriveOnMap(_ participantUids: [String]) {
+        nearbyLive.deactivate()
+        var seen = Set<String>()
+        groupDriveMapUids = participantUids.filter {
+            !$0.isEmpty && seen.insert($0).inserted
+        }
+        routes = .empty
+        selectedTab = .map
+    }
+
+    private func closeGroupDriveMap() {
+        nearbyLive.deactivate()
+        groupDriveMapUids = []
     }
 
     /// Reactions follow the same map-chrome gate as Android: listen only while

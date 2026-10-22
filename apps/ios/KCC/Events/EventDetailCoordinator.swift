@@ -41,6 +41,7 @@ enum RsvpSubmitState: Equatable, Sendable {
 final class EventDetailCoordinator {
     private let repository: EventsRepository
     private let eventChatRepository: EventChatRepository?
+    private let groupDriveRepository: GroupDriveRepository?
     let eventId: String
     /// The signed-in user's uid, resolved once at construction. Nil (no
     /// session) hides the RSVP affordance — there is no owner document to
@@ -104,6 +105,7 @@ final class EventDetailCoordinator {
         repository: EventsRepository,
         eventId: String,
         eventChatRepository: EventChatRepository? = nil,
+        groupDriveRepository: GroupDriveRepository? = nil,
         locationProvider: (any LocationProvider)? = nil,
         subscriptionRepository: SubscriptionStateRepository? = nil,
         passesMemberGate: Bool = MemberGating.allows(isActiveMember: false)
@@ -112,6 +114,7 @@ final class EventDetailCoordinator {
         self.eventId = eventId
         self.uid = repository.currentUserId()
         self.eventChatRepository = eventChatRepository
+        self.groupDriveRepository = groupDriveRepository
         self.eventChatEnabled = eventChatRepository != nil
         self.locationProvider = locationProvider
         self.subscriptionRepository = subscriptionRepository
@@ -164,6 +167,26 @@ final class EventDetailCoordinator {
             repository: eventChatRepository,
             eventId: eventId,
             currentUserId: uid
+        )
+    }
+
+    var canOpenGroupDrive: Bool {
+        guard groupDriveRepository != nil else { return false }
+        let eventStatus: EventStatus?
+        if case .loaded(let event) = state { eventStatus = event.status } else { eventStatus = nil }
+        return GroupDrive.canJoin(eventStatus: eventStatus, rsvp: myRsvp)
+    }
+
+    func makeGroupDriveCoordinator() -> GroupDriveCoordinator? {
+        guard canOpenGroupDrive,
+              let groupDriveRepository,
+              let uid,
+              case .loaded(let event) = state else { return nil }
+        return GroupDriveCoordinator(
+            repository: groupDriveRepository,
+            eventId: eventId,
+            uid: uid,
+            canJoin: GroupDrive.canJoin(eventStatus: event.status, rsvp: myRsvp)
         )
     }
 
