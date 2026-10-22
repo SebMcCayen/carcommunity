@@ -67,6 +67,7 @@ struct ShellView: View {
     /// factory is config-safe, so a build without GoogleService-Info.plist
     /// still renders each route's unavailable state rather than crashing.
     @State private var eventsCoordinator: EventsCoordinator?
+    @State private var billboardsCoordinator: BillboardsCoordinator?
     @State private var leaderboardCoordinator: LeaderboardCoordinator?
     @State private var notificationsCoordinator: NotificationsInboxCoordinator?
     @State private var notificationSettingsCoordinator: NotificationSettingsCoordinator?
@@ -178,6 +179,9 @@ struct ShellView: View {
             .onChange(of: chatFeatureWiringKey) { _, _ in
                 applyChatFeatureGate()
             }
+            .onChange(of: billboardFeatureWiringKey) { _, _ in
+                wireBillboards()
+            }
             .onChange(of: access) { _, access in
                 partnersCoordinator?.updateAccess(access)
                 if !partnerStatsEntryAvailable, routes.current == .partnerStats {
@@ -215,6 +219,8 @@ struct ShellView: View {
                 // background drive collection synchronously during that swap.
                 liveLocationCoordinator?.standDownForRestrictedAccess()
                 driveRecordingCoordinator?.reset()
+                billboardsCoordinator?.stop()
+                mapSurface.setBillboardMarkers([])
             }
     }
 
@@ -523,6 +529,12 @@ struct ShellView: View {
                             projection: mapSurface
                         )
                     }
+                    if let billboardsCoordinator {
+                        BillboardMapOverlay(
+                            coordinator: billboardsCoordinator,
+                            projection: mapSurface
+                        )
+                    }
                     if liveLocationFeatureEnabled {
                         ConvoyMapAwarenessOverlay(
                             members: convoyAwareness.visibleMembers,
@@ -673,6 +685,9 @@ struct ShellView: View {
                         currentUid: signedInUid,
                         excludedUids: excludedUids
                     )
+                }
+                .onChange(of: billboardsCoordinator?.markers, initial: true) { _, markers in
+                    mapSurface.setBillboardMarkers(markers ?? [])
                 }
                 .onChange(of: convoyAwareness.focusMode) { _, _ in applyConvoyFocus() }
                 .onChange(of: convoyAwareness.positions) { _, _ in
@@ -1695,6 +1710,10 @@ struct ShellView: View {
         convoyCreateCoordinator = nil
         incidentMapCoordinator?.stop()
         incidentMapCoordinator = nil
+        billboardsCoordinator?.stop()
+        billboardsCoordinator = nil
+        mapSurface.setBillboardMarkers([])
+        wireBillboards()
         convoyCreateVehicleId = nil
         convoyCreateReturnsToList = false
         selectedConvoyId = nil
@@ -1887,6 +1906,25 @@ struct ShellView: View {
         )
         guard !Task.isCancelled, uid == signedInUid else { return }
         crownHuntComposition = composition
+    }
+
+    @MainActor
+    private func wireBillboards() {
+        billboardsCoordinator?.stop()
+        billboardsCoordinator = nil
+        mapSurface.setBillboardMarkers([])
+        guard signedInUid != nil,
+              FeatureGate.isAvailable(
+                flags: featureFlags,
+                flag: .digitalBillboards,
+                memberGated: false,
+                access: access
+              ) else { return }
+        let coordinator = BillboardsCoordinator(
+            repository: FirebaseBillboardsRepository.createIfAvailable()
+        )
+        billboardsCoordinator = coordinator
+        coordinator.start()
     }
 
     @MainActor
@@ -2124,6 +2162,10 @@ struct ShellView: View {
 
     private var chatFeatureWiringKey: String {
         "\(featureFlags.isEnabled(.chat))|\(featureFlags.isEnabled(.chatReplies))|\(access.isRestricted)"
+    }
+
+    private var billboardFeatureWiringKey: String {
+        "\(signedInUid ?? "unavailable")|\(featureFlags.isEnabled(.digitalBillboards))|\(access.isRestricted)"
     }
 
     private var foregroundMapWorkActive: Bool {
