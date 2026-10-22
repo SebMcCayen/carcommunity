@@ -71,7 +71,9 @@ describe('parseAppleTransaction', () => {
     [{ inAppOwnershipType: 'FAMILY_SHARED' }, 'unsupported_transaction'],
   ])('rejects an untrusted transaction boundary %#', (overrides, code) => {
     expect(() => parseAppleTransaction(transaction(overrides), TOKEN, NOW)).toThrowError(
-      expect.objectContaining<Partial<AppleVerificationError>>({ code }),
+      expect.objectContaining<Partial<AppleVerificationError>>({
+        code: code as AppleVerificationError['code'],
+      }),
     );
   });
 });
