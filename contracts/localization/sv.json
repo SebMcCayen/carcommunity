@@ -1629,6 +1629,8 @@
     "settingsSaving": "Sparar...",
     "settingsLoadError": "Kunde inte hämta notisinställningarna. Försök igen.",
     "permissionRationale": "Få påminnelser om event och viktiga meddelanden.",
+    "permissionEnable": "Aktivera notiser",
+    "permissionEnabled": "Notiser är aktiverade",
     "permissionOptional": "Notiser är valfria.",
     "permissionChangeHint": "Du kan ändra dina val senare under Inställningar.",
     "channelEventsName": "Event",

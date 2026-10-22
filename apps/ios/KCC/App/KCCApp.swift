@@ -1,7 +1,9 @@
+import FirebaseCore
 import SwiftUI
 
 @main
 struct KCCApp: App {
+    @UIApplicationDelegateAdaptor(KCCAppDelegate.self) private var appDelegate
     private let session: AuthSession
     private let signInCoordinator: SignInCoordinator
     private let accessSession: AppAccessSession
@@ -14,6 +16,10 @@ struct KCCApp: App {
         // features standing down — the iOS mirror of Android's
         // `createIfAvailable` pattern.
         FirebaseBootstrap.configureIfAvailable()
+        PushNotificationCoordinator.shared.configure(
+            repository: FirebasePushTokenRepository.createIfAvailable(),
+            tokenSource: FirebaseApp.app() == nil ? nil : FirebaseMessagingTokenSource()
+        )
 
         let repository = FirebaseAuthRepository.createIfAvailable()
         let diagnosticsReporter = FirebaseDiagnosticsReporter.createIfAvailable()

@@ -35,6 +35,25 @@ time — exactly like Android's `google-services.json`:
 
 Never commit a real `GoogleService-Info.plist`.
 
+## Push notification configuration
+
+The target includes the APNs entitlement and Firebase Messaging integration,
+but simulator/config-less builds remain supported. To receive pushes on a
+physical device:
+
+1. Enable **Push Notifications** for `com.kungsbackacarcommunity.app` in the
+   Apple Developer portal and refresh the provisioning profile.
+2. Create an APNs authentication key and upload it under the iOS app's Cloud
+   Messaging settings in Firebase. Keep the `.p8` key outside the repository.
+3. Install the production `GoogleService-Info.plist` as described above, sign
+   in on the device, and enable notifications from the in-app notification
+   settings screen.
+
+Debug builds use the APNs development environment; Release uses production.
+The app opts into Firebase Messaging's FID based registration API. The
+Functions sender selects the APNs envelope only for registrations stored with
+platform `ios`, leaving Android's data-only delivery unchanged.
+
 ## Mapbox configuration
 
 The Standard map uses Mapbox Maps SDK 11.26.0. Supply the public runtime token

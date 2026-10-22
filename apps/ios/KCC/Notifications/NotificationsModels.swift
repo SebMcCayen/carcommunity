@@ -187,8 +187,7 @@ struct AppNotification: Equatable, Sendable, Identifiable {
 ///
 /// Values name screens the shell ALREADY has (``ShellRoute`` / chat-hub tabs);
 /// this is a naming of existing destinations, not a new navigation graph. The
-/// enum is EXPORTED so a later wiring PR can route taps — routing is NOT wired
-/// here (no ``ShellView`` edits in this slice).
+/// enum is shared by inbox rows and native push-tap routing in ``ShellView``.
 enum NotificationDeepLinkTarget: String, Equatable, Sendable, CaseIterable {
     case dm
     case communityChat = "community_chat"

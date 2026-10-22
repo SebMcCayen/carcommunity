@@ -7,9 +7,8 @@ import UIKit
 ///
 /// The essential account notices (`account_warning`, `account_suspension`)
 /// render locked-on and reject toggles, mirroring the backend delivery-time
-/// rule. The Android runtime push-permission REQUEST flow is out of this slice
-/// (push delivery needs the end-of-MVP APNs setup); an informational push
-/// section explains it and offers a deep link to system settings instead.
+/// rule. The push section reflects the native authorization state, requests
+/// permission once, and directs denied members to system settings.
 ///
 /// A dumb view over ``NotificationSettingsUiState``: the toggle recompute +
 /// save lives in the pure ``NotificationSettingsCoordinator``.
@@ -18,11 +17,21 @@ import UIKit
 /// `NavigationStack` and supplies Back (future wiring PR).
 struct NotificationSettingsScreen: View {
     let coordinator: NotificationSettingsCoordinator?
+    @Bindable var pushNotifications: PushNotificationCoordinator
+
+    init(
+        coordinator: NotificationSettingsCoordinator?,
+        pushNotifications: PushNotificationCoordinator = .shared
+    ) {
+        self.coordinator = coordinator
+        self.pushNotifications = pushNotifications
+    }
 
     var body: some View {
         content
             .navigationTitle(Text("notifications.settingsTitle"))
             .task { coordinator?.start() }
+            .task { await pushNotifications.refreshPermissionState() }
     }
 
     @ViewBuilder
@@ -117,10 +126,23 @@ struct NotificationSettingsScreen: View {
 
     private var pushSection: some View {
         Section {
-            Button {
-                openSystemSettings()
-            } label: {
-                Text("notifications.settingsOpenSystemSettings")
+            switch pushNotifications.permissionState {
+            case .notDetermined:
+                Button {
+                    Task { await pushNotifications.requestPermission() }
+                } label: {
+                    Text("notifications.permissionEnable")
+                }
+                .disabled(pushNotifications.isRequestingPermission)
+            case .denied:
+                Button {
+                    openSystemSettings()
+                } label: {
+                    Text("notifications.settingsOpenSystemSettings")
+                }
+            case .enabled:
+                Label("notifications.permissionEnabled", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(KccPalette.successGreen)
             }
         } header: {
             Text("notifications.settingsPushTitle")

@@ -48,6 +48,8 @@ targets:
       # europe-west1.
       - package: Firebase
         product: FirebaseFunctions
+      - package: Firebase
+        product: FirebaseMessaging
       # Avatar rendering: stored Storage PATHS resolve to download URLs at
       # render time (FirebaseUserProfileRepository.avatarDownloadURL),
       # mirroring Android's media/StorageImageUrl.
@@ -68,6 +70,10 @@ targets:
         CFBundleDevelopmentRegion: sv
         UILaunchScreen: {}
         ITSAppUsesNonExemptEncryption: false
+        # Firebase Messaging 12.18's supported registration API is FID-based.
+        # Without this opt-in register()/unregister() fail and only the now-
+        # deprecated token API is available.
+        FirebaseMessagingInstallationIdEnabled: true
         # Public runtime token only (pk....). Inject MAPBOX_ACCESS_TOKEN as a
         # user-defined build setting; an absent/invalid token deliberately
         # leaves the config-less map placeholder active for CI.
@@ -94,6 +100,7 @@ targets:
         NSLocationWhenInUseUsageDescription: "Utan platsåtkomst kan kartan inte visa var du är, och vägbeskrivningar, körinspelning och livedelning fungerar inte."
         UIBackgroundModes:
           - location
+          - remote-notification
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kungsbackacarcommunity.app
@@ -107,8 +114,10 @@ targets:
       configs:
         Debug:
           APP_ATTEST_ENVIRONMENT: development
+          APS_ENVIRONMENT: development
         Release:
           APP_ATTEST_ENVIRONMENT: production
+          APS_ENVIRONMENT: production
     postBuildScripts:
       # The config-less-build seam (parity with Android's gitignored
       # google-services.json): GoogleService-Info.plist is NOT referenced by the

@@ -21268,6 +21268,40 @@
         }
       }
     },
+    "notifications.permissionEnable": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktivera notiser"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable notifications"
+          }
+        }
+      }
+    },
+    "notifications.permissionEnabled": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notiser är aktiverade"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifications are enabled"
+          }
+        }
+      }
+    },
     "notifications.permissionOptional": {
       "extractionState": "manual",
       "localizations": {

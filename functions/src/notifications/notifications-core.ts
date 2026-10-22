@@ -11,7 +11,7 @@
  *   notification eligibility and content (legacy design rule).
  * - `userPrivate/{uid}/pushTokens/{tokenId}` — push token registrations, one
  *   per device. The SHA-256 token hash IS the document ID (making
- *   registration idempotent) and the raw FCM token is stored in the document,
+ *   registration idempotent) and the raw FCM address identifier is stored in the document,
  *   because FCM addresses a device by the token itself. The raw token is never
  *   logged or returned, and the collection is client-inaccessible.
  * - Push delivery: the `notifications-onNotificationCreated` Firestore trigger
@@ -550,6 +550,35 @@ export function buildPushPayload(input: PushPayloadInput): Record<string, string
   return payload;
 }
 
+/** Platform-specific FCM transport fields layered over the shared data map. */
+export function buildPushTransport(
+  platform: PushTokenPlatform,
+  payload: Readonly<Record<string, string>>,
+  ttlMs: number,
+  nowMs = Date.now(),
+): Pick<import('firebase-admin/messaging').TokenMessage, 'android' | 'apns'> {
+  if (platform === 'ios') {
+    return {
+      apns: {
+        headers: {
+          'apns-priority': '10',
+          'apns-expiration': String(Math.floor((nowMs + ttlMs) / 1000)),
+        },
+        payload: {
+          aps: {
+            alert: {
+              title: payload.title,
+              ...(payload.previewText ? { body: payload.previewText } : {}),
+            },
+            sound: 'default',
+          },
+        },
+      },
+    };
+  }
+  return { android: { ttl: ttlMs, priority: 'high' } };
+}
+
 /**
  * FCM send errors that mean the token is permanently dead and must be dropped
  * from the registry. Anything else (quota, transient unavailability) is a
@@ -680,7 +709,8 @@ export function buildNotificationDocument(
 /**
  * userPrivate/{uid}/pushTokens/{tokenId} document.
  *
- * Stores the RAW FCM token in `token` — FCM has no way to address a device by
+ * Stores the RAW FCM address identifier (Android registration token or iOS
+ * Firebase Installation ID) in `token` — FCM cannot address a device by
  * a hash, so the previous hash-only registry made sending impossible. The
  * token is treated as personal data (a device identifier):
  *  - `pushTokens` denies ALL client access in firebase/firestore.rules (the

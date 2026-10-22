@@ -6,6 +6,7 @@ import {
   SOCIAL_NOTIFICATION_CATEGORIES,
   buildPushDeepLink,
   buildPushPayload,
+  buildPushTransport,
   buildPushTokenDocument,
   chunkTokens,
   decideInAppDelivery,
@@ -25,6 +26,35 @@ const active: UserAccessState = {
 };
 const suspended: UserAccessState = { ...active, suspended: true };
 const deleted: UserAccessState = { ...active, deleted: true };
+
+describe('buildPushTransport', () => {
+  const payload = { title: 'Convoy update', previewText: 'Sam left the convoy.' };
+
+  it('keeps Android data-only with a high-priority TTL', () => {
+    expect(buildPushTransport('android', payload, 60_000, 1_000)).toEqual({
+      android: { ttl: 60_000, priority: 'high' },
+    });
+  });
+
+  it('adds an APNs alert and absolute expiration for iOS', () => {
+    expect(buildPushTransport('ios', payload, 60_000, 1_000)).toEqual({
+      apns: {
+        headers: { 'apns-priority': '10', 'apns-expiration': '61' },
+        payload: {
+          aps: {
+            alert: { title: 'Convoy update', body: 'Sam left the convoy.' },
+            sound: 'default',
+          },
+        },
+      },
+    });
+  });
+
+  it('omits an APNs body when lock-screen previews are disabled', () => {
+    const transport = buildPushTransport('ios', { title: 'New message' }, 60_000, 1_000);
+    expect(transport.apns?.payload?.aps.alert).toEqual({ title: 'New message' });
+  });
+});
 
 describe('decidePushDelivery — inherits the in-app decision', () => {
   // The load-bearing property: push is a strict SUBSET of in-app. If this
