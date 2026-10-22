@@ -256,7 +256,7 @@
     "teaserBody": "Upptäck Plus-förmåner eller stötta communityn med Supporter.",
     "memberMonthlyTitle": "Månadsmedlemskap",
     "memberRequiredBody": "Eventdetaljer, RSVP, sociala funktioner och körstatistik är gratis. Plus och Supporter ger eventincheckning, deltagarnamn och partnernas medlemserbjudanden.",
-    "purchaseHandledExternally": "Köp hanteras via App Store eller Google Play i en senare version.",
+    "purchaseHandledExternally": "Prenumerationer köps via App Store eller Google Play.",
     "accessLimitedBySuspension": "Din åtkomst kan begränsas vid avstängning eller regelbrott.",
     "currentEntitlementMember": "Du har ett aktivt medlemskap.",
     "currentEntitlementPlus": "Du har ett aktivt Plus-medlemskap.",
@@ -283,13 +283,14 @@
     "statusPurchasing": "Slutför köpet…",
     "statusVerifying": "Verifierar ditt köp…",
     "statusSuccess": "Köpet är verifierat. Medlemskapet är aktivt.",
-    "statusPending": "Betalningen behandlas av Google Play. Inga medlemsförmåner aktiveras innan köpet är klart.",
+    "statusPending": "Betalningen behandlas av din appbutik. Inga medlemsförmåner aktiveras innan köpet är klart.",
     "statusUnavailable": "Prenumerationer är inte tillgängliga på den här enheten.",
     "errorConnection": "Kunde inte ansluta till butiken. Försök igen senare.",
     "errorProductUnavailable": "Den här medlemskapsprodukten är inte tillgänglig just nu.",
     "errorPurchase": "Köpet kunde inte slutföras.",
     "errorVerification": "Vi kunde inte verifiera ditt köp. Det har ännu inte aktiverats som medlemskap.",
-    "errorInactivePurchase": "Google Play bekräftade inget aktivt medlemskap för köpet."
+    "errorInactivePurchase": "Din appbutik bekräftade inget aktivt medlemskap för köpet.",
+    "restoreAction": "Återställ köp"
   },
   "profile": {
     "title": "Profil",

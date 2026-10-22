@@ -1,4 +1,7 @@
-import { GOOGLE_PLAY_PRODUCT_IDS, type GooglePlayProductId } from './google-play-core';
+import { PLUS_MONTHLY_PRODUCT_ID, SUPPORTER_MONTHLY_PRODUCT_ID } from './subscription-core';
+
+const STORE_PRODUCT_IDS = [PLUS_MONTHLY_PRODUCT_ID, SUPPORTER_MONTHLY_PRODUCT_ID] as const;
+type StoreProductId = (typeof STORE_PRODUCT_IDS)[number];
 
 export class PurchaseTokenOwnershipError extends Error {
   constructor(
@@ -49,7 +52,7 @@ export function assertNoDifferentActiveToken(
 
 export interface PurchaseTokenOwnershipRecord {
   uid: string;
-  productId: GooglePlayProductId;
+  productId: StoreProductId;
 }
 
 /** Pure decision used by transaction code and focused replay tests. */
@@ -67,7 +70,7 @@ export function validateTokenOwnership(
     typeof record.uid !== 'string' ||
     record.uid.length === 0 ||
     typeof record.productId !== 'string' ||
-    !(GOOGLE_PLAY_PRODUCT_IDS as readonly string[]).includes(record.productId)
+    !(STORE_PRODUCT_IDS as readonly string[]).includes(record.productId)
   ) {
     throw new PurchaseTokenOwnershipError('malformed_record');
   }

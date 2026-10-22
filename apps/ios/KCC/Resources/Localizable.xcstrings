@@ -31168,13 +31168,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Google Play bekräftade inget aktivt medlemskap för köpet."
+            "value": "Din appbutik bekräftade inget aktivt medlemskap för köpet."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Google Play did not confirm an active membership for this purchase."
+            "value": "Your app store did not confirm an active membership for this purchase."
           }
         }
       }
@@ -31355,13 +31355,30 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Köp hanteras via App Store eller Google Play i en senare version."
+            "value": "Prenumerationer köps via App Store eller Google Play."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Purchases are handled via the App Store or Google Play in a later version."
+            "value": "Subscriptions are purchased through the App Store or Google Play."
+          }
+        }
+      }
+    },
+    "subscription.restoreAction": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Återställ köp"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore purchases"
           }
         }
       }
@@ -31406,13 +31423,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Betalningen behandlas av Google Play. Inga medlemsförmåner aktiveras innan köpet är klart."
+            "value": "Betalningen behandlas av din appbutik. Inga medlemsförmåner aktiveras innan köpet är klart."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Google Play is processing the payment. No member benefits are enabled until it completes."
+            "value": "Your app store is processing the payment. No member benefits are enabled until it completes."
           }
         }
       }

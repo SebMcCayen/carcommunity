@@ -13,7 +13,8 @@
  * - Suspension and deletion always override entitlement (enforced by
  *   shared/access.ts, unchanged here).
  * - Google Play receipt verification uses Android Publisher subscriptionsv2;
- *   Apple remains unavailable. Until `config/subscriptionProviders` enables a provider,
+ *   Apple verifies StoreKit 2 signed transactions against Apple's certificate chain.
+ *   Until `config/subscriptionProviders` enables a provider,
  *   subscription.verify fails closed with failed-precondition. The
  *   entitlement application chain (record + users flag + claim) is fully
  *   implemented and reachable via admin.grantEntitlement (platform

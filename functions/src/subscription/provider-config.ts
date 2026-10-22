@@ -14,6 +14,11 @@
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 
+export interface AppleSubscriptionProviderConfig {
+  environment: 'sandbox' | 'production';
+  appAppleId?: number;
+}
+
 /** True only when `config/subscriptionProviders.{platform}.enabled === true`. */
 export async function isSubscriptionProviderEnabled(
   platform: 'apple' | 'google',
@@ -26,5 +31,32 @@ export async function isSubscriptionProviderEnabled(
       error: String(error),
     });
     return false;
+  }
+}
+
+/**
+ * Returns validated Apple verifier settings only while the provider is on.
+ * Production requires the numeric App Store app id; malformed settings fail closed.
+ */
+export async function getAppleSubscriptionProviderConfig(): Promise<AppleSubscriptionProviderConfig | null> {
+  try {
+    const snap = await db.collection('config').doc('subscriptionProviders').get();
+    const apple = snap.data()?.apple as Record<string, unknown> | undefined;
+    if (apple?.enabled !== true) return null;
+    if (apple.environment !== 'sandbox' && apple.environment !== 'production') return null;
+    const appAppleId = apple.appAppleId;
+    if (
+      appAppleId !== undefined &&
+      (typeof appAppleId !== 'number' || !Number.isSafeInteger(appAppleId) || appAppleId <= 0)
+    ) {
+      return null;
+    }
+    if (apple.environment === 'production' && appAppleId === undefined) return null;
+    return { environment: apple.environment, ...(appAppleId === undefined ? {} : { appAppleId }) };
+  } catch (error) {
+    logger.warn('Apple subscription provider config read failed; failing closed', {
+      error: String(error),
+    });
+    return null;
   }
 }
