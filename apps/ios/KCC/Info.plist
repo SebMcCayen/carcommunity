@@ -20,6 +20,8 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>FirebaseCrashlyticsCollectionEnabled</key>
+	<string>$(CRASHLYTICS_COLLECTION_ENABLED)</string>
 	<key>FirebaseMessagingInstallationIdEnabled</key>
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>

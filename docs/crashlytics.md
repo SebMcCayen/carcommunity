@@ -1,7 +1,10 @@
-# Firebase Crashlytics (Android)
+# Firebase Crashlytics
 
-Crash reporting for the Android app. This is **additive** — it sits alongside the
-existing home-grown diagnostics pipeline, it does not replace it.
+Crash reporting for the Android and iOS apps. This is **additive** — it sits
+alongside the existing home-grown diagnostics pipeline, it does not replace it.
+
+The detailed implementation below describes Android. The iOS-specific setup,
+collection policy, dSYM handling, and privacy manifest are covered at the end.
 
 ## The two pipelines, and why both exist
 
@@ -238,3 +241,40 @@ submitting". What has to be weighed there:
 - The **admin diagnostics view** still shows the sanitized `diagnosticsReports`
   entries. Cross-reference by exception class + app version when a member reports
   a crash that Crashlytics has not surfaced yet.
+
+## iOS implementation
+
+The iOS target links `FirebaseCrashlytics` through the existing Firebase Swift
+package. `FirebaseCrashTelemetry.install` runs immediately after Firebase
+bootstrap, adds only bounded app-authored build metadata, and never sets a user
+identifier. A checkout without `GoogleService-Info.plist` receives a no-op sink.
+
+Collection is `NO` for Debug and `YES` for Release in the generated Info.plist,
+and the same policy is set through the runtime API. This keeps local crashes out
+of production stability metrics. `PrivacyInfo.xcprivacy` declares the app's
+direct diagnostics collection and the required-reason APIs used by app code;
+Firebase's Swift packages provide their own SDK privacy manifests.
+
+Release builds produce dSYMs. The target's final custom build phase runs
+Firebase's official Crashlytics script and uploads symbols only when a real,
+gitignored `GoogleService-Info.plist` was embedded. Config-less validation builds
+skip upload cleanly. CI also performs an unsigned generic-device Release build,
+which catches device-architecture and Release-only compile/link failures before
+TestFlight.
+
+### One-time iOS verification
+
+1. Open **Firebase Console → Crashlytics**, select the iOS app, and enable it if
+   the console requests activation.
+2. Archive a Release build containing the production
+   `GoogleService-Info.plist`; confirm the build log says the Crashlytics script
+   processed its dSYM.
+3. Install that build on a physical device, launch once, close it, then trigger
+   one deliberate test crash from a temporary local-only change with the Xcode
+   debugger detached. Remove the test crash before committing anything.
+4. Reopen the app so it can upload the report, then confirm the issue is
+   symbolicated in the iOS Crashlytics dashboard.
+
+Crashlytics collects installation/session identifiers, device and OS facts,
+timestamps, stack frames, and exception details. Keep the App Store privacy
+answers and public privacy policy consistent with that behavior before release.

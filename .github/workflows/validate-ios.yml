@@ -74,3 +74,15 @@ jobs:
           xcodebuild -project KCC.xcodeproj -scheme KCC \
             -destination "platform=iOS Simulator,name=${DEST}" \
             test
+
+      # TestFlight uses the Release configuration on arm64 hardware. Keep this
+      # unsigned and config-less so PRs catch device-only compile/link failures
+      # without storing Apple signing credentials or Firebase config in CI.
+      - name: Build release for a generic iOS device (unsigned, config-less)
+        run: |
+          cd apps/ios
+          xcodebuild -project KCC.xcodeproj -scheme KCC \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
