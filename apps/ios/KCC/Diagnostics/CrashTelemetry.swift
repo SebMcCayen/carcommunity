@@ -84,7 +84,7 @@ final class FirebaseCrashTelemetry: CrashTelemetry {
 
     static func install(
         environment: DiagnosticsEnvironment,
-        isDebugBuild: Bool = Self.isDebugBuild
+        isDebugBuild: Bool = FirebaseCrashTelemetry.isDebugBuild
     ) -> any CrashTelemetry {
         guard FirebaseApp.app() != nil else { return NoopCrashTelemetry() }
 
