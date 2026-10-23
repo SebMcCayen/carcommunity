@@ -9,6 +9,7 @@ struct KCCApp: App {
     private let accessSession: AppAccessSession
     private let restrictedPrivacyCoordinator: LiveLocationCoordinator
     private let diagnostics: IOSDiagnosticsComposition
+    private let crashTelemetry: any CrashTelemetry
 
     init() {
         // Null-safe: a checkout without the gitignored GoogleService-Info.plist
@@ -25,6 +26,7 @@ struct KCCApp: App {
         let diagnosticsReporter = FirebaseDiagnosticsReporter.createIfAvailable()
             ?? NoopDiagnosticsReporter()
         let diagnosticsEnvironment = DiagnosticsEnvironment.current()
+        crashTelemetry = FirebaseCrashTelemetry.install(environment: diagnosticsEnvironment)
         diagnostics = IOSDiagnosticsComposition(environment: diagnosticsEnvironment)
         session = AuthSession(repository: repository)
         accessSession = AppAccessSession(

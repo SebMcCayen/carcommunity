@@ -75,7 +75,25 @@ xcodebuild -project KCC.xcodeproj -scheme KCC \
 # Run the unit tests
 xcodebuild -project KCC.xcodeproj -scheme KCC \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
+
+# Validate the Release/device compilation path without signing
+xcodebuild -project KCC.xcodeproj -scheme KCC \
+  -configuration Release -destination 'generic/platform=iOS' \
+  CODE_SIGNING_ALLOWED=NO build
 ```
+
+## Crash reporting and App Store privacy manifest
+
+Release builds use Firebase Crashlytics; Debug builds explicitly disable its
+collection. When the production `GoogleService-Info.plist` is present, the final
+build phase uploads the Release dSYM so crashes are symbolicated. Config-less
+builds skip that upload and continue to work.
+
+`KCC/Resources/PrivacyInfo.xcprivacy` ships with the app. It declares the app's
+direct crash/diagnostics collection and the approved reasons for its direct
+UserDefaults and system-uptime use. Do not remove it when adding files to the
+target, and review it whenever new required-reason APIs or data collection are
+introduced. See `docs/crashlytics.md` for the one-time physical-device check.
 
 ## Developing against the Firebase emulators
 

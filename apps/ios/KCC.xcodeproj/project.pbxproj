@@ -41,6 +41,7 @@
 		13F4A99C1761787E34F42A45 /* FirebaseConvoyReactionRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D078D5979DD1ACCE12DB1B9 /* FirebaseConvoyReactionRepository.swift */; };
 		15F365792E4CEB78754C9312 /* LiveLocationScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36B73725FF334E4EAEA7D54B /* LiveLocationScreen.swift */; };
 		16110FC826E2D1D5D7DC7677 /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DBBB1856DCE04D9FD4E51DA /* SettingsScreen.swift */; };
+		165DAD96D084AF1EB041A3CB /* CrashTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99D486CBCDBC069170C690B2 /* CrashTelemetry.swift */; };
 		17ADD3D7ECD1619AEC08C458 /* BillboardModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D23CFD57C10E481B49AFCC8 /* BillboardModels.swift */; };
 		17E534749AC4E00E377A3E6B /* PerkShopCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D123BF9682E0A7A2684BA376 /* PerkShopCoordinatorTests.swift */; };
 		18C9F40C2A35E8C26C9EA32F /* BadgesRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58003A940AECB933074E31FF /* BadgesRepository.swift */; };
@@ -166,7 +167,7 @@
 		6B8718A69B1E94DB1CD75A4A /* DrivesPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 646362817945B8F03EEAE0F7 /* DrivesPanel.swift */; };
 		6BBAE19A37A042FE6163233A /* ConvoyCreateCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34DE0674B32B7522E972B970 /* ConvoyCreateCoordinatorTests.swift */; };
 		6BED4DFF912081F5E46876D6 /* VehicleCatalogue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25EF8EAE76E679C6D0546150 /* VehicleCatalogue.swift */; };
-		6BEF6C5466B6C98DDF7A2831 /* MapboxMaps in Frameworks */ = {isa = PBXBuildFile; productRef = 17E9848C7910B9F7E994738A /* MapboxMaps */; };
+		6BEF6C5466B6C98DDF7A2831 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = 36D91335A3A06717A7867FCB /* FirebaseCrashlytics */; };
 		6C25F552799AC5E993EA18E2 /* AuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B1E7BBD0B5E2B7BA4D84048 /* AuthRepository.swift */; };
 		6D514EC45A75E05AD2F5E5A2 /* NearbyLiveFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F762C496C5728450E0CC33F2 /* NearbyLiveFeatureTests.swift */; };
 		6D653074C83AD139C001A226 /* ShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00786BDC5D7D80DF3558096D /* ShellView.swift */; };
@@ -217,6 +218,7 @@
 		91464A291FE7F68519A5A178 /* ConvoyCreateScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 927D2CC9BD7DE37F49B3D21E /* ConvoyCreateScreen.swift */; };
 		91F36640DE0946C3FFE135EC /* AccountAccessRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60FA9540A9F13D0D761C52C5 /* AccountAccessRepository.swift */; };
 		92DC6CA7F5AE9A09CC410B62 /* FirebasePerkShopRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35B4441EF2622D883E73D1EC /* FirebasePerkShopRepository.swift */; };
+		93C55D774DE8ADB3773B041B /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A7167A1118C17AD86A75C54E /* PrivacyInfo.xcprivacy */; };
 		93CA6529A07CFC82DC529107 /* NotificationsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7F45B0C97C6B5308514F667 /* NotificationsModels.swift */; };
 		93D8327640479E52ED05A344 /* OnboardingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B89663DBE394C55F4F956DC /* OnboardingScreen.swift */; };
 		93E6DAFE79F0203DBFB3C12D /* GroupDriveCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03086898EF9A4C5C8962F4EA /* GroupDriveCoordinator.swift */; };
@@ -334,11 +336,13 @@
 		E0EFA24043EC79042A5890CE /* EventsModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 693946E5862A24E475BE6ED3 /* EventsModelTests.swift */; };
 		E131FC550A1A702035CD3433 /* LiveLocationModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C723CECAC346226F99FA9C76 /* LiveLocationModelsTests.swift */; };
 		E1724EBEBE48B9F94A044D30 /* DriveRecordingJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F22A46B5B9F3B045048B6D6 /* DriveRecordingJournal.swift */; };
+		E17D1FFFBB3E51CEFD5B5B8D /* MapboxMaps in Frameworks */ = {isa = PBXBuildFile; productRef = 17E9848C7910B9F7E994738A /* MapboxMaps */; };
 		E1BE1D553DBF1E8884816D4B /* LeaderboardScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 823B72DF567DBE7BF840589A /* LeaderboardScreen.swift */; };
 		E36B68A9057B1EB98BC8EF27 /* ChannelChatCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76DF6530C2C3AA39EF2D0495 /* ChannelChatCoordinator.swift */; };
 		E477115F1466E60CC9D47600 /* EventChatScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94541AFD9EA410314206E746 /* EventChatScreen.swift */; };
 		E4D61FAACAFFB1746CE8FB47 /* AuthState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C80A81EA9949BF434E7C246D /* AuthState.swift */; };
 		E515A09C71A239BEA3846F35 /* FriendsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83D164C4115AE0F4E61F35D9 /* FriendsRepository.swift */; };
+		E5DAD522A65BF61C0374D9EF /* CrashTelemetryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9050ED8A8D96ACE23EADCF /* CrashTelemetryTests.swift */; };
 		E74AF2642E6FF28D9B30E23B /* WhatsNewViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 261D23CE05C08CF684E5B8C0 /* WhatsNewViews.swift */; };
 		E7D0FD9A2D31A4568504745E /* TranslucentPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D310DD7A144B4F601CF0B1B7 /* TranslucentPanelView.swift */; };
 		E7F5C6058E0BA7397CA8DF52 /* CrownHuntModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D85DDB9CECF90E383D874BFF /* CrownHuntModels.swift */; };
@@ -427,6 +431,7 @@
 		1ADA4273944D1E94AC6D82A4 /* MapLayerPreferencesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapLayerPreferencesTests.swift; sourceTree = "<group>"; };
 		1B4532D3799C9910574152D2 /* KCC.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = KCC.entitlements; sourceTree = "<group>"; };
 		1D6838666A82B7A2863EFC02 /* IncidentModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncidentModels.swift; sourceTree = "<group>"; };
+		1F9050ED8A8D96ACE23EADCF /* CrashTelemetryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashTelemetryTests.swift; sourceTree = "<group>"; };
 		1FDCD5467CC28087B5AAECB1 /* EventDetailCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailCoordinator.swift; sourceTree = "<group>"; };
 		214FBC24826233C7A95CFF50 /* CrownHuntPerkNames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrownHuntPerkNames.swift; sourceTree = "<group>"; };
 		219D763CBDC5CB6AC1BAED01 /* CrownHuntMapModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrownHuntMapModels.swift; sourceTree = "<group>"; };
@@ -610,6 +615,7 @@
 		993EB05B6669D0DBC46FAA42 /* DriveHistoryFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveHistoryFeatureTests.swift; sourceTree = "<group>"; };
 		99777699003E0D1F8B9FCD63 /* NotificationsInboxCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsInboxCoordinator.swift; sourceTree = "<group>"; };
 		99BCF885BCAC95E5A84E495A /* ShellMapHostTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellMapHostTests.swift; sourceTree = "<group>"; };
+		99D486CBCDBC069170C690B2 /* CrashTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashTelemetry.swift; sourceTree = "<group>"; };
 		9A69FD7035A5431EDE82DD8F /* FirebaseFeedbackRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseFeedbackRepository.swift; sourceTree = "<group>"; };
 		9AA2251CD692FAE6F150A56A /* VehicleCatalogueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VehicleCatalogueTests.swift; sourceTree = "<group>"; };
 		9BD79AAE2207B0BB1BCA984F /* VehicleCatalogueData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VehicleCatalogueData.swift; sourceTree = "<group>"; };
@@ -628,6 +634,7 @@
 		A63D281B16F9581698DE721B /* LocationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationModels.swift; sourceTree = "<group>"; };
 		A64B3B4F425E9706B34B7F7C /* ConvoyCreateRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyCreateRepository.swift; sourceTree = "<group>"; };
 		A6D25BB0C0CB44B6B13CB300 /* SeasonStandingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonStandingsView.swift; sourceTree = "<group>"; };
+		A7167A1118C17AD86A75C54E /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		A717827AADCF5D6F269BEEC0 /* FirebaseNotificationsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseNotificationsRepository.swift; sourceTree = "<group>"; };
 		A7315551383B456AF6D1C808 /* PartnerApplicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartnerApplicationTests.swift; sourceTree = "<group>"; };
 		A7C8CF75F4B1CA5403CC09B3 /* PrivacySettingsCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacySettingsCoordinatorTests.swift; sourceTree = "<group>"; };
@@ -771,7 +778,8 @@
 				AFAB9CCD75BABA90B7C61130 /* FirebaseMessaging in Frameworks */,
 				613B8194B7824CF9011547F0 /* FirebaseStorage in Frameworks */,
 				5D5497CB236ECCDC0A9A985D /* FirebaseDatabase in Frameworks */,
-				6BEF6C5466B6C98DDF7A2831 /* MapboxMaps in Frameworks */,
+				6BEF6C5466B6C98DDF7A2831 /* FirebaseCrashlytics in Frameworks */,
+				E17D1FFFBB3E51CEFD5B5B8D /* MapboxMaps in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -978,6 +986,7 @@
 			children = (
 				24ACA4339607DCEEA56FA0CC /* InfoPlist.xcstrings */,
 				AB4411241111CAD26506FD14 /* Localizable.xcstrings */,
+				A7167A1118C17AD86A75C54E /* PrivacyInfo.xcprivacy */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -1136,6 +1145,7 @@
 		6EBFD4C4E5B1224C6B1055CF /* Diagnostics */ = {
 			isa = PBXGroup;
 			children = (
+				99D486CBCDBC069170C690B2 /* CrashTelemetry.swift */,
 				4AC26EAA401DBAFA1A975E44 /* DiagnosticsModels.swift */,
 				016C9FDFF5699BD274C06E88 /* DiagnosticsReporters.swift */,
 				2AEBC2338F37CAF85AB970B6 /* FeatureHealth.swift */,
@@ -1403,6 +1413,7 @@
 				0323E8145E9403B744C5203A /* ConvoyManagementModelsTests.swift */,
 				667567749288390662CCCFDE /* ConvoyReactionCoordinatorTests.swift */,
 				3EB71A805F62274D65250E5B /* ConvoyReactionModelsTests.swift */,
+				1F9050ED8A8D96ACE23EADCF /* CrashTelemetryTests.swift */,
 				6A8A14E33FEF8557066A6A12 /* CrownHuntBoardTests.swift */,
 				42A78A419991AB5C1A5281B4 /* CrownHuntClaimsCoordinatorTests.swift */,
 				8762FA4089D8E6940ABB67D4 /* CrownHuntFeatureFlagsTests.swift */,
@@ -1497,6 +1508,7 @@
 				2313BAF3598EA6E6171B11FB /* Resources */,
 				5A5E7B7F89CBF4E5E2C0055B /* Frameworks */,
 				88D0EAC6C5DDFD8046D10C60 /* Embed GoogleService-Info.plist when present */,
+				238CF8043345F5A50FA0D939 /* Upload release dSYMs to Crashlytics */,
 			);
 			buildRules = (
 			);
@@ -1511,6 +1523,7 @@
 				61D8B538026B274C86D1E17E /* FirebaseMessaging */,
 				35ECF01C5EE3E57259D5C48F /* FirebaseStorage */,
 				F9CC24020F8667EB5E289AB3 /* FirebaseDatabase */,
+				36D91335A3A06717A7867FCB /* FirebaseCrashlytics */,
 				17E9848C7910B9F7E994738A /* MapboxMaps */,
 			);
 			productName = KCC;
@@ -1580,6 +1593,7 @@
 			files = (
 				D82FBCB9FF439B2E1275434C /* InfoPlist.xcstrings in Resources */,
 				E89DC7EC35F16BB97D6E2B60 /* Localizable.xcstrings in Resources */,
+				93C55D774DE8ADB3773B041B /* PrivacyInfo.xcprivacy in Resources */,
 				FF5DAD303A0C20F13A16B67D /* changelog.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1587,6 +1601,30 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		238CF8043345F5A50FA0D939 /* Upload release dSYMs to Crashlytics */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}",
+				"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}/Contents/Resources/DWARF/${PRODUCT_NAME}",
+				"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}/Contents/Info.plist",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/GoogleService-Info.plist",
+				"$(TARGET_BUILD_DIR)/$(EXECUTABLE_PATH)",
+			);
+			name = "Upload release dSYMs to Crashlytics";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"${CONFIGURATION}\" != \"Release\" ]; then\n  echo \"Crashlytics dSYM upload skipped for ${CONFIGURATION}\"\n  exit 0\nfi\n\nGOOGLE_SERVICE_INFO=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GoogleService-Info.plist\"\nif [ ! -f \"${GOOGLE_SERVICE_INFO}\" ]; then\n  echo \"GoogleService-Info.plist absent — Crashlytics dSYM upload skipped\"\n  exit 0\nfi\n\n\"${BUILD_DIR%/Build/*}/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run\"\n";
+		};
 		88D0EAC6C5DDFD8046D10C60 /* Embed GoogleService-Info.plist when present */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -1678,6 +1716,7 @@
 				281529946F7B9975D8B2981F /* ConvoyReactionModels.swift in Sources */,
 				4876B45F502490B4CD5F8D27 /* ConvoyReactionRepository.swift in Sources */,
 				8B3D0292A205E690A9358586 /* CoreLocationProvider.swift in Sources */,
+				165DAD96D084AF1EB041A3CB /* CrashTelemetry.swift in Sources */,
 				5B5523E3A40EA2AB165EFB2D /* CrownHuntBoard.swift in Sources */,
 				8543A3000FAE5BB214C22DD2 /* CrownHuntClaimsCoordinator.swift in Sources */,
 				1DD5D291E6FC7ACB42F3779A /* CrownHuntClaimsRepository.swift in Sources */,
@@ -1914,6 +1953,7 @@
 				CB74AD40DF3D54FF1EEFDBC4 /* ConvoyManagementModelsTests.swift in Sources */,
 				3ABBC5529ADE35738A161AF8 /* ConvoyReactionCoordinatorTests.swift in Sources */,
 				100A24D3A90671D408A908B1 /* ConvoyReactionModelsTests.swift in Sources */,
+				E5DAD522A65BF61C0374D9EF /* CrashTelemetryTests.swift in Sources */,
 				D5EC10EC42AE496D9A3EFDAF /* CrownHuntBoardTests.swift in Sources */,
 				23A5B7BEE420A37586F8F53B /* CrownHuntClaimsCoordinatorTests.swift in Sources */,
 				1E9975E9B863634926D0BAC2 /* CrownHuntFeatureFlagsTests.swift in Sources */,
@@ -2098,6 +2138,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = KCC/KCC.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CRASHLYTICS_COLLECTION_ENABLED = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = KCC/Info.plist;
@@ -2106,6 +2147,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = "$(inherited) -ObjC";
 				PRODUCT_BUNDLE_IDENTIFIER = com.kungsbackacarcommunity.app;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -2120,7 +2162,9 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = KCC/KCC.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CRASHLYTICS_COLLECTION_ENABLED = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = KCC/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -2128,6 +2172,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = "$(inherited) -ObjC";
 				PRODUCT_BUNDLE_IDENTIFIER = com.kungsbackacarcommunity.app;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -2251,6 +2296,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = C2463E4F930BC5BDBC34F663 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseStorage;
+		};
+		36D91335A3A06717A7867FCB /* FirebaseCrashlytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C2463E4F930BC5BDBC34F663 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCrashlytics;
 		};
 		61D8B538026B274C86D1E17E /* FirebaseMessaging */ = {
 			isa = XCSwiftPackageProductDependency;
