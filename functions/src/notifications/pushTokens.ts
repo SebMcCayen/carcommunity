@@ -3,7 +3,8 @@
  * registration callables (contracts/functions/functions.json).
  *
  * Storage model:
- * - The SHA-256 hash of the FCM token is the
+ * - The SHA-256 hash of the FCM address identifier (Android registration
+ *   token or iOS Firebase Installation ID) is the
  *   `userPrivate/{uid}/pushTokens/{tokenId}` document ID, so registration is
  *   naturally idempotent — a re-register bumps lastSeenAt. One document per
  *   device means a member may hold several (phone + tablet), up to
@@ -15,8 +16,8 @@
  *   turns one notification into an unbounded fan-out. Registering past the cap
  *   evicts the least-recently-seen registration instead of failing, so a
  *   legitimate member with many devices is never locked out of push.
- * - The document ALSO stores the raw token, because FCM addresses a device by
- *   the token itself and the previous hash-only registry could never actually
+ * - The document ALSO stores the raw identifier, because FCM addresses a device
+ *   by that identifier and the previous hash-only registry could never actually
  *   send. The raw token is still never logged and never returned (the response
  *   carries only the tokenId hash), and `pushTokens` denies ALL client access
  *   in firebase/firestore.rules — only the Admin SDK reads it.
@@ -131,7 +132,10 @@ export const registerPushToken = onCall(
       for (const staleId of evictable) {
         tx.delete(collection.doc(staleId));
       }
-      tx.set(ref, buildPushTokenDocument(parsed.input, () => FieldValue.serverTimestamp()));
+      tx.set(
+        ref,
+        buildPushTokenDocument(parsed.input, () => FieldValue.serverTimestamp()),
+      );
       // Recorded, not logged, here: Firestore re-runs this callback on
       // contention, so logging inside it would emit once per ATTEMPT. The
       // assignment is idempotent, so the value that survives is the one from

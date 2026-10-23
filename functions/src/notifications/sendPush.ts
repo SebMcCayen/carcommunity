@@ -25,9 +25,10 @@
  * between the inbox write and this invocation, and re-running it is what makes
  * "push is a subset of in-app" true by construction instead of by comment.
  *
- * Sends are data-only multicasts (see buildPushPayload) in batches of up to 500
- * tokens, and tokens FCM reports as dead are deleted from the registry in the
- * same pass so they cannot accumulate.
+ * Android sends remain data-only so the app owns notification-channel routing.
+ * iOS registrations receive the same data plus an APNs alert envelope because
+ * iOS does not reliably wake a terminated app to render data-only pushes.
+ * Tokens FCM reports as dead are deleted in the same pass.
  */
 
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
@@ -40,6 +41,7 @@ import {
   NOTIFICATION_CATEGORIES,
   PUSH_NOTIFICATIONS_FLAG_KEY,
   buildPushPayload,
+  buildPushTransport,
   chunkTokens,
   decidePushDelivery,
   isDeadTokenError,
@@ -67,11 +69,11 @@ function pushTtlMs(category: NotificationCategory): number {
 interface RegisteredToken {
   tokenId: string;
   token: string;
+  platform: 'android' | 'ios';
 }
 
 function toCategory(value: unknown): NotificationCategory | null {
-  return typeof value === 'string' &&
-    (NOTIFICATION_CATEGORIES as readonly string[]).includes(value)
+  return typeof value === 'string' && (NOTIFICATION_CATEGORIES as readonly string[]).includes(value)
     ? (value as NotificationCategory)
     : null;
 }
@@ -89,7 +91,12 @@ async function loadTokens(uid: string): Promise<RegisteredToken[]> {
     // they are left alone and simply skipped (the device re-registers on next
     // launch, which upgrades the document in place).
     if (token) {
-      tokens.push({ tokenId: doc.id, token });
+      tokens.push({
+        tokenId: doc.id,
+        token,
+        // Rows predating platform storage were Android-only registrations.
+        platform: doc.data()?.platform === 'ios' ? 'ios' : 'android',
+      });
     }
   }
   return tokens;
@@ -207,14 +214,14 @@ export const onNotificationCreated = onDocumentCreated(
     let successCount = 0;
 
     for (const chunk of chunkTokens(tokens)) {
-      const messages: TokenMessage[] = chunk.map((entry) => ({
-        token: entry.token,
-        data: payload,
-        android: {
-          ttl: pushTtlMs(category),
-          priority: 'high',
-        },
-      }));
+      const messages: TokenMessage[] = chunk.map((entry) => {
+        const ttl = pushTtlMs(category);
+        return {
+          token: entry.token,
+          data: payload,
+          ...buildPushTransport(entry.platform, payload, ttl),
+        };
+      });
 
       let responses;
       try {

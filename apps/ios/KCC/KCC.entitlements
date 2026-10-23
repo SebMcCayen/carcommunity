@@ -4,5 +4,7 @@
 <dict>
 	<key>com.apple.developer.devicecheck.appattest-environment</key>
 	<string>$(APP_ATTEST_ENVIRONMENT)</string>
+	<key>aps-environment</key>
+	<string>$(APS_ENVIRONMENT)</string>
 </dict>
 </plist>

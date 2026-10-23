@@ -27,6 +27,8 @@ struct ShellView: View {
     /// ``ShellRouteStack``; every open/Back goes through its ``ShellRouteStack/opening(_:)``
     /// / ``ShellRouteStack/poppingOne()`` reducers rather than ad-hoc state.
     @State private var routes = ShellRouteStack.empty
+    @State private var eventPath: [EventDetailRoute] = []
+    @State private var pushNotifications = PushNotificationCoordinator.shared
 
     init(
         session: AuthSession,
@@ -166,6 +168,13 @@ struct ShellView: View {
     var body: some View {
         shellPresentation
             .task(id: signedInUid) { await wireFeatures() }
+            .task(id: signedInUid) {
+                await pushNotifications.bind(uid: signedInUid)
+                openPendingPushDeepLink()
+            }
+            .onChange(of: pushNotifications.pendingDeepLink) { _, _ in
+                openPendingPushDeepLink()
+            }
             .task(id: crownFeatureWiringKey) { await wireCrownHunt() }
             .task(id: signedInUid) {
                 whatsNewCoordinator.start()
@@ -197,6 +206,7 @@ struct ShellView: View {
             }
             .onChange(of: routes.current) { _, route in
                 if route != nil { closeAddressSearch() }
+                if route != .events { eventPath = [] }
             }
             .onChange(of: featureFlags.isEnabled(.partners)) { _, enabled in
                 if !enabled, routes.current == .partners {
@@ -772,7 +782,7 @@ struct ShellView: View {
                     crownHuntEnabled: featureFlags.isEnabled(.crownHunt),
                     partnersEnabled: featureFlags.isEnabled(.partners)
                         && partnersCoordinator != nil,
-                    onOpenEvents: { routes = routes.opening(.events) },
+                    onOpenEvents: { openEvents() },
                     onOpenConvoys: openConvoyManagement,
                     onOpenCrownHunt: { routes = routes.opening(.crownHunt) },
                     onOpenLeaderboard: { routes = routes.opening(.leaderboard) },
@@ -943,7 +953,7 @@ struct ShellView: View {
             // The read-only events list, opened from the Social hub. The
             // NavigationStack hosts the screen's `navigationTitle`; Back pops
             // one level via the pure stack, like every route.
-            NavigationStack {
+            NavigationStack(path: $eventPath) {
                 EventsScreen(
                     coordinator: eventsCoordinator,
                     locationProvider: locationProvider,
@@ -1021,7 +1031,10 @@ struct ShellView: View {
             }
         case .notificationSettings:
             routeNavigation {
-                NotificationSettingsScreen(coordinator: notificationSettingsCoordinator)
+                NotificationSettingsScreen(
+                    coordinator: notificationSettingsCoordinator,
+                    pushNotifications: pushNotifications
+                )
             }
         case .blocked:
             BlockedUsersScreen(uid: signedInUid) {
@@ -1350,10 +1363,45 @@ struct ShellView: View {
         routes = routes.opening(.chat)
     }
 
+    private func openPendingPushDeepLink() {
+        guard let link = pushNotifications.pendingDeepLink, signedInUid != nil else { return }
+        if link.target == .dm, link.entityId != nil, conversationsRepository == nil {
+            return
+        }
+        _ = pushNotifications.consumePendingDeepLink()
+        switch link.target {
+        case .dm:
+            if let uid = link.entityId { openDm(uid: uid, displayName: nil) }
+            else { routes = routes.opening(.conversations) }
+        case .communityChat:
+            chatHubCoordinator?.select(.community)
+            routes = routes.opening(.chatHub)
+        case .convoyChat:
+            chatHubCoordinator?.select(.convoys)
+            routes = routes.opening(.chatHub)
+        case .convoys:
+            selectedConvoyId = link.entityId
+            routes = routes.opening(.convoys)
+        case .friends:
+            routes = routes.opening(.friends)
+        case .event:
+            openEvents(eventId: link.entityId)
+        case .subscription:
+            routes = routes.opening(.subscription)
+        case .notifications:
+            routes = routes.opening(.notifications)
+        }
+    }
+
     private func openMemberProfile(uid: String, displayName: String?) {
         guard !uid.isEmpty, uid != signedInUid else { return }
         memberProfileTarget = MemberProfileRouteTarget(uid: uid, displayName: displayName)
         routes = routes.opening(.memberProfile)
+    }
+
+    private func openEvents(eventId: String? = nil) {
+        eventPath = eventId.map { [EventDetailRoute(eventId: $0)] } ?? []
+        routes = routes.opening(.events)
     }
 
     private var tabSelection: Binding<ShellTab> {
@@ -1883,6 +1931,10 @@ struct ShellView: View {
                 ? FirebaseConvoyChatRepository.createIfAvailable() : nil,
             chatRepliesEnabled: featureFlags.isEnabled(.chatReplies)
         )
+        // A cold-start push can arrive before asynchronous feature composition
+        // installs the DM repository. Retry now that every destination has its
+        // required coordinator instead of losing the one-shot handoff.
+        openPendingPushDeepLink()
         let convoyManagement = ConvoyManagementCoordinator(
             repository: FirebaseConvoyManagementRepository.createIfAvailable()
         )

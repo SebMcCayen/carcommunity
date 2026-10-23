@@ -1522,6 +1522,8 @@
     <string name="notifications_settingsSaving">Saving...</string>
     <string name="notifications_settingsLoadError">Could not load notification settings. Try again.</string>
     <string name="notifications_permissionRationale">Receive reminders about events and important messages.</string>
+    <string name="notifications_permissionEnable">Enable notifications</string>
+    <string name="notifications_permissionEnabled">Notifications are enabled</string>
     <string name="notifications_permissionOptional">Notifications are optional.</string>
     <string name="notifications_permissionChangeHint">You can change your preferences later under Settings.</string>
     <string name="notifications_channelEventsName">Events</string>

@@ -1629,6 +1629,8 @@
     "settingsSaving": "Saving...",
     "settingsLoadError": "Could not load notification settings. Try again.",
     "permissionRationale": "Receive reminders about events and important messages.",
+    "permissionEnable": "Enable notifications",
+    "permissionEnabled": "Notifications are enabled",
     "permissionOptional": "Notifications are optional.",
     "permissionChangeHint": "You can change your preferences later under Settings.",
     "channelEventsName": "Events",

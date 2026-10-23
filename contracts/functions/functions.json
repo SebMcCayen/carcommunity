@@ -777,7 +777,7 @@
     {
       "name": "notifications.registerPushToken",
       "domain": "notifications",
-      "description": "Registers a push device token. The raw FCM token is stored in the userPrivate/{uid}/pushTokens document (FCM addresses a device BY the token, so a hash-only registry cannot send); the SHA-256 hash remains the document ID, which keeps registration idempotent — re-registers bump lastSeenAt. Multiple devices per member are supported (one document per token). The raw token is never logged and never returned: the response carries only the tokenId hash, and the collection denies ALL client access in firestore.rules. Gated by the pushNotifications feature flag. Deployed via grouped export as notifications-registerPushToken (functions/src/notifications/pushTokens.ts).",
+      "description": "Registers a push address identifier (an Android FCM registration token or iOS Firebase Installation ID). The raw identifier is stored in the userPrivate/{uid}/pushTokens document (FCM addresses a device BY the identifier, so a hash-only registry cannot send); the SHA-256 hash remains the document ID, which keeps registration idempotent — re-registers bump lastSeenAt. Multiple devices per member are supported (one document per identifier). The raw identifier is never logged and never returned: the response carries only the tokenId hash, and the collection denies ALL client access in firestore.rules. Gated by the pushNotifications feature flag. Deployed via grouped export as notifications-registerPushToken (functions/src/notifications/pushTokens.ts).",
       "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
