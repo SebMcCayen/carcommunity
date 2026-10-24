@@ -129,6 +129,7 @@ class NavigationSearchScreenTest {
         composeTestRule.onNodeWithText(suggestion.name).assertIsDisplayed()
 
         composeTestRule.onNodeWithText(suggestion.name).performClick()
+        composeTestRule.onNodeWithText(str(R.string.addressSearch_searchPlaceholder)).assertDoesNotExist()
 
         // Route resolved → the sheet appears at its PEEK. This is the whole fix:
         // the directions are composed but revealed to zero height, so the map

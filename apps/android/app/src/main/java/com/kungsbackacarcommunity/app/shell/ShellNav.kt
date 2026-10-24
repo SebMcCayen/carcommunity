@@ -5,13 +5,14 @@ package com.kungsbackacarcommunity.app.shell
  * decisions are JVM-unit-testable without Compose.
  */
 
-/** The five bottom-navigation tabs. [Map] is the default, map-first home. */
+/** Stable saved identities. History is retained for old saved sessions, never reused. */
 enum class ShellTab {
     Map,
     History,
     Create,
     Social,
     Garage,
+    Chat,
     ;
 
     companion object {
@@ -138,6 +139,8 @@ enum class ShellRoute {
      * blank. Do not reuse.
      */
     More,
+    /** Owner drive history, reached from Profile and post-drive links. */
+    MyDrives,
 }
 
 /** Outcome of a system-Back press in the shell. */

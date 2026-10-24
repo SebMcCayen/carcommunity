@@ -313,7 +313,7 @@ fun NavigationSearchScreen(
 
     // Back closes the route first (returns to search), then leaves the overlay.
     BackHandler {
-        if (state.destination != null) controller.clearDestination() else onClose()
+        onClose()
     }
 
     // Chrome only — the map behind this (showing the drawn route + destination
@@ -332,7 +332,7 @@ fun NavigationSearchScreen(
                     .padding(horizontal = KccSpacing.s3, vertical = KccSpacing.s3),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
         ) {
-            SearchField(
+            if (state.destination == null) SearchField(
                 query = state.query,
                 onQueryChange = { new ->
                     // Editing while a destination is picked returns to search.

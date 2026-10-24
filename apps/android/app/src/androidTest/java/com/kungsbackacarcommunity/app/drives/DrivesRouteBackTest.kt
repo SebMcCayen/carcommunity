@@ -114,7 +114,7 @@ class DrivesRouteBackTest {
         setRoute()
 
         // The History list root is shown, arrow-free.
-        composeTestRule.onNodeWithText(str(R.string.savedDrives_screenTitle)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.shell_moreDrives)).assertIsDisplayed()
         composeTestRule.onNodeWithTag(AeroBackButtonTag).assertDoesNotExist()
 
         // Open Statistics.
@@ -127,7 +127,7 @@ class DrivesRouteBackTest {
         // Tapping it returns to the History list.
         composeTestRule.onNodeWithTag(AeroBackButtonTag).performClick()
         composeTestRule.onNodeWithText(str(R.string.savedDrives_statsTitle)).assertDoesNotExist()
-        composeTestRule.onNodeWithText(str(R.string.savedDrives_screenTitle)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.shell_moreDrives)).assertIsDisplayed()
     }
 
     /** A long history so the last drive starts well below the fold. */
@@ -214,6 +214,6 @@ class DrivesRouteBackTest {
         // Tapping it returns to the History list.
         composeTestRule.onNodeWithTag(AeroBackButtonTag).performClick()
         composeTestRule.onNodeWithText(str(R.string.savedDrives_detailTitle)).assertDoesNotExist()
-        composeTestRule.onNodeWithText(str(R.string.savedDrives_screenTitle)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.shell_moreDrives)).assertIsDisplayed()
     }
 }

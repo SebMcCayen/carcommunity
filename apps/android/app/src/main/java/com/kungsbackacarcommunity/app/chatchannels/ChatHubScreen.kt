@@ -43,6 +43,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.emptyFlow
@@ -488,44 +489,66 @@ fun ChatHubRoute(
     // Opens an event's detail from an event notification tap in the inbox tab.
     // Forwarded untouched; see [NotificationsRoute].
     onOpenEvent: ((String) -> Unit)? = null,
+    // Native Driver adapter owned by the integration lane; never chat messages.
+    driverContent: (@Composable () -> Unit)? = null,
 ) {
+    var driverSelected by rememberSaveable(uid) { mutableStateOf(false) }
+    val chatState = rememberSaveableStateHolder()
+    LaunchedEffect(pushDeepLink) {
+        if (pushDeepLink != null) driverSelected = false
+    }
+    BackHandler(enabled = driverSelected) { driverSelected = false }
     Surface(
         modifier = modifier.fillMaxSize().testTag(CHAT_HUB_TEST_TAG),
-        // A LITTLE transparency, not a see-through window: the hub floats over the
-        // live map (the canonical map-shell presentation raises it as an overlay),
-        // so a fully-opaque `background` read as a harsh near-black panel. Applying
-        // the shared Aero alpha (0.92 — the same token the chat peek and every other
-        // floating surface use) softens the black by letting the map beneath show
-        // through faintly, while staying opaque enough that the chat text and bubbles
-        // stay perfectly legible over moving roads. Theme-aware: the alpha rides on
-        // the existing `background` token, so light/dark theming is unaffected. The
-        // tab strip below is made transparent so the whole hub reads as ONE
-        // translucent surface rather than an opaque tab bar over a translucent body.
-        color = MaterialTheme.colorScheme.background.copy(alpha = KccAlpha.aeroSurface),
+        // Opaque reading surface: the shell pauses the single map behind it.
+        color = MaterialTheme.colorScheme.background,
     ) {
-        ChatHubContent(
-            uid = uid,
-            communityChatRepository = communityChatRepository,
-            convoyChatRepository = convoyChatRepository,
-            friendsRepository = friendsRepository,
-            dmRepository = dmRepository,
-            notificationsRepository = notificationsRepository,
-            notificationsCoordinator = notificationsCoordinator,
-            communityUnread = communityUnread,
-            convoysUnread = convoysUnread,
-            friendsUnread = friendsUnread,
-            notificationsUnread = notificationsUnread,
-            onClose = onClose,
-            applyStatusBarInset = true,
-            showHubBackArrow = showHubBackArrow,
-            onViewProfile = onViewProfile,
-            onShowLocationOnMap = onShowLocationOnMap,
-            blockingRepository = blockingRepository,
-            chatRepliesEnabled = chatRepliesEnabled,
-            pushDeepLink = pushDeepLink,
-            convoyLink = convoyLink,
-            onOpenEvent = onOpenEvent,
-        )
+        Column(Modifier.fillMaxSize()) {
+            if (driverContent != null) {
+                TabRow(
+                    selectedTabIndex = if (driverSelected) 1 else 0,
+                    modifier = Modifier.statusBarsPadding(),
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.tertiary,
+                ) {
+                    Tab(selected = !driverSelected, onClick = { driverSelected = false },
+                        text = { Text(stringResource(R.string.chatHub_tabChats)) })
+                    Tab(selected = driverSelected, onClick = { driverSelected = true },
+                        text = { Text(stringResource(R.string.chatHub_tabDriver)) })
+                }
+            }
+            Box(Modifier.weight(1f)) {
+                if (driverSelected && driverContent != null) {
+                    driverContent()
+                } else {
+                    chatState.SaveableStateProvider(uid) {
+                        ChatHubContent(
+                            uid = uid,
+                            communityChatRepository = communityChatRepository,
+                            convoyChatRepository = convoyChatRepository,
+                            friendsRepository = friendsRepository,
+                            dmRepository = dmRepository,
+                            notificationsRepository = notificationsRepository,
+                            notificationsCoordinator = notificationsCoordinator,
+                            communityUnread = communityUnread,
+                            convoysUnread = convoysUnread,
+                            friendsUnread = friendsUnread,
+                            notificationsUnread = notificationsUnread,
+                            onClose = onClose,
+                            applyStatusBarInset = driverContent == null,
+                            showHubBackArrow = showHubBackArrow,
+                            onViewProfile = onViewProfile,
+                            onShowLocationOnMap = onShowLocationOnMap,
+                            blockingRepository = blockingRepository,
+                            chatRepliesEnabled = chatRepliesEnabled,
+                            pushDeepLink = pushDeepLink,
+                            convoyLink = convoyLink,
+                            onOpenEvent = onOpenEvent,
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -234,6 +234,7 @@ import com.kungsbackacarcommunity.app.crownhunt.SpikeStripOverlay
 import com.kungsbackacarcommunity.app.crownhunt.crownGlyphRes
 import com.kungsbackacarcommunity.app.crownhunt.crownPointGlyphRes
 import com.kungsbackacarcommunity.app.chatchannels.ChatHubRoute
+import com.kungsbackacarcommunity.app.chatchannels.NativeDriverFeed
 import com.kungsbackacarcommunity.app.chatchannels.CommunityChatRepository
 import com.kungsbackacarcommunity.app.chatchannels.ConvoyChatRepository
 import com.kungsbackacarcommunity.app.dm.ChatRoute
@@ -1230,8 +1231,8 @@ fun AuthenticatedApp(
             // forget: leaving it set would re-land the next plain chat-bubble tap on
             // a convoy the member did not ask for. Setting the link and opening the
             // hub happen in the same frame, so this never races the open.
-            LaunchedEffect(chatHubOpen) {
-                if (!chatHubOpen) chatHubLandingLink = null
+            LaunchedEffect(selectedTab, chatHubOpen) {
+                if (selectedTab != ShellTab.Chat && !chatHubOpen) chatHubLandingLink = null
             }
 
             // Address-search + directions overlay ("Where to?"). The Mapbox
@@ -1875,7 +1876,7 @@ fun AuthenticatedApp(
             // covers the fallback route. Each derivation is also guarded on its repo
             // — no repo (config-less build) means never unread.
             val needsChatUnread =
-                selectedTab == ShellTab.Map || route == ShellRoute.ChatHub || chatHubOpen
+                true // The primary Chat tab carries unread state on every destination.
             val communityChatUnread by
                 remember(communityChatRepository, uid, needsChatUnread) {
                     if (communityChatRepository != null && needsChatUnread) {
@@ -3104,6 +3105,8 @@ fun AuthenticatedApp(
             // shared by the place menu's "Navigate here", a chat geo-link tap, and a
             // saved-places pick — it NEVER fires an external ACTION_VIEW / maps app.
             val moveMapToPoint: (Double, Double, String?) -> Unit = { lat, lng, name ->
+                clearRoutes()
+                selectedTab = ShellTab.Map
                 navSearchTarget = LatLng(longitude = lng, latitude = lat)
                 navSearchTargetName = name
                 navSearchOpen = true
@@ -6596,6 +6599,9 @@ fun AuthenticatedApp(
                         onOpenChat = openChat,
                         pointsRepository = pointsRepository,
                         drivesRepository = drivesRepository,
+                        driveHistoryRepository = driveHistoryRepository,
+                        pendingDriveDetailRideId = pendingDriveDetailRideId,
+                        onDriveDetailConsumed = { pendingDriveDetailRideId = null },
                         partnerApplicationCoordinator = partnerApplicationCoordinator,
                         billboardsRepository = billboardsRepository,
                         accountDeletionCoordinator = accountDeletionCoordinator,
@@ -7586,7 +7592,7 @@ fun AuthenticatedApp(
                                     // ShellBottomBar.onSelect (switches to Map + raises the
                                     // live-share prompt), so it never renders as its own tab —
                                     // it shares this branch for `when` exhaustiveness.
-                                    ShellTab.Map, ShellTab.Create -> Unit
+                                    ShellTab.Map, ShellTab.Create, ShellTab.Chat -> Unit
 
                                     ShellTab.History ->
                                         TranslucentShellPanel(
@@ -7612,7 +7618,7 @@ fun AuthenticatedApp(
                                                 )
                                             } else {
                                                 HubScreen(
-                                                    title = stringResource(R.string.shell_tabHistory),
+                                                    title = stringResource(R.string.shell_moreDrives),
                                                     entries = emptyList(),
                                                 )
                                             }
@@ -7825,6 +7831,7 @@ fun AuthenticatedApp(
                                 // into the STOP sign the moment a start is tapped,
                                 // not when the server's session echoes back.
                                 isSharing = isSharingUi,
+                                hasUnreadChat = anyChatUnread,
                                 onManageLiveShare = { liveManageOpen = true },
                             )
                         }
@@ -8402,7 +8409,8 @@ fun AuthenticatedApp(
                             // Just navigate — DriveSavedDialog closes itself (calls
                             // onDismiss) after this, so no dismiss is needed here.
                             driveSavedDialogRideId?.let { pendingDriveDetailRideId = it }
-                            selectedTab = ShellTab.History
+                            selectedTab = ShellTab.Map
+                            openRootRoute(ShellRoute.MyDrives)
                         },
                     )
                 }
@@ -8440,24 +8448,17 @@ fun AuthenticatedApp(
                 // would have been missed when search stopped being its own
                 // branch). Both the auto-close effect below and the render
                 // condition read THIS value, so the two cannot drift apart.
-                val chatHubGateOpen =
-                    ShellNavigation.chatHubAllowed(
-                        cover = mapCover,
-                        navigating = navDestination != null,
-                    )
-
-                // Auto-close. `chatHubOpen` is rememberSaveable so a genuinely open
-                // (and still valid) hub survives process death — but it only
-                // RENDERS while the gate holds. Without this effect, losing the gate
-                // would hide the hub while leaving the flag set, and it would pop
-                // open again by itself the next time the user came back to the map.
-                // Keyed on the same derived gate, so no gate can be lost without
-                // clearing the flag.
-                LaunchedEffect(chatHubGateOpen) {
-                    if (!chatHubGateOpen) chatHubOpen = false
+                // Legacy notification/convoy entry intents now select the real tab.
+                LaunchedEffect(chatHubOpen) {
+                    if (chatHubOpen) {
+                        navSearchDismissRequest = true
+                        clearRoutes()
+                        selectedTab = ShellTab.Chat
+                        chatHubOpen = false
+                    }
                 }
 
-                val chatHubVisible = chatHubOpen && chatHubGateOpen
+                val chatHubVisible = selectedTab == ShellTab.Chat && route == null
                 if (chatHubVisible) {
                     val reserveBottomBar =
                         shouldReserveChatHubBottomBar(
@@ -8493,6 +8494,7 @@ fun AuthenticatedApp(
                     ) {
                         ChatHubRoute(
                             uid = uid,
+                            driverContent = { NativeDriverFeed(uid) },
                             communityChatRepository = communityChatRepository,
                             convoyChatRepository = convoyChatRepository,
                             friendsRepository = friendsRepository,
@@ -8505,7 +8507,7 @@ fun AuthenticatedApp(
                             notificationsUnread = notificationsUnread,
                             // System Back (via the hub's BackHandler) and the Back
                             // arrow both close the hub back to the map.
-                            onClose = { chatHubOpen = false },
+                            onClose = { selectedTab = ShellTab.Map },
                             showHubBackArrow = true,
                             // Guarded exactly like RouteHost: a member profile is a
                             // shell route, so opening it drops the map-cover gate and
@@ -8625,6 +8627,7 @@ internal fun ShellBottomBar(
     onSelect: (ShellTab) -> Unit,
     isSharing: Boolean,
     onManageLiveShare: () -> Unit,
+    hasUnreadChat: Boolean = false,
 ) {
     // 50%-alpha surface container so the map shows through the bar; icon-only
     // items (no labels) keep the tabs compact over the semi-transparent map.
@@ -8642,20 +8645,27 @@ internal fun ShellBottomBar(
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     NavigationBar(
         modifier = Modifier.height(ShellBottomBarHeight + bottomInset),
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+        containerColor = MaterialTheme.colorScheme.surface,
     ) {
         NavigationBarItem(
             selected = selected == ShellTab.Map,
             onClick = { onSelect(ShellTab.Map) },
             icon = { Icon(Icons.Filled.Map, contentDescription = stringResource(R.string.shell_tabMap)) },
-            label = null,
+            label = { Text(stringResource(R.string.shell_tabMap)) },
         )
         NavigationBarItem(
-            selected = selected == ShellTab.History,
-            onClick = { onSelect(ShellTab.History) },
-            icon = { Icon(Icons.Filled.History, contentDescription = stringResource(R.string.shell_tabHistory)) },
-            label = null,
-            modifier = Modifier.coachMarkAnchor(CoachMarkStep.History),
+            selected = selected == ShellTab.Chat,
+            onClick = { onSelect(ShellTab.Chat) },
+            icon = {
+                androidx.compose.material3.BadgedBox(badge = {
+                    if (hasUnreadChat) androidx.compose.material3.Badge()
+                }) {
+                    Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = stringResource(
+                        if (hasUnreadChat) R.string.shell_chatUnreadDot else R.string.shell_tabChat,
+                    ))
+                }
+            },
+            label = { Text(stringResource(R.string.shell_tabChat)) },
         )
         // The centre action is a "+" that starts a session, and — while one RUNS —
         // the live-session disc that raises the stop sheet: one control for the
@@ -8723,14 +8733,14 @@ internal fun ShellBottomBar(
             selected = selected == ShellTab.Social,
             onClick = { onSelect(ShellTab.Social) },
             icon = { Icon(Icons.Filled.Groups, contentDescription = stringResource(R.string.shell_tabSocial)) },
-            label = null,
+            label = { Text(stringResource(R.string.shell_tabSocial)) },
             modifier = Modifier.coachMarkAnchor(CoachMarkStep.Social),
         )
         NavigationBarItem(
             selected = selected == ShellTab.Garage,
             onClick = { onSelect(ShellTab.Garage) },
             icon = { Icon(Icons.Filled.DirectionsCar, contentDescription = stringResource(R.string.shell_tabGarage)) },
-            label = null,
+            label = { Text(stringResource(R.string.shell_tabGarage)) },
         )
     }
 }
@@ -8969,6 +8979,9 @@ private fun RouteHost(
     // Owner drives list, folded into the profile's "my stats" summary (same
     // owner query the History tab uses). Null in a config-less build.
     drivesRepository: DrivesRepository?,
+    driveHistoryRepository: DriveHistoryRepository?,
+    pendingDriveDetailRideId: String?,
+    onDriveDetailConsumed: () -> Unit,
     partnerApplicationCoordinator: PartnerApplicationCoordinator?,
     billboardsRepository: BillboardsRepository?,
     accountDeletionCoordinator: AccountDeletionCoordinator?,
@@ -9012,6 +9025,20 @@ private fun RouteHost(
     val openProfileIfWired: ((String) -> Unit)? =
         if (memberProfileRepository != null) onOpenMemberProfile else null
     when (route) {
+        ShellRoute.MyDrives -> {
+            if (drivesRepository != null && driveHistoryRepository != null) {
+                DrivesRoute(
+                    repository = drivesRepository,
+                    historyRepository = driveHistoryRepository,
+                    uid = uid,
+                    subscriptionTier = storedSubscription.effectiveTier,
+                    initialRideId = pendingDriveDetailRideId,
+                    onInitialRideConsumed = onDriveDetailConsumed,
+                )
+            } else {
+                HubScreen(title = stringResource(R.string.shell_moreDrives), entries = emptyList())
+            }
+        }
         ShellRoute.Profile -> {
             val saveStatus by
                 (profileEditCoordinator?.status ?: flowOf(ProfileEditStatus.Idle))
@@ -9291,6 +9318,7 @@ private fun RouteHost(
                     badgeShowcase = badgeShowcase,
                     pointsBalance = pointsBalance,
                     recentPointsEarnings = recentPointsEarnings,
+                    onOpenDrives = { onOpenRoute(ShellRoute.MyDrives) },
                     // The points card is now the ONLY way into the full ledger
                     // (the profile menu's "Points" row was removed). Pushed, not
                     // opened as a root, so Back returns to the profile that sent
@@ -9906,6 +9934,11 @@ private fun profileMenuEntries(
     onSignOut: () -> Unit,
 ): List<HubEntry> =
     listOf(
+        HubEntry(
+            stringResource(R.string.shell_moreDrives),
+            Icons.Filled.History,
+            { onOpenRoute(ShellRoute.MyDrives) },
+        ),
         HubEntry(
             stringResource(R.string.shell_moreProfile),
             Icons.Filled.Person,

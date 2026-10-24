@@ -452,7 +452,7 @@ private fun ConvoyMemberChip(
 ) {
     val density = LocalDensity.current
     val chipPx = with(density) { CHIP_SIZE.toPx() }
-    val accent = MaterialTheme.colorScheme.primary
+    val accent = MaterialTheme.colorScheme.tertiary
 
     Box(
         modifier =

@@ -98,6 +98,8 @@ import com.kungsbackacarcommunity.app.design.KccAlpha
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalKccDarkTheme
+import com.kungsbackacarcommunity.app.design.LocalKccMapColors
+import androidx.compose.foundation.BorderStroke
 import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
 import com.kungsbackacarcommunity.app.incidents.IncidentLocationChoiceDialog
 import com.kungsbackacarcommunity.app.incidents.IncidentAgeFilter
@@ -660,7 +662,8 @@ fun MapHome(
                 onSearch = onSearch,
                 onOpenMore = { moreOpen = true },
                 searchExpanded = searchExpanded,
-                onExpandSearch = { searchExpanded = true },
+                // Open the actual focused field on the first tap.
+                onExpandSearch = onSearch,
                 // Composed between the search control and the avatar so the live
                 // session pill sits in the gap the two frame, never overlapping
                 // either.
@@ -810,14 +813,6 @@ fun MapHome(
                             contentDescription = stringResource(R.string.shell_savedPlacesButton),
                             onClick = onOpenSavedPlaces,
                             modifier = Modifier.testTag(MAP_HOME_SAVED_PLACES_TAG),
-                        )
-
-                    // Chat bubble — opens the chat hub; shows a red DOT when there
-                    // is any unread across the hub's sections.
-                    MapCircleControlKind.Chat ->
-                        ChatCircleControl(
-                            hasUnread = hasUnreadChat,
-                            onClick = onOpenChat,
                         )
 
                     // Kronjakt perk-deploy control — opens the "use a perk" menu
@@ -2184,7 +2179,8 @@ private fun SearchBarRow(
                     Modifier
                         .size(KccSpacing.s12)
                         .testTag(MAP_HOME_MORE_TAG)
-                        .coachMarkAnchor(CoachMarkStep.Explore),
+                        .coachMarkAnchor(CoachMarkStep.Explore)
+                        .coachMarkAnchor(CoachMarkStep.History),
             ) {
                 // Always render the AccountCircle fallback so the button never
                 // shows a blank circle: it covers both the window while the Storage
@@ -2297,7 +2293,7 @@ internal fun CircleControl(
     contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    containerColor: Color = MaterialTheme.colorScheme.surface,
+    containerColor: Color = LocalKccMapColors.current.overlay,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
     iconRotationDegrees: Float = 0f,
 ) {
@@ -2305,6 +2301,7 @@ internal fun CircleControl(
     Surface(
         shape = CircleShape,
         color = containerColor,
+        border = BorderStroke(1.dp, LocalKccMapColors.current.border),
         contentColor = contentColor,
         tonalElevation = 3.dp,
         shadowElevation = 3.dp,
