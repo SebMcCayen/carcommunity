@@ -237,6 +237,15 @@ capture variants. Follow-up CI/rendered validation is pending; the prior green
 run alone does not establish resolution of this visual finding. Android and
 central evidence remain owned by main; no release is implied.
 
+Merged-head run `40137029824` compiled and passed 1201 XCTest unit tests and
+17 Swift Testing tests, but passed only 7/9 UI cases. The new geometry assertion
+caught a real 33-point primary-button accessibility/hit width, and the large-text
+capture failed to select Chat after tapping. The fresh Map PNG shows compact
+bottom labels but also exposed scaled search/menu icons outside their circles.
+The focused follow-up gives each complete 56-point-high primary slot a rectangular
+content shape and fixes the two map navigation icon fonts. Assertions are retained;
+Release was skipped after the UI failure and final recapture is still required.
+
 S01 follow-up: the iOS tool rail was vertically centered. It now starts below
 the 48-point avatar/top controls. Convoy status and its dynamic error row share
 the same vertical stack above the rail, so they cannot be overlaid by it.

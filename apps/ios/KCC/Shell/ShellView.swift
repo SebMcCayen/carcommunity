@@ -857,7 +857,7 @@ struct ShellView: View {
                 systemImage: signedInUid == nil ? "gearshape" : "person.circle"
             )
             .labelStyle(.iconOnly)
-            .font(.title2)
+            .font(.system(size: 24))
             .frame(width: 48, height: 48)
             .kccMapControl()
         }
@@ -963,7 +963,7 @@ struct ShellView: View {
             navSearchOpen = true
         } label: {
             Image(systemName: "magnifyingglass")
-                .font(.title3.weight(.semibold))
+                .font(.system(size: 20, weight: .semibold))
                 .frame(width: 48, height: 48)
                 .kccMapControl()
         }
@@ -992,6 +992,7 @@ struct ShellView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 56)
+                    .contentShape(Rectangle())
                     .foregroundStyle(tab == .create
                         ? (liveLocationCoordinator?.isSharing == true ? KccPalette.warmIvory : KccTheme.onGold)
                         : KccTheme.text)
