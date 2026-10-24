@@ -20,8 +20,8 @@ final class ShellSmokeTests: XCTestCase {
     func testSettingsAndNestedBackNavigation() {
         let app = launch(language: "en")
         openSettings(app)
-        let privacy = app.buttons["settings.privacyPolicy"]
-        let terms = app.buttons["settings.terms"]
+        let privacy = element("settings.privacyPolicy", in: app)
+        let terms = element("settings.terms", in: app)
         XCTAssertTrue(privacy.waitForExistence(timeout: 5))
         XCTAssertEqual(privacy.label, "Privacy Policy")
         XCTAssertEqual(terms.label, "Terms of Service")
@@ -45,7 +45,7 @@ final class ShellSmokeTests: XCTestCase {
         openSettings(app)
         // These are accessibility-tree smoke checks, not a full VoiceOver audit.
         for id in ["settings.privacyPolicy", "settings.terms"] {
-            let button = app.buttons[id]
+            let button = element(id, in: app)
             if !button.isHittable { app.swipeUp() }
             XCTAssertTrue(button.waitForExistence(timeout: 5))
             XCTAssertFalse(button.label.isEmpty)
@@ -89,6 +89,11 @@ final class ShellSmokeTests: XCTestCase {
         )
         XCTAssertEqual(app.buttons["shell.menu"].label, language == "sv" ? "Inställningar" : "Settings")
         return app
+    }
+
+    private func element(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
+        // SwiftUI Link can expose a link or button trait across iOS versions.
+        app.descendants(matching: .any).matching(identifier: identifier).firstMatch
     }
 
     private func openSettings(_ app: XCUIApplication) {
