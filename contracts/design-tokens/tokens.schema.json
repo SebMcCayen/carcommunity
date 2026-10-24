@@ -26,7 +26,12 @@
         "brandPrimary": { "$ref": "#/$defs/hexColor" },
         "statusSuccess": { "$ref": "#/$defs/hexColor" },
         "statusError": { "$ref": "#/$defs/hexColor" },
-        "statusWarning": { "$ref": "#/$defs/hexColor" }
+        "statusWarning": { "$ref": "#/$defs/hexColor" },
+        "overlayBackground": { "$ref": "#/$defs/hexColor" },
+        "overlayBorder": { "$ref": "#/$defs/hexColor" },
+        "driverActive": { "$ref": "#/$defs/hexColor" },
+        "onDriverActive": { "$ref": "#/$defs/hexColor" },
+        "onBrandPrimary": { "$ref": "#/$defs/hexColor" }
       },
       "required": [
         "pageBackground",
@@ -38,7 +43,12 @@
         "brandPrimary",
         "statusSuccess",
         "statusError",
-        "statusWarning"
+        "statusWarning",
+        "overlayBackground",
+        "overlayBorder",
+        "driverActive",
+        "onDriverActive",
+        "onBrandPrimary"
       ],
       "additionalProperties": false
     },

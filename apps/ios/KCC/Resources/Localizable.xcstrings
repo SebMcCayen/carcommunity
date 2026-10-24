@@ -5101,6 +5101,23 @@
         }
       }
     },
+    "chatHub.tabChats": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chattar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chats"
+          }
+        }
+      }
+    },
     "chatHub.tabCommunity": {
       "extractionState": "manual",
       "localizations": {
@@ -5131,6 +5148,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Convoys"
+          }
+        }
+      }
+    },
+    "chatHub.tabDriver": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Driver-inlägg"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Driver posts"
           }
         }
       }
@@ -11744,6 +11778,295 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$lld unread messages"
+          }
+        }
+      }
+    },
+    "driver.feed.back": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tillbaka"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back"
+          }
+        }
+      }
+    },
+    "driver.feed.canonicalOnboarding": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slutför din profil i CarCommunity för att läsa Driver-inlägg."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Complete your CarCommunity profile to read Driver posts."
+          }
+        }
+      }
+    },
+    "driver.feed.comments": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kommentarer"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comments"
+          }
+        }
+      }
+    },
+    "driver.feed.empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inga inlägg att visa."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No posts to show."
+          }
+        }
+      }
+    },
+    "driver.feed.error": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det gick inte att hämta innehållet."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't load content."
+          }
+        }
+      }
+    },
+    "driver.feed.image": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bild i inlägget"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Post image"
+          }
+        }
+      }
+    },
+    "driver.feed.likes": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gilla-markeringar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Likes"
+          }
+        }
+      }
+    },
+    "driver.feed.loading": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hämtar inlägg…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading posts…"
+          }
+        }
+      }
+    },
+    "driver.feed.more": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa fler"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Load more"
+          }
+        }
+      }
+    },
+    "driver.feed.noComments": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inga kommentarer att visa."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No comments to show."
+          }
+        }
+      }
+    },
+    "driver.feed.onboarding": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slutför din Driver-profil i Driver för att läsa inlägg här."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Complete your Driver profile in Driver to read posts here."
+          }
+        }
+      }
+    },
+    "driver.feed.refresh": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uppdatera"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refresh"
+          }
+        }
+      }
+    },
+    "driver.feed.restricted": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Driver är inte tillgängligt för ditt konto."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Driver is unavailable for your account."
+          }
+        }
+      }
+    },
+    "driver.feed.retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Försök igen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retry"
+          }
+        }
+      }
+    },
+    "driver.feed.source": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Från Driver"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From Driver"
+          }
+        }
+      }
+    },
+    "driver.feed.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Driver-inlägg"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Driver posts"
+          }
+        }
+      }
+    },
+    "driver.feed.unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Driver-innehållet är inte tillgängligt just nu."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Driver content is unavailable right now."
           }
         }
       }
@@ -30159,6 +30482,23 @@
         }
       }
     },
+    "shell.moreDrives": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mina körningar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My drives"
+          }
+        }
+      }
+    },
     "shell.moreFeedback": {
       "extractionState": "manual",
       "localizations": {
@@ -30811,7 +31151,7 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Socialt"
+            "value": "Social"
           }
         },
         "en": {
@@ -30835,6 +31175,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Share live location"
+          }
+        }
+      }
+    },
+    "shell.tabChat": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chatt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat"
           }
         }
       }
@@ -30913,7 +31270,7 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Socialt"
+            "value": "Social"
           }
         },
         "en": {

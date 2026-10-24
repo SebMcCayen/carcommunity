@@ -1742,6 +1742,8 @@
   },
   "chatHub": {
     "title": "Chat",
+    "tabChats": "Chats",
+    "tabDriver": "Driver posts",
     "back": "Back",
     "tabCommunity": "Community",
     "tabConvoys": "Convoys",
@@ -1788,6 +1790,7 @@
     "panelDragHandle": "Drag down to close",
     "panelDismiss": "Close",
     "tabMap": "Map",
+    "tabChat": "Chat",
     "tabHistory": "History",
     "tabCreate": "Create",
     "tabSocial": "Social",
@@ -1818,6 +1821,7 @@
     "friendsTitle": "Friends",
     "moreTitle": "Profile",
     "moreProfile": "Profile",
+    "moreDrives": "My drives",
     "moreNotificationSettings": "Notification settings",
     "moreBlocked": "Blocked users",
     "morePartnerApplication": "Become a partner",
@@ -2067,6 +2071,27 @@
     "empty": "No release notes yet.",
     "release010Highlight": "The first native iOS MVP is taking shape.",
     "release010Change": "A native map-first experience with community, drive and profile features."
+  },
+  "driver": {
+    "feed": {
+      "title": "Driver posts",
+      "source": "From Driver",
+      "loading": "Loading posts…",
+      "empty": "No posts to show.",
+      "error": "Couldn't load content.",
+      "retry": "Retry",
+      "refresh": "Refresh",
+      "more": "Load more",
+      "back": "Back",
+      "comments": "Comments",
+      "noComments": "No comments to show.",
+      "unavailable": "Driver content is unavailable right now.",
+      "onboarding": "Complete your Driver profile in Driver to read posts here.",
+      "canonicalOnboarding": "Complete your CarCommunity profile to read Driver posts.",
+      "restricted": "Driver is unavailable for your account.",
+      "image": "Post image",
+      "likes": "Likes"
+    }
   },
   "moderation": {
     "messageActionsTitle": "Message from %1$s",

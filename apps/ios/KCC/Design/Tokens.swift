@@ -16,6 +16,8 @@ enum KccPalette {
     static let successGreen = Color(red: 30 / 255, green: 142 / 255, blue: 62 / 255)
     static let errorRed = Color(red: 197 / 255, green: 34 / 255, blue: 31 / 255)
     static let warningAmber = Color(red: 230 / 255, green: 168 / 255, blue: 23 / 255)
+    static let nightOverlay = Color(red: 18 / 255, green: 26 / 255, blue: 39 / 255)
+    static let driverCyan = Color(red: 73 / 255, green: 221 / 255, blue: 235 / 255)
 }
 
 /// Spacing scale (4pt base).
@@ -66,18 +68,28 @@ enum KccLightColors {
     static let statusSuccess = Color(red: 30 / 255, green: 142 / 255, blue: 62 / 255)
     static let statusError = Color(red: 197 / 255, green: 34 / 255, blue: 31 / 255)
     static let statusWarning = Color(red: 230 / 255, green: 168 / 255, blue: 23 / 255)
+    static let overlayBackground = Color(red: 255 / 255, green: 255 / 255, blue: 255 / 255)
+    static let overlayBorder = Color(red: 180 / 255, green: 177 / 255, blue: 173 / 255)
+    static let driverActive = Color(red: 0 / 255, green: 117 / 255, blue: 130 / 255)
+    static let onDriverActive = Color(red: 255 / 255, green: 255 / 255, blue: 255 / 255)
+    static let onBrandPrimary = Color(red: 4 / 255, green: 2 / 255, blue: 17 / 255)
 }
 
 /// Semantic dark-theme colors.
 enum KccDarkColors {
     static let pageBackground = Color(red: 4 / 255, green: 2 / 255, blue: 17 / 255)
-    static let surfaceBackground = Color(red: 63 / 255, green: 62 / 255, blue: 59 / 255)
-    static let subtleBackground = Color(red: 42 / 255, green: 41 / 255, blue: 39 / 255)
+    static let surfaceBackground = Color(red: 18 / 255, green: 26 / 255, blue: 39 / 255)
+    static let subtleBackground = Color(red: 11 / 255, green: 17 / 255, blue: 27 / 255)
     static let textPrimary = Color(red: 248 / 255, green: 246 / 255, blue: 239 / 255)
     static let textSecondary = Color(red: 180 / 255, green: 177 / 255, blue: 173 / 255)
-    static let borderDefault = Color(red: 109 / 255, green: 108 / 255, blue: 109 / 255)
+    static let borderDefault = Color(red: 82 / 255, green: 97 / 255, blue: 114 / 255)
     static let brandPrimary = Color(red: 234 / 255, green: 181 / 255, blue: 75 / 255)
     static let statusSuccess = Color(red: 30 / 255, green: 142 / 255, blue: 62 / 255)
     static let statusError = Color(red: 197 / 255, green: 34 / 255, blue: 31 / 255)
     static let statusWarning = Color(red: 230 / 255, green: 168 / 255, blue: 23 / 255)
+    static let overlayBackground = Color(red: 18 / 255, green: 26 / 255, blue: 39 / 255)
+    static let overlayBorder = Color(red: 82 / 255, green: 97 / 255, blue: 114 / 255)
+    static let driverActive = Color(red: 73 / 255, green: 221 / 255, blue: 235 / 255)
+    static let onDriverActive = Color(red: 4 / 255, green: 2 / 255, blue: 17 / 255)
+    static let onBrandPrimary = Color(red: 4 / 255, green: 2 / 255, blue: 17 / 255)
 }
