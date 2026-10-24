@@ -34,7 +34,10 @@ actor StoreKitSubscriptionStore: SubscriptionStore {
                     id: transaction.id,
                     productID: transaction.productID,
                     signedTransaction: verification.jwsRepresentation,
-                    appAccountToken: transaction.appAccountToken
+                    appAccountToken: transaction.appAccountToken,
+                    expiresAt: transaction.expirationDate,
+                    isRevoked: transaction.revocationDate != nil,
+                    isUpgraded: transaction.isUpgraded
                 ))
             case .unverified:
                 throw StoreKitSubscriptionError.unverifiedTransaction
@@ -59,7 +62,10 @@ actor StoreKitSubscriptionStore: SubscriptionStore {
                 id: transaction.id,
                 productID: transaction.productID,
                 signedTransaction: verification.jwsRepresentation,
-                    appAccountToken: transaction.appAccountToken
+                    appAccountToken: transaction.appAccountToken,
+                    expiresAt: transaction.expirationDate,
+                    isRevoked: transaction.revocationDate != nil,
+                    isUpgraded: transaction.isUpgraded
             ))
         }
         return values
@@ -92,7 +98,10 @@ actor StoreKitSubscriptionStore: SubscriptionStore {
         transactionsByID[transaction.id] = transaction
         return StoreSignedTransaction(id: transaction.id, productID: transaction.productID,
                                       signedTransaction: verification.jwsRepresentation,
-                                      appAccountToken: transaction.appAccountToken)
+                                      appAccountToken: transaction.appAccountToken,
+                                      expiresAt: transaction.expirationDate,
+                                      isRevoked: transaction.revocationDate != nil,
+                                      isUpgraded: transaction.isUpgraded)
     }
 
     func synchronize() async throws {

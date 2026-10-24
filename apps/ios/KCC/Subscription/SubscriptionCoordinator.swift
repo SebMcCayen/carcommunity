@@ -185,8 +185,23 @@ final class SubscriptionTransactionObserver {
         guard inFlight.insert(key).inserted else { return }
         defer { inFlight.remove(key) }
         do {
-            _ = try await verifier.verify(signedTransaction: transaction.signedTransaction, expectedUID: uid)
+            var authoritative = transaction
+            if transaction.isInactive(at: Date()) {
+                // Old unfinished periods and upgrade/revocation updates must
+                // not revoke a newer active subscription on the same account.
+                let active = await store.currentEntitlements().filter {
+                    $0.id != transaction.id && $0.appAccountToken == SubscriptionAccountToken.forUID(uid)
+                        && !$0.isInactive(at: Date()) && subscriptionProductIDs.contains($0.productID)
+                }
+                authoritative = active.first(where: { $0.productID == supporterMonthlyProductID })
+                    ?? active.first ?? transaction
+            }
             guard !Task.isCancelled, generation == expected else { return }
+            _ = try await verifier.verify(signedTransaction: authoritative.signedTransaction, expectedUID: uid)
+            guard !Task.isCancelled, generation == expected else { return }
+            if authoritative.id != transaction.id {
+                await store.finish(transactionID: authoritative.id)
+            }
             await store.finish(transactionID: transaction.id)
             guard !Task.isCancelled, generation == expected else { return }
             failed.removeValue(forKey: transaction.id)
