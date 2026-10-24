@@ -4,31 +4,35 @@ import SwiftUI
 struct DriverFeedScreen: View {
     let uid: String?
     let strings: DriverFeedStrings
+    let isActive: Bool
     private let repository: (any DriverFeedRepository)?
 
-    init(uid: String?, strings: DriverFeedStrings,
+    init(uid: String?, strings: DriverFeedStrings, isActive: Bool = true,
         repository: (any DriverFeedRepository)? = FirebaseDriverFeedRepository.createIfAvailable()) {
         self.uid = uid
         self.strings = strings
+        self.isActive = isActive
         self.repository = repository
     }
 
     var body: some View {
-        DriverFeedSession(uid: uid, strings: strings, repository: repository).id(uid)
+        DriverFeedSession(uid: uid, strings: strings, isActive: isActive, repository: repository).id(uid)
     }
 }
 
 private struct DriverFeedSession: View {
     let uid: String?
     let strings: DriverFeedStrings
+    let isActive: Bool
     let repository: (any DriverFeedRepository)?
     @State private var coordinator: DriverFeedCoordinator
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
 
-    init(uid: String?, strings: DriverFeedStrings, repository: (any DriverFeedRepository)?) {
+    init(uid: String?, strings: DriverFeedStrings, isActive: Bool, repository: (any DriverFeedRepository)?) {
         self.uid = uid
         self.strings = strings
+        self.isActive = isActive
         self.repository = repository
         _coordinator = State(initialValue: DriverFeedCoordinator(repository: repository, uid: uid))
     }
@@ -89,15 +93,15 @@ private struct DriverFeedSession: View {
         .foregroundStyle(colorScheme == .dark ? KccDarkColors.textPrimary : KccLightColors.textPrimary)
         .tint(colorScheme == .dark ? KccDarkColors.driverActive : KccLightColors.driverActive)
         .background(colorScheme == .dark ? KccDarkColors.pageBackground : KccLightColors.pageBackground)
-        .task(id: coordinator.state.selectedId) {
+        .task(id: DriverFeedTaskIdentity(threadId: coordinator.state.selectedId, active: isActive && scenePhase == .active)) {
+            guard isActive && scenePhase == .active else { coordinator.pause(); return }
             guard let uid, let repository else { coordinator.refresh(); return }
             for await _ in repository.invalidations(uid: uid, threadId: coordinator.state.selectedId) {
                 guard !Task.isCancelled else { return }
                 coordinator.invalidate()
             }
         }
-        .onChange(of: scenePhase) { _, phase in if phase == .active { coordinator.refresh() } }
-        .onDisappear { coordinator.stop() }
+        .onDisappear { coordinator.pause() }
     }
 
     private func failureKey(_ failure: DriverFeedFailure) -> String {
@@ -109,6 +113,11 @@ private struct DriverFeedSession: View {
         case .restricted: "restricted"
         }
     }
+}
+
+private struct DriverFeedTaskIdentity: Equatable {
+    let threadId: String?
+    let active: Bool
 }
 
 private struct DriverPostBody: View {

@@ -156,6 +156,19 @@ final class DriverFeedTests: XCTestCase {
         XCTAssertTrue(model.state.loading)
         model.stop()
     }
+
+    func testPauseClearsContentButRetainsDetailTarget() async {
+        let repo = FakeDriverFeedRepository()
+        repo.original = post("original")
+        let model = DriverFeedCoordinator(repository: repo, uid: "uid")
+        model.open("original"); await settle()
+        model.pause()
+        XCTAssertEqual(model.state.selectedId, "original")
+        XCTAssertNil(model.state.post)
+        XCTAssertTrue(model.state.comments.isEmpty)
+        model.refresh(); await settle()
+        XCTAssertEqual(model.state.post?.id, "original")
+    }
 }
 
 @MainActor

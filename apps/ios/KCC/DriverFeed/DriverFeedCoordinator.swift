@@ -48,9 +48,15 @@ final class DriverFeedCoordinator {
     }
 
     func stop() {
+        pause()
+        state = DriverFeedState()
+    }
+
+    func pause() {
         generation += 1
         task?.cancel()
-        state = DriverFeedState()
+        // Retain the navigation target, but reauthorize content when the host resumes.
+        state = DriverFeedState(selectedId: state.selectedId)
     }
 
     private func load(more: Bool, debounce: Bool = false) {
