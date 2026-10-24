@@ -4,7 +4,7 @@
 
 When documentation conflicts, use this priority order:
 
-1. `docs/adr/001-firebase-platform.md`
+1. `docs/adr/001-firebase-platform.md` and its iOS scope amendment, `docs/adr/002-ios-app-rescope.md`
 2. `docs/architecture.md`
 3. `docs/migration/native-firebase-migration-plan.md`
 4. `.github/instructions/mobile-platform-parity.instructions.md`
