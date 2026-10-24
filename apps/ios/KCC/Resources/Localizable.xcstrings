@@ -11799,6 +11799,23 @@
         }
       }
     },
+    "driver.feed.canonicalOnboarding": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slutför din profil i CarCommunity för att läsa Driver-inlägg."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Complete your CarCommunity profile to read Driver posts."
+          }
+        }
+      }
+    },
     "driver.feed.comments": {
       "extractionState": "manual",
       "localizations": {
