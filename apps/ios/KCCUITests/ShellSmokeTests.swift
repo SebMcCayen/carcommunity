@@ -84,7 +84,7 @@ final class ShellSmokeTests: XCTestCase {
             assertSelected(tab)
             if index == 1 {
                 XCTAssertTrue(element("chatHub.opaqueScreen", in: app).waitForExistence(timeout: 5))
-                XCTAssertFalse(app.buttons["shell.search"].isHittable)
+                XCTAssertFalse(app.buttons["shell.search"].exists)
             } else {
                 let heading = index == 3 ? (language == "sv" ? "Mitt garage" : "My Garage") : label
                 XCTAssertTrue(app.staticTexts[heading].firstMatch.waitForExistence(timeout: 5))
@@ -132,7 +132,7 @@ final class ShellSmokeTests: XCTestCase {
             app.buttons["shell.tab.chat"].tap()
             assertSelected(app.buttons["shell.tab.chat"])
             XCTAssertTrue(element("chatHub.opaqueScreen", in: app).waitForExistence(timeout: 5))
-            XCTAssertFalse(app.buttons["shell.search"].isHittable)
+            XCTAssertFalse(app.buttons["shell.search"].exists)
             attach(app, name: "\(prefix)-S29-chat-opaque")
             let driver = app.buttons["chatHub.source.driver"]
             XCTAssertTrue(driver.isHittable)

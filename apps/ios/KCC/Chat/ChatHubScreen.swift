@@ -79,6 +79,7 @@ struct ChatHubScreen: View {
         .kccReadingSurface()
         .navigationTitle(Text("chatHub.title"))
         .navigationBarTitleDisplayMode(.inline)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("chatHub.opaqueScreen")
     }
 

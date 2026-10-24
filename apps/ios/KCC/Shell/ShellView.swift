@@ -1007,7 +1007,6 @@ struct ShellView: View {
             flags: featureFlags, flag: .socialSharing, memberGated: false, access: access
         ))
         .kccReadingSurface()
-        .accessibilityIdentifier("shell.myDrivesScreen")
     }
 
     private var chatTab: some View {
