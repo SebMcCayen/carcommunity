@@ -110,7 +110,7 @@ class MapFirstShellTest {
         appUpdateSource: AppUpdateSource? = null,
         drivesRepository: DrivesRepository? = null,
         driveHistoryRepository: DriveHistoryRepository? = null,
-        contentHost: (((@Composable () -> Unit)) -> Unit)? = null,
+        contentHost: ((@Composable () -> Unit) -> Unit)? = null,
     ) {
         val render: ((@Composable () -> Unit) -> Unit) = contentHost ?: { composeTestRule.setContent(it) }
         render {

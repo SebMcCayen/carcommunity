@@ -3,6 +3,8 @@
 Status: first substantial native shell slice; implementation is not release approval.
 Base foundation: `41e60f05` on `1b63f152`. Android owner branch:
 `codex/redesign-android`, worktree `/tmp/carcommunity-redesign-android`.
+Implementation commit: `49c3df6d`. Subsequently merged foundation `91d6482d`
+and `origin/main` `fdf180f1` (upstream iOS changes only) before integration CI.
 
 ## Scope and evidence
 
