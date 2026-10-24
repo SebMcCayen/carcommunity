@@ -52,16 +52,16 @@ captured Firebase-user fencing reject late responses. Owner/parent invalidations
 are coalesced over 150 milliseconds.
 
 The native lane supplies Android model/coordinator/wire tests and matching iOS
-XCTest sources. Its optional cached-dependency helper is
-`apps/android/app/src/test/java/com/kungsbackacarcommunity/app/driverfeed/verify-kotlin.mjs`:
+XCTest sources. Run the Android tests through the actual application classpath:
 
 ```sh
-JAVA_HOME=/path/to/jdk node apps/android/app/src/test/java/com/kungsbackacarcommunity/app/driverfeed/verify-kotlin.mjs /path/to/gradle-home
-# Add /path/to/android-sdk for optional SDK + Compose source compilation.
+cd apps/android
+./gradlew :app:testDebugUnitTest --tests 'com.kungsbackacarcommunity.app.driverfeed.DriverFeedTest'
 ```
 
-This helper does not replace full native builds or device checks. iOS XCTest
-execution requires an Apple toolchain.
+This does not replace full native builds or device checks. iOS XCTest execution
+requires an Apple toolchain. A temporary cached-classpath compiler helper used
+during development is not part of the delivery.
 
 ## Focused backend validation
 
