@@ -11,6 +11,7 @@
  */
 
 import { onRequest } from 'firebase-functions/v2/https';
+import { list as driverFeedList, detail as driverFeedDetail } from './driverFeed';
 import { handleHealth } from './health';
 import { eventPage } from './public/eventPage';
 import { completeOnboarding } from './auth/completeOnboarding';
@@ -234,6 +235,9 @@ import { reportMessage as chatChannelsReportMessage } from './chatchannels/repor
 import { adminDeleteMessage as chatChannelsAdminDeleteMessage } from './chatchannels/adminDeleteMessage';
 import { reportMessage as dmReportMessage } from './dm/reportMessage';
 import { reportUser as moderationReportUser } from './moderation/reportUser';
+
+/** Native Driver read bridge; owned by this Firebase project's default codebase. */
+export const driverFeed = { list: driverFeedList, detail: driverFeedDetail };
 
 /**
  * GET /health

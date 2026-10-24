@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/driver-feed.schema.json",
+  "title": "Native Driver read bridge",
+  "description": "Read-only Driver feed API. Explicit millisecond display timestamps and nanosecond cursor tuples follow Driver's existing native wire fields. See contracts/driver-feed/read-api.md.",
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{8,128}$" },
+    "cursor": {
+      "type": "object", "additionalProperties": false,
+      "required": ["seconds", "nanoseconds", "id"],
+      "properties": {
+        "seconds": { "type": "integer", "minimum": -62135596800, "maximum": 253402300799 },
+        "nanoseconds": { "type": "integer", "minimum": 0, "maximum": 999999999 },
+        "id": { "$ref": "#/$defs/id" }
+      }
+    },
+    "nextCursor": { "oneOf": [{ "$ref": "#/$defs/cursor" }, { "type": "null" }] },
+    "listRequest": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "limit": { "type": "integer", "minimum": 1, "maximum": 20, "default": 20 },
+        "cursor": { "$ref": "#/$defs/cursor" }
+      }
+    },
+    "detailRequest": {
+      "type": "object", "additionalProperties": false, "required": ["threadId"],
+      "properties": {
+        "threadId": { "$ref": "#/$defs/id" },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 20, "default": 20 },
+        "cursor": { "$ref": "#/$defs/cursor" }
+      }
+    },
+    "comment": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "authorUid", "authorName", "authorHandle", "text", "createdAtMillis"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "authorUid": { "$ref": "#/$defs/id" },
+        "authorName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "authorHandle": { "type": "string", "pattern": "^[a-z0-9_]{3,24}$" },
+        "text": { "type": "string", "minLength": 1, "maxLength": 1200 },
+        "createdAtMillis": { "type": "integer", "minimum": -62135596800000, "maximum": 253402300799999 }
+      }
+    },
+    "post": {
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/postBase" },
+        { "type": "object", "required": ["mediaUrls", "likeCount", "replyCount"], "properties": {
+          "mediaUrls": { "type": "array", "maxItems": 4, "items": { "type": "string", "maxLength": 2048, "pattern": "^https://firebasestorage\\.googleapis\\.com/" } },
+          "likeCount": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "replyCount": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+        } }
+      ], "unevaluatedProperties": false
+    },
+    "postBase": {
+      "type": "object", "required": ["id", "authorUid", "authorName", "authorHandle", "text", "createdAtMillis"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "authorUid": { "$ref": "#/$defs/id" },
+        "authorName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "authorHandle": { "type": "string", "pattern": "^[a-z0-9_]{3,24}$" },
+        "text": { "type": "string", "minLength": 1, "maxLength": 1200 },
+        "createdAtMillis": { "type": "integer", "minimum": -62135596800000, "maximum": 253402300799999 }
+      }
+    },
+    "listResponse": {
+      "type": "object", "additionalProperties": false, "required": ["posts", "nextCursor"],
+      "properties": {
+        "posts": { "type": "array", "maxItems": 20, "items": { "$ref": "#/$defs/post" } },
+        "nextCursor": { "$ref": "#/$defs/nextCursor" }
+      }
+    },
+    "detailResponse": {
+      "type": "object", "additionalProperties": false, "required": ["post", "comments", "nextCursor"],
+      "properties": {
+        "post": { "$ref": "#/$defs/post" },
+        "comments": { "type": "array", "maxItems": 20, "items": { "$ref": "#/$defs/comment" } },
+        "nextCursor": { "$ref": "#/$defs/nextCursor" }
+      }
+    },
+    "accessReason": { "enum": ["canonical-onboarding-required", "driver-onboarding-required", "account-restricted", "thread-unavailable"] }
+  }
+}
