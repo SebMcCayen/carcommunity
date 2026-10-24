@@ -2072,6 +2072,26 @@
     "release010Highlight": "The first native iOS MVP is taking shape.",
     "release010Change": "A native map-first experience with community, drive and profile features."
   },
+  "driver": {
+    "feed": {
+      "title": "Driver posts",
+      "source": "From Driver",
+      "loading": "Loading posts…",
+      "empty": "No posts to show.",
+      "error": "Couldn't load content.",
+      "retry": "Retry",
+      "refresh": "Refresh",
+      "more": "Load more",
+      "back": "Back",
+      "comments": "Comments",
+      "noComments": "No comments to show.",
+      "unavailable": "Driver content is unavailable right now.",
+      "onboarding": "Complete your Driver profile in Driver to read posts here.",
+      "restricted": "Driver is unavailable for your account.",
+      "image": "Post image",
+      "likes": "Likes"
+    }
+  },
   "moderation": {
     "messageActionsTitle": "Message from %1$s",
     "reply": "Reply",
