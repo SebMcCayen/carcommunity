@@ -18,6 +18,11 @@ Implementation checkpoint: 2026-10-24. No production deployment or data changes.
   emulator file in the Social group and classifying the new callables as
   `uncosted`. All 77 emulator files map to exactly one CI group.
 
+Finance's exact-list regression tests explicitly expect the two new Driver
+callables as pending estimates. The admin estimate therefore flags the missing
+page-frequency assumption instead of pretending that these reads cost zero;
+any additional uncosted callable still fails the guarded exact list.
+
 The first local callable attempts did not load the entire Functions manifest
 within the CLI's default ten-second discovery window; all seven cases were
 skipped after their Auth provisioning setup timed out. Retrying with
