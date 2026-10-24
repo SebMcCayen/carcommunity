@@ -33,7 +33,11 @@ actor StoreKitSubscriptionStore: SubscriptionStore {
                 return .purchased(StoreSignedTransaction(
                     id: transaction.id,
                     productID: transaction.productID,
-                    signedTransaction: verification.jwsRepresentation
+                    signedTransaction: verification.jwsRepresentation,
+                    appAccountToken: transaction.appAccountToken,
+                    expiresAt: transaction.expirationDate,
+                    isRevoked: transaction.revocationDate != nil,
+                    isUpgraded: transaction.isUpgraded
                 ))
             case .unverified:
                 throw StoreKitSubscriptionError.unverifiedTransaction
@@ -57,10 +61,47 @@ actor StoreKitSubscriptionStore: SubscriptionStore {
             values.append(StoreSignedTransaction(
                 id: transaction.id,
                 productID: transaction.productID,
-                signedTransaction: verification.jwsRepresentation
+                signedTransaction: verification.jwsRepresentation,
+                appAccountToken: transaction.appAccountToken,
+                expiresAt: transaction.expirationDate,
+                isRevoked: transaction.revocationDate != nil,
+                isUpgraded: transaction.isUpgraded
             ))
         }
         return values
+    }
+
+    func transactionUpdates() -> AsyncStream<StoreSignedTransaction> {
+        let (stream, continuation) = AsyncStream<StoreSignedTransaction>.makeStream()
+        let task = Task {
+            for await verification in Transaction.updates {
+                guard !Task.isCancelled else { break }
+                if let signed = self.capture(verification) { continuation.yield(signed) }
+            }
+            continuation.finish()
+        }
+        continuation.onTermination = { _ in task.cancel() }
+        return stream
+    }
+
+    func unfinishedTransactions() async -> [StoreSignedTransaction] {
+        var pending: [StoreSignedTransaction] = []
+        for await verification in Transaction.unfinished {
+            if let signed = capture(verification) { pending.append(signed) }
+        }
+        return pending
+    }
+
+    private func capture(_ verification: VerificationResult<Transaction>) -> StoreSignedTransaction? {
+        guard case .verified(let transaction) = verification,
+              subscriptionProductIDs.contains(transaction.productID) else { return nil }
+        transactionsByID[transaction.id] = transaction
+        return StoreSignedTransaction(id: transaction.id, productID: transaction.productID,
+                                      signedTransaction: verification.jwsRepresentation,
+                                      appAccountToken: transaction.appAccountToken,
+                                      expiresAt: transaction.expirationDate,
+                                      isRevoked: transaction.revocationDate != nil,
+                                      isUpgraded: transaction.isUpgraded)
     }
 
     func synchronize() async throws {

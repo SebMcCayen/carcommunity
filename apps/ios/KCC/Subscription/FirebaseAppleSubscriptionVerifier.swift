@@ -10,7 +10,10 @@ final class FirebaseAppleSubscriptionVerifier: AppleSubscriptionVerifying, @unch
         self.auth = auth
     }
 
-    func verify(signedTransaction: String) async throws -> SubscriptionVerificationResult {
+    func verify(signedTransaction: String, expectedUID: String) async throws -> SubscriptionVerificationResult {
+        guard auth.currentUser?.uid == expectedUID else {
+            throw AppleSubscriptionVerificationError.signedOut
+        }
         let data = try await functions.call("subscription-verify", payload: [
             "platform": "apple",
             "purchaseToken": signedTransaction,
@@ -24,10 +27,13 @@ final class FirebaseAppleSubscriptionVerifier: AppleSubscriptionVerifying, @unch
 
         // applyEntitlement may grant or revoke the activeMember claim. Force a
         // fresh ID token before the UI exposes the new authorization state.
-        guard let user = auth.currentUser else {
+        guard let user = auth.currentUser, user.uid == expectedUID else {
             throw AppleSubscriptionVerificationError.signedOut
         }
         try await refreshIDToken(for: user)
+        guard auth.currentUser?.uid == expectedUID else {
+            throw AppleSubscriptionVerificationError.signedOut
+        }
         return SubscriptionVerificationResult(
             entitlement: entitlement,
             status: status,

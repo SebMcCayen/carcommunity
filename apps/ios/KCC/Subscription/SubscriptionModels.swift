@@ -20,6 +20,14 @@ struct StoreSignedTransaction: Equatable, Sendable {
     let id: UInt64
     let productID: String
     let signedTransaction: String
+    var appAccountToken: UUID? = nil
+    var expiresAt: Date? = nil
+    var isRevoked = false
+    var isUpgraded = false
+
+    func isInactive(at now: Date) -> Bool {
+        isRevoked || isUpgraded || expiresAt.map { $0 <= now } == true
+    }
 }
 
 enum StorePurchaseResult: Equatable, Sendable {
