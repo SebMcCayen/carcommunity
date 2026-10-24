@@ -60,28 +60,29 @@ final class ShellSmokeTests: XCTestCase {
     private func checkShell(language: String, labels: [String]) {
         let app = launch(language: language)
         let tabs = app.tabBars
-        XCTAssertTrue(tabs.buttons[labels[0]].isSelected, "Map is the initial tab")
+        assertSelected(tabs.buttons[labels[0]])
         for (index, label) in labels.enumerated().dropFirst() {
             let tab = tabs.buttons[label]
             XCTAssertTrue(tab.isHittable)
             tab.tap()
-            XCTAssertTrue(tab.isSelected)
+            assertSelected(tab)
             let heading = index == 3 ? (language == "sv" ? "Mitt garage" : "My Garage") : label
             XCTAssertTrue(app.staticTexts[heading].firstMatch.waitForExistence(timeout: 5))
         }
         tabs.buttons[labels[0]].tap()
-        XCTAssertTrue(tabs.buttons[labels[0]].isSelected)
+        assertSelected(tabs.buttons[labels[0]])
         XCTAssertTrue(app.buttons["shell.menu"].isHittable)
     }
 
     private func launch(language: String, largeText: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
-        if largeText {
-            app.launchArguments += [
-                "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
-            ]
-        }
+        // UIKit can retain a previous launch's preferred category. Reset it
+        // explicitly so the Swedish scenario does not inherit the large-text one.
+        app.launchArguments += [
+            "-UIPreferredContentSizeCategoryName",
+            largeText ? "UICTContentSizeCategoryAccessibilityXXXL" : "UICTContentSizeCategoryL"
+        ]
         app.launch()
         XCTAssertTrue(
             app.buttons["shell.menu"].waitForExistence(timeout: 15),
@@ -89,6 +90,16 @@ final class ShellSmokeTests: XCTestCase {
         )
         XCTAssertEqual(app.buttons["shell.menu"].label, language == "sv" ? "Inställningar" : "Settings")
         return app
+    }
+
+    private func assertSelected(_ tab: XCUIElement) {
+        // A tap returning does not guarantee SwiftUI has published the next
+        // accessibility snapshot. Wait for the actual selection, without retaps.
+        let selected = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "selected == true"),
+            object: tab
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
     }
 
     private func element(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
