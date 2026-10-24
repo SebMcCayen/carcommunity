@@ -1,4 +1,42 @@
 import SwiftUI
+import UIKit
+
+/// Resolves the generated semantic roles without copying their source values.
+/// UIKit's trait-aware color also resolves correctly in sheets and native bars.
+enum KccTheme {
+    static let page = adaptive(KccLightColors.pageBackground, KccDarkColors.pageBackground)
+    static let surface = adaptive(KccLightColors.surfaceBackground, KccDarkColors.surfaceBackground)
+    static let subtle = adaptive(KccLightColors.subtleBackground, KccDarkColors.subtleBackground)
+    static let overlay = adaptive(KccLightColors.overlayBackground, KccDarkColors.overlayBackground)
+    static let border = adaptive(KccLightColors.overlayBorder, KccDarkColors.overlayBorder)
+    static let text = adaptive(KccLightColors.textPrimary, KccDarkColors.textPrimary)
+    static let secondary = adaptive(KccLightColors.textSecondary, KccDarkColors.textSecondary)
+    static let driver = adaptive(KccLightColors.driverActive, KccDarkColors.driverActive)
+    static let onDriver = adaptive(KccLightColors.onDriverActive, KccDarkColors.onDriverActive)
+    static let onGold = adaptive(KccLightColors.onBrandPrimary, KccDarkColors.onBrandPrimary)
+
+    private static func adaptive(_ light: Color, _ dark: Color) -> Color {
+        Color(uiColor: UIColor { traits in
+            UIColor(traits.userInterfaceStyle == .dark ? dark : light)
+        })
+    }
+}
+
+extension View {
+    func kccMapControl() -> some View {
+        foregroundStyle(KccTheme.text)
+            .background(KccTheme.overlay, in: Circle())
+            .overlay { Circle().strokeBorder(KccTheme.border, lineWidth: 1) }
+    }
+
+    func kccReadingSurface() -> some View {
+        foregroundStyle(KccTheme.text)
+            .background(KccTheme.surface, ignoresSafeAreaEdges: .all)
+            .scrollContentBackground(.hidden)
+            .toolbarBackground(KccTheme.surface, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+    }
+}
 
 /// A translucent shell panel: the bottom-anchored card the History / Social /
 /// Garage tabs render OVER the live map (``MapCover/transparent``), leaving a
@@ -41,7 +79,7 @@ struct TranslucentShellPanel<Content: View>: View {
 
                 content()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .background(.regularMaterial)
+                    .background(KccTheme.overlay)
                     .clipShape(
                         .rect(
                             topLeadingRadius: KccRadius.lg,

@@ -9,6 +9,7 @@ struct ProfileScreen: View {
     let onSignOut: () -> Bool
     let onBack: () -> Void
     let onOpenPoints: (() -> Void)?
+    let onOpenDrives: (() -> Void)?
     let onOpenWhatsNew: (() -> Void)?
     let onOpenAccountDeletion: (() -> Void)?
     @State private var coordinator: ProfileCoordinator
@@ -25,6 +26,7 @@ struct ProfileScreen: View {
     init(
         uid: String?, displayName: String?, onSignOut: @escaping () -> Bool,
         onBack: @escaping () -> Void, onOpenPoints: @escaping () -> Void,
+        onOpenDrives: (() -> Void)? = nil,
         onOpenWhatsNew: (() -> Void)? = nil,
         onOpenAccountDeletion: @escaping () -> Void
     ) {
@@ -36,6 +38,7 @@ struct ProfileScreen: View {
             onSignOut: onSignOut,
             onBack: onBack,
             onOpenPoints: pointsRepository == nil ? nil : onOpenPoints,
+            onOpenDrives: onOpenDrives,
             onOpenWhatsNew: onOpenWhatsNew,
             onOpenAccountDeletion: FirebaseAccountDeletionRepository.createIfAvailable() == nil
                 ? nil : onOpenAccountDeletion,
@@ -52,6 +55,7 @@ struct ProfileScreen: View {
         uid: String? = nil, displayName: String?, onSignOut: @escaping () -> Bool,
         onBack: @escaping () -> Void,
         onOpenPoints: (() -> Void)? = nil,
+        onOpenDrives: (() -> Void)? = nil,
         onOpenWhatsNew: (() -> Void)? = nil,
         onOpenAccountDeletion: (() -> Void)? = nil,
         coordinator: ProfileCoordinator,
@@ -64,6 +68,7 @@ struct ProfileScreen: View {
         self.onSignOut = onSignOut
         self.onBack = onBack
         self.onOpenPoints = onOpenPoints
+        self.onOpenDrives = onOpenDrives
         self.onOpenWhatsNew = onOpenWhatsNew
         self.onOpenAccountDeletion = onOpenAccountDeletion
         _coordinator = State(initialValue: coordinator)
@@ -106,6 +111,20 @@ struct ProfileScreen: View {
                     editForm
                 } else {
                     profileDetails
+                    if let onOpenDrives {
+                        Button(action: onOpenDrives) {
+                            HStack {
+                                Label("shell.moreDrives", systemImage: "chart.bar.xaxis")
+                                Spacer()
+                                Image(systemName: "chevron.forward").accessibilityHidden(true)
+                            }
+                            .frame(minHeight: 48)
+                            .padding(KccSpacing.s3)
+                            .background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.md))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("profile.myDrives")
+                    }
                     ProfilePointsSection(
                         balance: pointsCoordinator.balance,
                         recentEarnings: pointsCoordinator.recentEarnings,
@@ -177,7 +196,7 @@ struct ProfileScreen: View {
             }
             .padding(KccSpacing.s6)
         }
-        .background(.background)
+        .kccReadingSurface()
         .task {
             coordinator.start()
             pointsCoordinator.start()
@@ -214,7 +233,7 @@ struct ProfileScreen: View {
 
     private var avatar: some View {
         ZStack {
-            Circle().fill(Color(.secondarySystemBackground))
+            Circle().fill(KccTheme.subtle)
             if let url = coordinator.avatarURL {
                 AsyncImage(url: url) { image in image.resizable().scaledToFill() }
                     placeholder: { avatarPlaceholder }

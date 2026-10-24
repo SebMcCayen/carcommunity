@@ -72,7 +72,7 @@ struct DriveRecordingSummarySheet: View {
         }
         .padding(KccSpacing.s4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
+        .background(KccTheme.subtle)
         .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
     }
 

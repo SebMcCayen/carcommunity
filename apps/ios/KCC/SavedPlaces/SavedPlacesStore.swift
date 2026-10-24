@@ -1,5 +1,15 @@
 import Foundation
 
+/// Config-less shell search can exercise keyboard/recovery without persisting
+/// exact locations under a fabricated account or making production requests.
+@MainActor
+final class TransientSavedPlacesStore: SavedPlacesStore {
+    private var places: [SavedPlace] = []
+    func load() -> [SavedPlace] { places }
+    func save(_ places: [SavedPlace]) -> Bool { self.places = places; return true }
+    func clear() -> Bool { places = []; return true }
+}
+
 @MainActor
 protocol SavedPlacesStore: AnyObject {
     func load() -> [SavedPlace]

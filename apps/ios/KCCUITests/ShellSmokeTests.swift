@@ -10,11 +10,11 @@ final class ShellSmokeTests: XCTestCase {
     }
 
     func testSwedishShellNavigation() {
-        checkShell(language: "sv", labels: ["Karta", "Historik", "Socialt", "Garage"])
+        checkShell(language: "sv", labels: ["Karta", "Chatt", "Socialt", "Garage"])
     }
 
     func testEnglishShellNavigation() {
-        checkShell(language: "en", labels: ["Map", "History", "Social", "Garage"])
+        checkShell(language: "en", labels: ["Map", "Chat", "Social", "Garage"])
     }
 
     func testSettingsAndNestedBackNavigation() {
@@ -37,7 +37,7 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(privacy.waitForExistence(timeout: 5), "Back must return to Settings")
         app.buttons["Back"].firstMatch.tap()
         XCTAssertTrue(app.buttons["shell.menu"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.tabBars.buttons["Map"].isSelected)
+        XCTAssertTrue(app.buttons["shell.tab.map"].isSelected)
     }
 
     func testSettingsControlsRemainAccessibleWithLargeText() {
@@ -59,24 +59,99 @@ final class ShellSmokeTests: XCTestCase {
 
     private func checkShell(language: String, labels: [String]) {
         let app = launch(language: language)
-        let tabs = app.tabBars
-        assertSelected(tabs.buttons[labels[0]])
+        let ids = ["map", "chat", "social", "garage"]
+        assertSelected(app.buttons["shell.tab.map"])
         for (index, label) in labels.enumerated().dropFirst() {
-            let tab = tabs.buttons[label]
+            let tab = app.buttons["shell.tab.\(ids[index])"]
             XCTAssertTrue(tab.isHittable)
+            XCTAssertEqual(tab.label, label)
             tab.tap()
             assertSelected(tab)
-            let heading = index == 3 ? (language == "sv" ? "Mitt garage" : "My Garage") : label
-            XCTAssertTrue(app.staticTexts[heading].firstMatch.waitForExistence(timeout: 5))
+            if index == 1 {
+                XCTAssertTrue(element("chatHub.opaqueScreen", in: app).waitForExistence(timeout: 5))
+                XCTAssertFalse(app.buttons["shell.search"].isHittable)
+            } else {
+                let heading = index == 3 ? (language == "sv" ? "Mitt garage" : "My Garage") : label
+                XCTAssertTrue(app.staticTexts[heading].firstMatch.waitForExistence(timeout: 5))
+            }
         }
-        tabs.buttons[labels[0]].tap()
-        assertSelected(tabs.buttons[labels[0]])
+        app.buttons["shell.tab.map"].tap()
+        assertSelected(app.buttons["shell.tab.map"])
         XCTAssertTrue(app.buttons["shell.menu"].isHittable)
     }
 
-    private func launch(language: String, largeText: Bool = false) -> XCUIApplication {
+    func testRedesignScreenshotsEnglishLight() {
+        captureRedesign(language: "en", theme: "Light")
+    }
+
+    func testRedesignScreenshotsSwedishDark() {
+        captureRedesign(language: "sv", theme: "Dark")
+    }
+
+    func testRedesignScreenshotsEnglishDarkLargeText() {
+        captureRedesign(language: "en", theme: "Dark", largeText: true)
+    }
+
+    private func captureRedesign(language: String, theme: String, largeText: Bool = false) {
+        let app = launch(language: language, largeText: largeText, theme: theme)
+        let prefix = "configless-\(language)-\(theme)-\(largeText ? "AXXXL" : "default")"
+        let map = app.staticTexts["shell.mapPlaceholder"]
+        XCTAssertTrue(map.waitForExistence(timeout: 5))
+        let mapIdentity = map.value as? String
+        XCTAssertNotNil(mapIdentity)
+        XCTAssertFalse(app.textFields["addressSearch.query"].exists)
+        XCTAssertTrue(app.buttons["shell.search"].isHittable)
+        attach(app, name: "\(prefix)-S01-map-collapsed-search")
+
+        app.buttons["shell.search"].tap()
+        let field = app.textFields["addressSearch.query"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        field.typeText("Kungsbacka")
+        attach(app, name: "\(prefix)-S02-search-keyboard")
+        app.buttons["addressSearch.close"].tap()
+        XCTAssertTrue(app.buttons["shell.search"].waitForExistence(timeout: 5))
+        XCTAssertFalse(field.exists)
+
+        for _ in 0..<2 {
+            app.buttons["shell.tab.chat"].tap()
+            assertSelected(app.buttons["shell.tab.chat"])
+            XCTAssertTrue(element("chatHub.opaqueScreen", in: app).waitForExistence(timeout: 5))
+            XCTAssertFalse(app.buttons["shell.search"].isHittable)
+            attach(app, name: "\(prefix)-S29-chat-opaque")
+            app.buttons["shell.tab.map"].tap()
+            assertSelected(app.buttons["shell.tab.map"])
+            XCTAssertEqual(map.value as? String, mapIdentity, "Tab changes must retain the map host")
+        }
+
+        app.buttons["shell.menu"].tap()
+        XCTAssertTrue(app.buttons["shell.myDrives"].waitForExistence(timeout: 5))
+        attach(app, name: "\(prefix)-S61-my-drives-entry")
+        app.buttons["shell.myDrives"].tap()
+        XCTAssertTrue(app.buttons["myDrives.stats"].waitForExistence(timeout: 5))
+        attach(app, name: "\(prefix)-S53-my-drives-unavailable")
+        app.buttons[language == "sv" ? "Tillbaka" : "Back"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["profile.myDrives"].waitForExistence(timeout: 5))
+        app.buttons[language == "sv" ? "Tillbaka" : "Back"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["shell.menu"].waitForExistence(timeout: 5))
+        XCTAssertEqual(map.value as? String, mapIdentity)
+        openSettings(app, language: language)
+        attach(app, name: "\(prefix)-S69-settings")
+    }
+
+    private func attach(_ app: XCUIApplication, name: String) {
+        // Reached only after launch verifies the config-less Settings identity.
+        // Every capture is an actual simulator render; no production fixtures.
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    private func launch(language: String, largeText: Bool = false, theme: String = "Light") -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
+        app.launchArguments += ["-AppleInterfaceStyle", theme]
         // UIKit can retain a previous launch's preferred category. Reset it
         // explicitly so the Swedish scenario does not inherit the large-text one.
         app.launchArguments += [
@@ -107,11 +182,11 @@ final class ShellSmokeTests: XCTestCase {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
     }
 
-    private func openSettings(_ app: XCUIApplication) {
+    private func openSettings(_ app: XCUIApplication, language: String = "en") {
         app.buttons["shell.menu"].tap()
         let settings = app.buttons["shell.settings"]
         XCTAssertTrue(settings.waitForExistence(timeout: 5))
         settings.tap()
-        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars[language == "sv" ? "Inställningar" : "Settings"].waitForExistence(timeout: 5))
     }
 }

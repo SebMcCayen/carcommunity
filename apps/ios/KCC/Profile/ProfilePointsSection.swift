@@ -57,7 +57,7 @@ struct ProfilePointsSection: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(KccSpacing.s4)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+        .background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.lg))
         .contentShape(Rectangle())
     }
 }

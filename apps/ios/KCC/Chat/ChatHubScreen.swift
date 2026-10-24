@@ -1,6 +1,8 @@
 import SwiftUI
 
-/// The chat hub opened from the map chat bubble — a four-tab scaffold
+/// Opaque native Chat destination preserving the four existing channel routes.
+/// Driver content is supplied separately by the authenticated shell.
+/// The chat hub — a four-tab scaffold
 /// (Community / Convoys / Friends / Notifications), the iOS port of Android's
 /// `ChatHubContent`. Community, Convoys, the existing 1:1 DMs, and the in-app
 /// notification inbox are connected by the signed-in shell. Each tab retains
@@ -19,6 +21,7 @@ struct ChatHubScreen: View {
     let onOpenConversation: ((_ uid: String, _ displayName: String?) -> Void)?
     let notificationsCoordinator: NotificationsInboxCoordinator?
     let onOpenNotificationSettings: (() -> Void)?
+    let onOpenEvents: (() -> Void)?
 
     init(
         coordinator: ChatHubCoordinator?,
@@ -26,7 +29,8 @@ struct ChatHubScreen: View {
         makeNewDialogueCoordinator: (() -> NewDialogueCoordinator)? = nil,
         onOpenConversation: ((_ uid: String, _ displayName: String?) -> Void)? = nil,
         notificationsCoordinator: NotificationsInboxCoordinator? = nil,
-        onOpenNotificationSettings: (() -> Void)? = nil
+        onOpenNotificationSettings: (() -> Void)? = nil,
+        onOpenEvents: (() -> Void)? = nil
     ) {
         self.coordinator = coordinator
         self.conversationsCoordinator = conversationsCoordinator
@@ -34,27 +38,39 @@ struct ChatHubScreen: View {
         self.onOpenConversation = onOpenConversation
         self.notificationsCoordinator = notificationsCoordinator
         self.onOpenNotificationSettings = onOpenNotificationSettings
+        self.onOpenEvents = onOpenEvents
     }
 
     var body: some View {
-        if let coordinator {
-            VStack(spacing: 0) {
+        VStack(spacing: 0) {
+            if let coordinator {
                 tabStrip(coordinator)
-                Divider()
+                if let onOpenEvents {
+                    Button(action: onOpenEvents) {
+                        Label("shell.socialEvents", systemImage: "calendar")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .accessibilityIdentifier("chatHub.events")
+                }
+                Divider().overlay(KccTheme.border)
                 tabContent(coordinator)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                unavailable
             }
-            .navigationTitle(Text("chatHub.title"))
-            .navigationBarTitleDisplayMode(.inline)
-        } else {
-            unavailable
-                .navigationTitle(Text("chatHub.title"))
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .kccReadingSurface()
+        .navigationTitle(Text("chatHub.title"))
+        .navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier("chatHub.opaqueScreen")
     }
 
     // MARK: - Tab strip
 
     private func tabStrip(_ coordinator: ChatHubCoordinator) -> some View {
-        HStack(spacing: 0) {
+        ScrollView(.horizontal, showsIndicators: false) {
+          HStack(spacing: KccSpacing.s2) {
             ForEach(ChatTab.allCases, id: \.rawValue) { tab in
                 Button {
                     coordinator.select(tab)
@@ -63,14 +79,20 @@ struct ChatHubScreen: View {
                         Image(systemName: Self.icon(for: tab))
                             .accessibilityHidden(true)  // decorative — the label text below already names the tab
                         Text(Self.label(for: tab))
-                            .font(.system(size: KccTypeScale.caption))
+                            .font(.subheadline)
                     }
-                    .frame(maxWidth: .infinity)
+                    .frame(minWidth: 72, minHeight: 44)
+                    .padding(.horizontal, KccSpacing.s3)
                     .padding(.vertical, KccSpacing.s2)
-                    .foregroundStyle(coordinator.selectedTab == tab ? KccPalette.crownGold : Color.secondary)
+                    .foregroundStyle(coordinator.selectedTab == tab ? KccTheme.onDriver : KccTheme.text)
+                    .background(coordinator.selectedTab == tab ? KccTheme.driver : KccTheme.subtle, in: Capsule())
                 }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("chatHub.channel.\(tab.rawValue)")
                 .accessibilityAddTraits(coordinator.selectedTab == tab ? [.isSelected] : [])
             }
+          }
+          .padding(KccSpacing.s3)
         }
     }
 

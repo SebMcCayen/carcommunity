@@ -45,19 +45,21 @@ struct DrivesPanel: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: KccSpacing.s4) {
                 HStack {
-                    Text("savedDrives.screenTitle")
-                        .font(.system(size: KccTypeScale.headingLg, weight: KccTypeScale.semibold))
+                    Text("shell.moreDrives")
+                        .font(.title2.weight(.semibold))
                     Spacer()
                     Button { showingStats = true } label: {
                         Label("savedDrives.statsEntryAction", systemImage: "chart.bar")
                     }
                     .labelStyle(.iconOnly)
                     .frame(minWidth: 44, minHeight: 44)
+                    .accessibilityIdentifier("myDrives.stats")
                 }
                 historyContent
             }
             .padding(KccSpacing.s6)
         }
+        .kccReadingSurface()
         .task { await coordinator.load() }
         .sheet(item: $selectedDrive) { drive in
             SavedDriveDetailScreen(
@@ -211,7 +213,7 @@ struct DriveHistoryCard: View {
             Image(systemName: "chevron.right").foregroundStyle(.secondary)
         }
         .padding(KccSpacing.s4).frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
-        .background(Color(.secondarySystemBackground)).clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
+        .background(KccTheme.subtle).clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
     }
 }
 
