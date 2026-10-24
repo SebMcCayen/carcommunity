@@ -3,6 +3,15 @@ import MapboxMaps
 import CoreLocation
 import UIKit
 
+/// A puck is foreground UI demand, never permission to keep GPS alive for
+/// a hidden map or a background scene. Explicit drive/live sessions own their
+/// separate providers and are unaffected by this gate.
+enum MapHomePuckPolicy {
+    static func isVisible(authorization: LocationAuthorization, surfaceActive: Bool, sceneIsActive: Bool) -> Bool {
+        authorization.isAuthorized && surfaceActive && sceneIsActive
+    }
+}
+
 /// Mirrors the convoy-camera ownership rules Android already applies in
 /// `MapboxMapSurface.setConvoyFit/applyConvoyFit`: turning focus OFF restores
 /// normal Me framing, a temporary lack of fittable points while focus stays ON
@@ -465,6 +474,7 @@ struct MapHomeView: View {
 /// opens over Kungsbacka and the Standard style matches Android's default.
 @MainActor
 private struct MapboxStandardMap: View {
+    @Environment(\.scenePhase) private var scenePhase
     let onLoaded: @MainActor () -> Void
     let onFullFrameRendered: @MainActor () -> Void
     let onLoadingError: @MainActor (FeatureHealthKind) -> Void
@@ -513,6 +523,14 @@ private struct MapboxStandardMap: View {
     var body: some View {
         MapReader { proxy in
             MapboxMaps.Map(viewport: $viewport) {
+                if MapHomePuckPolicy.isVisible(
+                    authorization: locationAuthorization,
+                    surfaceActive: surfaceActive,
+                    sceneIsActive: scenePhase == .active
+                ) {
+                    Puck2D(bearing: .course)
+                        .showsAccuracyRing(true)
+                }
                 if let trail = surface.followMeTrail, trail.count >= 2 {
                     PolylineAnnotation(
                         id: "convoy-follow-me-trail",
