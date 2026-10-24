@@ -1035,16 +1035,22 @@ class MapFirstShellTest {
     }
 
     @Test
-    fun chatBubble_opensChatHub_andBackArrowDismissesIt() {
-        setShell()
-        // The floating chat bubble is present (unread count is 0 → "Chat").
+    fun chatTab_opensOpaqueHub_andBackArrowResumesTheMap() {
+        val surface = StubMapSurface()
+        setShell(mapSurface = surface)
+        // Chat is a labelled primary tab, not a floating map bubble.
         tabNode(R.string.shell_tabChat).assertExists()
         // Tapping it opens the FULL-PAGE chat HUB over the map (the map stays
         // composed behind it, and the shell's bottom bar stays visible).
         tabNode(R.string.shell_tabChat).performClick()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
-        // The map stays composed behind the hub.
-        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+        // The map instance stays mounted, but its chrome is intentionally
+        // absent from the semantics tree while the opaque reader covers it.
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertDoesNotExist()
+        composeTestRule.runOnIdle {
+            assertEquals(1, surface.contentCompositions)
+            assertFalse(surface.isActive)
+        }
         // The hub shows its four top tabs — Community / Convoys / Friends /
         // Notifications — not the old two-button peek.
         composeTestRule.onNodeWithText(str(R.string.chatHub_tabCommunity)).assertIsDisplayed()
@@ -1059,6 +1065,10 @@ class MapFirstShellTest {
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+        composeTestRule.runOnIdle {
+            assertEquals(1, surface.contentCompositions)
+            assertTrue(surface.isActive)
+        }
     }
 
     @Test
