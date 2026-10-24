@@ -228,25 +228,27 @@ final class PushNotificationCoordinator {
     }
 
     func receive(userInfo: [AnyHashable: Any]) {
-        guard let recipient = userInfo["recipientUid"] as? String else { return }
-        receive(deepLink: PushPayload.deepLink(from: userInfo), recipientUID: recipient)
+        receive(deepLink: PushPayload.deepLink(from: userInfo),
+                recipientUID: userInfo["recipientUid"] as? String)
     }
 
-    func receive(deepLink: NotificationDeepLink, recipientUID: String) {
-        guard signedInUid == nil || signedInUid == recipientUID else { return }
-        pendingRecipientUid = recipientUID
+    func receive(deepLink: NotificationDeepLink, recipientUID: String? = nil) {
+        guard recipientUID == nil || signedInUid == nil || signedInUid == recipientUID else { return }
+        // Existing backend payloads have no recipientUid; bind those to the
+        // receiving session and retain cold-launch routing compatibility.
+        pendingRecipientUid = recipientUID ?? signedInUid
         pendingDeepLink = deepLink
     }
 
     func shouldPresent(recipientUID: String?) -> Bool {
-        shouldPresentForegroundNotification && recipientUID == signedInUid
+        shouldPresentForegroundNotification && (recipientUID == nil || recipientUID == signedInUid)
     }
 
     var shouldPresentForegroundNotification: Bool { signedInUid != nil && lastToken != nil }
 
     func consumePendingDeepLink() -> NotificationDeepLink? {
         defer { pendingDeepLink = nil; pendingRecipientUid = nil }
-        guard pendingRecipientUid == signedInUid else { return nil }
+        guard signedInUid != nil, pendingRecipientUid == nil || pendingRecipientUid == signedInUid else { return nil }
         return pendingDeepLink
     }
 
@@ -319,7 +321,7 @@ final class KCCAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationC
         didReceive response: UNNotificationResponse
     ) async {
         let userInfo = response.notification.request.content.userInfo
-        guard let recipient = userInfo["recipientUid"] as? String else { return }
+        let recipient = userInfo["recipientUid"] as? String
         let deepLink = PushPayload.deepLink(from: userInfo)
         await MainActor.run {
             PushNotificationCoordinator.shared.receive(deepLink: deepLink, recipientUID: recipient)

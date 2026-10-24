@@ -46,6 +46,18 @@ final class PushNotificationsTests: XCTestCase {
     }
 
     @MainActor
+    func testExistingBackendPayloadWithoutRecipientStillPresentsAndRoutes() async {
+        let coordinator = PushNotificationCoordinator(permissionReader: { .enabled })
+        coordinator.configure(repository: FakePushRepository(), tokenSource: FakePushSource())
+        coordinator.bind(uid: "A")
+        await coordinator.waitForPendingOperations()
+        XCTAssertTrue(coordinator.shouldPresent(recipientUID: nil))
+        coordinator.receive(userInfo: ["target": "dm", "entityId": "friend"])
+        XCTAssertEqual(coordinator.consumePendingDeepLink(),
+                       NotificationDeepLink(target: .dm, entityId: "friend"))
+    }
+
+    @MainActor
     func testLogoutInvalidatesTokenAndClearsPresentationAndPendingLink() async {
         let source = FakePushSource()
         let repository = FakePushRepository()
