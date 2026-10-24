@@ -202,11 +202,7 @@ struct ChannelChatScreen: View {
     }
 
     private var placeholder: some View {
-        Text("chatHub.unavailable")
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .padding(KccSpacing.s4)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ChatUnavailableState()
     }
 }
 

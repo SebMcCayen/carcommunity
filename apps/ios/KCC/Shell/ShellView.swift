@@ -980,13 +980,18 @@ struct ShellView: View {
                 } label: {
                     VStack(spacing: KccSpacing.s1) {
                         Image(systemName: tabSystemImage(tab))
-                            .font(.title3.weight(.semibold))
+                            .font(.system(size: 20, weight: .semibold))
                             .frame(height: 28)
                             .accessibilityHidden(true)
                         Text(LocalizedStringKey(tabTitle(tab))).font(.caption2)
-                            .multilineTextAlignment(.center)
+                            // Only navigation chrome is bounded. Reading content
+                            // keeps the user's full accessibility text size.
+                            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                     }
-                    .frame(maxWidth: .infinity, minHeight: 56)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
                     .foregroundStyle(tab == .create
                         ? (liveLocationCoordinator?.isSharing == true ? KccPalette.warmIvory : KccTheme.onGold)
                         : KccTheme.text)
@@ -1003,6 +1008,7 @@ struct ShellView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(Text(LocalizedStringKey(tabTitle(tab))))
                 .accessibilityIdentifier("shell.tab.\(tab.accessibilityID)")
                 .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
                 .accessibilityValue(tab == .chat && chatUnreadCount > 0

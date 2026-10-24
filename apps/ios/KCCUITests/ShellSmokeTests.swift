@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 
 /// Exercises the shipping SwiftUI shell without Firebase config or credentials.
 /// A provisioned build deliberately fails the initial shell assertion: these
@@ -75,6 +76,74 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(back.isHittable)
         back.tap()
         XCTAssertTrue(app.buttons["shell.menu"].waitForExistence(timeout: 5))
+    }
+
+    func testChatChromeAndRecoveryRemainReadableAtAccessibilityXXXL() {
+        let app = launch(language: "en", largeText: true, theme: "Dark")
+        // Geometry, not just existence: the previous render had hittable tabs
+        // while their labels wrapped into a roughly 200-point navigation bar.
+        for id in ["map", "chat", "create", "social", "garage"] {
+            let tab = app.buttons["shell.tab.\(id)"]
+            XCTAssertTrue(tab.isHittable)
+            XCTAssertFalse(tab.label.isEmpty)
+            XCTAssertGreaterThanOrEqual(tab.frame.height, 44)
+            XCTAssertLessThanOrEqual(tab.frame.height, 64)
+            XCTAssertGreaterThanOrEqual(tab.frame.width, 44)
+            XCTAssertTrue(app.frame.contains(tab.frame))
+        }
+        for id in ["social", "garage", "map", "chat"] {
+            let tab = app.buttons["shell.tab.\(id)"]
+            tab.tap()
+            assertSelected(tab)
+        }
+        for id in ["driver", "chats"] {
+            let source = app.buttons["chatHub.source.\(id)"]
+            XCTAssertTrue(source.isHittable)
+            XCTAssertGreaterThanOrEqual(source.frame.height, 44)
+            XCTAssertLessThanOrEqual(source.frame.height, 80)
+            source.tap()
+            assertSelected(source)
+        }
+
+        let message = app.staticTexts["chatHub.unavailable.message"]
+        XCTAssertTrue(message.waitForExistence(timeout: 5))
+        XCTAssertEqual(message.label, "This isn't available right now.")
+        // Independently estimate full, uncapped body text height. The old
+        // accessibility label contained all words even when pixels ellipsized.
+        let font = UIFont.preferredFont(forTextStyle: .body, compatibleWith:
+            UITraitCollection(preferredContentSizeCategory: .accessibilityExtraExtraExtraLarge))
+        let fullText = (message.label as NSString).boundingRect(
+            with: CGSize(width: message.frame.width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: font], context: nil)
+        XCTAssertGreaterThan(message.frame.height, 90, "Reading text must not inherit the chrome size cap")
+        XCTAssertGreaterThanOrEqual(message.frame.height, fullText.height - font.lineHeight * 0.25,
+            "The recovery message must reserve its full rendered line height")
+        let recovery = element("chatHub.unavailable.scroll", in: app)
+        XCTAssertTrue(recovery.exists)
+        recovery.swipeUp()
+        XCTAssertLessThanOrEqual(message.frame.maxY, recovery.frame.maxY + 1)
+        XCTAssertGreaterThan(message.frame.maxY, recovery.frame.minY)
+        attach(app, name: "configless-en-Dark-AXXXL-S29-readable-recovery")
+
+        let channels = element("chatHub.channels", in: app)
+        XCTAssertLessThanOrEqual(channels.frame.height, 110)
+        // Notifications is intentionally reached by horizontal scrolling, not
+        // by removing or shrinking away one of the existing channel routes.
+        for index in 0..<4 {
+            let channel = app.buttons["chatHub.channel.\(index)"]
+            for _ in 0..<4 {
+                if channel.isHittable && channels.frame.contains(channel.frame) { break }
+                channels.swipeLeft()
+            }
+            XCTAssertTrue(channel.isHittable)
+            XCTAssertTrue(channels.frame.contains(channel.frame))
+            channel.tap()
+            assertSelected(channel)
+        }
+        attach(app, name: "configless-en-Dark-AXXXL-S29-notifications-reachable")
+        app.buttons["shell.tab.create"].tap()
+        assertSelected(app.buttons["shell.tab.map"])
     }
 
     private func checkShell(language: String, labels: [String]) {

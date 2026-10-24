@@ -220,6 +220,23 @@ the screenshot filenames alone.
 
 ## Honest 84-screen pass
 
+P1 accessibility-size follow-up: main's final-head visual review of
+`428835A2-B935-4E16-B0C0-5EE575BFBEE7.png` from run `40134626295` found oversized
+primary/Chat chrome and a truncated Community unavailable message despite green
+tests. The native fix bounds **only navigation labels** to XXXL (not accessibility
+XXXL), uses stable-size decorative icons and one-line primary labels, and retains
+full accessible button names/targets. Source labels retain multiline fitting;
+the channel row remains horizontally scrollable, including Notifications.
+The Community/hub unavailable reading state uses uncapped `.body`, natural text
+height and vertical scrolling. No global Dynamic Type cap or function removal.
+The new accessibility XXXL UI regression checks actual button/strip geometry,
+all primary/source/channel reachability, full rendered recovery-text height
+against independent UIKit body metrics, and its visible end after scrolling.
+Fresh readable-recovery/Notifications attachments supplement the existing three
+capture variants. Follow-up CI/rendered validation is pending; the prior green
+run alone does not establish resolution of this visual finding. Android and
+central evidence remain owned by main; no release is implied.
+
 S01 follow-up: the iOS tool rail was vertically centered. It now starts below
 the 48-point avatar/top controls. Convoy status and its dynamic error row share
 the same vertical stack above the rail, so they cannot be overlaid by it.

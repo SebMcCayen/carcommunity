@@ -93,6 +93,8 @@ struct ChatHubScreen: View {
                         Label("shell.socialEvents", systemImage: "calendar")
                             .frame(maxWidth: .infinity, minHeight: 44)
                     }
+                    .font(.subheadline)
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                     .accessibilityIdentifier("chatHub.events")
                 }
                 Divider().overlay(KccTheme.border)
@@ -116,7 +118,11 @@ struct ChatHubScreen: View {
     private func sourceButton(_ title: LocalizedStringKey, driver: Bool) -> some View {
         Button { showsDriver = driver } label: {
             Text(title).font(.subheadline.weight(.semibold))
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, KccSpacing.s3)
+                .padding(.vertical, KccSpacing.s2)
                 .frame(maxWidth: .infinity, minHeight: 48)
                 .foregroundStyle(showsDriver == driver ? KccTheme.onDriver : KccTheme.text)
                 .background(showsDriver == driver ? KccTheme.driver : KccTheme.overlay, in: Capsule())
@@ -137,9 +143,12 @@ struct ChatHubScreen: View {
                 } label: {
                     VStack(spacing: KccSpacing.s1) {
                         Image(systemName: Self.icon(for: tab))
+                            .font(.system(size: 20))
                             .accessibilityHidden(true)  // decorative — the label text below already names the tab
                         Text(Self.label(for: tab))
                             .font(.subheadline)
+                            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                            .lineLimit(1)
                     }
                     .frame(minWidth: 72, minHeight: 44)
                     .padding(.horizontal, KccSpacing.s3)
@@ -154,6 +163,9 @@ struct ChatHubScreen: View {
           }
           .padding(KccSpacing.s3)
         }
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("chatHub.channels")
     }
 
     // MARK: - Tab content
@@ -192,11 +204,7 @@ struct ChatHubScreen: View {
     }
 
     private var unavailable: some View {
-        Text("chatHub.unavailable")
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .padding(KccSpacing.s4)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ChatUnavailableState()
     }
 
     // MARK: - Tab chrome
@@ -217,6 +225,27 @@ struct ChatHubScreen: View {
         case .friends: return "person.2"
         case .notifications: return "bell"
         }
+    }
+}
+
+/// The actual reading state is not size-capped with the navigation controls.
+/// Natural text height inside a scroll view prevents a short viewport from
+/// substituting an ellipsis for the end of the recovery message.
+struct ChatUnavailableState: View {
+    var body: some View {
+        ScrollView {
+            Text("chatHub.unavailable")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity)
+                .accessibilityIdentifier("chatHub.unavailable.message")
+                .padding(KccSpacing.s4)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("chatHub.unavailable.scroll")
     }
 }
 
