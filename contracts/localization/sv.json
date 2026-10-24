@@ -1793,7 +1793,7 @@
     "tabChat": "Chatt",
     "tabHistory": "Historik",
     "tabCreate": "Skapa",
-    "tabSocial": "Socialt",
+    "tabSocial": "Social",
     "tabGarage": "Garage",
     "comingSoon": "Kommer snart",
     "startLiveLocation": "Dela liveplats",
@@ -1808,7 +1808,7 @@
     "createChooserConvoyBody": "Skapa en konvoj och kör tillsammans med vänner.",
     "createChooserCarLabel": "Vilken bil kör du?",
     "createChooserNoCars": "Lägg till en bil i ditt garage för att visa den på kartan.",
-    "socialTitle": "Socialt",
+    "socialTitle": "Social",
     "socialEvents": "Event",
     "socialNotifications": "Aviseringar",
     "socialCrownHunt": "Kronjakt",
@@ -2071,6 +2071,26 @@
     "empty": "Inga uppdateringsanteckningar ännu.",
     "release010Highlight": "Den första inbyggda iOS-MVP:n tar form.",
     "release010Change": "En inbyggd kartbaserad upplevelse med community-, kör- och profilfunktioner."
+  },
+  "driver": {
+    "feed": {
+      "title": "Driver-inlägg",
+      "source": "Från Driver",
+      "loading": "Hämtar inlägg…",
+      "empty": "Inga inlägg att visa.",
+      "error": "Det gick inte att hämta innehållet.",
+      "retry": "Försök igen",
+      "refresh": "Uppdatera",
+      "more": "Visa fler",
+      "back": "Tillbaka",
+      "comments": "Kommentarer",
+      "noComments": "Inga kommentarer att visa.",
+      "unavailable": "Driver-innehållet är inte tillgängligt just nu.",
+      "onboarding": "Slutför din Driver-profil i Driver för att läsa inlägg här.",
+      "restricted": "Driver är inte tillgängligt för ditt konto.",
+      "image": "Bild i inlägget",
+      "likes": "Gilla-markeringar"
+    }
   },
   "moderation": {
     "messageActionsTitle": "Meddelande från %1$s",
