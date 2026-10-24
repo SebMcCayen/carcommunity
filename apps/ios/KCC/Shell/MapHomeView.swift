@@ -436,6 +436,7 @@ struct MapHomeView: View {
             Color(.secondarySystemBackground)
                 .ignoresSafeArea()
             Text("shell.mapPlaceholder")
+                .accessibilityIdentifier("shell.mapPlaceholder")
                 .font(.system(size: KccTypeScale.titleMd, weight: KccTypeScale.medium))
                 .foregroundStyle(.secondary)
         }
