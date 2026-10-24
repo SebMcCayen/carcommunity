@@ -252,6 +252,9 @@ class MapFirstShellTest {
         composeTestRule.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         instrumentation.uiAutomation.waitForIdle(500, 5000)
+        val blockedByAnr = instrumentation.uiAutomation.rootInActiveWindow
+            ?.findAccessibilityNodeInfosByViewId("android:id/aerr_close")?.isNotEmpty() == true
+        check(!blockedByAnr) { "An Android ANR dialog covers the capture; recover the emulator before visual QA." }
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         val variant = InstrumentationRegistry.getArguments().getString("redesignCaptureVariant") ?: "default"
         require(variant.matches(Regex("[a-zA-Z0-9_-]+")))

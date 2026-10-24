@@ -61,6 +61,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
@@ -74,6 +75,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -362,6 +364,8 @@ fun MapHome(
     trapDrainOverlay: (@Composable () -> Unit)? = null,
 ) {
     val loadState by mapSurface.loadState.collectAsState()
+    var topChromeHeightPx by remember { mutableIntStateOf(0) }
+    val chromeDensity = LocalDensity.current
     val trafficOn by mapSurface.trafficEnabled.collectAsState()
     val is3d by mapSurface.is3d.collectAsState()
     val bearing by mapSurface.bearing.collectAsState()
@@ -653,6 +657,7 @@ fun MapHome(
             modifier =
                 Modifier
                     .align(Alignment.TopCenter)
+                    .onSizeChanged { topChromeHeightPx = it.height }
                     .statusBarsPadding()
                     .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -692,12 +697,19 @@ fun MapHome(
             }
         }
 
-        // Right-side floating controls, bottom-right.
+        // Source S01 places tools beneath the top chrome, not against the
+        // bottom bar. Measure the actual chrome so large text and a convoy
+        // strip cannot overlap the rail. Short windows retain scroll access.
         Column(
             modifier =
                 Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(16.dp),
+                    .align(Alignment.TopEnd)
+                    .padding(
+                        top = with(chromeDensity) { topChromeHeightPx.toDp() } + KccSpacing.s3,
+                        end = KccSpacing.s4,
+                        bottom = KccSpacing.s4,
+                    )
+                    .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
