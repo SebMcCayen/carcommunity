@@ -24,6 +24,7 @@ internal fun NativeDriverFeed(uid: String) {
         "noComments" to R.string.driver_feed_noComments,
         "unavailable" to R.string.driver_feed_unavailable,
         "onboarding" to R.string.driver_feed_onboarding,
+        "canonicalOnboarding" to R.string.driver_feed_canonicalOnboarding,
         "restricted" to R.string.driver_feed_restricted,
         "image" to R.string.driver_feed_image,
         "likes" to R.string.driver_feed_likes,
