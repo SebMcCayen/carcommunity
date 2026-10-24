@@ -17,10 +17,22 @@ struct ChannelChatScreen: View {
     /// name — a runtime string, so passed as ``Text`` rather than a localization
     /// key — for a convoy).
     let title: Text
+    let showsNavigationTitle: Bool
+
+    init(coordinator: ChannelChatCoordinator?, title: Text, showsNavigationTitle: Bool = true) {
+        self.coordinator = coordinator
+        self.title = title
+        self.showsNavigationTitle = showsNavigationTitle
+    }
 
     var body: some View {
-        content
-            .navigationTitle(title)
+        Group {
+            if showsNavigationTitle {
+                content.navigationTitle(title)
+            } else {
+                content
+            }
+        }
             .navigationBarTitleDisplayMode(.inline)
             .task { coordinator?.start() }
             .onChange(of: readingActive, initial: true) { _, active in

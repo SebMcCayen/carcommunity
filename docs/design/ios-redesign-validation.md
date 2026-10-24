@@ -122,8 +122,10 @@ xcodegen generate
 | iOS token and string generators | PASS, no generated-file drift |
 | Android token generator | PASS, no generated-file drift |
 | git diff --check | PASS at checkpoint |
-| Swift compiler / simulator XCTest / unsigned device Release build | NOT RUN, unavailable on Linux |
-| Rendered screenshots / reference comparison | PENDING macOS CI and image review |
+| Swift compiler / simulator unit tests | PASS on CI head 6d6705db: 1201 XCTest + 17 Swift Testing tests |
+| Simulator UI tests | 5/8 PASS on 6d6705db; three capture cases failed finding the Driver source button |
+| Unsigned device Release build | SKIPPED after UI failure; final-head CI still required |
+| Rendered screenshots / reference comparison | Captures exist for 6d6705db; invalid dark fixture and title/nav roles found by main; recapture required |
 | Configured-device functionality | NOT RUN |
 
 Commands run from the repository root:
@@ -161,8 +163,11 @@ these state/launch combinations:
 | S69-settings | Native Settings |
 
 Prefixes: `configless-en-Light-default`, `configless-sv-Dark-default`, and
-`configless-en-Dark-AXXXL`. Theme/text names describe launch configuration;
-inspect the rendered images to confirm traits and layout. The test also checks
+`configless-en-Dark-AXXXL`. A DEBUG-only `-KCCUITestTheme` fixture explicitly
+sets SwiftUI preferredColorScheme, guarded on Firebase being unconfigured;
+Release/configured apps keep system behavior. The original AppleInterfaceStyle
+launch default proved ineffective in rendered images and was replaced. Inspect
+recaptures to confirm traits and layout. The test also checks
 keyboard dismissal, tab selection, map-host UUID continuity over two Chat round
 trips and My drives/Settings navigation. The UUID is exposed only by the map's
 config-less placeholder and contains no account/location data.
@@ -183,16 +188,20 @@ xcrun xcresulttool export attachments --path /tmp/ios-redesign-tests.xcresult --
 
 CI run URL, exact tested commit, successful test/build result, artifact URLs and
 reviewed screenshot filenames must be appended after main pushes/runs CI.
-**There is no rendered evidence attached to this local checkpoint yet.** A
-config-less placeholder proves shell composition only, never real map tiles,
+**The first captures do not establish valid dark-mode fidelity.** A config-less
+placeholder proves shell composition only, never real map tiles,
 search results, GPS, a live session, Driver access, or Apple purchases.
 
 Draft PR: <https://github.com/SebMcCayen/carcommunity/pull/1170>, base
-`codex/redesign-design-language`. Active validation checkpoint at the time of
-this entry: `6d6705db`, run
+`codex/redesign-design-language`. Initial validation checkpoint: `6d6705db`, run
 <https://github.com/SebMcCayen/carcommunity/actions/runs/40131037243>.
-Contract and general CI checks passed; native simulator/build results remain
-pending. Main retrieves and visually reviews the screenshot artifacts.
+Swift compilation and unit tests passed; three UI capture cases failed at the
+Driver selector. Pushed 573fa7de adds explicit Chat accessibility containment
+to retain source-control IDs. Main reviewed its predecessor's images and found
+that dark-labelled images were light, the child Community title replaced Chat,
+and the selected primary-tab underline used cyan. The next batched fix supplies
+the explicit theme fixture, removes the child navigation-title preference and
+uses gold for primary navigation. Main retrieves/reviews recaptures.
 
 ## Honest 84-screen pass
 

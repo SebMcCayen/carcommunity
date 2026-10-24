@@ -172,7 +172,7 @@ final class ShellSmokeTests: XCTestCase {
     private func launch(language: String, largeText: Bool = false, theme: String = "Light") -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
-        app.launchArguments += ["-AppleInterfaceStyle", theme]
+        app.launchArguments += ["-KCCUITestTheme", theme]
         // UIKit can retain a previous launch's preferred category. Reset it
         // explicitly so the Swedish scenario does not inherit the large-text one.
         app.launchArguments += [

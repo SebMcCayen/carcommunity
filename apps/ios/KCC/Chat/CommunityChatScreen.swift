@@ -8,7 +8,11 @@ struct CommunityChatScreen: View {
     let coordinator: ChannelChatCoordinator?
 
     var body: some View {
-        ChannelChatScreen(coordinator: coordinator, title: Text("chatHub.tabCommunity"))
+        ChannelChatScreen(
+            coordinator: coordinator,
+            title: Text("chatHub.tabCommunity"),
+            showsNavigationTitle: false
+        )
     }
 }
 

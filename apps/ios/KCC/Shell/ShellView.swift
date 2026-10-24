@@ -979,7 +979,7 @@ struct ShellView: View {
                     }
                     .overlay(alignment: .bottom) {
                         if selectedTab == tab {
-                            Capsule().fill(KccTheme.driver).frame(width: 28, height: 3)
+                            Capsule().fill(KccPalette.crownGold).frame(width: 28, height: 3)
                         }
                     }
                 }
