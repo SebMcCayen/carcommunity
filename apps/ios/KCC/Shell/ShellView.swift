@@ -254,18 +254,19 @@ struct ShellView: View {
                 )
             )
 
-            TabView(selection: tabSelection) {
-                ForEach(ShellTab.allCases, id: \.self) { tab in
-                    content(for: tab)
-                        .tabItem {
-                            Label(
-                                tabTitle(tab),
-                                systemImage: tabSystemImage(tab)
-                            )
-                        }
-                        .tag(tab)
-                }
-            }
+            content(for: selectedTab)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            // UITabBar provides native selection/accessibility without an
+            // opaque UITabBarController content host covering our one map.
+            ShellNativeTabBar(
+                selection: tabSelection,
+                titles: ShellTab.allCases.map { String(localized: String.LocalizationValue(tabTitle($0))) },
+                symbols: ShellTab.allCases.map { tabSystemImage($0) }
+            )
+            .frame(height: 49)
+            .background(.bar)
+
         }
         // Route host: sub-routes render full-screen OVER the tab shell (the
         // Android shell's route-host pattern), each carrying its own back
@@ -1614,12 +1615,12 @@ struct ShellView: View {
         }
     }
 
-    private func tabTitle(_ tab: ShellTab) -> LocalizedStringKey {
+    private func tabTitle(_ tab: ShellTab) -> String {
         if tab == .create,
            (liveLocationCoordinator?.isSharing == true || pendingSessionCommand == .starting) {
             return "liveLocation.stop"
         }
-        return tab.title
+        return tab.titleKey
     }
 
     private func tabSystemImage(_ tab: ShellTab) -> String {
@@ -2397,7 +2398,9 @@ extension ShellTab {
     /// Localized tab title. Keys live in the generated `Localizable.xcstrings`
     /// and are the same semantic names as `contracts/localization`
     /// (`shell.tabMap` …) — see `apps/ios/scripts/generate-strings.mjs`.
-    var title: LocalizedStringKey {
+    var title: LocalizedStringKey { LocalizedStringKey(titleKey) }
+
+    var titleKey: String {
         switch self {
         case .map: "shell.tabMap"
         case .history: "shell.tabHistory"
@@ -2427,4 +2430,46 @@ extension ShellTab {
         featureFlags: .contractDefaults,
         diagnostics: IOSDiagnosticsComposition()
     )
+}
+
+
+private struct ShellNativeTabBar: UIViewRepresentable {
+    @Binding var selection: ShellTab
+    let titles: [String]
+    let symbols: [String]
+
+    func makeCoordinator() -> Coordinator { Coordinator(selection: $selection) }
+
+    func makeUIView(context: Context) -> UITabBar {
+        let bar = UITabBar()
+        bar.delegate = context.coordinator
+        bar.items = ShellTab.allCases.enumerated().map { index, _ in
+            UITabBarItem(title: titles[index], image: UIImage(systemName: symbols[index]), tag: index)
+        }
+        return bar
+    }
+
+    func updateUIView(_ bar: UITabBar, context: Context) {
+        context.coordinator.selection = $selection
+        for (index, item) in (bar.items ?? []).enumerated() {
+            item.title = titles[index]
+            item.image = UIImage(systemName: symbols[index])
+        }
+        if let index = ShellTab.allCases.firstIndex(of: selection) {
+            bar.selectedItem = bar.items?[index]
+        }
+    }
+
+    final class Coordinator: NSObject, UITabBarDelegate {
+        var selection: Binding<ShellTab>
+        init(selection: Binding<ShellTab>) { self.selection = selection }
+        func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
+            guard ShellTab.allCases.indices.contains(item.tag) else { return }
+            selection.wrappedValue = ShellTab.allCases[item.tag]
+            // Create is an action and may deliberately keep Map selected.
+            if let index = ShellTab.allCases.firstIndex(of: selection.wrappedValue) {
+                tabBar.selectedItem = tabBar.items?[index]
+            }
+        }
+    }
 }
