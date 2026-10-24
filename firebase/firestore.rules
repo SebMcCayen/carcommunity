@@ -664,6 +664,93 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // Driver – standalone community app sharing this Firebase identity
+    // Driver reads users/{uid} and vehicles above as canonical CarCommunity
+    // data. Every Driver-owned top-level collection is prefixed to avoid name
+    // collisions. All Driver writes go through the separately deployed
+    // `driver` Functions codebase; clients never write these documents.
+    // -------------------------------------------------------------------------
+    function hasActiveDriverAccount() {
+      return isAuthenticated() && isNotSuspended()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true
+        && exists(/databases/$(database)/documents/driverUsers/$(request.auth.uid))
+        && get(/databases/$(database)/documents/driverUsers/$(request.auth.uid)).data.get('onboardingComplete', false) == true
+        && get(/databases/$(database)/documents/driverUsers/$(request.auth.uid)).data.get('status', 'active') == 'active';
+    }
+
+    function isDriverOwner(uid) {
+      return hasActiveDriverAccount() && request.auth.uid == uid;
+    }
+
+    function driverRole() {
+      return isAuthenticated() ? request.auth.token.get('driverRole', 'user') : 'user';
+    }
+
+    function isDriverStaff() {
+      return hasActiveDriverAccount()
+        && driverRole() in ['moderator', 'admin', 'superAdmin'];
+    }
+
+    function isDriverAdmin() {
+      return hasActiveDriverAccount()
+        && driverRole() in ['admin', 'superAdmin'];
+    }
+
+    match /driverUsers/{uid} {
+      allow read: if isDriverOwner(uid) || isDriverStaff();
+      match /pushTokens/{tokenId} { allow read, write: if false; }
+      match /connections/{connectionId} { allow read: if isDriverOwner(uid); }
+      match /followingCommunities/{communityId} { allow read: if isDriverOwner(uid); }
+      match /followingUsers/{targetUid} { allow read: if isDriverOwner(uid); }
+      match /followers/{followerUid} { allow read: if isDriverOwner(uid); }
+      match /blockedUsers/{targetUid} { allow read: if isDriverOwner(uid); }
+      match /bookmarks/{threadId} { allow read: if isDriverOwner(uid); }
+      match /likedThreads/{threadId} { allow read: if isDriverOwner(uid); }
+      match /followedThreads/{threadId} { allow read: if isDriverOwner(uid); }
+      match /preferences/{preferenceId} { allow read: if isDriverOwner(uid); }
+    }
+
+    match /driverProfiles/{uid} {
+      allow read: if resource.data.status == 'active'
+        || isDriverStaff() || isDriverOwner(uid);
+    }
+
+    match /driverHandles/{handle} { allow read, write: if false; }
+    match /driverBrands/{brandId} {
+      allow read: if resource.data.status == 'active' || isDriverAdmin();
+    }
+    match /driverModels/{modelId} {
+      allow read: if resource.data.status == 'active' || isDriverAdmin();
+    }
+    match /driverCommunities/{communityId} {
+      allow read: if resource.data.status == 'active' || isDriverStaff();
+      match /followers/{uid} { allow read, write: if false; }
+    }
+    match /driverThreads/{threadId} {
+      allow read: if resource.data.status == 'active' || isDriverStaff()
+        || (isDriverOwner(resource.data.authorUid));
+      match /replies/{replyId} {
+        allow read: if isDriverStaff()
+          || isDriverOwner(resource.data.authorUid)
+          || (resource.data.status == 'active'
+            && get(/databases/$(database)/documents/driverThreads/$(threadId)).data.status == 'active');
+      }
+      match /likes/{uid} { allow read, write: if false; }
+    }
+    match /driverNotifications/{uid}/items/{itemId} {
+      allow read: if isDriverOwner(uid);
+    }
+    match /driverReports/{reportId} { allow read: if isDriverStaff(); }
+    match /driverAuditLogs/{logId} { allow read: if isDriverAdmin(); }
+    match /driverDataExportRequests/{requestId} { allow read, write: if false; }
+    match /driverAccountDeletionRequests/{uid} { allow read, write: if false; }
+    match /driverRateLimits/{id} { allow read, write: if false; }
+    match /driverPushTokenState/{uid} { allow read, write: if false; }
+    match /driverIdempotencyKeys/{id} { allow read, write: if false; }
+
+    // -------------------------------------------------------------------------
     // rides – saved drive history (Phase 9d)
     // Each document carries a `userId` field. Route GPS data lives in Cloud
     // Storage (rideRoutes/{uid}/{rideId}/, member-gated); only the storage

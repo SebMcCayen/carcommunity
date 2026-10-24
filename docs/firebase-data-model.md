@@ -182,6 +182,24 @@ Composite index: `userId ASC, createdAt DESC` (user's garage list, paginated).
 
 ---
 
+### `driver*` — Driver app namespace
+
+Driver shares Firebase Auth, `users/{uid}`, `vehicles`, and their Storage
+images with CarCommunity. All data owned only by Driver uses a `driver` prefix:
+`driverUsers`, `driverProfiles`, `driverHandles`, `driverBrands`,
+`driverModels`, `driverCommunities`, `driverThreads`, `driverNotifications`,
+`driverReports`, `driverAuditLogs`, `driverRateLimits`,
+`driverIdempotencyKeys`, `driverDataExportRequests`, and
+`driverAccountDeletionRequests`. Post images use `driverThreadMedia/{uid}`.
+
+Driver clients may read only the projections and private owner state granted by
+Security Rules. All Driver writes go through the separately deployed `driver`
+Functions codebase. Driver profile deletion and moderation never disable or
+delete the shared Auth user or canonical CarCommunity documents. See
+[ADR 003](adr/003-driver-shared-identity.md).
+
+---
+
 ### `rides` — saved drive history
 
 Document ID: auto-generated.
