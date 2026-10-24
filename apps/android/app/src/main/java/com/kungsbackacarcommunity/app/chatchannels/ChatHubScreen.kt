@@ -505,9 +505,17 @@ fun ChatHubRoute(
     ) {
         Column(Modifier.fillMaxSize()) {
             if (driverContent != null) {
+                Row(
+                    Modifier.fillMaxWidth().statusBarsPadding().padding(KccSpacing.s4),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        stringResource(R.string.shell_tabChat),
+                        style = MaterialTheme.typography.headlineLarge,
+                    )
+                }
                 TabRow(
                     selectedTabIndex = if (driverSelected) 1 else 0,
-                    modifier = Modifier.statusBarsPadding(),
                     containerColor = MaterialTheme.colorScheme.surface,
                     contentColor = MaterialTheme.colorScheme.tertiary,
                 ) {
