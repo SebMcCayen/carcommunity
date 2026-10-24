@@ -67,6 +67,14 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Regenerate native project including feature folders
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          cd apps/ios
+          xcodegen generate
+
       # Builds WITHOUT GoogleService-Info.plist (it is gitignored and no
       # secret is injected here) — this is deliberate: it continuously proves
       # the config-less-build seam that FirebaseBootstrap provides.
@@ -124,5 +132,14 @@ jobs:
         with:
           name: ios-configless-screenshots
           path: ${{ runner.temp }}/ios-configless-screenshots
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload generated Xcode project
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-generated-project
+          path: apps/ios/KCC.xcodeproj
           if-no-files-found: ignore
           retention-days: 7
