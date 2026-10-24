@@ -114,6 +114,8 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(map.waitForExistence(timeout: 5))
         let mapIdentity = map.value as? String
         XCTAssertNotNil(mapIdentity)
+        XCTAssertTrue(mapIdentity?.hasSuffix("|\(theme)") == true,
+            "Capture names must match the actual SwiftUI color scheme")
         XCTAssertFalse(app.textFields["addressSearch.query"].exists)
         XCTAssertTrue(app.buttons["shell.search"].isHittable)
         attach(app, name: "\(prefix)-S01-map-collapsed-search")
@@ -132,9 +134,11 @@ final class ShellSmokeTests: XCTestCase {
             app.buttons["shell.tab.chat"].tap()
             assertSelected(app.buttons["shell.tab.chat"])
             XCTAssertTrue(element("chatHub.opaqueScreen", in: app).waitForExistence(timeout: 5))
+            XCTAssertTrue(app.navigationBars[language == "sv" ? "Chatt" : "Chat"].waitForExistence(timeout: 5))
             XCTAssertFalse(app.buttons["shell.search"].exists)
             attach(app, name: "\(prefix)-S29-chat-opaque")
             let driver = app.buttons["chatHub.source.driver"]
+            XCTAssertTrue(driver.waitForExistence(timeout: 5))
             XCTAssertTrue(driver.isHittable)
             driver.tap()
             assertSelected(driver)

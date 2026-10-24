@@ -340,6 +340,7 @@ private final class ConvoyViewportInteractionObserver: @preconcurrency ViewportS
 /// renderer without changing the shell-facing ``MapSurface`` seam.
 @MainActor
 struct MapHomeView: View {
+    @Environment(\.colorScheme) private var colorScheme
     /// Config-less accessibility diagnostics let UI tests detect accidental
     /// map-host recreation. No account or location data is included.
     @State private var hostLifetimeID = UUID()
@@ -449,7 +450,8 @@ struct MapHomeView: View {
                 .ignoresSafeArea()
             Text("shell.mapPlaceholder")
                 .accessibilityIdentifier("shell.mapPlaceholder")
-                .accessibilityValue(Text(verbatim: hostLifetimeID.uuidString))
+                .accessibilityValue(Text(verbatim:
+                    "\(hostLifetimeID.uuidString)|\(colorScheme == .dark ? "Dark" : "Light")"))
                 .font(.system(size: KccTypeScale.titleMd, weight: KccTypeScale.medium))
                 .foregroundStyle(.secondary)
         }

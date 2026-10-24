@@ -165,12 +165,15 @@ these state/launch combinations:
 Prefixes: `configless-en-Light-default`, `configless-sv-Dark-default`, and
 `configless-en-Dark-AXXXL`. A DEBUG-only `-KCCUITestTheme` fixture explicitly
 sets SwiftUI preferredColorScheme, guarded on Firebase being unconfigured;
+the capture test asserts the map host's actual colorScheme before attaching
+images, and checks the Chat/Chatt navigation title after selecting Chat.
 Release/configured apps keep system behavior. The original AppleInterfaceStyle
 launch default proved ineffective in rendered images and was replaced. Inspect
 recaptures to confirm traits and layout. The test also checks
 keyboard dismissal, tab selection, map-host UUID continuity over two Chat round
 trips and My drives/Settings navigation. The UUID is exposed only by the map's
-config-less placeholder and contains no account/location data.
+config-less placeholder (with its actual color scheme) and contains no
+account/location data.
 
 New unit scenarios cover the explicit History identity/parent stack, opaque Chat
 and My drives despite stale search state, camera retention over cover changes,
