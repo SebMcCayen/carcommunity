@@ -243,12 +243,12 @@ final class ShellNavTests: XCTestCase {
             route: nil,
             addressSearchRequested: false
         ))
-        XCTAssertTrue(ShellNavigation.mapHomeChromeVisible(
+        XCTAssertFalse(ShellNavigation.mapHomeChromeVisible(
             tab: .map,
             route: .savedPlaces,
             addressSearchRequested: true
         ))
-        XCTAssertTrue(ShellNavigation.mapHomeChromeVisible(
+        XCTAssertFalse(ShellNavigation.mapHomeChromeVisible(
             tab: .social,
             route: nil,
             addressSearchRequested: true

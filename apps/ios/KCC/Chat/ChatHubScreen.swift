@@ -1,5 +1,16 @@
 import SwiftUI
 
+private struct ChatReadingActiveKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    var chatReadingActive: Bool {
+        get { self[ChatReadingActiveKey.self] }
+        set { self[ChatReadingActiveKey.self] = newValue }
+    }
+}
+
 /// Opaque native Chat destination preserving the four existing channel routes.
 /// Driver content is supplied separately by the authenticated shell.
 /// The chat hub — a four-tab scaffold
@@ -8,10 +19,7 @@ import SwiftUI
 /// notification inbox are connected by the signed-in shell. Each tab retains
 /// its own unavailable state when its backing service cannot be configured.
 ///
-/// The shell presents this behind
-/// ``ChatHubCoordinator/canPresentHub(cover:navigating:)`` (which consumes the
-/// unmodified `ShellNavigation.chatHubAllowed` gate) via the translucent
-/// `ShellRoute.chatHub` overlay hosted inside the Map tab.
+/// Both the primary tab and retained legacy chatHub route are opaque.
 /// A nil coordinator is supported by previews and isolated hosts; individual
 /// feature coordinators may also be nil in config-less builds.
 struct ChatHubScreen: View {
@@ -22,6 +30,9 @@ struct ChatHubScreen: View {
     let notificationsCoordinator: NotificationsInboxCoordinator?
     let onOpenNotificationSettings: (() -> Void)?
     let onOpenEvents: (() -> Void)?
+    /// The host supplies real native Driver content when its adapter is linked.
+    let driverContent: AnyView?
+    @State private var showsDriver = false
 
     init(
         coordinator: ChatHubCoordinator?,
@@ -30,7 +41,8 @@ struct ChatHubScreen: View {
         onOpenConversation: ((_ uid: String, _ displayName: String?) -> Void)? = nil,
         notificationsCoordinator: NotificationsInboxCoordinator? = nil,
         onOpenNotificationSettings: (() -> Void)? = nil,
-        onOpenEvents: (() -> Void)? = nil
+        onOpenEvents: (() -> Void)? = nil,
+        driverContent: AnyView? = nil
     ) {
         self.coordinator = coordinator
         self.conversationsCoordinator = conversationsCoordinator
@@ -39,11 +51,17 @@ struct ChatHubScreen: View {
         self.notificationsCoordinator = notificationsCoordinator
         self.onOpenNotificationSettings = onOpenNotificationSettings
         self.onOpenEvents = onOpenEvents
+        self.driverContent = driverContent
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            if let coordinator {
+            if driverContent != nil {
+                sourcePicker
+            }
+            if showsDriver, let driverContent {
+                driverContent
+            } else if let coordinator {
                 tabStrip(coordinator)
                 if let onOpenEvents {
                     Button(action: onOpenEvents) {
@@ -64,6 +82,28 @@ struct ChatHubScreen: View {
         .navigationTitle(Text("chatHub.title"))
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("chatHub.opaqueScreen")
+    }
+
+    private var sourcePicker: some View {
+        HStack(spacing: KccSpacing.s2) {
+            sourceButton("chatHub.tabChats", driver: false)
+            sourceButton("chatHub.tabDriver", driver: true)
+        }
+        .padding(KccSpacing.s3)
+        .background(KccTheme.subtle)
+    }
+
+    private func sourceButton(_ title: LocalizedStringKey, driver: Bool) -> some View {
+        Button { showsDriver = driver } label: {
+            Text(title).font(.subheadline.weight(.semibold))
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .foregroundStyle(showsDriver == driver ? KccTheme.onDriver : KccTheme.text)
+                .background(showsDriver == driver ? KccTheme.driver : KccTheme.overlay, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(driver ? "chatHub.source.driver" : "chatHub.source.chats")
+        .accessibilityAddTraits(showsDriver == driver ? [.isSelected] : [])
     }
 
     // MARK: - Tab strip

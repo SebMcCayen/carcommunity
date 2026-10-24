@@ -153,7 +153,7 @@ struct GaragePanel: View {
                 .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
                 .frame(maxWidth: .infinity, minHeight: 44)
         }
-        .buttonStyle(.borderedProminent)
+        .kccPrimaryAction()
     }
 
     /// The signed-in uid from the process-wide auth repository, nil when

@@ -49,6 +49,7 @@ struct AddressSearchOverlay: View {
         .background(KccTheme.overlay, in: RoundedRectangle(cornerRadius: KccRadius.lg))
         .overlay { RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.border) }
         .padding(.horizontal, KccSpacing.s3)
+        .padding(.trailing, KccSpacing.s12 + KccSpacing.s4)
         .padding(.top, KccSpacing.s8)
         .frame(maxHeight: .infinity, alignment: .top)
         .task { searchFocused = true }

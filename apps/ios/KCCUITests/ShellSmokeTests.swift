@@ -14,9 +14,9 @@ final class ShellSmokeTests: XCTestCase {
         let placeholder = app.staticTexts["shell.mapPlaceholder"]
         XCTAssertTrue(placeholder.waitForExistence(timeout: 5))
         XCTAssertTrue(placeholder.isHittable, "Map content must not be covered by the tab host")
-        app.tabBars.buttons["Social"].tap()
-        app.tabBars.buttons["Map"].tap()
-        assertSelected(app.tabBars.buttons["Map"])
+        app.buttons["shell.tab.social"].tap()
+        app.buttons["shell.tab.map"].tap()
+        assertSelected(app.buttons["shell.tab.map"])
         XCTAssertTrue(placeholder.isHittable)
         openSettings(app)
         app.buttons["Back"].firstMatch.tap()
@@ -25,7 +25,7 @@ final class ShellSmokeTests: XCTestCase {
     }
 
     func testSwedishShellNavigation() {
-        checkShell(language: "sv", labels: ["Karta", "Chatt", "Socialt", "Garage"])
+        checkShell(language: "sv", labels: ["Karta", "Chatt", "Social", "Garage"])
     }
 
     func testEnglishShellNavigation() {

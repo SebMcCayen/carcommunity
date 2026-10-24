@@ -11,19 +11,22 @@ import SwiftUI
 /// renders the unavailable placeholder rather than crashing, the same seam every
 /// Firebase-backed surface honors.
 struct ChannelChatScreen: View {
+    @Environment(\.chatReadingActive) private var readingActive
     let coordinator: ChannelChatCoordinator?
     /// The channel's title (`chatHub.tabCommunity` for community, the convoy's
     /// name — a runtime string, so passed as ``Text`` rather than a localization
     /// key — for a convoy).
     let title: Text
 
-    @State private var draft = ""
-
     var body: some View {
         content
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .task { coordinator?.start() }
+            .onChange(of: readingActive, initial: true) { _, active in
+                coordinator?.setReadingActive(active)
+            }
+            .onDisappear { coordinator?.setReadingActive(false) }
     }
 
     @ViewBuilder
@@ -148,25 +151,27 @@ struct ChannelChatScreen: View {
 
     private func composer(_ coordinator: ChannelChatCoordinator) -> some View {
         HStack(spacing: KccSpacing.s2) {
-            TextField("chat.inputPlaceholder", text: $draft, axis: .vertical)
+            TextField("chat.inputPlaceholder", text: Binding(
+                get: { coordinator.draft }, set: { coordinator.draft = $0 }
+            ), axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1...4)
                 .padding(.horizontal, KccSpacing.s3)
                 .padding(.vertical, KccSpacing.s2)
-                .background(KccPalette.softSand.opacity(0.4))
+                .background(KccTheme.subtle)
                 .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
             Button {
                 // Only clear the draft when something was actually sent — a
                 // signed-out caller (no currentUserId) has send(_:) ignored and
                 // must not silently lose their draft.
-                if coordinator.send(draft) != nil {
-                    draft = ""
+                if coordinator.send(coordinator.draft) != nil {
+                    coordinator.draft = ""
                 }
             } label: {
                 Text("chat.sendButton")
                     .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
             }
-            .disabled(!ChannelThread.isSendable(draft) || coordinator.currentUserId == nil)
+            .disabled(!ChannelThread.isSendable(coordinator.draft) || coordinator.currentUserId == nil)
         }
         .padding(KccSpacing.s3)
     }
@@ -219,7 +224,8 @@ private struct MessageRow: View {
                 .font(.system(size: KccTypeScale.bodyMd))
                 .padding(.horizontal, KccSpacing.s3)
                 .padding(.vertical, KccSpacing.s2)
-                .background(isOwn ? KccPalette.crownGold.opacity(0.25) : KccPalette.softSand.opacity(0.6))
+                .background(isOwn ? KccTheme.driver : KccTheme.subtle)
+                .foregroundStyle(isOwn ? KccTheme.onDriver : KccTheme.text)
                 .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
             statusLine
         }

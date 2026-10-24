@@ -288,7 +288,7 @@ struct ProfileScreen: View {
                         if validationError == nil, editor.status == .saved { editing = false }
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .kccPrimaryAction()
                 .disabled(editor.status == .saving || editor.status == .uploading)
             }
         }

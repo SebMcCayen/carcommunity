@@ -255,6 +255,7 @@ struct ShellView: View {
                     uid: signedInUid
                 )
             )
+            .accessibilityHidden(mapCover == .opaque)
 
             // PR #1165 (codex/ios-map-visibility): remove the opaque TabView
             // content host. Keep map feature tasks mounted across tab changes.
@@ -265,6 +266,8 @@ struct ShellView: View {
             // not stop the explicit live/drive session underneath.
             if chatHasOpened || selectedTab == .chat {
                 chatTab
+                    .environment(\.chatReadingActive,
+                        selectedTab == .chat && routes.current == nil && scenePhase == .active)
                     .opacity(selectedTab == .chat ? 1 : 0)
                     .allowsHitTesting(selectedTab == .chat && routes.current == nil)
                     .accessibilityHidden(selectedTab != .chat || routes.current != nil)
@@ -524,7 +527,8 @@ struct ShellView: View {
                 }
                 .overlay(alignment: .bottomLeading) {
                     if mapHomeChromeVisible,
-                       case .kept = driveRecordingCoordinator?.state {
+                       let recordingState = driveRecordingCoordinator?.state,
+                       case .kept = recordingState {
                         Button {
                             routes = routes.opening(.myDrives)
                         } label: {
@@ -896,8 +900,6 @@ struct ShellView: View {
             Button {
                 let next = mapSurface.compassMode.toggled()
                 mapSurface.setCompassMode(next)
-                if next == .northUp { mapSurface.recenterNorthUp() }
-                else { mapSurface.recenter() }
             } label: {
                 Image(systemName: "location.north.line")
                     .frame(width: 48, height: 48)
@@ -966,7 +968,9 @@ struct ShellView: View {
                             .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity, minHeight: 56)
-                    .foregroundStyle(tab == .create ? KccTheme.onGold : KccTheme.text)
+                    .foregroundStyle(tab == .create
+                        ? (liveLocationCoordinator?.isSharing == true ? KccPalette.warmIvory : KccTheme.onGold)
+                        : KccTheme.text)
                     .background {
                         if tab == .create {
                             RoundedRectangle(cornerRadius: KccRadius.xl)
@@ -982,12 +986,20 @@ struct ShellView: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("shell.tab.\(tab.accessibilityID)")
                 .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
+                .accessibilityValue(tab == .chat && chatUnreadCount > 0
+                    ? Text(String(format: String(localized: "dm.unreadCount"), chatUnreadCount)) : Text(""))
             }
         }
         .padding(.horizontal, KccSpacing.s2)
         .padding(.vertical, KccSpacing.s2)
         .background(KccTheme.overlay, ignoresSafeAreaEdges: .bottom)
         .overlay(alignment: .top) { Rectangle().fill(KccTheme.border).frame(height: 1) }
+    }
+
+    /// Existing block-filtered inbox state; Driver activity never enters it.
+    private var chatUnreadCount: Int {
+        guard case .loaded(let rows) = conversationsCoordinator?.state else { return 0 }
+        return rows.reduce(0) { $0 + max(0, $1.unreadCount) }
     }
 
     private var myDrives: some View {
@@ -1001,6 +1013,7 @@ struct ShellView: View {
     private var chatTab: some View {
         NavigationStack { chatHubContent }
             .kccReadingSurface()
+            .accessibilityAction(.escape) { selectedTab = .map }
     }
 
     private func applyMapLayerPreferences() {
@@ -1106,6 +1119,7 @@ struct ShellView: View {
             }
         case .chatHub:
             chatHubOverlay
+                .environment(\.chatReadingActive, scenePhase == .active)
         case .notifications:
             routeNavigation {
                 NotificationsInboxScreen(
@@ -1401,6 +1415,7 @@ struct ShellView: View {
             }
         }
         .kccReadingSurface()
+        .accessibilityAction(.escape) { routes = routes.poppingOne() }
     }
 
     private var unavailableRoute: some View {

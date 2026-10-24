@@ -445,7 +445,7 @@ struct MapHomeView: View {
 
     private var mapPlaceholder: some View {
         ZStack {
-            Color(.secondarySystemBackground)
+            KccTheme.subtle
                 .ignoresSafeArea()
             Text("shell.mapPlaceholder")
                 .accessibilityIdentifier("shell.mapPlaceholder")

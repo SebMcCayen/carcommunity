@@ -23,6 +23,12 @@ enum KccTheme {
 }
 
 extension View {
+    func kccPrimaryAction() -> some View {
+        buttonStyle(.borderedProminent)
+            .tint(KccPalette.crownGold)
+            .foregroundStyle(KccTheme.onGold)
+    }
+
     func kccMapControl() -> some View {
         foregroundStyle(KccTheme.text)
             .background(KccTheme.overlay, in: Circle())
