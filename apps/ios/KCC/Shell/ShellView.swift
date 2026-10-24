@@ -857,7 +857,7 @@ struct ShellView: View {
                 systemImage: signedInUid == nil ? "gearshape" : "person.circle"
             )
             .labelStyle(.iconOnly)
-            .font(.system(size: 24))
+            .font(.system(size: 22))
             .frame(width: 48, height: 48)
             .kccMapControl()
         }
