@@ -206,6 +206,18 @@ and the selected primary-tab underline used cyan. The next batched fix supplies
 the explicit theme fixture, removes the child navigation-title preference and
 uses gold for primary navigation. Main retrieves/reviews recaptures.
 
+Recapture run <https://github.com/SebMcCayen/carcommunity/actions/runs/40132485529>
+tested `ccf2b4e8`: all three complete screenshot scenarios passed, including
+actual colorScheme/title assertions, Driver switching, map-host continuity,
+My drives and Settings. Overall UI result: 7/8 passed. The sole remaining
+failure was the pre-existing large-text legal-links test after its one swipe
+failed to instantiate the lazy List row. Its follow-up uses at most six swipes
+and retains both existence/hittability assertions. Release remained skipped
+after that failure; final all-green validation is still required.
+Artifacts: `ios-configless-screenshots` 12575099867, `ios-test-results`
+12575514506. Main owns their visual comparison and does not infer fidelity from
+the screenshot filenames alone.
+
 ## Honest 84-screen pass
 
 No catalogue family is marked visually complete. The table distinguishes code

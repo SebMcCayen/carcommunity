@@ -61,7 +61,12 @@ final class ShellSmokeTests: XCTestCase {
         // These are accessibility-tree smoke checks, not a full VoiceOver audit.
         for id in ["settings.privacyPolicy", "settings.terms"] {
             let button = element(id, in: app)
-            if !button.isHittable { app.swipeUp() }
+            // SwiftUI List virtualizes rows. At accessibility XXXL, a single
+            // swipe need not instantiate the legal section below account rows.
+            for _ in 0..<6 {
+                if button.exists && button.isHittable { break }
+                app.swipeUp()
+            }
             XCTAssertTrue(button.waitForExistence(timeout: 5))
             XCTAssertFalse(button.label.isEmpty)
             XCTAssertTrue(button.isHittable, "\(id) must remain reachable with large text")
