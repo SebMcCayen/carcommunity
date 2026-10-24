@@ -1,7 +1,7 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.driverfeed.DriverFeedRoute
 import com.kungsbackacarcommunity.app.driverfeed.DriverFeedStrings
@@ -9,7 +9,7 @@ import com.kungsbackacarcommunity.app.driverfeed.DriverFeedStrings
 /** The shell supplies identity and localization; the adapter owns all data/access. */
 @Composable
 internal fun NativeDriverFeed(uid: String) {
-    val context = LocalContext.current
+    val localizedResources = LocalResources.current
     val resources = mapOf(
         "title" to R.string.driver_feed_title,
         "source" to R.string.driver_feed_source,
@@ -32,7 +32,7 @@ internal fun NativeDriverFeed(uid: String) {
     DriverFeedRoute(
         uid = uid,
         strings = DriverFeedStrings { key ->
-            context.getString(resources.getValue(key.removePrefix("driver.feed.")))
+            localizedResources.getString(resources.getValue(key.removePrefix("driver.feed.")))
         },
     )
 }
