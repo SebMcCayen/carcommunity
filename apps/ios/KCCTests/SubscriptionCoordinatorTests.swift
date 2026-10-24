@@ -176,13 +176,46 @@ struct SubscriptionCoordinatorTests {
         #expect(finished.isEmpty)
     }
 
+    @Test("a failed in-app verification is recovered even without a StoreKit update event")
+    @MainActor
+    func inAppPurchaseRecovery() async throws {
+        let transaction = StoreSignedTransaction(id: 37, productID: plusMonthlyProductID,
+            signedTransaction: "in-app", appAccountToken: SubscriptionAccountToken.forUID("member"))
+        let store = FakeSubscriptionStore(purchaseResult: .purchased(transaction))
+        let verifier = FakeAppleVerifier(result: .success(SubscriptionVerificationResult(
+            entitlement: "member_monthly", status: "active", tier: .plus)))
+        let observer = SubscriptionTransactionObserver(store: store, verifier: verifier,
+                                                       retryDelay: .milliseconds(10))
+        let task = Task { await observer.run(uid: "member") }
+        defer { task.cancel() }
+        for _ in 0..<500 {
+            if await store.unfinishedReads > 0 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let membership = SubscriptionCoordinator(uid: "member", store: store,
+            verifier: FakeAppleVerifier(result: .failure(TestError.failed)))
+        await membership.start()
+        await membership.purchase(plusMonthlyProductID)
+        // No transaction update is emitted. The root observer must discover
+        // the unfinished transaction independently of the membership screen.
+        for _ in 0..<500 {
+            if await store.finishedIDs.contains(37) { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let submitted = await verifier.signedTransactions
+        let finished = await store.finishedIDs
+        #expect(submitted == ["in-app"])
+        #expect(finished == [37])
+    }
+
 }
 
 private actor FakeSubscriptionStore: SubscriptionStore {
     private let availableProducts: [StoreSubscriptionProduct]
     private let purchaseResult: StorePurchaseResult
     private let entitlements: [StoreSignedTransaction]
-    private let unfinished: [StoreSignedTransaction]
+    private var unfinished: [StoreSignedTransaction]
+    private(set) var unfinishedReads = 0
     private let updates: AsyncStream<StoreSignedTransaction>
     private let continuation: AsyncStream<StoreSignedTransaction>.Continuation
     private(set) var finishedIDs: [UInt64] = []
@@ -205,11 +238,15 @@ private actor FakeSubscriptionStore: SubscriptionStore {
 
     func products() async throws -> [StoreSubscriptionProduct] { availableProducts }
     func purchase(productID: String, appAccountToken: UUID) async throws -> StorePurchaseResult {
-        purchaseResult
+        if case .purchased(let transaction) = purchaseResult { unfinished.append(transaction) }
+        return purchaseResult
     }
     func currentEntitlements() async -> [StoreSignedTransaction] { entitlements }
     func transactionUpdates() async -> AsyncStream<StoreSignedTransaction> { updates }
-    func unfinishedTransactions() async -> [StoreSignedTransaction] { unfinished }
+    func unfinishedTransactions() async -> [StoreSignedTransaction] {
+        unfinishedReads += 1
+        return unfinished.filter { !finishedIDs.contains($0.id) }
+    }
     func emit(_ transaction: StoreSignedTransaction) { continuation.yield(transaction) }
     func synchronize() async throws {}
     func finish(transactionID: UInt64) async { finishedIDs.append(transactionID) }

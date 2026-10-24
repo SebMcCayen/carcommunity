@@ -162,7 +162,13 @@ final class SubscriptionTransactionObserver {
             while !Task.isCancelled {
                 do { try await Task.sleep(for: retryDelay) } catch { return }
                 guard let self, self.generation == expectedGeneration else { return }
-                for transaction in Array(self.failed.values) {
+                // Successful in-app purchases are returned by purchase(),
+                // not necessarily by Transaction.updates. Pick up unfinished
+                // ones too when their screen's backend verification failed.
+                let unfinished = await self.store.unfinishedTransactions()
+                var pending = self.failed
+                for transaction in unfinished { pending[transaction.id] = transaction }
+                for transaction in pending.values {
                     await self.process(transaction, uid: uid, generation: expectedGeneration)
                 }
             }
