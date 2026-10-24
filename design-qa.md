@@ -59,3 +59,26 @@ acceptance independently from implementation, compilation and unit tests.
 Initial checkpoint: sources inspected; schema/code generation and contrast
 checks performed. Native visual comparison remains pending. PRs are reviewable
 implementation checkpoints, not a claim that the redesign is ready to release.
+
+### iOS capture iteration 1
+
+Run `40131037243`, implementation `6d6705db`, produced native iPhone 17 Pro
+attachments. The source S29 sheet (1649 x 954 pixels, four concepts) and the
+1206 x 2622-pixel app capture were opened together. The device viewport is
+402 x 874 points at 3x density. Native OS chrome is excluded from app-content
+judgments; the four-view source sheet must be cropped before a pixel-level pass.
+
+The attachment named `configless-sv-Dark-default-S29-chat-opaque` rendered a
+light reading surface, not the requested dark state. A focused header/navigation
+review also found the heading naming the selected Community channel rather than
+the Chat area, and a cyan primary-navigation selection instead of the source
+gold role. These are P1/P2 acceptance findings, not density differences. The
+iOS owner is correcting the fixture/theme application and header/navigation
+roles; fresh captures of the revised implementation are required.
+
+Evidence is in the `ios-configless-screenshots` artifact for the run, with a
+manifest mapping names to PNGs. Reviewed Chat PNG:
+`A0086558-CF3B-4A8C-B205-974DBE2FADE5.png`; map PNG:
+`998BB27F-0175-47D1-BBAA-1481DCF58630.png`. The map is a deliberate config-less
+placeholder, so real map-image/marker quality remains unassessed. This iteration
+does not pass dark-theme fidelity or the overall visual gate.
