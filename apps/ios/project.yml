@@ -50,6 +50,8 @@ targets:
         product: FirebaseFunctions
       - package: Firebase
         product: FirebaseMessaging
+      - package: Firebase
+        product: FirebaseInstallations
       # Avatar rendering: stored Storage PATHS resolve to download URLs at
       # render time (FirebaseUserProfileRepository.avatarDownloadURL),
       # mirroring Android's media/StorageImageUrl.

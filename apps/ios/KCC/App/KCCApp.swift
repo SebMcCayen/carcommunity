@@ -28,7 +28,9 @@ struct KCCApp: App {
         let diagnosticsEnvironment = DiagnosticsEnvironment.current()
         crashTelemetry = FirebaseCrashTelemetry.install(environment: diagnosticsEnvironment)
         diagnostics = IOSDiagnosticsComposition(environment: diagnosticsEnvironment)
-        session = AuthSession(repository: repository)
+        session = AuthSession(observing: repository, onIdentityChange: { uid in
+            PushNotificationCoordinator.shared.bind(uid: uid)
+        })
         accessSession = AppAccessSession(
             accessRepository: FirebaseAccountAccessRepository.createIfAvailable(),
             flagsRepository: FirebaseFeatureFlagsRepository.createIfAvailable()
