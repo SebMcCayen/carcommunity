@@ -169,7 +169,6 @@ struct ShellView: View {
         shellPresentation
             .task(id: signedInUid) { await wireFeatures() }
             .task(id: signedInUid) {
-                await pushNotifications.bind(uid: signedInUid)
                 openPendingPushDeepLink()
             }
             .onChange(of: pushNotifications.pendingDeepLink) { _, _ in

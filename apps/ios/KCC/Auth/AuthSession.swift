@@ -17,6 +17,7 @@ final class AuthSession {
     ///   build; the state is then permanently ``AuthState/unavailable``.
     init(
         repository: AuthRepository?,
+        onIdentityChange: @escaping (String?) -> Void = { _ in },
         clearSavedPlaces: @escaping (String) -> Bool = {
             ProtectedFileSavedPlacesStore(uid: $0).clear()
         }
@@ -24,10 +25,12 @@ final class AuthSession {
         self.repository = repository
         self.clearSavedPlaces = clearSavedPlaces
         self.state = repository?.authState ?? .unavailable
+        onIdentityChange(Self.uid(in: state))
         if let repository {
             observation = Task { [weak self] in
                 for await newState in repository.authStateUpdates() {
                     self?.state = newState
+                    onIdentityChange(Self.uid(in: newState))
                 }
             }
         }
@@ -69,6 +72,11 @@ final class AuthSession {
         } catch {
             return false
         }
+    }
+
+    private static func uid(in state: AuthState) -> String? {
+        if case .signedIn(let uid, _) = state { return uid }
+        return nil
     }
 
     deinit {
