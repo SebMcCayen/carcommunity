@@ -11,6 +11,10 @@ struct RootView: View {
     @Bindable var accessSession: AppAccessSession
     @Bindable var restrictedPrivacyCoordinator: LiveLocationCoordinator
     let diagnostics: IOSDiagnosticsComposition
+    @State private var subscriptionUpdates = SubscriptionTransactionObserver(
+        store: StoreKitSubscriptionStore(),
+        verifier: FirebaseAppleSubscriptionVerifier.createIfAvailable()
+    )
 
     var body: some View {
         Group {
@@ -30,6 +34,7 @@ struct RootView: View {
             }
         }
         .task(id: signedInUid) { accessSession.bind(uid: signedInUid) }
+        .task(id: signedInUid) { await subscriptionUpdates.run(uid: signedInUid) }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await accessSession.refreshFlags() } }
         }

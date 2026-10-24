@@ -51,6 +51,9 @@ struct MembershipScreen: View {
         .navigationTitle("subscription.screenTitle")
         .accessibilityIdentifier("membership.screen")
         .task { await coordinator.start() }
+        .onChange(of: access.activeMember) { _, _ in
+            Task { await coordinator.reloadAndReconcile() }
+        }
     }
 
     private var membershipCard: some View {

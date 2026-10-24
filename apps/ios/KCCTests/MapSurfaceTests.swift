@@ -11,6 +11,24 @@ final class MapSurfaceTests: XCTestCase {
 
     // MARK: - layer toggles (ported from Android's ShellNavTest)
 
+    func testNativePuckRequiresAuthorizationAndVisibleForegroundMap() {
+        for authorization in [LocationAuthorization.notDetermined, .denied, .whileInUse, .always] {
+            for surfaceActive in [true, false] {
+                for sceneIsActive in [true, false] {
+                    XCTAssertEqual(
+                        MapHomePuckPolicy.isVisible(authorization: authorization,
+                                                    surfaceActive: surfaceActive,
+                                                    sceneIsActive: sceneIsActive),
+                        authorization.isAuthorized && surfaceActive && sceneIsActive
+                    )
+                }
+            }
+        }
+        // A settings grant re-enables the same renderer; revocation removes it.
+        XCTAssertFalse(MapHomePuckPolicy.isVisible(authorization: .denied, surfaceActive: true, sceneIsActive: true))
+        XCTAssertTrue(MapHomePuckPolicy.isVisible(authorization: .whileInUse, surfaceActive: true, sceneIsActive: true))
+    }
+
     func testStubSurfaceStartsWithTrafficOffAndToggles() {
         let surface = StubMapSurface(autoLoad: false)
         XCTAssertFalse(surface.trafficEnabled)
