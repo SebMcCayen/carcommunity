@@ -134,6 +134,12 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertTrue(element("chatHub.opaqueScreen", in: app).waitForExistence(timeout: 5))
             XCTAssertFalse(app.buttons["shell.search"].isHittable)
             attach(app, name: "\(prefix)-S29-chat-opaque")
+            let driver = app.buttons["chatHub.source.driver"]
+            XCTAssertTrue(driver.isHittable)
+            driver.tap()
+            assertSelected(driver)
+            attach(app, name: "\(prefix)-S37-driver-restricted-configless")
+            app.buttons["chatHub.source.chats"].tap()
             app.buttons["shell.tab.map"].tap()
             assertSelected(app.buttons["shell.tab.map"])
             XCTAssertEqual(map.value as? String, mapIdentity, "Tab changes must retain the map host")

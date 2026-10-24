@@ -1396,7 +1396,15 @@ struct ShellView: View {
                 },
                 onOpenEvents: {
                     openEvents()
-                }
+                },
+                driverContent: AnyView(
+                    DriverFeedScreen(
+                        uid: signedInUid,
+                        strings: DriverFeedStrings(lookup: { key in
+                            Bundle.main.localizedString(forKey: key, value: nil, table: nil)
+                        })
+                    )
+                )
             )
             .kccReadingSurface()
     }

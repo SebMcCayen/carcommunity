@@ -63,10 +63,11 @@ statistics are not runtime fixtures.
 
 ## Driver integration boundary
 
-ChatHubScreen accepts optional native `driverContent: AnyView?` and exposes the
-Chats/Driver selector only when real content is supplied. The sibling owns
-`KCC/DriverFeed/**` and `KCCTests/DriverFeed/**`; this owner does not copy its
-uncommitted files. The supplied mount API is:
+ChatHubScreen accepts native `driverContent: AnyView?`; ShellView mounts the real
+DriverFeedScreen behind its Chats/Driver selector. The sibling's iOS-only commit
+`d00b2ab737132ff06cc7f6d90d90fc3a65709cd9` was cherry-picked as `b58ad6e4`, adding
+`KCC/DriverFeed/**` and `KCCTests/DriverFeed/**`. No uncommitted files were copied.
+The mount is:
 
 ```swift
 DriverFeedScreen(
@@ -80,14 +81,18 @@ DriverFeedScreen(
 The host passes only the authenticated UID and localization lookup; it makes no
 direct Driver queries, creates no second profile, and exposes no paid cosmetics
 or unsupported write actions. Canonical driver.feed.* strings are provided by
-the shared foundation. Main integrates the sibling's committed files/backend
-contract and final host mount before CI. Driver onboarding, bilateral blocking,
+the shared foundation, including canonicalOnboarding from `d62db557`. The
+adapter calls the new `driverFeed-list` and `driverFeed-detail` bridge once per
+page; the backend implementation/deployment is a separate dependency. It does
+not fall back to legacy content queries. Driver onboarding, bilateral blocking,
 pagination, stale account responses and required backend deployment still need
 their own executed evidence. No deployment is authorized by this branch.
 
 `project.yml` recursively includes `KCC` and `KCCTests`, so both new DriverFeed
 folders belong to the existing app/test targets. Regenerate the committed
-project after integrating those files:
+project after integrating those files. CI now performs this regeneration before
+building and uploads `ios-generated-project`, which also lets the Linux owner
+synchronize the committed project snapshot from the actual macOS generator:
 
 ```sh
 cd apps/ios
@@ -136,6 +141,7 @@ these state/launch combinations:
 | S01-map-collapsed-search | Semantic placeholder map and collapsed search launcher |
 | S02-search-keyboard | Actual address field and keyboard |
 | S29-chat-opaque | Full-screen native Chat, unavailable backend state |
+| S37-driver-restricted-configless | Actual native Driver adapter without an authenticated account |
 | S61-my-drives-entry | Profile/menu entry to history |
 | S53-my-drives-unavailable | Actual history view without configured backend |
 | S69-settings | Native Settings |
@@ -183,7 +189,7 @@ adoption from future rendered/configured-device comparison.
 | S25-S28 | Perks map control surface adopted; economy retained | Inventory/deploy/ledger; open-sheet flag revocation |
 | S29-S32 | Opaque Chat + existing community/convoy routes | Rendered keyboard/composer, unread, reply flags, block/retry |
 | S33-S36 | DM/inbox/friends routes and guards retained | Real unread/DM/new-dialogue, blocked/restricted identities |
-| S37-S40 | Driver slot and host contract; existing share routes retained | Committed adapter mount, bounded pages/details/access and real renders |
+| S37-S40 | Actual native Driver adapter mounted; existing share routes retained | Bridge deployment, bounded pages/details/access and real renders |
 | S41-S44 | Existing event/list/detail/editor/chat routes retained | RSVP/editor/owner actions, chat flag and notification links |
 | S45-S48 | Social shell updated, other event paths retained | Check-in access, group drive, sharing, long copy |
 | S49-S52 | Existing convoy management/session behavior retained | Leader/member/invite/leave/end lifecycle and render pass |
@@ -203,5 +209,7 @@ Stockholm midnight/DST, real GPS freshness, App Check, purchases and production
 backend correctness cannot be inferred from screenshots or a green CI build.
 
 Android implementation and validation belong to the separate Android branch/PR.
-This branch does not claim cross-platform completion. Commits stay local until
-main orchestrates push and separate PR delivery; no merge/release is performed.
+This branch does not claim cross-platform completion. The user subsequently
+authorized pushing this lane and opening a draft PR against the shared design
+foundation to start macOS CI. Main owns screenshot retrieval/review. No PR
+merge, release, production data access or backend deployment is performed.
