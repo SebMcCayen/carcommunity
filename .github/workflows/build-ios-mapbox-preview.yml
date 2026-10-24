@@ -1,0 +1,77 @@
+name: Build iOS Mapbox Preview
+
+# Reuse Android's PUBLIC runtime token, never MAPBOX_DOWNLOADS_TOKEN. Manual
+# main-only execution and the existing production environment preserve the
+# same secret-access/protection boundary as Build Android Release.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-mapbox-preview
+  cancel-in-progress: false
+
+jobs:
+  build-preview:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-latest
+    timeout-minutes: 45
+    environment: production
+    steps:
+      - name: Checkout the selected main revision
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Configure the same public Mapbox token as Android
+        env:
+          MAPBOX_ACCESS_TOKEN: ${{ secrets.MAPBOX_ACCESS_TOKEN }}
+        run: |
+          python3 apps/ios/scripts/mapbox-build-config.py \
+            --output "$RUNNER_TEMP/kcc-mapbox.xcconfig"
+
+      - name: Build universal simulator app without Firebase configuration
+        run: |
+          xcodebuild -project apps/ios/KCC.xcodeproj -scheme KCC \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/ios-mapbox-preview" \
+            -xcconfig "$RUNNER_TEMP/kcc-mapbox.xcconfig" \
+            ONLY_ACTIVE_ARCH=NO ARCHS='arm64 x86_64' CODE_SIGN_IDENTITY=- build
+
+      - name: Verify token injection and package the preview
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import plistlib
+          import sys
+          root = Path(os.environ['RUNNER_TEMP'])
+          app = root / 'ios-mapbox-preview/Build/Products/Debug-iphonesimulator/KCC.app'
+          expected = (root / 'kcc-mapbox.xcconfig').read_text().split(' = ', 1)[1].strip()
+          with (app / 'Info.plist').open('rb') as stream:
+              info = plistlib.load(stream)
+          if info.get('MBXAccessToken') != expected:
+              sys.exit('Mapbox token was not injected into the app')
+          if (app / 'GoogleService-Info.plist').exists():
+              sys.exit('This map-only preview must not contain Firebase configuration')
+          print('Public runtime token injection verified; Firebase remains unconfigured')
+          PY
+          ditto -c -k --keepParent \
+            "$RUNNER_TEMP/ios-mapbox-preview/Build/Products/Debug-iphonesimulator/KCC.app" \
+            "$RUNNER_TEMP/kcc-ios-mapbox-simulator.zip"
+
+      - name: Upload simulator preview
+        uses: actions/upload-artifact@v7
+        with:
+          name: kcc-ios-mapbox-simulator
+          path: ${{ runner.temp }}/kcc-ios-mapbox-simulator.zip
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Remove temporary token configuration
+        if: always()
+        run: rm -f "$RUNNER_TEMP/kcc-mapbox.xcconfig"

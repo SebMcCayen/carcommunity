@@ -83,10 +83,20 @@ jobs:
           cd apps/ios
           # Pick the first available iPhone simulator on the runner image, so
           # the workflow survives device-lineup renames across Xcode versions.
-          DEST=$(xcrun simctl list devices available | grep -m1 -o 'iPhone [0-9][^(]*' | sed 's/ *$//')
+          # Use its UDID to avoid ambiguous names across installed runtimes.
+          DEST=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          print(next(device["udid"] for runtime in devices.values() for device in runtime
+                     if device.get("isAvailable") and device["name"].startswith("iPhone ")))
+          ')
           echo "Using simulator destination: ${DEST}"
+          # A cold first UI-test launch has timed out on hosted Xcode runners
+          # while subsequent tests pass. Wait for simulator startup explicitly;
+          # do not retry or suppress failing tests.
+          xcrun simctl bootstatus "$DEST" -b
           xcodebuild -project KCC.xcodeproj -scheme KCC \
-            -destination "platform=iOS Simulator,name=${DEST}" \
+            -destination "platform=iOS Simulator,id=${DEST}" \
             -parallel-testing-enabled NO \
             -resultBundlePath "${RUNNER_TEMP}/ios-tests.xcresult" \
             test

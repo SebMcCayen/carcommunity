@@ -10,6 +10,24 @@
   },
   "functions": [
     {
+      "name": "driverFeed.list",
+      "domain": "driverFeed",
+      "description": "Native Driver read-only feed page. Deployed as driverFeed-list in the default codebase, europe-west1. Requires canonical and Driver onboarding/active account; enforces both Driver and canonical KCC block directions for every author. Scans at most 20 raw threads with timestamp+ID cursor; shares 120 pages/hour per UID with detail. No staff bypass or profile/content writes.",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "contracts/driver-feed/read-api.md"
+    },
+    {
+      "name": "driverFeed.detail",
+      "domain": "driverFeed",
+      "description": "Native Driver read-only thread and comments page. Deployed as driverFeed-detail in the default codebase, europe-west1. Reauthorizes the active parent, caller and every author in a consistent read snapshot on every page; checks both Driver and canonical KCC block directions. At most 20 raw replies, ascending timestamp+ID cursor, 120 shared pages/hour. No direct-read fallback or staff bypass.",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "contracts/driver-feed/read-api.md"
+    },
+    {
       "name": "auth.completeOnboarding",
       "domain": "auth",
       "description": "Marks onboarding complete for the calling user; backend writes onboardingCompletedAt and consent timestamps. Also accepts an optional anonymousPartnerStatsOptIn boolean (anonymised partner statistics are DEFAULT-ON / opt-out): the onboarding step surfaces the toggle pre-enabled and the member's choice persists to userPrivate/{uid}.anonymousPartnerStatsOptIn in the same transaction. Deployed via grouped export as auth-completeOnboarding (functions/src/auth/completeOnboarding.ts).",

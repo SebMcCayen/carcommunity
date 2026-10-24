@@ -387,8 +387,12 @@ describe('resolveMemberCount', () => {
 });
 
 describe('uncosted / unknown function surfacing', () => {
-  it('every classified callable is costed (none deliberately left uncosted today)', () => {
-    expect(uncostedCallables()).toEqual([]);
+  // These are intentionally visible gaps: existing per-member assumptions
+  // have no Driver page-frequency input. Keep the exact list guarded so any
+  // further uncosted addition still requires an explicit decision.
+  const pendingDriverEstimates = ['driverFeed.detail', 'driverFeed.list'];
+  it('only the explicitly reviewed Driver page estimates remain uncosted', () => {
+    expect(uncostedCallables()).toEqual(pendingDriverEstimates);
   });
 
   it('a function absent from the cost map surfaces as unknown (not silently zeroed)', () => {
@@ -398,7 +402,7 @@ describe('uncosted / unknown function surfacing', () => {
 
   it('the estimate reports the uncosted list for the board to flag', () => {
     const est = estimateFinance({ ...baseInput, memberCount: 16 });
-    expect(est.functionInventory.uncosted).toEqual([]);
+    expect(est.functionInventory.uncosted).toEqual(pendingDriverEstimates);
     expect(est.functionInventory.totalCallables).toBeGreaterThan(100);
     expect(est.functionInventory.scheduledJobs).toBe(SCHEDULED_JOBS.length);
   });
