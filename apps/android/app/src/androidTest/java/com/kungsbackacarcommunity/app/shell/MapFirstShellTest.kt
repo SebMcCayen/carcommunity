@@ -14,6 +14,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
@@ -83,6 +85,15 @@ class MapFirstShellTest {
 
     private fun str(id: Int) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
+
+    // Material navigation suppresses an icon's redundant description when its
+    // visible label is present. Target the labelled clickable tab, not a hidden
+    // icon. Create intentionally remains icon-only.
+    private fun tabNode(id: Int) = if (id == R.string.shell_tabCreate) {
+        composeTestRule.onNodeWithContentDescription(str(id))
+    } else {
+        composeTestRule.onNode(hasText(str(id)) and hasClickAction())
+    }
 
     /**
      * Two one-time first-login flows gate/overlay the Main shell on the first
@@ -193,8 +204,8 @@ class MapFirstShellTest {
         setShell(mapSurface = surface)
         composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
 
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabGarage)).performClick()
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
+        tabNode(R.string.shell_tabGarage).performClick()
+        tabNode(R.string.shell_tabMap).performClick()
 
         // Still the SAME map: had it been disposed on the way to Garage, coming
         // back would have entered the composition a second time.
@@ -481,7 +492,7 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithTag(MAP_HOME_SEARCH_TAG).performClick()
         composeTestRule.onNodeWithTag(NAV_SEARCH_TEST_TAG).assertIsDisplayed()
         composeTestRule.runOnUiThread { composeTestRule.activity.onBackPressedDispatcher.onBackPressed() }
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabSocial)).performClick()
+        tabNode(R.string.shell_tabSocial).performClick()
         composeTestRule.waitForIdle()
 
         composeTestRule.runOnUiThread {
@@ -1001,10 +1012,10 @@ class MapFirstShellTest {
     fun chatBubble_opensChatHub_andBackArrowDismissesIt() {
         setShell()
         // The floating chat bubble is present (unread count is 0 → "Chat").
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabChat)).assertExists()
+        tabNode(R.string.shell_tabChat).assertExists()
         // Tapping it opens the FULL-PAGE chat HUB over the map (the map stays
         // composed behind it, and the shell's bottom bar stays visible).
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabChat)).performClick()
+        tabNode(R.string.shell_tabChat).performClick()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
         // The map stays composed behind the hub.
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
@@ -1015,8 +1026,7 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithText(str(R.string.chatHub_tabNotifications)).assertIsDisplayed()
         // The shell's bottom bar stays reachable beneath the hub (it is inset above
         // the bar, not a full-screen takeover).
-        composeTestRule
-            .onNodeWithContentDescription(str(R.string.shell_tabChat))
+        tabNode(R.string.shell_tabChat)
             .assertExists()
         // The hub-level Back arrow dismisses chat back to the map.
         composeTestRule.onNodeWithContentDescription(str(R.string.chatHub_back)).performClick()
@@ -1058,20 +1068,20 @@ class MapFirstShellTest {
     fun chatHub_doesNotReappearAfterLeavingAndReturningToMapTab() {
         setShell()
         // Open the hub over the map.
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabChat)).performClick()
+        tabNode(R.string.shell_tabChat).performClick()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
 
         // Leaving the Map tab closes the hub: tapping a bottom-bar tab clears the
         // rememberSaveable open flag (and the map-cover gate drops). (The shell's
         // single map surface stays composed across tabs, so this asserts on the
         // HUB, not the map.)
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabSocial)).performClick()
+        tabNode(R.string.shell_tabSocial).performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
 
         // Returning to the Map tab must NOT re-open the hub — the regression: a
         // saveable open flag that survived would pop the hub back up here.
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
+        tabNode(R.string.shell_tabMap).performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
@@ -1143,17 +1153,17 @@ class MapFirstShellTest {
         setShell()
         // All five tabs are present. Icon-only bottom nav: labels are null and the
         // tab name lives on the icon's contentDescription, so select by that.
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabChat)).assertExists()
+        tabNode(R.string.shell_tabChat).assertExists()
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabCreate)).assertExists()
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabSocial)).assertExists()
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabGarage)).assertExists()
+        tabNode(R.string.shell_tabSocial).assertExists()
+        tabNode(R.string.shell_tabGarage).assertExists()
 
         // Switching to History leaves the map home.
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabChat)).performClick()
+        tabNode(R.string.shell_tabChat).performClick()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
 
         // Returning to the Map tab restores the map home.
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
+        tabNode(R.string.shell_tabMap).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
     }
 
@@ -1186,7 +1196,7 @@ class MapFirstShellTest {
 
     /** Opens a tab by its bottom-bar content description. */
     private fun openTab(tabTitleRes: Int) {
-        composeTestRule.onNodeWithContentDescription(str(tabTitleRes)).performClick()
+        tabNode(tabTitleRes).performClick()
         composeTestRule.waitForIdle()
     }
 
