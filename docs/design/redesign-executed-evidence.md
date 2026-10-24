@@ -86,8 +86,29 @@ final PNGs confirm the corrected tool-rail placement and actual theme variants.
 The largest-text Chat image nevertheless exposed a responsive layout failure,
 recorded in `design-qa.md`; a subsequent fix and verification are required.
 
+### Final corrected iOS code
+
+Run `40138657535` at **`197b8970`** passed 1,201 XCTest unit tests, 17 Swift
+Testing tests and all **nine UI tests**, with zero failures, followed by a
+successful unsigned generic-device Release build. Fresh source/native image
+comparison confirmed compact navigation, contained search/menu glyphs, full
+enlarged recovery text and horizontally reachable Notifications. The new UI
+test independently checks minimum hit-target geometry, selection, complete
+text height and scrolling, rather than existence alone. Intermediate run
+`40137029824` failed the 44-point target assertion; the assertion was retained
+and the production content shape fixed, not weakened to produce a pass.
+
+Foundation code/test checkpoint `38e05c53` also passed every PR check, including
+both native validation workflows, after the canonical Social label correction.
+This log's final update changes documentation only. Android source `a4d11153`
+and iOS source `197b8970` are the explicitly verified app revisions; do not
+substitute a documentation commit's SHA for a tested app revision.
+
 Configured map imagery/markers and populated Driver content are not represented
 by these config-less screenshots. Detailed Chat/feature layouts remain in the
 migration register; passing shell checks alone does not establish full S29-S40
-visual equivalence. The full Xcode test/device-Release result must be checked at
-the final iOS code commit, not inferred from the existence of PNGs.
+visual equivalence. The final Xcode test/device-Release result above was checked
+independently, not inferred from the existence of PNGs. Real configured map,
+GPS/live/convoy, original Driver-account/data transitions, purchases, affordable
+device performance and the remaining detailed layouts still require validation
+before a production release. No physical-device or full-84-view pass is claimed.

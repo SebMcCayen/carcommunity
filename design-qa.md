@@ -145,3 +145,34 @@ much height, and the unavailable-state body truncates. Passing XCTest assertions
 did not establish usability at that text size. The iOS owner is fixing this
 responsive/accessibility regression with stronger checks and fresh captures.
 Overall visual acceptance remains blocked.
+
+### iOS final accessibility recapture
+
+The intermediate run `40137029824` at `8b8e89d3` revealed a second concrete
+failure: a primary button's accessibility/hit width measured only 33.3 points,
+and an accessibility-size Chat tap did not select the tab. The 44-point check
+was retained. Commit `47570be2` gives the complete 56-point-high framed label a
+rectangular content shape; `197b8970` also fixes the menu glyph at 22 points.
+Only compact navigation chrome is bounded; reading content retains full user
+text scaling and a naturally sized scrollable recovery message.
+
+Final run `40138657535` at **`197b8970` passed**: 1,201 XCTest unit tests,
+17 Swift Testing tests, all nine UI tests, and the unsigned generic-device
+Release build. The source sheets and fresh PNGs were opened together:
+
+- `C2F1FEB8-B995-43F4-B2ED-7F8382FD7A88.png`: accessibility-XXXL Chat has compact
+  navigation, readable source controls and the complete unavailable message,
+  without an ellipsis. Reading text remains visibly enlarged.
+- `717F4E92-4E5C-42D7-9BE8-44C0341DA9DE.png`: horizontally scrolling the channel
+  strip exposes and selects Notifications; the existing route is not removed.
+- `492A66E3-8DA7-4B5A-9308-CC52C109D4C3.png`: accessibility-size map chrome has
+  contained decorative glyphs and the compact bottom bar. The map is a stub.
+- `7AA02D9C-4247-4C70-843E-663BC880F388.png` and
+  `39A5E5AE-66F5-4D48-B423-22D95D62BF77.png`: final English/light map and
+  Swedish/dark Chat variants were inspected as well.
+
+The initial shell accessibility P1 above is resolved in these states, with
+rendered evidence and geometric/reachability regression checks. This does not
+resolve the separate full-catalogue, populated-data and configured-device
+acceptance requirements, so the report's overall result intentionally stays
+**blocked**, not a release approval.
