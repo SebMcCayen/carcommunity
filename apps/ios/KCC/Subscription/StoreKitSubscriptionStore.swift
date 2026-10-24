@@ -62,10 +62,10 @@ actor StoreKitSubscriptionStore: SubscriptionStore {
                 id: transaction.id,
                 productID: transaction.productID,
                 signedTransaction: verification.jwsRepresentation,
-                    appAccountToken: transaction.appAccountToken,
-                    expiresAt: transaction.expirationDate,
-                    isRevoked: transaction.revocationDate != nil,
-                    isUpgraded: transaction.isUpgraded
+                appAccountToken: transaction.appAccountToken,
+                expiresAt: transaction.expirationDate,
+                isRevoked: transaction.revocationDate != nil,
+                isUpgraded: transaction.isUpgraded
             ))
         }
         return values

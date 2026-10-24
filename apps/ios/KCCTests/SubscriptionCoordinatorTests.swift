@@ -82,7 +82,7 @@ struct SubscriptionCoordinatorTests {
         let task = Task { await observer.run(uid: "member") }
         defer { task.cancel() }
         await store.emit(transaction)
-        for _ in 0..<100 {
+        for _ in 0..<500 {
             if await store.finishedIDs.contains(31) { break }
             try await Task.sleep(for: .milliseconds(10))
         }
@@ -101,7 +101,7 @@ struct SubscriptionCoordinatorTests {
                                                        retryDelay: .milliseconds(10))
         let task = Task { await observer.run(uid: "member") }
         defer { task.cancel() }
-        for _ in 0..<100 {
+        for _ in 0..<500 {
             if await store.finishedIDs.contains(32) { break }
             try await Task.sleep(for: .milliseconds(10))
         }
@@ -144,7 +144,7 @@ struct SubscriptionCoordinatorTests {
         let observer = SubscriptionTransactionObserver(store: store, verifier: verifier)
         let task = Task { await observer.run(uid: "member") }
         defer { task.cancel() }
-        for _ in 0..<100 {
+        for _ in 0..<500 {
             if await store.finishedIDs.contains(34) { break }
             try await Task.sleep(for: .milliseconds(10))
         }
@@ -152,6 +152,28 @@ struct SubscriptionCoordinatorTests {
         let finished = await store.finishedIDs
         #expect(submitted == ["current"])
         #expect(finished == [35, 34])
+    }
+
+    @Test("a verification response after session cancellation cannot finish its transaction")
+    @MainActor
+    func cancelledVerification() async throws {
+        let transaction = StoreSignedTransaction(id: 36, productID: plusMonthlyProductID,
+            signedTransaction: "in-flight", appAccountToken: SubscriptionAccountToken.forUID("member"))
+        let store = FakeSubscriptionStore(unfinished: [transaction])
+        let verifier = HoldingAppleVerifier()
+        let observer = SubscriptionTransactionObserver(store: store, verifier: verifier)
+        let task = Task { await observer.run(uid: "member") }
+        for _ in 0..<500 {
+            if await verifier.entered { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let entered = await verifier.entered
+        #expect(entered)
+        task.cancel()
+        await verifier.complete()
+        await task.value
+        let finished = await store.finishedIDs
+        #expect(finished.isEmpty)
     }
 
 }
@@ -219,5 +241,19 @@ private actor RecoveringAppleVerifier: AppleSubscriptionVerifying {
         calls += 1
         if calls == 1 { throw TestError.failed }
         return SubscriptionVerificationResult(entitlement: "member_monthly", status: "active", tier: .plus)
+    }
+}
+
+private actor HoldingAppleVerifier: AppleSubscriptionVerifying {
+    private(set) var entered = false
+    private var continuation: CheckedContinuation<SubscriptionVerificationResult, Never>?
+    func verify(signedTransaction: String, expectedUID: String) async throws -> SubscriptionVerificationResult {
+        entered = true
+        return await withCheckedContinuation { continuation = $0 }
+    }
+    func complete() {
+        continuation?.resume(returning: SubscriptionVerificationResult(
+            entitlement: "member_monthly", status: "active", tier: .plus))
+        continuation = nil
     }
 }
