@@ -249,6 +249,21 @@ describe('bounded pagination and parent lifecycle', () => {
 });
 
 describe('request bounds and page budget', () => {
+  it('writes an expiring UID-linked marker and cannot renew it after canonical deletion', async () => {
+    const { store, reader } = setup();
+    await reader.list(request());
+    const path = `driverRateLimits/${VIEWER}_nativeFeedRead`;
+    const marker = store.docs.get(path)!;
+    // Matches Driver's existing deletion worker query where('uid', '==', uid).
+    expect(marker.uid).toBe(VIEWER);
+    expect(marker.action).toBe('nativeFeedRead');
+    expect(marker.expiresAt).toBeInstanceOf(Timestamp);
+    expect((marker.expiresAt as Timestamp).toMillis()).toBe(NOW + 2 * 60 * 60 * 1000);
+    store.docs.get(`users/${VIEWER}`)!.deleted = true;
+    await expect(reader.list(request())).rejects.toMatchObject({ details: { reason: 'account-restricted' } });
+    expect(store.docs.get(path)).toBe(marker);
+    expect(store.writes).toEqual([path]);
+  });
   it.each([
     null, [], { limit: 0 }, { limit: 21 }, { limit: 1.5 }, { limit: '20' }, { uid: AUTHOR },
     { cursor: {} }, { cursor: { seconds: 0, nanoseconds: 1e9, id: THREAD } },

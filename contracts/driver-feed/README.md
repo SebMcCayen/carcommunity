@@ -5,6 +5,11 @@ The canonical backend contract is [read-api.md](read-api.md), with the
 exports `driverFeed-list` and `driverFeed-detail` in `europe-west1` from
 CarCommunity's default Functions codebase. **Backend deployment has not been
 performed.** Main owns review, PRs, rollout and production verification.
+Before deployment, verify Firestore TTL is **ENABLED** on
+`driverRateLimits.expiresAt`. The new UID-linked marker becomes eligible for TTL
+deletion two hours after its last read; expiry metadata alone does not delete it. Driver's existing
+UID-based deletion worker also covers it. See the retention details in the API
+contract; production TTL state has not been verified by this change.
 
 Each page requires one callable, scans at most 20 candidates, and shares a
 120-page/hour per-UID budget. A filtered empty page may have a continuation

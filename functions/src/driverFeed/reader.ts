@@ -34,7 +34,8 @@ export class DriverFeedReader {
 
   private async charge(uid: string): Promise<void> {
     // Reuse Driver's backend-only collection and fixed-hour counter pattern.
-    // A stable ID bounds retained documents to one per viewer without new TTL setup.
+    // Stable ID bounds cardinality to one/viewer. TTL on expiresAt is a release
+    // prerequisite; Driver's existing deletion worker also removes rows by uid.
     const now = this.now();
     const bucket = Math.floor(now / 3_600_000);
     const ref = this.db.doc(`driverRateLimits/${uid}_nativeFeedRead`);

@@ -115,8 +115,27 @@ codes/reasons, not message text.
 List/detail share 120 pages per UID per fixed UTC hour. Atomic rate accounting
 uses Driver's existing backend-only `driverRateLimits` collection, action
 `nativeFeedRead`, stable document ID `{uid}_nativeFeedRead`, bucket/count and
-`expiresAt`. At most one record per viewer is retained without requiring a new
-TTL policy. A request validates before any reads; profile authorization precedes
+`expiresAt`. At most one record per viewer is retained. **Deployment prerequisite:
+verify an ENABLED Firestore TTL policy on collection group `driverRateLimits`,
+field `expiresAt`, in the target project before deploying this bridge.** The
+field alone does not delete anything, and TTL configuration has not been checked
+or changed by this implementation. Each successful charge sets a timestamp two
+hours after that read; TTL removal is asynchronous, not immediate account erasure.
+Canonical deletion/suspension prevents further renewal.
+
+Driver's inspected `functions/src/index.ts` deletion worker already drains
+`db.collection('driverRateLimits').where('uid', '==', uid)` and deletes every
+matching document. The new marker preserves that exact `uid` field, so it is
+included without a Driver migration. Driver's `syncSharedProfile` queues its
+cleanup on canonical deletion; KCC's own purge plan does not currently remove
+this marker itself. The existing Driver worker is an additional cleanup path,
+not a substitute for verified TTL when deploying this new KCC writer. Driver's
+`docs/FIREBASE_SETUP.md` already lists rate-limit TTL as an operator release
+task; do not infer that it has been completed. The focused marker test pins the
+UID, finite expiry and denial of renewal after canonical deletion. No broad
+Driver-data purge or production retention change is performed here.
+
+A request validates before any reads; profile authorization precedes
 quota mutation. Authorized requests consume a page even if filtered empty or
 their parent is unavailable. Corrupt current-bucket counters fail closed.
 
