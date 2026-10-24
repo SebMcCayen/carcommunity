@@ -8644,18 +8644,26 @@ internal fun ShellBottomBar(
     // is large (bar floats above the buttons with clearance intact) — correct on
     // both because the reserved height tracks the device's real inset.
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val darkTabs = com.kungsbackacarcommunity.app.design.LocalKccDarkTheme.current
+    val tabColors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+        selectedIconColor = if (darkTabs) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onPrimary,
+        selectedTextColor = if (darkTabs) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+        indicatorColor = if (darkTabs) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.primary,
+    )
     NavigationBar(
         modifier = Modifier.height(ShellBottomBarHeight + bottomInset),
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
         NavigationBarItem(
             selected = selected == ShellTab.Map,
+            colors = tabColors,
             onClick = { onSelect(ShellTab.Map) },
             icon = { Icon(Icons.Filled.Map, contentDescription = stringResource(R.string.shell_tabMap)) },
             label = { Text(stringResource(R.string.shell_tabMap)) },
         )
         NavigationBarItem(
             selected = selected == ShellTab.Chat,
+            colors = tabColors,
             onClick = { onSelect(ShellTab.Chat) },
             icon = {
                 androidx.compose.material3.BadgedBox(badge = {
@@ -8676,6 +8684,7 @@ internal fun ShellBottomBar(
         // delete the saved drive" choice is made).
         NavigationBarItem(
             selected = !isSharing && selected == ShellTab.Create,
+            colors = tabColors,
             onClick = { if (isSharing) onManageLiveShare() else onSelect(ShellTab.Create) },
             modifier = Modifier.coachMarkAnchor(CoachMarkStep.Drive),
             // Standout action: a glyph on a filled disc so it reads as a distinct
@@ -8732,6 +8741,7 @@ internal fun ShellBottomBar(
         )
         NavigationBarItem(
             selected = selected == ShellTab.Social,
+            colors = tabColors,
             onClick = { onSelect(ShellTab.Social) },
             icon = { Icon(Icons.Filled.Groups, contentDescription = stringResource(R.string.shell_tabSocial)) },
             label = { Text(stringResource(R.string.shell_tabSocial)) },
@@ -8739,6 +8749,7 @@ internal fun ShellBottomBar(
         )
         NavigationBarItem(
             selected = selected == ShellTab.Garage,
+            colors = tabColors,
             onClick = { onSelect(ShellTab.Garage) },
             icon = { Icon(Icons.Filled.DirectionsCar, contentDescription = stringResource(R.string.shell_tabGarage)) },
             label = { Text(stringResource(R.string.shell_tabGarage)) },
