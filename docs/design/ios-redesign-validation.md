@@ -32,6 +32,9 @@ statistics are not runtime fixtures.
   accents and dark foreground on primary gold actions. KccTheme resolves the
   generated light/dark roles; generated tokens and localization are not edited
   by this implementation. System theme remains the default.
+- Convoy driver rings, direction arrows and fallback images use the driver
+  semantic roles. Marker-list changes do not animate removed/stale drivers;
+  the existing position/privacy filtering remains authoritative.
 - Primary navigation: Map / Chat / existing Create-or-Stop / Social / Garage.
   Create retains its existing vehicle/single/convoy, permission, pending command
   and stop flow. Garage remains the actual vehicle list, without an extra hub.
