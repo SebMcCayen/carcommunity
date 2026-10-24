@@ -507,6 +507,11 @@ export type CallableCostClass =
  * exactly how a newly-added function surfaces instead of silently costing zero.
  */
 export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
+  // Bounded author/block joins are documented in contracts/driver-feed/read-api.md.
+  // The existing per-member assumptions do not yet model Driver page frequency;
+  // expose that gap on Finance rather than silently counting these reads as free.
+  'driverFeed.list': 'uncosted',
+  'driverFeed.detail': 'uncosted',
   'auth.completeOnboarding': 'variable-member',
   'auth.recordLogin': 'variable-member',
   'subscription.verify': 'variable-member',
