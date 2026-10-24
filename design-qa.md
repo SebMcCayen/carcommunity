@@ -82,3 +82,42 @@ manifest mapping names to PNGs. Reviewed Chat PNG:
 `998BB27F-0175-47D1-BBAA-1481DCF58630.png`. The map is a deliberate config-less
 placeholder, so real map-image/marker quality remains unassessed. This iteration
 does not pass dark-theme fidelity or the overall visual gate.
+
+### iOS capture iteration 2
+
+Run `40132485529`, code `ccf2b4e8`, supplied corrected dark screenshots. The
+source sheet and native captures were opened together, including focused
+header/selector/navigation inspection. `040CB5D9-59B0-46F2-A22E-86550AA5BC7D.png`
+shows actual graphite surfaces, the Chat heading and gold primary-navigation
+selection. `C5AE18F8-4BA7-42C7-98D2-BF2A249C1AB6.png` confirms the actual native
+keyboard and focused address input. The earlier theme/heading/color findings
+are resolved in these visible states. The map rail was still centered in that
+capture; code `0bac8e00` moves it below the top chrome and needs fresh evidence.
+
+Fonts remain native SF, with legible hierarchy and state text; dark/light roles
+are contract-based. Actual map imagery, avatars and populated Driver content
+remain unavailable in the config-less fixture. Detailed feature layout fidelity
+and complete same-viewport normalization remain outside acceptance of this
+initial shell slice, so the overall result stays blocked.
+
+### Android capture iteration 1 and CI recapture
+
+Local 390-logical-pixel S01/S02 images were rejected: a Pixel Launcher ANR dialog
+covered/dimmed the first image and prevented a normal keyboard state. These are
+environment-contaminated captures, not evidence of an app design pass.
+
+CI run `40134452073`, code `753257b7`, retained S01/S02/S29/S53 PNGs after test
+app cleanup. Source and native images were opened together. Full-view and focused
+chrome checks show the corrected upper tool rail, labelled primary navigation,
+gold selection, explicit Chat heading and opaque reading surface. The drive
+list is clearly a synthetic test fixture. CI's narrow default viewport differs
+from the reference; this is functional/narrow-layout evidence, not a 1:1 source
+pixel pass. Roboto/system text and token colors are legible. No logo or Chat
+circle was added back to the map, and no reference photo/person was fabricated.
+
+That CI run passed 98/99 UI cases. The remaining legacy test incorrectly looked
+for visible map chrome underneath the newly opaque Chat page. Code `a4d11153`
+instead asserts a single retained map instance, paused rendering, absent covered
+chrome and successful reactivation after Back. Its new CI result must be checked
+before claiming the entire UI suite passes. Basic shell captures do not complete
+all 84 feature layouts or configured-device safety/billing/Driver checks.
