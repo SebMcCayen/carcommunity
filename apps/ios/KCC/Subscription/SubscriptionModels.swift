@@ -20,6 +20,7 @@ struct StoreSignedTransaction: Equatable, Sendable {
     let id: UInt64
     let productID: String
     let signedTransaction: String
+    var appAccountToken: UUID? = nil
 }
 
 enum StorePurchaseResult: Equatable, Sendable {

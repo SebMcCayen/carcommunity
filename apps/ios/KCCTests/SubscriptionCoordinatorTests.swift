@@ -70,12 +70,74 @@ struct SubscriptionCoordinatorTests {
         let calls = await verifier.calls
         #expect(calls == 0)
     }
+    @Test("approval is delivered without opening membership")
+    @MainActor
+    func delayedApproval() async throws {
+        let transaction = StoreSignedTransaction(id: 31, productID: plusMonthlyProductID,
+            signedTransaction: "delayed", appAccountToken: SubscriptionAccountToken.forUID("member"))
+        let store = FakeSubscriptionStore()
+        let verifier = FakeAppleVerifier(result: .success(SubscriptionVerificationResult(
+            entitlement: "member_monthly", status: "active", tier: .plus)))
+        let observer = SubscriptionTransactionObserver(store: store, verifier: verifier)
+        let task = Task { await observer.run(uid: "member") }
+        defer { task.cancel() }
+        await store.emit(transaction)
+        for _ in 0..<100 {
+            if await store.finishedIDs.contains(31) { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let finished = await store.finishedIDs
+        #expect(finished == [31])
+    }
+
+    @Test("unfinished verification retries automatically after backend recovery")
+    @MainActor
+    func automaticRetry() async throws {
+        let transaction = StoreSignedTransaction(id: 32, productID: plusMonthlyProductID,
+            signedTransaction: "retry", appAccountToken: SubscriptionAccountToken.forUID("member"))
+        let store = FakeSubscriptionStore(entitlements: [transaction])
+        let verifier = RecoveringAppleVerifier()
+        let observer = SubscriptionTransactionObserver(store: store, verifier: verifier,
+                                                       retryDelay: .milliseconds(10))
+        let task = Task { await observer.run(uid: "member") }
+        defer { task.cancel() }
+        for _ in 0..<100 {
+            if await store.finishedIDs.contains(32) { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let finished = await store.finishedIDs
+        let calls = await verifier.calls
+        #expect(finished == [32])
+        #expect(calls == 2)
+    }
+
+    @Test("a different app account's transaction is never submitted or finished")
+    @MainActor
+    func accountFence() async throws {
+        let transaction = StoreSignedTransaction(id: 33, productID: plusMonthlyProductID,
+            signedTransaction: "other-account", appAccountToken: SubscriptionAccountToken.forUID("A"))
+        let store = FakeSubscriptionStore(entitlements: [transaction])
+        let verifier = FakeAppleVerifier(result: .failure(TestError.failed))
+        let observer = SubscriptionTransactionObserver(store: store, verifier: verifier)
+        let task = Task { await observer.run(uid: "B") }
+        await store.emit(transaction)
+        try await Task.sleep(for: .milliseconds(50))
+        task.cancel()
+        await task.value
+        let calls = await verifier.calls
+        let finished = await store.finishedIDs
+        #expect(calls == 0)
+        #expect(finished.isEmpty)
+    }
+
 }
 
 private actor FakeSubscriptionStore: SubscriptionStore {
     private let availableProducts: [StoreSubscriptionProduct]
     private let purchaseResult: StorePurchaseResult
     private let entitlements: [StoreSignedTransaction]
+    private let updates: AsyncStream<StoreSignedTransaction>
+    private let continuation: AsyncStream<StoreSignedTransaction>.Continuation
     private(set) var finishedIDs: [UInt64] = []
 
     init(
@@ -86,6 +148,7 @@ private actor FakeSubscriptionStore: SubscriptionStore {
         purchaseResult: StorePurchaseResult = .cancelled,
         entitlements: [StoreSignedTransaction] = []
     ) {
+        (updates, continuation) = AsyncStream.makeStream()
         availableProducts = products
         self.purchaseResult = purchaseResult
         self.entitlements = entitlements
@@ -96,6 +159,9 @@ private actor FakeSubscriptionStore: SubscriptionStore {
         purchaseResult
     }
     func currentEntitlements() async -> [StoreSignedTransaction] { entitlements }
+    func transactionUpdates() async -> AsyncStream<StoreSignedTransaction> { updates }
+    func unfinishedTransactions() async -> [StoreSignedTransaction] { entitlements }
+    func emit(_ transaction: StoreSignedTransaction) { continuation.yield(transaction) }
     func synchronize() async throws {}
     func finish(transactionID: UInt64) async { finishedIDs.append(transactionID) }
 }
@@ -108,7 +174,7 @@ private actor FakeAppleVerifier: AppleSubscriptionVerifying {
         self.result = result
     }
 
-    func verify(signedTransaction: String) async throws -> SubscriptionVerificationResult {
+    func verify(signedTransaction: String, expectedUID: String) async throws -> SubscriptionVerificationResult {
         calls += 1
         return try result.get()
     }
@@ -116,4 +182,13 @@ private actor FakeAppleVerifier: AppleSubscriptionVerifying {
 
 private enum TestError: Error {
     case failed
+}
+
+private actor RecoveringAppleVerifier: AppleSubscriptionVerifying {
+    private(set) var calls = 0
+    func verify(signedTransaction: String, expectedUID: String) async throws -> SubscriptionVerificationResult {
+        calls += 1
+        if calls == 1 { throw TestError.failed }
+        return SubscriptionVerificationResult(entitlement: "member_monthly", status: "active", tier: .plus)
+    }
 }
