@@ -32,6 +32,7 @@ jobs:
     # macOS minutes bill at a 10x multiplier on private repos — this job is
     # paths-filtered above so it only runs when iOS or its contracts change.
     runs-on: macos-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -58,13 +59,18 @@ jobs:
             exit 1
           fi
 
+      - name: Validate release metadata and preflight regression tests
+        run: |
+          python3 apps/ios/scripts/release-preflight.py
+          python3 -m unittest discover -s apps/ios/scripts -p 'test_*.py'
+
       - name: Show Xcode version
         run: xcodebuild -version
 
       # Builds WITHOUT GoogleService-Info.plist (it is gitignored and no
       # secret is injected here) — this is deliberate: it continuously proves
       # the config-less-build seam that FirebaseBootstrap provides.
-      - name: Build and test (simulator, config-less)
+      - name: Build and test (unit + UI smoke tests, simulator, config-less)
         run: |
           cd apps/ios
           # Pick the first available iPhone simulator on the runner image, so
@@ -73,6 +79,8 @@ jobs:
           echo "Using simulator destination: ${DEST}"
           xcodebuild -project KCC.xcodeproj -scheme KCC \
             -destination "platform=iOS Simulator,name=${DEST}" \
+            -parallel-testing-enabled NO \
+            -resultBundlePath "${RUNNER_TEMP}/ios-tests.xcresult" \
             test
 
       # TestFlight uses the Release configuration on arm64 hardware. Keep this
@@ -86,3 +94,12 @@ jobs:
             -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO \
             build
+
+      - name: Upload simulator failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-test-results
+          path: ${{ runner.temp }}/ios-tests.xcresult
+          if-no-files-found: ignore
+          retention-days: 7

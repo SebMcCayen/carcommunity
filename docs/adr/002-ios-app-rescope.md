@@ -125,3 +125,13 @@ remains a five-place flip, with iOS added as a sixth documented location.
 - The Android app and backend are unchanged by this decision.
 - App Store metadata, privacy documentation, and membership purchase are deferred to the
   production cutover milestone.
+
+## Implementation status (2026-10-24)
+
+The production-cutover list above records the original dependencies, not missing
+client implementations. Native StoreKit purchase/restore plus Apple transaction
+verification, APNs/FCM integration, App Check provider selection, and release
+Crashlytics are now implemented. Apple account/service provisioning, signed
+archive validation, physical-device acceptance, and TestFlight distribution still
+require operational verification. Follow the maintained
+[iOS release readiness checklist](../ios-release-readiness.md) for current gates.

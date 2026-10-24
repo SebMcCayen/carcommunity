@@ -178,6 +178,7 @@ targets:
     scheme:
       testTargets:
         - KCCTests
+        - KCCUITests
 
   KCCTests:
     type: bundle.unit-test
@@ -193,3 +194,14 @@ targets:
       # a real FunctionsErrorDomain NSError.
       - package: Firebase
         product: FirebaseFunctions
+
+  KCCUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: KCCUITests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: KCC

@@ -97,9 +97,8 @@ introduced. See `docs/crashlytics.md` for the one-time physical-device check.
 
 ## Developing against the Firebase emulators
 
-There is no paid Apple Developer membership yet (ADR-002), so the Sign in
-with Apple capability cannot be used against production. Development instead
-targets the **Firebase Auth emulator**, which never verifies token
+Before the Apple Developer account and production sign-in capability are ready,
+development can target the **Firebase Auth emulator**, which never verifies token
 signatures:
 
 1. Start the emulators from the repo root: `firebase emulators:start`
@@ -167,3 +166,24 @@ listing returns a newer semantic version; no App Store ID or credential is commi
 Tapping **Not now** defers that exact version for seven days, while a newer version can
 prompt immediately. Prompts wait until live sharing/drive recording and the bundled
 What's New announcement have finished.
+
+## UI smoke tests and release preflight
+
+The KCC scheme includes `KCCTests` and `KCCUITests`. The UI smoke tests launch the
+real config-less app and exercise Swedish/English shell tabs, Settings and nested
+Back navigation, and labeled/reachable controls at large text sizes. Run without
+`GoogleService-Info.plist` or a Mapbox runtime token. They do not authenticate or
+write to production, and they do not replace real-device testing. To run only UI
+smoke tests, add `-only-testing:KCCUITests -parallel-testing-enabled NO` to the
+simulator test command above.
+
+Run `python3 apps/ios/scripts/release-preflight.py` from the repository root for
+credential-free source release checks. After provisioning, use `--release` with
+local `DEVELOPMENT_TEAM` and `MAPBOX_ACCESS_TOKEN` environment variables and the
+production Firebase plist. Values are never printed. This validates local inputs;
+it does not perform signing or prove online service availability.
+
+The current [iOS release and device checklist](../../docs/ios-release-readiness.md)
+covers Apple/Firebase setup, signed archive validation, TestFlight, physical-iPhone
+acceptance tests, and App Store metadata. The GitHub workflow does not sign or
+upload releases.

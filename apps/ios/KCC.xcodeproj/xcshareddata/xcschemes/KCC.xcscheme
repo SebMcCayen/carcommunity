@@ -50,6 +50,17 @@
                ReferencedContainer = "container:KCC.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "1FEF7FCA2B1A33771F15C8B6"
+               BuildableName = "KCCUITests.xctest"
+               BlueprintName = "KCCUITests"
+               ReferencedContainer = "container:KCC.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>

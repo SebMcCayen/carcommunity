@@ -129,6 +129,7 @@
 		4D16751D9EF71310CE6F7847 /* ChannelChatScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11CDD124E35FCE223DE9DCB /* ChannelChatScreen.swift */; };
 		4DC332267ACEDE81E20CC5A4 /* FeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = 846341BD49597226831C4E13 /* FeatureFlags.swift */; };
 		4E36CD41A0EE50285C015024 /* NotificationSettingsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E55266E4E5C9DA8913ED97DF /* NotificationSettingsRepository.swift */; };
+		4E37B727A82BA021B053235A /* ShellSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08D2BE682E5679774562C313 /* ShellSmokeTests.swift */; };
 		4E79C8F6CC66EC188BD6864F /* PushNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEFD696D6EC6FCA43AD27FBD /* PushNotifications.swift */; };
 		4F15CD3C9F64E61A8F285EBC /* PerkShopModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 766FD0B723163B3B95BBB96A /* PerkShopModelTests.swift */; };
 		4F6401742950C4DC5F4FFF76 /* PrivacySettingsCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C8CF75F4B1CA5403CC09B3 /* PrivacySettingsCoordinatorTests.swift */; };
@@ -385,6 +386,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		08ABC50AB0270A1648FA6E54 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0E18604EA3025EC582371214 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 27ADF49B5B571DC880D2DEC9;
+			remoteInfo = KCC;
+		};
 		CD4559BC6AC668055317D31E /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 0E18604EA3025EC582371214 /* Project object */;
@@ -408,6 +416,7 @@
 		07AB0F95F655E836F1DD7719 /* OnboardingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingTests.swift; sourceTree = "<group>"; };
 		0853E77674B68782F091D10C /* DriveRouteUploadSpool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveRouteUploadSpool.swift; sourceTree = "<group>"; };
 		08AEF6E96BF2AB0EDF375B5F /* FriendsCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsCoordinatorTests.swift; sourceTree = "<group>"; };
+		08D2BE682E5679774562C313 /* ShellSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellSmokeTests.swift; sourceTree = "<group>"; };
 		0A0AECAFE48DCEEB1CE2EA05 /* FirebasePartnersRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebasePartnersRepository.swift; sourceTree = "<group>"; };
 		0B00397E45AB94249025E8C0 /* EventAttendeesSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventAttendeesSheet.swift; sourceTree = "<group>"; };
 		0B8AC573ED81F9A257D3F9DB /* PartnersCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartnersCoordinator.swift; sourceTree = "<group>"; };
@@ -724,6 +733,7 @@
 		DD356449B915D60437161C4F /* Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tokens.swift; sourceTree = "<group>"; };
 		DDA58F2A9973F08991D2F4CF /* ClaimHistoryScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaimHistoryScreen.swift; sourceTree = "<group>"; };
 		DF81B13C98719E049F390996 /* MapSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapSurface.swift; sourceTree = "<group>"; };
+		DFC7F5E2A96301972AE2E58E /* KCCUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = KCCUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E15892EE69827A386C169C05 /* ConversationsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationsRepository.swift; sourceTree = "<group>"; };
 		E175F7C3177C9045EA47D7FE /* BadgesModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BadgesModelTests.swift; sourceTree = "<group>"; };
 		E4C13E96CF6F7A3D81269B6D /* ProfileCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileCoordinatorTests.swift; sourceTree = "<group>"; };
@@ -1072,6 +1082,7 @@
 			children = (
 				8B4A1900424F0BA9CB9105FA /* KCC.app */,
 				5A1F61264065E19240C32A0D /* KCCTests.xctest */,
+				DFC7F5E2A96301972AE2E58E /* KCCUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -1081,6 +1092,7 @@
 			children = (
 				4354374B4D732A7906C4993A /* KCC */,
 				F609A800CAF387D91FC4893D /* KCCTests */,
+				E1CDCF4151740237E2053815 /* KCCUITests */,
 				4CDCB20F1F46BDF788444D9D /* Products */,
 			);
 			sourceTree = "<group>";
@@ -1329,6 +1341,14 @@
 			path = Feedback;
 			sourceTree = "<group>";
 		};
+		E1CDCF4151740237E2053815 /* KCCUITests */ = {
+			isa = PBXGroup;
+			children = (
+				08D2BE682E5679774562C313 /* ShellSmokeTests.swift */,
+			);
+			path = KCCUITests;
+			sourceTree = "<group>";
+		};
 		E6B51906F4CC4000D0CF9422 /* Badges */ = {
 			isa = PBXGroup;
 			children = (
@@ -1500,6 +1520,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		1FEF7FCA2B1A33771F15C8B6 /* KCCUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 61AD4D83A69201FC9D5EB2CF /* Build configuration list for PBXNativeTarget "KCCUITests" */;
+			buildPhases = (
+				B053976468FEEFC79BC9C677 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				6D8385279C97315B3366AEB2 /* PBXTargetDependency */,
+			);
+			name = KCCUITests;
+			packageProductDependencies = (
+			);
+			productName = KCCUITests;
+			productReference = DFC7F5E2A96301972AE2E58E /* KCCUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		27ADF49B5B571DC880D2DEC9 /* KCC */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 894321D2EFDC3E068EAFCAD7 /* Build configuration list for PBXNativeTarget "KCC" */;
@@ -1559,6 +1597,9 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					1FEF7FCA2B1A33771F15C8B6 = {
+						TestTargetID = 27ADF49B5B571DC880D2DEC9;
+					};
 				};
 			};
 			buildConfigurationList = 285AF6F4BB009C0573D6A2B5 /* Build configuration list for PBXProject "KCC" */;
@@ -1582,6 +1623,7 @@
 			targets = (
 				27ADF49B5B571DC880D2DEC9 /* KCC */,
 				9C961040DE4A5766EA1602A7 /* KCCTests */,
+				1FEF7FCA2B1A33771F15C8B6 /* KCCUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -1649,6 +1691,14 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		B053976468FEEFC79BC9C677 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4E37B727A82BA021B053235A /* ShellSmokeTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		ECBBEB83C34F82F81358F838 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -2027,6 +2077,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		6D8385279C97315B3366AEB2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 27ADF49B5B571DC880D2DEC9 /* KCC */;
+			targetProxy = 08ABC50AB0270A1648FA6E54 /* PBXContainerItemProxy */;
+		};
 		83B8C031C1234F4FC26EA94A /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 27ADF49B5B571DC880D2DEC9 /* KCC */;
@@ -2154,6 +2209,38 @@
 			};
 			name = Debug;
 		};
+		BF56B7104C306F8E16D72750 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = KCC;
+			};
+			name = Debug;
+		};
+		CD54D8C1AB8AE145341D6659 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = KCC;
+			};
+			name = Release;
+		};
 		DE6FC946F4B77D4082E244F3 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2243,6 +2330,15 @@
 			buildConfigurations = (
 				807B5B65FCF75583011F62A2 /* Debug */,
 				E693B154D2EB047020772154 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		61AD4D83A69201FC9D5EB2CF /* Build configuration list for PBXNativeTarget "KCCUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BF56B7104C306F8E16D72750 /* Debug */,
+				CD54D8C1AB8AE145341D6659 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

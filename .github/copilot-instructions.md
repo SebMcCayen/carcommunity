@@ -4,7 +4,7 @@
 
 When documentation conflicts, use this priority order:
 
-1. `docs/adr/001-firebase-platform.md`
+1. `docs/adr/001-firebase-platform.md` and its iOS scope amendment, `docs/adr/002-ios-app-rescope.md`
 2. `docs/architecture.md`
 3. `docs/migration/native-firebase-migration-plan.md`
 4. `.github/instructions/mobile-platform-parity.instructions.md`
@@ -52,8 +52,8 @@ Follow the full mobile parity instructions defined in:
 - `carcommunity` is an open source monorepo for a Swedish car community app.
 - MVP brand is Kungsbacka Car Community (KCC), but implementation must stay brand-ready for future national or multi-local branding.
 - Platform scope includes:
-  - iOS native app (Swift and SwiftUI) at `apps/ios` (target — not yet scaffolded)
-  - Android native app (Kotlin and Jetpack Compose) at `apps/android` (target — not yet scaffolded)
+  - iOS native app (Swift and SwiftUI) at `apps/ios` (implemented; see `docs/ios-release-readiness.md`)
+  - Android native app (Kotlin and Jetpack Compose) at `apps/android` (Google Play closed testing)
   - Admin web app (React + Vite, hosted on Firebase Hosting) at `apps/admin`
   - Cloud Functions for Firebase (Firebase-supported Node.js runtime, TypeScript) at `functions/`
   - Cloud Firestore (durable data) and Firebase Realtime Database (ephemeral live location, presence)

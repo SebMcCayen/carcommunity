@@ -9,13 +9,16 @@ The codebase is intentionally **brand-ready** so it can support a future nationa
 
 **Phase: active development — pre-public-launch.** The Android app is distributed through **Google Play closed testing** and has not been publicly released. Interfaces, data, and feature scope are still changing.
 
-The MVP is three parts, all in this monorepo:
+The project has four parts, all in this monorepo:
 
-- **Android app** (Kotlin / Jetpack Compose) — the primary member client.
+- **Android app** (Kotlin / Jetpack Compose) — in Google Play closed testing.
+- **iOS app** (Swift / SwiftUI) — implemented and preparing for signed device/TestFlight validation.
 - **Admin web app** (React + Vite) — internal community administration and moderation.
 - **Firebase backend** (Cloud Functions, Firestore, Realtime Database, App Check) — deployed from CI via Workload Identity Federation.
 
-iOS is **out of scope for the MVP** (parked on the Future Ideas board).
+iOS is in scope per [ADR-002](docs/adr/002-ios-app-rescope.md). Apple account/service
+configuration and physical-device validation remain release gates; see the
+[iOS release checklist](docs/ios-release-readiness.md).
 
 ### Implemented feature areas
 
@@ -29,13 +32,13 @@ These member-facing areas exist in the codebase today. As a pre-launch project, 
 - **Saved drives** — routes stored only after an explicit user action; users can delete them at any time.
 - **Traffic-incident overlays** — incident reporting and map overlays.
 - **Partner insights** — anonymised, aggregated engagement signals for community partners; location-derived pass-by statistics require explicit opt-in (off by default).
-- **Membership & subscription** — Google Play billing and entitlement checks.
+- **Membership & subscription** — Google Play Billing, StoreKit 2, and backend entitlement checks.
 
 Supporting systems include Firebase Authentication, push notifications (FCM), in-app moderation and blocking, and an in-app problem reporter.
 
 ### What's next
 
-Work is focused on hardening the closed-testing build toward a public launch: stabilizing the map-first Android experience, completing feature areas still behind flags, and operational readiness. Roadmap items are tracked internally and are not commitments.
+Work is focused on hardening the closed-testing build toward a public launch: stabilizing the native mobile experiences, completing feature areas still behind flags, and validating iOS on provisioned iPhones before TestFlight. Roadmap items are tracked internally and are not commitments.
 
 ## Open source status
 
@@ -50,7 +53,7 @@ Work is focused on hardening the closed-testing build toward a public launch: st
 **Architecture:**
 
 - Android native app (Kotlin / Jetpack Compose) — `apps/android` (MVP mobile client)
-- iOS native app — descoped from MVP (parked on the Future Ideas board)
+- iOS native app (Swift / SwiftUI) — `apps/ios` (in scope per ADR-002)
 - Admin web app (React, hosted on Firebase Hosting) — `apps/admin`
 - Cloud Functions for Firebase (2nd gen, Node.js 22, TypeScript) — `functions/`
 - Cloud Firestore (durable data) and Firebase Realtime Database (live location, presence)
@@ -65,6 +68,7 @@ Work is focused on hardening the closed-testing build toward a public launch: st
 ```text
 .
 ├── apps/
+│   ├── ios/            # Swift / SwiftUI native iOS app
 │   ├── android/        # Kotlin / Jetpack Compose native Android app (MVP)
 │   └── admin/          # Admin web app (React + Vite, hosted on Firebase Hosting)
 ├── functions/          # Cloud Functions for Firebase
@@ -89,6 +93,7 @@ Minimum prerequisites:
 - JDK 21 (required by the Firebase Emulator Suite for the functions emulator tests)
 - Firebase CLI (`npm install -g firebase-tools`)
 - JDK 21 and the Android SDK for `apps/android` (Gradle wrapper included)
+- Xcode 26+ with an iOS simulator for `apps/ios` ([iOS setup](apps/ios/README.md))
 
 Run the root workspace checks (`packages/shared` and `apps/admin`):
 
@@ -123,6 +128,15 @@ cd apps/android
 ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
 ```
 
+Build and test the iOS app without Apple signing credentials:
+
+```bash
+python3 apps/ios/scripts/release-preflight.py
+xcodebuild -project apps/ios/KCC.xcodeproj -scheme KCC \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -parallel-testing-enabled NO test
+```
+
 > See [docs/deployment.md](docs/deployment.md) for CI and production deployment details.
 
 ## Security note
@@ -138,7 +152,8 @@ cd apps/android
 - [Current state inventory](docs/migration/current-state-inventory.md)
 - [Feature parity matrix](docs/migration/feature-parity-matrix.md)
 - [Backend domain mapping](docs/migration/backend-domain-mapping.md)
-- [Cutover checklist](docs/migration/cutover-checklist.md)
+- [Historical migration cutover checklist](docs/migration/cutover-checklist.md)
+- [Current iOS release readiness and device checks](docs/ios-release-readiness.md)
 - [Security](docs/security.md)
 - [Data model](docs/data-model.md)
 - [Firebase data model](docs/firebase-data-model.md)
