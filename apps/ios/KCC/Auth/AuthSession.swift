@@ -15,9 +15,18 @@ final class AuthSession {
 
     /// - Parameter repository: nil when Firebase is not configured in this
     ///   build; the state is then permanently ``AuthState/unavailable``.
-    init(
+    convenience init(
         repository: AuthRepository?,
-        onIdentityChange: @escaping (String?) -> Void = { _ in },
+        clearSavedPlaces: @escaping (String) -> Bool = {
+            ProtectedFileSavedPlacesStore(uid: $0).clear()
+        }
+    ) {
+        self.init(observing: repository, onIdentityChange: { _ in }, clearSavedPlaces: clearSavedPlaces)
+    }
+
+    init(
+        observing repository: AuthRepository?,
+        onIdentityChange: @escaping (String?) -> Void,
         clearSavedPlaces: @escaping (String) -> Bool = {
             ProtectedFileSavedPlacesStore(uid: $0).clear()
         }

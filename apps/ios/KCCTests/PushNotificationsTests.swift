@@ -29,7 +29,7 @@ final class PushNotificationsTests: XCTestCase {
         let coordinator = PushNotificationCoordinator(permissionReader: { .enabled })
         coordinator.configure(repository: repository, tokenSource: source)
         let auth = PushTestAuthRepository()
-        let session = AuthSession(repository: auth, onIdentityChange: { coordinator.bind(uid: $0) },
+        let session = AuthSession(observing: auth, onIdentityChange: { coordinator.bind(uid: $0) },
                                   clearSavedPlaces: { _ in true })
         await coordinator.waitForPendingOperations()
         XCTAssertTrue(coordinator.shouldPresentForegroundNotification)
