@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.navigation
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -100,6 +101,7 @@ class NavigationSearchScreenTest {
         }
         composeTestRule.onNodeWithText(str(R.string.addressSearch_searchPlaceholder))
             .assertIsDisplayed()
+        composeTestRule.onNodeWithTag(NAV_SEARCH_INPUT_TEST_TAG).assertIsFocused()
     }
 
     @Test
