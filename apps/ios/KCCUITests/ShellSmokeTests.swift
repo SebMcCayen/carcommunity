@@ -25,7 +25,7 @@ final class ShellSmokeTests: XCTestCase {
     }
 
     func testSwedishShellNavigation() {
-        checkShell(language: "sv", labels: ["Karta", "Historik", "Socialt", "Garage"])
+        checkShell(language: "sv", labels: ["Karta", "Historik", "Social", "Garage"])
     }
 
     func testEnglishShellNavigation() {

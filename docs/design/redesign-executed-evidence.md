@@ -3,6 +3,15 @@
 This log separates executed checks from authored harnesses and visual acceptance.
 It does not approve a release or claim that all 84 concept views are finished.
 
+## Foundation contract regression
+
+The foundation's iOS smoke test still expected Swedish `Socialt`, while the
+approved canonical label is `Social`. Run `40135549312` failed that exact
+hard-coded-label assertion after the string regeneration. The fixture now
+expects the canonical label; native redesign tests use the new Chat-based
+navigation independently. This is a test expectation correction, not a hidden
+claim that a failed run passed.
+
 ## Android local checkpoint
 
 The initial config-less app and instrumentation APKs were built together with
@@ -34,6 +43,21 @@ MediaStore captures on API 29+ and CI collection from
 `Pictures/carcommunity-redesign` retain evidence without production storage
 permissions. This follows the [Android own-media storage guidance](https://developer.android.com/training/data-storage/shared/media).
 
+CI run `40135320682` at Android code `a4d11153` passed all 99 Compose
+instrumentation cases with no skipped/failed cases, on API 34. The navigation
+SDK compilation/alignment job also passed. Its retained S01/S02/S29/S53 images
+were opened alongside the source sheets: upper-right map tools, collapsed
+search, the opaque Chat host and My drives are present. This narrow English
+config-less fixture does not prove Swedish, large-text or populated map/feed
+fidelity. Lint and release shrinking have separate job results; do not infer
+them from the instrumentation pass.
+
+The completed run also passed `validate-android`: debug/release unit tests,
+Android lint, debug assembly, R8 release shrinking and 16 KB native-library
+alignment. All three Android jobs were checked individually, because the
+repository's pre-existing instrumentation job is informational/non-blocking;
+an overall workflow conclusion alone can conceal an instrumentation failure.
+
 ## Driver backend checkpoint
 
 PR #1172's focused real callable transport tests all passed (7/7). Reader tests,
@@ -42,6 +66,12 @@ evidence. The full CI checks were green at backend commit `f38311e8`.
 See `contracts/driver-feed/validation.md` in that PR for executed commands,
 initial discovery-timeout attempts, cost-model gaps and deployment/TTL gates.
 
+The existing `deploy-firebase-functions.yml` runs on pushes to `main`.
+Merging the backend PR can therefore deploy automatically, subject to the
+production environment's protections. Verify the TTL/App Check and rollout
+prerequisites **before merging**, not after. This task performed no merge,
+deployment, production configuration change or store release.
+
 ## iOS visual checkpoints
 
 `design-qa.md` records the first theme/heading/navigation findings. The second
@@ -49,6 +79,12 @@ artifact set (`40132485529`, native code `ccf2b4e8`) confirms actual dark readin
 surfaces, the Chat heading, gold primary-navigation selection and a real native
 search keyboard. It also contains the Driver unavailable-account surface,
 profile/history entry and Settings. These were opened with the source references.
+
+Run `40134626295` at `0bac8e00` passed 1,201 XCTest unit tests, 17 Swift Testing
+tests, all eight UI tests and the unsigned generic-device Release build. Its
+final PNGs confirm the corrected tool-rail placement and actual theme variants.
+The largest-text Chat image nevertheless exposed a responsive layout failure,
+recorded in `design-qa.md`; a subsequent fix and verification are required.
 
 Configured map imagery/markers and populated Driver content are not represented
 by these config-less screenshots. Detailed Chat/feature layouts remain in the

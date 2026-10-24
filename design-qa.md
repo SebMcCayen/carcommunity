@@ -12,16 +12,18 @@ acceptance independently from implementation, compilation and unit tests.
   supplied 84-view catalogue; source hashes and view IDs are recorded there.
 - Source image sheets inspected: S01-S84. Each sheet contains four concepts;
   sample people, cars and map locations are not production fixtures.
-- Implementation screenshots: pending native capture and review. Platform
-  capture harnesses and actual executed results belong in
+- Implementation screenshots: native shell captures have been opened alongside
+  the sources in the iterations below. This is limited config-less evidence,
+  not acceptance of the complete catalogue. Platform capture harnesses belong in
   `docs/design/android-redesign-validation.md` and
   `docs/design/ios-redesign-validation.md` in the platform PRs.
 - Target: the app-owned viewport and matching theme/state. OS status bars,
   keyboards, safe areas and navigation chrome stay native. Normalize source
   crops and screenshot density before judging layout; do not compare the full
   four-view sheet against a single device screenshot.
-- Full-view and focused-region comparison: pending rendered evidence. No
-  screenshot-equivalence or complete 84-screen acceptance is claimed.
+- Full-view and focused-region comparison: performed for the initial shell
+  states below; matching-viewport, populated-content and full-catalogue
+  comparisons remain pending. No complete screenshot equivalence is claimed.
 
 ## Required fidelity surfaces
 
@@ -35,9 +37,10 @@ acceptance independently from implementation, compilation and unit tests.
 
 ## Findings and blockers
 
-- [P1] Rendered acceptance is not yet established on both platforms. Open the
-  source and matching native capture together, inspect full view and focused
-  chrome/text regions, then record exact evidence and differences.
+- [P1] Complete rendered acceptance is not established on both platforms.
+  Initial source/native shell comparisons are recorded below; extend them to
+  matching populated states, themes, viewport sizes and text scales before
+  claiming the full design is verified.
 - Detailed feature-specific layouts remain in the migration register. A shared
   token change is not completion of all 84 views. Paid profile-frame purchases
   are deliberately deferred; Driver reading is included in the current slice.
@@ -118,6 +121,27 @@ circle was added back to the map, and no reference photo/person was fabricated.
 That CI run passed 98/99 UI cases. The remaining legacy test incorrectly looked
 for visible map chrome underneath the newly opaque Chat page. Code `a4d11153`
 instead asserts a single retained map instance, paused rendering, absent covered
-chrome and successful reactivation after Back. Its new CI result must be checked
-before claiming the entire UI suite passes. Basic shell captures do not complete
+chrome and successful reactivation after Back. Run `40135320682` passed all 99
+UI cases, with no failed/skipped cases, at `a4d11153`. Lint, debug/release unit
+tests, the R8 release build, alignment and navigation-SDK compilation also passed.
+Basic shell captures do not complete
 all 84 feature layouts or configured-device safety/billing/Driver checks.
+
+### iOS capture iteration 3
+
+Run `40134626295`, code `0bac8e00`, passed simulator tests and the unsigned
+generic-device Release build. Source and final native captures were opened
+together. Swedish dark map `ED212E16-864E-44DF-B9E5-6DC0A5A77D6F.png` and
+English light map `A635375D-D13F-44EA-9120-E01F05749513.png` confirm the tools
+now start below the top chrome. Swedish dark Chat
+`D52BCCFF-AB35-49F3-A89F-CC78BCE2C0A8.png` confirms the source selector,
+opaque reading surface and gold navigation role. Config-less Settings replaces
+the signed-in avatar, and unavailable content is not a populated-content pass.
+
+The English accessibility-XXXL Chat capture
+`428835A2-B935-4E16-B0C0-5EE575BFBEE7.png` exposed a **P1 layout failure**:
+primary-navigation labels break across fragments, compact chrome occupies too
+much height, and the unavailable-state body truncates. Passing XCTest assertions
+did not establish usability at that text size. The iOS owner is fixing this
+responsive/accessibility regression with stronger checks and fresh captures.
+Overall visual acceptance remains blocked.
