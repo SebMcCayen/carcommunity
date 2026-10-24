@@ -1941,6 +1941,7 @@
     <string name="driver_feed_noComments">Inga kommentarer att visa.</string>
     <string name="driver_feed_unavailable">Driver-innehållet är inte tillgängligt just nu.</string>
     <string name="driver_feed_onboarding">Slutför din Driver-profil i Driver för att läsa inlägg här.</string>
+    <string name="driver_feed_canonicalOnboarding">Slutför din profil i CarCommunity för att läsa Driver-inlägg.</string>
     <string name="driver_feed_restricted">Driver är inte tillgängligt för ditt konto.</string>
     <string name="driver_feed_image">Bild i inlägget</string>
     <string name="driver_feed_likes">Gilla-markeringar</string>
