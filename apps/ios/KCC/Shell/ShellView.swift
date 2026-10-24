@@ -962,7 +962,7 @@ struct ShellView: View {
                             .font(.title3.weight(.semibold))
                             .frame(height: 28)
                             .accessibilityHidden(true)
-                        Text(tabTitle(tab)).font(.caption2)
+                        Text(LocalizedStringKey(tabTitle(tab))).font(.caption2)
                             .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity, minHeight: 56)
@@ -1700,12 +1700,12 @@ struct ShellView: View {
         }
     }
 
-    private func tabTitle(_ tab: ShellTab) -> LocalizedStringKey {
+    private func tabTitle(_ tab: ShellTab) -> String {
         if tab == .create,
            (liveLocationCoordinator?.isSharing == true || pendingSessionCommand == .starting) {
             return "liveLocation.stop"
         }
-        return tab.title
+        return tab.titleKey
     }
 
     private func tabSystemImage(_ tab: ShellTab) -> String {
@@ -2488,7 +2488,9 @@ extension ShellTab {
     /// Localized tab title. Keys live in the generated `Localizable.xcstrings`
     /// and are the same semantic names as `contracts/localization`
     /// (`shell.tabMap` …) — see `apps/ios/scripts/generate-strings.mjs`.
-    var title: LocalizedStringKey {
+    var title: LocalizedStringKey { LocalizedStringKey(titleKey) }
+
+    var titleKey: String {
         switch self {
         case .map: "shell.tabMap"
         case .history: "shell.moreDrives"

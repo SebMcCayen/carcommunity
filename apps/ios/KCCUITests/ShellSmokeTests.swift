@@ -9,6 +9,21 @@ final class ShellSmokeTests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testMapBackdropRemainsVisibleAfterTabAndSettingsRoundTrip() {
+        let app = launch(language: "en")
+        let placeholder = app.staticTexts["shell.mapPlaceholder"]
+        XCTAssertTrue(placeholder.waitForExistence(timeout: 5))
+        XCTAssertTrue(placeholder.isHittable, "Map content must not be covered by the tab host")
+        app.tabBars.buttons["Social"].tap()
+        app.tabBars.buttons["Map"].tap()
+        assertSelected(app.tabBars.buttons["Map"])
+        XCTAssertTrue(placeholder.isHittable)
+        openSettings(app)
+        app.buttons["Back"].firstMatch.tap()
+        XCTAssertTrue(placeholder.waitForExistence(timeout: 5))
+        XCTAssertTrue(placeholder.isHittable)
+    }
+
     func testSwedishShellNavigation() {
         checkShell(language: "sv", labels: ["Karta", "Chatt", "Socialt", "Garage"])
     }
