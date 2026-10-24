@@ -65,6 +65,35 @@ Never commit a token or use the private `sk.` downloads token here. Without a
 valid `pk.` token the app still builds and shows the localized map placeholder,
 which is the expected CI behavior.
 
+### Simulator preview using Android's existing token
+
+The manually dispatched **Build iOS Mapbox Preview** GitHub Actions workflow
+uses the same `production` environment secret, `MAPBOX_ACCESS_TOKEN`, as
+Android. No new Mapbox token is needed. It never uses `MAPBOX_DOWNLOADS_TOKEN`
+and does not expose production configuration to pull request CI.
+
+After the workflow is merged, select **Actions → Build iOS Mapbox Preview →
+Run workflow → main**. Approve the existing production environment deployment
+if GitHub requests it. Download the `kcc-ios-mapbox-simulator` artifact and
+extract the ZIP containing `KCC.app`. With an iPhone simulator booted, run
+these commands from the directory containing the extracted app:
+
+```bash
+xcrun simctl install booted KCC.app
+xcrun simctl launch booted com.kungsbackacarcommunity.app
+```
+
+The workflow builds both Intel and Apple Silicon simulator architectures with
+ad hoc signing; it does not need an Apple Developer team. This is a simulator
+app, not an iPhone IPA or TestFlight build. Firebase configuration is deliberately
+absent, so this preview does not validate sign-in or backend features. The public
+runtime token is embedded in the app, as on Android; the temporary build
+configuration is removed after the run. Artifacts expire after seven days.
+
+The workflow verifies token injection, not live tile rendering. Open the map in
+the simulator to check rendering and attribution; location permission and a
+simulated location are needed to check the user location indicator.
+
 ## Building and testing (CLI)
 
 ```bash
