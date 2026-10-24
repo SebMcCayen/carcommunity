@@ -37,7 +37,7 @@ apps/admin   (React + Vite web)         ─┘         │               Firebas
 ```text
 .
 ├── apps/
-│   ├── ios/            # Swift / SwiftUI native iOS app (in scope per ADR-002; not scaffolded yet)
+│   ├── ios/            # Swift / SwiftUI native iOS app (in scope per ADR-002; release/device validation pending)
 │   ├── android/        # Kotlin / Jetpack Compose native Android app
 │   └── admin/          # React + Vite admin web app (hosted on Firebase Hosting)
 ├── functions/          # Cloud Functions for Firebase

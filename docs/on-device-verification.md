@@ -1,6 +1,7 @@
-# On-device verification
+# Android on-device verification
 
-A manual pre-release checklist for the things **CI structurally cannot test**.
+A manual Android pre-release checklist for the things **CI structurally cannot test**.
+For iOS, use the current [iPhone release/device checklist](ios-release-readiness.md).
 
 Large parts of this app only exist on a real, provisioned device. CI builds have no
 Mapbox token, no GPS, no camera, no Play Billing and no App Check attestation — so

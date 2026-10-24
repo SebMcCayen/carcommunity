@@ -296,24 +296,13 @@ The single rules test file is `functions/src/__tests__/security-rules.emulator.t
 
 ## Part 7 — iOS build and tests
 
-**All nine items obsolete.** iOS was descoped from the MVP on 2026-07-02 — see the amendment in
-[`docs/adr/001-firebase-platform.md`](../adr/001-firebase-platform.md), echoed in `README.md:21`,
-`docs/architecture.md:40`, `docs/app-check.md:10` and `apps/android/README.md:3`. There is no
-`apps/ios` directory, no Swift or Xcode file anywhere in the tree, and no `validate-ios.yml`. iOS is
-parked on the Future Ideas board.
-
-- ~~iOS app compiles without warnings for the release target.~~
-- ~~iOS unit tests pass (XCTest / Swift Testing).~~
-- ~~iOS UI tests pass for critical flows.~~
-- ~~iOS CI workflow (`validate-ios.yml`) passes on `main`.~~
-- ~~`GoogleService-Info.plist` is gitignored; placeholder documentation is present.~~
-- ~~No hardcoded secrets, API keys, or tokens in iOS source code.~~
-- ~~iOS Keychain usage is verified.~~
-- ~~iOS Sign in with Apple flow completes on a physical device.~~
-- ~~Firebase App Check is registered on iOS (App Attest or DeviceCheck).~~
-
-> `docs/product-decisions.md` still describes iOS as shipping in the MVP and `docs/deployment.md:19`
-> still lists `apps/ios` as a deploy target. Both contradict this decision.
+This migration-era section was superseded when [ADR-002](../adr/002-ios-app-rescope.md)
+restored iOS to scope. The native app now exists under `apps/ios`; Validate iOS
+runs simulator unit/UI tests and an unsigned Release device build. This is not
+proof of signed-device readiness. Use the current
+[iOS release checklist](../ios-release-readiness.md) for Apple setup, archive,
+TestFlight, and physical-iPhone evidence. Historical counts and deployment claims
+elsewhere in this migration checklist should not be treated as current evidence.
 
 ## Part 8 — Android build and tests
 

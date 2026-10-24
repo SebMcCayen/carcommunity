@@ -826,6 +826,7 @@ struct ShellView: View {
             } label: {
                 Label("settingsMenu.title", systemImage: "gearshape")
             }
+            .accessibilityIdentifier("shell.settings")
             if savedPlacesCoordinator != nil {
                 Button {
                     routes = routes.opening(.savedPlaces)
@@ -859,6 +860,7 @@ struct ShellView: View {
                 .labelStyle(.iconOnly)
                 .font(.system(size: 28))
         }
+        .accessibilityIdentifier("shell.profileMenu")
         .padding(KccSpacing.s4)
     }
 
