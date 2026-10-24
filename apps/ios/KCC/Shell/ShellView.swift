@@ -858,7 +858,9 @@ struct ShellView: View {
             }
         } label: {
             Label(
-                signedInUid == nil ? "settingsMenu.title" : "shell.moreProfile",
+                signedInUid == nil
+                    ? LocalizedStringKey("settingsMenu.title")
+                    : LocalizedStringKey("shell.moreProfile"),
                 systemImage: signedInUid == nil ? "gearshape" : "person.circle"
             )
             .labelStyle(.iconOnly)

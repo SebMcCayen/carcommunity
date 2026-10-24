@@ -87,6 +87,7 @@ final class ShellSmokeTests: XCTestCase {
             app.buttons["shell.menu"].waitForExistence(timeout: 15),
             "Build without GoogleService-Info.plist to test the config-less shell"
         )
+        XCTAssertEqual(app.buttons["shell.menu"].label, language == "sv" ? "Inställningar" : "Settings")
         return app
     }
 

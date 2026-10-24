@@ -24,7 +24,8 @@ Python 3 and never changes files. The simulator suite runs unit tests plus the
 and labeled/reachable Settings controls with large text. Build without
 `KCC/GoogleService-Info.plist` and without a Mapbox token for these smoke tests;
 they use the actual config-less app, without an authentication bypass or production
-writes. A configured build fails the initial shell assertion intentionally.
+writes. The config-less shell exposes public Settings and legal links while
+profile/account actions remain tied to a signed-in session. A configured build fails the initial shell assertion intentionally.
 
 These smoke checks do not cover authenticated screens, purchases, push delivery,
 real map rendering, GPS, or a full VoiceOver audit. Those need the checks below.
