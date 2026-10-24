@@ -1941,6 +1941,7 @@
     <string name="driver_feed_noComments">No comments to show.</string>
     <string name="driver_feed_unavailable">Driver content is unavailable right now.</string>
     <string name="driver_feed_onboarding">Complete your Driver profile in Driver to read posts here.</string>
+    <string name="driver_feed_canonicalOnboarding">Complete your CarCommunity profile to read Driver posts.</string>
     <string name="driver_feed_restricted">Driver is unavailable for your account.</string>
     <string name="driver_feed_image">Post image</string>
     <string name="driver_feed_likes">Likes</string>
