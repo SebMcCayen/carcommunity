@@ -131,6 +131,26 @@ final class PushNotificationsTests: XCTestCase {
     }
 
     @MainActor
+    func testTransientStartupFailureRetriesAfterNetworkRecovery() async {
+        let source = FakePushSource()
+        await source.failCleanup()
+        let repository = FakePushRepository()
+        let coordinator = PushNotificationCoordinator(retryDelay: .milliseconds(10), permissionReader: { .enabled })
+        coordinator.configure(repository: repository, tokenSource: source)
+        coordinator.bind(uid: "A")
+        await coordinator.waitForPendingOperations()
+        XCTAssertFalse(coordinator.shouldPresentForegroundNotification)
+        await source.recoverCleanup()
+        for _ in 0..<100 {
+            if await repository.registrations.count == 1 { break }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        let registrations = await repository.registrations
+        XCTAssertEqual(registrations, ["A:fid-1"])
+        XCTAssertTrue(coordinator.shouldPresentForegroundNotification)
+    }
+
+    @MainActor
     func testFailedInvalidationCannotBeBypassedByAPNsRefresh() async {
         let source = FakePushSource()
         let repository = FakePushRepository()
@@ -165,6 +185,7 @@ private actor FakePushSource: PushTokenSource {
     var isPaused: Bool { continuation != nil }
     func pauseCleanup() { shouldPause = true }
     func failCleanup() { failure = true }
+    func recoverCleanup() { failure = false }
     func resumeCleanup() { shouldPause = false; continuation?.resume(); continuation = nil }
     func register() async throws -> String { "fid-\(invalidations)" }
     func unregister() async throws {

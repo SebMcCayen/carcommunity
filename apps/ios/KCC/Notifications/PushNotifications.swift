@@ -131,15 +131,19 @@ final class PushNotificationCoordinator {
     @ObservationIgnored private var lastToken: String?
     @ObservationIgnored private var registrationTask: Task<Void, Never>?
 
+    @ObservationIgnored private var retryTask: Task<Void, Never>?
+    @ObservationIgnored private let retryDelay: Duration
     @ObservationIgnored private let permissionReader: @MainActor () async -> PushPermissionState
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var hasBound = false
     @ObservationIgnored private var needsInvalidation = true
     @ObservationIgnored private var apnsRequestedGeneration: Int?
 
-    init(permissionReader: @escaping @MainActor () async -> PushPermissionState = {
+    init(retryDelay: Duration = .seconds(15),
+         permissionReader: @escaping @MainActor () async -> PushPermissionState = {
         PushPermissionState(await UNUserNotificationCenter.current().notificationSettings().authorizationStatus)
     }) {
+        self.retryDelay = retryDelay
         self.permissionReader = permissionReader
     }
 
@@ -153,6 +157,8 @@ final class PushNotificationCoordinator {
     /// cleanup can never invalidate a replacement account's new registration.
     func bind(uid: String?) {
         guard !hasBound || uid != signedInUid else { return }
+        retryTask?.cancel()
+        retryTask = nil
         let previousUid = signedInUid
         if hasBound || (pendingRecipientUid != nil && pendingRecipientUid != uid) {
             pendingDeepLink = nil
@@ -256,7 +262,7 @@ final class PushNotificationCoordinator {
         guard generation == expectedGeneration, let tokenSource else { return }
         if needsInvalidation {
             do { try await tokenSource.unregister() }
-            catch { return }
+            catch { scheduleRetry(expectedGeneration: expectedGeneration); return }
             guard generation == expectedGeneration else { return }
             needsInvalidation = false
         }
@@ -272,12 +278,27 @@ final class PushNotificationCoordinator {
             guard generation == expectedGeneration else { return }
             lastToken = token
             await registerBackend(token, expectedGeneration: expectedGeneration)
-        } catch { return }
+        } catch { scheduleRetry(expectedGeneration: expectedGeneration) }
     }
 
     private func registerBackend(_ token: String, expectedGeneration: Int) async {
         guard generation == expectedGeneration, let uid = signedInUid, let repository else { return }
-        try? await repository.register(token: token, uid: uid)
+        do {
+            try await repository.register(token: token, uid: uid)
+            guard generation == expectedGeneration else { return }
+            retryTask?.cancel()
+            retryTask = nil
+        } catch { scheduleRetry(expectedGeneration: expectedGeneration) }
+    }
+
+    private func scheduleRetry(expectedGeneration: Int) {
+        guard generation == expectedGeneration, retryTask == nil else { return }
+        retryTask = Task { [weak self, retryDelay] in
+            do { try await Task.sleep(for: retryDelay) } catch { return }
+            guard let self, self.generation == expectedGeneration else { return }
+            self.retryTask = nil
+            await self.refreshRegistration()
+        }
     }
 
 }
@@ -291,6 +312,10 @@ final class KCCAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationC
         UNUserNotificationCenter.current().delegate = self
         if FirebaseApp.app() != nil { Messaging.messaging().delegate = self }
         return true
+    }
+
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        Task { @MainActor in await PushNotificationCoordinator.shared.refreshRegistration() }
     }
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken token: Data) {
