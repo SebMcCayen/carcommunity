@@ -1,7 +1,10 @@
 package com.kungsbackacarcommunity.app.shell
 
 import androidx.activity.ComponentActivity
+import android.content.ContentValues
 import android.graphics.Bitmap
+import android.os.Build
+import android.provider.MediaStore
 import java.io.File
 import java.io.FileOutputStream
 import androidx.compose.runtime.getValue
@@ -252,10 +255,30 @@ class MapFirstShellTest {
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         val variant = InstrumentationRegistry.getArguments().getString("redesignCaptureVariant") ?: "default"
         require(variant.matches(Regex("[a-zA-Z0-9_-]+")))
-        val folder = File(instrumentation.targetContext.getExternalFilesDir(null), "redesign/$variant")
-        check(folder.mkdirs() || folder.isDirectory)
-        FileOutputStream(File(folder, "$name.png")).use {
-            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // AGP uninstalls the test app before CI can pull app-private files.
+            // Own test-only media survives that cleanup, without production
+            // storage permissions or any real account/location content.
+            val resolver = instrumentation.targetContext.contentResolver
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, "$name.png")
+                put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/carcommunity-redesign/$variant")
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+            val uri = checkNotNull(resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values))
+            checkNotNull(resolver.openOutputStream(uri)).use {
+                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+            resolver.update(uri, ContentValues().apply {
+                put(MediaStore.Images.Media.IS_PENDING, 0)
+            }, null, null)
+        } else {
+            val folder = File(instrumentation.targetContext.getExternalFilesDir(null), "redesign/$variant")
+            check(folder.mkdirs() || folder.isDirectory)
+            FileOutputStream(File(folder, "$name.png")).use {
+                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
         }
         bitmap.recycle()
     }

@@ -59,11 +59,14 @@ adb -s emulator-5554 shell am instrument -w \
   -e redesignTheme dark -e redesignCaptureVariant dark-default \
   com.kungsbackacarcommunity.app.test/androidx.test.runner.AndroidJUnitRunner
 adb -s emulator-5554 pull \
-  /sdcard/Android/data/com.kungsbackacarcommunity.app/files/redesign/ \
+  /sdcard/Pictures/carcommunity-redesign/ \
   /tmp/carcommunity-redesign-rendered/
 ```
 
-PNG names under `files/redesign/<redesignCaptureVariant>/`:
+PNG names under `Pictures/carcommunity-redesign/<redesignCaptureVariant>/` on
+API 29+. These test-only MediaStore captures survive AGP's post-test app uninstall;
+no storage permission is added to the production app. Older manual test devices
+fall back to app-private `files/redesign/` and must be pulled before uninstall:
 
 - `S01-map-collapsed-search.png`
 - `S02-search-expanded.png`
