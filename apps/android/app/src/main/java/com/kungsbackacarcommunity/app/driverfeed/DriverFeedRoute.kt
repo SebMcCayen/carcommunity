@@ -37,6 +37,7 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 import java.text.DateFormat
 import java.util.Date
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.onEach
 
@@ -65,7 +66,11 @@ private fun DriverFeedSession(uid: String?, strings: DriverFeedStrings, modifier
         if (!isActive) { coordinator.pause(); return@LaunchedEffect }
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             try {
-                if (repository == null || uid == null) coordinator.refresh()
+                if (repository == null || uid == null) {
+                    coordinator.refresh()
+                    // Keep the recovery state visible until lifecycle/host cancellation.
+                    awaitCancellation()
+                }
                 else repository.invalidations(uid, state.selectedId).onEach { coordinator.invalidate() }
                     .debounce(150).collect { coordinator.refresh() }
             } finally { coordinator.pause() }
