@@ -1623,6 +1623,8 @@
     <string name="channel_mentionsNotDelivered">Ditt meddelande publicerades, men några av medlemmarna du nämnde kunde inte aviseras.</string>
     <string name="channel_locationLink">📍 Visa på kartan</string>
     <string name="chatHub_title">Chatt</string>
+    <string name="chatHub_tabChats">Chattar</string>
+    <string name="chatHub_tabDriver">Driver-inlägg</string>
     <string name="chatHub_back">Tillbaka</string>
     <string name="chatHub_tabCommunity">Gemenskap</string>
     <string name="chatHub_tabConvoys">Konvojer</string>
@@ -1663,6 +1665,7 @@
     <string name="shell_panelDragHandle">Dra nedåt för att stänga</string>
     <string name="shell_panelDismiss">Stäng</string>
     <string name="shell_tabMap">Karta</string>
+    <string name="shell_tabChat">Chatt</string>
     <string name="shell_tabHistory">Historik</string>
     <string name="shell_tabCreate">Skapa</string>
     <string name="shell_tabSocial">Socialt</string>
@@ -1693,6 +1696,7 @@
     <string name="shell_friendsTitle">Vänner</string>
     <string name="shell_moreTitle">Profil</string>
     <string name="shell_moreProfile">Profil</string>
+    <string name="shell_moreDrives">Mina körningar</string>
     <string name="shell_moreNotificationSettings">Aviseringsinställningar</string>
     <string name="shell_moreBlocked">Blockerade användare</string>
     <string name="shell_morePartnerApplication">Bli partner</string>

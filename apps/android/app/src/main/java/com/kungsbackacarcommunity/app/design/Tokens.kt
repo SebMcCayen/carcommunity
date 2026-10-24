@@ -20,6 +20,8 @@ object KccPalette {
     val successGreen = Color(0xFF1E8E3E)
     val errorRed = Color(0xFFC5221F)
     val warningAmber = Color(0xFFE6A817)
+    val nightOverlay = Color(0xFF121A27)
+    val driverCyan = Color(0xFF49DDEB)
 }
 
 /** Spacing scale (4pt base). */
@@ -69,18 +71,28 @@ object KccLightColors {
     val statusSuccess = Color(0xFF1E8E3E)
     val statusError = Color(0xFFC5221F)
     val statusWarning = Color(0xFFE6A817)
+    val overlayBackground = Color(0xFFFFFFFF)
+    val overlayBorder = Color(0xFFB4B1AD)
+    val driverActive = Color(0xFF007582)
+    val onDriverActive = Color(0xFFFFFFFF)
+    val onBrandPrimary = Color(0xFF040211)
 }
 
 /** Semantic dark-theme colors. */
 object KccDarkColors {
     val pageBackground = Color(0xFF040211)
-    val surfaceBackground = Color(0xFF3F3E3B)
-    val subtleBackground = Color(0xFF2A2927)
+    val surfaceBackground = Color(0xFF121A27)
+    val subtleBackground = Color(0xFF0B111B)
     val textPrimary = Color(0xFFF8F6EF)
     val textSecondary = Color(0xFFB4B1AD)
-    val borderDefault = Color(0xFF6D6C6D)
+    val borderDefault = Color(0xFF526172)
     val brandPrimary = Color(0xFFEAB54B)
     val statusSuccess = Color(0xFF1E8E3E)
     val statusError = Color(0xFFC5221F)
     val statusWarning = Color(0xFFE6A817)
+    val overlayBackground = Color(0xFF121A27)
+    val overlayBorder = Color(0xFF526172)
+    val driverActive = Color(0xFF49DDEB)
+    val onDriverActive = Color(0xFF040211)
+    val onBrandPrimary = Color(0xFF040211)
 }

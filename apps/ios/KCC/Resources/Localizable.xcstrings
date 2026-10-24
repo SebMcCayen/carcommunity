@@ -5101,6 +5101,23 @@
         }
       }
     },
+    "chatHub.tabChats": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chattar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chats"
+          }
+        }
+      }
+    },
     "chatHub.tabCommunity": {
       "extractionState": "manual",
       "localizations": {
@@ -5131,6 +5148,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Convoys"
+          }
+        }
+      }
+    },
+    "chatHub.tabDriver": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Driver-inlägg"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Driver posts"
           }
         }
       }
@@ -30159,6 +30193,23 @@
         }
       }
     },
+    "shell.moreDrives": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mina körningar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My drives"
+          }
+        }
+      }
+    },
     "shell.moreFeedback": {
       "extractionState": "manual",
       "localizations": {
@@ -30835,6 +30886,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Share live location"
+          }
+        }
+      }
+    },
+    "shell.tabChat": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chatt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat"
           }
         }
       }

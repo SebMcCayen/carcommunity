@@ -1,5 +1,12 @@
 # KCC Crown UI
 
+> **Native redesign, 2026-10-24:** [CarCommunity map-first design language](design/mobile-redesign.md)
+> is the current mobile specification for navigation, map chrome, semantic
+> surfaces, driver accents, and module boundaries. Its screen registry and
+> acceptance criteria guide Android and iOS changes. It supersedes the older
+> start-screen ordering and live-marker color guidance below where they conflict.
+> The admin website is not being redesigned by this mobile specification.
+
 KCC Crown UI is the design system for the app. It defines the visual language, interaction patterns, and reusable UI rules for the MVP brand Kungsbacka Car Community (KCC), while keeping the codebase ready for future national branding.
 
 ## Design vision
