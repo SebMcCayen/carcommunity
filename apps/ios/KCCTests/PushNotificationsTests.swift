@@ -73,6 +73,7 @@ final class PushNotificationsTests: XCTestCase {
         XCTAssertNil(coordinator.pendingDeepLink)
         coordinator.receivedMessagingRegistration("fid-1")
         await coordinator.waitForPendingOperations()
+        await coordinator.refreshRegistration()
 
         let invalidations = await source.invalidations
         let registrations = await repository.registrations

@@ -210,7 +210,8 @@ final class PushNotificationCoordinator {
         }
         await refreshPermissionState()
         if permissionState == .enabled {
-            UIApplication.shared.registerForRemoteNotifications()
+            // The permission sheet may complete after logout; only the
+            // serialized, identity-fenced path may re-enable APNs.
             await refreshRegistration()
         }
     }
