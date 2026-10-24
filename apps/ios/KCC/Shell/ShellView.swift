@@ -496,12 +496,11 @@ struct ShellView: View {
         case .map:
             Color.clear
                 .ignoresSafeArea()
-                // The map-home profile entry (Android: the map-home top-right
-                // profile menu button). Only when a session actually exists —
-                // the unavailable shell has no one to show or sign out.
+                // Account entries require a real session. Public Settings
+                // (including legal links) also remain usable without config.
                 .overlay(alignment: .topTrailing) {
-                    if case .signedIn = session.state, mapHomeChromeVisible {
-                        profileButton
+                    if mapHomeChromeVisible {
+                        shellMenuButton
                     }
                 }
                 .overlay(alignment: .top) {
@@ -807,12 +806,14 @@ struct ShellView: View {
         )
     }
 
-    private var profileButton: some View {
+    private var shellMenuButton: some View {
         Menu {
-            Button {
-                routes = routes.opening(.profile)
-            } label: {
-                Label("shell.moreProfile", systemImage: "person")
+            if case .signedIn = session.state {
+                Button {
+                    routes = routes.opening(.profile)
+                } label: {
+                    Label("shell.moreProfile", systemImage: "person")
+                }
             }
             if friendsCoordinator != nil {
                 Button {
@@ -856,11 +857,14 @@ struct ShellView: View {
                 }
             }
         } label: {
-            Label("shell.moreProfile", systemImage: "person.circle")
-                .labelStyle(.iconOnly)
-                .font(.system(size: 28))
+            Label(
+                signedInUid == nil ? "settingsMenu.title" : "shell.moreProfile",
+                systemImage: signedInUid == nil ? "gearshape" : "person.circle"
+            )
+            .labelStyle(.iconOnly)
+            .font(.system(size: 28))
         }
-        .accessibilityIdentifier("shell.profileMenu")
+        .accessibilityIdentifier("shell.menu")
         .padding(KccSpacing.s4)
     }
 

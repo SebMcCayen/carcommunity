@@ -36,7 +36,7 @@ final class ShellSmokeTests: XCTestCase {
         app.buttons["Back"].firstMatch.tap()
         XCTAssertTrue(privacy.waitForExistence(timeout: 5), "Back must return to Settings")
         app.buttons["Back"].firstMatch.tap()
-        XCTAssertTrue(app.buttons["shell.profileMenu"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["shell.menu"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.tabBars.buttons["Map"].isSelected)
     }
 
@@ -54,7 +54,7 @@ final class ShellSmokeTests: XCTestCase {
         let back = app.buttons["Back"].firstMatch
         XCTAssertTrue(back.isHittable)
         back.tap()
-        XCTAssertTrue(app.buttons["shell.profileMenu"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["shell.menu"].waitForExistence(timeout: 5))
     }
 
     private func checkShell(language: String, labels: [String]) {
@@ -71,7 +71,7 @@ final class ShellSmokeTests: XCTestCase {
         }
         tabs.buttons[labels[0]].tap()
         XCTAssertTrue(tabs.buttons[labels[0]].isSelected)
-        XCTAssertTrue(app.buttons["shell.profileMenu"].isHittable)
+        XCTAssertTrue(app.buttons["shell.menu"].isHittable)
     }
 
     private func launch(language: String, largeText: Bool = false) -> XCUIApplication {
@@ -84,14 +84,14 @@ final class ShellSmokeTests: XCTestCase {
         }
         app.launch()
         XCTAssertTrue(
-            app.buttons["shell.profileMenu"].waitForExistence(timeout: 15),
+            app.buttons["shell.menu"].waitForExistence(timeout: 15),
             "Build without GoogleService-Info.plist to test the config-less shell"
         )
         return app
     }
 
     private func openSettings(_ app: XCUIApplication) {
-        app.buttons["shell.profileMenu"].tap()
+        app.buttons["shell.menu"].tap()
         let settings = app.buttons["shell.settings"]
         XCTAssertTrue(settings.waitForExistence(timeout: 5))
         settings.tap()
