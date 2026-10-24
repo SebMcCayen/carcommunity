@@ -123,6 +123,12 @@ final class ShellSmokeTests: XCTestCase {
             "Capture names must match the actual SwiftUI color scheme")
         XCTAssertFalse(app.textFields["addressSearch.query"].exists)
         XCTAssertTrue(app.buttons["shell.search"].isHittable)
+        let layers = app.buttons["shell.mapLayers"]
+        let avatar = app.buttons["shell.menu"]
+        XCTAssertTrue(layers.isHittable)
+        XCTAssertGreaterThanOrEqual(layers.frame.minY, avatar.frame.maxY)
+        XCTAssertLessThanOrEqual(layers.frame.minY, avatar.frame.maxY + 32,
+            "S01 rail must start just below top chrome, not at map center")
         attach(app, name: "\(prefix)-S01-map-collapsed-search")
 
         app.buttons["shell.search"].tap()

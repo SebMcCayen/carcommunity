@@ -558,9 +558,6 @@ struct ShellView: View {
                         .padding(.top, KccSpacing.s4)
                     }
                 }
-                .overlay(alignment: .trailing) {
-                    if mapHomeChromeVisible { mapCommunicationControls }
-                }
                 .overlay {
                     if let crownMapCoordinator = crownHuntComposition?.mapCoordinator {
                         CrownHuntMapOverlay(
@@ -609,23 +606,8 @@ struct ShellView: View {
                         )
                     }
                 }
-                .overlay(alignment: .top) {
-                    if mapHomeChromeVisible,
-                       let coordinator = convoyManagementCoordinator,
-                       let convoy = coordinator.activeConvoy {
-                        ConvoyStatusBar(
-                            coordinator: coordinator,
-                            convoy: convoy,
-                            friendsCoordinator: friendsCoordinator,
-                            awareness: convoyAwareness,
-                            mapSurface: mapSurface,
-                            liveLocationEnabled: liveLocationFeatureEnabled,
-                            viewerUid: signedInUid,
-                            onOpenMemberProfile: openMemberProfile
-                        )
-                        .padding(.horizontal, KccSpacing.s4)
-                        .padding(.top, KccSpacing.s12 + KccSpacing.s3)
-                    }
+                .overlay(alignment: .topTrailing) {
+                    if mapHomeChromeVisible { mapTopTools }
                 }
                 .overlay {
                     if mapHomeChromeVisible,
@@ -883,6 +865,41 @@ struct ShellView: View {
         .padding(KccSpacing.s4)
     }
 
+    /// S01: tools start below the avatar, never centered over the map. Keeping
+    /// the convoy strip in this stack reserves its actual rendered height,
+    /// including action errors, rather than guessing a fixed rail offset.
+    private var mapTopTools: some View {
+        VStack(spacing: KccSpacing.s3) {
+            if let coordinator = convoyManagementCoordinator,
+               let convoy = coordinator.activeConvoy {
+                ConvoyStatusBar(
+                    coordinator: coordinator,
+                    convoy: convoy,
+                    friendsCoordinator: friendsCoordinator,
+                    awareness: convoyAwareness,
+                    mapSurface: mapSurface,
+                    liveLocationEnabled: liveLocationFeatureEnabled,
+                    viewerUid: signedInUid,
+                    onOpenMemberProfile: openMemberProfile
+                )
+                .padding(.horizontal, KccSpacing.s4)
+            }
+            HStack(alignment: .top, spacing: 0) {
+                Spacer(minLength: 0)
+                ViewThatFits(in: .vertical) {
+                    mapCommunicationControls
+                    ScrollView(.vertical) {
+                        mapCommunicationControls
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                }
+                .frame(width: 48 + KccSpacing.s4 * 2)
+            }
+        }
+        .padding(.top, KccSpacing.s4 + 48 + KccSpacing.s3)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+    }
+
     private var mapCommunicationControls: some View {
         VStack(spacing: KccSpacing.s3) {
             if incidentMapCoordinator?.available == true {
@@ -897,6 +914,7 @@ struct ShellView: View {
             }
 
             MapLayersButton(isPresented: $showMapLayers)
+                .accessibilityIdentifier("shell.mapLayers")
             Button {
                 let next = mapSurface.compassMode.toggled()
                 mapSurface.setCompassMode(next)
@@ -936,7 +954,8 @@ struct ShellView: View {
             }
         }
         .font(.system(size: 20, weight: .semibold))
-        .padding(KccSpacing.s4)
+        .padding(.horizontal, KccSpacing.s4)
+        .padding(.bottom, KccSpacing.s4)
     }
 
     private var mapSearchButton: some View {

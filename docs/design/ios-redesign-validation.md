@@ -220,6 +220,15 @@ the screenshot filenames alone.
 
 ## Honest 84-screen pass
 
+S01 follow-up: the iOS tool rail was vertically centered. It now starts below
+the 48-point avatar/top controls. Convoy status and its dynamic error row share
+the same vertical stack above the rail, so they cannot be overlaid by it.
+`ViewThatFits` keeps the normal rail compact and falls back to vertical scrolling
+when space is short. Existing buttons, order and feature flags are unchanged.
+The three capture variants assert the config-less Layers button starts within
+32 points below the avatar; configured convoy/short-screen rendering remains a
+separate manual check. Final-head CI and recaptures are required for this change.
+
 No catalogue family is marked visually complete. The table distinguishes code
 adoption from future rendered/configured-device comparison.
 
