@@ -29,19 +29,19 @@ The map is the scene; community content supplies the focus. Use graphite/navy
 surfaces, cyan for active driver position, and crown gold for primary actions and
 game rewards. Keep decoration restrained and preserve Mapbox attribution.
 
-| Role | Dark | Light | Contract key |
-| --- | --- | --- | --- |
-| Page | `#040211` | `#F8F6EF` | `pageBackground` |
+| Role                   | Dark      | Light     | Contract key        |
+| ---------------------- | --------- | --------- | ------------------- |
+| Page                   | `#040211` | `#F8F6EF` | `pageBackground`    |
 | Card / reading surface | `#121A27` | `#FFFFFF` | `surfaceBackground` |
-| Subtle surface | `#0B111B` | `#F0EBDC` | `subtleBackground` |
-| Map overlay | `#121A27` | `#FFFFFF` | `overlayBackground` |
-| Overlay border | `#526172` | `#B4B1AD` | `overlayBorder` |
-| Primary text | `#F8F6EF` | `#040211` | `textPrimary` |
-| Supporting text | `#B4B1AD` | `#6D6C6D` | `textSecondary` |
-| Primary action | `#EAB54B` | `#EAB54B` | `brandPrimary` |
-| Text on primary action | `#040211` | `#040211` | `onBrandPrimary` |
-| Active driver | `#49DDEB` | `#007582` | `driverActive` |
-| Text on driver accent | `#040211` | `#FFFFFF` | `onDriverActive` |
+| Subtle surface         | `#0B111B` | `#F0EBDC` | `subtleBackground`  |
+| Map overlay            | `#121A27` | `#FFFFFF` | `overlayBackground` |
+| Overlay border         | `#526172` | `#B4B1AD` | `overlayBorder`     |
+| Primary text           | `#F8F6EF` | `#040211` | `textPrimary`       |
+| Supporting text        | `#B4B1AD` | `#6D6C6D` | `textSecondary`     |
+| Primary action         | `#EAB54B` | `#EAB54B` | `brandPrimary`      |
+| Text on primary action | `#040211` | `#040211` | `onBrandPrimary`    |
+| Active driver          | `#49DDEB` | `#007582` | `driverActive`      |
+| Text on driver accent  | `#040211` | `#FFFFFF` | `onDriverActive`    |
 
 The supplied dark overlay and cyan are source values. The light driver accent,
 subtle navy, and border are implementation companions selected for legibility;
@@ -73,15 +73,15 @@ Keep light/dark/system selection, with System the default.
 
 The five primary choices, in order, are **Karta, Chatt, +, Social, Garage**.
 
-| Entry | Destination and preserved behavior |
-| --- | --- |
-| Karta | Persistent map, collapsed search launcher, map tools, selected entity |
-| Chatt | Opaque full-screen chat hub; Chats and Driver posts remain distinct |
-| + | Existing car/single/convoy chooser; active session opens management / Stop |
-| Social | Events, Crown Hunt hub, leaderboards, partners, convoy access |
-| Garage | Vehicle list directly, existing create/edit/photos/delete flows |
-| Avatar / profile menu | Profile, My drives, friends, partner application, Settings |
-| My drives | Existing history, statistics, detail, route replay, deletion, save/retry |
+| Entry                 | Destination and preserved behavior                                         |
+| --------------------- | -------------------------------------------------------------------------- |
+| Karta                 | Persistent map, collapsed search launcher, map tools, selected entity      |
+| Chatt                 | Opaque full-screen chat hub; Chats and Driver posts remain distinct        |
+| +                     | Existing car/single/convoy chooser; active session opens management / Stop |
+| Social                | Events, Crown Hunt hub, leaderboards, partners, convoy access              |
+| Garage                | Vehicle list directly, existing create/edit/photos/delete flows            |
+| Avatar / profile menu | Profile, My drives, friends, partner application, Settings                 |
+| My drives             | Existing history, statistics, detail, route replay, deletion, save/retry   |
 
 Keep the legacy History identity for persisted-state migration. Never reuse its
 ordinal or identifier for Chat. Restore old History to My drives, including its
@@ -124,19 +124,19 @@ an avatar or car inside. Sponsored pins retain a sponsored label and action.
 
 ## Independent modules and state
 
-| Module | Input / output | Boundary |
-| --- | --- | --- |
-| Map scene | Visible map state + selected entity -> tap/camera intent | Single map lifecycle; no new per-marker listeners |
-| Driver marker / preview | Filtered driver state -> profile action | Account/block/privacy rules precede presentation |
-| Crown marker / detail | Point or spawn target + claim UI -> navigate/claim | Separate adapters, server result codes preserved |
-| Crown hub / inventory | Existing stats/season/catalog/balance/inventory | KP economy and server activation remain intact |
-| Live session bar | Session state -> manage/hide | No purchase or cosmetic dependency |
-| Convoy strip / sheet | Convoy + role -> invite/follow/leave/end | Preserve leader rules and edge indicators |
-| Avatar base | Permitted image/initials + label | Image fallback and accessibility |
-| Avatar frame | Approved style + motion policy | Pure decoration; never authority or visibility |
-| Membership badge | Effective tier + visibility preference | Separate optional Supporter badge |
-| Driver feed adapter | Bounded original posts + paging + account access | Driver API/data/roles, not chat messages |
-| Motion policy | OS reduced motion + lifecycle + power | Shared policy per native app, static fallback |
+| Module                  | Input / output                                           | Boundary                                          |
+| ----------------------- | -------------------------------------------------------- | ------------------------------------------------- |
+| Map scene               | Visible map state + selected entity -> tap/camera intent | Single map lifecycle; no new per-marker listeners |
+| Driver marker / preview | Filtered driver state -> profile action                  | Account/block/privacy rules precede presentation  |
+| Crown marker / detail   | Point or spawn target + claim UI -> navigate/claim       | Separate adapters, server result codes preserved  |
+| Crown hub / inventory   | Existing stats/season/catalog/balance/inventory          | KP economy and server activation remain intact    |
+| Live session bar        | Session state -> manage/hide                             | No purchase or cosmetic dependency                |
+| Convoy strip / sheet    | Convoy + role -> invite/follow/leave/end                 | Preserve leader rules and edge indicators         |
+| Avatar base             | Permitted image/initials + label                         | Image fallback and accessibility                  |
+| Avatar frame            | Approved style + motion policy                           | Pure decoration; never authority or visibility    |
+| Membership badge        | Effective tier + visibility preference                   | Separate optional Supporter badge                 |
+| Driver feed adapter     | Bounded original posts + paging + account access         | Driver API/data/roles, not chat messages          |
+| Motion policy           | OS reduced motion + lifecycle + power                    | Shared policy per native app, static fallback     |
 
 Do not copy full admin capabilities into mobile or create a parallel profile.
 ADR-003's canonical `users` and `vehicles` remain the only shared identity/garage.
