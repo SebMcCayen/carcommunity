@@ -97,9 +97,13 @@ selection and native view identity; read receipts are limited to visible chat.
 
 `project.yml` recursively includes `KCC` and `KCCTests`, so both new DriverFeed
 folders belong to the existing app/test targets. Regenerate the committed
-project after integrating those files. CI now performs this regeneration before
-building and uploads `ios-generated-project`, which also lets the Linux owner
-synchronize the committed project snapshot from the actual macOS generator:
+project after integrating those files. CI performs this regeneration before
+building and uploads `ios-generated-project`. The committed project snapshot
+was synchronized byte-for-byte with that macOS-generated pbxproj from run
+`40130932474` (artifact `12575115603`): five Driver sources and the Driver test
+source are included in their proper app/test targets. The scheme had no drift.
+That superseded run was cancelled after the lifecycle update was pushed; it
+does not establish passing compilation/tests.
 
 ```sh
 cd apps/ios
@@ -179,6 +183,13 @@ reviewed screenshot filenames must be appended after main pushes/runs CI.
 **There is no rendered evidence attached to this local checkpoint yet.** A
 config-less placeholder proves shell composition only, never real map tiles,
 search results, GPS, a live session, Driver access, or Apple purchases.
+
+Draft PR: <https://github.com/SebMcCayen/carcommunity/pull/1170>, base
+`codex/redesign-design-language`. Active validation checkpoint at the time of
+this entry: `6d6705db`, run
+<https://github.com/SebMcCayen/carcommunity/actions/runs/40131037243>.
+Contract and general CI checks passed; native simulator/build results remain
+pending. Main retrieves and visually reviews the screenshot artifacts.
 
 ## Honest 84-screen pass
 
