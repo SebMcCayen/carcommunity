@@ -39,6 +39,16 @@ service firebase.storage {
       return request.resource.size <= mb * 1024 * 1024;
     }
 
+    function hasActiveDriverAccount() {
+      return isAuthenticated() && isNotSuspended()
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true
+        && firestore.exists(/databases/(default)/documents/driverUsers/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/driverUsers/$(request.auth.uid)).data.get('onboardingComplete', false) == true
+        && firestore.get(/databases/(default)/documents/driverUsers/$(request.auth.uid)).data.get('status', 'active') == 'active';
+    }
+
     // -------------------------------------------------------------------------
     // Deny-all catch-all (rules below override for specific paths)
     // -------------------------------------------------------------------------
@@ -84,6 +94,20 @@ service firebase.storage {
       allow read: if isAuthenticated();
       allow write: if isOwner(userId) && isNotSuspended() && isImage() && isUnderMB(10);
       allow write: if isAdmin();
+    }
+
+    // Driver community post media. Driver and CarCommunity share Auth, but
+    // Driver content has its own prefix and stricter 4 MB JPEG/WebP contract.
+    // Public reads match Driver's public active-thread feed; document
+    // moderation controls discoverability while backend deletion removes media.
+    match /driverThreadMedia/{userId}/{imageId} {
+      allow read: if true;
+      allow create: if isOwner(userId) && hasActiveDriverAccount()
+        && request.resource.size > 0 && request.resource.size <= 4 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|webp)');
+      allow update: if false;
+      // Privacy cleanup remains available even when Driver access is restricted.
+      allow delete: if isOwner(userId);
     }
 
     // -------------------------------------------------------------------------
