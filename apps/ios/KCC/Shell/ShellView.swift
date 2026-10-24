@@ -1398,12 +1398,7 @@ struct ShellView: View {
                     openEvents()
                 },
                 driverContent: AnyView(
-                    DriverFeedScreen(
-                        uid: signedInUid,
-                        strings: DriverFeedStrings(lookup: { key in
-                            Bundle.main.localizedString(forKey: key, value: nil, table: nil)
-                        })
-                    )
+                    ShellDriverFeed(uid: signedInUid)
                 )
             )
             .kccReadingSurface()
@@ -2500,6 +2495,23 @@ struct ShellView: View {
 private struct DmRouteTarget: Equatable, Sendable {
     let uid: String
     let displayName: String?
+}
+
+/// The inherited visibility is source-, route-, tab- and scene-aware. It keeps
+/// source/detail identity while pausing the adapter behind an opaque child.
+private struct ShellDriverFeed: View {
+    @Environment(\.chatReadingActive) private var readingActive
+    let uid: String?
+
+    var body: some View {
+        DriverFeedScreen(
+            uid: uid,
+            strings: DriverFeedStrings(lookup: { key in
+                Bundle.main.localizedString(forKey: key, value: nil, table: nil)
+            }),
+            isActive: readingActive
+        )
+    }
 }
 
 private struct MemberProfileRouteTarget: Equatable, Sendable {

@@ -23,6 +23,7 @@ extension EnvironmentValues {
 /// A nil coordinator is supported by previews and isolated hosts; individual
 /// feature coordinators may also be nil in config-less builds.
 struct ChatHubScreen: View {
+    @Environment(\.chatReadingActive) private var readingActive
     let coordinator: ChatHubCoordinator?
     let conversationsCoordinator: ConversationsCoordinator?
     let makeNewDialogueCoordinator: (() -> NewDialogueCoordinator)?
@@ -59,9 +60,32 @@ struct ChatHubScreen: View {
             if driverContent != nil {
                 sourcePicker
             }
-            if showsDriver, let driverContent {
-                driverContent
-            } else if let coordinator {
+            ZStack {
+                chatsContent
+                    .opacity(showsDriver ? 0 : 1)
+                    .allowsHitTesting(!showsDriver)
+                    .accessibilityHidden(showsDriver)
+                    .environment(\.chatReadingActive, readingActive && !showsDriver)
+                if let driverContent {
+                    driverContent
+                        .opacity(showsDriver ? 1 : 0)
+                        .allowsHitTesting(showsDriver)
+                        .accessibilityHidden(!showsDriver)
+                        .environment(\.chatReadingActive, readingActive && showsDriver)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .kccReadingSurface()
+        .navigationTitle(Text("chatHub.title"))
+        .navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier("chatHub.opaqueScreen")
+    }
+
+    @ViewBuilder
+    private var chatsContent: some View {
+        if let coordinator {
+            VStack(spacing: 0) {
                 tabStrip(coordinator)
                 if let onOpenEvents {
                     Button(action: onOpenEvents) {
@@ -73,15 +97,10 @@ struct ChatHubScreen: View {
                 Divider().overlay(KccTheme.border)
                 tabContent(coordinator)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                unavailable
             }
+        } else {
+            unavailable
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .kccReadingSurface()
-        .navigationTitle(Text("chatHub.title"))
-        .navigationBarTitleDisplayMode(.inline)
-        .accessibilityIdentifier("chatHub.opaqueScreen")
     }
 
     private var sourcePicker: some View {

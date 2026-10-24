@@ -74,7 +74,8 @@ DriverFeedScreen(
     uid: signedInUid,
     strings: DriverFeedStrings(lookup: { key in
         Bundle.main.localizedString(forKey: key, value: nil, table: nil)
-    })
+    }),
+    isActive: readingActive
 )
 ```
 
@@ -87,6 +88,12 @@ page; the backend implementation/deployment is a separate dependency. It does
 not fall back to legacy content queries. Driver onboarding, bilateral blocking,
 pagination, stale account responses and required backend deployment still need
 their own executed evidence. No deployment is authorized by this branch.
+
+Lifecycle follow-up `8071b6d2` is included. Source/route/tab/scene visibility
+flows through ShellDriverFeed into `isActive`; inactive readers cancel requests
+and listeners, clear content and preserve the selected detail ID for fresh
+authorization on return. Chat and Driver views stay mounted to retain source
+selection and native view identity; read receipts are limited to visible chat.
 
 `project.yml` recursively includes `KCC` and `KCCTests`, so both new DriverFeed
 folders belong to the existing app/test targets. Regenerate the committed
