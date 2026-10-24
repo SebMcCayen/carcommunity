@@ -68,6 +68,7 @@ export const GROUPS = [
       'rules-free-social',
       'friends',
       'dm',
+      'driver-feed',
       'user-search',
       'chatchannels*',
       'communityDigest',
