@@ -62,7 +62,13 @@ class FirebaseDriverFeedRepository private constructor(
 
     // Owner/parent listeners only invalidate memory; content comes solely from the bridge.
     override fun invalidations(uid: String, threadId: String?): Flow<Unit> = callbackFlow {
-        val listener = FirebaseAuth.IdTokenListener { trySend(Unit) }
+        // Explicit override avoids exposing Firebase's Java parameter type-use
+        // annotations through Kotlin's inferred SAM lambda parameter type.
+        val listener = object : FirebaseAuth.IdTokenListener {
+            override fun onIdTokenChanged(auth: FirebaseAuth) {
+                trySend(Unit)
+            }
+        }
         auth.addIdTokenListener(listener)
         val documents = listOf(db.collection("users").document(uid), db.collection("driverUsers").document(uid),
             db.collection("blockVisibility").document(uid)) +
