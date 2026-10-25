@@ -17,12 +17,15 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PersonOutline
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -37,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
@@ -49,24 +53,20 @@ import com.kungsbackacarcommunity.app.navigation.openDefaultMapAppSettings
 /**
  * Onboarding consent gate (Phase 12 slice 2).
  *
- * Collects the three mandatory consents (driving licence, terms, privacy
- * policy) and a
- * REQUIRED public display name, then calls auth.completeOnboarding via
- * [onSubmit]. The display name is what other members see; the user's Google
- * account name is never prefilled or shown. Continue is enabled only when all
- * consents are checked and a valid display name is entered
+ * Collects the three mandatory consents (driving licence, terms, privacy policy) and a REQUIRED
+ * public display name, then calls auth.completeOnboarding via [onSubmit]. The display name is what
+ * other members see; the user's Google account name is never prefilled or shown. Continue is
+ * enabled only when all consents are checked and a valid display name is entered
  * ([OnboardingForm.canSubmit]) and no submission is in flight.
  *
- * When [partnerStatsEnabled] is true a fourth, NON-mandatory step is shown:
- * anonymised partner statistics are DEFAULT-ON / opt-out, so the toggle starts
- * enabled and the member may turn it off here (or later under Privacy). The
- * choice is passed to [onSubmit] as the second argument (null when the step is
- * hidden, so the backend keeps its provisioning default).
+ * When [partnerStatsEnabled] is true a fourth, NON-mandatory step is shown: anonymised partner
+ * statistics are DEFAULT-ON / opt-out, so the toggle starts enabled and the member may turn it off
+ * here (or later under Privacy). The choice is passed to [onSubmit] as the second argument (null
+ * when the step is hidden, so the backend keeps its provisioning default).
  *
- * The content scrolls and consumes safe-drawing insets (status/navigation bars
- * and the IME) so the submit button stays reachable under edge-to-edge and with
- * the keyboard open. All copy is generated string resources
- * (contracts/localization). Wrap in [KccTheme].
+ * The content scrolls and consumes safe-drawing insets (status/navigation bars and the IME) so the
+ * submit button stays reachable under edge-to-edge and with the keyboard open. All copy is
+ * generated string resources (contracts/localization). Wrap in [KccTheme].
  */
 @Composable
 fun OnboardingScreen(
@@ -90,15 +90,20 @@ fun OnboardingScreen(
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
             modifier =
-                Modifier
-                    .fillMaxSize()
+                Modifier.fillMaxSize()
                     .safeDrawingPadding()
                     .verticalScroll(rememberScrollState())
-                    .padding(KccSpacing.s6),
+                    .padding(KccSpacing.s4),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
+            Icon(
+                Icons.Filled.PersonOutline,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
             Text(
                 text = stringResource(R.string.onboarding_title),
+                modifier = Modifier.semantics { heading() },
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onBackground,
             )
@@ -108,36 +113,77 @@ fun OnboardingScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            ConsentRow(checked = licence, onCheckedChange = { licence = it }, label = stringResource(R.string.onboarding_licenceConfirm))
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = displayName,
+                        onValueChange = { displayName = it },
+                        label = { Text(stringResource(R.string.onboarding_displayNameLabel)) },
+                        placeholder = {
+                            Text(stringResource(R.string.onboarding_displayNamePlaceholder))
+                        },
+                        supportingText = {
+                            Text(stringResource(R.string.onboarding_displayNameDescription))
+                        },
+                        isError = OnboardingForm.isDisplayNameTooLong(displayName),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
 
-            ConsentRow(checked = terms, onCheckedChange = { terms = it }, label = stringResource(R.string.onboarding_termsAccept))
-            ConsentLink(text = stringResource(R.string.onboarding_termsLink), url = stringResource(R.string.url_terms))
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ConsentRow(
+                        checked = licence,
+                        onCheckedChange = { licence = it },
+                        label = stringResource(R.string.onboarding_licenceConfirm),
+                    )
+                    ConsentRow(
+                        checked = terms,
+                        onCheckedChange = { terms = it },
+                        label = stringResource(R.string.onboarding_termsAccept),
+                    )
+                    ConsentLink(
+                        text = stringResource(R.string.onboarding_termsLink),
+                        url = stringResource(R.string.url_terms),
+                    )
 
-            ConsentRow(checked = privacy, onCheckedChange = { privacy = it }, label = stringResource(R.string.onboarding_privacyAccept))
-            ConsentLink(text = stringResource(R.string.onboarding_privacyLink), url = stringResource(R.string.url_privacy))
-
-            OutlinedTextField(
-                value = displayName,
-                onValueChange = { displayName = it },
-                label = { Text(stringResource(R.string.onboarding_displayNameLabel)) },
-                placeholder = { Text(stringResource(R.string.onboarding_displayNamePlaceholder)) },
-                supportingText = { Text(stringResource(R.string.onboarding_displayNameDescription)) },
-                isError = OnboardingForm.isDisplayNameTooLong(displayName),
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
+                    ConsentRow(
+                        checked = privacy,
+                        onCheckedChange = { privacy = it },
+                        label = stringResource(R.string.onboarding_privacyAccept),
+                    )
+                    ConsentLink(
+                        text = stringResource(R.string.onboarding_privacyLink),
+                        url = stringResource(R.string.url_privacy),
+                    )
+                }
+            }
 
             if (partnerStatsEnabled) {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                PartnerStatsStep(checked = partnerStats, onCheckedChange = { partnerStats = it })
+                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        PartnerStatsStep(
+                            checked = partnerStats,
+                            onCheckedChange = { partnerStats = it },
+                        )
+                    }
+                }
             }
 
             // Optional, non-mandatory step: offer to open map links in KCC. It
             // does NOT gate Continue (it writes nothing to onSubmit), so it is
             // fully skippable — the member can ignore it and finish onboarding,
             // and reach the same screen later under Settings.
-            HorizontalDivider(modifier = Modifier.padding(vertical = KccSpacing.s1))
-            DefaultMapAppStep()
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    DefaultMapAppStep()
+                }
+            }
 
             if (status == OnboardingStatus.Failed) {
                 Text(
@@ -170,10 +216,10 @@ fun OnboardingScreen(
 }
 
 /**
- * The optional anonymised-partner-statistics step (default-on / opt-out). Shows
- * the same privacy reassurance as the Settings screen (companies never see the
- * member's identity, live location or drive history) with a Switch that starts
- * ON; the member can turn it off here or later under Privacy.
+ * The optional anonymised-partner-statistics step (default-on / opt-out). Shows the same privacy
+ * reassurance as the Settings screen (companies never see the member's identity, live location or
+ * drive history) with a Switch that starts ON; the member can turn it off here or later under
+ * Privacy.
  */
 @Composable
 private fun PartnerStatsStep(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
@@ -197,8 +243,7 @@ private fun PartnerStatsStep(checked: Boolean, onCheckedChange: (Boolean) -> Uni
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier =
-            Modifier
-                .fillMaxWidth()
+            Modifier.fillMaxWidth()
                 .toggleable(value = checked, onValueChange = onCheckedChange, role = Role.Switch)
                 .semantics(mergeDescendants = true) {},
     ) {
@@ -219,11 +264,10 @@ private fun PartnerStatsStep(checked: Boolean, onCheckedChange: (Boolean) -> Uni
 }
 
 /**
- * The optional "open map links in KCC" step. Honest copy: this makes KCC an
- * OPTION Android offers when another app opens a map location — there is no
- * OS-level default-navigator role and no way to set it programmatically, so the
- * button opens the system screen where the member picks KCC (or sets it as the
- * default). Skippable: it gates nothing.
+ * The optional "open map links in KCC" step. Honest copy: this makes KCC an OPTION Android offers
+ * when another app opens a map location — there is no OS-level default-navigator role and no way to
+ * set it programmatically, so the button opens the system screen where the member picks KCC (or
+ * sets it as the default). Skippable: it gates nothing.
  */
 @Composable
 private fun DefaultMapAppStep() {
@@ -253,8 +297,7 @@ private fun ConsentRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit, lab
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier =
-            Modifier
-                .fillMaxWidth()
+            Modifier.fillMaxWidth()
                 .toggleable(value = checked, onValueChange = onCheckedChange, role = Role.Checkbox),
     ) {
         Checkbox(checked = checked, onCheckedChange = null)
@@ -268,9 +311,9 @@ private fun ConsentRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit, lab
 }
 
 /**
- * A small "read the terms/privacy policy" link. Kept out of the toggleable
- * consent [Row] so the tap opens the document instead of toggling the checkbox.
- * Aligned under the label (checkbox width + row padding).
+ * A small "read the terms/privacy policy" link. Kept out of the toggleable consent [Row] so the tap
+ * opens the document instead of toggling the checkbox. Aligned under the label (checkbox width +
+ * row padding).
  */
 @Composable
 private fun ConsentLink(text: String, url: String) {
@@ -288,17 +331,16 @@ private fun ConsentLink(text: String, url: String) {
                 // Screen readers otherwise announce this as plain text: mark it
                 // as a button and label the action with the link text itself
                 // ("Read the terms" / "Läs villkoren") so it reads as tappable.
-                .clickable(
-                    role = Role.Button,
-                    onClickLabel = text,
-                ) { openExternalUrl(context, url) },
+                .clickable(role = Role.Button, onClickLabel = text) {
+                    openExternalUrl(context, url)
+                },
     )
 }
 
 /**
- * Opens an external web document via ACTION_VIEW. Restricted to http(s) so a
- * misconfigured/empty URL resource can never launch a non-web intent
- * (file:/intent:/javascript: …). Silently no-ops if there is no browser.
+ * Opens an external web document via ACTION_VIEW. Restricted to http(s) so a misconfigured/empty
+ * URL resource can never launch a non-web intent (file:/intent:/javascript: …). Silently no-ops if
+ * there is no browser.
  */
 private fun openExternalUrl(context: Context, url: String) {
     // Trim first: leading/trailing whitespace makes Uri.parse yield a null scheme.
@@ -308,7 +350,7 @@ private fun openExternalUrl(context: Context, url: String) {
     if (scheme != "http" && scheme != "https") return
     try {
         context.startActivity(
-            Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
     } catch (_: ActivityNotFoundException) {
         // No browser available — nothing to open.

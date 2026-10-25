@@ -162,6 +162,7 @@ private fun VehiclePhoto(
  *    set independently for the owner's action stack and read-only profiles.
  *
  * @param actions trailing controls (manage buttons); empty for a read-only card.
+ * @param overlayActions optional controls over the photo, outside the detail tap target.
  */
 @Composable
 internal fun VehicleCard(
@@ -173,6 +174,7 @@ internal fun VehicleCard(
     @StringRes registrationPlateFormatRes: Int? = null,
     contentSpacing: Dp = KccSpacing.s2,
     onOpen: (() -> Unit)? = null,
+    overlayActions: (@Composable () -> Unit)? = null,
     actions: @Composable ColumnScope.() -> Unit = {},
 ) {
     Card(
@@ -196,20 +198,27 @@ internal fun VehicleCard(
                     registrationPlateFormatRes = registrationPlateFormatRes,
                 )
             }
-            if (onOpen == null) {
-                summary()
+            if (overlayActions != null) {
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                            .then(if (onOpen != null) Modifier.clickable(role = Role.Button, onClick = onOpen) else Modifier),
+                        verticalArrangement = Arrangement.spacedBy(contentSpacing),
+                        content = summary,
+                    )
+                    Box(modifier = Modifier.align(Alignment.TopEnd)) { overlayActions() }
+                }
             } else {
-                // The photo + details is the tap target that opens the full
-                // car-detail page (announced as a button). The manage buttons
-                // stay OUTSIDE this clickable region, so a tap on
-                // Edit/Delete/Set-main is not also read as "open detail".
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(role = Role.Button, onClick = onOpen),
-                    verticalArrangement = Arrangement.spacedBy(contentSpacing),
-                    content = summary,
-                )
+                // Preserve the existing layout for callers without photo-overlay controls.
+                if (onOpen == null) {
+                    summary()
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onOpen),
+                        verticalArrangement = Arrangement.spacedBy(contentSpacing),
+                        content = summary,
+                    )
+                }
             }
             actions()
         }

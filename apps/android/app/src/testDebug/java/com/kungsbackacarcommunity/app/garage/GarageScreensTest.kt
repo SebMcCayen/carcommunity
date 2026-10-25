@@ -76,7 +76,10 @@ class GarageScreensTest {
             }
         }
         composeTestRule.onNodeWithText("Volvo 240 (1988)").assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.garage_editVehicle)).performScrollTo().performClick()
+        composeTestRule.onNodeWithContentDescription(
+            str(R.string.savedPlaces_moreActions).format("Volvo 240 (1988)"),
+        ).performScrollTo().performClick()
+        composeTestRule.onNodeWithText(str(R.string.garage_editVehicle)).assertIsDisplayed().performClick()
         assertEquals("v1", edited?.id)
     }
 

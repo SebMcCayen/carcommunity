@@ -1,30 +1,44 @@
 package com.kungsbackacarcommunity.app.subscription
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CardMembership
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
- * Subscription / membership purchase screen (Phase 12 slice 24). Shows the
- * current membership state, separate Plus/Supporter purchase actions, and
- * localized status / error text driven by [PurchaseFlowStatus].
+ * Subscription / membership purchase screen (Phase 12 slice 24). Shows the current membership
+ * state, separate Plus/Supporter purchase actions, and localized status / error text driven by
+ * [PurchaseFlowStatus].
  *
- * @param canSubscribe false disables the buttons (e.g. no Activity available or
- *   billing unavailable on this build).
+ * @param canSubscribe false disables the buttons (e.g. no Activity available or billing unavailable
+ *   on this build).
  */
 @Composable
 fun SubscriptionScreen(
@@ -38,6 +52,7 @@ fun SubscriptionScreen(
     onManageSubscription: (String?) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    onRestore: (() -> Unit)? = null,
 ) {
     val paidTier = currentTier?.takeIf { it == "plus" || it == "supporter" }
     val hasPaidMembership = isActiveMember || paidTier != null
@@ -49,9 +64,7 @@ fun SubscriptionScreen(
         }
 
     val canStartNewPurchase =
-        canSubscribe &&
-            !PurchaseFlow.isInFlight(status) &&
-            (!hasPaidMembership || canChangePlan)
+        canSubscribe && !PurchaseFlow.isInFlight(status) && (!hasPaidMembership || canChangePlan)
 
     val currentEntitlement =
         when {
@@ -62,106 +75,144 @@ fun SubscriptionScreen(
         }
 
     AeroPage(title = stringResource(R.string.subscription_screenTitle), modifier = modifier) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.subscription_currentPlanTitle),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text =
-                            stringResource(currentEntitlement),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = stringResource(R.string.subscription_memberRequiredBody),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (hasPaidMembership && canManageSubscription) {
-                        OutlinedButton(
-                            onClick = { onManageSubscription(currentProductId) },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(text = stringResource(R.string.subscription_manageAction))
-                        }
-                        Text(
-                            text = stringResource(R.string.subscription_manageBody),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (canChangePlan) {
-                        Text(
-                            text = stringResource(R.string.subscription_changePlanBody),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-
-            SubscriptionPlanCard(
-                title = stringResource(R.string.subscription_plusTitle),
-                body = stringResource(R.string.subscription_plusBody),
-                action =
-                    stringResource(
-                        when (paidTier) {
-                            "plus" -> R.string.subscription_currentPlanAction
-                            "supporter" -> R.string.subscription_downgradePlusAction
-                            else -> R.string.subscription_subscribePlusAction
-                        },
-                    ),
-                enabled = canStartNewPurchase && paidTier != "plus",
-                onClick = { onSubscribe(PLUS_MONTHLY_PRODUCT_ID) },
-            )
-
-            SubscriptionPlanCard(
-                title = stringResource(R.string.subscription_supporterTitle),
-                body = stringResource(R.string.subscription_supporterBody),
-                action =
-                    stringResource(
-                        when (paidTier) {
-                            "supporter" -> R.string.subscription_currentPlanAction
-                            "plus" -> R.string.subscription_upgradeSupporterAction
-                            else -> R.string.subscription_subscribeSupporterAction
-                        },
-                    ),
-                enabled = canStartNewPurchase && paidTier != "supporter",
-                onClick = { onSubscribe(SUPPORTER_MONTHLY_PRODUCT_ID) },
-            )
-
-            statusTextRes(status)?.let { res ->
-                val isError = status is PurchaseFlowStatus.Failed
+        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 Text(
-                    text = stringResource(res),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color =
-                        if (isError) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
+                    text = stringResource(R.string.subscription_currentPlanTitle),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
-            }
-
-            // Explain why subscribing is disabled, unless the status text above
-            // already carries the unavailable copy (Failed(Unavailable)), to
-            // avoid rendering the same message twice.
-            val statusAlreadyUnavailable =
-                status == PurchaseFlowStatus.Failed(PurchaseFailureReason.Unavailable)
-            if (!canSubscribe && !statusAlreadyUnavailable) {
                 Text(
-                    text = stringResource(R.string.subscription_statusUnavailable),
+                    text = stringResource(currentEntitlement),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = stringResource(R.string.subscription_memberRequiredBody),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (hasPaidMembership && canManageSubscription) {
+                    OutlinedButton(
+                        onClick = { onManageSubscription(currentProductId) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(text = stringResource(R.string.subscription_manageAction))
+                    }
+                    Text(
+                        text = stringResource(R.string.subscription_manageBody),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (canChangePlan) {
+                    Text(
+                        text = stringResource(R.string.subscription_changePlanBody),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
+        }
+
+        OutlinedCard(modifier = Modifier.fillMaxWidth().testTag("membership_community")) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(R.string.subscription_communityPlanName),
+                    Modifier.semantics { heading() },
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Text(
+                    stringResource(R.string.subscription_communityPlanBody),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        SubscriptionPlanCard(
+            // Existing title resources contain planning prices. Keep the
+            // card price-free; Play supplies the localized checkout price.
+            title = stringResource(R.string.subscription_plusPlanName),
+            body = stringResource(R.string.subscription_plusBody),
+            icon = Icons.Filled.CardMembership,
+            selected = paidTier == "plus",
+            testTag = "membership_plus",
+            action =
+                stringResource(
+                    when (paidTier) {
+                        "plus" -> R.string.subscription_currentPlanAction
+                        "supporter" -> R.string.subscription_downgradePlusAction
+                        else -> R.string.subscription_subscribePlusAction
+                    }
+                ),
+            enabled = canStartNewPurchase && paidTier != "plus",
+            onClick = { onSubscribe(PLUS_MONTHLY_PRODUCT_ID) },
+        )
+
+        SubscriptionPlanCard(
+            title = stringResource(R.string.subscription_supporterPlanName),
+            body = stringResource(R.string.subscription_supporterBody),
+            icon = Icons.Filled.VerifiedUser,
+            selected = paidTier == "supporter",
+            testTag = "membership_supporter",
+            action =
+                stringResource(
+                    when (paidTier) {
+                        "supporter" -> R.string.subscription_currentPlanAction
+                        "plus" -> R.string.subscription_upgradeSupporterAction
+                        else -> R.string.subscription_subscribeSupporterAction
+                    }
+                ),
+            enabled = canStartNewPurchase && paidTier != "supporter",
+            onClick = { onSubscribe(SUPPORTER_MONTHLY_PRODUCT_ID) },
+        )
+
+        Text(
+            text = stringResource(R.string.subscription_purchaseHandledExternally),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (onRestore != null) {
+            TextButton(
+                onClick = onRestore,
+                enabled = canSubscribe && !PurchaseFlow.isInFlight(status),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.subscription_restoreAction))
+            }
+        }
+
+        statusTextRes(status)?.let { res ->
+            val isError = status is PurchaseFlowStatus.Failed
+            Text(
+                text = stringResource(res),
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                style = MaterialTheme.typography.bodyMedium,
+                color =
+                    if (isError) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+            )
+        }
+
+        // Explain why subscribing is disabled, unless the status text above
+        // already carries the unavailable copy (Failed(Unavailable)), to
+        // avoid rendering the same message twice.
+        val statusAlreadyUnavailable =
+            status == PurchaseFlowStatus.Failed(PurchaseFailureReason.Unavailable)
+        if (!canSubscribe && !statusAlreadyUnavailable) {
+            Text(
+                text = stringResource(R.string.subscription_statusUnavailable),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -169,30 +220,44 @@ fun SubscriptionScreen(
 private fun SubscriptionPlanCard(
     title: String,
     body: String,
+    icon: ImageVector,
+    selected: Boolean,
+    testTag: String,
     action: String,
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    OutlinedCard(
+        modifier = Modifier.fillMaxWidth().testTag(testTag),
+        border =
+            BorderStroke(
+                if (selected) 2.dp else 1.dp,
+                if (selected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.outlineVariant,
+            ),
+    ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text(
+                    text = title,
+                    modifier = Modifier.weight(1f).semantics { heading() },
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
             Text(
                 text = body,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Button(
-                onClick = onClick,
-                enabled = enabled,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
+            Button(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
                 Text(text = action)
             }
         }

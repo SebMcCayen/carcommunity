@@ -1,6 +1,10 @@
 package com.kungsbackacarcommunity.app.live
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,16 +13,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Button
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -27,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -35,8 +40,8 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
-import com.kungsbackacarcommunity.app.design.KccAlpha
 import com.kungsbackacarcommunity.app.design.KccRadius
+import com.kungsbackacarcommunity.app.design.LocalKccMapColors
 import com.kungsbackacarcommunity.app.friends.FriendPointsFormat
 import com.kungsbackacarcommunity.app.friends.FriendPointsRepository
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
@@ -153,17 +158,19 @@ fun LiveSharerPopup(
             modifier =
                 Modifier
                     .padding(16.dp)
+                    .widthIn(max = 560.dp)
                     .fillMaxWidth()
-                    .widthIn(max = 360.dp)
                     .testTag(LIVE_SHARER_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
+            color = LocalKccMapColors.current.overlay,
+            border = BorderStroke(1.dp, LocalKccMapColors.current.border),
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.8f).dp)
+                    .verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -176,6 +183,10 @@ fun LiveSharerPopup(
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
+                        sharer.mainCar?.let { car ->
+                            Text(text = "${car.make} ${car.model}", style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                         val pointsText =
                             when (val p = points) {
                                 is LiveSharerPoints.Loading -> DASH
@@ -201,12 +212,12 @@ fun LiveSharerPopup(
                     }
                 }
                 if (canVisit && onVisitProfile != null) {
-                    TextButton(
+                    Button(
                         onClick = {
                             onVisitProfile(sharer.uid)
                             onDismiss()
                         },
-                        modifier = Modifier.testTag(LIVE_SHARER_POPUP_VISIT_TAG),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(LIVE_SHARER_POPUP_VISIT_TAG),
                     ) {
                         Text(text = stringResource(R.string.nearby_visitProfile))
                     }
@@ -220,7 +231,7 @@ fun LiveSharerPopup(
 private const val DASH = "—"
 
 /**
- * The sharer's main-car photo (the same image the chip shows) in a round frame,
+ * The sharer's main-car photo (the same image the chip shows) in a cyan card frame,
  * with the generic car glyph — the same fallback the tapped chip shows — shown
  * whenever the photo URL is unavailable: no photo set, the URL still resolving,
  * or resolution failed.
@@ -231,8 +242,10 @@ private fun SharerAvatar(imagePath: String?) {
     Box(
         modifier =
             Modifier
-                .size(44.dp)
-                .clip(CircleShape)
+                .size(80.dp)
+                .border(2.dp, MaterialTheme.colorScheme.tertiary, RoundedCornerShape(KccRadius.md))
+                .padding(3.dp)
+                .clip(RoundedCornerShape(KccRadius.md))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {
@@ -241,7 +254,7 @@ private fun SharerAvatar(imagePath: String?) {
                 model = url,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(44.dp).clip(CircleShape),
+                modifier = Modifier.matchParentSize(),
             )
         } else {
             Icon(

@@ -9,12 +9,18 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,8 +31,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
@@ -44,47 +53,69 @@ fun NotificationSettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     AeroPage(title = stringResource(R.string.notifications_settingsTitle), modifier = modifier) {
-            // Runtime request: on Android 13+ an in-context prompt is far better
-            // than only deep-linking to system settings. Keep a local status so
-            // the card reflects the grant immediately after the dialog.
-            val context = LocalContext.current
-            var permissionStatus by remember(pushPermission) { mutableStateOf(pushPermission) }
-            val canRequestInApp = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-            val requestLauncher =
-                rememberLauncherForActivityResult(
-                    ActivityResultContracts.RequestPermission(),
-                ) { permissionStatus = currentPushPermissionStatus(context) }
-            PushPermissionCard(
-                status = permissionStatus,
-                onRequestPermission =
-                    if (canRequestInApp && permissionStatus != PushPermissionStatus.GRANTED) {
-                        { requestLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
-                    } else {
-                        null
-                    },
-                onOpenSystemSettings = onOpenSystemSettings,
-            )
+        // Runtime request: on Android 13+ an in-context prompt is far better
+        // than only deep-linking to system settings. Keep a local status so
+        // the card reflects the grant immediately after the dialog.
+        val context = LocalContext.current
+        var permissionStatus by remember(pushPermission) { mutableStateOf(pushPermission) }
+        val canRequestInApp = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+        val requestLauncher =
+            rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+                permissionStatus = currentPushPermissionStatus(context)
+            }
+        PushPermissionCard(
+            status = permissionStatus,
+            onRequestPermission =
+                if (canRequestInApp && permissionStatus != PushPermissionStatus.GRANTED) {
+                    { requestLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
+                } else {
+                    null
+                },
+            onOpenSystemSettings = onOpenSystemSettings,
+        )
 
+        Text(
+            text = stringResource(R.string.notifications_settingsCategoriesTitle),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+
+        if (saveStatus == NotificationSettingsSaveStatus.Saving) {
             Text(
-                text = stringResource(R.string.notifications_settingsCategoriesTitle),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onBackground,
+                text = stringResource(R.string.notifications_settingsSaving),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        if (state == NotificationSettingsState.Loading) {
+            CircularProgressIndicator()
+        }
+        if (
+            saveStatus == NotificationSettingsSaveStatus.Saved ||
+                saveStatus == NotificationSettingsSaveStatus.Failed
+        ) {
+            Text(
+                text =
+                    stringResource(
+                        if (saveStatus == NotificationSettingsSaveStatus.Saved)
+                            R.string.privacySettings_saved
+                        else R.string.privacySettings_error
+                    ),
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                color =
+                    if (saveStatus == NotificationSettingsSaveStatus.Failed)
+                        MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
 
-            if (saveStatus == NotificationSettingsSaveStatus.Saving) {
-                Text(
-                    text = stringResource(R.string.notifications_settingsSaving),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            val preferences =
-                (state as? NotificationSettingsState.Loaded)?.preferences
-                    ?: NotificationPreferences.ALL_ENABLED
-            NotificationCategories.ACTIVE.forEach { category ->
-                CategoryRow(category, preferences.effective(category), onToggle)
-            }
+        val preferences =
+            (state as? NotificationSettingsState.Loaded)?.preferences
+                ?: NotificationPreferences.ALL_ENABLED
+        NotificationCategories.ACTIVE.forEach { category ->
+            CategoryRow(category, preferences.effective(category), onToggle)
+        }
     }
 }
 
@@ -94,7 +125,7 @@ private fun PushPermissionCard(
     onRequestPermission: (() -> Unit)?,
     onOpenSystemSettings: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -143,28 +174,42 @@ private fun CategoryRow(
     onToggle: (String, NotificationChannel, Boolean) -> Unit,
 ) {
     val essential = NotificationCategories.isEssential(category)
-    Card(modifier = Modifier.fillMaxWidth()) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth().testTag("notification_category_$category")) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                text = stringResource(categoryLabelRes(category)),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            ChannelToggle(
-                label = stringResource(R.string.notifications_settingsInApp),
-                checked = preference.inApp,
-                enabled = !essential,
-                onCheckedChange = { onToggle(category, NotificationChannel.IN_APP, it) },
-            )
-            ChannelToggle(
-                label = stringResource(R.string.notifications_settingsPush),
-                checked = preference.push,
-                enabled = !essential,
-                onCheckedChange = { onToggle(category, NotificationChannel.PUSH, it) },
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    if (essential) Icons.Filled.Lock else Icons.Filled.Notifications,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = stringResource(categoryLabelRes(category)),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                ChannelToggle(
+                    label = stringResource(R.string.notifications_settingsInApp),
+                    checked = preference.inApp,
+                    enabled = !essential,
+                    onCheckedChange = { onToggle(category, NotificationChannel.IN_APP, it) },
+                    modifier = Modifier.weight(1f).testTag("notification_${category}_in_app"),
+                )
+                ChannelToggle(
+                    label = stringResource(R.string.notifications_settingsPush),
+                    checked = preference.push,
+                    enabled = !essential,
+                    onCheckedChange = { onToggle(category, NotificationChannel.PUSH, it) },
+                    modifier = Modifier.weight(1f).testTag("notification_${category}_push"),
+                )
+            }
             if (essential) {
                 Text(
                     text = stringResource(R.string.notifications_settingsEssential),
@@ -182,14 +227,16 @@ private fun ChannelToggle(
     checked: Boolean,
     enabled: Boolean,
     onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     // Whole row is the toggle target with merged semantics so TalkBack reads
     // the label as the switch's accessible name (Role.Switch); the Switch's own
     // callback is null — the row owns the interaction.
     Row(
         modifier =
-            Modifier
+            modifier
                 .fillMaxWidth()
+                .heightIn(min = 48.dp)
                 .toggleable(
                     value = checked,
                     enabled = enabled,
@@ -211,10 +258,9 @@ private fun ChannelToggle(
 }
 
 /**
- * Wire category → label. Delegates to [NotificationCategory.labelRes] so the
- * settings rows and the inbox rows can't drift apart as categories are added;
- * [NotificationCategory.fromWire] already falls back to the neutral system
- * notice for anything unrecognized.
+ * Wire category → label. Delegates to [NotificationCategory.labelRes] so the settings rows and the
+ * inbox rows can't drift apart as categories are added; [NotificationCategory.fromWire] already
+ * falls back to the neutral system notice for anything unrecognized.
  */
 @StringRes
 private fun categoryLabelRes(category: String): Int =

@@ -1,15 +1,25 @@
 package com.kungsbackacarcommunity.app.police
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -20,8 +30,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.shell.MapDetailSheet
 
 /** Test tag on the "still there?" confirm action (non-reporter). */
 const val POLICE_DETAILS_CONFIRM_TAG = "police_details_confirm"
@@ -41,7 +53,7 @@ const val POLICE_DETAILS_DISPUTE_COUNT_TAG = "police_details_dispute_count"
 /**
  * The sheet opened by TAPPING a police pin on the map — the police-layer sibling
  * of [com.kungsbackacarcommunity.app.incidents.IncidentDetailsSheet], modelled on
- * the same tap→dialog interaction but leaner (a police pin has no category, note,
+ * the same map-detail sheet interaction but leaner (a police pin has no category, note,
  * or age filter — it is a transient "police here" marker).
  *
  * It surfaces the shared verify signal and offers the one action appropriate to
@@ -75,103 +87,96 @@ fun PoliceDetailsSheet(
     disputeInProgress: Boolean = false,
     removeInProgress: Boolean = false,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
+    MapDetailSheet(
+        title = stringResource(R.string.police_sheetTitle),
+        onDismiss = onDismiss,
+        leadingContent = { PoliceBadge() },
+    ) {
+        OutlinedCard(
+            modifier = Modifier.fillMaxWidth(),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary),
+        ) {
             Row(
+                modifier = Modifier.padding(KccSpacing.s4),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
             ) {
-                PoliceBadge()
-                Text(
-                    text = stringResource(R.string.police_sheetTitle),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-            }
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+                Icon(Icons.Filled.Info, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
                 Text(
                     text = stringResource(R.string.police_reportedByMember),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
                 )
-                // BOTH tallies, TOGETHER, whenever EITHER is non-zero — never one
-                // line on its own (which would read like a single netted verdict).
-                // The reader is about to drive into the spot, so "3 confirm / 1 says
-                // gone" — including the 0 on the empty side — serves them better than
-                // half the picture. Nothing is shown at all until someone has voted.
-                if (pin.confirmationCount > 0 || pin.disputeCount > 0) {
-                    Text(
-                        text = stringResource(R.string.police_confirmedBy, pin.confirmationCount),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.testTag(POLICE_DETAILS_CONFIRM_COUNT_TAG),
-                    )
-                    Text(
-                        text = stringResource(R.string.police_disputedBy, pin.disputeCount),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.testTag(POLICE_DETAILS_DISPUTE_COUNT_TAG),
-                    )
-                }
-                if (pin.mine) {
-                    Text(
-                        text = stringResource(R.string.police_ownPinHint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    Text(
-                        text = stringResource(R.string.police_stillHereQuestion),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
             }
-        },
-        confirmButton = {
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+            // Show both tallies whenever either is non-zero, including the zero
+            // on the other side. A dispute is not a netted removal verdict.
+            if (pin.confirmationCount > 0 || pin.disputeCount > 0) {
+                Text(
+                    text = stringResource(R.string.police_confirmedBy, pin.confirmationCount),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag(POLICE_DETAILS_CONFIRM_COUNT_TAG),
+                )
+                Text(
+                    text = stringResource(R.string.police_disputedBy, pin.disputeCount),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag(POLICE_DETAILS_DISPUTE_COUNT_TAG),
+                )
+            }
             if (pin.mine) {
-                TextButton(
-                    onClick = onRemove,
-                    enabled = !removeInProgress,
-                    modifier = Modifier.testTag(POLICE_DETAILS_REMOVE_TAG),
-                ) {
-                    Text(stringResource(R.string.police_removeAction))
-                }
+                Text(
+                    text = stringResource(R.string.police_ownPinHint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             } else {
-                TextButton(
-                    onClick = onConfirm,
-                    enabled = !confirmInProgress,
-                    modifier = Modifier.testTag(POLICE_DETAILS_CONFIRM_TAG),
-                ) {
-                    Text(stringResource(R.string.police_stillHereYes))
-                }
+                Text(
+                    text = stringResource(R.string.police_stillHereQuestion),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             }
-        },
-        dismissButton = {
-            // "Nej, den är borta" sits beside Close rather than in the primary slot
-            // (the same restraint as the incident sheet's clear vote), so the
-            // informational-but-negative action is not the reflex tap.
-            Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
-                if (!pin.mine) {
-                    TextButton(
-                        onClick = onDispute,
-                        enabled = !disputeInProgress,
-                        modifier = Modifier.testTag(POLICE_DETAILS_DISPUTE_TAG),
-                    ) {
-                        Text(stringResource(R.string.police_stillHereNo))
-                    }
-                }
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.incidents_close))
-                }
+        }
+        if (pin.mine) {
+            OutlinedButton(
+                onClick = onRemove,
+                enabled = !removeInProgress,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.fillMaxWidth().heightIn(min = KccSpacing.s12).testTag(POLICE_DETAILS_REMOVE_TAG),
+            ) {
+                Text(stringResource(R.string.police_removeAction))
             }
-        },
-    )
+        } else {
+            Button(
+                onClick = onConfirm,
+                enabled = !confirmInProgress,
+                modifier = Modifier.fillMaxWidth().heightIn(min = KccSpacing.s12).testTag(POLICE_DETAILS_CONFIRM_TAG),
+            ) {
+                Text(stringResource(R.string.police_stillHereYes))
+            }
+        }
+        // Disputing informs other drivers; it never removes the pin. Keep this
+        // secondary to confirmation and preserve the separate guard.
+        if (!pin.mine) {
+            OutlinedButton(
+                onClick = onDispute,
+                enabled = !disputeInProgress,
+                modifier = Modifier.fillMaxWidth().heightIn(min = KccSpacing.s12).testTag(POLICE_DETAILS_DISPUTE_TAG),
+            ) {
+                Text(stringResource(R.string.police_stillHereNo))
+            }
+        }
+        TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.incidents_close))
+        }
+    }
 }
 
 /**
- * The dialog-sized police badge: the police glyph on the SAME blue disc the map
+ * The sheet-sized police badge: the police glyph on the SAME blue disc the map
  * marker draws ([PoliceMapMarkers.DISC_COLOR_ARGB]), so the pin you tapped and the
  * thing you are now reading about are visibly the same object.
  */
@@ -181,6 +186,8 @@ private fun PoliceBadge() {
         modifier =
             Modifier
                 .size(BADGE_SIZE)
+                .border(2.dp, MaterialTheme.colorScheme.tertiary, CircleShape)
+                .padding(KccSpacing.s1)
                 .clip(CircleShape)
                 .background(Color(PoliceMapMarkers.DISC_COLOR_ARGB)),
         contentAlignment = Alignment.Center,
@@ -195,5 +202,5 @@ private fun PoliceBadge() {
     }
 }
 
-private val BADGE_SIZE = KccSpacing.s8
+private val BADGE_SIZE = KccSpacing.s12
 private val BADGE_GLYPH_SIZE = BADGE_SIZE * 0.6f

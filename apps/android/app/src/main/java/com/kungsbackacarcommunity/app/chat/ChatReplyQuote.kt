@@ -94,12 +94,12 @@ fun ChatQuoteHeader(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
 ) {
-    val accent = if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+    val accent = if (isOwn) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.tertiary
     val authorColor =
-        if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+        if (isOwn) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.tertiary
     val previewColor =
         if (isOwn) {
-            MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f)
+            MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.85f)
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant
         }

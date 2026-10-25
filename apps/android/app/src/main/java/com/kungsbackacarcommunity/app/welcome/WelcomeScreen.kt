@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Button
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -79,7 +80,7 @@ fun WelcomeScreen(
                 Modifier
                     .fillMaxSize()
                     .safeDrawingPadding()
-                    .padding(KccSpacing.s6),
+                    .padding(KccSpacing.s4),
         ) {
             // Top chrome: step progress + a persistent Skip (marks the flow seen).
             Row(
@@ -101,6 +102,13 @@ fun WelcomeScreen(
                     Text(stringResource(R.string.welcome_skip))
                 }
             }
+
+            LinearProgressIndicator(
+                progress = { WelcomeFlow.position(step).toFloat() / WelcomeStep.COUNT },
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.tertiary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+            )
 
             Spacer(modifier = Modifier.size(KccSpacing.s4))
 
@@ -198,13 +206,13 @@ private fun StepCard(step: WelcomeStep) {
                         // the scale rather than hard-coding a raw dp value.
                         .size(KccSpacing.s12 + KccSpacing.s6)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer),
+                        .background(MaterialTheme.colorScheme.tertiaryContainer),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = step.icon(),
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
                     modifier = Modifier.size(KccSpacing.s8),
                 )
             }

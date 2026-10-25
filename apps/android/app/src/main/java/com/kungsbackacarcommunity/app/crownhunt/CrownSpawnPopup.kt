@@ -5,12 +5,16 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -38,15 +42,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import kotlinx.coroutines.launch
 import com.kungsbackacarcommunity.app.R
-import com.kungsbackacarcommunity.app.design.KccAlpha
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 
@@ -119,12 +122,15 @@ fun CrownSpawnPopup(
                     .fillMaxWidth()
                     .testTag(CROWN_SPAWN_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = KccSpacing.s5, vertical = KccSpacing.s4),
+                modifier = Modifier.heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.8f).dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = KccSpacing.s5, vertical = KccSpacing.s4),
                 verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
             ) {
                 CrownHeader(spawn = spawn, onDismiss = onDismiss)
@@ -200,7 +206,7 @@ private fun CrownHeader(spawn: CrownSpawn, onDismiss: () -> Unit) {
         Box(
             modifier =
                 Modifier
-                    .size(KccSpacing.s8)
+                    .size(KccSpacing.s12)
                     .clip(CircleShape)
                     .background(Color(CrownMarkerStyle.discColorArgb(spawn.rarity))),
             contentAlignment = Alignment.Center,
@@ -211,7 +217,7 @@ private fun CrownHeader(spawn: CrownSpawn, onDismiss: () -> Unit) {
                 // announcement would just be noise.
                 contentDescription = null,
                 tint = Color(CrownMarkerStyle.glyphColorArgb(spawn.rarity)),
-                modifier = Modifier.size(KccSpacing.s5),
+                modifier = Modifier.size(KccSpacing.s8),
             )
         }
         Column(modifier = Modifier.weight(1f)) {
@@ -475,13 +481,7 @@ private fun CrownOutcomeBody(outcome: CrownSpawnClaimOutcome, onDismiss: () -> U
         // actually landed in the balance — showing the document's value would be
         // a guess that could disagree with the ledger.
         val points = outcome.pointsAwarded ?: 0
-        Text(
-            text = stringResource(R.string.crownHunt_spawnResultAwardedPoints, points),
-            modifier = Modifier.fillMaxWidth(),
-            style = MaterialTheme.typography.headlineSmall,
-            textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.primary,
-        )
+        CrownRewardSummary(pointsAwarded = points)
     }
     TextButton(
         onClick = onDismiss,

@@ -236,6 +236,10 @@
     <string name="subscription_currentEntitlementSupporter">You have an active Supporter membership.</string>
     <string name="subscription_currentEntitlementFree">No active membership.</string>
     <string name="subscription_currentPlanTitle">Your membership</string>
+    <string name="subscription_communityPlanName">Community</string>
+    <string name="subscription_communityPlanBody">Always free: social features, event details and RSVP, driving statistics, up to 2 garage vehicles, your 5 newest saved drives and 2,250 Crown Hunt KP per day.</string>
+    <string name="subscription_plusPlanName">Plus</string>
+    <string name="subscription_supporterPlanName">Supporter</string>
     <string name="subscription_plusTitle">Plus · SEK 39/month</string>
     <string name="subscription_plusBody">Event check-in, attendee names, member partner offers, up to 5 garage vehicles, 90 days of drive history and 3,000 Crown Hunt KP per day (Community: 2,250).</string>
     <string name="subscription_supporterTitle">Supporter · SEK 119/month</string>

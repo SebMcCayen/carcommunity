@@ -3,15 +3,22 @@ package com.kungsbackacarcommunity.app.partners
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -62,9 +69,14 @@ fun PartnersRootScreen(
         when (section) {
             PartnersRootSection.DIRECTORY ->
                 PartnersDirectoryContent(
-                    state, offersState, onOpenCompany, onRetry,
-                    onLoadMoreCompanies, canLoadMoreCompanies,
-                    isLoadingMoreCompanies, didFailLoadingMoreCompanies,
+                    state,
+                    offersState,
+                    onOpenCompany,
+                    onRetry,
+                    onLoadMoreCompanies,
+                    canLoadMoreCompanies,
+                    isLoadingMoreCompanies,
+                    didFailLoadingMoreCompanies,
                 )
             PartnersRootSection.SAVED ->
                 SavedOffersContent(
@@ -80,8 +92,8 @@ fun PartnersRootScreen(
 }
 
 /**
- * Partner companies list (Phase 12 slice 17). Stateless: renders [state] and
- * reports taps. Any authenticated user sees active companies.
+ * Partner companies list (Phase 12 slice 17). Stateless: renders [state] and reports taps. Any
+ * authenticated user sees active companies.
  */
 @Composable
 fun PartnersListScreen(
@@ -157,7 +169,9 @@ private fun PartnersDirectoryContent(
                             (offersState as? OffersState.Loaded)
                                 ?.takeIf { it.isExhaustive }
                                 ?.offers
-                                ?.let { offers -> Partners.offersForCompany(offers, company.id).size },
+                                ?.let { offers ->
+                                    Partners.offersForCompany(offers, company.id).size
+                                },
                         onClick = { onOpenCompany(company.id) },
                     )
                 }
@@ -169,8 +183,9 @@ private fun PartnersDirectoryContent(
                     ) {
                         Text(
                             stringResource(
-                                if (isLoadingMore) R.string.partners_loading else R.string.partners_loadMore,
-                            ),
+                                if (isLoadingMore) R.string.partners_loading
+                                else R.string.partners_loadMore
+                            )
                         )
                     }
                 }
@@ -258,11 +273,9 @@ private fun SavedOffersContent(
         val companyName =
             companies.firstOrNull { it.id == offer.companyId }?.name
                 ?: offer.partnerCompanyName?.takeIf { it.isNotBlank() }
-        Card(
+        OutlinedCard(
             modifier =
-                Modifier.fillMaxWidth().clickable {
-                    onOpenSavedOffer(offer.companyId, offer.id)
-                },
+                Modifier.fillMaxWidth().clickable { onOpenSavedOffer(offer.companyId, offer.id) }
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -291,41 +304,55 @@ private fun SavedOffersContent(
 }
 
 @Composable
-private fun CompanyCard(
-    company: PartnerCompany,
-    offerCount: Int?,
-    onClick: () -> Unit,
-) {
-    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+private fun CompanyCard(company: PartnerCompany, offerCount: Int?, onClick: () -> Unit) {
+    OutlinedCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                text = company.name,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
+            // The company model has no image URL: a native symbol is the honest fallback.
+            Icon(
+                Icons.Filled.Storefront,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(32.dp),
             )
-            Text(
-                text = stringResource(company.category.labelRes()),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            offerCount?.let { count ->
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 Text(
-                    text =
-                        stringResource(
-                            if (count == 1) {
-                                R.string.partnerOffers_offerCountOne
-                            } else {
-                                R.string.partnerOffers_offerCountOther
-                            },
-                            count,
-                        ),
-                    style = MaterialTheme.typography.bodySmall,
+                    text = company.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = stringResource(company.category.labelRes()),
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                offerCount?.let { count ->
+                    Text(
+                        text =
+                            stringResource(
+                                if (count == 1) {
+                                    R.string.partnerOffers_offerCountOne
+                                } else {
+                                    R.string.partnerOffers_offerCountOther
+                                },
+                                count,
+                            ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

@@ -1,13 +1,21 @@
 package com.kungsbackacarcommunity.app.account
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -24,8 +32,8 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
- * Account-deletion confirmation (Phase 12 slice 25). A two-step confirm before
- * calling the soft-delete callable; on success the caller signs the user out.
+ * Account-deletion confirmation (Phase 12 slice 25). A two-step confirm before calling the
+ * soft-delete callable; on success the caller signs the user out.
  */
 @Composable
 fun AccountDeletionScreen(
@@ -39,35 +47,48 @@ fun AccountDeletionScreen(
     val busy = status == AccountDeletionStatus.Deleting
 
     AeroPage(title = stringResource(R.string.settings_deleteAccount), modifier = modifier) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-            ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors =
+                CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+        ) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Icon(
+                    Icons.Filled.DeleteForever,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.size(32.dp),
+                )
                 Text(
                     text = stringResource(R.string.settings_accountDeletionWarning),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.padding(16.dp),
                 )
             }
+        }
 
-            if (status == AccountDeletionStatus.Failed) {
-                Text(
-                    text = stringResource(R.string.settings_accountDeletionError),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
+        if (status == AccountDeletionStatus.Failed) {
+            Text(
+                text = stringResource(R.string.settings_accountDeletionError),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
 
-            Button(
-                onClick = { confirming = true },
-                enabled = !busy,
-                colors =
-                    ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(text = stringResource(R.string.settings_deleteAccount))
+        Button(
+            onClick = { confirming = true },
+            enabled = !busy,
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (busy) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
             }
+            Text(text = stringResource(R.string.settings_deleteAccount))
+        }
+        OutlinedButton(onClick = onBack, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.profile_cancelButton))
+        }
     }
 
     if (confirming) {
@@ -76,11 +97,13 @@ fun AccountDeletionScreen(
             title = { Text(text = stringResource(R.string.settings_deleteAccount)) },
             text = { Text(text = stringResource(R.string.settings_accountDeletionWarning)) },
             confirmButton = {
-                TextButton(onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    confirming = false
-                    onDelete()
-                }) {
+                TextButton(
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        confirming = false
+                        onDelete()
+                    }
+                ) {
                     Text(text = stringResource(R.string.settings_deleteAccount))
                 }
             },

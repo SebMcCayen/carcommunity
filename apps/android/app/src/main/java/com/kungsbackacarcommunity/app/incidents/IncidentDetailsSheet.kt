@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -24,6 +26,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.shell.MapDetailSheet
 
 /** Test tag on the "still there?" confirmation action. */
 const val INCIDENT_DETAILS_CONFIRM_TAG = "incident_details_confirm"
@@ -112,18 +115,11 @@ fun IncidentDetailsSheet(
     val confirmWired = IncidentDetails.confirmAvailability == ConfirmAvailability.Wired
     val label = incidentTypeLabel(incident.type)
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
-            ) {
-                IncidentBadge(type = incident.type, reportedCleared = incident.reportedCleared)
-                Text(text = label, style = MaterialTheme.typography.titleMedium)
-            }
-        },
-        text = {
+    MapDetailSheet(
+        title = label,
+        onDismiss = onDismiss,
+        leadingContent = { IncidentBadge(type = incident.type, reportedCleared = incident.reportedCleared) },
+    ) {
             Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
                 // Trafikverket rows are timed off their upstream original post
                 // time, not our sync time; when that is missing the age line is
@@ -221,58 +217,52 @@ fun IncidentDetailsSheet(
                     IncidentAction.Remove -> Unit
                 }
             }
-        },
-        confirmButton = {
             when (action) {
                 IncidentAction.Confirm ->
-                    TextButton(
+                    Button(
                         onClick = onConfirm,
                         // Live now that `incidents-confirm` is wired; disabled only
                         // while a confirmation is already in flight, so one press is
                         // one call.
                         enabled = confirmWired && !confirmInProgress,
-                        modifier = Modifier.testTag(INCIDENT_DETAILS_CONFIRM_TAG),
+                        modifier = Modifier.fillMaxWidth().testTag(INCIDENT_DETAILS_CONFIRM_TAG),
                     ) {
                         Text(stringResource(R.string.incidents_stillHereYes))
                     }
                 IncidentAction.Remove ->
-                    TextButton(
+                    OutlinedButton(
                         onClick = onRemove,
                         // One delete per press: the sheet outlives the press now,
                         // so without this a second tap during the round-trip would
                         // fire a second removal for the same incident.
                         enabled = !removeInProgress,
-                        modifier = Modifier.testTag(INCIDENT_DETAILS_REMOVE_TAG),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.fillMaxWidth().testTag(INCIDENT_DETAILS_REMOVE_TAG),
                     ) {
                         Text(stringResource(R.string.incidents_removeAction))
                     }
                 IncidentAction.None -> Unit
             }
-        },
-        dismissButton = {
-            // "Nej, den är borta" sits beside Close rather than opposite the
-            // confirm action: both are answers to the same question, and putting
-            // the destructive-sounding one in the primary slot would invite the
-            // reflex tap this whole design is built to survive.
-            Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
+            // Keep clear secondary to confirmation, with its real eligibility
+            // reason above. Stacked actions can wrap with large system text.
+            Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
                 if (action == IncidentAction.Confirm && onReportCleared != null) {
-                    TextButton(
+                    OutlinedButton(
                         onClick = onReportCleared,
                         // Rendered even when it cannot be used — disabled, with the
                         // reason above — because a missing button explains nothing.
                         enabled =
                             clearEligibility == ClearVoteEligibility.Available && !clearInProgress,
-                        modifier = Modifier.testTag(INCIDENT_DETAILS_CLEAR_TAG),
+                        modifier = Modifier.fillMaxWidth().testTag(INCIDENT_DETAILS_CLEAR_TAG),
                     ) {
                         Text(stringResource(R.string.incidents_stillHereNo))
                     }
                 }
-                TextButton(onClick = onDismiss) {
+                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.incidents_close))
                 }
             }
-        },
-    )
+    }
 }
 
 /**

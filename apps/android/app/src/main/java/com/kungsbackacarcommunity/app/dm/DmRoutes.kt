@@ -6,7 +6,10 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -97,25 +100,24 @@ fun ConversationListRoute(
         )
 
         if (canStartNew) {
-            // Material "compose new message" convention: a bottom-end FAB. This
-            // section has no top app bar of its own to hang an action on (inside
-            // the chat hub the tab row sits above it; the standalone route uses the
-            // shared Aero chrome), so the FAB is both the conventional and the
-            // best-fitting placement here.
-            FloatingActionButton(
+            // Catalogue S33 uses a prominent gold action. The same picker and
+            // friendship rules back both standalone and embedded inboxes.
+            ExtendedFloatingActionButton(
                 onClick = { showPicker = true },
                 modifier =
                     Modifier
-                        .align(Alignment.BottomEnd)
+                        .align(Alignment.BottomCenter)
                         .navigationBarsPadding()
                         .padding(KccSpacing.s4)
+                        .fillMaxWidth()
                         .testTag(NEW_DIALOGUE_FAB_TEST_TAG),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Edit,
-                    contentDescription = stringResource(R.string.dm_newDialogue_action),
-                )
-            }
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                text = { Text(stringResource(R.string.dm_newDialogue_action)) },
+                icon = {
+                    Icon(imageVector = Icons.Filled.Edit, contentDescription = null)
+                },
+            )
 
             if (showPicker) {
                 NewDialogueSheet(

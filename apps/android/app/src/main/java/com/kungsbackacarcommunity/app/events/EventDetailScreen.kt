@@ -18,6 +18,8 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -29,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -215,19 +218,32 @@ fun EventDetailScreen(
                     color = MaterialTheme.colorScheme.error,
                 )
             }
-            event.startsAtMillis?.let { millis ->
-                Text(
-                    text = DateFormat.getDateTimeInstance(DateFormat.FULL, DateFormat.SHORT).format(Date(millis)),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            event.approximateArea?.takeIf { it.isNotBlank() }?.let { area ->
-                Text(
-                    text = area,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    EventDateBadge(event.startsAtMillis)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        event.startsAtMillis?.let { millis ->
+                            EventInfoLine(
+                                icon = Icons.Filled.CalendarMonth,
+                                text = DateFormat.getDateTimeInstance(DateFormat.FULL, DateFormat.SHORT).format(Date(millis)),
+                            )
+                        }
+                        event.approximateArea?.takeIf { it.isNotBlank() }?.let { area ->
+                            EventInfoLine(icon = Icons.Filled.LocationOn, text = area)
+                        }
+                        organizerName?.takeIf { it.isNotBlank() }?.let { name ->
+                            EventInfoLine(
+                                icon = Icons.Filled.Groups,
+                                text = stringResource(R.string.events_organizerLabel, name),
+                                modifier = Modifier.testTag(EVENT_DETAIL_ORGANIZER_TAG),
+                            )
+                        }
+                    }
+                }
             }
             // PUBLIC place name (teaser data since the 2026-07 open-up — it is
             // what the map pin is labelled with), so it sits OUTSIDE the member
@@ -247,19 +263,6 @@ fun EventDetailScreen(
                     text = summary,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            // Organizer — the event's creator, resolved to their current display
-            // name in the route. Sits with the event's identity, just under the
-            // title/teaser lines. Hidden when no name resolved (older event with no
-            // creator uid, unresolved name, or config-less build).
-            organizerName?.takeIf { it.isNotBlank() }?.let { name ->
-                Text(
-                    text = stringResource(R.string.events_organizerLabel, name),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.testTag(EVENT_DETAIL_ORGANIZER_TAG),
                 )
             }
 
@@ -332,7 +335,11 @@ fun EventDetailScreen(
                 // server-maintained public rsvpCounts tally on the event doc — no
                 // roster read needed, so it is always shown. Neutral tallies at equal
                 // weight; the same three labels the buttons above use, mirrored.
-                RsvpCountsBreakdown(event.counts)
+                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        RsvpCountsBreakdown(event.counts)
+                    }
+                }
                 if (!canViewAttendees) UpgradeCard(onUpgrade = onUpgrade)
 
                 // Who answered — behind a button so the roster never makes the page
@@ -574,13 +581,15 @@ private fun CheckInSection(
     val dwellElapsed = anchor != null && CheckInDwell.isDwellElapsed(anchor, now)
 
     Column(
-        modifier = Modifier.fillMaxWidth().testTag(CHECK_IN_SECTION_TAG),
+        modifier = Modifier.fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface, MaterialTheme.shapes.large)
+            .padding(16.dp).testTag(CHECK_IN_SECTION_TAG),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
             text = stringResource(R.string.events_checkInTitle),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
         )
         if (verified) {
             Row(

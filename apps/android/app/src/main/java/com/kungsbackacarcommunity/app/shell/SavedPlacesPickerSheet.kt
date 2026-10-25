@@ -4,22 +4,18 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
@@ -50,35 +46,24 @@ fun savedPlacePickerRowTestTag(id: String): String = "saved_places_picker_row_$i
  * @param onSelect move the map to this place (reuses the same in-app "move map to
  *   point" flow a chat geo-link tap uses) and dismiss.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SavedPlacesPickerSheet(
     places: List<SavedPlace>,
     onSelect: (SavedPlace) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState()
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
+    MapDetailSheet(
+        title = stringResource(R.string.shell_savedPlacesPickerTitle),
+        onDismiss = onDismiss,
         modifier = Modifier.testTag(SAVED_PLACES_PICKER_SHEET_TEST_TAG),
     ) {
         Column(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
+                    .padding(vertical = KccSpacing.s2),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
         ) {
-            Text(
-                text = stringResource(R.string.shell_savedPlacesPickerTitle),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = KccSpacing.s2),
-            )
-
             if (places.isEmpty()) {
                 Text(
                     text = stringResource(R.string.shell_savedPlacesPickerEmpty),
@@ -100,27 +85,29 @@ fun SavedPlacesPickerSheet(
 
 @Composable
 private fun SavedPlaceRow(place: SavedPlace, onClick: () -> Unit) {
-    TextButton(
+    OutlinedCard(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth().testTag(savedPlacePickerRowTestTag(place.id)),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp).testTag(savedPlacePickerRowTestTag(place.id)),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
             horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
                 imageVector = place.kind.icon(),
                 contentDescription = null,
+                tint = MaterialTheme.colorScheme.tertiary,
                 modifier = Modifier.size(24.dp),
             )
-            Text(
-                text = place.displayLabel(),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
+                Text(text = place.displayLabel(), style = MaterialTheme.typography.titleMedium)
+                val address = place.place.address ?: place.place.name
+                if (address != place.displayLabel()) {
+                    Text(text = address, style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         }
     }
 }

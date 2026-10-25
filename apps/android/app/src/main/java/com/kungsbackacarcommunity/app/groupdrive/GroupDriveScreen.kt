@@ -2,27 +2,33 @@ package com.kungsbackacarcommunity.app.groupdrive
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
  * Group driving roster + participation controls (Phase 12 slice 11).
- * Stateless. Joining is gated on [canJoin] (member + published + going/maybe
+ * Stateless. Joining is gated on [canJoin] (active account + published + going/maybe
  * RSVP); live-location sharing is a SEPARATE action and never implied here.
  */
 @Composable
@@ -42,88 +48,106 @@ fun GroupDriveScreen(
     val participating = GroupDrive.isParticipating(myStatus)
     val activeCount = GroupDrive.activeParticipants(participants).size
 
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.groupDrive_screenTitle),
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
+    AeroPage(title = stringResource(R.string.groupDrive_screenTitle), modifier = modifier) {
+        Text(
+            text = stringResource(R.string.groupDrive_liveLocationSeparate),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        if (!canJoin && !participating) {
+            InfoCard(
+                title = stringResource(R.string.groupDrive_memberRequired),
+                body = stringResource(R.string.groupDrive_rsvpRequired),
             )
-            Text(
-                text = stringResource(R.string.groupDrive_liveLocationSeparate),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            if (!canJoin && !participating) {
-                InfoCard(
-                    title = stringResource(R.string.groupDrive_memberRequired),
-                    body = stringResource(R.string.groupDrive_rsvpRequired),
-                )
-                TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-                    Text(text = stringResource(R.string.profile_back))
-                }
-                return@Column
-            }
-
-            Text(
-                text = "${stringResource(R.string.groupDrive_participantCount)}: $activeCount",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-
-            // "Show on map" opens the shared map for the active roster. Only
-            // wired when live markers are available (onShowOnMap != null) and
-            // there is at least one active participant to show. Each member only
-            // renders if they are actually sharing (their own opt-in) — joining
-            // a drive never implies live-location sharing.
-            if (onShowOnMap != null && activeCount > 0) {
-                OutlinedButton(onClick = onShowOnMap, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                    Text(text = stringResource(R.string.groupDrive_showOnMap))
-                }
-            }
-
-            if (participating) {
-                Text(
-                    text = statusLabel(myStatus),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    text = stringResource(R.string.groupDrive_setStatus),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                StatusButton(R.string.groupDrive_statusJoined, GroupDriveStatus.JOINED, myStatus, busy, onSetStatus)
-                StatusButton(R.string.groupDrive_statusOnTheWay, GroupDriveStatus.ON_THE_WAY, myStatus, busy, onSetStatus)
-                StatusButton(R.string.groupDrive_statusArrived, GroupDriveStatus.ARRIVED, myStatus, busy, onSetStatus)
-                OutlinedButton(onClick = onLeave, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                    Text(text = stringResource(R.string.groupDrive_leaveButton))
-                }
-            } else {
-                Button(onClick = onJoin, enabled = !busy && canJoin, modifier = Modifier.fillMaxWidth()) {
-                    Text(text = stringResource(R.string.groupDrive_joinButton))
-                }
-            }
-
-            if (actionStatus == GroupDriveActionStatus.Failed) {
-                Text(
-                    text = stringResource(R.string.groupDrive_error),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-
             TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
                 Text(text = stringResource(R.string.profile_back))
             }
+            return@AeroPage
+        }
+
+        Text(
+            text = "${stringResource(R.string.groupDrive_participantCount)}: $activeCount",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+
+        // Names and participation status are the complete roster model. No
+        // inferred vehicle, avatar, position or live-sharing state.
+        val active = GroupDrive.activeParticipants(participants)
+        if (active.isNotEmpty()) {
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                active.forEachIndexed { index, participant ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp)
+                            .testTag("group_drive_participant_${participant.uid}"),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Filled.Person, contentDescription = null, modifier = Modifier.size(32.dp))
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = participant.displayName?.takeIf { it.isNotBlank() }
+                                    ?: stringResource(R.string.events_attendeesUnknownMember),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = statusLabel(participant.status),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    if (index < active.lastIndex) HorizontalDivider()
+                }
+            }
+        }
+
+        // "Show on map" opens the shared map for the active roster. Only
+        // wired when live markers are available (onShowOnMap != null) and
+        // there is at least one active participant to show. Each member only
+        // renders if they are actually sharing (their own opt-in) — joining
+        // a drive never implies live-location sharing.
+        if (onShowOnMap != null && activeCount > 0) {
+            OutlinedButton(onClick = onShowOnMap, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                Text(text = stringResource(R.string.groupDrive_showOnMap))
+            }
+        }
+
+        if (participating) {
+            Text(
+                text = statusLabel(myStatus),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text = stringResource(R.string.groupDrive_setStatus),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            StatusButton(R.string.groupDrive_statusJoined, GroupDriveStatus.JOINED, myStatus, busy, onSetStatus)
+            StatusButton(R.string.groupDrive_statusOnTheWay, GroupDriveStatus.ON_THE_WAY, myStatus, busy, onSetStatus)
+            StatusButton(R.string.groupDrive_statusArrived, GroupDriveStatus.ARRIVED, myStatus, busy, onSetStatus)
+            OutlinedButton(onClick = onLeave, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                Text(text = stringResource(R.string.groupDrive_leaveButton))
+            }
+        } else {
+            Button(onClick = onJoin, enabled = !busy && canJoin, modifier = Modifier.fillMaxWidth()) {
+                Text(text = stringResource(R.string.groupDrive_joinButton))
+            }
+        }
+
+        if (actionStatus == GroupDriveActionStatus.Failed) {
+            Text(
+                text = stringResource(R.string.groupDrive_error),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+
+        TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+            Text(text = stringResource(R.string.profile_back))
         }
     }
 }

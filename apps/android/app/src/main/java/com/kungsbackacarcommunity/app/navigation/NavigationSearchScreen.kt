@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.navigation
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -81,6 +82,7 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccAlpha
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.design.LocalKccMapColors
 import com.kungsbackacarcommunity.app.diagnostics.NoopCrashTelemetry
 import com.kungsbackacarcommunity.app.diagnostics.rememberCrashTelemetry
 import com.kungsbackacarcommunity.app.shell.MapPoint
@@ -1098,10 +1100,8 @@ private fun RouteSheet(
 
     Surface(
         shape = RoundedCornerShape(topStart = KccRadius.xl, topEnd = KccRadius.xl),
-        // Shared Aero translucency, like the shell panels and the map popups: the
-        // route line and the map keep showing through the sheet's edge, which is
-        // what stops a bottom-anchored card reading as a second screen.
-        color = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
+        color = LocalKccMapColors.current.overlay,
+        border = BorderStroke(1.dp, LocalKccMapColors.current.border),
         tonalElevation = 4.dp,
         shadowElevation = 8.dp,
         modifier =
@@ -1154,8 +1154,6 @@ private fun RouteSheet(
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                     )
                     IconButton(onClick = onSave, modifier = Modifier.testTag(NAV_SAVE_TEST_TAG)) {
                         Icon(
@@ -1272,7 +1270,7 @@ private fun RouteSheet(
                 if (route != null) {
                     Button(
                         onClick = onStart,
-                        modifier = Modifier.fillMaxWidth().testTag(NAV_START_TEST_TAG),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag(NAV_START_TEST_TAG),
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Navigation,
@@ -1330,18 +1328,22 @@ private fun RouteSummaryLine(route: RouteSummary) {
     val unitMin = stringResource(R.string.addressSearch_unitMinutes)
     val unitH = stringResource(R.string.addressSearch_unitHours)
 
-    Text(
-        // Distance first, then duration/ETA — matching the app convention
-        // (e.g. DrivesScreen): "4.5 km · 12 min".
-        text =
-            stringResource(
-                R.string.addressSearch_routeSummary,
-                NavFormat.formatDistance(route.distanceMeters, unitM, unitKm),
-                NavFormat.formatDuration(route.durationSeconds, unitMin, unitH),
-            ),
-        style = MaterialTheme.typography.titleLarge,
-        color = MaterialTheme.colorScheme.primary,
-    )
+    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant) {
+        Row(modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
+            Icon(Icons.Filled.DirectionsCar, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
+            Text(
+                text = stringResource(
+                    R.string.addressSearch_routeSummary,
+                    NavFormat.formatDistance(route.distanceMeters, unitM, unitKm),
+                    NavFormat.formatDuration(route.durationSeconds, unitMin, unitH),
+                ),
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
 }
 
 /**

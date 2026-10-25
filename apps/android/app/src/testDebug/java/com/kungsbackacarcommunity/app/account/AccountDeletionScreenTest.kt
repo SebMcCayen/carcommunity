@@ -1,6 +1,9 @@
 package com.kungsbackacarcommunity.app.account
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
@@ -16,13 +19,10 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * Compose UI tests for the account-deletion confirmation (Phase 12 slice 25).
- */
+/** Compose UI tests for the account-deletion confirmation (Phase 12 slice 25). */
 @RunWith(AndroidJUnit4::class)
 class AccountDeletionScreenTest {
-    @get:Rule
-    val composeTestRule = createComposeRule()
+    @get:Rule val composeTestRule = createComposeRule()
 
     private fun str(id: Int) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
@@ -41,9 +41,15 @@ class AccountDeletionScreenTest {
         }
         // First delete button opens the confirm dialog; the dialog's confirm
         // (same label, rendered last in the tree) triggers the callback.
-        composeTestRule.onAllNodesWithText(str(R.string.settings_deleteAccount)).onLast()
-            .performScrollTo().performClick()
-        composeTestRule.onAllNodesWithText(str(R.string.settings_deleteAccount)).onLast().performClick()
+        composeTestRule
+            .onAllNodesWithText(str(R.string.settings_deleteAccount))
+            .onLast()
+            .performScrollTo()
+            .performClick()
+        composeTestRule
+            .onAllNodesWithText(str(R.string.settings_deleteAccount))
+            .onLast()
+            .performClick()
         assertEquals(1, deletes)
     }
 
@@ -58,6 +64,40 @@ class AccountDeletionScreenTest {
                 )
             }
         }
-        composeTestRule.onNodeWithText(str(R.string.settings_accountDeletionError)).assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText(str(R.string.settings_accountDeletionError))
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun cancel_returnsWithoutDeletingAccount() {
+        var backs = 0
+        var deletes = 0
+        composeTestRule.setContent {
+            KccTheme {
+                AccountDeletionScreen(AccountDeletionStatus.Idle, { deletes++ }, { backs++ })
+            }
+        }
+        composeTestRule
+            .onNodeWithText(str(R.string.profile_cancelButton))
+            .performScrollTo()
+            .performClick()
+        assertEquals(1, backs)
+        assertEquals(0, deletes)
+    }
+
+    @Test
+    fun deleting_disablesRepeatedDeleteAndCancel() {
+        composeTestRule.setContent {
+            KccTheme { AccountDeletionScreen(AccountDeletionStatus.Deleting, {}, {}) }
+        }
+        composeTestRule
+            .onNode(hasText(str(R.string.settings_deleteAccount)) and hasClickAction())
+            .performScrollTo()
+            .assertIsNotEnabled()
+        composeTestRule
+            .onNodeWithText(str(R.string.profile_cancelButton))
+            .performScrollTo()
+            .assertIsNotEnabled()
     }
 }

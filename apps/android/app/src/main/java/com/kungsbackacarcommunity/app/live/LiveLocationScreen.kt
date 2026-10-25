@@ -3,21 +3,40 @@ package com.kungsbackacarcommunity.app.live
 import android.content.res.Configuration
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Podcasts
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.shell.AeroPage
+import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
+import coil.compose.AsyncImage
 
 /**
  * Live-location session control surface (Phase 12 slice 5).
@@ -51,24 +70,28 @@ fun LiveLocationScreen(
 
     AeroPage(title = stringResource(R.string.liveLocation_screenTitle), modifier = modifier) {
         // Current sharing status.
-        Text(
-            text =
-                stringResource(
+        OutlinedCard(modifier = Modifier.fillMaxWidth(), border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary)) {
+            Row(modifier = Modifier.padding(KccSpacing.s4), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
+                Icon(Icons.Filled.Podcasts, contentDescription = null,
+                    tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(KccSpacing.s8))
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+                    Text(
+                        text = stringResource(
+                            if (sharing) R.string.liveLocation_statusSharing else R.string.liveLocation_statusNotSharing,
+                        ),
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
                     if (sharing) {
-                        R.string.liveLocation_statusSharing
-                    } else {
-                        R.string.liveLocation_statusNotSharing
-                    },
-                ),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-        if (sharing) {
-            Text(
-                text = stringResource(R.string.liveLocation_sessionAutoExpires),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+                        Text(
+                            text = stringResource(R.string.liveLocation_sessionAutoExpires),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
         }
 
         if (sharing) {
@@ -79,8 +102,11 @@ fun LiveLocationScreen(
             Button(
                 onClick = onStop,
                 enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError),
             ) {
+                Icon(Icons.Filled.Stop, contentDescription = null, modifier = Modifier.padding(end = KccSpacing.s2))
                 Text(text = stringResource(R.string.liveLocation_stop))
             }
         } else if (canShare) {
@@ -111,10 +137,16 @@ fun LiveLocationScreen(
         OutlinedButton(
             onClick = onHideMeNow,
             enabled = !busy,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
         ) {
+            Icon(Icons.Filled.VisibilityOff, contentDescription = null, modifier = Modifier.padding(end = KccSpacing.s2))
             Text(text = stringResource(R.string.liveLocation_hideNow))
         }
+
+        // Keep the privacy actions above the image, including with large text.
+        session?.mainCar?.let { LiveVehicleCard(it) }
 
         if (actionStatus == LiveActionStatus.Failed) {
             Text(
@@ -150,7 +182,7 @@ fun LiveLocationScreen(
 
 @Composable
 private fun InfoCard(title: String, body: String) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -165,6 +197,28 @@ private fun InfoCard(title: String, body: String) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+/** Only the display-safe vehicle projection already attached to this session. */
+@Composable
+private fun LiveVehicleCard(car: LiveMainCar) {
+    val imageUrl = rememberStorageImageUrl(LocalContext.current, car.imagePath)
+    OutlinedCard(Modifier.fillMaxWidth()) {
+        Box(Modifier.fillMaxWidth().aspectRatio(2.2f), contentAlignment = Alignment.Center) {
+            if (imageUrl != null) {
+                AsyncImage(model = imageUrl, contentDescription = null, contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize())
+            } else {
+                Icon(painterResource(R.drawable.ic_generic_car), contentDescription = null,
+                    tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(64.dp))
+            }
+        }
+        Column(Modifier.padding(KccSpacing.s4), verticalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
+            Text(text = "${car.make} ${car.model}", style = MaterialTheme.typography.titleMedium)
+            Text(text = car.modelYear.toString(), style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

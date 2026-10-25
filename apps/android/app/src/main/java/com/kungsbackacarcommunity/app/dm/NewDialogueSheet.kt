@@ -8,12 +8,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -22,10 +31,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -34,6 +49,8 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.friends.FriendSummary
 import com.kungsbackacarcommunity.app.friends.FriendsRepository
+import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
+import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 
 /** Test tags so UI tests can address the new-dialogue friend picker. */
@@ -71,6 +88,7 @@ fun NewDialogueSheet(
     val coordinator =
         remember(friendsRepository) { NewDialogueCoordinator.fromFriendsRepository(friendsRepository) }
     val state by coordinator.state.collectAsState()
+    var query by rememberSaveable { mutableStateOf("") }
 
     LaunchedEffect(coordinator) { coordinator.load() }
 
@@ -89,16 +107,21 @@ fun NewDialogueSheet(
         ) {
             Text(
                 text = stringResource(R.string.dm_newDialogue_title),
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(horizontal = KccSpacing.s2),
             )
             Text(
                 text = stringResource(R.string.dm_newDialogue_subtitle),
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = KccSpacing.s2),
             )
+
+            OutlinedTextField(value = query, onValueChange = { query = it }, singleLine = true,
+                label = { Text(stringResource(R.string.shell_searchIcon)) },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth())
 
             when (val current = state) {
                 NewDialogueState.Loading ->
@@ -140,8 +163,16 @@ fun NewDialogueSheet(
                                     .testTag(NEW_DIALOGUE_EMPTY_TEST_TAG),
                         )
                     } else {
-                        current.friends.forEach { friend ->
-                            FriendRow(friend = friend, onClick = { onPick(friend) })
+                        val matches = current.friends.filter {
+                            query.isBlank() || it.displayName.orEmpty().contains(query.trim(), ignoreCase = true)
+                        }
+                        if (matches.isEmpty()) Text(stringResource(R.string.userSearch_noMatches),
+                            modifier = Modifier.padding(KccSpacing.s3), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        LazyColumn {
+                            items(matches, key = { it.uid }) { friend ->
+                                FriendRow(friend = friend, onClick = { onPick(friend) })
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            }
                         }
                     }
             }
@@ -166,11 +197,13 @@ private fun FriendRow(
             horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = Icons.Filled.Person,
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
-            )
+            val url = rememberStorageImageUrl(LocalContext.current, friend.avatarPath)
+            Box(Modifier.size(48.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                .clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+                if (url != null) AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize())
+                else Icon(Icons.Filled.Person, contentDescription = null, modifier = Modifier.size(24.dp))
+            }
             Text(
                 text = name,
                 style = MaterialTheme.typography.bodyLarge,

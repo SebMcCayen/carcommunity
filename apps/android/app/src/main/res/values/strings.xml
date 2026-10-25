@@ -236,6 +236,10 @@
     <string name="subscription_currentEntitlementSupporter">Du har ett aktivt Supporter-medlemskap.</string>
     <string name="subscription_currentEntitlementFree">Inget aktivt medlemskap.</string>
     <string name="subscription_currentPlanTitle">Ditt medlemskap</string>
+    <string name="subscription_communityPlanName">Community</string>
+    <string name="subscription_communityPlanBody">Alltid gratis: sociala funktioner, eventdetaljer och RSVP, körstatistik, upp till 2 garagefordon, dina 5 senaste sparade körningar och 2 250 Kronjakt-KP per dag.</string>
+    <string name="subscription_plusPlanName">Plus</string>
+    <string name="subscription_supporterPlanName">Supporter</string>
     <string name="subscription_plusTitle">Plus · 39 kr/månad</string>
     <string name="subscription_plusBody">Eventincheckning, deltagarnamn, partnernas medlemserbjudanden, upp till 5 garagefordon, 90 dagars körhistorik och 3 000 Kronjakt-KP per dag (Community: 2 250).</string>
     <string name="subscription_supporterTitle">Supporter · 119 kr/månad</string>

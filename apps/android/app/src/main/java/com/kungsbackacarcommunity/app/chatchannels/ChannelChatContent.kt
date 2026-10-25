@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -517,6 +518,8 @@ fun ChannelChatContent(
                 modifier = Modifier.weight(1f).testTag(CHANNEL_INPUT_TEST_TAG),
                 keyboardOptions = ChatComposerKeyboardOptions,
                 singleLine = false,
+                maxLines = 5,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
             )
             Button(
                 onClick = {
@@ -535,6 +538,8 @@ fun ChannelChatContent(
                     replyToId = null
                 },
                 enabled = ChannelThread.isSendable(draft.text),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary),
             ) {
                 Text(stringResource(R.string.channel_send))
             }
@@ -856,7 +861,7 @@ private fun ChannelMessageRow(
                     Modifier
                 },
         )
-        Column {
+        Column(Modifier.weight(1f)) {
             // Sender name and time share the header line above the bubble, the
             // conventional group-chat header. Only the NAME is the profile tap
             // target — the time is inert, so a mis-tap can't navigate.
@@ -867,7 +872,7 @@ private fun ChannelMessageRow(
                 Text(
                     text = senderName,
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.tertiary,
                     modifier =
                         if (openProfile != null) {
                             Modifier.clickable(role = Role.Button, onClick = openProfile)
@@ -947,19 +952,19 @@ private fun ChannelBubble(
     onQuoteTap: (String) -> Unit = {},
 ) {
     val bubbleColor =
-        if (isOwn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+        if (isOwn) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.surface
     val textColor =
-        if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+        if (isOwn) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onSurface
     // Highlight from the message's OWN stored mentionedUids — the set the server
     // ACCEPTED. A uid it dropped isn't in there, so its text renders plain, which
     // is exactly what it now is.
     val mentionColor =
-        if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+        if (isOwn) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.tertiary
     // A shared `geo:` link renders as a single tappable chip. Coloured like a
     // mention (so it reads as "special" against the bubble) but UNDERLINED, so it
     // reads as tappable rather than merely emphasised.
     val linkColor =
-        if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+        if (isOwn) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.tertiary
     val linkLabel = stringResource(R.string.channel_locationLink)
     // Detection depends only on WHETHER a map-move handler exists, so the body is
     // keyed on that boolean rather than the lambda's (per-recomposition) identity —
@@ -995,7 +1000,10 @@ private fun ChannelBubble(
                 onOpenUrl = onOpenUrl,
             )
         }
-    val bubbleShape = androidx.compose.foundation.shape.RoundedCornerShape(KccRadius.lg)
+    val bubbleShape = androidx.compose.foundation.shape.RoundedCornerShape(
+        topStart = KccRadius.lg, topEnd = KccRadius.lg,
+        bottomStart = if (isOwn) KccRadius.lg else KccSpacing.s1,
+        bottomEnd = if (isOwn) KccSpacing.s1 else KccRadius.lg)
     Surface(
         color = bubbleColor,
         shape = bubbleShape,
@@ -1045,7 +1053,7 @@ private fun ChannelBubble(
             }
             Text(
                 text = body,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyLarge,
                 color = textColor,
                 textAlign = TextAlign.Start,
             )
@@ -1184,7 +1192,7 @@ private fun SenderAvatar(
         // rather than painting a square behind it.
         modifier =
             Modifier
-                .size(32.dp)
+                .size(48.dp)
                 .clip(CircleShape)
                 .then(modifier)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
@@ -1195,7 +1203,7 @@ private fun SenderAvatar(
                 model = url,
                 contentDescription = contentDescription,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(32.dp),
+                modifier = Modifier.fillMaxSize(),
             )
         } else {
             Icon(

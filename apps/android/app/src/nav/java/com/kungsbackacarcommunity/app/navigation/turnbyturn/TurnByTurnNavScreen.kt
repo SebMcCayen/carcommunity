@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.border
@@ -33,6 +34,8 @@ import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -67,6 +70,8 @@ import com.kungsbackacarcommunity.app.R
 import androidx.lifecycle.Lifecycle
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.design.LocalKccMapColors
+import androidx.compose.foundation.BorderStroke
 import com.kungsbackacarcommunity.app.diagnostics.FeatureHealthKind
 import com.kungsbackacarcommunity.app.diagnostics.FeatureHealthReporter
 import com.kungsbackacarcommunity.app.diagnostics.rememberFeatureHealthReporter
@@ -1337,7 +1342,8 @@ private fun NavProgressBar(
 
     Surface(
         shape = RoundedCornerShape(topStart = KccRadius.xl, topEnd = KccRadius.xl),
-        color = MaterialTheme.colorScheme.surface,
+        color = LocalKccMapColors.current.overlay,
+        border = BorderStroke(1.dp, LocalKccMapColors.current.border),
         tonalElevation = 4.dp,
         shadowElevation = 8.dp,
         modifier = modifier.fillMaxWidth(),
@@ -1349,9 +1355,9 @@ private fun NavProgressBar(
                     .navigationBarsPadding()
                     .padding(KccSpacing.s4),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 if (progress != null) {
                     val arrival =
                         NavProgressFormat.arrivalClock(
@@ -1362,7 +1368,7 @@ private fun NavProgressBar(
                     Text(
                         text = stringResource(R.string.turnByTurn_arrive, arrival),
                         style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
                         text =
@@ -1385,7 +1391,9 @@ private fun NavProgressBar(
                     )
                 }
             }
-            Button(onClick = onExit) {
+            OutlinedButton(onClick = onExit, modifier = Modifier.heightIn(min = 48.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
                 Text(stringResource(R.string.turnByTurn_exit))
             }
         }

@@ -13,6 +13,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,10 +30,10 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
- * "Report a problem" form. Owns its field state; a prominent notice warns that
- * the report is filed to a PUBLIC issue tracker before any typing. Validates
- * (description required) then submits via the callable; shows a success
- * confirmation (with an optional "View issue" link) or a friendly error.
+ * "Report a problem" form. Owns its field state; a prominent notice warns that the report is filed
+ * to a PUBLIC issue tracker before any typing. Validates (description required) then submits via
+ * the callable; shows a success confirmation (with an optional "View issue" link) or a friendly
+ * error.
  */
 @Composable
 fun FeedbackReportScreen(
@@ -85,155 +86,152 @@ fun FeedbackReportScreen(
         // inside its background Surface, so the Surface still draws full-bleed.
         contentWindowInsets = WindowInsets.ime.union(WindowInsets.navigationBars),
     ) {
-            if (status is FeedbackStatus.Done) {
-                // "Tack för din rapport" confirmation window: the report summary
-                // (when the user gave one), the created issue number and a browser
-                // link to the public issue.
-                Card(
-                    colors =
-                        CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        ),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.feedback_thankYouTitle),
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        Text(
-                            text = stringResource(R.string.feedback_thankYouBody),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        if (!status.summary.isNullOrBlank()) {
-                            Text(
-                                text = status.summary,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontStyle = FontStyle.Italic,
-                            )
-                        }
-                        if (status.issueNumber != null) {
-                            Text(
-                                text =
-                                    stringResource(
-                                        R.string.feedback_issueNumber,
-                                        status.issueNumber,
-                                    ),
-                                style = MaterialTheme.typography.labelLarge,
-                            )
-                        }
-                        if (status.issueUrl != null) {
-                            Text(
-                                text = stringResource(R.string.feedback_thankYouIssue),
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                    }
-                }
-                if (status.issueUrl != null) {
-                    OutlinedButton(
-                        onClick = { onViewIssue(status.issueUrl) },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(text = stringResource(R.string.feedback_viewIssue))
-                    }
-                }
-                Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-                    Text(text = stringResource(R.string.feedback_close))
-                }
-                return@AeroPage
-            }
-
-            // Prominent public-tracker warning — the report is world-readable.
+        if (status is FeedbackStatus.Done) {
+            // "Tack för din rapport" confirmation window: the report summary
+            // (when the user gave one), the created issue number and a browser
+            // link to the public issue.
             Card(
                 colors =
                     CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     ),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        text = stringResource(R.string.feedback_publicNoticeTitle),
-                        style = MaterialTheme.typography.titleSmall,
+                        text = stringResource(R.string.feedback_thankYouTitle),
+                        style = MaterialTheme.typography.titleMedium,
                     )
                     Text(
-                        text = stringResource(R.string.feedback_publicNotice),
-                        style = MaterialTheme.typography.bodySmall,
+                        text = stringResource(R.string.feedback_thankYouBody),
+                        style = MaterialTheme.typography.bodyMedium,
                     )
+                    if (!status.summary.isNullOrBlank()) {
+                        Text(
+                            text = status.summary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontStyle = FontStyle.Italic,
+                        )
+                    }
+                    if (status.issueNumber != null) {
+                        Text(
+                            text =
+                                stringResource(R.string.feedback_issueNumber, status.issueNumber),
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
+                    if (status.issueUrl != null) {
+                        Text(
+                            text = stringResource(R.string.feedback_thankYouIssue),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                 }
             }
-
-            OutlinedTextField(
-                value = summary,
-                onValueChange = { summary = it },
-                label = { Text(text = stringResource(R.string.feedback_summaryLabel)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = description,
-                onValueChange = { description = it },
-                label = { Text(text = stringResource(R.string.feedback_descriptionLabel)) },
-                singleLine = false,
-                minLines = 4,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            if (showError && FeedbackReports.validate(form) != null) {
-                Text(
-                    text = stringResource(R.string.feedback_descriptionRequired),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            if (status is FeedbackStatus.Failed) {
-                Text(
-                    // Only SIGNED_OUT is something the user can act on. The
-                    // App Check / invoker-binding causes are ours to fix, so
-                    // they share the generic "contact us" copy rather than
-                    // leaking infrastructure detail — the actionable detail
-                    // goes to logcat via FeedbackFailureDiagnosis instead.
-                    text =
-                        stringResource(
-                            when (status.reason) {
-                                FeedbackFailureReason.RATE_LIMITED -> R.string.feedback_rateLimited
-                                FeedbackFailureReason.SIGNED_OUT -> R.string.feedback_errorSignedOut
-                                else -> R.string.feedback_error
-                            },
-                        ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-
-            Button(
-                onClick = {
-                    val input = FeedbackReports.toInput(form, clientContext)
-                    if (input == null) showError = true else onSubmit(input)
-                },
-                enabled = status != FeedbackStatus.Submitting,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(text = stringResource(R.string.feedback_submit))
-            }
-
-            // Entry to the "Open tickets" browser — only when the flag is on.
-            if (openTicketsEnabled) {
+            if (status.issueUrl != null) {
                 OutlinedButton(
-                    onClick = onOpenTickets,
+                    onClick = { onViewIssue(status.issueUrl) },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(text = stringResource(R.string.feedback_openTicketsButton))
+                    Text(text = stringResource(R.string.feedback_viewIssue))
                 }
             }
+            Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+                Text(text = stringResource(R.string.feedback_close))
+            }
+            return@AeroPage
+        }
+
+        // Prominent public-tracker warning — the report is world-readable.
+        Card(
+            colors =
+                CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                ),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.feedback_publicNoticeTitle),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    text = stringResource(R.string.feedback_publicNotice),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+
+        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                OutlinedTextField(
+                    value = summary,
+                    onValueChange = { summary = it },
+                    label = { Text(text = stringResource(R.string.feedback_summaryLabel)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text(text = stringResource(R.string.feedback_descriptionLabel)) },
+                    singleLine = false,
+                    minLines = 4,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+        if (showError && FeedbackReports.validate(form) != null) {
+            Text(
+                text = stringResource(R.string.feedback_descriptionRequired),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        if (status is FeedbackStatus.Failed) {
+            Text(
+                // Only SIGNED_OUT is something the user can act on. The
+                // App Check / invoker-binding causes are ours to fix, so
+                // they share the generic "contact us" copy rather than
+                // leaking infrastructure detail — the actionable detail
+                // goes to logcat via FeedbackFailureDiagnosis instead.
+                text =
+                    stringResource(
+                        when (status.reason) {
+                            FeedbackFailureReason.RATE_LIMITED -> R.string.feedback_rateLimited
+                            FeedbackFailureReason.SIGNED_OUT -> R.string.feedback_errorSignedOut
+                            else -> R.string.feedback_error
+                        }
+                    ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+
+        Button(
+            onClick = {
+                val input = FeedbackReports.toInput(form, clientContext)
+                if (input == null) showError = true else onSubmit(input)
+            },
+            enabled = status != FeedbackStatus.Submitting,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(text = stringResource(R.string.feedback_submit))
+        }
+
+        // Entry to the "Open tickets" browser — only when the flag is on.
+        if (openTicketsEnabled) {
+            OutlinedButton(onClick = onOpenTickets, modifier = Modifier.fillMaxWidth()) {
+                Text(text = stringResource(R.string.feedback_openTicketsButton))
+            }
+        }
     }
 }
