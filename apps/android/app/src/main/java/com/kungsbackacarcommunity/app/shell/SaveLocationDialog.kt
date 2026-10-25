@@ -3,7 +3,12 @@ package com.kungsbackacarcommunity.app.shell
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -53,39 +58,35 @@ fun SaveLocationDialog(
 ) {
     var name by remember { mutableStateOf(initialName) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        modifier = Modifier.testTag(SAVE_LOCATION_DIALOG_TEST_TAG),
-        title = { Text(stringResource(R.string.shell_saveLocationTitle)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
-                Text(
-                    text = coordinateHint,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it.take(SavedPlaces.MAX_LABEL) },
-                    singleLine = true,
-                    label = { Text(stringResource(R.string.shell_saveLocationNameLabel)) },
-                    placeholder = { Text(coordinateHint) },
-                    modifier = Modifier.fillMaxWidth().testTag(SAVE_LOCATION_NAME_TEST_TAG),
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onSave(name) },
-                modifier = Modifier.testTag(SAVE_LOCATION_SAVE_TEST_TAG),
-            ) {
-                Text(stringResource(R.string.shell_saveLocationSave))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.shell_saveLocationCancel))
-            }
-        },
-    )
+    MapDetailSheet(
+        title = stringResource(R.string.shell_saveLocationTitle),
+        onDismiss = onDismiss,
+        modifier = Modifier.imePadding().testTag(SAVE_LOCATION_DIALOG_TEST_TAG),
+        leadingContent = { Icon(Icons.Filled.BookmarkBorder, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary) },
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
+            Text(
+                text = coordinateHint,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it.take(SavedPlaces.MAX_LABEL) },
+                singleLine = true,
+                label = { Text(stringResource(R.string.shell_saveLocationNameLabel)) },
+                placeholder = { Text(coordinateHint) },
+                modifier = Modifier.fillMaxWidth().testTag(SAVE_LOCATION_NAME_TEST_TAG),
+            )
+        }
+        Button(
+            onClick = { onSave(name) },
+            modifier = Modifier.fillMaxWidth().heightIn(min = KccSpacing.s12).testTag(SAVE_LOCATION_SAVE_TEST_TAG),
+        ) {
+            Text(stringResource(R.string.shell_saveLocationSave))
+        }
+        TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.shell_saveLocationCancel))
+        }
+    }
 }
