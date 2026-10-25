@@ -17,7 +17,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -29,11 +28,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
-import com.kungsbackacarcommunity.app.design.LocalKccDarkTheme
 
 /** Thumbnail box on a History card — small enough that a row stays a row. */
-private val THUMBNAIL_WIDTH = 72.dp
-private val THUMBNAIL_HEIGHT = 56.dp
+private val THUMBNAIL_WIDTH = 88.dp
+private val THUMBNAIL_HEIGHT = 64.dp
 
 /** Inset so the route never touches (or gets clipped by) the rounded corners. */
 private val THUMBNAIL_PADDING = 6.dp
@@ -42,19 +40,6 @@ private val ROUTE_STROKE_WIDTH = 2.dp
 
 /** The placeholder glyph, kept well inside the box so it reads as an icon. */
 private val PLACEHOLDER_ICON_SIZE = 20.dp
-
-/**
- * The app's route blue — the same `0xFF1A73E8` the History replay map and the
- * shell's route overlay draw with, so a drive's shape is the same colour
- * wherever it appears.
- *
- * The dark-theme variant is Google's paired light blue rather than the same
- * value: on the dark card surface `0xFF1A73E8` sits at ~2.3:1, under the 3:1
- * that non-text graphics need to be made out at all, while `0xFF8AB4F8` is
- * ~5:1. Same hue, still unmistakably "the route colour", actually visible.
- */
-private val ROUTE_COLOR_LIGHT = Color(0xFF1A73E8)
-private val ROUTE_COLOR_DARK = Color(0xFF8AB4F8)
 
 /**
  * A drive's route drawn from its stored `routeThumbnail` polyline, or a tidy
@@ -96,7 +81,7 @@ fun RouteThumbnailImage(
             }
         }
 
-    val routeColor = if (LocalKccDarkTheme.current) ROUTE_COLOR_DARK else ROUTE_COLOR_LIGHT
+    val routeColor = MaterialTheme.colorScheme.tertiary
     val label =
         stringResource(
             if (path == null) {

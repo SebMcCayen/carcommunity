@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.garage
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,6 +12,11 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material3.Icon
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -26,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.network.HttpException
 import com.kungsbackacarcommunity.app.R
@@ -35,11 +42,9 @@ import com.kungsbackacarcommunity.app.media.rememberStorageImage
 /**
  * How a car photo is sized, shaped and aligned at a given call site.
  *
- * The two variants are DELIBERATELY different looks, not drift: the owner's own
- * garage shows a compact circular badge of a car they already know, so the list
- * stays skimmable, while a stranger's profile shows a wide postcard of a car
- * they don't. Both go through the same [VehiclePhoto], so the resolution,
- * cropping and no-photo behaviour can no longer diverge between the two screens.
+ * Garage and member-profile cards share resolution, cropping and fallback
+ * behavior. Circle geometry remains available for existing native callers;
+ * the catalogue's garage uses a wide photo.
  *
  * [alignment] is part of the style rather than a separate parameter because it
  * follows from the sizing: a fixed-diameter circle has to be told where to sit in
@@ -67,18 +72,12 @@ internal sealed interface VehiclePhotoStyle {
  * [style]. `ContentScale.Crop` centre-crops whatever ratio the source was into
  * the target shape — no stretching, just a centred cut.
  *
- * Renders NOTHING when the car has no photo — the card simply starts at its
- * title, exactly as it did before photos existed. When the car DOES have one,
- * the shaped box is laid out immediately, filled with a neutral surface tint,
- * and the image fades into it. That is a deliberate change from "render nothing
- * until the URL resolves": the photo is the tallest thing in the card, so
- * appearing late shoved the whole list down under the reader. Reserving the
- * space costs a grey circle for a moment and buys a layout that never jumps.
- * (The same neutral-circle-then-image treatment the member avatars use.)
+ * Reserves its geometry immediately so resolving an image never shifts the
+ * list. Missing photos use a native vehicle icon, never a sample image.
  *
  * The box is sized BEFORE the image is requested, so Coil's size resolver reads
- * exact constraints and decodes a bitmap scaled to the target (180dp circle in
- * My Garage) rather than the full-resolution upload.
+ * exact constraints and decodes a bitmap scaled to the target rather than the
+ * full-resolution upload.
  *
  * @param contentDescription accessibility label; null marks the photo decorative
  *   (the surrounding card already names the car).
@@ -90,9 +89,9 @@ private fun VehiclePhoto(
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
 ) {
-    if (imagePath.isNullOrBlank()) return
-    val image = rememberStorageImage(LocalContext.current, imagePath)
-    val url = image.url
+    // No Storage initialization for missing photos, including local test fixtures.
+    val image = if (imagePath.isNullOrBlank()) null else rememberStorageImage(LocalContext.current, imagePath)
+    val url = image?.url
     Box(
         modifier = modifier
             .then(
@@ -110,7 +109,14 @@ private fun VehiclePhoto(
                 },
             )
             .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center,
     ) {
+        Icon(
+            Icons.Filled.DirectionsCar,
+            contentDescription = if (url == null) stringResource(R.string.garage_photoNone) else null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(KccSpacing.s12),
+        )
         if (url != null) {
             AsyncImage(
                 model = url,
@@ -124,7 +130,7 @@ private fun VehiclePhoto(
                 // keep, because it is what lets Coil serve the photo from disk
                 // with no round-trip at all.
                 onError = { state ->
-                    if (state.result.throwable is HttpException) image.onLoadFailed()
+                    if (state.result.throwable is HttpException) image?.onLoadFailed()
                 },
                 modifier = Modifier.matchParentSize(),
             )
@@ -142,7 +148,7 @@ private fun VehiclePhoto(
  * drift apart again. Everything the two screens genuinely disagree about is a
  * parameter, and each passes what it renders today:
  *
- *  - [photoStyle] — a centred circle in My Garage, a wide postcard on a profile.
+ *  - [photoStyle] — the host's photo geometry; both garage and profile use wide cards.
  *  - [registrationPlateFormatRes] — the plate is a DETAIL-level field: a public
  *    profile shows it under the make/model line, the owner's own list does not
  *    (their detail page does). Null omits the line entirely.
@@ -153,9 +159,7 @@ private fun VehiclePhoto(
  *    of [actions]: a tap on Edit/Delete/Set-main must not also be announced as
  *    "open detail".
  *  - [contentSpacing] — the gap between the card's rows, which the two screens
- *    have historically set differently (4dp vs. 8dp). Parameterised rather than
- *    unified so this refactor is invisible on screen; converging the two is a
- *    design decision, not a refactor.
+ *    set independently for the owner's action stack and read-only profiles.
  *
  * @param actions trailing controls (manage buttons); empty for a read-only card.
  */
@@ -171,7 +175,14 @@ internal fun VehicleCard(
     onOpen: (() -> Unit)? = null,
     actions: @Composable ColumnScope.() -> Unit = {},
 ) {
-    Card(modifier = modifier.fillMaxWidth()) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(
+            if (vehicle.isMainCar) 2.dp else 1.dp,
+            if (vehicle.isMainCar) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outlineVariant,
+        ),
+    ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
             verticalArrangement = Arrangement.spacedBy(contentSpacing),
@@ -229,7 +240,7 @@ private fun ColumnScope.VehicleCardSummary(
         // the catalogue's current name, an "Other / not listed" one shows the
         // localized label, and a pre-catalogue one shows the owner's own text.
         text = VehicleDisplay.headline(vehicle, stringResource(R.string.garage_catalogueOther)),
-        style = MaterialTheme.typography.titleMedium,
+        style = MaterialTheme.typography.titleLarge,
         color = MaterialTheme.colorScheme.onSurface,
     )
     if (registrationPlateFormatRes != null) {
@@ -251,11 +262,17 @@ private fun ColumnScope.VehicleCardSummary(
         color = MaterialTheme.colorScheme.primary,
     )
     if (vehicle.isMainCar) {
-        Text(
-            text = stringResource(mainCarLabelRes),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary,
-        )
+        Surface(
+            color = MaterialTheme.colorScheme.tertiary,
+            contentColor = MaterialTheme.colorScheme.onTertiary,
+            shape = MaterialTheme.shapes.small,
+        ) {
+            Text(
+                text = stringResource(mainCarLabelRes),
+                modifier = Modifier.padding(horizontal = KccSpacing.s3, vertical = KccSpacing.s1),
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
     }
     vehicle.engineDescription?.takeIf { it.isNotBlank() }?.let { engine ->
         Text(

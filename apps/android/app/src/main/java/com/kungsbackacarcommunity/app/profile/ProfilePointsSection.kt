@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -85,6 +88,8 @@ fun ProfilePointsSection(
     if (onOpenLedger != null) {
         Card(
             onClick = onOpenLedger,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
             modifier =
                 modifier
                     .fillMaxWidth()
@@ -115,7 +120,11 @@ fun ProfilePointsSection(
             content = body,
         )
     } else {
-        Card(modifier = modifier.fillMaxWidth(), content = body)
+        Card(
+            modifier = modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            content = body,
+        )
     }
 }
 

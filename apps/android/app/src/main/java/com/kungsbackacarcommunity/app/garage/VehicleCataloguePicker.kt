@@ -17,6 +17,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -93,6 +97,13 @@ fun CatalogueSelectorField(
             readOnly = true,
             enabled = enabled,
             label = { Text(text = label) },
+            trailingIcon = { Icon(Icons.Filled.ExpandMore, contentDescription = null) },
+            shape = MaterialTheme.shapes.medium,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                focusedBorderColor = MaterialTheme.colorScheme.tertiary,
+            ),
             supportingText = supportingText?.let { { Text(text = it) } },
             singleLine = true,
             modifier = Modifier.fillMaxWidth().clearAndSetSemantics {},

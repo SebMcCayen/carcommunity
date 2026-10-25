@@ -5,6 +5,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -19,6 +23,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
@@ -98,13 +103,14 @@ fun GarageScreen(
                                 state.vehicles.size,
                                 vehicleLimit,
                             ),
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     // The backend independently resolves the current tier and
                     // enforces this allowance inside the add transaction.
                     if (state.vehicles.size < vehicleLimit) {
                         Button(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Filled.Add, contentDescription = null)
                             Text(text = stringResource(R.string.garage_addVehicle))
                         }
                     } else {
@@ -141,28 +147,12 @@ fun GarageScreen(
     }
 }
 
-/**
- * Diameter of the circular car photo in the garage list.
- *
- * Deliberately a fixed size rather than `fillMaxWidth()`: a full-width circle is
- * as tall as the card is wide (~300dp+ on a phone), so a single car filled the
- * screen and the list could not be skimmed. There is no size token for this —
- * [KccSpacing] tops out at 48dp and is a spacing scale, not a component scale —
- * so a literal dp here matches how the rest of the app sizes images (e.g. the
- * 96dp profile avatar).
- */
-private val VehiclePhotoDiameter = 180.dp
-
-/**
- * My Garage renders the car photo as a fixed-diameter CIRCLE, centre-cropped
- * into the circle from whatever ratio the source was. Declared after
- * [VehiclePhotoDiameter] because top-level properties initialise in file order.
- */
-private val GarageVehiclePhotoStyle = VehiclePhotoStyle.Circle(VehiclePhotoDiameter)
+/** Catalogue S57: a wide real photo, with a native car glyph when none exists. */
+private val GarageVehiclePhotoStyle = VehiclePhotoStyle.FullWidth(16f / 9f, KccRadius.md)
 
 /**
  * One of the owner's own cars in the garage list: the shared [VehicleCard] with
- * My Garage's look (circular photo, 4dp rows) plus the manage actions that only
+ * My Garage's photo-led look plus the manage actions that only
  * the owner gets. The plate is deliberately not shown here — it belongs to the
  * detail page ([VehicleDetailScreen]), not the skimmable list.
  */
@@ -179,7 +169,7 @@ private fun OwnedVehicleCard(
         photoStyle = GarageVehiclePhotoStyle,
         mainCarLabelRes = R.string.garage_mainCarBadge,
         photoContentDescriptionRes = R.string.garage_photoAlt,
-        contentSpacing = KccSpacing.s1,
+        contentSpacing = KccSpacing.s3,
         onOpen = onOpen,
     ) {
         // Main-car toggle: filled when this car is the main car (tapping
@@ -188,6 +178,10 @@ private fun OwnedVehicleCard(
             Button(
                 onClick = { onSetMain(false) },
                 modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary,
+                ),
             ) {
                 Text(text = stringResource(R.string.garage_unsetMainCar))
             }
@@ -206,7 +200,11 @@ private fun OwnedVehicleCard(
             OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) {
                 Text(text = stringResource(R.string.garage_editVehicle))
             }
-            OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f)) {
+            OutlinedButton(
+                onClick = onDelete,
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            ) {
                 Text(text = stringResource(R.string.garage_deleteVehicle))
             }
         }

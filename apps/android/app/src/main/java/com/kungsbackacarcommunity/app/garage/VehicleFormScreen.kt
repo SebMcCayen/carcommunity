@@ -2,6 +2,9 @@ package com.kungsbackacarcommunity.app.garage
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
@@ -24,7 +27,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material3.Icon
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +43,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 import com.kungsbackacarcommunity.app.shell.AeroPage
 import java.util.Locale
@@ -271,14 +280,19 @@ fun VehicleFormScreen(
                     VehiclePowertrain.selectable() +
                         listOfNotNull(powertrain?.takeIf { !it.isSelectable })
                 }
-            powertrainOptions.forEach { option ->
-                if (option == powertrain) {
-                    Button(onClick = { powertrain = option }, modifier = Modifier.fillMaxWidth()) {
-                        Text(text = stringResource(option.labelRes()))
-                    }
-                } else {
-                    OutlinedButton(onClick = { powertrain = option }, modifier = Modifier.fillMaxWidth()) {
-                        Text(text = stringResource(option.labelRes()))
+            powertrainOptions.chunked(2).forEach { options ->
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+                    options.forEach { option ->
+                        FilterChip(
+                            selected = option == powertrain,
+                            onClick = { powertrain = option },
+                            label = { Text(stringResource(option.labelRes()), modifier = Modifier.padding(vertical = KccSpacing.s2)) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                            ),
+                            modifier = Modifier.weight(1f),
+                        )
                     }
                 }
             }
@@ -369,16 +383,22 @@ private fun VehiclePhotoSection(
     val uploading = uploadStatus == ImageUploadStatus.Uploading
     val model: Any? = photoPreview ?: photoUrl
     Box(
-        // Round (circle-clipped) preview, matching how My Garage renders vehicle
-        // photos. A square (1:1) box centre-crops the pick into the circle, so the
-        // tile shown here is the round tile the garage will show.
+        // Show the picked/uploaded photo at the same landscape ratio as the garage.
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(1f)
-            .clip(CircleShape)
+            .aspectRatio(16f / 9f)
+            .clip(RoundedCornerShape(KccRadius.lg))
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {
+        if (model == null) {
+            Icon(
+                Icons.Filled.DirectionsCar,
+                contentDescription = stringResource(R.string.garage_photoNone),
+                modifier = Modifier.size(KccSpacing.s12),
+                tint = MaterialTheme.colorScheme.tertiary,
+            )
+        }
         if (model != null) {
             // Coil renders nothing (keeps the placeholder) when the model does
             // not resolve.
