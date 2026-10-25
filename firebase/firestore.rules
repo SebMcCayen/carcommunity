@@ -699,7 +699,15 @@ service cloud.firestore {
     }
 
     match /driverUsers/{uid} {
-      allow read: if isDriverOwner(uid) || isDriverStaff();
+      // The owner must be able to read the root record before Driver onboarding
+      // has created it, and after a restriction, so the client can select the
+      // correct onboarding/restricted state. Requiring hasActiveDriverAccount()
+      // here creates a circular gate because that helper itself requires this
+      // document to exist and have onboardingComplete == true.
+      //
+      // Child collections keep the stricter isDriverOwner() gate below, so an
+      // incomplete or restricted Driver account gains no access to Driver data.
+      allow read: if isOwner(uid) || isDriverStaff();
       match /pushTokens/{tokenId} { allow read, write: if false; }
       match /connections/{connectionId} { allow read: if isDriverOwner(uid); }
       match /followingCommunities/{communityId} { allow read: if isDriverOwner(uid); }
