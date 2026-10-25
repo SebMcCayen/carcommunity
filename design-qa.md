@@ -41,9 +41,10 @@ acceptance independently from implementation, compilation and unit tests.
   Initial source/native shell comparisons are recorded below; extend them to
   matching populated states, themes, viewport sizes and text scales before
   claiming the full design is verified.
-- Detailed feature-specific layouts remain in the migration register. A shared
-  token change is not completion of all 84 views. Paid profile-frame purchases
-  are deliberately deferred; Driver reading is included in the current slice.
+- Android wave 2 now implements five detailed feature areas in the migration
+  register, beyond shared tokens. Full rendered acceptance of all 84 concepts
+  still remains open. Paid profile-frame purchases are deliberately deferred;
+  Driver reading is included, without unsupported writes or a fabricated link.
 - Config-less screenshots can establish shell layout/state only. Real map
   markers, search, Driver data and live/convoy/crown behavior require configured
   integration checks before a production release.
@@ -58,6 +59,57 @@ acceptance independently from implementation, compilation and unit tests.
    relevant platform report. Change this result only after both lanes qualify.
 
 ## Comparison history
+
+### Current Android wave 2 — feature previews, 2026-10-25
+
+All source sheets S01-S84 were inspected; relevant states were checked against
+the native previews, including focused hierarchy, controls, spacing and copy.
+Canonical native Roboto/system typography and real data contracts take
+precedence over illustrative sample people/cars and non-native mockup fonts.
+This is a qualitative component-state review, not a pixel-equivalence pass:
+the source concepts and 320 × 640 CI viewport are different sizes/states.
+
+Run `40187162028`, app `2f421ed1`, provides twelve actual API 34 dark,
+English/normal-text component captures. Swedish local test content and the
+visible test-data banner prevent them being mistaken for real member data.
+Every filename was checked against its pixels after the stale-frame correction.
+No full populated map, real car photos or real Driver account is represented.
+
+Observed matches in these states: graphite reading surfaces, gold primary and
+Crown accents, cyan chat/source/live roles, explicit headings, contained text,
+visible event RSVP controls, grouped settings and accurate Community/Plus plan
+copy. Long pages are scrollable; a screenshot's lower edge is not its final row.
+
+Two concrete findings were corrected instead of counted as a pass:
+
+1. Some first-generation screenshots (`40186384885`) showed the preceding
+   window. They were rejected. The selected Compose root now completes a draw
+   before capture (`2f421ed1`); the recaptured files match their intended states.
+2. [P2] S57 garage management buttons made one list card consume nearly the
+   whole short viewport. PR #1182 (`5d019ca1`) compacts the photo to 2.5:1 and
+   moves actions into a car-named accessible menu. Correct-car callbacks,
+   separation from opening detail and deletion confirmation have regression
+   tests. Final recapture is recorded in the executed evidence log.
+
+The final `7c2e64de` garage image resolves that density finding in the captured
+320 × 640 state: both test cars, their separate menus, the plan counter and Add
+vehicle fit in view. All twelve final files were opened, matched to their names
+and retained unchanged in the gallery with hashes. Run `40188008306` passed all
+100 emulator cases, unit/lint/debug/R8/alignment and navigation compilation.
+These green results do not change the full-acceptance limits below.
+
+Final combined app revision: `7c2e64de`. Its final check/capture provenance lives
+in [the executed log](docs/design/redesign-executed-evidence.md), separately from
+the earlier green checkpoint. Full 360/390/430 logical widths, Swedish/English,
+light/dark, enlarged text, keyboard/TalkBack and configured account/GPS/billing
+states remain required. No claim of complete 84-view acceptance is made.
+
+The earlier local emulator OS/ANR failure remains rejected evidence. The report
+intentionally stays **blocked for complete visual/release acceptance**, even
+when implementation and automated checks are green. No new iOS behavior is
+implemented by this wave; its historical comparisons below are preserved.
+
+### Historical first-slice checkpoints
 
 Initial checkpoint: sources inspected; schema/code generation and contrast
 checks performed. Native visual comparison remains pending. PRs are reviewable

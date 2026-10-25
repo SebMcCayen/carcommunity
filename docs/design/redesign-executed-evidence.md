@@ -3,6 +3,93 @@
 This log separates executed checks from authored harnesses and visual acceptance.
 It does not approve a release or claim that all 84 concept views are finished.
 
+## Current Android wave 2 — 2026-10-25
+
+Five feature areas and the combined preview are described in
+[Android validation](android-redesign-validation.md). Current app source is
+`7c2e64deecdbabd44b34dd964c2591ecced6e9d6`; documentation SHAs are not app-build
+evidence. Final run: [40188008306](https://github.com/SebMcCayen/carcommunity/actions/runs/40188008306).
+All three Android jobs passed at that exact head: debug/release unit tests,
+lint, debug assembly, R8 release shrinking, 16 KB alignment (10 native libraries),
+real navigation-SDK compilation and **100/100** API 34 Compose emulator cases
+(zero failures/skips, first attempt). CI/contracts, CodeQL and dependency review
+also passed. The separate generated-string iOS workflow completed successfully
+as well; it is no longer pending. All PR checks were green before the owner-
+authorized merge of integration #1181 and its five included component PRs.
+Merge `8e044b41278e84aa8f8775e5a265eb4e9f5973c3` retains the tested Android tree
+and preserves the upstream iOS local-transport fix. Documentation does not
+replace the source/run provenance above; configured-device acceptance remains
+separate from merge approval.
+
+The local serialized checkpoint build completed in 14m30s: debug app/test APKs
+and 3,586 unit tests, zero failures/errors, one skipped case. Because that build
+started before the garage merge, it is checkpoint evidence only. An incremental
+build at final app source `7c2e64de` then assembled both APKs and passed all
+108 garage unit tests (10 suites, zero failures/errors/skips) in 5m21s. The
+full final debug/release suite, lint and release gates are established by CI,
+not inferred from the targeted local run.
+
+### Final native recapture
+
+At `7c2e64de`, the emulator job and real navigation-SDK compilation passed.
+Artifact `android-redesign-captures` (`12597037490`) was downloaded from attempt
+1 of run `40188008306`. All twelve new PNGs were opened and checked against
+their intended states. The corrected garage shows both local cars and Add
+vehicle in the short viewport, with no management-button stack. The S57
+density finding is resolved in this captured state, not claimed for every
+viewport/locale. The other eleven captures retain their intended content.
+
+The [retained gallery](previews/android-wave2-2026-10-25/README.md) includes
+unchanged PNGs and a SHA-256 manifest; CI's temporary retention does not erase
+this review evidence. The separate `validate-android` job passed R8 and native
+alignment as well; that result was checked independently of the PNGs.
+
+### Executed checkpoint before compact garage
+
+Run [40187162028](https://github.com/SebMcCayen/carcommunity/actions/runs/40187162028)
+at `2f421ed168105e1d69244f556f06bc3205d6dbf8` passed each Android job:
+debug/release unit tests, lint, debug assembly, release R8/16 KB alignment,
+real navigation-SDK compilation, and all **100/100** API 34 Compose UI cases
+(zero failed/skipped, first attempt). Artifact `android-redesign-captures`
+(`12597070521`) contains twelve 320 × 640 English/dark, normal-text native
+previews with local test data. Every image was opened and checked against its
+filename. This run precedes the S57 density correction.
+
+### Failures, corrections and rejected evidence
+
+- Chat's first CI compilation rejected an invalid top-level test import;
+  `8e109413` removes it, retaining the real node assertion.
+- A convoy regression exposed Leave below a long roster. Production actions
+  move before the roster (`9d66d164`); role/callback/confirmation assertions remain.
+- Partner-upgrade and Supporter-downgrade tests now scroll to reachable controls
+  (`fa13a39b`). Free users still cannot see codes; downgrade assertions remain.
+- Run `40186384885` passed UI tests but some PNGs captured the previous window
+  (Chat showed Live; Settings showed Profile). Those PNGs are **rejected visual
+  evidence**. A Compose draw fence plus compositor settling fixed timing;
+  `40187162028` was recaptured and opened, not relabelled from the failed set.
+- Source/native S57 review found excessive card height from the management
+  button stack. PR #1182 (`5d019ca1`) uses 2.5:1 photos, 8 dp gaps and an
+  accessible car-named overflow menu; callbacks/deletion confirmation remain.
+  Its final capture is separate from the pre-correction garage screenshot.
+- The local read-only API 34 emulator suffered OS network-stack/ANR failures.
+  Its preview was rejected by the guard, not reported as app QA. CI provides
+  valid previews; failed local captures are not included.
+
+### Current limitations
+
+Production views use test-only inputs, not live Firebase or a real purchase.
+Map imagery/photos, full-catalogue states, locale/theme/large-text matrix,
+physical-device performance and configured-service checks remain unverified.
+Use the current checklist, not historical "pending" wording below. No new store
+release or production configuration is performed by this Android delivery.
+
+## Historical wave-1 evidence — retained, not current pending status
+
+The following sections describe earlier app revisions. Their time-local
+"pending", "not deployed" and "no merge" statements are historical, not claims
+about today's repository/production state. Use the current Android checklist
+above for wave 2. iOS history is preserved; current iOS work is owned elsewhere.
+
 ## Foundation contract regression
 
 The foundation's iOS smoke test still expected Swedish `Socialt`, while the
