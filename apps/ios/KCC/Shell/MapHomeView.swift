@@ -564,15 +564,6 @@ private struct MapboxStandardMap: View {
                 scaleBar: ScaleBarViewOptions(visibility: .hidden),
                 compass: CompassViewOptions(visibility: .hidden)
             ))
-            .onChange(of: surface.compassMode) { _, _ in
-                guard surfaceActive else { return }
-                compassFollowRequested = true
-                canonicalCameraTarget = nil
-                surface.suspendConvoyFitForInteraction()
-                meFollowSuspended = true
-                meFollowIdleTask?.cancel()
-                applyCompassViewport(viewport: $viewport, snapshot: surface.cameraSnapshot)
-            }
             .onMapLoaded { _ in
                 onLoaded()
                 if !rendererAttached, let viewportController = proxy.viewport {
@@ -660,6 +651,15 @@ private struct MapboxStandardMap: View {
             }
             .onChange(of: surface.isActive, initial: true) { _, active in
                 surfaceActive = active
+            }
+            .onChange(of: surface.compassMode) { _, _ in
+                guard surfaceActive else { return }
+                compassFollowRequested = true
+                canonicalCameraTarget = nil
+                surface.suspendConvoyFitForInteraction()
+                meFollowSuspended = true
+                meFollowIdleTask?.cancel()
+                applyCompassViewport(viewport: $viewport, snapshot: surface.cameraSnapshot)
             }
             .ignoresSafeArea(edges: .top)
         }
