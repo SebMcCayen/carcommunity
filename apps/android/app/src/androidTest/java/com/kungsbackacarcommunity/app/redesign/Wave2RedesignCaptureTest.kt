@@ -41,7 +41,7 @@ class Wave2RedesignCaptureTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val args = InstrumentationRegistry.getArguments()
         val screens = args.getString("wave2Screen")?.let(::listOf) ?: listOf(
-            "map-place", "map-live", "chat", "driver", "events", "crown",
+            "map-place", "map-live", "chat", "driver", "driver-detail", "events", "event-detail", "crown",
             "garage", "profile", "settings", "membership",
         )
         val variant = args.getString("redesignCaptureVariant") ?: "wave2-dark"
@@ -61,8 +61,8 @@ class Wave2RedesignCaptureTest {
                             key(selected) {
                                 when (selected) {
                                     "map-place", "map-live" -> Wave2MapPreview(selected)
-                                    "chat", "driver" -> Wave2ChatPreview(selected)
-                                    "events", "crown" -> Wave2SocialPreview(selected)
+                                    "chat", "driver", "driver-detail" -> Wave2ChatPreview(selected)
+                                    "events", "event-detail", "crown" -> Wave2SocialPreview(selected)
                                     "garage", "profile" -> Wave2GaragePreview(selected)
                                     "settings", "membership" -> Wave2SettingsPreview(selected)
                                     else -> error("Unknown redesign capture case: $selected")
