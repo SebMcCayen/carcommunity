@@ -1,7 +1,9 @@
 package com.kungsbackacarcommunity.app.convoy
 
 import androidx.compose.ui.test.assertHasNoClickAction
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -176,9 +178,27 @@ class ConvoyDetailScreenTest {
      */
     @Test
     fun aNonLeaderSeesOnlyLeave() {
-        setExitContent(viewerRole = ConvoyRole.Member, members = threeAccepted())
+        var ended = false
+        var left = false
+        setExitContent(
+            viewerRole = ConvoyRole.Member,
+            members = threeAccepted(),
+            onEnd = { ended = true },
+            onLeave = { left = true },
+        )
         composeTestRule.onNodeWithTag(CONVOY_DETAIL_END_TAG).assertDoesNotExist()
-        composeTestRule.onNodeWithTag(CONVOY_DETAIL_LEAVE_TAG).assertIsDisplayed()
+        // The detail page scrolls on short viewports. Verify Leave is reachable
+        // while retaining the leader-only absence, localized copy and routing.
+        composeTestRule.onNodeWithTag(CONVOY_DETAIL_LEAVE_TAG)
+            .performScrollTo()
+            .assertIsDisplayed()
+            .assertHasClickAction()
+            .assertTextEquals(string(R.string.convoy_leave))
+            .performClick()
+        composeTestRule.onNodeWithText(string(R.string.convoy_barLeaveConfirmAction)).performClick()
+        composeTestRule.waitForIdle()
+        assertTrue("a member's Leave must reach the leave action", left)
+        assertFalse("a member's Leave must never invoke the leader's End action", ended)
     }
 
     /**
