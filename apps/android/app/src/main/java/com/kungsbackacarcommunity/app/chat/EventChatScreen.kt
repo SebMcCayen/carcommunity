@@ -15,11 +15,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -33,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -51,6 +55,9 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
 import com.kungsbackacarcommunity.app.design.ChatComposerKeyboardOptions
 import com.kungsbackacarcommunity.app.design.ChatQuickEmojiRow
+import com.kungsbackacarcommunity.app.chattime.MessageTimeText
+import com.kungsbackacarcommunity.app.chattime.ChatDateContext
+import com.kungsbackacarcommunity.app.chattime.rememberChatDateContext
 import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
 import com.kungsbackacarcommunity.app.moderation.ChatSurface
 import com.kungsbackacarcommunity.app.moderation.MessageActionsSheet
@@ -98,6 +105,7 @@ fun EventChatScreen(
     onBlockDismiss: () -> Unit = {},
     onViewProfile: ((String) -> Unit)? = null,
 ) {
+    val dates = rememberChatDateContext()
     var draft by rememberSaveable { mutableStateOf("") }
     var awaitingSend by rememberSaveable { mutableStateOf(false) }
     // The long-pressed message, held by ID: Saveable (the sheet survives rotation)
@@ -209,6 +217,8 @@ fun EventChatScreen(
                                 val isOwn = message.authorUserId == currentUid
                                 MessageRow(
                                     message = message,
+                                    isOwn = isOwn,
+                                    dates = dates,
                                     // Tap the author's name → their profile. Never
                                     // for your own message, and never for a blank
                                     // author uid (a dead profile route).
@@ -301,6 +311,8 @@ fun EventChatScreen(
                     modifier = Modifier.weight(1f),
                     keyboardOptions = ChatComposerKeyboardOptions,
                     singleLine = false,
+                    maxLines = 5,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
                 )
                 Button(
                     onClick = {
@@ -308,6 +320,8 @@ fun EventChatScreen(
                         onSend(draft)
                     },
                     enabled = sendStatus != ChatSendStatus.Sending && EventChat.isSendable(draft),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary,
+                        contentColor = MaterialTheme.colorScheme.onTertiary),
                 ) {
                     Text(text = stringResource(R.string.chat_sendButton))
                 }
@@ -378,6 +392,8 @@ fun EventChatScreen(
 @Composable
 private fun MessageRow(
     message: ChatMessage,
+    isOwn: Boolean,
+    dates: ChatDateContext,
     onViewProfile: (() -> Unit)?,
     onLongPress: (() -> Unit)?,
 ) {
@@ -385,87 +401,94 @@ private fun MessageRow(
     // id so a reveal never leaks onto a different message reusing this row, and
     // rememberSaveable so it survives rotation without being persisted anywhere.
     var revealed by rememberSaveable(message.id) { mutableStateOf(false) }
-    Card(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .then(
-                    if (onLongPress != null) {
-                        // combinedClickable, not pointerInput: it announces the
-                        // long-press to accessibility services as a custom action,
-                        // so the moderation sheet is reachable without a physical
-                        // long-press. onClick is a deliberate no-op — only the
-                        // author's name navigates.
-                        Modifier.combinedClickable(onLongClick = onLongPress, onClick = {})
-                    } else {
-                        Modifier
-                    },
-                ),
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+    val contentColor = if (isOwn) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onSurface
+    val accentColor = if (isOwn) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.tertiary
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = if (isOwn) Alignment.End else Alignment.Start) {
+        MessageTimeText(message.createdAtMillis, dates)
+        Card(
+            colors = CardDefaults.cardColors(containerColor = if (isOwn) MaterialTheme.colorScheme.tertiary
+                else MaterialTheme.colorScheme.surface),
+            modifier =
+                Modifier
+                    .widthIn(max = 280.dp)
+                    .then(
+                        if (onLongPress != null) {
+                            // combinedClickable, not pointerInput: it announces the
+                            // long-press to accessibility services as a custom action,
+                            // so the moderation sheet is reachable without a physical
+                            // long-press. onClick is a deliberate no-op — only the
+                            // author's name navigates.
+                            Modifier.combinedClickable(onLongClick = onLongPress, onClick = {})
+                        } else {
+                            Modifier
+                        },
+                    ),
         ) {
-            Text(
-                text = message.authorDisplayName?.takeIf { it.isNotBlank() }
-                    ?: stringResource(R.string.chat_unknownAuthor),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                // Tapping the author opens their read-only profile. Announced as a
-                // button so the affordance reaches accessibility services.
-                modifier =
-                    if (onViewProfile != null) {
-                        Modifier.clickable(role = Role.Button, onClick = onViewProfile)
-                    } else {
-                        Modifier
-                    },
-            )
-            when {
-                message.isRemoved ->
-                    Text(
-                        text = stringResource(R.string.chat_removedMessage),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontStyle = FontStyle.Italic,
-                    )
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = message.authorDisplayName?.takeIf { it.isNotBlank() }
+                        ?: stringResource(R.string.chat_unknownAuthor),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = accentColor,
+                    // Tapping the author opens their read-only profile. Announced as a
+                    // button so the affordance reaches accessibility services.
+                    modifier =
+                        if (onViewProfile != null) {
+                            Modifier.clickable(role = Role.Button, onClick = onViewProfile)
+                        } else {
+                            Modifier
+                        },
+                )
+                when {
+                    message.isRemoved ->
+                        Text(
+                            text = stringResource(R.string.chat_removedMessage),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = contentColor,
+                            fontStyle = FontStyle.Italic,
+                        )
 
-                message.isAutoHidden && !revealed -> {
-                    // Auto-hidden after several reports: collapsed placeholder + a
-                    // reveal control. Revealing is LOCAL and ephemeral — it only
-                    // expands this row in this reader's UI; nothing is written and
-                    // the message stays hidden for everyone else.
-                    Text(
-                        text = stringResource(R.string.chat_reportedHidden),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontStyle = FontStyle.Italic,
-                    )
-                    TextButton(
-                        onClick = { revealed = true },
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
-                    ) {
-                        Text(text = stringResource(R.string.chat_showReportedMessage))
-                    }
-                }
-
-                else -> {
-                    // Auto-linkify any http/https URL the author pasted so it opens in
-                    // the phone's default browser on tap. Detection is content-only, so
-                    // the AnnotatedString is keyed on the message text (the context-
-                    // capturing opener is deliberately not a key).
-                    val context = LocalContext.current
-                    val linkColor = MaterialTheme.colorScheme.primary
-                    val body =
-                        remember(message.message, linkColor) {
-                            annotateWebLinks(message.message, linkColor) { url ->
-                                ChatUrlOpener.open(context, url)
-                            }
+                    message.isAutoHidden && !revealed -> {
+                        // Auto-hidden after several reports: collapsed placeholder + a
+                        // reveal control. Revealing is LOCAL and ephemeral — it only
+                        // expands this row in this reader's UI; nothing is written and
+                        // the message stays hidden for everyone else.
+                        Text(
+                            text = stringResource(R.string.chat_reportedHidden),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = contentColor,
+                            fontStyle = FontStyle.Italic,
+                        )
+                        TextButton(
+                            onClick = { revealed = true },
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+                        ) {
+                            Text(text = stringResource(R.string.chat_showReportedMessage))
                         }
-                    Text(
-                        text = body,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
+                    }
+
+                    else -> {
+                        // Auto-linkify any http/https URL the author pasted so it opens in
+                        // the phone's default browser on tap. Detection is content-only, so
+                        // the AnnotatedString is keyed on the message text (the context-
+                        // capturing opener is deliberately not a key).
+                        val context = LocalContext.current
+                        val linkColor = accentColor
+                        val body =
+                            remember(message.message, linkColor) {
+                                annotateWebLinks(message.message, linkColor) { url ->
+                                    ChatUrlOpener.open(context, url)
+                                }
+                            }
+                        Text(
+                            text = body,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = contentColor,
+                        )
+                    }
                 }
             }
         }

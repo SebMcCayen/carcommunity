@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -282,6 +283,8 @@ fun ChatScreen(
                 modifier = Modifier.weight(1f),
                 keyboardOptions = ChatComposerKeyboardOptions,
                 singleLine = false,
+                maxLines = 5,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
             )
             Button(
                 onClick = {
@@ -294,6 +297,8 @@ fun ChatScreen(
                     replyToId = null
                 },
                 enabled = DmThread.isSendable(draft),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary),
             ) {
                 Text(stringResource(R.string.dm_send))
             }
@@ -483,18 +488,18 @@ private fun MessageBubble(
     counterpartyName: String? = null,
 ) {
     val bubbleColor =
-        if (isOwn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+        if (isOwn) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.surface
     val textColor =
         if (isOwn) {
-            MaterialTheme.colorScheme.onPrimary
+            MaterialTheme.colorScheme.onTertiary
         } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
+            MaterialTheme.colorScheme.onSurface
         }
     // A shared `geo:` link renders as a single tappable "show on map" chip —
     // coloured against the bubble and underlined so it reads as tappable. Detection
     // is keyed on WHETHER a map-move handler exists (not the lambda identity) so the
     // AnnotatedString is not rebuilt every recompose. Mirrors the group channels.
-    val linkColor = if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+    val linkColor = if (isOwn) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.tertiary
     val linkLabel = stringResource(R.string.channel_locationLink)
     val eventLinkLabel = stringResource(R.string.events_shareEventLinkLabel)
     val canShowLocation = onShowLocationOnMap != null
@@ -526,7 +531,10 @@ private fun MessageBubble(
         horizontalAlignment = if (isOwn) Alignment.End else Alignment.Start,
     ) {
         MessageTimeText(millis = message.createdAtMillis, dates = dates)
-        val bubbleShape = androidx.compose.foundation.shape.RoundedCornerShape(KccRadius.lg)
+        val bubbleShape = androidx.compose.foundation.shape.RoundedCornerShape(
+            topStart = KccRadius.lg, topEnd = KccRadius.lg,
+            bottomStart = if (isOwn) KccRadius.lg else KccSpacing.s1,
+            bottomEnd = if (isOwn) KccSpacing.s1 else KccRadius.lg)
         Surface(
             color = bubbleColor,
             shape = bubbleShape,
@@ -576,7 +584,7 @@ private fun MessageBubble(
                 }
                 Text(
                     text = body,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyLarge,
                     color = textColor,
                     textAlign = TextAlign.Start,
                 )
