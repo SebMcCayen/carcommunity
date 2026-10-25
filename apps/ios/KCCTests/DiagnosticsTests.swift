@@ -1,8 +1,29 @@
 import XCTest
+import FirebaseFirestore
 
 @testable import KCC
 
 final class DiagnosticsTests: XCTestCase {
+    func testLocalFirestoreUsesPlaintextOnlyForExplicitDebugDemo() throws {
+        let settings = try XCTUnwrap(LocalFirestoreEmulator.settings(
+            projectID: "demo-kcc-ios", endpoint: "127.0.0.1:18080", isDebugBuild: true
+        ))
+        XCTAssertEqual(settings.host, "127.0.0.1:18080")
+        XCTAssertFalse(settings.isSSLEnabled)
+        XCTAssertTrue(FirestoreSettings().isSSLEnabled)
+        for (project, endpoint, debug) in [
+            ("demo-kcc-ios", "127.0.0.1:18080", false),
+            ("production-project", "127.0.0.1:18080", true),
+            ("demo-kcc-ios", "remote.example:18080", true),
+            ("demo-kcc-ios", "127.0.0.1:0", true),
+            ("demo-kcc-ios", "", true)
+        ] {
+            XCTAssertNil(LocalFirestoreEmulator.settings(
+                projectID: project, endpoint: endpoint, isDebugBuild: debug
+            ))
+        }
+    }
+
     func testAppCheckProviderSelectionUsesDebugOnlyForDevelopment() {
         XCTAssertEqual(
             FirebaseAppCheckProviderKind.select(isDebugBuild: true, appAttestSupported: true),
