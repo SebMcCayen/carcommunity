@@ -491,6 +491,7 @@ private struct MapboxStandardMap: View {
     @State private var cameraBeforeConvoy: MapCameraSnapshot?
     @State private var interactionObserver: ConvoyViewportInteractionObserver
     @State private var latestOwnPoint: MapPoint?
+    @State private var compassFollowRequested = false
     @State private var meFollowEnabled = false
     @State private var meFollowSuspended = false
     @State private var locationAuthorization: LocationAuthorization
@@ -557,6 +558,12 @@ private struct MapboxStandardMap: View {
                 }
             }
             .mapStyle(.standard)
+            // Keep Mapbox attribution/logo; hide only the requested scale
+            // and the redundant SDK compass in favour of our accessible rail.
+            .ornamentOptions(OrnamentOptions(
+                scaleBar: ScaleBarViewOptions(visibility: .hidden),
+                compass: CompassViewOptions(visibility: .hidden)
+            ))
             .onMapLoaded { _ in
                 onLoaded()
                 if !rendererAttached, let viewportController = proxy.viewport {
@@ -645,7 +652,16 @@ private struct MapboxStandardMap: View {
             .onChange(of: surface.isActive, initial: true) { _, active in
                 surfaceActive = active
             }
-            .ignoresSafeArea()
+            .onChange(of: surface.compassMode) { _, _ in
+                guard surfaceActive else { return }
+                compassFollowRequested = true
+                canonicalCameraTarget = nil
+                surface.suspendConvoyFitForInteraction()
+                meFollowSuspended = true
+                meFollowIdleTask?.cancel()
+                applyCompassViewport(viewport: $viewport, snapshot: surface.cameraSnapshot)
+            }
+            .ignoresSafeArea(edges: .top)
         }
         .task(id: MapHomeMeFollowPolicy.subscriptionKey(
             surfaceActive: surfaceActive,
@@ -676,6 +692,11 @@ private struct MapboxStandardMap: View {
             ) {
                 if Task.isCancelled { return }
                 locationAuthorization = authorization
+                if !authorization.isAuthorized, compassFollowRequested {
+                    compassFollowRequested = false
+                    // Stop the explicit follow viewport when consent is lost.
+                    performProgrammaticViewportChange { viewport = .idle }
+                }
             }
         }
         .onChange(of: locationAuthorization) { oldValue, newValue in
@@ -761,6 +782,7 @@ private struct MapboxStandardMap: View {
                     meFollowIdleTask = nil
                     meFollowIdleTaskToken = nil
                 }
+                if enabled { compassFollowRequested = false }
                 switch MapHomeConvoyViewportPolicy.plan(points: points, focusEnabled: enabled) {
                 case .keepCurrentViewport:
                     return
@@ -983,6 +1005,10 @@ private struct MapboxStandardMap: View {
         snapshot: MapCameraSnapshot? = nil,
         restoringBrowsing: Bool = false
     ) {
+        if compassFollowRequested, locationAuthorization.isAuthorized {
+            applyCompassViewport(viewport: viewport, snapshot: snapshot ?? surface.cameraSnapshot)
+            return
+        }
         guard let camera = meFollowCamera(
             point,
             fallback: fallback,
@@ -1000,6 +1026,38 @@ private struct MapboxStandardMap: View {
             duration: 0.9,
             viewport: viewport
         )
+    }
+
+    /// The same retained Mapbox viewport owns this user-requested transition.
+    /// No permission request, extra location subscription, or live sharing is
+    /// started by toggling orientation. Without consent only north is reset.
+    private func applyCompassViewport(
+        viewport: Binding<Viewport>,
+        snapshot: MapCameraSnapshot?
+    ) {
+        if locationAuthorization.isAuthorized {
+            performProgrammaticViewportChange {
+                withViewportAnimation(.easeInOut(duration: 0.5)) {
+                    viewport.wrappedValue = .followPuck(
+                        zoom: CGFloat(surface.browsingZoom),
+                        bearing: surface.compassMode == .northUp ? .constant(0) : .course,
+                        pitch: surface.is3D ? 45 : 0
+                    )
+                }
+            }
+        } else if let snapshot {
+            applyCameraTarget(
+                MapHomeCameraTarget(
+                    latitude: snapshot.latitude,
+                    longitude: snapshot.longitude,
+                    zoom: snapshot.zoom,
+                    bearing: surface.compassMode == .northUp ? 0 : snapshot.bearing,
+                    pitch: snapshot.pitch
+                ),
+                duration: 0.5,
+                viewport: viewport
+            )
+        }
     }
 
     private func meFollowCamera(
