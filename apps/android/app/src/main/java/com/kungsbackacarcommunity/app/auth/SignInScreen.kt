@@ -8,7 +8,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -25,49 +29,49 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.KccTheme
 import kotlin.random.Random
 
 /**
- * Car quotes shown under the sign-in form — one is picked at random per
- * screen display. The quotes are attributed and localized through the
- * localization contract (Swedish is the default locale, English lives in
- * values-en). Kept internal so tests can assert on the list.
+ * Car quotes shown under the sign-in form — one is picked at random per screen display. The quotes
+ * are attributed and localized through the localization contract (Swedish is the default locale,
+ * English lives in values-en). Kept internal so tests can assert on the list.
  */
-internal val signInCarQuoteResIds = listOf(
-    R.string.auth_carQuote01,
-    R.string.auth_carQuote02,
-    R.string.auth_carQuote03,
-    R.string.auth_carQuote04,
-    R.string.auth_carQuote05,
-    R.string.auth_carQuote06,
-    R.string.auth_carQuote07,
-    R.string.auth_carQuote08,
-    R.string.auth_carQuote09,
-    R.string.auth_carQuote10,
-    R.string.auth_carQuote11,
-    R.string.auth_carQuote12,
-    R.string.auth_carQuote13,
-    R.string.auth_carQuote14,
-    R.string.auth_carQuote15,
-    R.string.auth_carQuote16,
-    R.string.auth_carQuote17,
-    R.string.auth_carQuote18,
-    R.string.auth_carQuote19,
-    R.string.auth_carQuote20,
-)
+internal val signInCarQuoteResIds =
+    listOf(
+        R.string.auth_carQuote01,
+        R.string.auth_carQuote02,
+        R.string.auth_carQuote03,
+        R.string.auth_carQuote04,
+        R.string.auth_carQuote05,
+        R.string.auth_carQuote06,
+        R.string.auth_carQuote07,
+        R.string.auth_carQuote08,
+        R.string.auth_carQuote09,
+        R.string.auth_carQuote10,
+        R.string.auth_carQuote11,
+        R.string.auth_carQuote12,
+        R.string.auth_carQuote13,
+        R.string.auth_carQuote14,
+        R.string.auth_carQuote15,
+        R.string.auth_carQuote16,
+        R.string.auth_carQuote17,
+        R.string.auth_carQuote18,
+        R.string.auth_carQuote19,
+        R.string.auth_carQuote20,
+    )
 
 /**
- * The message shown for a failed sign-in attempt. Extracted from the composable
- * so the choice of copy is directly unit-testable — in particular that
- * [SignInFailure.NO_GOOGLE_ACCOUNT] gets its own actionable guidance and does
- * NOT fall back to the generic "sign-in failed, try again".
+ * The message shown for a failed sign-in attempt. Extracted from the composable so the choice of
+ * copy is directly unit-testable — in particular that [SignInFailure.NO_GOOGLE_ACCOUNT] gets its
+ * own actionable guidance and does NOT fall back to the generic "sign-in failed, try again".
  *
- * Exhaustive `when` with no `else` on purpose: a new [SignInFailure] must fail
- * to compile here rather than silently inheriting the generic message, which is
- * how the missing-account case went unnoticed in the first place.
+ * Exhaustive `when` with no `else` on purpose: a new [SignInFailure] must fail to compile here
+ * rather than silently inheriting the generic message, which is how the missing-account case went
+ * unnoticed in the first place.
  */
 internal fun signInFailureMessageRes(reason: SignInFailure): Int =
     when (reason) {
@@ -79,11 +83,10 @@ internal fun signInFailureMessageRes(reason: SignInFailure): Int =
 /**
  * Minimal sign-in scaffold (migration plan Phase 7, PR 7c).
  *
- * Google Sign-In per docs/auth-mobile-requirements.md. All copy comes from
- * generated string resources (contracts/localization). The screen forces its
- * own [KccTheme] (dark — a brand moment over Ink Black) internally, overriding
- * any ambient/app-level theme, so it looks the same regardless of the caller's
- * theme; no dedicated [KccTheme] wrapper is needed for it.
+ * Google Sign-In per docs/auth-mobile-requirements.md. All copy comes from generated string
+ * resources (contracts/localization). The screen forces its own [KccTheme] (dark — a brand moment
+ * over Ink Black) internally, overriding any ambient/app-level theme, so it looks the same
+ * regardless of the caller's theme; no dedicated [KccTheme] wrapper is needed for it.
  */
 @Composable
 fun SignInScreen(
@@ -98,14 +101,12 @@ fun SignInScreen(
     // Whether this device can open the system add-account screen. Production
     // resolves it once per context; previews/tests pin it to render both the
     // "button offered" and "text-only fallback" shapes deterministically.
-    canAddAccount: Boolean = LocalContext.current.let { context ->
-        remember(context) { canAddGoogleAccount(context) }
-    },
+    canAddAccount: Boolean =
+        LocalContext.current.let { context -> remember(context) { canAddGoogleAccount(context) } },
     // Opens the system add-account screen. Injectable so tests can observe the
     // tap without launching a real activity.
-    onAddGoogleAccountClick: () -> Unit = LocalContext.current.let { context ->
-        { openAddGoogleAccount(context) }
-    },
+    onAddGoogleAccountClick: () -> Unit =
+        LocalContext.current.let { context -> { openAddGoogleAccount(context) } },
 ) {
     // The sign-in screen is a brand moment shown over Ink Black art, so it
     // always renders light-on-dark (light content over the dark background)
@@ -113,10 +114,7 @@ fun SignInScreen(
     // every text/button color on a contract token (light ivory text, gold
     // button) instead of hardcoding hex.
     KccTheme(darkTheme = true) {
-        Surface(
-            modifier = modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background,
-        ) {
+        Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Box(modifier = Modifier.fillMaxSize()) {
                 // Subtle full-screen brand background. The art is bottom-weighted
                 // (top ~55% is clean), so the centered form stays legible over it.
@@ -127,95 +125,116 @@ fun SignInScreen(
                     contentScale = ContentScale.Crop,
                 )
                 Column(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = KccSpacing.s6),
+                    modifier =
+                        Modifier.fillMaxSize()
+                            .safeDrawingPadding()
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s6),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
                     Image(
                         painter = painterResource(R.drawable.kcc_logo_dark_bg),
                         contentDescription = stringResource(R.string.app_name),
-                        modifier = Modifier.fillMaxWidth(0.7f),
-                    )
-                    Spacer(Modifier.height(KccSpacing.s8))
-                    Text(
-                        text = stringResource(R.string.auth_loginTitle),
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        textAlign = TextAlign.Center,
-                    )
-                    Spacer(Modifier.height(KccSpacing.s2))
-                    Text(
-                        text = stringResource(R.string.auth_loginSubtitle),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(0.7f).heightIn(max = 160.dp),
                     )
                     Spacer(Modifier.height(KccSpacing.s6))
-
-                    when (status) {
-                        SignInStatus.InProgress -> {
-                            CircularProgressIndicator()
-                            Spacer(Modifier.height(KccSpacing.s2))
+                    // A reading surface keeps error/recovery copy legible over
+                    // the bundled artwork at large font sizes and on small phones.
+                    Surface(
+                        shape = MaterialTheme.shapes.extraLarge,
+                        color = MaterialTheme.colorScheme.surface,
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s5),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
                             Text(
-                                text = stringResource(R.string.auth_loading),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-
-                        is SignInStatus.Failed -> {
-                            Text(
-                                text =
-                                    stringResource(signInFailureMessageRes(status.reason)),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error,
+                                text = stringResource(R.string.auth_loginTitle),
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = MaterialTheme.colorScheme.onBackground,
                                 textAlign = TextAlign.Center,
                             )
-                            // Missing-account is the one failure the user can fix
-                            // from here, so it gets a route to the fix. The button
-                            // is omitted when the device can't resolve the
-                            // add-account activity (managed profiles, some ROMs):
-                            // the message alone still names Settings > Accounts.
-                            if (status.reason == SignInFailure.NO_GOOGLE_ACCOUNT && canAddAccount) {
-                                Spacer(Modifier.height(KccSpacing.s4))
-                                Button(onClick = onAddGoogleAccountClick) {
-                                    Text(stringResource(R.string.auth_addGoogleAccountButton))
+                            Spacer(Modifier.height(KccSpacing.s2))
+                            Text(
+                                text = stringResource(R.string.auth_loginSubtitle),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
+                            Spacer(Modifier.height(KccSpacing.s6))
+
+                            when (status) {
+                                SignInStatus.InProgress -> {
+                                    CircularProgressIndicator()
+                                    Spacer(Modifier.height(KccSpacing.s2))
+                                    Text(
+                                        text = stringResource(R.string.auth_loading),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
+
+                                is SignInStatus.Failed -> {
+                                    Text(
+                                        text =
+                                            stringResource(signInFailureMessageRes(status.reason)),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.error,
+                                        textAlign = TextAlign.Center,
+                                    )
+                                    // Missing-account is the one failure the user can fix
+                                    // from here, so it gets a route to the fix. The button
+                                    // is omitted when the device can't resolve the
+                                    // add-account activity (managed profiles, some ROMs):
+                                    // the message alone still names Settings > Accounts.
+                                    if (
+                                        status.reason == SignInFailure.NO_GOOGLE_ACCOUNT &&
+                                            canAddAccount
+                                    ) {
+                                        Spacer(Modifier.height(KccSpacing.s4))
+                                        Button(onClick = onAddGoogleAccountClick) {
+                                            Text(
+                                                stringResource(R.string.auth_addGoogleAccountButton)
+                                            )
+                                        }
+                                    }
+                                    Spacer(Modifier.height(KccSpacing.s4))
+                                    GoogleSignInButton(onSignInClick)
+                                }
+
+                                SignInStatus.Idle -> GoogleSignInButton(onSignInClick)
                             }
-                            Spacer(Modifier.height(KccSpacing.s4))
-                            GoogleSignInButton(onSignInClick)
-                        }
 
-                        SignInStatus.Idle -> GoogleSignInButton(onSignInClick)
+                            Spacer(Modifier.height(KccSpacing.s6))
+                            // Random car quote in place of the old privacy note.
+                            // In production (quoteIndex == null) a random index is
+                            // drawn and remembered so the pick stays stable across
+                            // recomposition and rotation; a new one is drawn each time
+                            // the screen enters composition. When an explicit
+                            // quoteIndex is pinned (previews/tests) no random state is
+                            // created. The final index is wrapped into bounds at the
+                            // point of use regardless of source (pinned OR a random
+                            // value restored by rememberSaveable), so neither a
+                            // caller-supplied out-of-range value nor a stale saved
+                            // index from an older quote-list size can crash this public
+                            // composable. No maxLines: the longest quote wraps to 2-3
+                            // centered lines.
+                            val rawQuoteIndex =
+                                if (quoteIndex != null) {
+                                    quoteIndex
+                                } else {
+                                    rememberSaveable { Random.nextInt(signInCarQuoteResIds.size) }
+                                }
+                            val resolvedQuoteIndex = rawQuoteIndex.mod(signInCarQuoteResIds.size)
+                            Text(
+                                text = stringResource(signInCarQuoteResIds[resolvedQuoteIndex]),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
                     }
-
-                    Spacer(Modifier.height(KccSpacing.s6))
-                    // Random car quote in place of the old privacy note.
-                    // In production (quoteIndex == null) a random index is
-                    // drawn and remembered so the pick stays stable across
-                    // recomposition and rotation; a new one is drawn each time
-                    // the screen enters composition. When an explicit
-                    // quoteIndex is pinned (previews/tests) no random state is
-                    // created. The final index is wrapped into bounds at the
-                    // point of use regardless of source (pinned OR a random
-                    // value restored by rememberSaveable), so neither a
-                    // caller-supplied out-of-range value nor a stale saved
-                    // index from an older quote-list size can crash this public
-                    // composable. No maxLines: the longest quote wraps to 2-3
-                    // centered lines.
-                    val rawQuoteIndex =
-                        if (quoteIndex != null) {
-                            quoteIndex
-                        } else {
-                            rememberSaveable { Random.nextInt(signInCarQuoteResIds.size) }
-                        }
-                    val resolvedQuoteIndex = rawQuoteIndex.mod(signInCarQuoteResIds.size)
-                    Text(
-                        text = stringResource(signInCarQuoteResIds[resolvedQuoteIndex]),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                    )
                 }
             }
         }

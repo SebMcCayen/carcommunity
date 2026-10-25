@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,8 +27,8 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
- * Anonymised partner-statistics opt-in (Phase 12 slice 19). Stateless apart
- * from the pending toggle; explains the privacy stance and saves the choice.
+ * Anonymised partner-statistics opt-in (Phase 12 slice 19). Stateless apart from the pending
+ * toggle; explains the privacy stance and saves the choice.
  */
 @Composable
 fun PartnerStatsScreen(
@@ -73,86 +74,91 @@ fun PartnerStatsScreen(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-            Text(
-                text = stringResource(R.string.privacySettings_partnerStatsTitle),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            Text(
-                text = stringResource(R.string.privacySettings_partnerStatsExplainer),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = stringResource(R.string.privacySettings_partnerStatsNotice),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            // The whole row is the toggle target with merged semantics, so
-            // TalkBack reads the description as the switch's label (Role.Switch).
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .toggleable(
-                            value = pending,
-                            role = Role.Switch,
-                            onValueChange = { pending = it },
-                        )
-                        .semantics(mergeDescendants = true) {},
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
-                    text = stringResource(R.string.privacySettings_partnerStatsBody),
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = stringResource(R.string.privacySettings_partnerStatsTitle),
+                    style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.weight(1f),
                 )
-                // Null callback — the row's toggleable owns the interaction.
-                Switch(checked = pending, onCheckedChange = null)
+                Text(
+                    text = stringResource(R.string.privacySettings_partnerStatsExplainer),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = stringResource(R.string.privacySettings_partnerStatsNotice),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                // The whole row is the toggle target with merged semantics, so
+                // TalkBack reads the description as the switch's label (Role.Switch).
+                Row(
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .toggleable(
+                                value = pending,
+                                role = Role.Switch,
+                                onValueChange = { pending = it },
+                            )
+                            .semantics(mergeDescendants = true) {},
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.privacySettings_partnerStatsBody),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.weight(1f),
+                    )
+                    // Null callback — the row's toggleable owns the interaction.
+                    Switch(checked = pending, onCheckedChange = null)
+                }
+                Text(
+                    text = stringResource(R.string.privacySettings_partnerStatsNote),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                when (saveStatus) {
+                    PartnerStatsSaveStatus.Saved ->
+                        Text(
+                            text = stringResource(R.string.privacySettings_saved),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+
+                    PartnerStatsSaveStatus.Failed ->
+                        Text(
+                            text = stringResource(R.string.privacySettings_error),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+
+                    else -> Unit
+                }
+
+                Button(
+                    onClick = { onSave(pending) },
+                    // Disabled until a definitive read: never let the default-on value
+                    // be persisted over an unresolved/errored (Unknown) read.
+                    enabled = seeded && saveStatus != PartnerStatsSaveStatus.Saving,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(text = stringResource(R.string.privacySettings_saveButton))
+                }
             }
-            Text(
-                text = stringResource(R.string.privacySettings_partnerStatsNote),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+        }
+        if (onSaveLeaderboard != null) {
+            LeaderboardVisibilitySection(
+                visibility = leaderboardVisibility,
+                saveStatus = leaderboardSaveStatus,
+                onSave = onSaveLeaderboard,
             )
-
-            when (saveStatus) {
-                PartnerStatsSaveStatus.Saved ->
-                    Text(
-                        text = stringResource(R.string.privacySettings_saved),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-
-                PartnerStatsSaveStatus.Failed ->
-                    Text(
-                        text = stringResource(R.string.privacySettings_error),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-
-                else -> Unit
-            }
-
-            Button(
-                onClick = { onSave(pending) },
-                // Disabled until a definitive read: never let the default-on value
-                // be persisted over an unresolved/errored (Unknown) read.
-                enabled = seeded && saveStatus != PartnerStatsSaveStatus.Saving,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(text = stringResource(R.string.privacySettings_saveButton))
-            }
-
-            if (onSaveLeaderboard != null) {
-                LeaderboardVisibilitySection(
-                    visibility = leaderboardVisibility,
-                    saveStatus = leaderboardSaveStatus,
-                    onSave = onSaveLeaderboard,
-                )
-            }
+        }
     }
 }

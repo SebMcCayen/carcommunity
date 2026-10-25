@@ -4,13 +4,16 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bookmark
@@ -28,12 +31,13 @@ import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Stars
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +51,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -62,15 +67,14 @@ import com.kungsbackacarcommunity.app.language.AppLanguage
 import com.kungsbackacarcommunity.app.navigation.openDefaultMapAppSettings
 
 /**
- * The Settings screen reached from the profile-picture ("More") menu. It groups
- * account destinations that used to sit loose in the More hub (subscription,
- * notification settings, blocked users, partner statistics, feedback, account
- * deletion) plus community/legal external links, and shows the app version at
- * the bottom.
+ * The Settings screen reached from the profile-picture ("More") menu. It groups account
+ * destinations that used to sit loose in the More hub (subscription, notification settings, blocked
+ * users, partner statistics, feedback, account deletion) plus community/legal external links, and
+ * shows the app version at the bottom.
  *
- * In-app destinations are passed as null-guarded callbacks so an unavailable
- * dependency simply hides its row (mirroring [HubEntry]). External links are
- * opened here via [LocalContext], restricted to http(s) / Play-store intents.
+ * In-app destinations are passed as null-guarded callbacks so an unavailable dependency simply
+ * hides its row (mirroring [HubEntry]). External links are opened here via [LocalContext],
+ * restricted to http(s) / Play-store intents.
  */
 @Composable
 fun SettingsScreen(
@@ -91,64 +95,67 @@ fun SettingsScreen(
     val termsUrl = stringResource(R.string.url_terms)
 
     AeroPage(title = stringResource(R.string.settingsMenu_title), modifier = modifier) {
-        SettingsSectionHeader(stringResource(R.string.settingsMenu_accountSection))
-        supporterBadgeSetting()
-        if (onManageSubscription != null) {
-            HubRow(
-                stringResource(R.string.settingsMenu_manageSubscription),
-                Icons.Filled.CardMembership,
-                onManageSubscription,
+        SettingsGroup(stringResource(R.string.settingsMenu_accountSection)) {
+            supporterBadgeSetting()
+            if (onManageSubscription != null) {
+                SettingsDestinationRow(
+                    stringResource(R.string.settingsMenu_manageSubscription),
+                    Icons.Filled.CardMembership,
+                    onManageSubscription,
+                )
+            }
+            // Always available: saved places are device-local (no backend dependency
+            // to guard on), so unlike the rows around it this needs no null check.
+            SettingsDestinationRow(
+                stringResource(R.string.settingsMenu_savedPlaces),
+                Icons.Filled.Bookmark,
+                onSavedPlaces,
             )
-        }
-        // Always available: saved places are device-local (no backend dependency
-        // to guard on), so unlike the rows around it this needs no null check.
-        HubRow(
-            stringResource(R.string.settingsMenu_savedPlaces),
-            Icons.Filled.Bookmark,
-            onSavedPlaces,
-        )
-        // Always available (opens a system screen, no backend dependency): make
-        // KCC the app Android offers for map links. Honest label — it opens the
-        // system "open by default" screen where the member picks KCC; there is
-        // no OS default-navigator role to set, and no API to set one.
-        HubRow(
-            stringResource(R.string.settingsMenu_defaultMapApp),
-            Icons.Filled.Map,
-        ) { openDefaultMapAppSettings(context) }
-        if (onNotificationSettings != null) {
-            HubRow(
-                stringResource(R.string.settingsMenu_notificationSettings),
-                Icons.Filled.NotificationsActive,
-                onNotificationSettings,
+            // Always available (opens a system screen, no backend dependency): make
+            // KCC the app Android offers for map links. Honest label — it opens the
+            // system "open by default" screen where the member picks KCC; there is
+            // no OS default-navigator role to set, and no API to set one.
+            SettingsDestinationRow(
+                stringResource(R.string.settingsMenu_defaultMapApp),
+                Icons.Filled.Map,
+                onClick = { openDefaultMapAppSettings(context) },
             )
-        }
-        if (onBlockedUsers != null) {
-            HubRow(
-                stringResource(R.string.settings_blockedUsers),
-                Icons.Filled.Block,
-                onBlockedUsers,
-            )
-        }
-        if (onPartnerStats != null) {
-            HubRow(
-                stringResource(R.string.settingsMenu_partnerStats),
-                Icons.Filled.BarChart,
-                onPartnerStats,
-            )
-        }
-        if (onFeedback != null) {
-            HubRow(
-                stringResource(R.string.settingsMenu_feedback),
-                Icons.Filled.BugReport,
-                onFeedback,
-            )
-        }
-        if (onDeleteAccount != null) {
-            HubRow(
-                stringResource(R.string.settingsMenu_deleteAccount),
-                Icons.Filled.DeleteForever,
-                onDeleteAccount,
-            )
+            if (onNotificationSettings != null) {
+                SettingsDestinationRow(
+                    stringResource(R.string.settingsMenu_notificationSettings),
+                    Icons.Filled.NotificationsActive,
+                    onNotificationSettings,
+                )
+            }
+            if (onBlockedUsers != null) {
+                SettingsDestinationRow(
+                    stringResource(R.string.settings_blockedUsers),
+                    Icons.Filled.Block,
+                    onBlockedUsers,
+                )
+            }
+            if (onPartnerStats != null) {
+                SettingsDestinationRow(
+                    stringResource(R.string.settingsMenu_partnerStats),
+                    Icons.Filled.BarChart,
+                    onPartnerStats,
+                )
+            }
+            if (onFeedback != null) {
+                SettingsDestinationRow(
+                    stringResource(R.string.settingsMenu_feedback),
+                    Icons.Filled.BugReport,
+                    onFeedback,
+                )
+            }
+            if (onDeleteAccount != null) {
+                SettingsDestinationRow(
+                    stringResource(R.string.settingsMenu_deleteAccount),
+                    Icons.Filled.DeleteForever,
+                    onDeleteAccount,
+                    destructive = true,
+                )
+            }
         }
 
         // Appearance: Automatic / Light / Dark. Automatic is the default and
@@ -157,32 +164,33 @@ fun SettingsScreen(
         // sunset->sunrise, battery saver), which is the point of the setting.
         // Applies immediately: the store's StateFlow re-themes the running app,
         // so this screen restyles under the user's finger with no restart.
-        SettingsSectionHeader(stringResource(R.string.settingsMenu_appearanceSection))
-        val themeController = LocalThemeController.current
-        ThemeOptionRow(
-            label = stringResource(R.string.settingsMenu_themeAutomatic),
-            description = stringResource(R.string.settingsMenu_themeAutomaticDescription),
-            icon = Icons.Filled.BrightnessAuto,
-            selected = themeController.preference == ThemePreference.SYSTEM,
-            testTag = SETTINGS_THEME_AUTOMATIC_TAG,
-            onClick = { themeController.setPreference(ThemePreference.SYSTEM) },
-        )
-        ThemeOptionRow(
-            label = stringResource(R.string.settingsMenu_themeLight),
-            description = stringResource(R.string.settingsMenu_themeLightDescription),
-            icon = Icons.Filled.LightMode,
-            selected = themeController.preference == ThemePreference.LIGHT,
-            testTag = SETTINGS_THEME_LIGHT_TAG,
-            onClick = { themeController.setPreference(ThemePreference.LIGHT) },
-        )
-        ThemeOptionRow(
-            label = stringResource(R.string.settingsMenu_themeDark),
-            description = stringResource(R.string.settingsMenu_themeDarkDescription),
-            icon = Icons.Filled.DarkMode,
-            selected = themeController.preference == ThemePreference.DARK,
-            testTag = SETTINGS_THEME_DARK_TAG,
-            onClick = { themeController.setPreference(ThemePreference.DARK) },
-        )
+        SettingsGroup(stringResource(R.string.settingsMenu_appearanceSection)) {
+            val themeController = LocalThemeController.current
+            ThemeOptionRow(
+                label = stringResource(R.string.settingsMenu_themeAutomatic),
+                description = stringResource(R.string.settingsMenu_themeAutomaticDescription),
+                icon = Icons.Filled.BrightnessAuto,
+                selected = themeController.preference == ThemePreference.SYSTEM,
+                testTag = SETTINGS_THEME_AUTOMATIC_TAG,
+                onClick = { themeController.setPreference(ThemePreference.SYSTEM) },
+            )
+            ThemeOptionRow(
+                label = stringResource(R.string.settingsMenu_themeLight),
+                description = stringResource(R.string.settingsMenu_themeLightDescription),
+                icon = Icons.Filled.LightMode,
+                selected = themeController.preference == ThemePreference.LIGHT,
+                testTag = SETTINGS_THEME_LIGHT_TAG,
+                onClick = { themeController.setPreference(ThemePreference.LIGHT) },
+            )
+            ThemeOptionRow(
+                label = stringResource(R.string.settingsMenu_themeDark),
+                description = stringResource(R.string.settingsMenu_themeDarkDescription),
+                icon = Icons.Filled.DarkMode,
+                selected = themeController.preference == ThemePreference.DARK,
+                testTag = SETTINGS_THEME_DARK_TAG,
+                onClick = { themeController.setPreference(ThemePreference.DARK) },
+            )
+        }
 
         // Language: Svenska / English. Swedish is the app default (res/values/);
         // English is the res/values-en/ override. The choice goes through the
@@ -197,70 +205,78 @@ fun SettingsScreen(
         // locale (explicit app-locale if set, else the system locale) and updated
         // on tap so the radio reflects the choice under the user's finger, before
         // the recreation.
-        SettingsSectionHeader(stringResource(R.string.settingsMenu_languageSection))
-        // The effective locale the app is actually rendering in — used to seed the
-        // picker when no explicit app-language has been chosen (empty app-locale
-        // list = follow system), so an English-system device shows English selected
-        // rather than defaulting the radio to Swedish while the UI reads English.
-        val configuration = LocalConfiguration.current
-        val systemLanguageTag = ConfigurationCompat.getLocales(configuration).get(0)?.toLanguageTag()
-        var selectedLanguage by remember(systemLanguageTag) {
-            mutableStateOf(currentAppLanguage(systemLanguageTag))
+        SettingsGroup(stringResource(R.string.settingsMenu_languageSection)) {
+            // The effective locale the app is actually rendering in — used to seed the
+            // picker when no explicit app-language has been chosen (empty app-locale
+            // list = follow system), so an English-system device shows English selected
+            // rather than defaulting the radio to Swedish while the UI reads English.
+            val configuration = LocalConfiguration.current
+            val systemLanguageTag =
+                ConfigurationCompat.getLocales(configuration).get(0)?.toLanguageTag()
+            var selectedLanguage by
+                remember(systemLanguageTag) {
+                    mutableStateOf(currentAppLanguage(systemLanguageTag))
+                }
+            LanguageOptionRow(
+                label = stringResource(R.string.settingsMenu_languageSwedish),
+                selected = selectedLanguage == AppLanguage.SWEDISH,
+                testTag = SETTINGS_LANGUAGE_SWEDISH_TAG,
+                onClick = {
+                    selectedLanguage = AppLanguage.SWEDISH
+                    applyAppLanguage(AppLanguage.SWEDISH)
+                },
+            )
+            LanguageOptionRow(
+                label = stringResource(R.string.settingsMenu_languageEnglish),
+                selected = selectedLanguage == AppLanguage.ENGLISH,
+                testTag = SETTINGS_LANGUAGE_ENGLISH_TAG,
+                onClick = {
+                    selectedLanguage = AppLanguage.ENGLISH
+                    applyAppLanguage(AppLanguage.ENGLISH)
+                },
+            )
         }
-        LanguageOptionRow(
-            label = stringResource(R.string.settingsMenu_languageSwedish),
-            selected = selectedLanguage == AppLanguage.SWEDISH,
-            testTag = SETTINGS_LANGUAGE_SWEDISH_TAG,
-            onClick = {
-                selectedLanguage = AppLanguage.SWEDISH
-                applyAppLanguage(AppLanguage.SWEDISH)
-            },
-        )
-        LanguageOptionRow(
-            label = stringResource(R.string.settingsMenu_languageEnglish),
-            selected = selectedLanguage == AppLanguage.ENGLISH,
-            testTag = SETTINGS_LANGUAGE_ENGLISH_TAG,
-            onClick = {
-                selectedLanguage = AppLanguage.ENGLISH
-                applyAppLanguage(AppLanguage.ENGLISH)
-            },
-        )
 
-        SettingsSectionHeader(stringResource(R.string.settingsMenu_communitySection))
-        HubRow(
-            stringResource(R.string.settingsMenu_instagram),
-            Icons.Filled.Groups,
-        ) { openExternalUrl(context, instagramUrl) }
-        HubRow(
-            stringResource(R.string.settingsMenu_reviewPlayStore),
-            Icons.Filled.Stars,
-        ) { openPlayStoreListing(context) }
+        SettingsGroup(stringResource(R.string.settingsMenu_communitySection)) {
+            SettingsDestinationRow(
+                stringResource(R.string.settingsMenu_instagram),
+                Icons.Filled.Groups,
+                onClick = { openExternalUrl(context, instagramUrl) },
+            )
+            SettingsDestinationRow(
+                stringResource(R.string.settingsMenu_reviewPlayStore),
+                Icons.Filled.Stars,
+                onClick = { openPlayStoreListing(context) },
+            )
+        }
 
         // About the app: the bundled "Vad är nytt" changelog. Always available —
         // the data ships with the APK, so unlike the rows above this needs no
         // `if (callback != null)` availability guard.
-        SettingsSectionHeader(stringResource(R.string.settingsMenu_aboutSection))
-        HubRow(
-            stringResource(R.string.settingsMenu_whatsNew),
-            Icons.Filled.NewReleases,
-            onWhatsNew,
-        )
+        SettingsGroup(stringResource(R.string.settingsMenu_aboutSection)) {
+            SettingsDestinationRow(
+                stringResource(R.string.settingsMenu_whatsNew),
+                Icons.Filled.NewReleases,
+                onWhatsNew,
+            )
+        }
 
-        SettingsSectionHeader(stringResource(R.string.settingsMenu_legalSection))
-        HubRow(
-            stringResource(R.string.settingsMenu_privacy),
-            Icons.Filled.Lock,
-        ) { openExternalUrl(context, privacyUrl) }
-        HubRow(
-            stringResource(R.string.settingsMenu_terms),
-            Icons.Filled.Description,
-        ) { openExternalUrl(context, termsUrl) }
+        SettingsGroup(stringResource(R.string.settingsMenu_legalSection)) {
+            SettingsDestinationRow(
+                stringResource(R.string.settingsMenu_privacy),
+                Icons.Filled.Lock,
+                onClick = { openExternalUrl(context, privacyUrl) },
+            )
+            SettingsDestinationRow(
+                stringResource(R.string.settingsMenu_terms),
+                Icons.Filled.Description,
+                onClick = { openExternalUrl(context, termsUrl) },
+            )
+        }
 
         Text(
             text = stringResource(R.string.settingsMenu_version, BuildConfig.VERSION_NAME),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = KccSpacing.s4),
+            modifier = Modifier.fillMaxWidth().padding(top = KccSpacing.s4),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -278,12 +294,11 @@ const val SETTINGS_LANGUAGE_SWEDISH_TAG = "settings_language_swedish"
 const val SETTINGS_LANGUAGE_ENGLISH_TAG = "settings_language_english"
 
 /**
- * The language option to show as selected. Prefers the explicit AndroidX per-app
- * application locale; when that list is empty (no explicit choice = follow
- * system) it falls back to [systemLanguageTag], the effective locale the app is
- * actually rendering in — so the radio matches the visible UI instead of always
- * snapping to Swedish. Framework glue (AppCompat), kept out of [AppLanguage] so
- * the tag→option mapping stays a pure JVM seam.
+ * The language option to show as selected. Prefers the explicit AndroidX per-app application
+ * locale; when that list is empty (no explicit choice = follow system) it falls back to
+ * [systemLanguageTag], the effective locale the app is actually rendering in — so the radio matches
+ * the visible UI instead of always snapping to Swedish. Framework glue (AppCompat), kept out of
+ * [AppLanguage] so the tag→option mapping stays a pure JVM seam.
  */
 private fun currentAppLanguage(systemLanguageTag: String?): AppLanguage {
     val locales = AppCompatDelegate.getApplicationLocales()
@@ -292,26 +307,23 @@ private fun currentAppLanguage(systemLanguageTag: String?): AppLanguage {
 }
 
 /**
- * Applies (and persists, via autoStoreLocales) the chosen app language through
- * the AndroidX per-app language API. This recreates the activity so every screen
- * re-reads its strings in the new language immediately. Framework glue.
+ * Applies (and persists, via autoStoreLocales) the chosen app language through the AndroidX per-app
+ * language API. This recreates the activity so every screen re-reads its strings in the new
+ * language immediately. Framework glue.
  */
 private fun applyAppLanguage(language: AppLanguage) {
-    AppCompatDelegate.setApplicationLocales(
-        LocaleListCompat.forLanguageTags(language.languageTag),
-    )
+    AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(language.languageTag))
 }
 
 /**
- * One Appearance choice: icon, label + explanatory line, and a trailing radio
- * showing which is active.
+ * One Appearance choice: icon, label + explanatory line, and a trailing radio showing which is
+ * active.
  *
- * Mirrors [HubRow]'s Surface/Row shape so the section sits visually with the
- * rest of Settings, but carries `selectableGroup`-style semantics
- * ([Role.RadioButton] + `selected`) instead of a button's: these three rows are
- * a single-choice set, and TalkBack should announce them as such. The radio is
- * non-clickable — the whole row is the target, so the click is declared once on
- * the Surface and the radio is decoration.
+ * Mirrors [HubRow]'s Surface/Row shape so the section sits visually with the rest of Settings, but
+ * carries `selectableGroup`-style semantics ([Role.RadioButton] + `selected`) instead of a
+ * button's: these three rows are a single-choice set, and TalkBack should announce them as such.
+ * The radio is non-clickable — the whole row is the target, so the click is declared once on the
+ * Surface and the radio is decoration.
  */
 @Composable
 private fun ThemeOptionRow(
@@ -323,13 +335,11 @@ private fun ThemeOptionRow(
     onClick: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag(testTag)
-            .semantics { role = Role.RadioButton },
+        modifier = Modifier.fillMaxWidth().testTag(testTag).semantics { role = Role.RadioButton },
         shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp,
+        color =
+            if (selected) MaterialTheme.colorScheme.secondaryContainer
+            else MaterialTheme.colorScheme.surface,
         selected = selected,
         onClick = onClick,
     ) {
@@ -352,7 +362,7 @@ private fun ThemeOptionRow(
                 )
                 Text(
                     text = description,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -368,13 +378,13 @@ private fun ThemeOptionRow(
 }
 
 /**
- * One Language choice: a globe icon, the language's own-language name, and a
- * trailing radio showing which is active.
+ * One Language choice: a globe icon, the language's own-language name, and a trailing radio showing
+ * which is active.
  *
- * Mirrors [ThemeOptionRow]'s Surface/Row shape and single-choice semantics
- * ([Role.RadioButton] + `selected`, whole row is the target, radio is
- * decoration) so the two settings sections read the same — but carries no
- * explanatory line: "Svenska"/"English" are self-evident and shown untranslated.
+ * Mirrors [ThemeOptionRow]'s Surface/Row shape and single-choice semantics ([Role.RadioButton] +
+ * `selected`, whole row is the target, radio is decoration) so the two settings sections read the
+ * same — but carries no explanatory line: "Svenska"/"English" are self-evident and shown
+ * untranslated.
  */
 @Composable
 private fun LanguageOptionRow(
@@ -384,13 +394,11 @@ private fun LanguageOptionRow(
     onClick: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag(testTag)
-            .semantics { role = Role.RadioButton },
+        modifier = Modifier.fillMaxWidth().testTag(testTag).semantics { role = Role.RadioButton },
         shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp,
+        color =
+            if (selected) MaterialTheme.colorScheme.secondaryContainer
+            else MaterialTheme.colorScheme.surface,
         selected = selected,
         onClick = onClick,
     ) {
@@ -423,19 +431,54 @@ private fun LanguageOptionRow(
 }
 
 @Composable
-private fun SettingsSectionHeader(title: String) {
-    Text(
-        text = title,
-        modifier = Modifier.padding(start = KccSpacing.s2, top = KccSpacing.s2),
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.primary,
-    )
+private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+        Text(
+            text = title,
+            modifier = Modifier.semantics { heading() },
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        OutlinedCard(modifier = Modifier.fillMaxWidth()) { Column(content = content) }
+    }
+}
+
+/** Local settings row: preserve each availability guard and callback. */
+@Composable
+private fun SettingsDestinationRow(
+    label: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    destructive: Boolean = false,
+) {
+    val tint =
+        if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+    Surface(onClick = onClick, color = MaterialTheme.colorScheme.surface) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+        ) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
+            Text(
+                label,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyLarge,
+                color = tint,
+            )
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
 
 /**
- * Opens an external web document via ACTION_VIEW, restricted to http(s) so a
- * misconfigured/empty URL resource can never launch a non-web intent. Silently
- * no-ops if there is no browser.
+ * Opens an external web document via ACTION_VIEW, restricted to http(s) so a misconfigured/empty
+ * URL resource can never launch a non-web intent. Silently no-ops if there is no browser.
  */
 private fun openExternalUrl(context: Context, url: String) {
     val uri = Uri.parse(url.trim())
@@ -443,7 +486,7 @@ private fun openExternalUrl(context: Context, url: String) {
     if (scheme != "http" && scheme != "https") return
     try {
         context.startActivity(
-            Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
     } catch (_: ActivityNotFoundException) {
         // No browser available — nothing to open.
@@ -451,9 +494,8 @@ private fun openExternalUrl(context: Context, url: String) {
 }
 
 /**
- * Opens the Play-store listing for this app: the Play-store app via a
- * `market://` intent, falling back to the https listing in a browser when the
- * Play-store app is unavailable.
+ * Opens the Play-store listing for this app: the Play-store app via a `market://` intent, falling
+ * back to the https listing in a browser when the Play-store app is unavailable.
  */
 private fun openPlayStoreListing(context: Context) {
     val packageName = context.packageName
@@ -465,12 +507,9 @@ private fun openPlayStoreListing(context: Context) {
             // falls back to the https listing when Play Store is unavailable.
             Intent(Intent.ACTION_VIEW, marketUri)
                 .setPackage("com.android.vending")
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
     } catch (_: ActivityNotFoundException) {
-        openExternalUrl(
-            context,
-            "https://play.google.com/store/apps/details?id=$packageName",
-        )
+        openExternalUrl(context, "https://play.google.com/store/apps/details?id=$packageName")
     }
 }

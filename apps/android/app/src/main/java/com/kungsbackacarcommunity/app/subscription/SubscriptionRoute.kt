@@ -15,16 +15,15 @@ import com.kungsbackacarcommunity.app.R
 import kotlinx.coroutines.launch
 
 /**
- * Subscription integration route (Phase 12 slice 24): wires the billing
- * repository + verifier into a [SubscriptionCoordinator] and drives the screen.
+ * Subscription integration route (Phase 12 slice 24): wires the billing repository + verifier into
+ * a [SubscriptionCoordinator] and drives the screen.
  *
- * Launching Play Billing needs an [Activity]; we resolve it from the local
- * context and disable the subscribe button when it is null (or when billing is
- * unavailable on this build). The billing repository is a single shared instance
- * created in MainActivity and reused across screen openings, so this route does
- * NOT close it on dispose — endConnection here would leave the reused client
- * unusable on re-entry. Its lifecycle is owned by the Activity/app; the
- * coordinator (re)connects on demand.
+ * Launching Play Billing needs an [Activity]; we resolve it from the local context and disable the
+ * subscribe button when it is null (or when billing is unavailable on this build). The billing
+ * repository is a single shared instance created in MainActivity and reused across screen openings,
+ * so this route does NOT close it on dispose — endConnection here would leave the reused client
+ * unusable on re-entry. Its lifecycle is owned by the Activity/app; the coordinator (re)connects on
+ * demand.
  */
 @Composable
 fun SubscriptionRoute(
@@ -37,8 +36,7 @@ fun SubscriptionRoute(
 ) {
     val activity: Activity? = LocalActivity.current
     val context = LocalContext.current
-    val managementUnavailableMessage =
-        stringResource(R.string.subscription_manageUnavailable)
+    val managementUnavailableMessage = stringResource(R.string.subscription_manageUnavailable)
     val coordinator = remember(billing, verifier) { SubscriptionCoordinator(billing, verifier) }
     val status by coordinator.status.collectAsState()
     val ownedPurchase by coordinator.ownedPurchase.collectAsState()
@@ -65,7 +63,7 @@ fun SubscriptionRoute(
     // backend correctly retains Supporter; block another change in that window.
     val canChangePlan =
         status is PurchaseFlowStatus.Success &&
-        ownedPurchase?.state == OwnedPurchaseState.Purchased &&
+            ownedPurchase?.state == OwnedPurchaseState.Purchased &&
             ownedProductId != null &&
             ownedProductId == currentProductId
 
@@ -98,12 +96,7 @@ fun SubscriptionRoute(
                                 )
                             }
                     coordinator.subscribe(productId) {
-                        billing.launchPurchase(
-                            a,
-                            productId,
-                            obfuscatedAccountId,
-                            replacement,
-                        )
+                        billing.launchPurchase(a, productId, obfuscatedAccountId, replacement)
                     }
                 }
             }
@@ -114,14 +107,11 @@ fun SubscriptionRoute(
                 applicationId = context.packageName,
                 productId = productId,
                 onUnavailable = {
-                    Toast.makeText(
-                        context,
-                        managementUnavailableMessage,
-                        Toast.LENGTH_SHORT,
-                    ).show()
+                    Toast.makeText(context, managementUnavailableMessage, Toast.LENGTH_SHORT).show()
                 },
             )
         },
         onBack = onBack,
+        onRestore = { scope.launch { coordinator.reconcileOwnedPurchases() } },
     )
 }
