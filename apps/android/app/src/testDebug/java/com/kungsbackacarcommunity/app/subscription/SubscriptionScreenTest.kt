@@ -151,6 +151,7 @@ class SubscriptionScreenTest {
 
         composeTestRule
             .onNodeWithText(str(R.string.subscription_downgradePlusAction))
+            .performScrollTo()
             .performClick()
 
         assertEquals(PLUS_MONTHLY_PRODUCT_ID, selectedProductId)

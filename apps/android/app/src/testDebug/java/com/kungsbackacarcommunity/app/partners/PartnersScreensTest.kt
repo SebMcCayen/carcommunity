@@ -218,6 +218,7 @@ class PartnersScreensTest {
         }
         composeTestRule
             .onNodeWithText(str(R.string.partnerOffers_upgradeForMemberOffers))
+            .performScrollTo()
             .assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.partnerOffers_showCode)).assertDoesNotExist()
         composeTestRule.onNodeWithText(str(R.string.partnerOffers_saveOffer)).assertDoesNotExist()
