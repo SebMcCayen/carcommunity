@@ -54,6 +54,17 @@ jobs:
         working-directory: functions
         run: pnpm run lockfile:check
 
+      - name: Validate standalone Cloud Build npm install
+        # The deploy uploads only functions/. npm 10 validates conditional
+        # cross-major overrides differently from pnpm and npm 11; reproduce
+        # that install before deploying, outside the pnpm workspace.
+        env:
+          FUNCTIONS_NPM_CHECK: ${{ runner.temp }}/functions-npm-check
+        run: |
+          mkdir -p "$FUNCTIONS_NPM_CHECK"
+          cp functions/package.json functions/package-lock.json "$FUNCTIONS_NPM_CHECK/"
+          npx --yes npm@10.9.9 ci --prefix "$FUNCTIONS_NPM_CHECK" --omit=dev --ignore-scripts --no-audit --no-fund
+
       - name: Lint
         working-directory: functions
         run: pnpm run lint
