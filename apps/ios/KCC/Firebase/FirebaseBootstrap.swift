@@ -1,7 +1,26 @@
 import DeviceCheck
 import FirebaseAppCheck
 import FirebaseCore
+import FirebaseFirestore
 import Foundation
+
+/// Plaintext is permitted only for an explicitly selected local demo in Debug.
+enum LocalFirestoreEmulator {
+    static func settings(
+        projectID: String?, endpoint: String?, isDebugBuild: Bool
+    ) -> FirestoreSettings? {
+        guard isDebugBuild, projectID?.hasPrefix("demo-") == true,
+              let emulator = FirebaseEmulatorHost.parse(endpoint),
+              ["127.0.0.1", "localhost"].contains(emulator.host)
+        else { return nil }
+        let settings = FirestoreSettings()
+        settings.host = "\(emulator.host):\(emulator.port)"
+        // Firebase 12.18 useEmulator changes the host but retains SSL.
+        // The loopback emulator speaks plaintext HTTP/2.
+        settings.isSSLEnabled = false
+        return settings
+    }
+}
 
 enum FirebaseAppCheckProviderKind: Equatable {
     case debug
@@ -71,6 +90,16 @@ enum FirebaseBootstrap {
         // builds prefer App Attest and fall back to DeviceCheck where needed.
         AppCheck.setAppCheckProviderFactory(KCCAppCheckProviderFactory())
         FirebaseApp.configure(options: options)
+        #if DEBUG
+        if let settings = LocalFirestoreEmulator.settings(
+            projectID: options.projectID,
+            endpoint: ProcessInfo.processInfo.environment["FIREBASE_FIRESTORE_EMULATOR_HOST"],
+            isDebugBuild: true
+        ) {
+            // Configure before any repository starts a Firestore listener.
+            Firestore.firestore().settings = settings
+        }
+        #endif
         isConfigured = true
     }
 }
