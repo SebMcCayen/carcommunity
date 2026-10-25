@@ -1,6 +1,11 @@
 package com.kungsbackacarcommunity.app.subscription
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -16,8 +21,7 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class SubscriptionScreenTest {
-    @get:Rule
-    val composeTestRule = createComposeRule()
+    @get:Rule val composeTestRule = createComposeRule()
 
     private fun str(id: Int) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
@@ -78,9 +82,7 @@ class SubscriptionScreenTest {
             onManageSubscription = { managedProductId = it },
         )
 
-        composeTestRule
-            .onNodeWithText(str(R.string.subscription_manageAction))
-            .performClick()
+        composeTestRule.onNodeWithText(str(R.string.subscription_manageAction)).performClick()
 
         assertEquals(SUPPORTER_MONTHLY_PRODUCT_ID, managedProductId)
     }
@@ -111,9 +113,7 @@ class SubscriptionScreenTest {
             canManageSubscription = false,
         )
 
-        composeTestRule
-            .onNodeWithText(str(R.string.subscription_manageAction))
-            .assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.subscription_manageAction)).assertDoesNotExist()
     }
 
     @Test
@@ -154,5 +154,64 @@ class SubscriptionScreenTest {
             .performClick()
 
         assertEquals(PLUS_MONTHLY_PRODUCT_ID, selectedProductId)
+    }
+
+    @Test
+    fun planningPrices_areNotRenderedAsStorePrices() {
+        var purchasedProductId: String? = null
+        setScreen(
+            isActiveMember = false,
+            status = PurchaseFlowStatus.Idle,
+            onSubscribe = { purchasedProductId = it },
+        )
+        composeTestRule.onNodeWithText(str(R.string.subscription_plusTitle)).assertDoesNotExist()
+        composeTestRule
+            .onNodeWithText(str(R.string.subscription_supporterTitle))
+            .assertDoesNotExist()
+        composeTestRule
+            .onNode(hasText(str(R.string.subscription_subscribePlusAction)) and hasClickAction())
+            .performScrollTo()
+            .performClick()
+        assertEquals(PLUS_MONTHLY_PRODUCT_ID, purchasedProductId)
+    }
+
+    @Test
+    fun explicitRestore_usesCallback_andIsDisabledDuringVerification() {
+        var restores = 0
+        var status by
+            androidx.compose.runtime.mutableStateOf<PurchaseFlowStatus>(PurchaseFlowStatus.Idle)
+        composeTestRule.setContent {
+            KccTheme {
+                SubscriptionScreen(
+                    isActiveMember = false,
+                    currentTier = null,
+                    status = status,
+                    canSubscribe = true,
+                    canChangePlan = false,
+                    canManageSubscription = false,
+                    onSubscribe = {},
+                    onManageSubscription = {},
+                    onBack = {},
+                    onRestore = { restores++ },
+                )
+            }
+        }
+        composeTestRule
+            .onNodeWithText(str(R.string.subscription_restoreAction))
+            .performScrollTo()
+            .performClick()
+        assertEquals(1, restores)
+        composeTestRule.runOnIdle { status = PurchaseFlowStatus.Verifying }
+        composeTestRule
+            .onNodeWithText(str(R.string.subscription_restoreAction))
+            .assertIsNotEnabled()
+        composeTestRule
+            .onNode(hasText(str(R.string.subscription_subscribePlusAction)) and hasClickAction())
+            .assertIsNotEnabled()
+        composeTestRule
+            .onNode(
+                hasText(str(R.string.subscription_subscribeSupporterAction)) and hasClickAction()
+            )
+            .assertIsNotEnabled()
     }
 }

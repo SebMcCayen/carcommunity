@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.notifications
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -10,10 +11,17 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.WavingHand
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -22,6 +30,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
@@ -61,78 +70,68 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * In-app notification inbox (Phase 12 slice 21). Stateless: renders [state],
- * reports a tap on an unread item (→ mark read), mark-all-read, and the two
- * delete actions. Uses a LazyColumn so only visible rows compose (the inbox is
- * durable and can hold many items).
+ * In-app notification inbox (Phase 12 slice 21). Stateless: renders [state], reports a tap on an
+ * unread item (→ mark read), mark-all-read, and the two delete actions. Uses a LazyColumn so only
+ * visible rows compose (the inbox is durable and can hold many items).
  *
- * DELETING. A row is swiped away RIGHT-TO-LEFT ([SwipeToDismissBoxValue.EndToStart])
- * and no other way: one direction rather than two, so a horizontal wobble
- * during a vertical scroll has only half the chance of arming a delete, and
- * that direction specifically because a left-to-right drag is the system back
- * gesture's territory. The swipe must also cross HALF the row's width before it
- * counts, which is deliberate — a delete here is not undoable, so it should
- * take a committed gesture rather than a flick.
+ * DELETING. A row is swiped away RIGHT-TO-LEFT ([SwipeToDismissBoxValue.EndToStart]) and no other
+ * way: one direction rather than two, so a horizontal wobble during a vertical scroll has only half
+ * the chance of arming a delete, and that direction specifically because a left-to-right drag is
+ * the system back gesture's territory. The swipe must also cross HALF the row's width before it
+ * counts, which is deliberate — a delete here is not undoable, so it should take a committed
+ * gesture rather than a flick.
  *
- * A swipe is a pointer gesture and therefore invisible to a screen reader, so
- * every row ALSO carries a semantics custom action ("Delete notification").
- * TalkBack surfaces it in the actions menu, which makes deleting reachable
- * without any dragging at all; it calls exactly the same [onDeleteNotification]
- * the swipe does.
+ * A swipe is a pointer gesture and therefore invisible to a screen reader, so every row ALSO
+ * carries a semantics custom action ("Delete notification"). TalkBack surfaces it in the actions
+ * menu, which makes deleting reachable without any dragging at all; it calls exactly the same
+ * [onDeleteNotification] the swipe does.
  *
- * "Delete all" is deliberately small, quiet text rather than a button — it is a
- * rarely-wanted, irreversible sweep, not something to invite — and it is behind
- * a confirmation dialog for the same reason.
+ * "Delete all" is deliberately small, quiet text rather than a button — it is a rarely-wanted,
+ * irreversible sweep, not something to invite — and it is behind a confirmation dialog for the same
+ * reason.
  *
- * WHEN IT ARRIVED. Every row carries its own timestamp, on the same line as the
- * category so it costs the card no extra height. The tiering — relative for the
- * first hour, then a clock time, then a date — lives in [NotificationTimeFormat];
- * the zone/locale/12-hour facts are the conversation screens' own
- * [ChatDateContext], reused rather than reinvented so the inbox cannot drift
- * into a third date/time style. A row with no timestamp shows none.
+ * WHEN IT ARRIVED. Every row carries its own timestamp, on the same line as the category so it
+ * costs the card no extra height. The tiering — relative for the first hour, then a clock time,
+ * then a date — lives in [NotificationTimeFormat]; the zone/locale/12-hour facts are the
+ * conversation screens' own [ChatDateContext], reused rather than reinvented so the inbox cannot
+ * drift into a third date/time style. A row with no timestamp shows none.
  *
- * The caller removes rows optimistically (see [NotificationsCoordinator]); this
- * screen just renders what it is given, so an empty [state] renders the normal
- * empty state whether the inbox emptied by delete or was never filled.
+ * The caller removes rows optimistically (see [NotificationsCoordinator]); this screen just renders
+ * what it is given, so an empty [state] renders the normal empty state whether the inbox emptied by
+ * delete or was never filled.
  *
- * FRIEND REQUESTS: a row announcing an incoming friend request answers it in
- * place, via Accept/Decline, instead of making the user find the Friends page —
- * the notification is where they were told about it, so it is where the choice
- * belongs. [pendingFriendRequestIds] maps a requester uid to their still-pending
- * request id (the live `friend-list` snapshot); a row is actionable only while
- * it resolves through that map, so a request already answered elsewhere shows no
- * buttons at all. See [Notifications.pendingFriendRequestId].
+ * FRIEND REQUESTS: a row announcing an incoming friend request answers it in place, via
+ * Accept/Decline, instead of making the user find the Friends page — the notification is where they
+ * were told about it, so it is where the choice belongs. [pendingFriendRequestIds] maps a requester
+ * uid to their still-pending request id (the live `friend-list` snapshot); a row is actionable only
+ * while it resolves through that map, so a request already answered elsewhere shows no buttons at
+ * all. See [Notifications.pendingFriendRequestId].
  *
- * The buttons deliberately reflect the SERVER's answer rather than guessing:
- * there is no optimistic "you are now friends" flip, because a refused accept
- * (the pair was blocked meanwhile, the request was withdrawn) would leave the
- * row asserting a friendship that does not exist. The coordinator re-fetches
- * after every response and the row re-derives from the new snapshot.
+ * The buttons deliberately reflect the SERVER's answer rather than guessing: there is no optimistic
+ * "you are now friends" flip, because a refused accept (the pair was blocked meanwhile, the request
+ * was withdrawn) would leave the row asserting a friendship that does not exist. The coordinator
+ * re-fetches after every response and the row re-derives from the new snapshot.
  *
- * CONVOY INVITES. A convoy-invite row is TAPPABLE and opens the convoy list,
- * where that invite is accepted or declined. Before this it rendered as a plain,
- * inert card: only an UNREAD row was clickable at all, and the only thing that
- * click did was mark it read — so an invite could be read about here but never
- * acted on, which is exactly the "tapping does nothing" report.
+ * CONVOY INVITES. A convoy-invite row is TAPPABLE and opens the convoy list, where that invite is
+ * accepted or declined. Before this it rendered as a plain, inert card: only an UNREAD row was
+ * clickable at all, and the only thing that click did was mark it read — so an invite could be read
+ * about here but never acted on, which is exactly the "tapping does nothing" report.
  *
- * TITLE. [showTitle] is false when the inbox is a SECTION of something that has
- * already named it — the chat hub, where the member arrived by tapping (or
- * swiping to) a tab labelled "Notifications". A second "Notifications" header
- * directly under that tab says nothing the tab has not already said. It stays
- * true for the standalone full-screen route (a push tap), where the header is
- * the only thing naming the screen.
+ * TITLE. [showTitle] is false when the inbox is a SECTION of something that has already named it —
+ * the chat hub, where the member arrived by tapping (or swiping to) a tab labelled "Notifications".
+ * A second "Notifications" header directly under that tab says nothing the tab has not already
+ * said. It stays true for the standalone full-screen route (a push tap), where the header is the
+ * only thing naming the screen.
  *
- * A convoy row is also re-derived against live convoy state ([convoyLink]),
- * because the notification itself is a historical record that is never rewritten
- * — the same staleness [Notifications.pendingFriendRequestId] handles for friend
- * requests. A row whose convoy has ENDED is struck through AND labelled
- * "Konvojen är avslutad" AND carries that in its content description:
- * strikethrough alone is a visual-only signal that a screen reader does not
- * announce and a hurried eye misses. It navigates nowhere, because the only
- * screen it could open would have nothing on it — the explanation is already on
- * the row, which is better than a screen that repeats it. An invite that has
- * merely been ANSWERED keeps its tap (the convoy is alive and worth opening) but
- * says so, so it stops implying something is waiting.
+ * A convoy row is also re-derived against live convoy state ([convoyLink]), because the
+ * notification itself is a historical record that is never rewritten — the same staleness
+ * [Notifications.pendingFriendRequestId] handles for friend requests. A row whose convoy has ENDED
+ * is struck through AND labelled "Konvojen är avslutad" AND carries that in its content
+ * description: strikethrough alone is a visual-only signal that a screen reader does not announce
+ * and a hurried eye misses. It navigates nowhere, because the only screen it could open would have
+ * nothing on it — the explanation is already on the row, which is better than a screen that repeats
+ * it. An invite that has merely been ANSWERED keeps its tap (the convoy is alive and worth opening)
+ * but says so, so it stops implying something is waiting.
  */
 @Composable
 fun NotificationsScreen(
@@ -182,16 +181,11 @@ fun NotificationsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (showTitle) {
-                item {
-                    AeroPageTitle(stringResource(R.string.notifications_title))
-                }
+                item { AeroPageTitle(stringResource(R.string.notifications_title)) }
             }
 
             when (state) {
-                NotificationsState.Loading ->
-                    item {
-                        CircularProgressIndicator()
-                    }
+                NotificationsState.Loading -> item { CircularProgressIndicator() }
 
                 is NotificationsState.Error ->
                     item {
@@ -229,7 +223,7 @@ fun NotificationsScreen(
                                                 R.string.notifications_deleteError
                                             NotificationDeleteError.ALL ->
                                                 R.string.notifications_deleteAllError
-                                        },
+                                        }
                                     ),
                                 onDismiss = onDismissDeleteError,
                             )
@@ -237,7 +231,10 @@ fun NotificationsScreen(
                     }
                     if (Notifications.unreadCount(state.items) > 0) {
                         item {
-                            OutlinedButton(onClick = onMarkAllRead, modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = onMarkAllRead,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
                                 Text(text = stringResource(R.string.notifications_markAllRead))
                             }
                         }
@@ -251,9 +248,7 @@ fun NotificationsScreen(
                             )
                         }
                     } else {
-                        item {
-                            DeleteAllAction(onClick = { confirmDeleteAll = true })
-                        }
+                        item { DeleteAllAction(onClick = { confirmDeleteAll = true }) }
                         items(state.items, key = { it.id }) { item ->
                             val requestId =
                                 Notifications.pendingFriendRequestId(item, pendingFriendRequestIds)
@@ -262,10 +257,7 @@ fun NotificationsScreen(
                             // ends while the inbox is open restyles its rows on
                             // the next snapshot instead of staying inviting.
                             val convoyState =
-                                ConvoyNotifications.rowState(
-                                    item,
-                                    convoyLink?.facts.orEmpty(),
-                                )
+                                ConvoyNotifications.rowState(item, convoyLink?.facts.orEmpty())
                             val tapAction = ConvoyNotifications.tapAction(item, convoyState)
                             // An event notification opens that event's detail; a
                             // convoy invite opens the convoy list. The two are
@@ -273,11 +265,13 @@ fun NotificationsScreen(
                             val eventId = EventNotifications.eventId(item)
                             val onOpen: (() -> Unit)? =
                                 when {
-                                    eventId != null && onOpenEvent != null ->
-                                        ({ onOpenEvent(eventId) })
+                                    eventId != null && onOpenEvent != null -> ({
+                                            onOpenEvent(eventId)
+                                        })
                                     convoyLink != null &&
-                                        ConvoyNotifications.navigates(tapAction) ->
-                                        ({ convoyLink.onOpen(tapAction) })
+                                        ConvoyNotifications.navigates(tapAction) -> ({
+                                            convoyLink.onOpen(tapAction)
+                                        })
                                     else -> null
                                 }
                             SwipeToDeleteRow(onDelete = { onDeleteNotification(item.id) }) {
@@ -287,8 +281,8 @@ fun NotificationsScreen(
                                     nowMillis = nowMillis,
                                     onMarkRead = { onMarkRead(item.id) },
                                     friendRequestId = requestId,
-                                    friendRequestBusy = requestId != null &&
-                                        requestId in busyFriendRequestIds,
+                                    friendRequestBusy =
+                                        requestId != null && requestId in busyFriendRequestIds,
                                     onAcceptFriendRequest = onAcceptFriendRequest,
                                     onDeclineFriendRequest = onDeclineFriendRequest,
                                     convoyState = convoyState,
@@ -307,51 +301,43 @@ fun NotificationsScreen(
 }
 
 /**
- * Wraps one inbox row in a right-to-left swipe that deletes it, revealing a red
- * bin underneath.
+ * Wraps one inbox row in a right-to-left swipe that deletes it, revealing a red bin underneath.
  *
- * The gesture is armed in ONE direction only. Both directions would double the
- * chance that a horizontal wobble during a vertical scroll destroys something,
- * and left-to-right in particular overlaps the system back gesture. The
- * positional threshold is half the row's width, so a delete needs a committed
- * drag rather than a flick — the right trade for an action with no undo.
+ * The gesture is armed in ONE direction only. Both directions would double the chance that a
+ * horizontal wobble during a vertical scroll destroys something, and left-to-right in particular
+ * overlaps the system back gesture. The positional threshold is half the row's width, so a delete
+ * needs a committed drag rather than a flick — the right trade for an action with no undo.
  *
- * [onDelete] fires from `onDismiss`, i.e. once the row has actually been
- * dismissed rather than while it is still being dragged, so a swipe the user
- * releases short of the threshold springs back and deletes nothing. The row
- * then disappears because the CALLER removes it optimistically — and this
- * immediately returns the box to rest, so whether a row is gone is answered by
- * the LIST and never by a "dismissed" flag held here. That is what lets a
- * failed delete put the item straight back with nothing to undo.
+ * [onDelete] fires from `onDismiss`, i.e. once the row has actually been dismissed rather than
+ * while it is still being dragged, so a swipe the user releases short of the threshold springs back
+ * and deletes nothing. The row then disappears because the CALLER removes it optimistically — and
+ * this immediately returns the box to rest, so whether a row is gone is answered by the LIST and
+ * never by a "dismissed" flag held here. That is what lets a failed delete put the item straight
+ * back with nothing to undo.
  *
- * The identical action is also published as a semantics custom action, because
- * a drag is unreachable for anyone driving the screen with TalkBack.
+ * The identical action is also published as a semantics custom action, because a drag is
+ * unreachable for anyone driving the screen with TalkBack.
  */
 @Composable
-private fun SwipeToDeleteRow(
-    onDelete: () -> Unit,
-    content: @Composable () -> Unit,
-) {
+private fun SwipeToDeleteRow(onDelete: () -> Unit, content: @Composable () -> Unit) {
     val deleteLabel = stringResource(R.string.notifications_deleteAction)
     val scope = rememberCoroutineScope()
     val dismissState =
         rememberSwipeToDismissBoxState(
-            positionalThreshold = { totalDistance -> totalDistance * SWIPE_DELETE_THRESHOLD },
+            positionalThreshold = { totalDistance -> totalDistance * SWIPE_DELETE_THRESHOLD }
         )
     SwipeToDismissBox(
         state = dismissState,
         modifier =
-            Modifier
-                .testTag(NOTIFICATION_ROW_TEST_TAG)
-                .semantics {
-                    customActions =
-                        listOf(
-                            CustomAccessibilityAction(label = deleteLabel) {
-                                onDelete()
-                                true
-                            },
-                        )
-                },
+            Modifier.testTag(NOTIFICATION_ROW_TEST_TAG).semantics {
+                customActions =
+                    listOf(
+                        CustomAccessibilityAction(label = deleteLabel) {
+                            onDelete()
+                            true
+                        }
+                    )
+            },
         enableDismissFromStartToEnd = false,
         enableDismissFromEndToStart = true,
         backgroundContent = {
@@ -380,21 +366,20 @@ private fun SwipeToDeleteRow(
 }
 
 /**
- * The red bin behind a swiped row. It is uncovered geometrically — the further
- * the row travels, the more of it shows — and the icon grows once the swipe has
- * passed the threshold, which is the row's way of saying "let go now and this
- * is gone".
+ * The red bin behind a swiped row. It is uncovered geometrically — the further the row travels, the
+ * more of it shows — and the icon grows once the swipe has passed the threshold, which is the row's
+ * way of saying "let go now and this is gone".
  */
 @Composable
 private fun DeleteSwipeBackground(armed: Boolean, contentDescription: String) {
-    val scale by animateFloatAsState(
-        targetValue = if (armed) 1.15f else 0.85f,
-        label = "notificationDeleteIconScale",
-    )
+    val scale by
+        animateFloatAsState(
+            targetValue = if (armed) 1.15f else 0.85f,
+            label = "notificationDeleteIconScale",
+        )
     Box(
         modifier =
-            Modifier
-                .fillMaxSize()
+            Modifier.fillMaxSize()
                 .clip(MaterialTheme.shapes.medium)
                 .background(MaterialTheme.colorScheme.error)
                 .padding(horizontal = KccSpacing.s6),
@@ -410,18 +395,14 @@ private fun DeleteSwipeBackground(armed: Boolean, contentDescription: String) {
 }
 
 /**
- * "Delete all" as small, quiet text. Seb asked for a smaller text rather than a
- * control, and that is also the honest weight for it: emptying the inbox is
- * irreversible and rarely what someone came here to do, so it should be
- * findable without being inviting. Still a TextButton underneath, so it keeps a
- * real touch target and reads to a screen reader as a button.
+ * "Delete all" as small, quiet text. Seb asked for a smaller text rather than a control, and that
+ * is also the honest weight for it: emptying the inbox is irreversible and rarely what someone came
+ * here to do, so it should be findable without being inviting. Still a TextButton underneath, so it
+ * keeps a real touch target and reads to a screen reader as a button.
  */
 @Composable
 private fun DeleteAllAction(onClick: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.End,
-    ) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         TextButton(onClick = onClick) {
             Text(
                 text = stringResource(R.string.notifications_deleteAll),
@@ -433,9 +414,9 @@ private fun DeleteAllAction(onClick: () -> Unit) {
 }
 
 /**
- * Confirmation for the irreversible sweep. Same AlertDialog shape the rest of
- * the app uses for a destructive confirm; the confirming action is tinted with
- * the error colour so the dangerous choice is the one that looks dangerous.
+ * Confirmation for the irreversible sweep. Same AlertDialog shape the rest of the app uses for a
+ * destructive confirm; the confirming action is tinted with the error colour so the dangerous
+ * choice is the one that looks dangerous.
  */
 @Composable
 private fun DeleteAllConfirmDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
@@ -463,10 +444,10 @@ private fun DeleteAllConfirmDialog(onDismiss: () -> Unit, onConfirm: () -> Unit)
 private const val SWIPE_DELETE_THRESHOLD = 0.5f
 
 /**
- * Tag for one swipeable inbox row. The UI test drives the gesture across the
- * ROW's full width; aiming at the title text instead would only span that
- * text's own width, which can fall short of [SWIPE_DELETE_THRESHOLD] and make
- * the test pass or fail on how long a notification's title happens to be.
+ * Tag for one swipeable inbox row. The UI test drives the gesture across the ROW's full width;
+ * aiming at the title text instead would only span that text's own width, which can fall short of
+ * [SWIPE_DELETE_THRESHOLD] and make the test pass or fail on how long a notification's title
+ * happens to be.
  */
 internal const val NOTIFICATION_ROW_TEST_TAG = "notificationRow"
 
@@ -510,21 +491,19 @@ private fun NotificationCard(
         } else {
             Modifier
         }
-    Card(
+    OutlinedCard(
         modifier = Modifier.fillMaxWidth().then(clickModifier).then(deadSemantics),
-        colors =
-            CardDefaults.cardColors(
-                containerColor =
-                    if (item.isRead) {
-                        MaterialTheme.colorScheme.surface
-                    } else {
-                        MaterialTheme.colorScheme.secondaryContainer
-                    },
+        border =
+            BorderStroke(
+                if (item.isRead) 1.dp else 2.dp,
+                if (item.isRead) MaterialTheme.colorScheme.outlineVariant
+                else MaterialTheme.colorScheme.primary,
             ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             // Category on the left, arrival time on the right of the SAME line:
             // the timestamp is metadata about the row, so it shares the row's
@@ -534,6 +513,28 @@ private fun NotificationCard(
                 horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                Icon(
+                    imageVector =
+                        when (item.category) {
+                            NotificationCategory.EVENT_CREATED,
+                            NotificationCategory.EVENT_REMINDER,
+                            NotificationCategory.EVENT_UPDATED,
+                            NotificationCategory.EVENT_CANCELLED -> Icons.Filled.Event
+                            NotificationCategory.DIRECT_MESSAGE,
+                            NotificationCategory.COMMUNITY_CHAT,
+                            NotificationCategory.CONVOY_CHAT -> Icons.Filled.ChatBubbleOutline
+                            NotificationCategory.FRIEND_REQUEST,
+                            NotificationCategory.CONVOY_INVITE,
+                            NotificationCategory.CONVOY_UPDATE -> Icons.Filled.Group
+                            NotificationCategory.ACCOUNT_WARNING,
+                            NotificationCategory.ACCOUNT_SUSPENSION -> Icons.Filled.Security
+                            NotificationCategory.WAVE -> Icons.Filled.WavingHand
+                            else -> Icons.Filled.Notifications
+                        },
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp),
+                )
                 Text(
                     text = stringResource(item.category.labelRes()),
                     style = MaterialTheme.typography.labelSmall,
@@ -583,13 +584,15 @@ private fun NotificationCard(
                     )
                 else -> Unit
             }
-            (item.previewText ?: item.body)?.takeIf { it.isNotBlank() }?.let { text ->
-                Text(
-                    text = text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            (item.previewText ?: item.body)
+                ?.takeIf { it.isNotBlank() }
+                ?.let { text ->
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             if (!item.isRead) {
                 Text(
                     text = stringResource(R.string.notifications_unreadLabel),
@@ -601,9 +604,9 @@ private fun NotificationCard(
             // resolved it against the live snapshot, so a request answered on
             // another device simply arrives here as null and renders nothing.
             if (friendRequestId != null) {
-                Row(
+                Column(
                     modifier = Modifier.padding(top = KccSpacing.s2),
-                    horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+                    verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
                 ) {
                     // Disabled while this request's callable is in flight, so
                     // rapid taps can't start overlapping mutations (and can't
@@ -612,12 +615,14 @@ private fun NotificationCard(
                     Button(
                         onClick = { onAcceptFriendRequest(friendRequestId) },
                         enabled = !friendRequestBusy,
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(stringResource(R.string.friends_accept))
                     }
                     OutlinedButton(
                         onClick = { onDeclineFriendRequest(friendRequestId) },
                         enabled = !friendRequestBusy,
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(stringResource(R.string.friends_decline))
                     }
@@ -630,14 +635,12 @@ private fun NotificationCard(
 /**
  * When a notification arrived, as small quiet text on the row's metadata line.
  *
- * Renders NOTHING when there is no timestamp. `createdAt` is a server timestamp,
- * so an item that was just written is momentarily readable with the field still
- * unset; a placeholder there would be a flicker, and falling back to the epoch
- * would have the row claim it arrived in 1970.
+ * Renders NOTHING when there is no timestamp. `createdAt` is a server timestamp, so an item that
+ * was just written is momentarily readable with the field still unset; a placeholder there would be
+ * a flicker, and falling back to the epoch would have the row claim it arrived in 1970.
  *
- * Deliberately subordinate to the message: `labelSmall` on `onSurfaceVariant`,
- * so it is the last thing the eye lands on and never competes with the
- * notification's own title.
+ * Deliberately subordinate to the message: `labelSmall` on `onSurfaceVariant`, so it is the last
+ * thing the eye lands on and never competes with the notification's own title.
  */
 @Composable
 private fun NotificationTimeText(
@@ -675,7 +678,7 @@ private fun NotificationTimeText(
                             R.string.notifications_timeDatePatternWithYear
                         } else {
                             R.string.notifications_timeDatePattern
-                        },
+                        }
                     )
                 val date = ChatDateFormat.format(label.date, pattern, dates.locale)
                 stringResource(
@@ -698,14 +701,12 @@ private fun NotificationTimeText(
 }
 
 /**
- * The clock time for one instant, computed once per row rather than on every
- * recomposition.
+ * The clock time for one instant, computed once per row rather than on every recomposition.
  *
- * Keyed on exactly the fields [ChatDateFormat.time] reads, so the ticking `now`
- * can re-run the (cheap) tier decision every minute without also rebuilding
- * every visible row's `DateTimeFormatter`. The key deliberately does NOT include
- * `dates.today`, which rolls over at midnight and would otherwise invalidate
- * every row's clock string for no reason.
+ * Keyed on exactly the fields [ChatDateFormat.time] reads, so the ticking `now` can re-run the
+ * (cheap) tier decision every minute without also rebuilding every visible row's
+ * `DateTimeFormatter`. The key deliberately does NOT include `dates.today`, which rolls over at
+ * midnight and would otherwise invalidate every row's clock string for no reason.
  */
 @Composable
 private fun rememberClockTime(millis: Long, dates: ChatDateContext): String =
@@ -721,27 +722,26 @@ private fun rememberClockTime(millis: Long, dates: ChatDateContext): String =
 /**
  * `System.currentTimeMillis()`, refreshed once a minute.
  *
- * The relative tier is the reason this exists: without it a row that said
- * "Nu" when the inbox opened would still say "Nu" ten minutes later, which is
- * simply false. A minute is also the resolution the labels are printed at, so
- * ticking faster could not change what any row says.
+ * The relative tier is the reason this exists: without it a row that said "Nu" when the inbox
+ * opened would still say "Nu" ten minutes later, which is simply false. A minute is also the
+ * resolution the labels are printed at, so ticking faster could not change what any row says.
  */
 @Composable
 private fun rememberTickingNow(): Long {
-    val now by produceState(initialValue = System.currentTimeMillis()) {
-        while (true) {
-            value = System.currentTimeMillis()
-            delay(NotificationTimeFormat.MINUTE_MILLIS)
+    val now by
+        produceState(initialValue = System.currentTimeMillis()) {
+            while (true) {
+                value = System.currentTimeMillis()
+                delay(NotificationTimeFormat.MINUTE_MILLIS)
+            }
         }
-    }
     return now
 }
 
 /**
- * Dismissible error for anything the inbox tried and the server refused — a
- * stale accept/decline, or a delete that did not go through. Mirrors the
- * Friends page's ErrorBanner (same shape, same error colours) rather than
- * importing it, which is private to that screen.
+ * Dismissible error for anything the inbox tried and the server refused — a stale accept/decline,
+ * or a delete that did not go through. Mirrors the Friends page's ErrorBanner (same shape, same
+ * error colours) rather than importing it, which is private to that screen.
  */
 @Composable
 private fun InboxErrorBanner(text: String, onDismiss: () -> Unit) {

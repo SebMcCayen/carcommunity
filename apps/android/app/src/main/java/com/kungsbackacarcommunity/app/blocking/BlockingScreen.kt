@@ -9,10 +9,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -32,10 +32,9 @@ import java.text.DateFormat
 import java.util.Date
 
 /**
- * Blocked-users management screen (Phase 12 slice 8): the caller's own blocked
- * list with an unblock action (confirm dialog). Block-initiation is contextual
- * (from a chat message or map marker) and lands with those slices; this is the
- * standalone management surface.
+ * Blocked-users management screen (Phase 12 slice 8): the caller's own blocked list with an unblock
+ * action (confirm dialog). Block-initiation is contextual (from a chat message or map marker) and
+ * lands with those slices; this is the standalone management surface.
  */
 @Composable
 fun BlockingScreen(
@@ -53,9 +52,7 @@ fun BlockingScreen(
             contentPadding = aeroLazyContentPadding(),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            item {
-                AeroPageTitle(stringResource(R.string.blocking_blockedUsersTitle))
-            }
+            item { AeroPageTitle(stringResource(R.string.blocking_blockedUsersTitle)) }
 
             if (actionStatus == BlockActionStatus.Failed) {
                 item {
@@ -112,7 +109,7 @@ fun BlockingScreen(
                     onClick = {
                         onUnblock(target.userId)
                         confirmTarget = null
-                    },
+                    }
                 ) {
                     Text(stringResource(R.string.blocking_unblockConfirmAction))
                 }
@@ -127,18 +124,14 @@ fun BlockingScreen(
 }
 
 @Composable
-private fun BlockedUserRow(
-    user: BlockedUser,
-    enabled: Boolean,
-    onUnblock: () -> Unit,
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+private fun BlockedUserRow(user: BlockedUser, enabled: Boolean, onUnblock: () -> Unit) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(modifier = Modifier.padding(end = 16.dp)) {
+            Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
                 Text(
                     text = user.displayName ?: user.userId,
                     style = MaterialTheme.typography.titleMedium,

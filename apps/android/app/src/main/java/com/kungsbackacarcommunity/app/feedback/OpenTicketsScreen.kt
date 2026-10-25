@@ -2,7 +2,6 @@ package com.kungsbackacarcommunity.app.feedback
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -10,10 +9,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -35,16 +34,15 @@ import com.kungsbackacarcommunity.app.shell.AeroPageTitle
 import com.kungsbackacarcommunity.app.shell.aeroLazyContentPadding
 
 /**
- * "Open tickets" browser: the member-facing list of OPEN GitHub issues mirrored
- * into `openTickets`. Per ticket the user can open the issue in the browser,
- * +1 ("me too"), and add ONE comment. The +1/comment controls disable once done
- * (optimistic, session-local — see [OpenTicketsCoordinator]).
+ * "Open tickets" browser: the member-facing list of OPEN GitHub issues mirrored into `openTickets`.
+ * Per ticket the user can open the issue in the browser, +1 ("me too"), and add ONE comment. The
+ * +1/comment controls disable once done (optimistic, session-local — see [OpenTicketsCoordinator]).
  *
- * Renders on a [AeroLazyPage] + [LazyColumn] so rows compose/recycle lazily — the
- * backend mirror can grow, so the list must not eagerly compose every ticket.
+ * Renders on a [AeroLazyPage] + [LazyColumn] so rows compose/recycle lazily — the backend mirror
+ * can grow, so the list must not eagerly compose every ticket.
  *
- * Gated upstream by the `reportTicketsBrowser` flag: the route is only reachable
- * while the flag is on, so this screen never renders with the feature off.
+ * Gated upstream by the `reportTicketsBrowser` flag: the route is only reachable while the flag is
+ * on, so this screen never renders with the feature off.
  */
 @Composable
 fun OpenTicketsScreen(
@@ -65,9 +63,7 @@ fun OpenTicketsScreen(
             contentPadding = aeroLazyContentPadding(),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item {
-                AeroPageTitle(stringResource(R.string.openTickets_title))
-            }
+            item { AeroPageTitle(stringResource(R.string.openTickets_title)) }
             item {
                 Text(
                     text = stringResource(R.string.openTickets_intro),
@@ -137,21 +133,16 @@ private fun TicketCard(
 ) {
     var comment by rememberSaveable(ticket.number) { mutableStateOf("") }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                text = ticket.title,
-                style = MaterialTheme.typography.titleSmall,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Text(text = ticket.title, style = MaterialTheme.typography.titleMedium)
             if (ticket.summary.isNotBlank() && ticket.summary != ticket.title) {
                 Text(
                     text = ticket.summary,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
@@ -168,16 +159,21 @@ private fun TicketCard(
             )
 
             // +1 ("me too") and the browser link.
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                val plusOneDescription =
-                    stringResource(R.string.openTickets_plusOneDescription)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                val plusOneDescription = stringResource(R.string.openTickets_plusOneDescription)
                 OutlinedButton(
                     onClick = onPlusOne,
                     enabled = state.canPlusOne,
-                    modifier = Modifier.semantics { contentDescription = plusOneDescription },
+                    modifier =
+                        Modifier.fillMaxWidth().semantics {
+                            contentDescription = plusOneDescription
+                        },
                 ) {
                     if (state.isPlusOneSubmitting) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                        )
                     } else {
                         Text(
                             text =
@@ -186,15 +182,16 @@ private fun TicketCard(
                                         R.string.openTickets_plusOneDone
                                     } else {
                                         R.string.openTickets_plusOne
-                                    },
-                                ),
+                                    }
+                                )
                         )
                     }
                 }
                 val openDescription = stringResource(R.string.openTickets_openInGitHubDescription)
                 TextButton(
                     onClick = onOpenInGitHub,
-                    modifier = Modifier.semantics { contentDescription = openDescription },
+                    modifier =
+                        Modifier.fillMaxWidth().semantics { contentDescription = openDescription },
                 ) {
                     Text(text = stringResource(R.string.openTickets_openInGitHub))
                 }
@@ -246,7 +243,10 @@ private fun TicketCard(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     if (state.isCommentSubmitting) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                        )
                     } else {
                         Text(text = stringResource(R.string.openTickets_commentSubmit))
                     }
@@ -258,11 +258,14 @@ private fun TicketCard(
                     text =
                         stringResource(
                             when (error) {
-                                TicketInteractionError.ALREADY_DONE -> R.string.openTickets_alreadyDone
-                                TicketInteractionError.RATE_LIMITED -> R.string.openTickets_rateLimited
-                                TicketInteractionError.EMPTY_COMMENT -> R.string.openTickets_emptyComment
+                                TicketInteractionError.ALREADY_DONE ->
+                                    R.string.openTickets_alreadyDone
+                                TicketInteractionError.RATE_LIMITED ->
+                                    R.string.openTickets_rateLimited
+                                TicketInteractionError.EMPTY_COMMENT ->
+                                    R.string.openTickets_emptyComment
                                 TicketInteractionError.UNKNOWN -> R.string.openTickets_genericError
-                            },
+                            }
                         ),
                     style = MaterialTheme.typography.bodySmall,
                     color =
