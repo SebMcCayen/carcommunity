@@ -64,9 +64,23 @@ val LocalKccStatusColors = staticCompositionLocalOf {
  */
 val LocalKccDarkTheme = staticCompositionLocalOf { false }
 
+/** Semantic map chrome and driver roles, independent from membership and rewards. */
+@Immutable
+data class KccMapColors(
+    val overlay: Color,
+    val border: Color,
+    val driverActive: Color,
+    val onDriverActive: Color,
+)
+
+val LocalKccMapColors = staticCompositionLocalOf {
+    KccMapColors(KccLightColors.overlayBackground, KccLightColors.overlayBorder,
+        KccLightColors.driverActive, KccLightColors.onDriverActive)
+}
+
 private val LightColorScheme = lightColorScheme(
     primary = KccLightColors.brandPrimary,
-    onPrimary = KccPalette.inkBlack,
+    onPrimary = KccLightColors.onBrandPrimary,
     primaryContainer = KccPalette.softSand,
     onPrimaryContainer = KccPalette.inkBlack,
     inversePrimary = KccPalette.crownGold,
@@ -74,17 +88,24 @@ private val LightColorScheme = lightColorScheme(
     onSecondary = KccPalette.warmIvory,
     secondaryContainer = KccLightColors.subtleBackground,
     onSecondaryContainer = KccPalette.inkBlack,
-    tertiary = KccPalette.darkCharcoal,
-    onTertiary = KccPalette.warmIvory,
-    tertiaryContainer = KccPalette.silverGrey,
-    onTertiaryContainer = KccPalette.inkBlack,
+    tertiary = KccLightColors.driverActive,
+    onTertiary = KccLightColors.onDriverActive,
+    tertiaryContainer = KccLightColors.subtleBackground,
+    onTertiaryContainer = KccLightColors.driverActive,
     background = KccLightColors.pageBackground,
     onBackground = KccLightColors.textPrimary,
     surface = KccLightColors.surfaceBackground,
+    surfaceDim = KccLightColors.subtleBackground,
+    surfaceBright = KccLightColors.surfaceBackground,
+    surfaceContainerLowest = KccLightColors.pageBackground,
+    surfaceContainerLow = KccLightColors.surfaceBackground,
+    surfaceContainer = KccLightColors.surfaceBackground,
+    surfaceContainerHigh = KccLightColors.surfaceBackground,
+    surfaceContainerHighest = KccLightColors.subtleBackground,
     onSurface = KccLightColors.textPrimary,
     surfaceVariant = KccLightColors.subtleBackground,
     onSurfaceVariant = KccLightColors.textSecondary,
-    surfaceTint = KccLightColors.brandPrimary,
+    surfaceTint = KccLightColors.surfaceBackground,
     inverseSurface = KccPalette.inkBlack,
     inverseOnSurface = KccPalette.warmIvory,
     error = KccLightColors.statusError,
@@ -98,33 +119,40 @@ private val LightColorScheme = lightColorScheme(
 
 private val DarkColorScheme = darkColorScheme(
     primary = KccDarkColors.brandPrimary,
-    onPrimary = KccPalette.inkBlack,
-    primaryContainer = KccPalette.darkCharcoal,
+    onPrimary = KccDarkColors.onBrandPrimary,
+    primaryContainer = KccDarkColors.subtleBackground,
     onPrimaryContainer = KccPalette.crownGold,
     inversePrimary = KccPalette.crownGold,
     secondary = KccDarkColors.textSecondary,
     onSecondary = KccPalette.inkBlack,
     secondaryContainer = KccDarkColors.subtleBackground,
     onSecondaryContainer = KccPalette.warmIvory,
-    tertiary = KccPalette.softSand,
-    onTertiary = KccPalette.inkBlack,
-    tertiaryContainer = KccPalette.darkCharcoal,
-    onTertiaryContainer = KccPalette.warmIvory,
+    tertiary = KccDarkColors.driverActive,
+    onTertiary = KccDarkColors.onDriverActive,
+    tertiaryContainer = KccDarkColors.subtleBackground,
+    onTertiaryContainer = KccDarkColors.driverActive,
     background = KccDarkColors.pageBackground,
     onBackground = KccDarkColors.textPrimary,
     surface = KccDarkColors.surfaceBackground,
+    surfaceDim = KccDarkColors.subtleBackground,
+    surfaceBright = KccDarkColors.surfaceBackground,
+    surfaceContainerLowest = KccDarkColors.pageBackground,
+    surfaceContainerLow = KccDarkColors.surfaceBackground,
+    surfaceContainer = KccDarkColors.surfaceBackground,
+    surfaceContainerHigh = KccDarkColors.surfaceBackground,
+    surfaceContainerHighest = KccDarkColors.subtleBackground,
     onSurface = KccDarkColors.textPrimary,
     surfaceVariant = KccDarkColors.subtleBackground,
     onSurfaceVariant = KccDarkColors.textSecondary,
-    surfaceTint = KccDarkColors.brandPrimary,
+    surfaceTint = KccDarkColors.surfaceBackground,
     inverseSurface = KccPalette.warmIvory,
     inverseOnSurface = KccPalette.inkBlack,
     error = KccDarkColors.statusError,
     onError = KccPalette.warmIvory,
-    errorContainer = KccPalette.darkCharcoal,
+    errorContainer = KccDarkColors.subtleBackground,
     onErrorContainer = KccDarkColors.statusError,
     outline = KccDarkColors.borderDefault,
-    outlineVariant = KccPalette.darkCharcoal,
+    outlineVariant = KccDarkColors.overlayBorder,
     scrim = KccPalette.inkBlack,
 )
 
@@ -169,6 +197,13 @@ fun KccTheme(
         // themselves. Without this they bypass the user's theme preference and
         // silently follow the system — which is the bug this replaced.
         LocalKccDarkTheme provides darkTheme,
+        LocalKccMapColors provides if (darkTheme) {
+            KccMapColors(KccDarkColors.overlayBackground, KccDarkColors.overlayBorder,
+                KccDarkColors.driverActive, KccDarkColors.onDriverActive)
+        } else {
+            KccMapColors(KccLightColors.overlayBackground, KccLightColors.overlayBorder,
+                KccLightColors.driverActive, KccLightColors.onDriverActive)
+        },
     ) {
         MaterialTheme(
             colorScheme = colorScheme,

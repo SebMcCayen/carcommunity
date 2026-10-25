@@ -323,7 +323,7 @@ fun DrivesListScreen(
  */
 @Composable
 private fun DrivesHeader(onShowStats: (() -> Unit)?) {
-    val title = stringResource(R.string.savedDrives_screenTitle)
+    val title = stringResource(R.string.shell_moreDrives)
     if (onShowStats == null) {
         AeroPageTitle(title)
     } else {

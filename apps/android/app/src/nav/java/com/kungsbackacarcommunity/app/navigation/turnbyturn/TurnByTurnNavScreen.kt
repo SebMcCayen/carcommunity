@@ -81,7 +81,6 @@ import com.kungsbackacarcommunity.app.map.LocalMapZoomController
 import com.kungsbackacarcommunity.app.map.MapMarkerStyle
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import com.kungsbackacarcommunity.app.navigation.NavInitialCamera
-import com.kungsbackacarcommunity.app.shell.ChatCircleControl
 import com.kungsbackacarcommunity.app.shell.CircleControl
 import com.kungsbackacarcommunity.app.shell.CompassCircleControl
 import com.kungsbackacarcommunity.app.shell.IncidentMarkerLayer
@@ -985,14 +984,6 @@ fun TurnByTurnNavScreen(
                                             stringResource(R.string.shell_savedPlacesButton),
                                         onClick = onOpenSavedPlaces,
                                         modifier = Modifier.testTag(TURN_BY_TURN_SAVED_PLACES_TAG),
-                                    )
-
-                                // Chat bubble + unread dot — the map home's
-                                // control. The host raises the same chat-hub popup.
-                                MapCircleControlKind.Chat ->
-                                    ChatCircleControl(
-                                        hasUnread = hasUnreadChat,
-                                        onClick = onOpenChat,
                                     )
 
                                 // Kronjakt perk-deploy control — the map home's

@@ -53,7 +53,7 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 val AeroPageTopSpacing: Dp = KccSpacing.s6
 
 /** Default gutters + comfortable content spacing shared by every Aero page. */
-val AeroPageHorizontalPadding: Dp = KccSpacing.s6
+val AeroPageHorizontalPadding: Dp = KccSpacing.s4
 val AeroPageBottomPadding: Dp = KccSpacing.s6
 
 /**

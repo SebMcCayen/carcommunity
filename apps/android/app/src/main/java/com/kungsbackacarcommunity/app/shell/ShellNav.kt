@@ -5,13 +5,14 @@ package com.kungsbackacarcommunity.app.shell
  * decisions are JVM-unit-testable without Compose.
  */
 
-/** The five bottom-navigation tabs. [Map] is the default, map-first home. */
+/** Stable saved identities. History is retained for old saved sessions, never reused. */
 enum class ShellTab {
     Map,
     History,
     Create,
     Social,
     Garage,
+    Chat,
     ;
 
     companion object {
@@ -138,6 +139,8 @@ enum class ShellRoute {
      * blank. Do not reuse.
      */
     More,
+    /** Owner drive history, reached from Profile and post-drive links. */
+    MyDrives,
 }
 
 /** Outcome of a system-Back press in the shell. */
@@ -286,26 +289,6 @@ object ShellNavigation {
             else -> MapCover.None
         }
 
-    /**
-     * Whether the chat-hub popup may be shown.
-     *
-     * The hub is a transparent popup with no dimming scrim: it is designed to
-     * float over a live map, and over anything else it is just a card hanging in
-     * space. So it needs A MAP in front — which is either the map home
-     * ([MapCover.None]) or turn-by-turn, the only other full-screen map in the
-     * app.
-     *
-     * Turn-by-turn was excluded until the two right-side control stacks were made
-     * identical; navigation now carries the map home's chat control, and a chat
-     * button that cannot open the hub is not the same button. It is admitted by
-     * [navigating] rather than by [MapCover.Opaque] alone, because Opaque also
-     * covers every full-screen route and non-map tab, where there is no map.
-     *
-     * Pure, so the rule is one unit-testable expression rather than a condition
-     * restated at the render site and again in the auto-close effect.
-     */
-    fun chatHubAllowed(cover: MapCover, navigating: Boolean): Boolean =
-        cover == MapCover.None || (navigating && cover == MapCover.Opaque)
 }
 
 /** What tapping the floating live-location-share toggle should do. */

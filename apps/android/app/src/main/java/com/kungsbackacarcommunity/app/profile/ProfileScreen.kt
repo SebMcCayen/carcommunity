@@ -92,6 +92,7 @@ fun ProfileScreen(
     // page), this tap-through is the app's ONLY way into that ledger. Null in a
     // config-less build with no points repository wired.
     onOpenPoints: (() -> Unit)? = null,
+    onOpenDrives: (() -> Unit)? = null,
 ) {
     var editing by remember { mutableStateOf(false) }
     var nameField by remember { mutableStateOf("") }
@@ -237,6 +238,12 @@ fun ProfileScreen(
                     recentEarnings = recentPointsEarnings,
                     onOpenLedger = onOpenPoints,
                 )
+
+                if (onOpenDrives != null) {
+                    OutlinedButton(onClick = onOpenDrives, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.shell_moreDrives))
+                    }
+                }
 
                 ProfileBadgesSection(showcase = badgeShowcase)
 

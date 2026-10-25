@@ -93,6 +93,7 @@ import kotlinx.coroutines.launch
 
 /** Test tag on the whole navigation search overlay, for UI tests. */
 const val NAV_SEARCH_TEST_TAG = "nav_search"
+const val NAV_SEARCH_INPUT_TEST_TAG = "nav_search_input"
 
 /** Test tag on the route preview's "Start" (turn-by-turn) button. */
 const val NAV_START_TEST_TAG = "nav_start"
@@ -234,6 +235,14 @@ fun NavigationSearchScreen(
         }
     val state by controller.state.collectAsState()
 
+    // Selection can also arrive through map links/saved places, not just a row tap.
+    LaunchedEffect(state.destination) {
+        if (state.destination != null) {
+            keyboardController?.hide()
+            focusManager.clearFocus()
+        }
+    }
+
     // The save/edit dialog's target, null when closed. Set from the route
     // preview's save button (a new or already-saved destination) and from a
     // saved row's edit button in the empty search state.
@@ -311,9 +320,9 @@ fun NavigationSearchScreen(
         )
     }
 
-    // Back closes the route first (returns to search), then leaves the overlay.
+    // Back collapses search and any preview through the host's common teardown.
     BackHandler {
-        if (state.destination != null) controller.clearDestination() else onClose()
+        onClose()
     }
 
     // Chrome only — the map behind this (showing the drawn route + destination
@@ -332,7 +341,7 @@ fun NavigationSearchScreen(
                     .padding(horizontal = KccSpacing.s3, vertical = KccSpacing.s3),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
         ) {
-            SearchField(
+            if (state.destination == null) SearchField(
                 query = state.query,
                 onQueryChange = { new ->
                     // Editing while a destination is picked returns to search.
@@ -469,7 +478,11 @@ private fun SearchField(
     searching: Boolean,
 ) {
     val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+        keyboard?.show()
+    }
 
     Surface(
         shape = RoundedCornerShape(KccRadius.full),
@@ -489,7 +502,7 @@ private fun SearchField(
             TextField(
                 value = query,
                 onValueChange = onQueryChange,
-                modifier = Modifier.weight(1f).focusRequester(focusRequester),
+                modifier = Modifier.weight(1f).focusRequester(focusRequester).testTag(NAV_SEARCH_INPUT_TEST_TAG),
                 singleLine = true,
                 placeholder = {
                     Text(stringResource(R.string.addressSearch_searchPlaceholder))

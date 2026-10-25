@@ -92,7 +92,7 @@ fun DrivesRoute(
     val deleteStatus by coordinator.deleteStatus.collectAsState()
     val scope = rememberCoroutineScope()
 
-    var selectedRideId by remember { mutableStateOf<String?>(null) }
+    var selectedRideId by rememberSaveable(uid) { mutableStateOf<String?>(null) }
     // Deep-link into a specific drive's detail once, when the shell hands one in
     // (the "Drive saved" dialog's History action, #856). Keyed on the id so a new
     // request re-opens; consumed immediately so it fires exactly once and a manual
@@ -106,7 +106,7 @@ fun DrivesRoute(
     // The "your driving" stats page is an internal level of this route (peer of
     // the detail view). It is server-authoritative now — its own callable, not a
     // fold over the list — so it is loaded on open and reloaded on tier change.
-    var showStats by remember { mutableStateOf(false) }
+    var showStats by rememberSaveable(uid) { mutableStateOf(false) }
     var statsReloadKey by remember { mutableStateOf(0) }
     val statsState by statsCoordinator.state.collectAsState()
     LaunchedEffect(showStats, subscriptionTier, statsReloadKey) {

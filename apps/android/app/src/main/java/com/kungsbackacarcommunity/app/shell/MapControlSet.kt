@@ -24,9 +24,6 @@ enum class MapCircleControlKind {
     /** Saved places — opens the saved-locations picker; a tap jumps the map there. */
     SavedPlaces,
 
-    /** Chat hub, with the unread badge. */
-    Chat,
-
     /**
      * Kronjakt perk DEPLOY menu — opens the "use a perk" popup (drop a trap /
      * raise a shield / arm the boost). Present ONLY while the `crownHuntPerks`
@@ -74,7 +71,6 @@ object MapControlSet {
             add(MapCircleControlKind.Layers)
             add(MapCircleControlKind.Compass)
             add(MapCircleControlKind.SavedPlaces)
-            add(MapCircleControlKind.Chat)
             if (crownHuntPerksEnabled) add(MapCircleControlKind.Perks)
         }
 }

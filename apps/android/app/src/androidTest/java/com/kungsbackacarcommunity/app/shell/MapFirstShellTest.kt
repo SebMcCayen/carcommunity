@@ -1,7 +1,15 @@
 package com.kungsbackacarcommunity.app.shell
 
 import androidx.activity.ComponentActivity
+import android.content.ContentValues
+import android.graphics.Bitmap
+import android.os.Build
+import android.provider.MediaStore
+import java.io.File
+import java.io.FileOutputStream
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -9,6 +17,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
@@ -31,6 +41,8 @@ import com.kungsbackacarcommunity.app.coachmark.CoachMarkStore
 import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.drives.DrivesRepository
+import com.kungsbackacarcommunity.app.drives.DriveHistoryRepository
 import com.kungsbackacarcommunity.app.navigation.NAV_SEARCH_TEST_TAG
 import com.kungsbackacarcommunity.app.profile.ProfileRepository
 import com.kungsbackacarcommunity.app.profile.ProfileState
@@ -77,6 +89,15 @@ class MapFirstShellTest {
     private fun str(id: Int) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
 
+    // Material navigation suppresses an icon's redundant description when its
+    // visible label is present. Target the labelled clickable tab, not a hidden
+    // icon. Create intentionally remains icon-only.
+    private fun tabNode(id: Int) = if (id == R.string.shell_tabCreate) {
+        composeTestRule.onNodeWithContentDescription(str(id))
+    } else {
+        composeTestRule.onNode(hasText(str(id)) and hasClickAction())
+    }
+
     /**
      * Two one-time first-login flows gate/overlay the Main shell on the first
      * reach for a uid: the full-screen welcome flow, and the coach-mark tour
@@ -101,9 +122,13 @@ class MapFirstShellTest {
         // not the gate, and must not depend on a real Play reading in the
         // emulator. The forced-update test below injects a source that gates.
         appUpdateSource: AppUpdateSource? = null,
+        drivesRepository: DrivesRepository? = null,
+        driveHistoryRepository: DriveHistoryRepository? = null,
+        contentHost: ((@Composable () -> Unit) -> Unit)? = null,
     ) {
-        composeTestRule.setContent {
-            KccTheme {
+        val render: ((@Composable () -> Unit) -> Unit) = contentHost ?: { composeTestRule.setContent(it) }
+        render {
+            KccTheme(darkTheme = InstrumentationRegistry.getArguments().getString("redesignTheme") != "light") {
                 AuthenticatedApp(
                     uid = TEST_UID,
                     authDisplayName = null,
@@ -139,8 +164,8 @@ class MapFirstShellTest {
                     convoyRepository = null,
                     communityChatRepository = null,
                     convoyChatRepository = null,
-                    drivesRepository = null,
-                    driveHistoryRepository = null,
+                    drivesRepository = drivesRepository,
+                    driveHistoryRepository = driveHistoryRepository,
                     pointsRepository = null,
                     partnerApplicationCoordinator = null,
                     billboardsRepository = null,
@@ -182,8 +207,8 @@ class MapFirstShellTest {
         setShell(mapSurface = surface)
         composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
 
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabGarage)).performClick()
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
+        tabNode(R.string.shell_tabGarage).performClick()
+        tabNode(R.string.shell_tabMap).performClick()
 
         // Still the SAME map: had it been disposed on the way to Garage, coming
         // back would have entered the composition a second time.
@@ -219,8 +244,117 @@ class MapFirstShellTest {
     /** Opens the address-search overlay the way a user does: expand the bar, tap it. */
     private fun openNavSearch() {
         composeTestRule.onNodeWithTag(MAP_HOME_SEARCH_TAG).performClick()
-        composeTestRule.onNodeWithText(str(R.string.shell_searchHint)).performClick()
         composeTestRule.onNodeWithTag(NAV_SEARCH_TEST_TAG).assertExists()
+    }
+
+    /** Writes rendered pixels from the host window; no Firebase or Mapbox config. */
+    private fun captureRedesignScreen(name: String) {
+        composeTestRule.waitForIdle()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.uiAutomation.waitForIdle(500, 5000)
+        val blockedByAnr = instrumentation.uiAutomation.rootInActiveWindow
+            ?.findAccessibilityNodeInfosByViewId("android:id/aerr_close")?.isNotEmpty() == true
+        check(!blockedByAnr) { "An Android ANR dialog covers the capture; recover the emulator before visual QA." }
+        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val variant = InstrumentationRegistry.getArguments().getString("redesignCaptureVariant") ?: "default"
+        require(variant.matches(Regex("[a-zA-Z0-9_-]+")))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // AGP uninstalls the test app before CI can pull app-private files.
+            // Own test-only media survives that cleanup, without production
+            // storage permissions or any real account/location content.
+            val resolver = instrumentation.targetContext.contentResolver
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, "$name.png")
+                put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/carcommunity-redesign/$variant")
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+            val uri = checkNotNull(resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values))
+            checkNotNull(resolver.openOutputStream(uri)).use {
+                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+            resolver.update(uri, ContentValues().apply {
+                put(MediaStore.Images.Media.IS_PENDING, 0)
+            }, null, null)
+        } else {
+            val folder = File(instrumentation.targetContext.getExternalFilesDir(null), "redesign/$variant")
+            check(folder.mkdirs() || folder.isDirectory)
+            FileOutputStream(File(folder, "$name.png")).use {
+                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+        }
+        bitmap.recycle()
+    }
+
+    @Test
+    fun captureRedesignShellScreens() {
+        val surface = StubMapSurface()
+        setShell(mapSurface = surface, drivesRepository = RedesignDrivesFixture,
+            driveHistoryRepository = RedesignDrivesFixture)
+        composeTestRule.onNodeWithTag(MAP_HOME_SEARCH_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).assertDoesNotExist()
+        captureRedesignScreen("S01-map-collapsed-search")
+
+        openNavSearch()
+        composeTestRule.onNodeWithTag(NAV_SEARCH_TEST_TAG).assertIsDisplayed()
+        captureRedesignScreen("S02-search-expanded")
+        // The first Back may dismiss the IME; dispatcher closes the search itself.
+        composeTestRule.runOnUiThread { composeTestRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeTestRule.waitForIdle()
+
+        openTab(R.string.shell_tabChat)
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
+        composeTestRule.runOnIdle {
+            assertFalse("Opaque Chat pauses map rendering", surface.isActive)
+            assertEquals(1, surface.contentCompositions)
+        }
+        captureRedesignScreen("S29-chat-opaque")
+
+        openTab(R.string.shell_tabMap)
+        composeTestRule.onNodeWithTag(MAP_HOME_MORE_TAG).performClick()
+        composeTestRule.onNodeWithText(str(R.string.shell_moreDrives)).performClick()
+        composeTestRule.onNodeWithText(str(R.string.shell_moreDrives)).assertIsDisplayed()
+        composeTestRule.runOnIdle { assertFalse(surface.isActive) }
+        composeTestRule.onNodeWithText("Test drive 1").assertIsDisplayed()
+        captureRedesignScreen("S53-my-drives-fixture")
+        composeTestRule.runOnUiThread { composeTestRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeTestRule.runOnIdle {
+            assertTrue(surface.isActive)
+            assertEquals(1, surface.contentCompositions)
+        }
+    }
+
+    @Test
+    fun chatTab_restoresAsOpaque_andBackResumesTheSameMap() {
+        val restoration = StateRestorationTester(composeTestRule)
+        val surface = StubMapSurface()
+        setShell(mapSurface = surface, contentHost = { restoration.setContent(it) })
+        openTab(R.string.shell_tabChat)
+        restoration.emulateSavedInstanceStateRestore()
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
+        composeTestRule.runOnIdle { assertFalse(surface.isActive) }
+        val compositions = surface.contentCompositions
+        composeTestRule.runOnUiThread { composeTestRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeTestRule.runOnIdle {
+            assertTrue(surface.isActive)
+            assertEquals(compositions, surface.contentCompositions)
+        }
+    }
+
+    @Test
+    fun myDrives_selectedDriveRestores_andBackReturnsToListThenMap() {
+        val restoration = StateRestorationTester(composeTestRule)
+        setShell(drivesRepository = RedesignDrivesFixture, driveHistoryRepository = RedesignDrivesFixture,
+            contentHost = { restoration.setContent(it) })
+        composeTestRule.onNodeWithTag(MAP_HOME_MORE_TAG).performClick()
+        composeTestRule.onNodeWithText(str(R.string.shell_moreDrives)).performClick()
+        composeTestRule.onNodeWithText("Test drive 1").performClick()
+        restoration.emulateSavedInstanceStateRestore()
+        composeTestRule.onNodeWithText(str(R.string.savedDrives_detailTitle)).assertIsDisplayed()
+        composeTestRule.runOnUiThread { composeTestRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeTestRule.onNodeWithText(str(R.string.shell_moreDrives)).assertIsDisplayed()
+        composeTestRule.runOnUiThread { composeTestRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeTestRule.onNodeWithTag(MAP_HOME_SEARCH_TAG).assertIsDisplayed()
     }
 
     /**
@@ -382,8 +516,9 @@ class MapFirstShellTest {
         setShell()
         // Expand the map's search bar, then leave the Map tab with it expanded.
         composeTestRule.onNodeWithTag(MAP_HOME_SEARCH_TAG).performClick()
-        composeTestRule.onNodeWithText(str(R.string.shell_searchHint)).assertIsDisplayed()
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabSocial)).performClick()
+        composeTestRule.onNodeWithTag(NAV_SEARCH_TEST_TAG).assertIsDisplayed()
+        composeTestRule.runOnUiThread { composeTestRule.activity.onBackPressedDispatcher.onBackPressed() }
+        tabNode(R.string.shell_tabSocial).performClick()
         composeTestRule.waitForIdle()
 
         composeTestRule.runOnUiThread {
@@ -544,7 +679,7 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithText(str(R.string.shell_searchHint)).assertDoesNotExist()
         // Tapping the round button expands the full-width "Where to?" bar.
         composeTestRule.onNodeWithTag(MAP_HOME_SEARCH_TAG).performClick()
-        composeTestRule.onNodeWithText(str(R.string.shell_searchHint)).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(NAV_SEARCH_TEST_TAG).assertIsDisplayed()
     }
 
     @Test
@@ -664,14 +799,13 @@ class MapFirstShellTest {
         val layers = topOf(MAP_HOME_LAYERS_TAG)
         val compass = topOf(MAP_HOME_COMPASS_TAG)
         val savedPlaces = topOf(MAP_HOME_SAVED_PLACES_TAG)
-        val chat = topOfDescribed(str(R.string.shell_chat))
+        composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).assertDoesNotExist()
 
         assertTrue("report must be above layers", report < layers)
         assertTrue("layers must be above the compass", layers < compass)
         assertTrue("the compass must be above saved-places", compass < savedPlaces)
-        assertTrue("saved-places must be above chat", savedPlaces < chat)
         // Nothing sits between the compass and the saved-places control.
-        listOf(report, layers, chat).forEach {
+        listOf(report, layers).forEach {
             assertFalse("no control may sit between compass and saved-places", it in compass..savedPlaces)
         }
     }
@@ -901,16 +1035,22 @@ class MapFirstShellTest {
     }
 
     @Test
-    fun chatBubble_opensChatHub_andBackArrowDismissesIt() {
-        setShell()
-        // The floating chat bubble is present (unread count is 0 → "Chat").
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_chat)).assertExists()
+    fun chatTab_opensOpaqueHub_andBackArrowResumesTheMap() {
+        val surface = StubMapSurface()
+        setShell(mapSurface = surface)
+        // Chat is a labelled primary tab, not a floating map bubble.
+        tabNode(R.string.shell_tabChat).assertExists()
         // Tapping it opens the FULL-PAGE chat HUB over the map (the map stays
         // composed behind it, and the shell's bottom bar stays visible).
-        composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
+        tabNode(R.string.shell_tabChat).performClick()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
-        // The map stays composed behind the hub.
-        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+        // The map instance stays mounted, but its chrome is intentionally
+        // absent from the semantics tree while the opaque reader covers it.
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertDoesNotExist()
+        composeTestRule.runOnIdle {
+            assertEquals(1, surface.contentCompositions)
+            assertFalse(surface.isActive)
+        }
         // The hub shows its four top tabs — Community / Convoys / Friends /
         // Notifications — not the old two-button peek.
         composeTestRule.onNodeWithText(str(R.string.chatHub_tabCommunity)).assertIsDisplayed()
@@ -918,14 +1058,17 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithText(str(R.string.chatHub_tabNotifications)).assertIsDisplayed()
         // The shell's bottom bar stays reachable beneath the hub (it is inset above
         // the bar, not a full-screen takeover).
-        composeTestRule
-            .onNodeWithContentDescription(str(R.string.shell_tabHistory))
+        tabNode(R.string.shell_tabChat)
             .assertExists()
         // The hub-level Back arrow dismisses chat back to the map.
         composeTestRule.onNodeWithContentDescription(str(R.string.chatHub_back)).performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+        composeTestRule.runOnIdle {
+            assertEquals(1, surface.contentCompositions)
+            assertTrue(surface.isActive)
+        }
     }
 
     @Test
@@ -961,20 +1104,20 @@ class MapFirstShellTest {
     fun chatHub_doesNotReappearAfterLeavingAndReturningToMapTab() {
         setShell()
         // Open the hub over the map.
-        composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
+        tabNode(R.string.shell_tabChat).performClick()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
 
         // Leaving the Map tab closes the hub: tapping a bottom-bar tab clears the
         // rememberSaveable open flag (and the map-cover gate drops). (The shell's
         // single map surface stays composed across tabs, so this asserts on the
         // HUB, not the map.)
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabHistory)).performClick()
+        tabNode(R.string.shell_tabSocial).performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
 
         // Returning to the Map tab must NOT re-open the hub — the regression: a
         // saveable open flag that survived would pop the hub back up here.
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
+        tabNode(R.string.shell_tabMap).performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
@@ -1046,17 +1189,17 @@ class MapFirstShellTest {
         setShell()
         // All five tabs are present. Icon-only bottom nav: labels are null and the
         // tab name lives on the icon's contentDescription, so select by that.
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabHistory)).assertExists()
+        tabNode(R.string.shell_tabChat).assertExists()
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabCreate)).assertExists()
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabSocial)).assertExists()
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabGarage)).assertExists()
+        tabNode(R.string.shell_tabSocial).assertExists()
+        tabNode(R.string.shell_tabGarage).assertExists()
 
         // Switching to History leaves the map home.
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabHistory)).performClick()
-        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertDoesNotExist()
+        tabNode(R.string.shell_tabChat).performClick()
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
 
         // Returning to the Map tab restores the map home.
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
+        tabNode(R.string.shell_tabMap).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
     }
 
@@ -1089,7 +1232,7 @@ class MapFirstShellTest {
 
     /** Opens a tab by its bottom-bar content description. */
     private fun openTab(tabTitleRes: Int) {
-        composeTestRule.onNodeWithContentDescription(str(tabTitleRes)).performClick()
+        tabNode(tabTitleRes).performClick()
         composeTestRule.waitForIdle()
     }
 
@@ -1127,10 +1270,11 @@ class MapFirstShellTest {
     }
 
     @Test
-    fun historyPanel_leavesUncoveredMapStripAboveCard() {
+    fun myDrives_opensFromProfileMenu_asOpaqueRoute() {
         setShell()
-        openTab(R.string.shell_tabHistory)
-        assertPanelLeavesUncoveredMapStrip(HISTORY_PANEL_TEST_TAG)
+        composeTestRule.onNodeWithTag(MAP_HOME_MORE_TAG).performClick()
+        composeTestRule.onNodeWithText(str(R.string.shell_moreDrives)).performClick()
+        composeTestRule.onNodeWithText(str(R.string.shell_moreDrives)).assertIsDisplayed()
     }
 
     @Test
@@ -1155,7 +1299,7 @@ class MapFirstShellTest {
     @Test
     fun everyPanelTab_showsALabelledDragHandle() {
         setShell()
-        for (tab in listOf(R.string.shell_tabHistory, R.string.shell_tabSocial, R.string.shell_tabGarage)) {
+        for (tab in listOf(R.string.shell_tabSocial, R.string.shell_tabGarage)) {
             openTab(tab)
             // Labelled, not `contentDescription = null`: the handle is the only
             // visible sign the page can be pulled away, so a screen reader has to
@@ -1217,18 +1361,18 @@ class MapFirstShellTest {
     @Test
     fun tappingTheUncoveredMapStrip_dismissesThePanel() {
         setShell()
-        openTab(R.string.shell_tabHistory)
+        openTab(R.string.shell_tabSocial)
         val cardTop =
-            composeTestRule.onNodeWithTag(HISTORY_PANEL_TEST_TAG).getUnclippedBoundsInRoot().top
+            composeTestRule.onNodeWithTag(SOCIAL_PANEL_TEST_TAG).getUnclippedBoundsInRoot().top
         assertTrue("no uncovered strip to tap", cardTop > 16.dp)
 
         val stripMidYPx = with(composeTestRule.density) { cardTop.toPx() } / 2f
-        composeTestRule.onNodeWithTag(HISTORY_PANEL_TEST_TAG).performTouchInput {
+        composeTestRule.onNodeWithTag(SOCIAL_PANEL_TEST_TAG).performTouchInput {
             click(Offset(width / 2f, -stripMidYPx))
         }
         composeTestRule.waitForIdle()
 
-        composeTestRule.onNodeWithTag(HISTORY_PANEL_TEST_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(SOCIAL_PANEL_TEST_TAG).assertDoesNotExist()
     }
 
     /**
@@ -1308,7 +1452,7 @@ class MapFirstShellTest {
         setShell(mapSurface = surface)
         composeTestRule.runOnIdle { assertTrue(surface.isActive) }
 
-        for (tab in listOf(R.string.shell_tabHistory, R.string.shell_tabSocial, R.string.shell_tabGarage)) {
+        for (tab in listOf(R.string.shell_tabSocial, R.string.shell_tabGarage)) {
             openTab(tab)
             composeTestRule.runOnIdle {
                 assertTrue(

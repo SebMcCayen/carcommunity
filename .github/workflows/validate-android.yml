@@ -321,7 +321,15 @@ jobs:
           disable-animations: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
           working-directory: apps/android
-          script: ./gradlew --no-daemon connectedDebugAndroidTest
+          # Keep the real test exit status while retaining config-less visual
+          # evidence before the emulator runner tears down the device.
+          script: >-
+            bash -c 'test_status=0;
+            ./gradlew --no-daemon connectedDebugAndroidTest || test_status=$?;
+            mkdir -p ../../android-redesign-captures/attempt-1;
+            adb pull /sdcard/Pictures/carcommunity-redesign
+            ../../android-redesign-captures/attempt-1 || true;
+            exit "$test_status"'
 
       - name: Run Compose UI tests on emulator (retry)
         if: steps.emulator_attempt_1.outcome == 'failure'
@@ -334,7 +342,22 @@ jobs:
           disable-animations: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
           working-directory: apps/android
-          script: ./gradlew --no-daemon connectedDebugAndroidTest
+          script: >-
+            bash -c 'test_status=0;
+            ./gradlew --no-daemon connectedDebugAndroidTest || test_status=$?;
+            mkdir -p ../../android-redesign-captures/attempt-2;
+            adb pull /sdcard/Pictures/carcommunity-redesign
+            ../../android-redesign-captures/attempt-2 || true;
+            exit "$test_status"'
+
+      - name: Upload config-less native redesign captures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-redesign-captures
+          path: android-redesign-captures/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Upload instrumentation results on failure
         if: failure()

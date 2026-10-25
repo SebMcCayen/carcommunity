@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.navigation
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -100,6 +101,7 @@ class NavigationSearchScreenTest {
         }
         composeTestRule.onNodeWithText(str(R.string.addressSearch_searchPlaceholder))
             .assertIsDisplayed()
+        composeTestRule.onNodeWithTag(NAV_SEARCH_INPUT_TEST_TAG).assertIsFocused()
     }
 
     @Test
@@ -129,6 +131,7 @@ class NavigationSearchScreenTest {
         composeTestRule.onNodeWithText(suggestion.name).assertIsDisplayed()
 
         composeTestRule.onNodeWithText(suggestion.name).performClick()
+        composeTestRule.onNodeWithText(str(R.string.addressSearch_searchPlaceholder)).assertDoesNotExist()
 
         // Route resolved → the sheet appears at its PEEK. This is the whole fix:
         // the directions are composed but revealed to zero height, so the map
