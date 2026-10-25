@@ -65,7 +65,9 @@ class SimulatorPackageTests(unittest.TestCase):
             with self.assertRaisesRegex(package.PackageError, "Config-less"):
                 package.check_package(app)
             self.assertEqual(package.check_package(app, "demo"), 1)
-            for field, value in (("PROJECT_ID", "production-project"), ("API_KEY", "private-value"), ("BUNDLE_ID", "other")):
+            for field, value in (("PROJECT_ID", "production-project"), ("API_KEY", "private-value"),
+                                 ("BUNDLE_ID", "other"), ("DATABASE_URL", "https://real-project.firebaseio.com"),
+                                 ("STORAGE_BUCKET", "real-project.appspot.com")):
                 path.write_bytes(plistlib.dumps({**config, field: value}))
                 with self.assertRaises(package.PackageError) as caught:
                     package.check_package(app, "demo")
@@ -81,6 +83,14 @@ class SimulatorPackageTests(unittest.TestCase):
             (app / "Info.plist").write_bytes(plistlib.dumps({"CFBundleIdentifier": BUNDLE, "CFBundleExecutable": "../outside"}))
             with self.assertRaisesRegex(package.PackageError, "executable name"):
                 package.check_package(app)
+
+    def test_malformed_package_xml_is_reported_without_its_values(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = Path(directory)
+            (app / "Info.plist").write_text('<?xml version="1.0"?><plist><dict><key>private-marker</key>')
+            with self.assertRaises(package.PackageError) as caught:
+                package.check_package(app)
+            self.assertNotIn("private-marker", str(caught.exception))
 
 
 if __name__ == "__main__":

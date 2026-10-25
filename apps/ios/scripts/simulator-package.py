@@ -6,6 +6,7 @@ from pathlib import Path
 import struct
 import subprocess
 import sys
+from xml.parsers.expat import ExpatError
 
 
 class PackageError(Exception):
@@ -64,7 +65,7 @@ def simulator_identities(data):
                             "Invalid simulator entitlement section")
                     try:
                         value = plistlib.loads(data[offset:offset + size])
-                    except (ValueError, plistlib.InvalidFileException) as error:
+                    except (ValueError, plistlib.InvalidFileException, ExpatError) as error:
                         raise PackageError("Invalid simulator entitlement plist") from error
                     require(isinstance(value, dict), "Invalid simulator entitlement dictionary")
                     identity = value.get("application-identifier")
@@ -102,7 +103,7 @@ def check_package(app, firebase_mode="absent"):
             require(info.get("NSAppTransportSecurity", {}).get("NSAllowsArbitraryLoads") is not True,
                     "Demo package must not allow arbitrary network loads")
         return len(identities)
-    except (OSError, ValueError, KeyError, TypeError, AttributeError, struct.error) as error:
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, struct.error, ExpatError) as error:
         raise PackageError("Cannot read valid simulator package metadata") from error
 
 

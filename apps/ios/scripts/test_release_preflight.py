@@ -123,6 +123,13 @@ class ReleasePreflightTests(unittest.TestCase):
             prepare.prepare(self.root, output)
         self.assertFalse(output.exists())
 
+    def test_malformed_xml_does_not_escape_as_a_raw_parser_error(self):
+        path = self.root / "KCC/GoogleService-Info.plist"
+        path.write_text('<?xml version="1.0"?><plist><dict><key>private-config-marker</key>')
+        with self.assertRaises(preflight.PreflightError) as caught:
+            preflight.load_plist(path)
+        self.assertNotIn("private-config-marker", str(caught.exception))
+
 
 if __name__ == "__main__":
     unittest.main()
