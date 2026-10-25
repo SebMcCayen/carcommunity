@@ -1,0 +1,30 @@
+{
+  "appSource": "7c2e64deecdbabd44b34dd964c2591ecced6e9d6",
+  "runId": "40188008306",
+  "artifactId": "12597037490",
+  "artifactName": "android-redesign-captures",
+  "artifactFolder": "attempt-1/carcommunity-redesign/wave2-dark",
+  "apiLevel": 34,
+  "widthPixels": 320,
+  "heightPixels": 640,
+  "theme": "dark",
+  "appLocale": "en",
+  "fixtureContentLocale": "sv",
+  "fontScale": 1.0,
+  "data": "local androidTest inputs; not production accounts",
+  "densityDpi": null,
+  "filesSha256": {
+    "chat.png": "c209d29774da94e1f9c4a4bd9567c11ea7ebfc8a0a57ae58ce5dc48fb620f891",
+    "crown.png": "89cbe6e1520e4b77df32004a0649e8b0d1e5fdf640808e154c412e0c9eee185c",
+    "driver-detail.png": "b90d1db12f4375541791bcacb44eccb3a403580b1fea12c08c6685165bbfd7f2",
+    "driver.png": "13cc824857201f216a544482938004d728abe4133d6cd0acf7b068d91bdb49d8",
+    "event-detail.png": "3051fa467bd2be1ded385fc2b54bb4621c0085cb55a2de05600669f2a0fe322c",
+    "events.png": "64e4eb7cd85a299a9f31955bec978545f92732ed3fcb0f63faff5923e51b4e4c",
+    "garage.png": "18836259c7d17f106ca380e23fe8422fe6ebd972c20c7fd2d2945860eed4a9b3",
+    "map-live.png": "d121eb5cdec0074b648616a20a36e5b7dcd682062b989c13023b4587c94f4fef",
+    "map-place.png": "aa32785b3e32c49c0327a6898d65f60b0655bce9be33eecedb46546f85c1f0e6",
+    "membership.png": "63abf6555cf866e9c275b5299f09fba555cefca527a51a57a7ecdadc053d28f7",
+    "profile.png": "14bed5655b0a2aa8472fe4bc6cbd7087cb54b50876472f3b98effaa378f62d7e",
+    "settings.png": "a715a3a94669bae2914ccc202ee14538719332279104b7bd860d3a4efa3b7e16"
+  }
+}

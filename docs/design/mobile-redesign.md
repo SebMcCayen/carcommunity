@@ -215,7 +215,10 @@ stale, live start/stop/hide, background/foreground, convoy and block/account
 transitions, crown claim/duplicate/budget and Stockholm midnight/DST, existing
 store purchase pending/cancel/restore/revoke, and performance on an affordable
 Android phone and an iPhone. CI builds alone do not prove those scenarios.
-PRs stay unmerged; no release, backend deploy or production flag change is implied.
+Use isolated PRs. The owner has authorized merging only after successful checks
+and addressed review findings. A code merge is not release approval: no store
+upload, backend deployment or production flag change is implied. Keep current
+executed results separate from historical pending notes in platform reports.
 
 ## Later cosmetic delivery
 
