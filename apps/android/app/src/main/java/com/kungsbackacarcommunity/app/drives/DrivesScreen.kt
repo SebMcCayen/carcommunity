@@ -43,6 +43,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -68,6 +70,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -775,14 +778,17 @@ private fun DriveCard(
     var showConfirm by remember { mutableStateOf(false) }
 
     Card(
-        modifier = Modifier.fillMaxWidth().clickable { onSelect(drive.rideId) },
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                // Only the summary opens detail. Share/delete keep independent actions.
+                modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { onSelect(drive.rideId) }
+                    .padding(vertical = KccSpacing.s2),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -837,7 +843,10 @@ private fun DriveCard(
                 TextButton(onClick = { launchShareIntent(context, shareText, shareUnavailable) }) {
                     Text(text = stringResource(R.string.savedDrives_shareAction))
                 }
-                TextButton(onClick = { showConfirm = true }, enabled = !deleteInFlight) {
+                TextButton(
+                    onClick = { showConfirm = true }, enabled = !deleteInFlight,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) {
                     Text(text = stringResource(R.string.savedDrives_deleteAction))
                 }
             }
@@ -1048,6 +1057,10 @@ fun SavedDriveDetailScreen(
     val shareSummary = driveShareText(drive, topSpeedMetersPerSecond = topSpeed)
 
     AeroPage(title = stringResource(R.string.savedDrives_detailTitle), modifier = modifier) {
+            DriveMetricSummary(
+                distance = DriveFormatters.formatDistance(drive.distanceMeters),
+                duration = DriveFormatters.formatDuration(drive.durationSeconds),
+            )
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
@@ -1059,14 +1072,6 @@ fun SavedDriveDetailScreen(
                     if (timeRangeText != null) {
                         StatRow(stringResource(R.string.savedDrives_timeRange), timeRangeText)
                     }
-                    StatRow(
-                        stringResource(R.string.savedDrives_distance),
-                        DriveFormatters.formatDistance(drive.distanceMeters),
-                    )
-                    StatRow(
-                        stringResource(R.string.savedDrives_duration),
-                        DriveFormatters.formatDuration(drive.durationSeconds),
-                    )
                     StatRow(
                         stringResource(R.string.savedDrives_averageSpeed),
                         DriveFormatters.formatSpeed(averageSpeed),
@@ -1192,6 +1197,10 @@ fun SavedDriveDetailScreen(
                 onClick = { showConfirm = true },
                 enabled = deleteStatus != DriveDeleteStatus.Deleting,
                 modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                ),
             ) {
                 Text(text = stringResource(R.string.savedDrives_deleteAction))
             }
@@ -1322,11 +1331,13 @@ private fun StatRow(label: String, value: String) {
             text = label,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
         )
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
         )
     }
 }

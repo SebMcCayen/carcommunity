@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -67,17 +69,16 @@ fun DriveStatsScreen(
 @Composable
 private fun StatsContent(stats: DriveStatsSnapshot) {
     StatsCard(stringResource(R.string.savedDrives_statsAllTime)) {
+        DriveMetricSummary(
+            distance = DriveFormatters.formatDistance(stats.totalDistanceMeters),
+            duration = DriveFormatters.formatDuration(stats.totalDurationSeconds),
+            distanceLabel = stringResource(R.string.savedDrives_statsTotalDistance),
+            durationLabel = stringResource(R.string.savedDrives_statsTotalTime),
+        )
+        HorizontalDivider()
         StatRow(
             stringResource(R.string.savedDrives_statsTotalDrives),
             stats.totalDrives.toString(),
-        )
-        StatRow(
-            stringResource(R.string.savedDrives_statsTotalDistance),
-            DriveFormatters.formatDistance(stats.totalDistanceMeters),
-        )
-        StatRow(
-            stringResource(R.string.savedDrives_statsTotalTime),
-            DriveFormatters.formatDuration(stats.totalDurationSeconds),
         )
         StatRow(
             stringResource(R.string.savedDrives_statsLongest),
@@ -119,14 +120,17 @@ private fun InfoCard(text: String) {
 
 @Composable
 private fun StatsCard(header: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
-            verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s4),
         ) {
             Text(
                 text = header,
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             content()
@@ -144,11 +148,13 @@ private fun StatRow(label: String, value: String) {
             text = label,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
         )
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
         )
     }
 }

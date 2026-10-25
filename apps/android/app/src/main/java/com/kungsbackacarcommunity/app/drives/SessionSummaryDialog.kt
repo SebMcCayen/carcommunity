@@ -2,6 +2,13 @@ package com.kungsbackacarcommunity.app.drives
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -99,26 +106,27 @@ private fun SaveFailedPrompt(
         modifier = Modifier.testTag(SESSION_SUMMARY_DIALOG_TAG),
         // Non-dismissible: a transient failure must not let the drive vanish.
         onDismissRequest = {},
+        icon = { Icon(Icons.Filled.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
         title = { Text(stringResource(R.string.savedDrives_saveFailedTitle)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(KccSpacing.s4),
+            ) {
+                Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium) {
+                    Text(
+                        text = stringResource(
+                            // A permanent refusal cannot succeed on retry.
+                            if (isPermanentRefusal) R.string.savedDrives_memberRequired else R.string.savedDrives_saveError,
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(KccSpacing.s3),
+                    )
+                }
                 DriveSummaryRows(
                     elapsedMillis = elapsedMillis,
                     preview = rememberSummaryPreview(elapsedMillis, pointsProvider),
-                )
-                Text(
-                    text =
-                        stringResource(
-                            // A member-gate refusal can never succeed on a retry,
-                            // so name what is actually wrong instead of "try again".
-                            if (isPermanentRefusal) {
-                                R.string.savedDrives_memberRequired
-                            } else {
-                                R.string.savedDrives_saveError
-                            },
-                        ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
                 )
             }
         },

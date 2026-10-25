@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -90,14 +92,17 @@ fun ProfileBadgesSection(
     var selected by remember { mutableStateOf<BadgeDetail?>(null) }
     var expanded by remember { mutableStateOf(false) }
 
-    Card(modifier = modifier.fillMaxWidth()) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
             Text(
                 text = stringResource(R.string.badgeShowcase_title),
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
@@ -109,6 +114,12 @@ fun ProfileBadgesSection(
                     ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            LinearProgressIndicator(
+                progress = { if (showcase.totalCount > 0) showcase.earnedCount.toFloat() / showcase.totalCount else 0f },
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
             )
 
             if (showcase.hasAnyBadge) {
@@ -296,54 +307,54 @@ private fun LadderProgressRow(progress: LadderProgress) {
     val ladder = progress.ladder
     val threshold = formatLadderValue(ladder.unit, next.threshold)
 
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s3),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
+        ) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(ladderNameRes(ladder.id)),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = stringResource(R.string.badgeShowcase_nextTier, stringResource(tierNameRes(next.tier))),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Text(
-                text = stringResource(ladderNameRes(ladder.id)),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = stringResource(R.string.badgeShowcase_nextTier, stringResource(tierNameRes(next.tier))),
-                style = MaterialTheme.typography.labelMedium,
+                text = stringResource(ladderRequirementRes(ladder.id), threshold),
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        }
-        Text(
-            text = stringResource(ladderRequirementRes(ladder.id), threshold),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
 
-        val fraction = progress.fractionToNext
-        val observed = progress.observedValue
-        if (fraction != null && observed != null) {
-            LinearProgressIndicator(
-                progress = { fraction },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Text(
-                text =
-                    stringResource(
+            val fraction = progress.fractionToNext
+            val observed = progress.observedValue
+            if (fraction != null && observed != null) {
+                LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
+                Text(
+                    text = stringResource(
                         R.string.badgeShowcase_progressCount,
                         formatLadderValue(ladder.unit, observed),
                         threshold,
                     ),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            // No honest client-readable counter for this ladder — say so rather
-            // than draw a bar the app cannot back up.
-            Text(
-                text = stringResource(ladderTaglineRes(ladder.id)),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                // Do not invent a counter when the owner-only read is unavailable.
+                Text(
+                    text = stringResource(ladderTaglineRes(ladder.id)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

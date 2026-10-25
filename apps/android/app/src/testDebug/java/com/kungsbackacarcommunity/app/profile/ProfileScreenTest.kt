@@ -33,6 +33,25 @@ class ProfileScreenTest {
     private val profile = UserProfile(displayName = "Sebbe", bio = "Volvo fan", onboardingComplete = true)
 
     @Test
+    fun redesignedDrivesRowKeepsItsAccessibleNavigationAction() {
+        var opened = 0
+        composeTestRule.setContent {
+            KccTheme {
+                ProfileScreen(
+                    profile = profile, saveStatus = ProfileEditStatus.Idle,
+                    onSave = { _, _, _ -> }, onBack = {}, onSignOut = {},
+                    onOpenDrives = { opened++ },
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.shell_moreDrives))
+            .performScrollTo()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+            .performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(1, opened)
+    }
+
+    @Test
     fun viewModeShowsProfileAndEditEntersEditMode() {
         composeTestRule.setContent {
             KccTheme {

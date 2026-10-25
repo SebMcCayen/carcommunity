@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.profile
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,6 +13,12 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.union
 import androidx.compose.material3.Button
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -33,6 +40,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -108,7 +118,7 @@ fun ProfileScreen(
     }
 
     AeroPage(
-        title = stringResource(R.string.profile_title),
+        title = stringResource(if (editing) R.string.profile_editButton else R.string.profile_title),
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp),
         // Consume the IME (and nav-bar) inset so the save button and lower fields
@@ -116,23 +126,13 @@ fun ProfileScreen(
         // (matches FeedbackReportScreen / issue #818).
         contentWindowInsets = WindowInsets.ime.union(WindowInsets.navigationBars),
     ) {
-            AvatarSection(
-                supporterBadgeVisible = profile?.supporterBadge?.visible == true,
+            ProfileIdentitySection(
+                profile = profile,
+                editing = editing,
                 avatarUrl = avatarUrl,
                 uploadStatus = avatarUploadStatus,
                 onChangeAvatar = onChangeAvatar,
             )
-
-            // Directly under the profile picture, as asked, and ONLY when the
-            // member has filled something in — the row draws nothing at all
-            // otherwise (ProfileSocialLinksRow). Hidden while editing, where
-            // the fields themselves are the surface.
-            if (!editing) {
-                ProfileSocialLinksRow(
-                    handles = profile?.social ?: SocialHandles.EMPTY,
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                )
-            }
 
             if (editing) {
                 val validation =
@@ -157,6 +157,7 @@ fun ProfileScreen(
                     onValueChange = { bioField = it },
                     label = { Text(stringResource(R.string.profile_bioLabel)) },
                     isError = validation.bioError != null,
+                    minLines = 3,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 FieldError(validation.bioError)
@@ -202,20 +203,6 @@ fun ProfileScreen(
                     Text(stringResource(R.string.profile_cancelButton))
                 }
             } else {
-                Text(
-                    text = profile?.displayName?.takeIf { it.isNotBlank() }
-                        ?: stringResource(R.string.profile_emptyDisplayName),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                )
-                Text(
-                    text = profile?.bio?.takeIf { it.isNotBlank() }
-                        ?: stringResource(R.string.profile_emptyBio),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-
                 Spacer(modifier = Modifier.height(4.dp))
                 Button(
                     onClick = {
@@ -240,8 +227,21 @@ fun ProfileScreen(
                 )
 
                 if (onOpenDrives != null) {
-                    OutlinedButton(onClick = onOpenDrives, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(R.string.shell_moreDrives))
+                    Surface(
+                        onClick = onOpenDrives,
+                        modifier = Modifier.fillMaxWidth().semantics { role = Role.Button },
+                        shape = MaterialTheme.shapes.large,
+                        color = MaterialTheme.colorScheme.surface,
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+                            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Filled.BarChart, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
+                            Text(stringResource(R.string.shell_moreDrives), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+                        }
                     }
                 }
 
@@ -249,6 +249,49 @@ fun ProfileScreen(
 
                 ProfileStatsSection(summary = statsSummary)
             }
+    }
+}
+
+@Composable
+private fun ProfileIdentitySection(
+    profile: UserProfile?,
+    editing: Boolean,
+    avatarUrl: String?,
+    uploadStatus: ImageUploadStatus,
+    onChangeAvatar: (() -> Unit)?,
+) {
+    Surface(color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.large) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+        ) {
+            AvatarSection(
+                supporterBadgeVisible = profile?.supporterBadge?.visible == true,
+                avatarUrl = avatarUrl,
+                uploadStatus = uploadStatus,
+                onChangeAvatar = onChangeAvatar,
+            )
+            if (!editing) {
+                // Preserve the social links directly beneath the avatar.
+                ProfileSocialLinksRow(
+                    handles = profile?.social ?: SocialHandles.EMPTY,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                )
+                Text(
+                    text = profile?.displayName?.takeIf { it.isNotBlank() }
+                        ?: stringResource(R.string.profile_emptyDisplayName),
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                )
+                Text(
+                    text = profile?.bio?.takeIf { it.isNotBlank() }
+                        ?: stringResource(R.string.profile_emptyBio),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 
@@ -268,7 +311,7 @@ private fun AvatarSection(
         SupporterAvatarFrame(supporterBadgeVisible) {
             Box(
                 modifier = Modifier
-                    .size(96.dp)
+                    .size(112.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center,
@@ -283,10 +326,11 @@ private fun AvatarSection(
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else {
-                    Text(
-                        text = "?",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    Icon(
+                        Icons.Filled.Person,
+                        contentDescription = stringResource(R.string.profile_avatarAlt),
+                        modifier = Modifier.size(KccSpacing.s12),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 if (uploading) {
