@@ -81,6 +81,18 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertTrue(tab.isHittable)
             tab.tap()
             assertSelected(tab)
+            if index == 2 {
+                let socialLabels = language == "sv"
+                    ? ["Event", "Kronjakt", "Topplista"]
+                    : ["Events", "Crown Hunt", "Leaderboard"]
+                for socialLabel in socialLabels {
+                    XCTAssertTrue(app.buttons[socialLabel].waitForExistence(timeout: 5))
+                }
+                XCTAssertFalse(app.buttons[language == "sv" ? "Konvojer" : "Convoys"].exists,
+                               "Convoys must not be offered in the Social menu")
+                // Partners remains hidden without its Firebase-backed coordinator.
+                XCTAssertFalse(app.buttons["Partners"].exists)
+            }
             let heading = index == 3 ? (language == "sv" ? "Mitt garage" : "My Garage") : label
             XCTAssertTrue(app.staticTexts[heading].firstMatch.waitForExistence(timeout: 5))
         }

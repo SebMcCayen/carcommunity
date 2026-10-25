@@ -782,7 +782,6 @@ struct ShellView: View {
                     partnersEnabled: featureFlags.isEnabled(.partners)
                         && partnersCoordinator != nil,
                     onOpenEvents: { openEvents() },
-                    onOpenConvoys: openConvoyManagement,
                     onOpenCrownHunt: { routes = routes.opening(.crownHunt) },
                     onOpenLeaderboard: { routes = routes.opening(.leaderboard) },
                     onOpenPartners: { routes = routes.opening(.partners) }
