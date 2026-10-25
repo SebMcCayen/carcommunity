@@ -1,9 +1,11 @@
 package com.kungsbackacarcommunity.app.crownhunt
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -14,6 +16,16 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Dangerous
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -28,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
@@ -131,14 +144,31 @@ fun CrownHuntScreen(
         // rememberSaveable keeps the initial value only, so a later manual tab
         // switch (or config change) still sticks and the tab is never force-held.
         var selectedTab by rememberSaveable { mutableIntStateOf(if (openShop) 1 else 0) }
-        TabRow(selectedTabIndex = selectedTab) {
+        TabRow(
+            selectedTabIndex = selectedTab,
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            indicator = {},
+            divider = {},
+        ) {
             Tab(
                 selected = selectedTab == 0,
+                modifier = Modifier.background(
+                    if (selectedTab == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                    MaterialTheme.shapes.medium,
+                ),
+                selectedContentColor = MaterialTheme.colorScheme.onPrimary,
+                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 onClick = { selectedTab = 0 },
                 text = { Text(stringResource(R.string.crownHunt_tabHome)) },
             )
             Tab(
                 selected = selectedTab == 1,
+                modifier = Modifier.background(
+                    if (selectedTab == 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                    MaterialTheme.shapes.medium,
+                ),
+                selectedContentColor = MaterialTheme.colorScheme.onPrimary,
+                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 onClick = { selectedTab = 1 },
                 text = { Text(stringResource(R.string.crownHunt_tabShop)) },
             )
@@ -279,16 +309,16 @@ private fun CrownHuntInstructionsScreen(
 /** One "heading over a paragraph" instruction card. */
 @Composable
 private fun InstructionSection(title: String, body: String) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(painterResource(crownPointGlyphRes()), contentDescription = null,
+                    modifier = Modifier.size(28.dp), tint = MaterialTheme.colorScheme.primary)
+                Text(text = title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+            }
             Text(
                 text = body,
                 style = MaterialTheme.typography.bodyMedium,
@@ -401,34 +431,43 @@ private fun LegendEntry(title: String, body: String) {
 /** The member's own Kronjakt numbers: crowns, Kronpoäng, season rank, streak. */
 @Composable
 private fun PersonalStatsCard(stats: CrownPersonalStats) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                text = stringResource(R.string.crownHunt_myStatsTitle),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            StatRow(
-                label = stringResource(R.string.crownHunt_statCrowns),
-                value = stats.crownsCollected.toString(),
-            )
-            StatRow(
-                label = stringResource(R.string.crownHunt_statPoints),
-                value = stringResource(R.string.crownHunt_kpValue, stats.points),
-            )
-            StatRow(
-                label = stringResource(R.string.crownHunt_statSeasonRank),
-                value =
-                    stats.seasonRank?.let { stringResource(R.string.crownHunt_rankValue, it) }
-                        ?: stringResource(R.string.crownHunt_rankNone),
-            )
-            StatRow(
-                label = stringResource(R.string.crownHunt_statStreak),
-                value = stats.streakCurrent.toString(),
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(painterResource(crownPointGlyphRes()), contentDescription = null,
+                    modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
+                Text(
+                    text = stringResource(R.string.crownHunt_myStatsTitle),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                StatTile(
+                    label = stringResource(R.string.crownHunt_statCrowns),
+                    value = stats.crownsCollected.toString(),
+                )
+                StatTile(
+                    label = stringResource(R.string.crownHunt_statPoints),
+                    value = stringResource(R.string.crownHunt_kpValue, stats.points),
+                )
+            }
+            HorizontalDivider()
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                StatTile(
+                    label = stringResource(R.string.crownHunt_statSeasonRank),
+                    value =
+                        stats.seasonRank?.let { stringResource(R.string.crownHunt_rankValue, it) }
+                            ?: stringResource(R.string.crownHunt_rankNone),
+                )
+                StatTile(
+                    label = stringResource(R.string.crownHunt_statStreak),
+                    value = stats.streakCurrent.toString(),
+                )
+            }
             if (stats.seasonsWon > 0) {
                 StatRow(
                     label = stringResource(R.string.crownHunt_statSeasonsWon),
@@ -441,7 +480,34 @@ private fun PersonalStatsCard(stats: CrownPersonalStats) {
                     value = stringResource(CrownSpawnMessages.rarityLabelRes(rarity)),
                 )
             }
+            if (stats.byRarity.isNotEmpty()) {
+                HorizontalDivider()
+                CrownRarity.entries.forEach { rarity ->
+                    stats.byRarity[rarity]?.let { count ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(painterResource(crownGlyphRes(rarity)), contentDescription = null,
+                                modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
+                            Text(stringResource(CrownSpawnMessages.rarityLabelRes(rarity)), modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodyMedium)
+                            Text(count.toString(), style = MaterialTheme.typography.titleSmall)
+                        }
+                    }
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun RowScope.StatTile(label: String, value: String) {
+    Column(modifier = Modifier.weight(1f).padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface)
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -455,6 +521,7 @@ private fun StatRow(label: String, value: String) {
     ) {
         Text(
             text = label,
+            modifier = Modifier.weight(1f).padding(end = 8.dp),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -491,7 +558,7 @@ private fun NoStatsYetCard() {
 /** This season's top scores, with the viewer's own row highlighted. */
 @Composable
 private fun SeasonLeaderboardCard(board: CrownSeasonBoard) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -508,7 +575,10 @@ private fun SeasonLeaderboardCard(board: CrownSeasonBoard) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
-                board.rows.forEach { row -> LeaderboardRow(row) }
+                board.rows.forEachIndexed { index, row ->
+                    LeaderboardRow(row)
+                    if (index < board.rows.lastIndex) HorizontalDivider()
+                }
             }
         }
     }
@@ -518,32 +588,37 @@ private fun SeasonLeaderboardCard(board: CrownSeasonBoard) {
 @Composable
 private fun LeaderboardRow(row: CrownLeaderboardRow) {
     val weight = if (row.isViewer) FontWeight.Bold else FontWeight.Normal
-    val nameColor =
-        if (row.isViewer) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    val nameColor = MaterialTheme.colorScheme.onSurface
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surface,
+        border = if (row.isViewer) BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary) else null,
     ) {
-        Text(
-            text = stringResource(R.string.crownHunt_rankValue, row.rank),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = weight,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = row.displayName,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = weight,
-            color = nameColor,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = stringResource(R.string.crownHunt_kpValue, row.points),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = weight,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.crownHunt_rankValue, row.rank),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = weight,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = row.displayName,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = weight,
+                color = nameColor,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = stringResource(R.string.crownHunt_kpValue, row.points),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = weight,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
     }
 }
 
@@ -586,6 +661,12 @@ private fun KronjagareStatsCard(standing: KronjagareStanding) {
             if (standing.nextTier != null && standing.nextThresholdCrowns != null) {
                 val nextTierName = ladderName + " " + stringResource(tierNameRes(standing.nextTier))
                 val towardNext = standing.crownsTowardNext
+                if (towardNext != null && standing.nextThresholdCrowns > 0L) {
+                    LinearProgressIndicator(
+                        progress = { (towardNext.toFloat() / standing.nextThresholdCrowns).coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    )
+                }
                 Text(
                     text =
                         if (towardNext != null) {
@@ -704,23 +785,27 @@ private fun ColumnScope.PerkShopContent(
 /** The member's current KP balance, shown at the top of the shop. */
 @Composable
 private fun PerkBalanceCard(balanceKp: Long) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = stringResource(R.string.crownHunt_shopBalanceLabel),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = stringResource(R.string.crownHunt_kpValue, balanceKp),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
+            Icon(painterResource(crownPointGlyphRes()), contentDescription = null,
+                modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
+            Column(modifier = Modifier.weight(1f).padding(start = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = stringResource(R.string.crownHunt_shopBalanceLabel),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = stringResource(R.string.crownHunt_kpValue, balanceKp),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
         }
     }
 }
@@ -740,16 +825,26 @@ private fun PerkCard(
     val buyingThis =
         buyStatus is PerkBuyStatus.Buying && buyStatus.perkId == item.entry.perkId
     val anyBuying = buyStatus is PerkBuyStatus.Buying
-    Card(modifier = Modifier.fillMaxWidth()) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                Icon(
+                    imageVector = when (item.entry.kind) {
+                        PerkKind.TRAP -> Icons.Filled.Dangerous
+                        PerkKind.SHIELD -> Icons.Filled.Shield
+                        PerkKind.BOOST -> Icons.Filled.Bolt
+                    },
+                    contentDescription = null,
+                    modifier = Modifier.size(40.dp),
+                    tint = MaterialTheme.colorScheme.tertiary,
+                )
                 Text(
                     text = perkDisplayName(item.entry.perkId, item.entry.name, item.entry.nameEn),
                     style = MaterialTheme.typography.titleMedium,

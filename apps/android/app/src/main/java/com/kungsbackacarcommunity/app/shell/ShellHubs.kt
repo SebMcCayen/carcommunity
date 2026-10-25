@@ -2,18 +2,24 @@ package com.kungsbackacarcommunity.app.shell
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import java.text.Collator
 import java.util.Locale
@@ -74,6 +80,46 @@ fun HubScreen(
             val onClick = entry.onClick
             if (onClick != null) {
                 HubRow(entry.label, entry.icon, onClick)
+            }
+        }
+    }
+}
+
+/** Social-only dashboard. Routing supplies the already localized and gated entries. */
+@Composable
+fun SocialHub(
+    title: String,
+    entries: List<HubEntry>,
+    modifier: Modifier = Modifier,
+) {
+    AeroPage(title = title, modifier = modifier) {
+        entries.forEach { entry ->
+            val onClick = entry.onClick ?: return@forEach
+            OutlinedCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.padding(KccSpacing.s4),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+                ) {
+                    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant) {
+                        Icon(
+                            entry.icon, contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(KccSpacing.s3).size(KccSpacing.s8),
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
+                        Text(entry.label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                        if (entry.label == stringResource(R.string.shell_socialEvents)) {
+                            Text(
+                                stringResource(R.string.events_screenSubtitle),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+                }
             }
         }
     }

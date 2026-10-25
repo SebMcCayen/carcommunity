@@ -21,6 +21,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,7 +38,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.kungsbackacarcommunity.app.R
-import com.kungsbackacarcommunity.app.design.KccAlpha
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 
@@ -90,7 +91,8 @@ fun PerkDeployPopup(
                     .widthIn(max = 360.dp)
                     .testTag(PERK_DEPLOY_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {
@@ -180,58 +182,62 @@ private fun PerkDeployRow(
     val deployingThis =
         status is PerkDeployStatus.Deploying && status.perkId == item.perkId
     val anyDeploying = status is PerkDeployStatus.Deploying
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // BIG kind icon in a tinted disc.
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primaryContainer,
-            modifier = Modifier.size(56.dp),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = perkKindIcon(item.kind),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(32.dp),
-                )
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(KccSpacing.s4), verticalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // BIG kind icon in a tinted disc.
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.size(56.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = perkKindIcon(item.kind),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.size(32.dp),
+                        )
+                    }
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
+                ) {
+                    Text(
+                        text = perkDisplayName(item.perkId, item.name, item.nameEn),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.crownHunt_deployOwnedLabel,
+                            item.ownedCount,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    ActiveStateLine(item = item, nowMillis = nowMillis)
+                }
             }
-        }
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
-        ) {
-            Text(
-                text = perkDisplayName(item.perkId, item.name, item.nameEn),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = stringResource(
-                    R.string.crownHunt_deployOwnedLabel,
-                    item.ownedCount,
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            ActiveStateLine(item = item, nowMillis = nowMillis)
-        }
-        Button(
-            onClick = { onDeploy(item) },
-            enabled = item.activatable && !anyDeploying,
-            modifier = Modifier.testTag(perkDeployActivateTag(item.perkId)),
-        ) {
-            if (deployingThis) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onPrimary,
-                )
-            } else {
-                Text(stringResource(R.string.crownHunt_deployActivateButton))
+            Button(
+                onClick = { onDeploy(item) },
+                enabled = item.activatable && !anyDeploying,
+                modifier = Modifier.fillMaxWidth().testTag(perkDeployActivateTag(item.perkId)),
+            ) {
+                if (deployingThis) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                } else {
+                    Text(stringResource(R.string.crownHunt_deployActivateButton))
+                }
             }
         }
     }

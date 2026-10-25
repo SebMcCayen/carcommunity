@@ -1,7 +1,7 @@
 package com.kungsbackacarcommunity.app.events
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +15,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -86,14 +93,31 @@ fun EventsListScreen(
 ) {
     AeroPage(title = stringResource(R.string.events_title), modifier = modifier) {
             if (onSelectTab != null) {
-                TabRow(selectedTabIndex = tab.ordinal) {
+                TabRow(
+                    selectedTabIndex = tab.ordinal,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    indicator = {},
+                    divider = {},
+                ) {
                     Tab(
                         selected = tab == EventsListTab.UPCOMING,
+                        modifier = Modifier.background(
+                            if (tab == EventsListTab.UPCOMING) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                            MaterialTheme.shapes.medium,
+                        ),
+                        selectedContentColor = MaterialTheme.colorScheme.onPrimary,
+                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         onClick = { onSelectTab(EventsListTab.UPCOMING) },
                         text = { Text(text = stringResource(R.string.events_tabUpcoming)) },
                     )
                     Tab(
                         selected = tab == EventsListTab.PAST,
+                        modifier = Modifier.background(
+                            if (tab == EventsListTab.PAST) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                            MaterialTheme.shapes.medium,
+                        ),
+                        selectedContentColor = MaterialTheme.colorScheme.onPrimary,
+                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         onClick = { onSelectTab(EventsListTab.PAST) },
                         text = { Text(text = stringResource(R.string.events_tabPast)) },
                     )
@@ -273,32 +297,24 @@ private fun EmptyState(tab: EventsListTab) {
 
 @Composable
 private fun EventCard(event: EventSummary, distanceMeters: Double?, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+    OutlinedCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
         ) {
-            // Title on the left, the "going" tally on the trailing/right edge.
-            // The count is the RSVP `going` tally (people who marked themselves
-            // as attending), NOT the geofenced check-in count — it reads off the
-            // teaser's denormalized rsvpCounts.going maintained by
-            // events-onRsvpWrite, so it is public and needs no member gate.
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                EventDateBadge(event.startsAtMillis)
                 Text(
                     text = event.title,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                 )
-                Text(
-                    text = stringResource(R.string.events_rowGoingCount, event.counts.going),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
             }
             if (event.isOfficial) {
                 Text(
@@ -325,19 +341,22 @@ private fun EventCard(event: EventSummary, distanceMeters: Double?, onClick: () 
                 )
             }
             event.startsAtMillis?.let { millis ->
-                Text(
+                EventInfoLine(
+                    icon = Icons.Filled.CalendarMonth,
                     text = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(millis)),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             event.approximateArea?.takeIf { it.isNotBlank() }?.let { area ->
-                Text(
+                EventInfoLine(
+                    icon = Icons.Filled.LocationOn,
                     text = area,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            // Only the public RSVP tally; never a fabricated check-in count.
+            EventInfoLine(
+                icon = Icons.Filled.Groups,
+                text = stringResource(R.string.events_rowGoingCount, event.counts.going),
+            )
             // Nice-to-have: how far the event is, when a location is available.
             distanceMeters?.let { meters ->
                 Text(

@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.events
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,7 +14,11 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -181,7 +186,7 @@ fun CreateEventScreen(
         // submit, moderated afterwards. Create-only — an edit is to an event that
         // is already live, so the notice would be misleading.
         if (!isEdit) {
-            Card(modifier = Modifier.fillMaxWidth()) {
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = stringResource(R.string.events_createLiveNotice),
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -198,29 +203,18 @@ fun CreateEventScreen(
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
-        // Start date/time.
-        Text(
-            text =
-                startsAt?.let {
-                    DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(it))
-                } ?: stringResource(R.string.events_createNoDate),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        OutlinedButton(onClick = { showDatePicker = true }, modifier = Modifier.fillMaxWidth()) {
-            Text(text = stringResource(R.string.events_createPickStart))
-        }
-
         OutlinedTextField(
             value = description,
             onValueChange = { description = it },
             label = { Text(text = stringResource(R.string.events_createFieldDescription)) },
+            minLines = 4,
             modifier = Modifier.fillMaxWidth(),
         )
         OutlinedTextField(
             value = address,
             onValueChange = { address = it },
             label = { Text(text = stringResource(R.string.events_createFieldAddress)) },
+            leadingIcon = { Icon(Icons.Filled.LocationOn, contentDescription = null) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -268,6 +262,27 @@ fun CreateEventScreen(
             }
         }
 
+        // The same two-step date/time picker, grouped into one readable row.
+        OutlinedButton(onClick = { showDatePicker = true }, modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.CalendarMonth, contentDescription = null)
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(text = stringResource(R.string.events_createPickStart), color = MaterialTheme.colorScheme.onSurface)
+                    Text(
+                        text = startsAt?.let {
+                            DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(it))
+                        } ?: stringResource(R.string.events_createNoDate),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+        }
+
         // Public homepage opt-in. The whole row toggles (checkbox + label are
         // one touch target via toggleable), and the helper text spells out
         // exactly what becomes public — the creator is putting their event on
@@ -280,12 +295,13 @@ fun CreateEventScreen(
                 modifier =
                     Modifier
                         .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface, MaterialTheme.shapes.medium)
                         .toggleable(
                             value = publicSiteEnabled,
                             role = Role.Checkbox,
                             enabled = !saving,
                             onValueChange = { publicSiteEnabled = it },
-                        ),
+                        ).padding(12.dp),
                 verticalAlignment = Alignment.Top,
             ) {
                 Checkbox(

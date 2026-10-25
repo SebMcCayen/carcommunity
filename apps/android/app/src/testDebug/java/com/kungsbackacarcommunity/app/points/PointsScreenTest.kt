@@ -41,7 +41,7 @@ class PointsScreenTest {
     }
 
     @Test
-    fun nullBalance_rendersZero_andEmptyTransactions() {
+    fun nullBalance_showsLoading_withoutInventingZeroBalance() {
         composeTestRule.setContent {
             KccTheme {
                 PointsScreen(
@@ -51,8 +51,24 @@ class PointsScreenTest {
                 )
             }
         }
-        composeTestRule.onNodeWithText("0").assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.points_loading)).assertIsDisplayed()
+        composeTestRule.onNodeWithText("0").assertDoesNotExist()
         composeTestRule.onNodeWithText(str(R.string.points_empty)).assertIsDisplayed()
+    }
+
+    @Test
+    fun debit_keepsSignedAmountAndDescription() {
+        composeTestRule.setContent {
+            KccTheme {
+                PointsScreen(
+                    balance = 100L,
+                    entriesState = PointsEntriesState.Loaded(listOf(PointsEntry("debit", -25, 100, "Perk purchase", null))),
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText("-25").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Perk purchase").assertIsDisplayed()
     }
 
     @Test

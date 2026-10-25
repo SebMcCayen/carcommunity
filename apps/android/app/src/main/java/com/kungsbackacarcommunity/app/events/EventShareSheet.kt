@@ -10,11 +10,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -105,17 +109,28 @@ fun EventShareSheet(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(horizontal = KccSpacing.s2),
             )
-            Text(
-                text =
-                    stringResource(
-                        R.string.events_shareEventSubtitle,
-                        eventTitle?.takeIf { it.isNotBlank() }
-                            ?: stringResource(R.string.events_shareEventUnnamed),
-                    ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = KccSpacing.s2),
-            )
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.padding(KccSpacing.s4),
+                    horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Filled.Event, contentDescription = null, modifier = Modifier.size(40.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.events_shareEventSubtitle,
+                            eventTitle?.takeIf { it.isNotBlank() }
+                                ?: stringResource(R.string.events_shareEventUnnamed),
+                        ),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
 
             when (val current = state) {
                 EventShareState.Loading ->
@@ -195,7 +210,7 @@ private fun FriendRow(
     val name =
         friend.displayName?.takeIf { it.isNotBlank() }
             ?: stringResource(R.string.events_shareEventUnnamedFriend)
-    TextButton(
+    OutlinedButton(
         onClick = onClick,
         enabled = enabled,
         modifier = Modifier.fillMaxWidth().testTag(shareEventFriendRowTestTag(friend.uid)),
@@ -219,6 +234,8 @@ private fun FriendRow(
             )
             if (sending) {
                 CircularProgressIndicator(modifier = Modifier.size(18.dp))
+            } else {
+                Icon(Icons.Filled.Send, contentDescription = null, modifier = Modifier.size(24.dp))
             }
         }
     }
