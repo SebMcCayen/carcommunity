@@ -5,6 +5,7 @@ import XCTest
 
 @testable import KCC
 
+#if DEBUG
 /// Opt-in SDK integration test. No production app configuration or credentials.
 final class FirebaseEmulatorIntegrationTests: XCTestCase {
     @MainActor
@@ -56,3 +57,4 @@ private final class EmulatorOnlyAppCheckProvider: NSObject, AppCheckProvider {
         completion(AppCheckToken(token: "local-emulator-test-only", expirationDate: Date().addingTimeInterval(3600)), nil)
     }
 }
+#endif
