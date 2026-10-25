@@ -2,6 +2,27 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 55,
+      "versionName": "1.1.0",
+      "releaseDate": "2026-10-25",
+      "highlights": [
+        "Ny, enhetlig design för karta, chatt, garage och profil",
+        "Chattar och Driver-inlägg samlade på ett ställe",
+        "Tydligare event, Kronjakt, inställningar och medlemskap"
+      ],
+      "changes": [
+        "Design: enhetliga färger, tydligare rubriker, knappar och kort i appen",
+        "Karta: uppdaterade menyer för platser, rapporter, live-delning och konvojer",
+        "Chatt: tydligare konversationer och enklare växling mellan chattar och Driver-inlägg",
+        "Driver: läs inlägg och kommentarer och behåll din plats när du växlar tillbaka till chatten",
+        "Social: tydligare översikt över event, Kronjakt, resultat och Kronpoäng",
+        "Garage: kompaktare fordonskort med samlade alternativ för varje bil",
+        "Profil: uppdaterad presentation av utmärkelser, körningar och statistik",
+        "Mina körningar: öppnas från profilen med tydligare detaljer och sparstatus",
+        "Inställningar: grupperade alternativ och tydligare sidor för medlemskap, partnerförmåner och hjälp"
+      ]
+    },
+    {
       "versionCode": 54,
       "versionName": "1.0.3",
       "releaseDate": "2026-09-14",
@@ -67,9 +88,7 @@
       "versionCode": 50,
       "versionName": "0.8.39",
       "releaseDate": "2026-08-30",
-      "highlights": [
-        "Tydligare och mer komplett hantering av medlemskapet"
-      ],
+      "highlights": ["Tydligare och mer komplett hantering av medlemskapet"],
       "changes": [
         "Medlemskap: medlemssidan visar nu om du har Plus eller Supporter",
         "Medlemskap: byt mellan Plus och Supporter direkt från appen",
@@ -80,9 +99,7 @@
       "versionCode": 49,
       "versionName": "0.8.38",
       "releaseDate": "2026-08-30",
-      "highlights": [
-        "Hantera ditt medlemskap direkt från appen"
-      ],
+      "highlights": ["Hantera ditt medlemskap direkt från appen"],
       "changes": [
         "Medlemskap: öppna Google Play från medlemssidan för att ändra eller avsluta ditt aktiva Plus- eller Supporter-medlemskap"
       ]
