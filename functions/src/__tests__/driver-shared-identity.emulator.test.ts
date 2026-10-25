@@ -16,7 +16,7 @@ import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { deleteObject, getBytes, ref, uploadBytes } from 'firebase/storage';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { afterAll, beforeAll, describe, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const FIREBASE_DIR = resolve(__dirname, '../../../firebase');
 const ALICE = 'driver-rules-alice';
@@ -127,6 +127,15 @@ describe('Driver shared Firebase identity rules', () => {
     );
   });
 
+  it('allows the owner to bootstrap Driver state before a Driver profile exists', async () => {
+    const noDriver = testEnv.authenticatedContext(NO_DRIVER).firestore();
+    const missingProfile = await assertSucceeds(getDoc(doc(noDriver, 'driverUsers', NO_DRIVER)));
+    expect(missingProfile.exists()).toBe(false);
+    await assertFails(
+      getDoc(doc(noDriver, 'driverUsers', NO_DRIVER, 'bookmarks', 'thread-1')),
+    );
+  });
+
   it('keeps CarCommunity admin and Driver admin authority separate', async () => {
     const driverAdmin = testEnv
       .authenticatedContext(DRIVER_ADMIN, {
@@ -143,9 +152,12 @@ describe('Driver shared Firebase identity rules', () => {
     await assertFails(setDoc(doc(driverAdmin, 'driverAuditLogs', 'forged'), { action: 'forged' }));
   });
 
-  it('denies private Driver access when the Driver profile is suspended', async () => {
+  it('exposes only the root status record when the Driver profile is suspended', async () => {
     const suspended = testEnv.authenticatedContext(DRIVER_SUSPENDED).firestore();
-    await assertFails(getDoc(doc(suspended, 'driverUsers', DRIVER_SUSPENDED)));
+    await assertSucceeds(getDoc(doc(suspended, 'driverUsers', DRIVER_SUSPENDED)));
+    await assertFails(
+      getDoc(doc(suspended, 'driverUsers', DRIVER_SUSPENDED, 'bookmarks', 'thread-1')),
+    );
   });
 
   it('continues to expose the canonical profile and garage only under their CarCommunity rules', async () => {
