@@ -118,10 +118,25 @@ fun SubscriptionScreen(
             }
         }
 
+        OutlinedCard(modifier = Modifier.fillMaxWidth().testTag("membership_community")) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(R.string.subscription_communityPlanName),
+                    Modifier.semantics { heading() },
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Text(
+                    stringResource(R.string.subscription_communityPlanBody),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
         SubscriptionPlanCard(
             // Existing title resources contain planning prices. Keep the
             // card price-free; Play supplies the localized checkout price.
-            title = stringResource(R.string.subscription_subscribePlusAction),
+            title = stringResource(R.string.subscription_plusPlanName),
             body = stringResource(R.string.subscription_plusBody),
             icon = Icons.Filled.CardMembership,
             selected = paidTier == "plus",
@@ -139,7 +154,7 @@ fun SubscriptionScreen(
         )
 
         SubscriptionPlanCard(
-            title = stringResource(R.string.subscription_subscribeSupporterAction),
+            title = stringResource(R.string.subscription_supporterPlanName),
             body = stringResource(R.string.subscription_supporterBody),
             icon = Icons.Filled.VerifiedUser,
             selected = paidTier == "supporter",
