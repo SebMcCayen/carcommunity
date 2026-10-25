@@ -31417,6 +31417,40 @@
         }
       }
     },
+    "subscription.communityPlanBody": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alltid gratis: sociala funktioner, eventdetaljer och RSVP, körstatistik, upp till 2 garagefordon, dina 5 senaste sparade körningar och 2 250 Kronjakt-KP per dag."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always free: social features, event details and RSVP, driving statistics, up to 2 garage vehicles, your 5 newest saved drives and 2,250 Crown Hunt KP per day."
+          }
+        }
+      }
+    },
+    "subscription.communityPlanName": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Community"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Community"
+          }
+        }
+      }
+    },
     "subscription.currentEntitlementFree": {
       "extractionState": "manual",
       "localizations": {
@@ -31723,6 +31757,23 @@
         }
       }
     },
+    "subscription.plusPlanName": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plus"
+          }
+        }
+      }
+    },
     "subscription.plusTitle": {
       "extractionState": "manual",
       "localizations": {
@@ -31974,6 +32025,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Everything in Plus, up to 10 garage vehicles, unlimited drive history and an optional Supporter crown on your profile picture. Your support helps fund the project."
+          }
+        }
+      }
+    },
+    "subscription.supporterPlanName": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supporter"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supporter"
           }
         }
       }
