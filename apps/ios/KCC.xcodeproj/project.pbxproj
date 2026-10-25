@@ -95,6 +95,7 @@
 		36162ECF083352070B3E5A44 /* WelcomeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 108B79C2BE8800B8E9C501BF /* WelcomeScreen.swift */; };
 		363729A04343E8E2EFC13A19 /* BadgeStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAC7716DBC57A9D08EED193 /* BadgeStrings.swift */; };
 		36E11671C66BBA3F46FA5313 /* CrownHuntHomeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E779154B4369CD7688C5153 /* CrownHuntHomeScreen.swift */; };
+		3760AFE7B232E88B4BBC75EA /* FirebaseEmulatorIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C88730F65A1C33A53F8172B /* FirebaseEmulatorIntegrationTests.swift */; };
 		3778D179CE502693EE396C55 /* FirebaseBillboardsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A45B80623D588BB3DC63A44 /* FirebaseBillboardsRepository.swift */; };
 		3778F0AC327B471569306EC9 /* EventChatCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 438E6C3C71A7985E04DEACC0 /* EventChatCoordinatorTests.swift */; };
 		379DB6A47FA7096CA9CCE514 /* PrivacySettingsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5FA8341E686035216B94BB9 /* PrivacySettingsModels.swift */; };
@@ -639,6 +640,7 @@
 		9AA2251CD692FAE6F150A56A /* VehicleCatalogueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VehicleCatalogueTests.swift; sourceTree = "<group>"; };
 		9BD79AAE2207B0BB1BCA984F /* VehicleCatalogueData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VehicleCatalogueData.swift; sourceTree = "<group>"; };
 		9BDF86D32CA8120C5012EDD1 /* LiveLocationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveLocationRepository.swift; sourceTree = "<group>"; };
+		9C88730F65A1C33A53F8172B /* FirebaseEmulatorIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseEmulatorIntegrationTests.swift; sourceTree = "<group>"; };
 		9DBBB1856DCE04D9FD4E51DA /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
 		9E00DF3B5AA069BE90D841A5 /* NotificationsInboxCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsInboxCoordinatorTests.swift; sourceTree = "<group>"; };
 		9E064C56B97C0A8CD1FDB584 /* EventChatModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventChatModels.swift; sourceTree = "<group>"; };
@@ -1491,6 +1493,7 @@
 				8BFA82E78E8D9398E6214520 /* FeatureFlagsTests.swift */,
 				2F004ABACC2F3A7136A3F081 /* FeatureHealthTests.swift */,
 				D93D195913ADF60FB8F6EDD4 /* FeedbackFeatureTests.swift */,
+				9C88730F65A1C33A53F8172B /* FirebaseEmulatorIntegrationTests.swift */,
 				8631E9E248B1F4C97D80F1AD /* FollowMeTrailTests.swift */,
 				08AEF6E96BF2AB0EDF375B5F /* FriendsCoordinatorTests.swift */,
 				37C658B56DC49747902E120A /* FriendsModelsTests.swift */,
@@ -2069,6 +2072,7 @@
 				D2A0823D21A0A264FBF2DCB5 /* FeatureFlagsTests.swift in Sources */,
 				1B334A74240817A336A68505 /* FeatureHealthTests.swift in Sources */,
 				CD14BC3E85FE19A3B2B9A7E4 /* FeedbackFeatureTests.swift in Sources */,
+				3760AFE7B232E88B4BBC75EA /* FirebaseEmulatorIntegrationTests.swift in Sources */,
 				4C843E89E7C5551D1702AB67 /* FollowMeTrailTests.swift in Sources */,
 				29AEAC84B2A5D0D49A2F40C5 /* FriendsCoordinatorTests.swift in Sources */,
 				FACE9EE74F3056EA7A628813 /* FriendsModelsTests.swift in Sources */,

@@ -1,0 +1,26 @@
+name: Prepare iOS TestFlight Handoff
+
+# Preparation only. No secrets, Apple requests, paid runners, artifact uploads,
+# signing, production deploys or App Store uploads. Owner runs it manually.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main' && github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Validate preparation scripts
+        run: python3 -m unittest discover -s apps/ios/scripts -p 'test_*.py'
+      - name: Prepare the unsigned handoff and publish a text summary
+        run: |
+          python3 apps/ios/scripts/prepare-testflight.py --output "${RUNNER_TEMP}/ios-testflight-handoff"
+          cat "${RUNNER_TEMP}/ios-testflight-handoff/Handoff.md" >> "$GITHUB_STEP_SUMMARY"

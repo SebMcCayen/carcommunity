@@ -11,6 +11,9 @@ SCRIPT = Path(__file__).with_name("release-preflight.py")
 SPEC = importlib.util.spec_from_file_location("release_preflight", SCRIPT)
 preflight = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(preflight)
+PREP_SPEC = importlib.util.spec_from_file_location("prepare_testflight", SCRIPT.with_name("prepare-testflight.py"))
+prepare = importlib.util.module_from_spec(PREP_SPEC)
+PREP_SPEC.loader.exec_module(prepare)
 
 
 class ReleasePreflightTests(unittest.TestCase):
@@ -85,6 +88,40 @@ class ReleasePreflightTests(unittest.TestCase):
         self.assertNotIn(environment["MAPBOX_ACCESS_TOKEN"], str(caught.exception))
         environment["MAPBOX_ACCESS_TOKEN"] = "pk.test-public-runtime-value"
         preflight.check_release(self.root, bundle, environment)
+
+    def test_release_rejects_local_demo_configuration_without_echoing_values(self):
+        bundle = preflight.check_source(self.root)
+        path = self.root / "KCC/GoogleService-Info.plist"
+        for project, key, expected in (
+            ("demo-kcc-ios", "test-key", "demo project"),
+            ("real-project", "AIza" + "0" * 35, "dummy API key")
+        ):
+            path.write_bytes(plistlib.dumps({"BUNDLE_ID": bundle, "PROJECT_ID": project, "API_KEY": key}))
+            with self.assertRaisesRegex(preflight.PreflightError, expected) as caught:
+                preflight.check_release(self.root, bundle, {})
+            self.assertNotIn(key, str(caught.exception))
+
+    def test_handoff_is_source_only_and_preserves_existing_output(self):
+        # A malformed local production config must neither be read nor copied.
+        (self.root / "KCC/GoogleService-Info.plist").write_text("private-config-must-not-be-read")
+        output = self.root / "handoff"
+        report = prepare.prepare(self.root, output)
+        self.assertIn("NOT verified", report)
+        self.assertNotIn("private-config-must-not-be-read", report)
+        options = plistlib.loads((output / "ExportOptions.example.plist").read_bytes())
+        self.assertEqual(options["method"], "app-store-connect")
+        self.assertEqual(options["teamID"], "SET_AFTER_ENROLLMENT")
+        self.assertFalse(options["manageAppVersionAndBuildNumber"])
+        with self.assertRaises(FileExistsError):
+            prepare.prepare(self.root, output)
+        self.assertEqual((output / "Handoff.md").read_text(), report)
+
+    def test_handoff_rejects_invalid_source_before_creating_output(self):
+        (self.root / "KCC/Updates/changelog.json").write_text("invalid")
+        output = self.root / "handoff"
+        with self.assertRaises(prepare.preflight.PreflightError):
+            prepare.prepare(self.root, output)
+        self.assertFalse(output.exists())
 
 
 if __name__ == "__main__":
