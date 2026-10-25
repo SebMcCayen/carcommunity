@@ -22,7 +22,9 @@ final class FirebaseEmulatorIntegrationTests: XCTestCase {
         FirebaseApp.configure(name: name, options: options)
         let app = try XCTUnwrap(FirebaseApp.app(name: name))
         let auth = Auth.auth(app: app)
-        auth.useEmulator(withHost: "127.0.0.1", port: 19098)
+        // ATS restricts literal IP HTTP on iOS 17+. The unqualified loopback
+        // hostname avoids adding network exceptions to the shipping Info.plist.
+        auth.useEmulator(withHost: "localhost", port: 19098)
         defer { app.delete { _ in } }
         do {
             let payload = try await EmulatorAppleIDTokenProvider(subject: "native-test-" + UUID().uuidString).fetchAppleIDToken()
