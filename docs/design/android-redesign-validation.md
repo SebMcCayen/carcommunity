@@ -13,9 +13,13 @@ The current task covers Android only; iOS feature work is owned on the Mac mini.
 | 3. Social / events / Crown Hunt    | Social dashboard wired to existing routes, event list/detail/editor/share, Crown summaries/rewards/perks, leaderboard/KP ledger. Server-authoritative rewards and free/paid actions retained.                                              | [#1179](https://github.com/SebMcCayen/carcommunity/pull/1179), `41654fd9`                                                                        |
 | 4. Garage / profile / drives       | Photo-led garage/detail/editor/picker, profile/awards hierarchy, responsive award grid, drives/detail/statistics/save-retry. Native fallback for absent photos. Compact car-named overflow menus preserve callbacks/deletion confirmation. | [#1176](https://github.com/SebMcCayen/carcommunity/pull/1176), merged; [#1182](https://github.com/SebMcCayen/carcommunity/pull/1182), `5d019ca1` |
 | 5. Settings / membership / account | Grouped settings, partners/offers/application/privacy, inbox/preferences/blocks, feedback/tickets/deletion/What's new, auth/welcome/onboarding. Community/Plus/Supporter headings, existing restore flow, no hard-coded checkout price.    | [#1177](https://github.com/SebMcCayen/carcommunity/pull/1177), `fa13a39b`                                                                        |
-| Integration                        | Material shape roles, semantic page headings, Social hub, scrollable Create chooser, test-only native preview and draw-fenced capture.                                                                                                     | Draft [#1181](https://github.com/SebMcCayen/carcommunity/pull/1181)                                                                              |
+| Integration                        | Material shape roles, semantic page headings, Social hub, scrollable Create chooser, test-only native preview and draw-fenced capture.                                                                                                     | Merged [#1181](https://github.com/SebMcCayen/carcommunity/pull/1181)                                                                             |
 
 Combined app source: `7c2e64deecdbabd44b34dd964c2591ecced6e9d6`.
+Integration PR #1181 and its five included component PRs merged on 2026-10-25
+with the owner's explicit approval. Merge `8e044b41278e84aa8f8775e5a265eb4e9f5973c3`
+preserves the exact tested Android tree and the newer upstream iOS fix. All
+pre-merge checks passed, including iOS validation of shared generated strings.
 Documentation SHAs are not tested app revisions. Original feature commits are
 combined through merge commits. Upstream iOS work already on main is ancestry,
 not iOS implementation by this lane. Four canonical plan strings also regenerate
@@ -86,10 +90,12 @@ S60 crop mechanics and S83/S84 existing account/OS permission guards retain thei
 behavior; no newly implemented standalone screen is claimed. S81 is iOS. S82
 paid cosmetics remain deferred. No new speed scoring or entitlement bypass.
 
-The owner authorized merging after successful checks and addressed findings;
-that does not authorize a Play release or cloud change. This wave performs no
-version bump, store upload or production configuration change. The user previews
-the result before further release work.
+The owner explicitly authorized the completed code merges after successful
+checks. No version bump or Play upload was performed. The existing repository
+workflow starts Firebase deployment on a main push even without backend changes;
+that automation is separate from Android acceptance and no manual deployment
+or cloud configuration change was initiated. Remaining device/release checks
+above still apply after the merge.
 
 ## Historical first-slice report — archived, not the current to-do list
 

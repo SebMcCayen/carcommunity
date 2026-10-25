@@ -13,8 +13,13 @@ All three Android jobs passed at that exact head: debug/release unit tests,
 lint, debug assembly, R8 release shrinking, 16 KB alignment (10 native libraries),
 real navigation-SDK compilation and **100/100** API 34 Compose emulator cases
 (zero failures/skips, first attempt). CI/contracts, CodeQL and dependency review
-also passed. The generated-string iOS workflow is a separate check; its pending
-state is not called an Android or whole-PR pass.
+also passed. The separate generated-string iOS workflow completed successfully
+as well; it is no longer pending. All PR checks were green before the owner-
+authorized merge of integration #1181 and its five included component PRs.
+Merge `8e044b41278e84aa8f8775e5a265eb4e9f5973c3` retains the tested Android tree
+and preserves the upstream iOS local-transport fix. Documentation does not
+replace the source/run provenance above; configured-device acceptance remains
+separate from merge approval.
 
 The local serialized checkpoint build completed in 14m30s: debug app/test APKs
 and 3,586 unit tests, zero failures/errors, one skipped case. Because that build
