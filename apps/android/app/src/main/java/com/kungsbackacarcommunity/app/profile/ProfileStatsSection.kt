@@ -121,11 +121,13 @@ private fun StatRow(label: String, value: String) {
             text = label,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
         )
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
         )
     }
 }

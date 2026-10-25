@@ -3,16 +3,19 @@ package com.kungsbackacarcommunity.app.badges
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -57,6 +60,7 @@ fun BadgeMedallionTile(
         modifier =
             modifier
                 .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+                .heightIn(min = KccSpacing.s12)
                 .padding(vertical = KccSpacing.s1),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
@@ -70,7 +74,7 @@ fun BadgeMedallionTile(
         )
         Text(
             text = label,
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.bodyMedium,
             color =
                 if (earned) {
                     MaterialTheme.colorScheme.onSurface
@@ -82,7 +86,7 @@ fun BadgeMedallionTile(
         if (caption != null) {
             Text(
                 text = caption,
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
@@ -91,7 +95,7 @@ fun BadgeMedallionTile(
 }
 
 /**
- * A fixed-column grid built from Rows.
+ * A responsive grid built from Rows; [perRow] is the maximum column count.
  *
  * Deliberately not a LazyVerticalGrid: badge walls render inside a vertically
  * scrolling column, where a nested lazy grid has unbounded height. The item
@@ -105,17 +109,22 @@ fun <T> BadgeGridRows(
     perRow: Int,
     item: @Composable (T) -> Unit,
 ) {
-    items.chunked(perRow).forEach { row ->
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
-        ) {
-            row.forEach { value ->
-                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
-                    item(value)
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val columns = badgeGridColumns(maxWidth.value, LocalDensity.current.fontScale, perRow)
+        Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
+            items.chunked(columns).forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+                ) {
+                    row.forEach { value ->
+                        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                            item(value)
+                        }
+                    }
+                    repeat(columns - row.size) { Spacer(modifier = Modifier.weight(1f)) }
                 }
             }
-            repeat(perRow - row.size) { Spacer(modifier = Modifier.weight(1f)) }
         }
     }
 }

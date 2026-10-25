@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -35,6 +36,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccSpacing
 import kotlinx.coroutines.launch
 
 /**
@@ -193,7 +195,13 @@ fun RecordDriveScreen(
 
                 is RecordingState.Recording -> {
                     RecordingStats(current.elapsedMillis, current.pointCount)
-                    Button(onClick = { onStopClicked() }, modifier = Modifier.fillMaxWidth()) {
+                    Button(
+                        onClick = { onStopClicked() }, modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError,
+                        ),
+                    ) {
                         Text(text = stringResource(R.string.savedDrives_recordStop))
                     }
                 }
@@ -310,11 +318,14 @@ private fun SavePrompt(
             )
 
             if (showError) {
-                Text(
-                    text = stringResource(R.string.savedDrives_saveError),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
-                )
+                Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium) {
+                    Text(
+                        text = stringResource(R.string.savedDrives_saveError),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.fillMaxWidth().padding(KccSpacing.s3),
+                    )
+                }
             }
 
             Button(
@@ -326,7 +337,10 @@ private fun SavePrompt(
             ) {
                 Text(text = stringResource(R.string.savedDrives_saveAction))
             }
-            TextButton(onClick = onDiscard, modifier = Modifier.fillMaxWidth()) {
+            TextButton(
+                onClick = onDiscard, modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            ) {
                 Text(text = stringResource(R.string.savedDrives_discardAction))
             }
         }
