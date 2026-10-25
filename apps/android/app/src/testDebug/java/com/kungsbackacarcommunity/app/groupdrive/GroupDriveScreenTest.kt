@@ -64,7 +64,7 @@ class GroupDriveScreenTest {
                 )
             }
         }
-        composeTestRule.onNodeWithText(str(R.string.groupDrive_leaveButton)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.groupDrive_leaveButton)).performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.groupDrive_statusArrived)).performScrollTo().performClick()
         assertEquals(GroupDriveStatus.ARRIVED, setStatus)
     }

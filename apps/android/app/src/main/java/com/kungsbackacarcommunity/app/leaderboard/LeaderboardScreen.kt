@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,6 +16,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.Surface
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Tab
@@ -32,8 +35,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -50,8 +51,8 @@ const val LEADERBOARD_SCOPE_TABS_TAG = "leaderboardScopeTabs"
  * Social leaderboard screen. Stateless.
  *
  * A read-only view of the precomputed board: a three-scope selector at the
- * top, then, per competitive category (in the server's render order), a podium of
- * the top three and a list down to rank ten. Everything shown — ranks, names,
+ * top, then, per competitive category (in the server's render order), a compact
+ * ranking table. Everything shown — ranks, names,
  * avatars, ordering — is resolved server-side; this screen only formats each raw
  * value for its category (KP/CP, km, counts, days) and lays it out.
  *
@@ -96,10 +97,19 @@ private fun ScopeToggle(
     TabRow(
         selectedTabIndex = selectedIndex,
         modifier = Modifier.fillMaxWidth().testTag(LEADERBOARD_SCOPE_TABS_TAG),
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        indicator = {},
+        divider = {},
     ) {
         scopes.forEachIndexed { index, tabScope ->
             Tab(
                 selected = selectedIndex == index,
+                modifier = Modifier.background(
+                    if (selectedIndex == index) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                    MaterialTheme.shapes.medium,
+                ),
+                selectedContentColor = MaterialTheme.colorScheme.onPrimary,
+                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 onClick = { onScopeChange(tabScope) },
                 text = { Text(stringResource(scopeTitleRes(tabScope))) },
             )
@@ -115,7 +125,7 @@ private fun scopeTitleRes(scope: LeaderboardScope): Int =
         LeaderboardScope.ALL_TIME -> R.string.leaderboard_scopeAllTime
     }
 
-/** One category: a header, then the podium + list, or a friendly empty state. */
+/** One category: a header and ranking table, or the existing empty state. */
 @Composable
 private fun CategorySection(board: LeaderboardCategoryBoard) {
     Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
@@ -128,14 +138,11 @@ private fun CategorySection(board: LeaderboardCategoryBoard) {
         if (board.entries.isEmpty()) {
             InfoNoticeCard(stringResource(R.string.leaderboard_categoryEmpty))
         } else {
-            val split = LeaderboardBoard.podiumSplit(board.entries)
-            Podium(top = split.top, format = board.category.format)
-            if (split.rest.isNotEmpty()) {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column {
-                        split.rest.forEach { entry ->
-                            LeaderboardListRow(entry = entry, format = board.category.format)
-                        }
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    board.entries.forEachIndexed { index, entry ->
+                        LeaderboardListRow(entry = entry, format = board.category.format)
+                        if (index < board.entries.lastIndex) HorizontalDivider()
                     }
                 }
             }
@@ -143,119 +150,58 @@ private fun CategorySection(board: LeaderboardCategoryBoard) {
     }
 }
 
-/**
- * The top-three podium. Rendered in rank order (1, 2, 3) with distinct medal
- * colours; the first-place tile is emphasised with a larger avatar. Fewer than
- * three entries simply yield a shorter row.
- */
-@Composable
-private fun Podium(
-    top: List<LeaderboardEntry>,
-    format: LeaderboardValueFormat,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
-        verticalAlignment = Alignment.Bottom,
-    ) {
-        top.forEach { entry ->
-            PodiumTile(
-                entry = entry,
-                format = format,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        // Pad a short podium so a single or double winner does not stretch full-width.
-        repeat(LeaderboardBoard.PODIUM_SIZE - top.size) {
-            Spacer(modifier = Modifier.weight(1f))
-        }
-    }
-}
-
-@Composable
-private fun PodiumTile(
-    entry: LeaderboardEntry,
-    format: LeaderboardValueFormat,
-    modifier: Modifier = Modifier,
-) {
-    val medal = medalColor(entry.rank)
-    val avatarSize = if (entry.rank == 1) KccSpacing.s12 else KccSpacing.s10
-    Card(modifier = modifier) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(vertical = KccSpacing.s3, horizontal = KccSpacing.s2),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
-        ) {
-            RankBadge(rank = entry.rank, color = medal)
-            MemberAvatar(avatarPath = entry.avatarPath, size = avatarSize, ringColor = medal)
-            Text(
-                text = entry.displayName,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (entry.isViewer) FontWeight.Bold else FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-            )
-            if (entry.isViewer) {
-                Text(
-                    text = stringResource(R.string.leaderboard_you),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-            Text(
-                text = formattedValue(format, entry.value),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary,
-                textAlign = TextAlign.Center,
-            )
-        }
-    }
-}
-
-/** A single ranked line (rank 4 downwards). */
+/** A ranked line, including medal ranks and a separate current-viewer outline. */
 @Composable
 private fun LeaderboardListRow(
     entry: LeaderboardEntry,
     format: LeaderboardValueFormat,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s3),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = MaterialTheme.shapes.medium,
+        border = if (entry.isViewer) BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary) else null,
+        modifier = Modifier.testTag("leaderboard_row_${entry.rank}"),
     ) {
-        Text(
-            text = stringResource(R.string.leaderboard_rank, entry.rank),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(KccSpacing.s8),
-        )
-        MemberAvatar(avatarPath = entry.avatarPath, size = KccSpacing.s8, ringColor = null)
-        Text(
-            text = entry.displayName,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = if (entry.isViewer) FontWeight.Bold else FontWeight.Normal,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        if (entry.isViewer) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s3),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+        ) {
+            if (entry.rank in 1..3) {
+                RankBadge(rank = entry.rank, color = medalColor(entry.rank))
+            } else {
+                Text(
+                    text = stringResource(R.string.leaderboard_rank, entry.rank),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.width(KccSpacing.s6),
+                )
+            }
+            MemberAvatar(avatarPath = entry.avatarPath, size = KccSpacing.s10,
+                ringColor = if (entry.isViewer) MaterialTheme.colorScheme.tertiary else null)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = entry.displayName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (entry.isViewer) FontWeight.Bold else FontWeight.Normal,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                if (entry.isViewer) {
+                    Text(
+                        text = stringResource(R.string.leaderboard_you),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             Text(
-                text = stringResource(R.string.leaderboard_you),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
+                text = formattedValue(format, entry.value),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
-        Text(
-            text = formattedValue(format, entry.value),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
     }
 }
 
@@ -270,12 +216,12 @@ private fun RankBadge(rank: Int, color: Color) {
             text = rank.toString(),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.inverseOnSurface,
+            color = KccPalette.inkBlack,
         )
     }
 }
 
-/** A circular member avatar; [ringColor] draws a medal ring on the podium. */
+/** A circular member avatar; [ringColor] marks the current viewer. */
 @Composable
 private fun MemberAvatar(avatarPath: String?, size: Dp, ringColor: Color?) {
     val context = LocalContext.current

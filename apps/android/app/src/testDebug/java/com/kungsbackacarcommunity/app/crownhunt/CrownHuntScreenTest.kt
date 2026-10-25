@@ -86,8 +86,8 @@ class CrownHuntScreenTest {
         composeTestRule.onNodeWithText(str(R.string.crownHunt_myStatsTitle)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.crownHunt_statCrowns)).assertIsDisplayed()
         // Season leaderboard block + a top scorer's name.
-        composeTestRule.onNodeWithText(str(R.string.crownHunt_leaderboardTitle)).assertIsDisplayed()
-        composeTestRule.onNodeWithText("Alice").assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_leaderboardTitle)).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Alice").performScrollTo().assertIsDisplayed()
         // The crown legend ("how they work") has MOVED off the hub into the
         // Instructions surface, so it is NOT on the hub any more (its new location is
         // asserted in instructionsButton_opensSurface_andBackArrowReturnsToHub).

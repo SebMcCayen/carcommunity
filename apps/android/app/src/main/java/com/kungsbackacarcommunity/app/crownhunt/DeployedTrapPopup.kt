@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.crownhunt
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Dangerous
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -35,7 +37,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.kungsbackacarcommunity.app.R
-import com.kungsbackacarcommunity.app.design.KccAlpha
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import kotlinx.coroutines.delay
@@ -107,7 +108,8 @@ fun DeployedTrapPopup(
                     .fillMaxWidth()
                     .testTag(DEPLOYED_TRAP_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {
@@ -124,7 +126,7 @@ fun DeployedTrapPopup(
                     Box(
                         modifier =
                             Modifier
-                                .size(KccSpacing.s8)
+                                    .size(KccSpacing.s12)
                                 .clip(CircleShape)
                                 .background(TRAP_PURPLE.copy(alpha = 0.18f)),
                         contentAlignment = Alignment.Center,
@@ -134,7 +136,7 @@ fun DeployedTrapPopup(
                             // The name is announced as text right beside this.
                             contentDescription = null,
                             tint = TRAP_PURPLE,
-                            modifier = Modifier.size(KccSpacing.s5),
+                            modifier = Modifier.size(KccSpacing.s8),
                         )
                     }
                     Column(modifier = Modifier.weight(1f)) {
@@ -174,17 +176,23 @@ fun DeployedTrapPopup(
                 // clears ~3.7:1 on the translucent light surface — below WCAG AA 4.5:1
                 // for this text size): the purple identity stays on the trap ICON, the
                 // readable countdown meets contrast in both light and dark themes.
-                Text(
-                    text = remainingClockText(clock),
-                    modifier = Modifier.testTag(DEPLOYED_TRAP_REMAINING_TAG),
-                    style = MaterialTheme.typography.titleSmall,
-                    color =
-                        if (clock.isExpired) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
-                            MaterialTheme.colorScheme.primary
-                        },
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Filled.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        text = remainingClockText(clock),
+                        modifier = Modifier.testTag(DEPLOYED_TRAP_REMAINING_TAG),
+                        style = MaterialTheme.typography.titleSmall,
+                        color =
+                            if (clock.isExpired) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                    )
+                }
             }
         }
     }
