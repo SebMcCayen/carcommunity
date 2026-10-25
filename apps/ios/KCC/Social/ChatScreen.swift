@@ -199,7 +199,8 @@ private struct MessageBubble: View {
         }
         .padding(.horizontal, KccSpacing.s3)
         .padding(.vertical, KccSpacing.s2)
-        .background(isOwn ? KccPalette.crownGold.opacity(0.35) : Color(.secondarySystemBackground))
+        .background(isOwn ? KccTheme.driver : KccTheme.subtle)
+        .foregroundStyle(isOwn ? KccTheme.onDriver : KccTheme.text)
         .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
     }
 

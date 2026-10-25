@@ -12,7 +12,7 @@ struct MapLayersButton: View {
         } label: {
             Image(systemName: "square.3.layers.3d")
                 .frame(width: 48, height: 48)
-                .background(.regularMaterial, in: Circle())
+                .kccMapControl()
         }
         .font(.system(size: 20, weight: .semibold))
         .accessibilityLabel(Text("shell.layersButton"))

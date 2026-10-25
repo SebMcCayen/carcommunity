@@ -10,10 +10,14 @@
 /// The five bottom-navigation tabs. ``map`` is the default, map-first home.
 enum ShellTab: CaseIterable, Sendable {
     case map
+    /// Retained only for legacy restoration; never a primary tab or Chat alias.
     case history
+    case chat
     case create
     case social
     case garage
+
+    static let allCases: [ShellTab] = [.map, .chat, .create, .social, .garage]
 
     /// The tab shown on first entry (map-first home). Production and tests both
     /// reference this so the default isn't tied to case declaration order.
@@ -30,6 +34,7 @@ enum ShellTab: CaseIterable, Sendable {
 /// here — do not add them.
 enum ShellRoute: Sendable {
     case profile
+    case myDrives
     case liveLocation
     /// The real Mapbox map (group-drive "show on map" overlay).
     case map
@@ -110,7 +115,7 @@ enum MapCover: Sendable {
 
 /// The tabs whose page renders as a TRANSLUCENT panel over the live map
 /// (``MapCover/transparent``) rather than as an opaque page that hides it.
-let translucentPanelTabs: Set<ShellTab> = [.history, .social, .garage]
+let translucentPanelTabs: Set<ShellTab> = [.social, .garage]
 
 /// The shell's full-screen sub-routes form a back-stack: the ``current`` route
 /// on top, with its ancestors in ``parents`` (nearest parent last). Modelled as
@@ -148,6 +153,17 @@ extension ShellRouteStack {
 }
 
 enum ShellNavigation {
+    /// Explicit migration keeps the old History identity out of Chat's slot.
+    static func restoredTab(_ tab: ShellTab) -> ShellTab {
+        tab == .history ? .map : tab
+    }
+
+    static func restoredRoutes(tab: ShellTab, route: ShellRoute?) -> ShellRouteStack {
+        let stack: ShellRouteStack = tab == .history
+            ? .empty.opening(.profile).opening(.myDrives) : .empty
+        return route.map { stack.opening($0) } ?? stack
+    }
+
     /// Address search belongs to the unobstructed Map tab. Keeping this
     /// decision beside `mapCover` prevents its overlay and map liveness from
     /// drifting when a tab or full-screen route changes.
@@ -167,7 +183,7 @@ enum ShellNavigation {
         route: ShellRoute?,
         addressSearchRequested: Bool
     ) -> Bool {
-        !addressSearchPresented(
+        tab == .map && route == nil && !addressSearchPresented(
             tab: tab,
             route: route,
             requested: addressSearchRequested
@@ -229,11 +245,9 @@ enum ShellNavigation {
         navSearchOpen: Bool
     ) -> MapCover {
         if navigating { return .opaque }
-        if navSearchOpen { return .transparent }
-        // Chat Hub is hosted inside the Map tab as a translucent overlay,
-        // above the live map and below the shell tab bar.
-        if route == .chatHub { return .transparent }
         if route != nil { return .opaque }
+        if tab == .chat || tab == .history { return .opaque }
+        if navSearchOpen { return .transparent }
         // History / Social / Garage are translucent PANELS over the map: the
         // map behind them is visible, so it has to keep rendering its puck and
         // its GPS fixes. Standing it down here would leave a puck-less map

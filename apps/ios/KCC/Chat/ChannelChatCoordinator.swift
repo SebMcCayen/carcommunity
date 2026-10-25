@@ -76,6 +76,19 @@ enum ChannelOlderPaging: Equatable, Sendable {
 @MainActor
 @Observable
 final class ChannelChatCoordinator {
+    /// Retained with this account/channel, across Chat source/tab view swaps.
+    var draft = ""
+    private var readingActive = true
+
+    /// Retained Chat views may be covered or backgrounded; incoming messages
+    /// must stay unread until the actual channel becomes visible again.
+    func setReadingActive(_ active: Bool) {
+        guard active != readingActive else { return }
+        readingActive = active
+        if active, currentUserId != nil {
+            Task { [source] in await source.markRead() }
+        }
+    }
     private let source: ChannelChatSource
     /// The caller's uid, captured once at init (the Firebase seam owns identity).
     /// Used to mark own vs other bubbles and to author optimistic bubbles.
@@ -131,7 +144,7 @@ final class ChannelChatCoordinator {
     func start() {
         guard subscription == nil else { return }
         subscribe()
-        guard currentUserId != nil else { return }
+        guard readingActive, currentUserId != nil else { return }
         Task { [source] in await source.markRead() }
     }
 
@@ -182,7 +195,7 @@ final class ChannelChatCoordinator {
             // (e.g. a blockVisibility change) would re-fire markRead for a
             // message already marked read; without the incoming check, our own
             // post reconciling would too. Both are needless backend traffic.
-            if let newest = messages.last, newest.id != previousNewestId,
+            if readingActive, let newest = messages.last, newest.id != previousNewestId,
                 let currentUserId, newest.senderUid != currentUserId {
                 Task { [source] in await source.markRead() }
             }

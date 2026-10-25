@@ -117,6 +117,24 @@ final class ChannelChatCoordinatorTests: XCTestCase {
     // MARK: - Load
 
     @MainActor
+    func testCoveredChatPreservesDraftAndDoesNotReadNewMessages() async {
+        let source = FakeChatSource()
+        let coordinator = ChannelChatCoordinator(source: source)
+        coordinator.draft = "Unsent channel draft"
+        coordinator.setReadingActive(false)
+        coordinator.start()
+        source.emit(.loaded([serverMessage("covered")]))
+        await waitUntil { coordinator.messages.count == 1 }
+        XCTAssertEqual(source.markReadCount, 0)
+        XCTAssertEqual(coordinator.draft, "Unsent channel draft")
+        coordinator.setReadingActive(true)
+        await waitUntil { source.markReadCount == 1 }
+        XCTAssertEqual(coordinator.draft, "Unsent channel draft")
+        let replacement = ChannelChatCoordinator(source: FakeChatSource(uid: "replacement"))
+        XCTAssertEqual(replacement.draft, "", "A new account/channel must not inherit drafts")
+    }
+
+    @MainActor
     func testInitialLoadingUntilFirstEmission() {
         let coordinator = ChannelChatCoordinator(source: FakeChatSource())
         XCTAssertTrue(coordinator.isInitialLoading)

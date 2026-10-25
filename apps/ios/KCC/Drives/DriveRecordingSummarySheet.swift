@@ -22,7 +22,7 @@ struct DriveRecordingSummarySheet: View {
                             Text("savedDrives.retryAction")
                                 .frame(maxWidth: .infinity, minHeight: 44)
                         }
-                        .buttonStyle(.borderedProminent)
+                        .kccPrimaryAction()
                     } else {
                         Button(role: .destructive, action: discard) {
                             Text("savedDrives.discardAction")
@@ -72,7 +72,7 @@ struct DriveRecordingSummarySheet: View {
         }
         .padding(KccSpacing.s4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
+        .background(KccTheme.subtle)
         .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
     }
 

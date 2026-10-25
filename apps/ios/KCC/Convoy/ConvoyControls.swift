@@ -336,7 +336,6 @@ struct ConvoyMapAwarenessOverlay: View {
                             .position(x: placement.point.x, y: placement.point.y)
                     }
                 }
-                .animation(.linear(duration: 1.2), value: members)
             }
         }
         .allowsHitTesting(false)
@@ -372,7 +371,7 @@ struct ConvoyMapAwarenessOverlay: View {
                 .lineLimit(1)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
-                .background(.regularMaterial, in: Capsule())
+                .background(KccTheme.overlay, in: Capsule())
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(String.localizedStringWithFormat(
@@ -385,16 +384,16 @@ struct ConvoyMapAwarenessOverlay: View {
         ZStack(alignment: .topTrailing) {
             Image(systemName: "location.north.fill")
                 .font(.system(size: 27, weight: .bold))
-                .foregroundStyle(KccPalette.successGreen)
+                .foregroundStyle(KccTheme.driver)
                 .rotationEffect(.degrees(placement.angleDegrees))
                 .frame(width: 48, height: 48)
-                .background(.regularMaterial, in: Circle())
+                .kccMapControl()
             if placement.extraCount > 0 {
                 Text("+\(placement.extraCount)")
                     .font(.caption2.bold())
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KccTheme.onDriver)
                     .padding(4)
-                    .background(KccPalette.successGreen, in: Capsule())
+                    .background(KccTheme.driver, in: Capsule())
             }
         }
         .accessibilityElement(children: .ignore)
@@ -405,21 +404,21 @@ struct ConvoyMapAwarenessOverlay: View {
     private func memberPhoto(_ member: ConvoyMemberPosition) -> some View {
         let url = member.imagePath.flatMap { imageURLs[$0] }
         ZStack {
-            Circle().fill(KccPalette.successGreen)
+            Circle().fill(KccTheme.driver)
             if let url {
                 AsyncImage(url: url) { image in
                     image.resizable().scaledToFill()
                 } placeholder: {
-                    Image(systemName: "car.side.fill").foregroundStyle(.white)
+                    Image(systemName: "car.side.fill").foregroundStyle(KccTheme.onDriver)
                 }
             } else {
-                Image(systemName: "car.side.fill").foregroundStyle(.white)
+                Image(systemName: "car.side.fill").foregroundStyle(KccTheme.onDriver)
             }
         }
         .font(.system(size: 18, weight: .semibold))
         .frame(width: 38, height: 38)
         .clipShape(Circle())
-        .overlay(Circle().stroke(.white, lineWidth: 2))
+        .overlay(Circle().stroke(KccTheme.driver, lineWidth: 2))
     }
 
     private func spokenName(_ member: ConvoyMemberPosition) -> String {

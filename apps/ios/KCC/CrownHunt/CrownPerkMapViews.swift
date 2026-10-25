@@ -11,7 +11,7 @@ struct CrownPerkMapControl: View {
             Image(systemName: active ? "bolt.shield.fill" : "bolt.shield")
                 .font(.title3.weight(.semibold))
                 .frame(width: 46, height: 46)
-                .background(.regularMaterial, in: Circle())
+                .kccMapControl()
                 .foregroundStyle(active ? .purple : .primary)
         }
         .accessibilityLabel(Text("crownHunt.deployTitle"))
