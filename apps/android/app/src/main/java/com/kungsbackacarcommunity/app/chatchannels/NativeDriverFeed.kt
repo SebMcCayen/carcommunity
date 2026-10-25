@@ -9,6 +9,12 @@ import com.kungsbackacarcommunity.app.driverfeed.DriverFeedStrings
 /** The shell supplies identity and localization; the adapter owns all data/access. */
 @Composable
 internal fun NativeDriverFeed(uid: String) {
+    DriverFeedRoute(uid = uid, strings = driverFeedStrings())
+}
+
+/** Also usable by local screenshot fixtures; resolving copy never starts a repository. */
+@Composable
+fun driverFeedStrings(): DriverFeedStrings {
     val localizedResources = LocalResources.current
     val resources = mapOf(
         "title" to R.string.driver_feed_title,
@@ -29,10 +35,7 @@ internal fun NativeDriverFeed(uid: String) {
         "image" to R.string.driver_feed_image,
         "likes" to R.string.driver_feed_likes,
     )
-    DriverFeedRoute(
-        uid = uid,
-        strings = DriverFeedStrings { key ->
+    return DriverFeedStrings { key ->
             localizedResources.getString(resources.getValue(key.removePrefix("driver.feed.")))
-        },
-    )
+    }
 }

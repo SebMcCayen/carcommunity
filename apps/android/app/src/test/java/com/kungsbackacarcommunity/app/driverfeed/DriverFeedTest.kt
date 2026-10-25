@@ -188,6 +188,134 @@ class DriverFeedTest {
         assertEquals("original", model.state.value.post?.id)
     }
 
+    @Test fun `same account host retains selected post comments window and viewport across tab disposal`() = runTest {
+        val seen = mutableListOf<DriverCursor?>()
+        val repo = Fake(postRead = { post(it) }, commentsRead = { _, after ->
+            seen += after
+            DriverPage(listOf(DriverComment(if (after == null) "first" else "second", "author", "Author", "Text", 123L)),
+                if (after == null) cursor else null)
+        })
+        val host = DriverFeedSessionOwner("uid", this)
+        var creations = 0
+        val source = host.defaultRepository { creations++; repo }
+        val model = host.coordinator("uid", source)
+        model.open("selected"); runCurrent()
+        model.more(); runCurrent()
+        model.recordViewport("selected", 3, 12)
+        model.pause()
+        assertNull(model.state.value.post)
+        val remountedSource = host.defaultRepository { creations++; Fake() }
+        assertEquals(1, creations)
+        assertSame(source, remountedSource)
+        assertSame(model, host.coordinator("uid", remountedSource))
+        model.resume(); runCurrent()
+        assertEquals("selected", model.state.value.selectedId)
+        assertEquals(listOf("first", "second"), model.state.value.comments.map { it.id })
+        assertEquals(DriverFeedViewport(3, 12), model.viewport())
+        assertEquals(listOf(null, cursor, null, cursor), seen)
+        host.close()
+        assertEquals(DriverFeedState(), model.state.value)
+        assertEquals(DriverFeedViewport(), model.viewport("selected"))
+    }
+
+    @Test fun `repeated hide resume restores at most two pages even after deep explicit paging`() = runTest {
+        var reads = 0
+        val repo = Fake(feedRead = { after ->
+            reads++
+            val page = (after?.seconds ?: 0) + 1
+            DriverPage(listOf(post("post-$page")), DriverCursor(page, 0, "post-$page"))
+        })
+        val model = DriverFeedCoordinator(repo, "uid", this)
+        model.refresh(); runCurrent()
+        repeat(6) { model.more(); runCurrent() }
+        assertEquals(7, model.state.value.posts.size)
+        repeat(8) {
+            val before = reads
+            model.pause()
+            assertTrue(model.state.value.posts.isEmpty())
+            model.resume(); runCurrent()
+            assertEquals(DRIVER_RESTORE_MAX_PAGES, reads - before)
+            assertEquals(2, model.state.value.posts.size)
+            assertNotNull(model.state.value.next)
+        }
+    }
+
+    @Test fun `bounded restore clamps deep viewport and keeps valid offset`() {
+        val state = DriverFeedState(posts = listOf(post("first"), post("second")))
+        assertEquals(DriverFeedViewport(1, 0), clampedDriverViewport(state, DriverFeedViewport(100, 37)))
+        assertEquals(DriverFeedViewport(1, 37), clampedDriverViewport(state, DriverFeedViewport(1, 37)))
+        assertEquals(DriverFeedViewport(2, 0), clampedDriverViewport(
+            DriverFeedState(selectedId = "post", post = post("post")), DriverFeedViewport(100, 37)))
+    }
+
+    @Test fun `back restores feed pages independently from selected detail`() = runTest {
+        val repo = Fake(feedRead = { after -> DriverPage(listOf(post(if (after == null) "first" else "second")),
+            if (after == null) cursor else null) }, postRead = { post(it) })
+        val model = DriverFeedCoordinator(repo, "uid", this)
+        model.refresh(); runCurrent()
+        model.more(); runCurrent()
+        model.recordViewport(null, 1, 11)
+        model.open("first"); runCurrent()
+        model.pause(); model.resume(); runCurrent()
+        model.back(); runCurrent()
+        assertEquals(listOf("first", "second"), model.state.value.posts.map { it.id })
+        assertEquals(DriverFeedViewport(1, 11), model.viewport())
+    }
+
+    @Test fun `resume rechecks access and never restores blocked content`() = runTest {
+        var blocked = false
+        val repo = Fake(feedRead = {
+            if (blocked) throw DriverFeedException(DriverFeedFailure.RESTRICTED)
+            DriverPage(listOf(post("formerly-visible")), cursor)
+        })
+        val model = DriverFeedCoordinator(repo, "uid", this)
+        model.refresh(); runCurrent()
+        model.pause()
+        blocked = true
+        model.resume()
+        assertTrue(model.state.value.posts.isEmpty())
+        runCurrent()
+        assertEquals(DriverFeedFailure.RESTRICTED, model.state.value.failure)
+        assertTrue(model.state.value.posts.isEmpty())
+    }
+
+    @Test fun `late reply after hide cannot replace reauthorized content`() = runTest {
+        val gate = CompletableDeferred<DriverPage<DriverPost>>()
+        var reads = 0
+        val repo = Fake(feedRead = {
+            if (++reads == 1) withContext(NonCancellable) { gate.await() }
+            else DriverPage(listOf(post("authorized")), null)
+        })
+        val model = DriverFeedCoordinator(repo, "uid", this)
+        model.refresh(); runCurrent()
+        model.pause(); model.resume(); runCurrent()
+        gate.complete(DriverPage(listOf(post("old")), cursor)); runCurrent()
+        assertEquals("authorized", model.state.value.posts.single().id)
+        assertEquals(2, reads)
+    }
+
+    @Test fun `account change and unmount retire old owner including uncancellable reply`() = runTest {
+        val gate = CompletableDeferred<DriverPage<DriverPost>>()
+        val oldRepo = Fake(feedRead = { withContext(NonCancellable) { gate.await() } })
+        val oldHost = DriverFeedSessionOwner("old", this)
+        val oldModel = oldHost.coordinator("old", oldRepo)
+        oldModel.refresh(); runCurrent()
+        assertThrows(IllegalArgumentException::class.java) { oldHost.coordinator("new", oldRepo) }
+        oldHost.close()
+        assertThrows(IllegalStateException::class.java) { oldHost.coordinator("old", oldRepo) }
+        val newHost = DriverFeedSessionOwner("new", this)
+        val newRepo = Fake(feedRead = { DriverPage(listOf(post("new-account")), null) })
+        val newModel = newHost.coordinator("new", newRepo)
+        newModel.refresh(); runCurrent()
+        gate.complete(DriverPage(listOf(post("private-old")), cursor)); runCurrent()
+        assertEquals(DriverFeedState(), oldModel.state.value)
+        assertEquals("new-account", newModel.state.value.posts.single().id)
+        newHost.close()
+        val returningHost = DriverFeedSessionOwner("old", this)
+        assertEquals(DriverFeedState(), returningHost.coordinator("old", oldRepo).state.value)
+        returningHost.close()
+    }
+
     private class Fake(
         val feedRead: suspend (DriverCursor?) -> DriverPage<DriverPost> = { DriverPage(emptyList(), null) },
         val postRead: suspend (String) -> DriverPost = { throw DriverFeedException(DriverFeedFailure.UNAVAILABLE) },

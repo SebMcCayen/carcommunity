@@ -2,6 +2,8 @@ package com.kungsbackacarcommunity.app.chatchannels
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,10 +37,12 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -50,6 +54,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -71,6 +76,8 @@ import com.kungsbackacarcommunity.app.design.KccTypeScale
 import com.kungsbackacarcommunity.app.dm.ChatRoute
 import com.kungsbackacarcommunity.app.dm.ConversationListRoute
 import com.kungsbackacarcommunity.app.dm.DmRepository
+import com.kungsbackacarcommunity.app.driverfeed.DriverFeedSessionOwner
+import com.kungsbackacarcommunity.app.driverfeed.LocalDriverFeedSessionOwner
 import com.kungsbackacarcommunity.app.friends.FriendsRepository
 import com.kungsbackacarcommunity.app.notifications.ConvoyNotificationLink
 import com.kungsbackacarcommunity.app.notifications.NotificationsCoordinator
@@ -492,67 +499,56 @@ fun ChatHubRoute(
     // Native Driver adapter owned by the integration lane; never chat messages.
     driverContent: (@Composable () -> Unit)? = null,
 ) {
-    var driverSelected by rememberSaveable(uid) { mutableStateOf(false) }
-    val chatState = rememberSaveableStateHolder()
-    LaunchedEffect(pushDeepLink) {
-        if (pushDeepLink != null) driverSelected = false
-    }
-    BackHandler(enabled = driverSelected) { driverSelected = false }
-    Surface(
-        modifier = modifier.fillMaxSize().testTag(CHAT_HUB_TEST_TAG),
-        // Opaque reading surface: the shell pauses the single map behind it.
-        color = MaterialTheme.colorScheme.background,
-    ) {
-        Column(Modifier.fillMaxSize()) {
-            if (driverContent != null) {
-                Row(
-                    Modifier.fillMaxWidth().statusBarsPadding().padding(KccSpacing.s4),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        stringResource(R.string.shell_tabChat),
-                        style = MaterialTheme.typography.headlineLarge,
-                    )
+    key(uid) {
+        var driverSelected by rememberSaveable(uid) { mutableStateOf(false) }
+        val chatState = rememberSaveableStateHolder()
+        val hostScope = rememberCoroutineScope()
+        val driverOwner = remember(uid, hostScope) { DriverFeedSessionOwner(uid, hostScope) }
+        DisposableEffect(driverOwner) { onDispose { driverOwner.close() } }
+        LaunchedEffect(pushDeepLink) {
+            if (pushDeepLink != null) driverSelected = false
+        }
+        BackHandler(enabled = driverSelected) { driverSelected = false }
+        Surface(
+            modifier = modifier.fillMaxSize().testTag(CHAT_HUB_TEST_TAG),
+            // Opaque reading surface: the shell pauses the single map behind it.
+            color = MaterialTheme.colorScheme.background,
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                if (driverContent != null) {
+                    ChatFeedHeader(driverSelected = driverSelected, onSelect = { driverSelected = it })
                 }
-                TabRow(
-                    selectedTabIndex = if (driverSelected) 1 else 0,
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.tertiary,
-                ) {
-                    Tab(selected = !driverSelected, onClick = { driverSelected = false },
-                        text = { Text(stringResource(R.string.chatHub_tabChats)) })
-                    Tab(selected = driverSelected, onClick = { driverSelected = true },
-                        text = { Text(stringResource(R.string.chatHub_tabDriver)) })
-                }
-            }
-            Box(Modifier.weight(1f)) {
-                if (driverSelected && driverContent != null) {
-                    driverContent()
-                } else {
-                    chatState.SaveableStateProvider(uid) {
-                        ChatHubContent(
-                            uid = uid,
-                            communityChatRepository = communityChatRepository,
-                            convoyChatRepository = convoyChatRepository,
-                            friendsRepository = friendsRepository,
-                            dmRepository = dmRepository,
-                            notificationsRepository = notificationsRepository,
-                            notificationsCoordinator = notificationsCoordinator,
-                            communityUnread = communityUnread,
-                            convoysUnread = convoysUnread,
-                            friendsUnread = friendsUnread,
-                            notificationsUnread = notificationsUnread,
-                            onClose = onClose,
-                            applyStatusBarInset = driverContent == null,
-                            showHubBackArrow = showHubBackArrow,
-                            onViewProfile = onViewProfile,
-                            onShowLocationOnMap = onShowLocationOnMap,
-                            blockingRepository = blockingRepository,
-                            chatRepliesEnabled = chatRepliesEnabled,
-                            pushDeepLink = pushDeepLink,
-                            convoyLink = convoyLink,
-                            onOpenEvent = onOpenEvent,
-                        )
+                Box(Modifier.weight(1f)) {
+                    if (driverSelected && driverContent != null) {
+                        CompositionLocalProvider(LocalDriverFeedSessionOwner provides driverOwner) {
+                            chatState.SaveableStateProvider("driver:$uid") { driverContent() }
+                        }
+                    } else {
+                        chatState.SaveableStateProvider(uid) {
+                            ChatHubContent(
+                                uid = uid,
+                                communityChatRepository = communityChatRepository,
+                                convoyChatRepository = convoyChatRepository,
+                                friendsRepository = friendsRepository,
+                                dmRepository = dmRepository,
+                                notificationsRepository = notificationsRepository,
+                                notificationsCoordinator = notificationsCoordinator,
+                                communityUnread = communityUnread,
+                                convoysUnread = convoysUnread,
+                                friendsUnread = friendsUnread,
+                                notificationsUnread = notificationsUnread,
+                                onClose = onClose,
+                                applyStatusBarInset = driverContent == null,
+                                showHubBackArrow = showHubBackArrow,
+                                onViewProfile = onViewProfile,
+                                onShowLocationOnMap = onShowLocationOnMap,
+                                blockingRepository = blockingRepository,
+                                chatRepliesEnabled = chatRepliesEnabled,
+                                pushDeepLink = pushDeepLink,
+                                convoyLink = convoyLink,
+                                onOpenEvent = onOpenEvent,
+                            )
+                        }
                     }
                 }
             }
@@ -983,6 +979,8 @@ private fun ChatHubContent(
                     // it.
                     containerColor = Color.Transparent,
                     contentColor = MaterialTheme.colorScheme.onSurface,
+                    indicator = {},
+                    divider = {},
                 ) {
                     ChatTabItem(
                         tab = ChatTab.Community,
@@ -1209,6 +1207,12 @@ private fun ChatTabItem(
     Tab(
         selected = selected == tab,
         onClick = { onSelect(tab) },
+        selectedContentColor = MaterialTheme.colorScheme.tertiary,
+        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 2.dp, vertical = KccSpacing.s2)
+            .clip(RoundedCornerShape(24.dp))
+            .border(1.dp, if (selected == tab) MaterialTheme.colorScheme.tertiary
+                else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp)),
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(vertical = KccSpacing.s2),

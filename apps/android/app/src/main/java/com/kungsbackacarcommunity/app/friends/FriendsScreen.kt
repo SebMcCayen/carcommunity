@@ -2,11 +2,14 @@ package com.kungsbackacarcommunity.app.friends
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,6 +25,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -44,6 +48,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
@@ -270,7 +276,7 @@ private fun AddFriendSection(
     onSubmit: () -> Unit,
     onDismissResult: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    FriendSurface {
         Column(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
@@ -285,6 +291,7 @@ private fun AddFriendSection(
                 onValueChange = onNicknameChange,
                 label = { Text(stringResource(R.string.friends_nicknameLabel)) },
                 singleLine = true,
+                shape = MaterialTheme.shapes.large,
                 enabled = addState !is AddFriendState.Working,
                 modifier = Modifier.fillMaxWidth(),
                 keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = { onSubmit() }),
@@ -345,19 +352,19 @@ private fun IncomingRequestRow(
     onAccept: () -> Unit,
     onDecline: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    FriendSurface {
         Column(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
             MemberHeader(user = request.otherUser)
-            Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
                 // Disabled while this row's accept/decline callable is in flight,
                 // so rapid taps can't start overlapping mutations.
-                Button(onClick = onAccept, enabled = !working) {
+                Button(onClick = onAccept, enabled = !working, modifier = Modifier.weight(1f)) {
                     Text(stringResource(R.string.friends_accept))
                 }
-                OutlinedButton(onClick = onDecline, enabled = !working) {
+                OutlinedButton(onClick = onDecline, enabled = !working, modifier = Modifier.weight(1f)) {
                     Text(stringResource(R.string.friends_decline))
                 }
             }
@@ -371,7 +378,7 @@ private fun OutgoingRequestRow(
     working: Boolean,
     onCancel: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    FriendSurface {
         Column(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
@@ -383,7 +390,7 @@ private fun OutgoingRequestRow(
             ) {
                 MemberHeader(
                     user = request.otherUser,
-                    modifier = Modifier.padding(end = KccSpacing.s3),
+                    modifier = Modifier.weight(1f).padding(end = KccSpacing.s3),
                 )
                 Text(
                     text = stringResource(R.string.friends_outgoingPendingLabel),
@@ -409,7 +416,7 @@ private fun FriendRow(
     onMessage: () -> Unit,
     onRemove: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    FriendSurface {
         Column(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
@@ -435,14 +442,14 @@ private fun FriendRow(
                 // has no points.
                 FriendPointsChip(points ?: 0L)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
                 // Opens the 1:1 DM thread with this friend; the conversation is
                 // created on the first message (dm-sendMessage).
-                OutlinedButton(onClick = onMessage) {
+                OutlinedButton(onClick = onMessage, modifier = Modifier.weight(1f)) {
                     Text(stringResource(R.string.friends_message))
                 }
                 // Disabled while this friend's removal callable is in flight.
-                OutlinedButton(onClick = onRemove, enabled = !working) {
+                OutlinedButton(onClick = onRemove, enabled = !working, modifier = Modifier.weight(1f)) {
                     Text(stringResource(R.string.friends_remove))
                 }
             }
@@ -520,6 +527,9 @@ private fun MemberHeader(
             text = user.displayName ?: stringResource(R.string.friends_unknownMember),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -531,7 +541,8 @@ private fun MemberAvatar(avatarPath: String?) {
     Box(
         modifier =
             Modifier
-                .size(KccSpacing.s10)
+                .size(48.dp)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
@@ -541,7 +552,7 @@ private fun MemberAvatar(avatarPath: String?) {
                 model = url,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(KccSpacing.s10),
+                modifier = Modifier.fillMaxSize(),
             )
         } else {
             Icon(
@@ -580,6 +591,13 @@ private fun InfoNoticeCard(text: String) {
             )
         }
     }
+}
+
+@Composable
+private fun FriendSurface(content: @Composable ColumnScope.() -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), content = content)
 }
 
 /**

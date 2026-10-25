@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.dm
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +22,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.Card
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.Surface
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -35,12 +38,16 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.chattime.MessageTimeText
+import com.kungsbackacarcommunity.app.chattime.ChatDateContext
+import com.kungsbackacarcommunity.app.chattime.rememberChatDateContext
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.shell.AeroLazyPage
 import com.kungsbackacarcommunity.app.shell.AeroPageTitle
@@ -70,6 +77,7 @@ fun ConversationListScreen(
     // sit permanently behind it.
     reserveBottomActionSpace: Boolean = false,
 ) {
+    val dates = rememberChatDateContext()
     // Durable list: a LazyColumn so only visible rows compose. The title is the
     // first `item {}`; conversation rows are keyed by conversationId so
     // recomposition/scroll state stays stable as the live inbox updates.
@@ -77,7 +85,7 @@ fun ConversationListScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = aeroLazyContentPadding(),
-            verticalArrangement = Arrangement.spacedBy(KccSpacing.s4),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
         ) {
             if (showTitle) {
                 item(key = "title") {
@@ -119,6 +127,7 @@ fun ConversationListScreen(
                         ) { conversation ->
                             ConversationRow(
                                 conversation = conversation,
+                                dates = dates,
                                 onClick = { onOpenConversation(conversation) },
                             )
                         }
@@ -152,11 +161,14 @@ private val FAB_CLEARANCE = 80.dp
 @Composable
 private fun ConversationRow(
     conversation: DmConversation,
+    dates: ChatDateContext,
     onClick: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+    Surface(modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick),
+        color = MaterialTheme.colorScheme.background) {
+        Column {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+            modifier = Modifier.fillMaxWidth().padding(vertical = KccSpacing.s3),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
@@ -180,9 +192,17 @@ private fun ConversationRow(
                     )
                 }
             }
-            if (conversation.unreadCount > 0) {
-                UnreadBadge(count = conversation.unreadCount)
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+                MessageTimeText(millis = conversation.lastMessageAtMillis, dates = dates)
+                if (conversation.unreadCount > 0) {
+                    UnreadBadge(count = conversation.unreadCount)
+                } else {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
     }
 }
@@ -197,7 +217,7 @@ private fun UnreadBadge(count: Int) {
             Modifier
                 .defaultMinSize(minWidth = 24.dp, minHeight = 24.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary)
+                .background(MaterialTheme.colorScheme.tertiary)
                 .padding(horizontal = KccSpacing.s2)
                 .clearAndSetSemantics { contentDescription = description },
         contentAlignment = Alignment.Center,
@@ -205,7 +225,7 @@ private fun UnreadBadge(count: Int) {
         Text(
             text = if (count > 99) "99+" else count.toString(),
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onPrimary,
+            color = MaterialTheme.colorScheme.onTertiary,
         )
     }
 }
@@ -217,7 +237,9 @@ private fun MemberAvatar(avatarPath: String?) {
     Box(
         modifier =
             Modifier
-                .size(40.dp)
+                .size(56.dp)
+                .border(1.dp, MaterialTheme.colorScheme.tertiary, CircleShape)
+                .padding(3.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
@@ -227,7 +249,7 @@ private fun MemberAvatar(avatarPath: String?) {
                 model = url,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier.fillMaxSize(),
             )
         } else {
             Icon(
