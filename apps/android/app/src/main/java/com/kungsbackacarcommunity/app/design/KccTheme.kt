@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.design
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -11,6 +12,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 /**
  * KCC Crown UI theme (contracts/design-tokens/tokens.json).
@@ -179,6 +181,15 @@ private val KccTypography = Typography(
     labelSmall = TextStyle(fontSize = KccTypeScale.caption, fontWeight = KccTypeScale.medium),
 )
 
+/** Use the approved native radius scale instead of unrelated Material defaults. */
+private val KccShapes = Shapes(
+    extraSmall = RoundedCornerShape(KccRadius.sm),
+    small = RoundedCornerShape(KccRadius.sm),
+    medium = RoundedCornerShape(KccRadius.md),
+    large = RoundedCornerShape(KccRadius.lg),
+    extraLarge = RoundedCornerShape(KccRadius.xl),
+)
+
 @Composable
 fun KccTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -208,6 +219,7 @@ fun KccTheme(
         MaterialTheme(
             colorScheme = colorScheme,
             typography = KccTypography,
+            shapes = KccShapes,
             content = content,
         )
     }
