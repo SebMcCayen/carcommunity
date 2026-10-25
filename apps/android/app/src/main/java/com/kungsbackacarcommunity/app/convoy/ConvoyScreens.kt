@@ -739,21 +739,8 @@ fun ConvoyDetailScreen(
             ConvoyRecap.stateFor(convoy)?.let { ConvoyRecapCard(it) }
         }
 
-        SectionHeader(stringResource(R.string.convoy_membersTitle))
-        convoy.members.forEach { member ->
-            MemberRow(
-                member = member,
-                isOwner = member.uid == convoy.ownerUid,
-                // Tapping a member opens their read-only profile. Never wired for
-                // the caller's own row, nor for a malformed member whose blank uid
-                // would open a dead profile route.
-                onClick =
-                    onViewMember
-                        ?.takeIf { member.uid.isNotBlank() && member.uid != viewerUid }
-                        ?.let { { it(member.uid) } },
-            )
-        }
-
+        // Session exits precede the potentially long roster so a participant can
+        // leave without first scrolling past every member. Role gates stay below.
         if (convoy.status != ConvoyStatus.Ended) {
             val acceptedCount =
                 convoy.members.count { it.inviteStatus == ConvoyInviteStatus.Accepted }
@@ -808,6 +795,21 @@ fun ConvoyDetailScreen(
                     Text(stringResource(R.string.convoy_end))
                 }
             }
+        }
+
+        SectionHeader(stringResource(R.string.convoy_membersTitle))
+        convoy.members.forEach { member ->
+            MemberRow(
+                member = member,
+                isOwner = member.uid == convoy.ownerUid,
+                // Tapping a member opens their read-only profile. Never wired for
+                // the caller's own row, nor for a malformed member whose blank uid
+                // would open a dead profile route.
+                onClick =
+                    onViewMember
+                        ?.takeIf { member.uid.isNotBlank() && member.uid != viewerUid }
+                        ?.let { { it(member.uid) } },
+            )
         }
     }
 
