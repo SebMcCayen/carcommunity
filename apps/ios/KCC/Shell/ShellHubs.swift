@@ -6,16 +6,15 @@ import SwiftUI
 /// feature yet says so honestly instead of dead-ending.
 
 /// The Social hub panel. Android's Social hub lists Events / Crown Hunt /
-/// Leaderboard / Partners (label-sorted, unavailable entries omitted). iOS
-/// currently has Events, Convoys, Crown Hunt, Leaderboard, and Partners. Entries
-/// whose live feature flag is off are omitted, matching Android.
+/// Leaderboard / Partners (label-sorted, unavailable entries omitted). Convoys
+/// belong in the Create chooser and chat hub, not in this menu. Entries whose
+/// live feature flag is off are omitted, matching Android.
 struct SocialHubPanel: View {
     @Environment(\.locale) private var locale
 
     let crownHuntEnabled: Bool
     let partnersEnabled: Bool
     let onOpenEvents: () -> Void
-    let onOpenConvoys: () -> Void
     let onOpenCrownHunt: () -> Void
     let onOpenLeaderboard: () -> Void
     let onOpenPartners: () -> Void
@@ -33,17 +32,12 @@ struct SocialHubPanel: View {
         }
         .padding(KccSpacing.s6)
       }
+      .accessibilityElement(children: .contain)
+      .accessibilityIdentifier("shell.socialHub")
     }
 
     private var entries: [SocialHubEntry] {
         var entries = [
-            SocialHubEntry(
-                id: .convoys,
-                label: "convoy.title",
-                localizedLabel: String(localized: "convoy.title", locale: locale),
-                icon: "person.3",
-                action: onOpenConvoys
-            ),
             SocialHubEntry(
                 id: .events,
                 label: "shell.socialEvents",
@@ -74,8 +68,8 @@ struct SocialHubPanel: View {
             entries.append(
                 SocialHubEntry(
                     id: .partners,
-                    label: "partners.screenTitle",
-                    localizedLabel: String(localized: "partners.screenTitle", locale: locale),
+                    label: "shell.socialPartners",
+                    localizedLabel: String(localized: "shell.socialPartners", locale: locale),
                     icon: "building.2",
                     action: onOpenPartners
                 )
@@ -114,7 +108,6 @@ struct SocialHubPanel: View {
 private struct SocialHubEntry: Identifiable {
     enum ID: Hashable {
         case events
-        case convoys
         case crownHunt
         case leaderboard
         case partners
@@ -153,7 +146,6 @@ struct ComingSoonPanel: View {
         crownHuntEnabled: true,
         partnersEnabled: true,
         onOpenEvents: {},
-        onOpenConvoys: {},
         onOpenCrownHunt: {},
         onOpenLeaderboard: {},
         onOpenPartners: {}

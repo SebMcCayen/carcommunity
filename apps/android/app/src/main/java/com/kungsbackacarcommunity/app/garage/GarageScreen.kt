@@ -1,16 +1,20 @@
 package com.kungsbackacarcommunity.app.garage
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Surface
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -20,7 +24,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.KccRadius
@@ -56,7 +59,11 @@ fun GarageScreen(
 ) {
     var pendingDelete by remember { mutableStateOf<String?>(null) }
 
-    AeroPage(title = stringResource(R.string.garage_screenTitle), modifier = modifier) {
+    AeroPage(
+        title = stringResource(R.string.garage_screenTitle),
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+    ) {
             when (state) {
                 GarageState.Loading ->
                     Text(
@@ -148,7 +155,7 @@ fun GarageScreen(
 }
 
 /** Catalogue S57: a wide real photo, with a native car glyph when none exists. */
-private val GarageVehiclePhotoStyle = VehiclePhotoStyle.FullWidth(16f / 9f, KccRadius.md)
+private val GarageVehiclePhotoStyle = VehiclePhotoStyle.FullWidth(2.5f, KccRadius.md)
 
 /**
  * One of the owner's own cars in the garage list: the shared [VehicleCard] with
@@ -164,49 +171,52 @@ private fun OwnedVehicleCard(
     onDelete: () -> Unit,
     onSetMain: (isMain: Boolean) -> Unit,
 ) {
+    var menuExpanded by remember(vehicle.id) { mutableStateOf(false) }
+    val vehicleName = VehicleDisplay.headline(vehicle, stringResource(R.string.garage_catalogueOther))
     VehicleCard(
         vehicle = vehicle,
         photoStyle = GarageVehiclePhotoStyle,
         mainCarLabelRes = R.string.garage_mainCarBadge,
         photoContentDescriptionRes = R.string.garage_photoAlt,
-        contentSpacing = KccSpacing.s3,
+        contentSpacing = KccSpacing.s2,
         onOpen = onOpen,
-    ) {
-        // Main-car toggle: filled when this car is the main car (tapping
-        // clears it), outlined otherwise (tapping makes it the main car).
-        if (vehicle.isMainCar) {
-            Button(
-                onClick = { onSetMain(false) },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.tertiary,
-                    contentColor = MaterialTheme.colorScheme.onTertiary,
-                ),
-            ) {
-                Text(text = stringResource(R.string.garage_unsetMainCar))
+        overlayActions = {
+            // Sibling of the detail tap target: opening/using this menu cannot open the car.
+            Box {
+                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surface) {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(
+                            Icons.Filled.MoreVert,
+                            contentDescription = stringResource(R.string.savedPlaces_moreActions, vehicleName),
+                        )
+                    }
+                }
+                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(stringResource(if (vehicle.isMainCar) R.string.garage_unsetMainCar else R.string.garage_setMainCar))
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onSetMain(!vehicle.isMainCar)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.garage_editVehicle)) },
+                        onClick = {
+                            menuExpanded = false
+                            onEdit()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.garage_deleteVehicle), color = MaterialTheme.colorScheme.error) },
+                        onClick = {
+                            menuExpanded = false
+                            onDelete()
+                        },
+                    )
+                }
             }
-        } else {
-            OutlinedButton(
-                onClick = { onSetMain(true) },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(text = stringResource(R.string.garage_setMainCar))
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
-        ) {
-            OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) {
-                Text(text = stringResource(R.string.garage_editVehicle))
-            }
-            OutlinedButton(
-                onClick = onDelete,
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-            ) {
-                Text(text = stringResource(R.string.garage_deleteVehicle))
-            }
-        }
-    }
+        },
+    )
 }

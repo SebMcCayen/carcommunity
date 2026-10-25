@@ -25,6 +25,29 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(placeholder.isHittable)
     }
 
+    func testMapToolsAppearOnRightAndWorkWithoutBackend() {
+        let app = launch(language: "en")
+        let layers = app.buttons["shell.mapLayers"]
+        let compass = app.buttons["shell.compass"]
+        XCTAssertTrue(layers.waitForExistence(timeout: 5))
+        XCTAssertTrue(compass.isHittable)
+        XCTAssertGreaterThan(layers.frame.midX, app.frame.midX)
+        XCTAssertGreaterThan(compass.frame.minY, layers.frame.maxY)
+        XCTAssertEqual(compass.value as? String, "NorthUp")
+        compass.tap()
+        let courseUp = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "CourseUp"), object: compass
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [courseUp], timeout: 5), .completed)
+        compass.tap()
+        let northUp = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "NorthUp"), object: compass
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [northUp], timeout: 5), .completed)
+        layers.tap()
+        XCTAssertTrue(app.navigationBars["Map layers"].waitForExistence(timeout: 5))
+    }
+
     func testSwedishShellNavigation() {
         checkShell(language: "sv", labels: ["Karta", "Chatt", "Social", "Garage"])
     }
@@ -156,6 +179,21 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertEqual(tab.label, label)
             tab.tap()
             assertSelected(tab)
+            if index == 2 {
+                let social = element("shell.socialHub", in: app)
+                XCTAssertTrue(social.waitForExistence(timeout: 5))
+                let socialLabels = language == "sv"
+                    ? ["Event", "Kronjakt", "Topplista"]
+                    : ["Events", "Crown Hunt", "Leaderboard"]
+                for socialLabel in socialLabels {
+                    XCTAssertTrue(social.buttons[socialLabel].waitForExistence(timeout: 5))
+                }
+                XCTAssertFalse(social.buttons[language == "sv" ? "Konvojer" : "Convoys"].exists,
+                               "Convoys must not be offered in the Social menu")
+                // Partners remains hidden without its Firebase-backed coordinator.
+                XCTAssertFalse(social.buttons["Partners"].exists)
+                attach(app, name: "configless-\(language)-Social-menu")
+            }
             if index == 1 {
                 XCTAssertTrue(element("chatHub.opaqueScreen", in: app).waitForExistence(timeout: 5))
                 XCTAssertFalse(app.buttons["shell.search"].exists)

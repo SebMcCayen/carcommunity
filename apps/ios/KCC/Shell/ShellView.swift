@@ -769,7 +769,6 @@ struct ShellView: View {
                     partnersEnabled: featureFlags.isEnabled(.partners)
                         && partnersCoordinator != nil,
                     onOpenEvents: { openEvents() },
-                    onOpenConvoys: openConvoyManagement,
                     onOpenCrownHunt: { routes = routes.opening(.crownHunt) },
                     onOpenLeaderboard: { routes = routes.opening(.leaderboard) },
                     onOpenPartners: { routes = routes.opening(.partners) }
@@ -920,12 +919,14 @@ struct ShellView: View {
                 mapSurface.setCompassMode(next)
             } label: {
                 Image(systemName: "location.north.line")
+                    .rotationEffect(.degrees(-mapSurface.bearing))
                     .frame(width: 48, height: 48)
                     .kccMapControl()
             }
             .accessibilityLabel(Text(mapSurface.compassMode == .northUp
                 ? "shell.compassCourseUp" : "shell.compassNorthUp"))
             .accessibilityIdentifier("shell.compass")
+            .accessibilityValue(mapSurface.compassMode.rawValue)
 
             if savedPlacesCoordinator != nil {
                 Button {
