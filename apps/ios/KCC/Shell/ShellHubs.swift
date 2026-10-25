@@ -32,6 +32,8 @@ struct SocialHubPanel: View {
         }
         .padding(KccSpacing.s6)
       }
+      .accessibilityElement(children: .contain)
+      .accessibilityIdentifier("shell.socialHub")
     }
 
     private var entries: [SocialHubEntry] {

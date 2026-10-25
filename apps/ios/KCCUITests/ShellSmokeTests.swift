@@ -180,16 +180,19 @@ final class ShellSmokeTests: XCTestCase {
             tab.tap()
             assertSelected(tab)
             if index == 2 {
+                let social = element("shell.socialHub", in: app)
+                XCTAssertTrue(social.waitForExistence(timeout: 5))
                 let socialLabels = language == "sv"
                     ? ["Event", "Kronjakt", "Topplista"]
                     : ["Events", "Crown Hunt", "Leaderboard"]
                 for socialLabel in socialLabels {
-                    XCTAssertTrue(app.buttons[socialLabel].waitForExistence(timeout: 5))
+                    XCTAssertTrue(social.buttons[socialLabel].waitForExistence(timeout: 5))
                 }
-                XCTAssertFalse(app.buttons[language == "sv" ? "Konvojer" : "Convoys"].exists,
+                XCTAssertFalse(social.buttons[language == "sv" ? "Konvojer" : "Convoys"].exists,
                                "Convoys must not be offered in the Social menu")
                 // Partners remains hidden without its Firebase-backed coordinator.
-                XCTAssertFalse(app.buttons["Partners"].exists)
+                XCTAssertFalse(social.buttons["Partners"].exists)
+                attach(app, name: "configless-\(language)-Social-menu")
             }
             if index == 1 {
                 XCTAssertTrue(element("chatHub.opaqueScreen", in: app).waitForExistence(timeout: 5))
