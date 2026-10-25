@@ -398,6 +398,8 @@ import com.kungsbackacarcommunity.app.shell.MapLayersPreferenceStore
 import com.kungsbackacarcommunity.app.shell.MapCompassMode
 import com.kungsbackacarcommunity.app.shell.MapMode
 import com.kungsbackacarcommunity.app.shell.HubScreen
+import com.kungsbackacarcommunity.app.shell.SocialHub
+import com.kungsbackacarcommunity.app.shell.MapDetailSheet
 import com.kungsbackacarcommunity.app.shell.sortedHubEntriesByLabel
 import com.kungsbackacarcommunity.app.shell.SettingsScreen
 import com.kungsbackacarcommunity.app.shell.LiveSessionAnchor
@@ -7630,7 +7632,7 @@ fun AuthenticatedApp(
                                             onDismiss = { selectedTab = ShellTab.Map },
                                             testTag = SOCIAL_PANEL_TEST_TAG,
                                         ) {
-                                            HubScreen(
+                                            SocialHub(
                                                 title = stringResource(R.string.shell_socialTitle),
                                                 // Alphabetical by the DISPLAYED, localized label
                                                 // (Issue 4) — see sortedHubEntriesByLabel. The
@@ -8779,14 +8781,11 @@ private fun CreateChooserDialog(
     selectedVehicleId: String? = null,
     onSelectVehicle: (String) -> Unit = {},
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        // Translucent surface so the map stays visible behind the chooser
-        // (shared Aero token).
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
-        title = { Text(stringResource(R.string.shell_createChooserTitle)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+    MapDetailSheet(
+        title = stringResource(R.string.shell_createChooserTitle),
+        onDismiss = onDismiss,
+    ) {
+            Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
                 Text(stringResource(R.string.shell_createChooserBody))
                 com.kungsbackacarcommunity.app.live.StartDrivingCarPicker(
                     vehicles = vehicles,
@@ -8806,15 +8805,11 @@ private fun CreateChooserDialog(
                     onClick = onConvoy,
                 )
             }
-        },
-        // No confirm button — each option card acts immediately; Cancel dismisses.
-        confirmButton = {},
-        dismissButton = {
+        // Each option keeps its existing immediate action; only presentation changes.
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.shell_liveSharePromptCancel))
             }
-        },
-    )
+    }
 }
 
 /**
