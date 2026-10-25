@@ -7,6 +7,7 @@ struct AddressSearchOverlay: View {
     let onManage: () -> Void
     let onClose: () -> Void
     @State private var editor: PlaceEditorContext?
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -16,6 +17,7 @@ struct AddressSearchOverlay: View {
                         .labelStyle(.iconOnly)
                         .frame(width: 44, height: 44)
                 }
+                .accessibilityIdentifier("addressSearch.close")
                 TextField(
                     "addressSearch.searchPlaceholder",
                     text: Binding(
@@ -27,6 +29,7 @@ struct AddressSearchOverlay: View {
                 .autocorrectionDisabled()
                 .submitLabel(.search)
                 .accessibilityIdentifier("addressSearch.query")
+                .focused($searchFocused)
                 if !coordinator.query.isEmpty {
                     Button {
                         coordinator.clearSearch()
@@ -43,10 +46,14 @@ struct AddressSearchOverlay: View {
             results
         }
         .frame(maxWidth: 620, maxHeight: 560, alignment: .top)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: KccRadius.lg))
+        .background(KccTheme.overlay, in: RoundedRectangle(cornerRadius: KccRadius.lg))
+        .overlay { RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.border) }
         .padding(.horizontal, KccSpacing.s3)
+        .padding(.trailing, KccSpacing.s12 + KccSpacing.s4)
         .padding(.top, KccSpacing.s8)
         .frame(maxHeight: .infinity, alignment: .top)
+        .task { searchFocused = true }
+        .accessibilityAction(.escape, close)
         .sheet(item: $editor) { context in
             SavedPlaceEditorSheet(
                 place: context.place,
@@ -140,6 +147,7 @@ struct AddressSearchOverlay: View {
     }
 
     private func close() {
+        searchFocused = false
         coordinator.clearSearch()
         onClose()
     }

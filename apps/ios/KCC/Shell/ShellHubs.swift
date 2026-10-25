@@ -20,17 +20,18 @@ struct SocialHubPanel: View {
     let onOpenPartners: () -> Void
 
     var body: some View {
+      ScrollView {
         VStack(alignment: .leading, spacing: KccSpacing.s4) {
             Text("shell.socialTitle")
-                .font(.system(size: KccTypeScale.headingLg, weight: KccTypeScale.semibold))
+                .font(.title2.weight(.semibold))
 
             ForEach(entries) { entry in
                 hubRow(label: entry.label, icon: entry.icon, action: entry.action)
             }
 
-            Spacer()
         }
         .padding(KccSpacing.s6)
+      }
     }
 
     private var entries: [SocialHubEntry] {
@@ -87,13 +88,16 @@ struct SocialHubPanel: View {
                 Image(systemName: icon)
                     .foregroundStyle(.secondary)
                 Text(label)
-                    .font(.system(size: KccTypeScale.bodyMd))
+                    .font(.body)
                 Spacer()
                 Image(systemName: "chevron.forward")
                     .font(.system(size: KccTypeScale.bodySm))
                     .foregroundStyle(.secondary)
             }
             .contentShape(Rectangle())
+            .frame(minHeight: 48)
+            .padding(KccSpacing.s3)
+            .background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.md))
         }
         .buttonStyle(.plain)
     }

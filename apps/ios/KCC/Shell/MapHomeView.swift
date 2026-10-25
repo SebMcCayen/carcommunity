@@ -340,6 +340,10 @@ private final class ConvoyViewportInteractionObserver: @preconcurrency ViewportS
 /// renderer without changing the shell-facing ``MapSurface`` seam.
 @MainActor
 struct MapHomeView: View {
+    @Environment(\.colorScheme) private var colorScheme
+    /// Config-less accessibility diagnostics let UI tests detect accidental
+    /// map-host recreation. No account or location data is included.
+    @State private var hostLifetimeID = UUID()
     @Environment(\.scenePhase) private var scenePhase
     /// The shell's one surface instance, owned by ``ShellView`` — composed
     /// once for the whole signed-in shell and never disposed.
@@ -442,10 +446,12 @@ struct MapHomeView: View {
 
     private var mapPlaceholder: some View {
         ZStack {
-            Color(.secondarySystemBackground)
+            KccTheme.subtle
                 .ignoresSafeArea()
             Text("shell.mapPlaceholder")
                 .accessibilityIdentifier("shell.mapPlaceholder")
+                .accessibilityValue(Text(verbatim:
+                    "\(hostLifetimeID.uuidString)|\(colorScheme == .dark ? "Dark" : "Light")"))
                 .font(.system(size: KccTypeScale.titleMd, weight: KccTypeScale.medium))
                 .foregroundStyle(.secondary)
         }

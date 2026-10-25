@@ -67,6 +67,14 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Regenerate native project including feature folders
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          cd apps/ios
+          xcodegen generate
+
       # Builds WITHOUT GoogleService-Info.plist (it is gitignored and no
       # secret is injected here) — this is deliberate: it continuously proves
       # the config-less-build seam that FirebaseBootstrap provides.
@@ -105,11 +113,43 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      - name: Upload simulator failure diagnostics
-        if: failure()
+      # All screenshot attachments are captured by config-less KCCUITests;
+      # no Firebase plist, production account, or production fixtures are used.
+      - name: Export config-less simulator screenshot attachments
+        if: always()
+        run: |
+          RESULTS="${RUNNER_TEMP}/ios-tests.xcresult"
+          SCREENSHOTS="${RUNNER_TEMP}/ios-configless-screenshots"
+          if [ -d "${RESULTS}" ]; then
+            mkdir -p "${SCREENSHOTS}"
+            xcrun xcresulttool export attachments \
+              --path "${RESULTS}" \
+              --output-path "${SCREENSHOTS}"
+          fi
+
+      - name: Upload simulator results and screenshot attachments
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: ios-test-results
           path: ${{ runner.temp }}/ios-tests.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload config-less screenshot PNGs and attachment manifest
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-configless-screenshots
+          path: ${{ runner.temp }}/ios-configless-screenshots
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload generated Xcode project
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-generated-project
+          path: apps/ios/KCC.xcodeproj
           if-no-files-found: ignore
           retention-days: 7

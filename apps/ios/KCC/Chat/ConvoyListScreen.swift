@@ -73,7 +73,7 @@ struct ConvoyListScreen: View {
             Button { coordinator.reload() } label: {
                 Text("chatHub.convoysRetry")
             }
-            .buttonStyle(.borderedProminent)
+            .kccPrimaryAction()
         }
         .padding(KccSpacing.s4)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

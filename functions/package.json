@@ -29,7 +29,26 @@
     "@opentelemetry/core@<2.8.0": "^2.8.0",
     "fast-xml-parser@<5.10.1": "^5.10.1",
     "js-yaml": "4.3.2",
-    "postcss": "8.5.28"
+    "postcss": "8.5.28",
+    "proxy-addr@<2.0.8": "2.0.8",
+    "@modelcontextprotocol/sdk@<1.32.1": "1.32.1",
+    "basic-ftp@<6.2.3": "6.2.3",
+    "@fastify/busboy@<3.2.3": "3.2.3",
+    "compression@<1.8.2": "1.8.2",
+    "fast-uri@<3.1.9": "3.1.9",
+    "undici@<6.29.1": "6.29.1",
+    "undici@8.10.0": "8.12.3",
+    "body-parser@<1.20.9": "1.20.9",
+    "body-parser@2.3.0": "2.4.0",
+    "brace-expansion@<1.1.21": "1.1.21",
+    "brace-expansion@2.1.4": "2.1.7",
+    "brace-expansion@5.0.9": "5.0.12",
+    "@grpc/grpc-js@1.14.4": "1.14.5",
+    "ip-address@<10.7.4": "10.7.4",
+    "hono@<4.13.13": "4.13.13",
+    "morgan@<1.12.1": "1.12.1",
+    "qs@<6.16.1": "6.16.1",
+    "@grpc/grpc-js@<1.13.6": "1.13.6"
   },
   "dependencies": {
     "@apple/app-store-server-library": "^3.1.0",
@@ -37,7 +56,7 @@
     "firebase-functions": "^7.4.0",
     "google-auth-library": "^11.1.0",
     "h3-js": "^4.2.1",
-    "zod": "^4.6.2"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.2",
@@ -47,6 +66,7 @@
     "firebase-tools": "^15.32.1",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.71.0",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "vite": "^7.3.7"
   }
 }

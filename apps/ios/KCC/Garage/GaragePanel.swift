@@ -39,7 +39,7 @@ struct GaragePanel: View {
         ScrollView {
             VStack(alignment: .leading, spacing: KccSpacing.s4) {
                 Text("garage.screenTitle")
-                    .font(.system(size: KccTypeScale.headingLg, weight: KccTypeScale.semibold))
+                    .font(.title2.weight(.semibold))
 
                 content
             }
@@ -153,7 +153,7 @@ struct GaragePanel: View {
                 .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
                 .frame(maxWidth: .infinity, minHeight: 44)
         }
-        .buttonStyle(.borderedProminent)
+        .kccPrimaryAction()
     }
 
     /// The signed-in uid from the process-wide auth repository, nil when
@@ -219,7 +219,7 @@ struct GarageVehicleCard: View {
         }
         .padding(KccSpacing.s4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
+        .background(KccTheme.subtle)
         .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
     }
 
@@ -406,7 +406,7 @@ struct VehicleDetailSheet: View {
     private var gallery: some View {
         if paths.isEmpty {
             ZStack {
-                Circle().fill(Color(.secondarySystemBackground))
+                Circle().fill(KccTheme.subtle)
                 Image(systemName: "car").font(.system(size: 48)).foregroundStyle(.secondary)
             }
             .aspectRatio(1, contentMode: .fit)
@@ -460,7 +460,7 @@ struct VehicleDetailSheet: View {
 
     private func galleryImage(path: String) -> some View {
         ZStack {
-            Color(.secondarySystemBackground)
+            KccTheme.subtle
             if let url = coordinator.imageURLs[path] {
                 AsyncImage(url: url) { image in
                     image.resizable().scaledToFill()

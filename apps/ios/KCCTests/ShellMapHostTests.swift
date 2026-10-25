@@ -59,6 +59,20 @@ final class ShellMapHostTests: XCTestCase {
         XCTAssertTrue(active(tab: .map, route: nil))
     }
 
+    @MainActor
+    func testMapChatMyDrivesRoundTripRetainsCamera() {
+        let surface = StubMapSurface(initialState: .loaded, autoLoad: false)
+        let snapshot = MapCameraSnapshot.of(
+            latitude: 57.49, longitude: 12.08, zoom: 14, bearing: 35, pitch: 45
+        )
+        surface.setCameraSnapshotForTest(snapshot)
+        for (tab, route) in [(ShellTab.chat, nil), (.map, ShellRoute.myDrives), (.map, nil)] {
+            surface.setActive(active(tab: tab, route: route))
+            XCTAssertEqual(surface.cameraSnapshot, snapshot)
+            XCTAssertEqual(surface.isActive, tab == .map && route == nil)
+        }
+    }
+
     func testEveryTranslucentPanelTabKeepsTheSurfaceLive() {
         // History / Social / Garage draw a strip of live map above their
         // card, so the surface must not stand down under them.

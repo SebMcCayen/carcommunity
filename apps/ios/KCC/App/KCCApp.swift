@@ -65,7 +65,27 @@ struct KCCApp: App {
                 restrictedPrivacyCoordinator: restrictedPrivacyCoordinator,
                 diagnostics: diagnostics
             )
+            .preferredColorScheme(configlessUITestColorScheme)
         }
+    }
+
+    /// Only config-less DEBUG builds accept this appearance fixture. Standard
+    /// UIKit launch defaults do not reliably override SwiftUI's appearance.
+    private var configlessUITestColorScheme: ColorScheme? {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        guard FirebaseApp.app() == nil,
+              let index = arguments.firstIndex(of: "-KCCUITestTheme"),
+              arguments.indices.contains(index + 1)
+        else { return nil }
+        switch arguments[index + 1] {
+        case "Dark": return .dark
+        case "Light": return .light
+        default: return nil
+        }
+        #else
+        return nil
+        #endif
     }
 
     /// The production provider drives the real Apple flow. In DEBUG builds

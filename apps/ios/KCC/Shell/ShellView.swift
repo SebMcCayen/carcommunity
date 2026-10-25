@@ -23,6 +23,7 @@ struct ShellView: View {
     let diagnostics: IOSDiagnosticsComposition
 
     @State private var selectedTab: ShellTab = .defaultTab
+    @State private var chatHasOpened = false
     /// The full-screen sub-route back-stack, held as the ONE pure value from
     /// ``ShellRouteStack``; every open/Back goes through its ``ShellRouteStack/opening(_:)``
     /// / ``ShellRouteStack/poppingOne()`` reducers rather than ad-hoc state.
@@ -44,8 +45,9 @@ struct ShellView: View {
         self.access = access
         self.featureFlags = featureFlags
         self.diagnostics = diagnostics
-        _selectedTab = State(initialValue: initialTab ?? .defaultTab)
-        _routes = State(initialValue: initialRoute.map { .empty.opening($0) } ?? .empty)
+        let restoredTab = initialTab ?? .defaultTab
+        _selectedTab = State(initialValue: ShellNavigation.restoredTab(restoredTab))
+        _routes = State(initialValue: ShellNavigation.restoredRoutes(tab: restoredTab, route: initialRoute))
         _accountDeletionCoordinator = State(initialValue: AccountDeletionCoordinator(
             repository: FirebaseAccountDeletionRepository.createIfAvailable()
         ))
@@ -66,6 +68,7 @@ struct ShellView: View {
     @State private var mapLayerPreferences = MapLayerPreferences()
     @State private var showMapLayers = false
     @State private var navSearchOpen = false
+    @AccessibilityFocusState private var searchLauncherFocused: Bool
     @State private var showSavedPlacesPicker = false
     @State private var savedPlacesCoordinator: SavedPlacesCoordinator?
     @State private var savedPlacesProximity: MapPoint?
@@ -252,26 +255,35 @@ struct ShellView: View {
                     uid: signedInUid
                 )
             )
+            .accessibilityHidden(mapCover == .opaque)
 
-            content(for: selectedTab)
+            // PR #1165 (codex/ios-map-visibility): remove the opaque TabView
+            // content host. Keep map feature tasks mounted across tab changes.
+            content(for: .map)
+                .allowsHitTesting(selectedTab == .map && routes.current == nil)
+                .accessibilityHidden(selectedTab != .map || routes.current != nil)
+            // Retain the Chat stack/drafts after first entry. Hiding it does
+            // not stop the explicit live/drive session underneath.
+            if chatHasOpened || selectedTab == .chat {
+                chatTab
+                    .environment(\.chatReadingActive,
+                        selectedTab == .chat && routes.current == nil && scenePhase == .active)
+                    .opacity(selectedTab == .chat ? 1 : 0)
+                    .allowsHitTesting(selectedTab == .chat && routes.current == nil)
+                    .accessibilityHidden(selectedTab != .chat || routes.current != nil)
+            }
+            if selectedTab != .map && selectedTab != .chat {
+                content(for: selectedTab)
+            }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            // UITabBar provides native selection/accessibility without an
-            // opaque UITabBarController content host covering our one map.
-            ShellNativeTabBar(
-                selection: tabSelection,
-                titles: ShellTab.allCases.map { String(localized: String.LocalizationValue(tabTitle($0))) },
-                symbols: ShellTab.allCases.map { tabSystemImage($0) }
-            )
-            .frame(height: 49)
-            .background(.bar)
-
+            primaryNavigation
         }
         // Route host: sub-routes render full-screen OVER the tab shell (the
         // Android shell's route-host pattern), each carrying its own back
         // affordance that pops one level via the pure stack.
         .overlay {
-            if let route = routes.current, route != .chatHub {
+            if let route = routes.current {
                 routeHost(for: route)
             }
         }
@@ -309,10 +321,14 @@ struct ShellView: View {
             applyMapLayerPreferences()
         }
         .onChange(of: selectedTab) { _, tab in
+            if tab == .chat { chatHasOpened = true }
             if tab != .map { closeAddressSearch() }
             if tab != .map, routes.current == .chatHub {
                 routes = routes.poppingOne()
             }
+        }
+        .onChange(of: navSearchOpen) { _, open in
+            if !open { searchLauncherFocused = true }
         }
         .onChange(of: locationPermissionCoordinator?.state) { _, state in
             if state == .granted {
@@ -422,6 +438,9 @@ struct ShellView: View {
 
     private var shellPresentation: some View {
         shellSheets
+        .foregroundStyle(KccTheme.text)
+        .tint(KccTheme.driver)
+        .background(KccTheme.page, ignoresSafeAreaEdges: .all)
         .confirmationDialog(
             "liveLocation.stop",
             isPresented: $showStopConfirmation,
@@ -499,8 +518,26 @@ struct ShellView: View {
                 // Account entries require a real session. Public Settings
                 // (including legal links) also remain usable without config.
                 .overlay(alignment: .topTrailing) {
+                    if selectedTab == .map, routes.current == nil { shellMenuButton }
+                }
+                .overlay(alignment: .topLeading) {
                     if mapHomeChromeVisible {
-                        shellMenuButton
+                        mapSearchButton.padding(KccSpacing.s4)
+                    }
+                }
+                .overlay(alignment: .bottomLeading) {
+                    if mapHomeChromeVisible,
+                       let recordingState = driveRecordingCoordinator?.state,
+                       case .kept = recordingState {
+                        Button {
+                            routes = routes.opening(.myDrives)
+                        } label: {
+                            Label("shell.moreDrives", systemImage: "chart.bar.xaxis")
+                                .padding(KccSpacing.s3)
+                                .background(KccTheme.overlay, in: Capsule())
+                        }
+                        .accessibilityIdentifier("shell.postDriveHistory")
+                        .padding(KccSpacing.s4)
                     }
                 }
                 .overlay(alignment: .top) {
@@ -519,28 +556,6 @@ struct ShellView: View {
                         .padding(.vertical, KccSpacing.s2)
                         .background(.regularMaterial, in: Capsule())
                         .padding(.top, KccSpacing.s4)
-                    }
-                }
-                .overlay(alignment: .bottomTrailing) {
-                    if case .signedIn = session.state, mapHomeChromeVisible {
-                        mapCommunicationControls
-                    }
-                }
-                .overlay(alignment: .bottomLeading) {
-                    // Viewing preferences are device-local and do not require
-                    // an account. Keep the control in the config-less shell so
-                    // clone-and-run builds exercise the same stub seam as CI.
-                    if mapHomeChromeVisible {
-                        MapLayersButton(isPresented: $showMapLayers)
-                            .padding(KccSpacing.s4)
-                    }
-                }
-                .overlay(alignment: .bottom) {
-                    if mapHomeChromeVisible,
-                       let coordinator = crownHuntComposition?.perkMapCoordinator,
-                       coordinator.isAvailable {
-                        CrownPerkMapControl(coordinator: coordinator)
-                            .padding(.bottom, KccSpacing.s4)
                     }
                 }
                 .overlay {
@@ -591,23 +606,8 @@ struct ShellView: View {
                         )
                     }
                 }
-                .overlay(alignment: .top) {
-                    if mapHomeChromeVisible,
-                       let coordinator = convoyManagementCoordinator,
-                       let convoy = coordinator.activeConvoy {
-                        ConvoyStatusBar(
-                            coordinator: coordinator,
-                            convoy: convoy,
-                            friendsCoordinator: friendsCoordinator,
-                            awareness: convoyAwareness,
-                            mapSurface: mapSurface,
-                            liveLocationEnabled: liveLocationFeatureEnabled,
-                            viewerUid: signedInUid,
-                            onOpenMemberProfile: openMemberProfile
-                        )
-                        .padding(.horizontal, KccSpacing.s4)
-                        .padding(.top, KccSpacing.s12 + KccSpacing.s3)
-                    }
+                .overlay(alignment: .topTrailing) {
+                    if mapHomeChromeVisible { mapTopTools }
                 }
                 .overlay {
                     if mapHomeChromeVisible,
@@ -758,23 +758,10 @@ struct ShellView: View {
                         applyConvoyFocus()
                     }
                 }
-                .overlay {
-                    if routes.current == .chatHub {
-                        chatHubOverlay
-                    }
-                }
+        case .chat:
+            chatTab
         case .history:
-            // The read-only drives history (Android's DrivesListScreen). The
-            // panel wires itself (repository + uid) at the feature level, so
-            // the shell stays argument-free here.
-            panelTab {
-                DrivesPanel(sharingEnabled: FeatureGate.isAvailable(
-                    flags: featureFlags,
-                    flag: .socialSharing,
-                    memberGated: false,
-                    access: access
-                ))
-            }
+            myDrives
         case .social:
             panelTab {
                 SocialHubPanel(
@@ -814,6 +801,12 @@ struct ShellView: View {
                     Label("shell.moreProfile", systemImage: "person")
                 }
             }
+            Button {
+                routes = routes.opening(.profile).opening(.myDrives)
+            } label: {
+                Label("shell.moreDrives", systemImage: "chart.bar.xaxis")
+            }
+            .accessibilityIdentifier("shell.myDrives")
             if friendsCoordinator != nil {
                 Button {
                     routes = routes.opening(.friends)
@@ -863,55 +856,89 @@ struct ShellView: View {
                 systemImage: signedInUid == nil ? "gearshape" : "person.circle"
             )
             .labelStyle(.iconOnly)
-            .font(.system(size: 28))
+            .font(.system(size: 22))
+            .frame(width: 48, height: 48)
+            .kccMapControl()
         }
         .accessibilityIdentifier("shell.menu")
         .padding(KccSpacing.s4)
     }
 
+    /// S01: tools start below the avatar, never centered over the map. Keeping
+    /// the convoy strip in this stack reserves its actual rendered height,
+    /// including action errors, rather than guessing a fixed rail offset.
+    private var mapTopTools: some View {
+        VStack(spacing: KccSpacing.s3) {
+            if let coordinator = convoyManagementCoordinator,
+               let convoy = coordinator.activeConvoy {
+                ConvoyStatusBar(
+                    coordinator: coordinator,
+                    convoy: convoy,
+                    friendsCoordinator: friendsCoordinator,
+                    awareness: convoyAwareness,
+                    mapSurface: mapSurface,
+                    liveLocationEnabled: liveLocationFeatureEnabled,
+                    viewerUid: signedInUid,
+                    onOpenMemberProfile: openMemberProfile
+                )
+                .padding(.horizontal, KccSpacing.s4)
+            }
+            HStack(alignment: .top, spacing: 0) {
+                Spacer(minLength: 0)
+                ViewThatFits(in: .vertical) {
+                    mapCommunicationControls
+                    ScrollView(.vertical) {
+                        mapCommunicationControls
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                }
+                .frame(width: 48 + KccSpacing.s4 * 2)
+            }
+        }
+        .padding(.top, KccSpacing.s4 + 48 + KccSpacing.s3)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+    }
+
     private var mapCommunicationControls: some View {
         VStack(spacing: KccSpacing.s3) {
-            if savedPlacesCoordinator != nil {
-                Button {
-                    navSearchOpen = true
-                } label: {
-                    Image(systemName: "magnifyingglass")
-                        .frame(width: 48, height: 48)
-                        .background(.regularMaterial, in: Circle())
-                }
-                .accessibilityLabel(Text("addressSearch.searchPlaceholder"))
-
-                Button {
-                    showSavedPlacesPicker = true
-                } label: {
-                    Image(systemName: "bookmark.fill")
-                        .frame(width: 48, height: 48)
-                        .background(.regularMaterial, in: Circle())
-                }
-                .accessibilityLabel(Text("shell.savedPlacesButton"))
-            }
-
             if incidentMapCoordinator?.available == true {
                 Button {
                     incidentMapCoordinator?.reportSheetPresented = true
                 } label: {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .frame(width: 48, height: 48)
-                        .background(.regularMaterial, in: Circle())
+                        .kccMapControl()
                 }
                 .accessibilityLabel(Text("incidents.reportButton"))
             }
 
-            if ShellNavigation.chatHubEntryAvailable(flags: featureFlags, access: access) {
+            MapLayersButton(isPresented: $showMapLayers)
+                .accessibilityIdentifier("shell.mapLayers")
+            Button {
+                let next = mapSurface.compassMode.toggled()
+                mapSurface.setCompassMode(next)
+            } label: {
+                Image(systemName: "location.north.line")
+                    .frame(width: 48, height: 48)
+                    .kccMapControl()
+            }
+            .accessibilityLabel(Text(mapSurface.compassMode == .northUp
+                ? "shell.compassCourseUp" : "shell.compassNorthUp"))
+            .accessibilityIdentifier("shell.compass")
+
+            if savedPlacesCoordinator != nil {
                 Button {
-                    guard ChatHubCoordinator.canPresentHub(cover: mapCover, navigating: false) else { return }
-                    routes = routes.opening(.chatHub)
+                    showSavedPlacesPicker = true
                 } label: {
-                    Image(systemName: "bubble.left.and.bubble.right.fill")
+                    Image(systemName: "bookmark.fill")
                         .frame(width: 48, height: 48)
-                        .background(.regularMaterial, in: Circle())
+                        .kccMapControl()
                 }
-                .accessibilityLabel(Text("chatHub.title"))
+                .accessibilityLabel(Text("shell.savedPlacesButton"))
+            }
+
+            if let coordinator = crownHuntComposition?.perkMapCoordinator, coordinator.isAvailable {
+                CrownPerkMapControl(coordinator: coordinator)
             }
 
             if let liveLocationCoordinator, liveLocationCoordinator.canPresentScreen {
@@ -920,13 +947,97 @@ struct ShellView: View {
                 } label: {
                     Image(systemName: "location.fill")
                         .frame(width: 48, height: 48)
-                        .background(.regularMaterial, in: Circle())
+                        .kccMapControl()
                 }
                 .accessibilityLabel(Text("liveLocation.screenTitle"))
             }
         }
         .font(.system(size: 20, weight: .semibold))
-        .padding(KccSpacing.s4)
+        .padding(.horizontal, KccSpacing.s4)
+        .padding(.bottom, KccSpacing.s4)
+    }
+
+    private var mapSearchButton: some View {
+        Button {
+            navSearchOpen = true
+        } label: {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 20, weight: .semibold))
+                .frame(width: 48, height: 48)
+                .kccMapControl()
+        }
+        .accessibilityLabel(Text("shell.searchExpand"))
+        .accessibilityIdentifier("shell.search")
+        .accessibilityFocused($searchLauncherFocused)
+    }
+
+    private var primaryNavigation: some View {
+        HStack(spacing: 0) {
+            ForEach(ShellTab.allCases, id: \.self) { tab in
+                Button {
+                    tabSelection.wrappedValue = tab
+                } label: {
+                    VStack(spacing: KccSpacing.s1) {
+                        Image(systemName: tabSystemImage(tab))
+                            .font(.system(size: 20, weight: .semibold))
+                            .frame(height: 28)
+                            .accessibilityHidden(true)
+                        Text(LocalizedStringKey(tabTitle(tab))).font(.caption2)
+                            // Only navigation chrome is bounded. Reading content
+                            // keeps the user's full accessibility text size.
+                            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .contentShape(Rectangle())
+                    .foregroundStyle(tab == .create
+                        ? (liveLocationCoordinator?.isSharing == true ? KccPalette.warmIvory : KccTheme.onGold)
+                        : KccTheme.text)
+                    .background {
+                        if tab == .create {
+                            RoundedRectangle(cornerRadius: KccRadius.xl)
+                                .fill(liveLocationCoordinator?.isSharing == true ? KccPalette.errorRed : KccPalette.crownGold)
+                        }
+                    }
+                    .overlay(alignment: .bottom) {
+                        if selectedTab == tab {
+                            Capsule().fill(KccPalette.crownGold).frame(width: 28, height: 3)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text(LocalizedStringKey(tabTitle(tab))))
+                .accessibilityIdentifier("shell.tab.\(tab.accessibilityID)")
+                .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
+                .accessibilityValue(tab == .chat && chatUnreadCount > 0
+                    ? Text(String(format: String(localized: "dm.unreadCount"), chatUnreadCount)) : Text(""))
+            }
+        }
+        .padding(.horizontal, KccSpacing.s2)
+        .padding(.vertical, KccSpacing.s2)
+        .background(KccTheme.overlay, ignoresSafeAreaEdges: .bottom)
+        .overlay(alignment: .top) { Rectangle().fill(KccTheme.border).frame(height: 1) }
+    }
+
+    /// Existing block-filtered inbox state; Driver activity never enters it.
+    private var chatUnreadCount: Int {
+        guard case .loaded(let rows) = conversationsCoordinator?.state else { return 0 }
+        return rows.reduce(0) { $0 + max(0, $1.unreadCount) }
+    }
+
+    private var myDrives: some View {
+        DrivesPanel(sharingEnabled: FeatureGate.isAvailable(
+            flags: featureFlags, flag: .socialSharing, memberGated: false, access: access
+        ))
+        .kccReadingSurface()
+    }
+
+    private var chatTab: some View {
+        NavigationStack { chatHubContent }
+            .kccReadingSurface()
+            .accessibilityAction(.escape) { selectedTab = .map }
     }
 
     private func applyMapLayerPreferences() {
@@ -949,9 +1060,12 @@ struct ShellView: View {
                 onSignOut: { endDeletionSession() },
                 onBack: { routes = routes.poppingOne() },
                 onOpenPoints: { routes = routes.opening(.points) },
+                onOpenDrives: { routes = routes.opening(.myDrives) },
                 onOpenWhatsNew: { routes = routes.opening(.whatsNew) },
                 onOpenAccountDeletion: { routes = routes.opening(.accountDeletion) }
             )
+        case .myDrives:
+            routeNavigation { myDrives }
         case .points:
             routeNavigation {
                 PointsScreen(uid: signedInUid)
@@ -1028,7 +1142,8 @@ struct ShellView: View {
                 unavailableRoute
             }
         case .chatHub:
-            EmptyView()
+            chatHubOverlay
+                .environment(\.chatReadingActive, scenePhase == .active)
         case .notifications:
             routeNavigation {
                 NotificationsInboxScreen(
@@ -1293,9 +1408,8 @@ struct ShellView: View {
         .padding(KccSpacing.s4)
     }
 
-    private var chatHubOverlay: some View {
-        NavigationStack {
-            ChatHubScreen(
+    private var chatHubContent: some View {
+        ChatHubScreen(
                 coordinator: chatHubCoordinator,
                 conversationsCoordinator: conversationsCoordinator,
                 makeNewDialogueCoordinator: makeNewDialogueCoordinator,
@@ -1303,9 +1417,20 @@ struct ShellView: View {
                 notificationsCoordinator: notificationsCoordinator,
                 onOpenNotificationSettings: {
                     routes = routes.opening(.notificationSettings)
-                }
+                },
+                onOpenEvents: {
+                    openEvents()
+                },
+                driverContent: AnyView(
+                    ShellDriverFeed(uid: signedInUid)
+                )
             )
-            .background(.regularMaterial, ignoresSafeAreaEdges: .all)
+            .kccReadingSurface()
+    }
+
+    private var chatHubOverlay: some View {
+        NavigationStack {
+            chatHubContent
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
@@ -1316,6 +1441,8 @@ struct ShellView: View {
                 }
             }
         }
+        .kccReadingSurface()
+        .accessibilityAction(.escape) { routes = routes.poppingOne() }
     }
 
     private var unavailableRoute: some View {
@@ -1325,7 +1452,7 @@ struct ShellView: View {
             routeBackButton
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.background, ignoresSafeAreaEdges: .all)
+        .kccReadingSurface()
     }
 
     private func routeNavigation<Content: View>(
@@ -1350,7 +1477,7 @@ struct ShellView: View {
                     }
                 }
         }
-        .background(.background, ignoresSafeAreaEdges: .all)
+        .kccReadingSurface()
     }
 
     private var makeNewDialogueCoordinator: (() -> NewDialogueCoordinator)? {
@@ -1382,10 +1509,12 @@ struct ShellView: View {
             else { routes = routes.opening(.conversations) }
         case .communityChat:
             chatHubCoordinator?.select(.community)
-            routes = routes.opening(.chatHub)
+            selectedTab = .chat
+            routes = .empty
         case .convoyChat:
             chatHubCoordinator?.select(.convoys)
-            routes = routes.opening(.chatHub)
+            selectedTab = .chat
+            routes = .empty
         case .convoys:
             selectedConvoyId = link.entityId
             routes = routes.opening(.convoys)
@@ -1912,6 +2041,11 @@ struct ShellView: View {
                 store: ProtectedFileSavedPlacesStore(uid: uid),
                 searchClient: searchClient
             )
+        } else {
+            savedPlacesCoordinator = SavedPlacesCoordinator(
+                store: TransientSavedPlacesStore(),
+                searchClient: UnavailableAddressSearchClient()
+            )
         }
         privacySettingsCoordinator = PrivacySettingsCoordinator(
             repository: FirebasePrivacySettingsRepository.createIfAvailable(),
@@ -2387,6 +2521,23 @@ private struct DmRouteTarget: Equatable, Sendable {
     let displayName: String?
 }
 
+/// The inherited visibility is source-, route-, tab- and scene-aware. It keeps
+/// source/detail identity while pausing the adapter behind an opaque child.
+private struct ShellDriverFeed: View {
+    @Environment(\.chatReadingActive) private var readingActive
+    let uid: String?
+
+    var body: some View {
+        DriverFeedScreen(
+            uid: uid,
+            strings: DriverFeedStrings(lookup: { key in
+                Bundle.main.localizedString(forKey: key, value: nil, table: nil)
+            }),
+            isActive: readingActive
+        )
+    }
+}
+
 private struct MemberProfileRouteTarget: Equatable, Sendable {
     let uid: String
     let displayName: String?
@@ -2401,7 +2552,8 @@ extension ShellTab {
     var titleKey: String {
         switch self {
         case .map: "shell.tabMap"
-        case .history: "shell.tabHistory"
+        case .history: "shell.moreDrives"
+        case .chat: "shell.tabChat"
         case .create: "shell.tabCreate"
         case .social: "shell.tabSocial"
         case .garage: "shell.tabGarage"
@@ -2412,9 +2564,21 @@ extension ShellTab {
         switch self {
         case .map: "map"
         case .history: "clock"
+        case .chat: "bubble.left.and.bubble.right"
         case .create: "plus.circle"
         case .social: "person.2"
         case .garage: "car"
+        }
+    }
+
+    var accessibilityID: String {
+        switch self {
+        case .map: "map"
+        case .history: "history"
+        case .chat: "chat"
+        case .create: "create"
+        case .social: "social"
+        case .garage: "garage"
         }
     }
 }
@@ -2428,46 +2592,4 @@ extension ShellTab {
         featureFlags: .contractDefaults,
         diagnostics: IOSDiagnosticsComposition()
     )
-}
-
-
-private struct ShellNativeTabBar: UIViewRepresentable {
-    @Binding var selection: ShellTab
-    let titles: [String]
-    let symbols: [String]
-
-    func makeCoordinator() -> Coordinator { Coordinator(selection: $selection) }
-
-    func makeUIView(context: Context) -> UITabBar {
-        let bar = UITabBar()
-        bar.delegate = context.coordinator
-        bar.items = ShellTab.allCases.enumerated().map { index, _ in
-            UITabBarItem(title: titles[index], image: UIImage(systemName: symbols[index]), tag: index)
-        }
-        return bar
-    }
-
-    func updateUIView(_ bar: UITabBar, context: Context) {
-        context.coordinator.selection = $selection
-        for (index, item) in (bar.items ?? []).enumerated() {
-            item.title = titles[index]
-            item.image = UIImage(systemName: symbols[index])
-        }
-        if let index = ShellTab.allCases.firstIndex(of: selection) {
-            bar.selectedItem = bar.items?[index]
-        }
-    }
-
-    final class Coordinator: NSObject, UITabBarDelegate {
-        var selection: Binding<ShellTab>
-        init(selection: Binding<ShellTab>) { self.selection = selection }
-        func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
-            guard ShellTab.allCases.indices.contains(item.tag) else { return }
-            selection.wrappedValue = ShellTab.allCases[item.tag]
-            // Create is an action and may deliberately keep Map selected.
-            if let index = ShellTab.allCases.firstIndex(of: selection.wrappedValue) {
-                tabBar.selectedItem = tabBar.items?[index]
-            }
-        }
-    }
 }

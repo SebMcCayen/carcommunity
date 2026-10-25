@@ -8,6 +8,31 @@ import XCTest
 /// `StubMapSurface` cases live in `MapSurfaceTests.swift`, alongside the
 /// ported seam.
 final class ShellNavTests: XCTestCase {
+    func testPrimaryTabsDoNotReuseLegacyHistoryIdentity() {
+        XCTAssertEqual(ShellTab.allCases, [.map, .chat, .create, .social, .garage])
+        XCTAssertFalse(ShellTab.allCases.contains(.history))
+        XCTAssertNotEqual(ShellTab.history, .chat)
+        XCTAssertEqual(ShellNavigation.restoredTab(.history), .map)
+        let restored = ShellNavigation.restoredRoutes(tab: .history, route: nil)
+        XCTAssertEqual(restored.current, .myDrives)
+        XCTAssertEqual(restored.poppingOne().current, .profile)
+        XCTAssertNil(restored.poppingOne().poppingOne().current)
+    }
+
+    func testLegacyHistoryRestoresChildRouteAboveMyDrives() {
+        let restored = ShellNavigation.restoredRoutes(tab: .history, route: .settings)
+        XCTAssertEqual(restored.current, .settings)
+        XCTAssertEqual(restored.poppingOne().current, .myDrives)
+        XCTAssertEqual(ShellNavigation.restoredTab(.chat), .chat)
+    }
+
+    func testChatAndMyDrivesPauseMapEvenWithStaleSearchRequest() {
+        for (tab, route) in [(ShellTab.chat, nil), (.map, ShellRoute.myDrives), (.map, .chatHub)] {
+            XCTAssertEqual(ShellNavigation.mapCover(
+                tab: tab, route: route, navigating: false, navSearchOpen: true
+            ), .opaque)
+        }
+    }
 
     // MARK: - system Back resolution
 
@@ -218,12 +243,12 @@ final class ShellNavTests: XCTestCase {
             route: nil,
             addressSearchRequested: false
         ))
-        XCTAssertTrue(ShellNavigation.mapHomeChromeVisible(
+        XCTAssertFalse(ShellNavigation.mapHomeChromeVisible(
             tab: .map,
             route: .savedPlaces,
             addressSearchRequested: true
         ))
-        XCTAssertTrue(ShellNavigation.mapHomeChromeVisible(
+        XCTAssertFalse(ShellNavigation.mapHomeChromeVisible(
             tab: .social,
             route: nil,
             addressSearchRequested: true
@@ -324,7 +349,7 @@ final class ShellNavTests: XCTestCase {
         // live map above them, so the map behind them is genuinely on screen.
         // Returning .opaque here makes the shell stand the surface down and
         // shows the user a puck-less map through the card.
-        for tab in [ShellTab.history, .social, .garage] {
+        for tab in [ShellTab.social, .garage] {
             XCTAssertEqual(
                 ShellNavigation.mapCover(tab: tab, route: nil, navigating: false, navSearchOpen: false),
                 .transparent,
@@ -337,7 +362,7 @@ final class ShellNavTests: XCTestCase {
         // Pins the set and its consumer together: adding a tab to
         // translucentPanelTabs without giving it a panel (or the reverse) is
         // the drift this asserts against.
-        XCTAssertEqual(translucentPanelTabs, [.history, .social, .garage])
+        XCTAssertEqual(translucentPanelTabs, [.social, .garage])
         for tab in translucentPanelTabs {
             XCTAssertEqual(
                 ShellNavigation.mapCover(tab: tab, route: nil, navigating: false, navSearchOpen: false),
@@ -372,7 +397,7 @@ final class ShellNavTests: XCTestCase {
         )
     }
 
-    func testChatHubRouteKeepsTheMapLiveBehindItsOverlay() {
+    func testChatHubRoutePausesMapBehindOpaqueReadingSurface() {
         XCTAssertEqual(
             ShellNavigation.mapCover(
                 tab: .map,
@@ -380,7 +405,7 @@ final class ShellNavTests: XCTestCase {
                 navigating: false,
                 navSearchOpen: false
             ),
-            .transparent
+            .opaque
         )
     }
 

@@ -23,11 +23,29 @@
     "jest-environment-node": "30.4.1",
     "jest-watch-typeahead": "3.0.1",
     "js-yaml": "4.3.2",
-    "postcss": "8.5.28",
+    "postcss": "8.5.31",
     "next": {
       "postcss": "8.5.28"
     },
-    "uuid@<11.1.1": "^11.1.1"
+    "uuid@<11.1.1": "^11.1.1",
+    "proxy-addr@<2.0.8": "2.0.8",
+    "@modelcontextprotocol/sdk@<1.32.1": "1.32.1",
+    "basic-ftp@<6.2.3": "6.2.3",
+    "@fastify/busboy@<3.2.3": "3.2.3",
+    "compression@<1.8.2": "1.8.2",
+    "fast-uri@<3.1.9": "3.1.9",
+    "undici@<6.29.1": "6.29.1",
+    "undici@8.10.0": "8.12.3",
+    "body-parser@<1.20.9": "1.20.9",
+    "body-parser@2.3.0": "2.4.0",
+    "brace-expansion@<1.1.21": "1.1.21",
+    "brace-expansion@2.1.4": "2.1.7",
+    "brace-expansion@5.0.9": "5.0.12",
+    "ip-address@<10.7.4": "10.7.4",
+    "hono@<4.13.13": "4.13.13",
+    "morgan@<1.12.1": "1.12.1",
+    "qs@<6.16.1": "6.16.1",
+    "@grpc/grpc-js": "1.13.6"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -41,7 +59,26 @@
       "@opentelemetry/core@<2.8.0": "^2.8.0",
       "fast-xml-parser@<5.10.1": "^5.10.1",
       "js-yaml": "4.3.2",
-      "postcss": "8.5.28"
+      "postcss": "8.5.28",
+      "proxy-addr@<2.0.8": "2.0.8",
+      "@modelcontextprotocol/sdk@<1.32.1": "1.32.1",
+      "basic-ftp@<6.2.3": "6.2.3",
+      "@fastify/busboy@<3.2.3": "3.2.3",
+      "compression@<1.8.2": "1.8.2",
+      "fast-uri@<3.1.9": "3.1.9",
+      "undici@<6.29.1": "6.29.1",
+      "undici@8.10.0": "8.12.3",
+      "body-parser@<1.20.9": "1.20.9",
+      "body-parser@2.3.0": "2.4.0",
+      "brace-expansion@<1.1.21": "1.1.21",
+      "brace-expansion@2.1.4": "2.1.7",
+      "brace-expansion@5.0.9": "5.0.12",
+      "@grpc/grpc-js@1.14.4": "1.14.5",
+      "ip-address@<10.7.4": "10.7.4",
+      "hono@<4.13.13": "4.13.13",
+      "morgan@<1.12.1": "1.12.1",
+      "qs@<6.16.1": "6.16.1",
+      "@grpc/grpc-js@<1.13.6": "1.13.6"
     }
   },
   "engines": {
