@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -41,6 +42,11 @@ import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WorkspacePremium
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.ViewInAr
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
@@ -53,6 +59,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -102,7 +109,6 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalKccDarkTheme
 import com.kungsbackacarcommunity.app.design.LocalKccMapColors
 import androidx.compose.foundation.BorderStroke
-import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
 import com.kungsbackacarcommunity.app.incidents.IncidentLocationChoiceDialog
 import com.kungsbackacarcommunity.app.incidents.IncidentAgeFilter
 import com.kungsbackacarcommunity.app.incidents.IncidentAgeOption
@@ -1080,14 +1086,15 @@ internal fun MapLayersPopup(
             modifier =
                 Modifier
                     .padding(16.dp)
-                    // Fill available width, then cap at 360.dp: full-width on
-                    // phones, capped on tablets (matches LiveSharePopup order).
+                    // Cap first, then fill: use the phone width and retain a
+                    // readable panel width on tablets.
+                    .widthIn(max = 560.dp)
                     .fillMaxWidth()
-                    .widthIn(max = 360.dp)
                     .testTag(MAP_HOME_LAYERS_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
-            // Slightly translucent so the map shows through (shared Aero alpha).
-            color = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
+            // Opaque reading surface stays legible over bright map tiles.
+            color = LocalKccMapColors.current.overlay,
+            border = BorderStroke(1.dp, LocalKccMapColors.current.border),
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {
@@ -1133,6 +1140,7 @@ internal fun MapLayersPopup(
                 // below belongs to THIS row and shows only while it is on.
                 LayerToggleRow(
                     label = stringResource(R.string.shell_layersIncidents),
+                    icon = Icons.Filled.Warning,
                     checked = incidentsOn,
                     onCheckedChange = onIncidentsChange,
                     switchTestTag = MAP_HOME_LAYERS_INCIDENTS_TAG,
@@ -1150,17 +1158,20 @@ internal fun MapLayersPopup(
                 }
                 LayerToggleRow(
                     label = stringResource(R.string.shell_layersTraffic),
+                    icon = Icons.Filled.DirectionsCar,
                     checked = trafficOn,
                     onCheckedChange = onTrafficChange,
                 )
                 LayerToggleRow(
                     label = stringResource(R.string.shell_layersNightMode),
+                    icon = Icons.Filled.DarkMode,
                     checked = nightMode,
                     onCheckedChange = onNightModeChange,
                     switchTestTag = MAP_HOME_LAYERS_NIGHT_TAG,
                 )
                 LayerToggleRow(
                     label = stringResource(R.string.shell_layers3d),
+                    icon = Icons.Filled.ViewInAr,
                     checked = is3d,
                     onCheckedChange = on3dChange,
                 )
@@ -1178,6 +1189,7 @@ internal fun MapLayersPopup(
                 // today: a live toggle with its help line.
                 LayerToggleRow(
                     label = stringResource(R.string.shell_layersCrownHunt),
+                    icon = Icons.Filled.WorkspacePremium,
                     checked = crownHuntParticipating && crownHuntUnlocked,
                     onCheckedChange = onCrownHuntParticipatingChange,
                     switchTestTag = MAP_HOME_LAYERS_CROWN_HUNT_TAG,
@@ -1242,11 +1254,17 @@ private fun LayerToggleRow(
     // Kronjakt paywall to LOCK the participation row for a free member. Defaults
     // true so every other row stays interactive.
     enabled: Boolean = true,
+    icon: ImageVector? = null,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
     ) {
+        if (icon != null) {
+            Icon(icon, contentDescription = null,
+                tint = if (checked && enabled) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         Text(
             text = label,
             modifier = Modifier.weight(1f),
@@ -1262,6 +1280,8 @@ private fun LayerToggleRow(
             checked = checked,
             onCheckedChange = onCheckedChange,
             enabled = enabled,
+            colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.tertiary,
+                checkedThumbColor = MaterialTheme.colorScheme.onTertiary),
             modifier = if (switchTestTag != null) Modifier.testTag(switchTestTag) else Modifier,
         )
     }
@@ -1579,7 +1599,6 @@ internal fun LiveSharePopup(
     onDismiss: () -> Unit,
     onStop: (() -> Unit)? = null,
 ) {
-    val statusColors = LocalKccStatusColors.current
     val rows = LiveManageSheet.actions(isSharing = isSharing, canShareLive = canShareLive, hasStop = onStop != null)
     Popup(
         alignment = Alignment.BottomCenter,
@@ -1590,19 +1609,20 @@ internal fun LiveSharePopup(
             modifier =
                 Modifier
                     .padding(16.dp)
-                    // Fill available width, then cap at 360.dp: keeps the sheet
-                    // width stable across the member-gated (narrow content) and
-                    // normal states instead of shrinking to content width.
+                    // Keep the reading width stable across all session states.
+                    .widthIn(max = 560.dp)
                     .fillMaxWidth()
-                    .widthIn(max = 360.dp)
                     .testTag(MAP_HOME_LIVE_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
+            color = LocalKccMapColors.current.overlay,
+            border = BorderStroke(1.dp, LocalKccMapColors.current.border),
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                modifier = Modifier.heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.8f).dp)
+                    .verticalScroll(rememberScrollState()).navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Row(
@@ -1613,7 +1633,7 @@ internal fun LiveSharePopup(
                         imageVector = Icons.Filled.Podcasts,
                         contentDescription = null,
                         tint =
-                            if (isSharing) statusColors.success else MaterialTheme.colorScheme.primary,
+                            if (isSharing) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
                     )
                     Text(
                         text = stringResource(R.string.shell_liveTitle),
@@ -1660,6 +1680,7 @@ internal fun LiveSharePopup(
                                 contentColor = MaterialTheme.colorScheme.onError,
                             ),
                     ) {
+                        Icon(Icons.Filled.Stop, contentDescription = null, modifier = Modifier.padding(end = KccSpacing.s2))
                         Text(text = stringResource(R.string.liveLocation_stop))
                     }
                 }
@@ -1676,7 +1697,10 @@ internal fun LiveSharePopup(
                             onDismiss()
                         },
                         modifier = Modifier.fillMaxWidth(),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                     ) {
+                        Icon(Icons.Filled.VisibilityOff, contentDescription = null, modifier = Modifier.padding(end = KccSpacing.s2))
                         Text(text = stringResource(R.string.liveLocation_hideNow))
                     }
                 }

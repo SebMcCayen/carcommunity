@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.convoy
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -56,6 +57,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -78,6 +80,7 @@ import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.design.LocalKccMapColors
 import com.kungsbackacarcommunity.app.map.ConvoyFocusMode
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.navigation.LatLng
@@ -307,7 +310,8 @@ fun ConvoyStatusBar(
     Surface(
         modifier = modifier.fillMaxWidth().testTag(CONVOY_BAR_TEST_TAG),
         shape = RoundedCornerShape(KccRadius.full),
-        color = MaterialTheme.colorScheme.surface,
+        color = LocalKccMapColors.current.overlay,
+        border = BorderStroke(1.dp, LocalKccMapColors.current.border),
         tonalElevation = 3.dp,
         shadowElevation = 3.dp,
     ) {
@@ -1126,7 +1130,8 @@ private fun ConvoyMemberListPopup(
                     .widthIn(min = 180.dp, max = 280.dp)
                     .testTag(CONVOY_BAR_MEMBER_LIST_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
-            color = MaterialTheme.colorScheme.surface,
+            color = LocalKccMapColors.current.overlay,
+            border = BorderStroke(1.dp, LocalKccMapColors.current.border),
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {
@@ -1135,7 +1140,7 @@ private fun ConvoyMemberListPopup(
                     Modifier
                         .padding(KccSpacing.s3)
                         // Long rosters scroll rather than run off the screen.
-                        .heightIn(max = 320.dp)
+                        .heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.65f).dp)
                         .verticalScroll(rememberScrollState()),
             ) {
                 Text(
@@ -1163,6 +1168,7 @@ private fun ConvoyMemberListPopup(
                     val rowModifier =
                         Modifier
                             .fillMaxWidth()
+                            .heightIn(min = 56.dp)
                             .then(
                                 if (tappable) {
                                     Modifier.clickable(role = Role.Button) {

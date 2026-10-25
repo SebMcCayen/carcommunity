@@ -3,19 +3,19 @@ package com.kungsbackacarcommunity.app.shell
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Navigation
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -49,7 +49,6 @@ const val PLACE_ACTIONS_SAVE_TEST_TAG = "place_actions_save"
  *   shown so the member can see exactly where the menu refers to (it matches the
  *   dropped pin on the map behind the sheet).
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlaceActionsSheet(
     placeName: String?,
@@ -59,30 +58,21 @@ fun PlaceActionsSheet(
     onSave: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState()
     val name = placeName?.takeIf { it.isNotBlank() }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
+    MapDetailSheet(
+        title = name ?: stringResource(R.string.shell_placeMenuTitle),
+        onDismiss = onDismiss,
+        leadingContent = { Icon(Icons.Filled.Place, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary) },
         modifier = Modifier.testTag(PLACE_ACTIONS_SHEET_TEST_TAG),
     ) {
         Column(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    // The sheet draws to the bottom edge, so its own content must
-                    // clear the navigation bar / gesture pill.
-                    .navigationBarsPadding()
-                    .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
+                    .padding(vertical = KccSpacing.s2),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
         ) {
-            Text(
-                text = name ?: stringResource(R.string.shell_placeMenuTitle),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = KccSpacing.s2),
-            )
             Text(
                 text = coordinateText,
                 style = MaterialTheme.typography.bodySmall,
@@ -94,19 +84,20 @@ fun PlaceActionsSheet(
                 icon = Icons.Filled.Navigation,
                 text = stringResource(R.string.shell_placeMenuNavigate),
                 onClick = onNavigate,
+                primary = true,
                 testTag = PLACE_ACTIONS_NAVIGATE_TEST_TAG,
-            )
-            PlaceAction(
-                icon = Icons.Filled.ContentCopy,
-                text = stringResource(R.string.shell_placeMenuCopy),
-                onClick = onCopy,
-                testTag = PLACE_ACTIONS_COPY_TEST_TAG,
             )
             PlaceAction(
                 icon = Icons.Filled.BookmarkBorder,
                 text = stringResource(R.string.shell_placeMenuSave),
                 onClick = onSave,
                 testTag = PLACE_ACTIONS_SAVE_TEST_TAG,
+            )
+            PlaceAction(
+                icon = Icons.Filled.ContentCopy,
+                text = stringResource(R.string.shell_placeMenuCopy),
+                onClick = onCopy,
+                testTag = PLACE_ACTIONS_COPY_TEST_TAG,
             )
             PlaceAction(
                 icon = null,
@@ -123,14 +114,11 @@ private fun PlaceAction(
     text: String,
     onClick: () -> Unit,
     testTag: String? = null,
+    primary: Boolean = false,
 ) {
-    TextButton(
-        onClick = onClick,
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
-    ) {
+    val actionModifier = Modifier.fillMaxWidth().heightIn(min = KccSpacing.s12)
+        .then(if (testTag != null) Modifier.testTag(testTag) else Modifier)
+    val label: @Composable () -> Unit = {
         if (icon != null) {
             Icon(imageVector = icon, contentDescription = null)
         }
@@ -139,5 +127,10 @@ private fun PlaceAction(
             textAlign = TextAlign.Start,
             modifier = Modifier.fillMaxWidth().padding(start = if (icon != null) KccSpacing.s3 else 0.dp),
         )
+    }
+    when {
+        primary -> Button(onClick = onClick, modifier = actionModifier, content = { label() })
+        icon != null -> OutlinedButton(onClick = onClick, modifier = actionModifier, content = { label() })
+        else -> TextButton(onClick = onClick, modifier = actionModifier, content = { label() })
     }
 }

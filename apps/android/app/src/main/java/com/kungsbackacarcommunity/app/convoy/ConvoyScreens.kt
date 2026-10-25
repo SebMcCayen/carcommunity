@@ -1,8 +1,11 @@
 package com.kungsbackacarcommunity.app.convoy
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
@@ -18,10 +22,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -120,8 +131,9 @@ fun ConvoyListScreen(
                 Button(
                     onClick = onCreate,
                     enabled = !alreadyInConvoy && !membershipUncertain,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                 ) {
+                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.padding(end = KccSpacing.s2))
                     Text(stringResource(R.string.convoy_createAction))
                 }
                 if (alreadyInConvoy || membershipUncertain) {
@@ -260,7 +272,7 @@ fun ConvoyLoadingScreen(modifier: Modifier = Modifier) {
 
 @Composable
 private fun ConvoyCardRow(convoy: ConvoySummary, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+    OutlinedCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
@@ -274,15 +286,20 @@ private fun ConvoyCardRow(convoy: ConvoySummary, onClick: () -> Unit) {
                     text = convoy.displayTitle(),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(end = KccSpacing.s3),
+                    modifier = Modifier.weight(1f).padding(end = KccSpacing.s3),
                 )
                 StatusChip(convoy.status)
             }
             // A compact cluster of member avatars, each with a green dot when the
             // member has accepted (inviteStatus == Accepted).
-            AvatarCluster(members = convoy.members)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+                    Text(text = convoy.ownerDisplayName(),
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    AvatarCluster(members = convoy.members)
+                }
+                Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
+            }
         }
     }
 }
@@ -290,7 +307,7 @@ private fun ConvoyCardRow(convoy: ConvoySummary, onClick: () -> Unit) {
 /** A horizontal run of small member avatars with an accepted (green-dot) badge. */
 @Composable
 private fun AvatarCluster(members: List<ConvoyMember>, max: Int = 6) {
-    Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+    Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
         members.take(max).forEach { member ->
             MemberAvatar(
                 avatarPath = member.avatarPath,
@@ -327,7 +344,7 @@ private fun PendingInviteRow(
     onAccept: () -> Unit,
     onDecline: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
@@ -485,7 +502,12 @@ private fun SelectableFriendRow(
     enabled: Boolean,
     onToggle: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    OutlinedCard(
+        modifier = Modifier.fillMaxWidth(),
+        border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.outlinedCardColors(containerColor =
+            if (selected) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surface),
+    ) {
         Row(
             modifier =
                 Modifier
@@ -510,7 +532,9 @@ private fun SelectableFriendRow(
             // Presentational only — the row's toggleable owns the click +
             // accessibility semantics (Role.Checkbox), avoiding a duplicate toggle
             // target. Mirrors the app's established selectable-row pattern.
-            Checkbox(checked = selected, onCheckedChange = null, enabled = enabled)
+            Checkbox(checked = selected, onCheckedChange = null, enabled = enabled,
+                colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.tertiary,
+                    checkmarkColor = MaterialTheme.colorScheme.onTertiary))
         }
     }
 }
@@ -692,8 +716,19 @@ fun ConvoyDetailScreen(
     // describes underneath itself and therefore captures the id).
     var confirmLeave by remember { mutableStateOf(false) }
     AeroPage(title = convoy.displayTitle(), modifier = modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
-            StatusChip(convoy.status)
+        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(KccSpacing.s4), verticalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
+                StatusChip(convoy.status)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
+                    Icon(Icons.Filled.Groups, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.convoy_summaryParticipants), style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(convoy.members.count { it.inviteStatus == ConvoyInviteStatus.Accepted }.toString(),
+                            style = MaterialTheme.typography.headlineSmall)
+                    }
+                }
+            }
         }
 
         actionError?.let { error ->
@@ -843,7 +878,7 @@ fun ConvoyDetailScreen(
  */
 @Composable
 private fun ConvoyRecapCard(recap: ConvoyRecapState) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
@@ -901,24 +936,26 @@ private fun ConvoyRecapCard(recap: ConvoyRecapState) {
 private fun SummaryStatRow(label: String, value: String) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
         )
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
         )
     }
 }
 
 @Composable
 private fun MemberRow(member: ConvoyMember, isOwner: Boolean, onClick: (() -> Unit)?) {
-    Card(
+    OutlinedCard(
         modifier =
             Modifier
                 .fillMaxWidth()
@@ -958,6 +995,12 @@ private fun MemberRow(member: ConvoyMember, isOwner: Boolean, onClick: (() -> Un
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            if (isOwner) {
+                Icon(Icons.Filled.WorkspacePremium, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            }
+            if (onClick != null) {
+                Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

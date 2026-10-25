@@ -1,6 +1,8 @@
 package com.kungsbackacarcommunity.app.navigation
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -228,19 +231,16 @@ private fun SavedPlacesList(
 ) {
     Surface(
         shape = RoundedCornerShape(KccRadius.lg),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 3.dp,
-        shadowElevation = 3.dp,
+        color = Color.Transparent,
         modifier = Modifier.fillMaxWidth().testTag(SAVED_PLACES_LIST_TEST_TAG),
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            places.forEachIndexed { index, place ->
+        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+            places.forEach { place ->
                 // Key each row by its stable place id: RowActions holds per-row
                 // remember state (the overflow-menu `expanded` flag), so without a
                 // key a deletion would shift composition slots and leave that menu
                 // state attached to the wrong row.
                 key(place.id) {
-                    if (index > 0) HorizontalDivider()
                     SavedPlaceRow(
                         place = place,
                         onRename = { onRename(place) },
@@ -270,6 +270,9 @@ private fun SavedPlaceRow(
         modifier = Modifier
             .fillMaxWidth()
             .testTag(savedPlaceRowTestTag(place.id))
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium)
             // Long-press raises the Rename / Share / Delete sheet. onClick is a
             // deliberate no-op (a row has no tap action) but combinedClickable
             // announces the long-press as an accessibility action.
@@ -281,15 +284,13 @@ private fun SavedPlaceRow(
         Icon(
             imageVector = place.kind.icon(),
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
+            tint = MaterialTheme.colorScheme.tertiary,
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
             // The address the shortcut routes to — otherwise a Home row reads just
             // "Home" with no way to tell WHICH address it points at.
@@ -299,8 +300,6 @@ private fun SavedPlaceRow(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

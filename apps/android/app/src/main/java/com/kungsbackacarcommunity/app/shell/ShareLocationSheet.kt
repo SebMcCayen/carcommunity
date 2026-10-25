@@ -5,19 +5,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -67,7 +63,6 @@ fun shareLocationFriendRowTestTag(uid: String): String = "share_location_friend_
  * @param onSendFailed invoked when the send could not be delivered, so the host
  *   can surface a retryable error; the sheet stays open.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShareLocationSheet(
     location: ShareableLocation,
@@ -77,7 +72,6 @@ fun ShareLocationSheet(
     onSendFailed: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
     val coordinator =
         remember(friendsRepository, dmRepository) {
@@ -88,25 +82,18 @@ fun ShareLocationSheet(
 
     LaunchedEffect(coordinator) { coordinator.load() }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
+    MapDetailSheet(
+        title = stringResource(R.string.shareLocation_title),
+        onDismiss = onDismiss,
         modifier = Modifier.testTag(SHARE_LOCATION_SHEET_TEST_TAG),
     ) {
         Column(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
+                    .padding(vertical = KccSpacing.s2),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
         ) {
-            Text(
-                text = stringResource(R.string.shareLocation_title),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = KccSpacing.s2),
-            )
             Text(
                 text = stringResource(R.string.shareLocation_subtitle, location.name),
                 style = MaterialTheme.typography.bodySmall,
