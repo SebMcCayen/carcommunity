@@ -17,6 +17,7 @@ import {
   computeRouteThumbnail,
   guardDriveTimes,
   guardRoutePoints,
+  MAX_ROUTE_POINTS,
   parseDeleteDriveInput,
   parseSaveDriveInput,
   ridePreviewPath,
@@ -178,6 +179,33 @@ describe('maxSpeedMps (stored since the 2026-07 decision)', () => {
 });
 
 describe('drives-core input parsing and guards', () => {
+  it('rejects oversized routes before validating their elements', () => {
+    let elementReads = 0;
+    // Observe validation work without relying on timing or heap-size thresholds.
+    // Traversing every invalid element used to accumulate unbounded Zod issues.
+    const routePoints = new Proxy(Array(MAX_ROUTE_POINTS + 1).fill(null), {
+      get(target, property, receiver) {
+        if (typeof property === 'string' && /^\d+$/.test(property)) elementReads += 1;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    expect(parseSaveDriveInput({ ...validSave, routePoints }).ok).toBe(false);
+    expect(elementReads).toBe(0);
+  });
+
+  it('continues accepting a route at the existing point limit', () => {
+    const routePoints = Array.from({ length: MAX_ROUTE_POINTS }, (_, i) => ({
+      latitude: 57.487,
+      longitude: 12.077,
+      timestampMs: i + 1,
+    }));
+    const result = parseSaveDriveInput({ ...validSave, routePoints });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.input.routePoints).toHaveLength(MAX_ROUTE_POINTS);
+  });
+
   it('accepts a summary-only save and rejects malformed inputs', () => {
     expect(parseSaveDriveInput(validSave).ok).toBe(true);
     expect(parseSaveDriveInput({ startedAt: 'yesterday', endedAt: validSave.endedAt }).ok).toBe(
