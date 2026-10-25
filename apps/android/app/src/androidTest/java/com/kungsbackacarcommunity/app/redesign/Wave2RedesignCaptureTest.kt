@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.redesign
 import android.content.ContentValues
 import android.graphics.Bitmap
 import android.os.Build
+import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
@@ -18,7 +19,14 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.assertExists
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodes
+import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -57,7 +65,7 @@ class Wave2RedesignCaptureTest {
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.tertiary,
                         )
-                        Box(Modifier.weight(1f)) {
+                        Box(Modifier.weight(1f).testTag("wave2-case-$selected")) {
                             key(selected) {
                                 when (selected) {
                                     "map-place", "map-live" -> Wave2MapPreview(selected)
@@ -75,7 +83,16 @@ class Wave2RedesignCaptureTest {
         }
         screens.forEach { screen ->
             rule.runOnIdle { selected = screen }
+            rule.mainClock.advanceTimeByFrame()
             rule.waitForIdle()
+            rule.onNodeWithTag("wave2-case-$screen").assertExists()
+            // Semantic idleness is not a SurfaceFlinger fence: an OS screenshot
+            // can still return the preceding window after a modal is replaced.
+            // PixelCopy waits for the current Compose root's draw first. Select
+            // the last root so modal windows receive the same fence as pages.
+            rule.onAllNodes(isRoot()).onLast().captureToImage()
+            instrumentation.waitForIdleSync()
+            SystemClock.sleep(100) // Let the compositor present the fenced buffer.
             instrumentation.uiAutomation.waitForIdle(500, 5000)
             check(instrumentation.uiAutomation.rootInActiveWindow
                 ?.findAccessibilityNodeInfosByViewId("android:id/aerr_close")?.isNotEmpty() != true) {
