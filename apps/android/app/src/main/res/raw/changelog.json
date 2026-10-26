@@ -2,6 +2,28 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 56,
+      "versionName": "1.1.1",
+      "releaseDate": "2026-10-26",
+      "highlights": [
+        "Kartans paneler öppnas ovanför den nedersta menyn",
+        "Kompaktare chatt och förbättrad design för event och Kronjakt",
+        "Kartan kommer ihåg ditt valda fokusavstånd"
+      ],
+      "changes": [
+        "Karta: paneler för förmåner, sparade platser, rapporter och sessionsstart placeras ovanför den nedersta menyn",
+        "Karta: aktiva live- och konvojsessioner visas längst ned ovanför menyn",
+        "Karta: ditt sparade fokusavstånd används även när appen startas om",
+        "Karta: uppdaterat utseende på kronor och tydligare inställningar för kartlager",
+        "Chatt: mindre knappar och rullningsbara flikar ger mer plats åt meddelandena",
+        "Kronjakt: enhetligare design för statistik, topplistor, historik och förmåner",
+        "Event: uppdaterad design för listor, detaljer, formulär och eventchatt",
+        "Garage och profil: tydligare fordonskort, utmärkelser och sparade körningar",
+        "Sparade platser: tydligare kategorier och förbättrad redigering",
+        "Tillgänglighet: förbättrad läsbarhet och layout för större text och mindre skärmar"
+      ]
+    },
+    {
       "versionCode": 55,
       "versionName": "1.1.0",
       "releaseDate": "2026-10-25",
