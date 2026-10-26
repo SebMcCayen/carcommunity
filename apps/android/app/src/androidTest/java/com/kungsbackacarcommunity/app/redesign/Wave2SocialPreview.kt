@@ -10,6 +10,8 @@ import com.kungsbackacarcommunity.app.crownhunt.PerkCatalogEntry
 import com.kungsbackacarcommunity.app.crownhunt.PerkKind
 import com.kungsbackacarcommunity.app.crownhunt.PerkShopItem
 import com.kungsbackacarcommunity.app.crownhunt.PerkShopUiState
+import com.kungsbackacarcommunity.app.points.PointsEntriesState
+import com.kungsbackacarcommunity.app.points.PointsEntry
 import com.kungsbackacarcommunity.app.events.EventDetail
 import com.kungsbackacarcommunity.app.events.EventDetailScreen
 import com.kungsbackacarcommunity.app.events.EventStatus
@@ -75,6 +77,10 @@ fun Wave2SocialPreview(screen: String) {
             passesMemberGate = true,
             onBack = {},
             perksEnabled = true,
+            historyState = PointsEntriesState.Loaded(listOf(
+                PointsEntry("fixture-earning-1", 100, 1250, "Testdata · Krona hämtad", Instant.parse("2026-10-26T14:20:00Z").toEpochMilli()),
+                PointsEntry("fixture-earning-2", 25, 1150, "Testdata · Krona hämtad", Instant.parse("2026-10-25T12:40:00Z").toEpochMilli()),
+            )),
             openShop = screen == "crown-shop",
             shopState = PerkShopUiState.Loaded(1250, PerkKind.entries.mapIndexed { index, kind ->
                 PerkShopItem(

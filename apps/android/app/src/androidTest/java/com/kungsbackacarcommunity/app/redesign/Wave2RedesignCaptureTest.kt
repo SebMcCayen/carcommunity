@@ -15,6 +15,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -26,6 +29,13 @@ import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithTag
+import com.kungsbackacarcommunity.app.shell.MAP_DETAIL_SHEET_TAG
+import com.kungsbackacarcommunity.app.map.LocalMapZoomController
+import com.kungsbackacarcommunity.app.map.MapZoomController
+import com.kungsbackacarcommunity.app.map.MapZoomPreference
+import com.kungsbackacarcommunity.app.shell.MapSurface
+import com.kungsbackacarcommunity.app.shell.MapLoadState
+import com.kungsbackacarcommunity.app.shell.MapboxMapSurface
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -73,6 +83,7 @@ class Wave2RedesignCaptureTest {
         val variant = args.getString("redesignCaptureVariant") ?: "wave2-dark"
         require(variant.matches(Regex("[a-zA-Z0-9_-]+")))
         var selected by mutableStateOf(screens.first())
+        var configuredSurface: MapSurface? = null
         rule.setContent {
             KccTheme(darkTheme = args.getString("redesignTheme") != "light") {
                 Surface(Modifier.fillMaxSize()) {
@@ -111,15 +122,25 @@ class Wave2RedesignCaptureTest {
                                         "settings", "membership" -> Wave2SettingsPreview(selected)
                                         // MapShellCataloguePreview is not referenced
                                         // until main cherry-picks map-qa's fixture.
-                                        "map-layers", "map-saved", "map-report", "map-create", "map-perks", "map-session" ->
-                                            MapShellCataloguePreview(selected,
-                                                mapSurface = if (args.getString("redesignMap") == "configured") rememberMapSurface() else null)
+                                        "map-layers", "map-saved", "map-report", "map-create", "map-perks", "map-session" -> {
+                                            val zoom = remember { object : MapZoomController {
+                                                private var value by mutableStateOf(14.5)
+                                                override val browsingZoom get() = value
+                                                override fun setBrowsingZoom(zoom: Double) { value = MapZoomPreference.snap(zoom) }
+                                            } }
+                                            CompositionLocalProvider(LocalMapZoomController provides zoom) {
+                                                val surface = if (args.getString("redesignMap") == "configured") rememberMapSurface() else null
+                                                check(surface == null || surface is MapboxMapSurface) { "Configured map capture requires a runtime Mapbox token; a stub is not map evidence." }
+                                                SideEffect { configuredSurface = surface }
+                                                MapShellCataloguePreview(selected, mapSurface = surface, zoomController = zoom)
+                                            }
+                                        }
                                         else -> error("Unknown redesign capture case: $selected")
                                     }
                                 }
                             }
                         }
-                        if (selected.startsWith("map-")) {
+                        if (selected.startsWith("map-") && selected !in MAP_SHELL_CATALOGUE_CASES) {
                             Surface(Modifier.align(Alignment.TopCenter)) {
                                 Text(
                                     "DESIGNPREVIEW · LOKALA TESTDATA",
@@ -142,6 +163,19 @@ class Wave2RedesignCaptureTest {
                 rule.waitForIdle()
             }
             rule.onNodeWithTag("wave2-case-$screen").assertExists()
+            if (screen in MAP_SHELL_CATALOGUE_CASES) {
+                rule.waitUntil(5_000) {
+                    runCatching {
+                        val footer = rule.onNodeWithTag(MAP_CATALOGUE_FOOTER_TAG).fetchSemanticsNode().boundsInRoot
+                        val tag = if (screen == "map-session") "map_home_session_dock" else MAP_DETAIL_SHEET_TAG
+                        val body = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+                        footer.height > 0f && body.height > 0f && body.bottom <= footer.top + 1f
+                    }.getOrDefault(false)
+                }
+                if (args.getString("redesignMap") == "configured") {
+                    rule.waitUntil(30_000) { configuredSurface?.loadState?.value == MapLoadState.Loaded }
+                }
+            }
             // Semantic idleness is not a SurfaceFlinger fence: an OS screenshot
             // can still return the preceding window after a modal is replaced.
             // PixelCopy waits for the current Compose root's draw first. Select

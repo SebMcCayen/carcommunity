@@ -118,7 +118,7 @@ class ChatHubViewportTest {
         )
         val backBounds = back.fetchSemanticsNode().boundsInRoot
         assertTrue("Back shares the channel row", backBounds.top < strip.bottom && backBounds.bottom > strip.top)
-        assertTrue("Back hit target", backBounds.height >= 48f && backBounds.width >= 48f)
+        assertTrue("Back hit target: $backBounds", backBounds.height >= 48f && backBounds.width >= 48f)
 
         // Real conditional route composition must retain the composer draft on source switches.
         compose.onNodeWithText(localized.getString(R.string.chatHub_tabDriver)).performClick()
