@@ -71,9 +71,19 @@ production permission prompts remain unchanged.
 
 The shell chat test now scrolls the natural-width channel row before asserting
 the long Notifications label, rather than requiring all translated labels to
-fit simultaneously. Test-APK compilation and lint pass in 7 s. The complete
-108-test emulator suite is verified separately from these compilation checks;
-its final result belongs in the validation index.
+fit simultaneously. Test-APK compilation and lint pass in 7 s. A further
+instrumentation-only correction in
+`3f77c9db24f91ce095af8bc4ad0d961e20f381a7` compares panel positions and actual
+status-bar insets in the same window coordinate system. The narrow display
+exposed two older assertions comparing root coordinates with a platform-resource
+height; their real window-clearance requirement remains strict.
+
+At that revision, the **complete 108-test native suite passes**, zero failures,
+214.644 s, API 34 / 320 × 640 dp / English / font scale 1.0. Notification access
+was revoked before starting the suite, so the capture rule's explicit setup is
+exercised rather than inherited from the earlier manually prepared emulator.
+The final test-APK compilation/lint follow-up passes in 8 s. Production app
+behavior remains at the already-verified presentation revision above.
 
 ## Rendered evidence and comparison
 
