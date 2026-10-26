@@ -69,6 +69,7 @@ fun MapDetailSheet(
     modifier: Modifier = Modifier,
     leadingContent: (@Composable () -> Unit)? = null,
     contentSpacing: Dp = KccSpacing.s3,
+    closeContentDescription: String = stringResource(R.string.shell_placeMenuClose),
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val host = LocalDockedMapSheetHost.current
@@ -79,11 +80,12 @@ fun MapDetailSheet(
     val currentLeading by rememberUpdatedState(leadingContent)
     val currentContent by rememberUpdatedState(content)
     val currentSpacing by rememberUpdatedState(contentSpacing)
+    val currentCloseDescription by rememberUpdatedState(closeContentDescription)
     val locals = currentCompositionLocalContext
     val currentLocals by rememberUpdatedState(locals)
     val presentation: @Composable () -> Unit = {
         CompositionLocalProvider(currentLocals) {
-            DockedMapSheetContent(currentTitle, currentDismiss, currentModifier, currentLeading, currentSpacing, currentContent)
+            DockedMapSheetContent(currentTitle, currentDismiss, currentModifier, currentLeading, currentSpacing, currentCloseDescription, currentContent)
         }
     }
     val currentPresentation by rememberUpdatedState(presentation)
@@ -93,7 +95,7 @@ fun MapDetailSheet(
             onDispose { host.remove(owner) }
         }
     } else {
-        DockedMapSheetContent(title, onDismiss, modifier, leadingContent, contentSpacing, content)
+        DockedMapSheetContent(title, onDismiss, modifier, leadingContent, contentSpacing, closeContentDescription, content)
     }
 }
 
@@ -104,6 +106,7 @@ private fun DockedMapSheetContent(
     modifier: Modifier,
     leadingContent: (@Composable () -> Unit)?,
     contentSpacing: Dp,
+    closeContentDescription: String,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     BackHandler(onBack = onDismiss)
@@ -143,7 +146,7 @@ private fun DockedMapSheetContent(
                 leadingContent?.invoke()
                 Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
                 IconButton(onClick = onDismiss) {
-                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.shell_placeMenuClose))
+                    Icon(Icons.Filled.Close, contentDescription = closeContentDescription)
                 }
             }
             }
