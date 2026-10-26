@@ -155,7 +155,7 @@ fun GarageScreen(
 }
 
 /** Catalogue S57: a wide real photo, with a native car glyph when none exists. */
-private val GarageVehiclePhotoStyle = VehiclePhotoStyle.FullWidth(2.5f, KccRadius.md)
+private val GarageVehiclePhotoStyle = VehiclePhotoStyle.FullWidth(16f / 9f, KccRadius.md)
 
 /**
  * One of the owner's own cars in the garage list: the shared [VehicleCard] with

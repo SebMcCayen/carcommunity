@@ -177,9 +177,9 @@ private fun rememberSummaryPreview(
 private fun DriveSummaryRows(elapsedMillis: Long, preview: DriveSummaryPreview?) {
     // O(1), so the duration renders immediately rather than waiting on the scan.
     val durationSeconds = DriveSummary.durationSeconds(elapsedMillis)
-    SummaryRow(
-        label = stringResource(R.string.savedDrives_distance),
-        value = DriveFormatters.formatDistance(preview?.distanceMeters),
+    DriveMetricSummary(
+        distance = DriveFormatters.formatDistance(preview?.distanceMeters),
+        duration = DriveFormatters.formatDuration(durationSeconds),
     )
     SummaryRow(
         label = stringResource(R.string.savedDrives_averageSpeed),
@@ -196,10 +196,6 @@ private fun DriveSummaryRows(elapsedMillis: Long, preview: DriveSummaryPreview?)
         label = stringResource(R.string.savedDrives_topSpeed),
         value = DriveFormatters.formatSpeed(preview?.topSpeedMetersPerSecond),
     )
-    SummaryRow(
-        label = stringResource(R.string.savedDrives_duration),
-        value = DriveFormatters.formatDuration(durationSeconds),
-    )
 }
 
 @Composable
@@ -213,11 +209,13 @@ private fun SummaryRow(label: String, value: String) {
             text = label,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
         )
         Text(
             text = value,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f),
         )
     }
 }

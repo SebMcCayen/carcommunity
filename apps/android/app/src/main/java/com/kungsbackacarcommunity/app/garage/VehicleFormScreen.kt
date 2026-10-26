@@ -146,15 +146,6 @@ fun VehicleFormScreen(
         // (matches FeedbackReportScreen / issue #818).
         contentWindowInsets = WindowInsets.ime.union(WindowInsets.navigationBars),
     ) {
-            if (onChangePhoto != null) {
-                VehiclePhotoSection(
-                    photoUrl = photoUrl,
-                    photoPreview = photoPreview,
-                    uploadStatus = photoUploadStatus,
-                    onChangePhoto = onChangePhoto,
-                )
-            }
-
             // Make / model / year are SELECTED, never typed (2026-07): the
             // community can only count cars per manufacturer if every Volvo
             // stores the same `volvo` id. See VehicleCataloguePicker.
@@ -330,6 +321,17 @@ fun VehicleFormScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            // S59: identify the vehicle before its photo controls. Picked bytes
+            // still take priority over the stored image; the upload pipeline is unchanged.
+            if (onChangePhoto != null) {
+                VehiclePhotoSection(
+                    photoUrl = photoUrl,
+                    photoPreview = photoPreview,
+                    uploadStatus = photoUploadStatus,
+                    onChangePhoto = onChangePhoto,
+                )
+            }
+
             if (showError && error != null) {
                 Text(
                     text = stringResource(error.messageRes()),
@@ -391,14 +393,13 @@ private fun VehiclePhotoSection(
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {
-        if (model == null) {
-            Icon(
-                Icons.Filled.DirectionsCar,
-                contentDescription = stringResource(R.string.garage_photoNone),
-                modifier = Modifier.size(KccSpacing.s12),
-                tint = MaterialTheme.colorScheme.tertiary,
-            )
-        }
+        // Keep a native fallback visible while a stored URL loads or fails.
+        Icon(
+            Icons.Filled.DirectionsCar,
+            contentDescription = if (model == null) stringResource(R.string.garage_photoNone) else null,
+            modifier = Modifier.size(KccSpacing.s12),
+            tint = MaterialTheme.colorScheme.tertiary,
+        )
         if (model != null) {
             // Coil renders nothing (keeps the placeholder) when the model does
             // not resolve.
