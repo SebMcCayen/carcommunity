@@ -201,6 +201,13 @@ report. Do not deploy anything as part of the design PRs.
 
 ## Crown Hunt and membership invariants
 
+The Crown Hunt hub has Overview, Statistics and, when enabled, Shop as its
+primary tabs. Return to the map through the shared Back control; do not add a
+separate Map tab or duplicate the shop link in Overview. Measure complete labels
+at the user's text scale, adapt tab widths/padding to the viewport, and keep
+labels on one line. For accessibility overflow, scroll horizontally rather than
+shrink, wrap or truncate labels. Retain a minimum 48 dp Android hit target.
+
 Preserve separate curated-point and spawned-crown flows, participation choices,
 stats/history, seasons, inventory and trap/shield/boost behavior. Feature flags
 control the whole relevant surface immediately, including an open sheet.

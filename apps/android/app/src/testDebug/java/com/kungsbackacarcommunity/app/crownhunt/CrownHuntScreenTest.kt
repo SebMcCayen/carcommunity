@@ -1,5 +1,9 @@
 package com.kungsbackacarcommunity.app.crownhunt
 
+import androidx.compose.runtime.CompositionLocalProvider
+import com.kungsbackacarcommunity.app.shell.LocalAeroBackAvailable
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -271,13 +275,30 @@ class CrownHuntScreenTest {
     }
 
     @Test
-    fun mapTab_invokesExistingReturnCallback_withoutClaiming() {
+    fun mapTabIsAbsent_andExistingBackArrowReturnsToMap() {
         var returns = 0
         composeTestRule.setContent {
-            KccTheme { CrownHuntScreen(CrownStatsUiState.Loading, true, { returns++ }) }
+            CompositionLocalProvider(LocalAeroBackAvailable provides true) {
+                KccTheme { CrownHuntScreen(CrownStatsUiState.Loading, true, { returns++ }) }
+            }
         }
-        composeTestRule.onNodeWithTag("crownHubTab_1").performClick()
+        composeTestRule.onNodeWithTag("crownHubTab_1").assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.shell_tabMap)).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(AeroBackButtonTag).assertIsDisplayed().performClick()
         assertEquals(1, returns)
+    }
+
+    @Test
+    fun overviewHasOneShopEntry_inTheTopRowOnly() {
+        composeTestRule.setContent {
+            KccTheme {
+                CrownHuntScreen(CrownStatsUiState.Loaded(personal(), board()), true, {}, perksEnabled = true)
+            }
+        }
+        composeTestRule.onAllNodesWithText(str(R.string.crownHunt_tabShop)).assertCountEquals(1)
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_openShop)).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("crownHubTab_3").performClick()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_shopLoading)).assertIsDisplayed()
     }
 
     @Test
