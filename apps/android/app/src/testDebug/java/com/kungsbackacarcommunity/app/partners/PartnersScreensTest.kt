@@ -64,6 +64,23 @@ class PartnersScreensTest {
     }
 
     @Test
+    fun directory_showsOnlySuppliedAddress_andRetainsCompanyCallback() {
+        var opened: String? = null
+        composeTestRule.setContent {
+            KccTheme {
+                PartnersListScreen(
+                    state = CompaniesState.Loaded(listOf(company().copy(address = "Fixture address"))),
+                    offersState = OffersState.Loading,
+                    onOpenCompany = { opened = it },
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText("Fixture address").performScrollTo().performClick()
+        assertEquals("c1", opened)
+    }
+
+    @Test
     fun directory_showsLocalizedSingularOfferCount() {
         composeTestRule.setContent {
             KccTheme {

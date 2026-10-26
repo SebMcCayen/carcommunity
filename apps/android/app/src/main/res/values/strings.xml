@@ -68,6 +68,7 @@
     <string name="settings_github">GitHub / Open Source</string>
     <string name="settings_blockedUsers">Blockerade användare</string>
     <string name="settings_accountDeletionWarning">Om du raderar kontot avslutas åtkomsten och data som får raderas schemaläggs för borttagning. Vissa poster måste behållas. Detta kan inte ångras.</string>
+    <string name="settings_accountDeletionAcknowledgement">Jag förstår att detta raderar hela mitt konto i appen och att det inte kan ångras.</string>
     <string name="settings_accountDeletionError">Kunde inte radera ditt konto. Försök igen.</string>
     <string name="settings_accountDeletionConfirmTitle">Ta bort ditt konto?</string>
     <string name="settings_accountDeletionConfirmBody">Åtkomsten avslutas direkt. Efter en lagringstid på 30 dagar rensar en begränsad daglig körning data som får tas bort; omförsök eller kö kan fördröja slutförandet. Raderingsbevis och vissa modererings-, revisions-, avidentifierade insikts- och belöningsanspråksposter, konvojers ägarnycklar samt eventchatt- och OSA-poster behålls.</string>
@@ -573,6 +574,9 @@
     <string name="blocking_blockCancelAction">Avbryt</string>
     <string name="blocking_blockSuccess">Användaren har blockerats.</string>
     <string name="blocking_blockedUsersTitle">Blockerade användare</string>
+    <string name="blocking_aboutTitle">Om blockeringar</string>
+    <string name="blocking_aboutBody">Blockerade användare kan inte se din liveposition eller interagera med dig.</string>
+    <string name="blocking_blockedOn">Blockerad %1$s</string>
     <string name="blocking_blockedUsersEmpty">Du har inte blockerat någon.</string>
     <string name="blocking_unblock">Avblockera</string>
     <string name="blocking_unblockConfirmTitle">Avblockera användare?</string>
@@ -1929,6 +1933,7 @@
     <string name="whatsNew_dialogShowAll">Visa alla uppdateringar</string>
     <string name="whatsNew_dialogClose">Stäng</string>
     <string name="whatsNew_entryTitle">Version %1$s · %2$s</string>
+    <string name="whatsNew_versionTitle">Version %1$s</string>
     <string name="whatsNew_empty">Inga uppdateringsanteckningar ännu.</string>
     <string name="whatsNew_release010Highlight">Den första inbyggda iOS-MVP:n tar form.</string>
     <string name="whatsNew_release010Change">En inbyggd kartbaserad upplevelse med community-, kör- och profilfunktioner.</string>
