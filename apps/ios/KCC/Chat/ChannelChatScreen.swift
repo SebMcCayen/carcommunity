@@ -206,14 +206,14 @@ struct ChannelComposer: View {
                 .font(.body)
                 .lineLimit(1...(dynamicTypeSize.isAccessibilitySize ? 1 : 2))
                 .padding(.horizontal, KccSpacing.s3)
-                .padding(.vertical, KccSpacing.s2)
+                .padding(.vertical, KccSpacing.s1)
                 .frame(minHeight: 48)
                 .background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.lg))
                 .overlay { RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.border) }
                 .accessibilityIdentifier("chat.composer.input")
             Button(action: onSend) {
                 if dynamicTypeSize.isAccessibilitySize {
-                    Image(systemName: "paperplane.fill").font(.title3)
+                    Image(systemName: "paperplane.fill").font(.system(size: 20, weight: .semibold))
                         .frame(width: 48, height: 48)
                 } else {
                     Text("chat.sendButton").font(.body.weight(.semibold)).frame(minHeight: 48)
@@ -226,7 +226,7 @@ struct ChannelComposer: View {
             .accessibilityIdentifier("chat.composer.send")
             .disabled(!canSend)
         }
-        .padding(KccSpacing.s3)
+        .padding(KccSpacing.s2)
     }
 }
 
