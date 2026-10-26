@@ -309,14 +309,7 @@ fun MapHome(
     // Session chrome docks above the persistent footer (catalogue S16).
     liveSessionBar: (@Composable () -> Unit)? = null,
     onManageLiveSession: (() -> Unit)? = null,
-    // Optional convoy status bar, composed as a FULL-WIDTH bar on its OWN row
-    // directly BELOW the top search row (which holds the search control, the
-    // live-session bar and the avatar) while — and only while — the caller is in a
-    // convoy. It moved out of the search strip so it can run side to side and show
-    // its content across the bar rather than squeezed into a pill. A slot rather
-    // than convoy parameters so the shell keeps knowing nothing about the convoy
-    // domain, and so "not in a convoy" is expressed by the host passing null:
-    // nothing is composed at all — no empty bar, and no gap where the row would be.
+    // Full-width convoy controls join the bottom session dock only while active.
     convoyBar: (@Composable () -> Unit)? = null,
     // Optional convoy awareness layer (member markers + off-screen direction
     // arrows), composed directly ON the map and UNDER all the floating chrome,
@@ -691,12 +684,6 @@ fun MapHome(
                 moreMenuOpen = moreOpen,
                 onDismissMore = { moreOpen = false },
             )
-            // The convoy bar sits on its OWN full-width row directly beneath the
-            // search strip (search icon + live-session bar + avatar). Composed only
-            // while the caller is in a convoy — null composes nothing, so no empty
-            // row is held open when there is no convoy. Hidden while the search is
-            // expanded so the opaque "Where to?" overlay above has the strip to
-            // itself and the bar's controls aren't left tappable under it.
             if (loadState == MapLoadState.Loading) {
                 LoadingRoadsChip()
             }
