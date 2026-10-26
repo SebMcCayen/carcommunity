@@ -83,6 +83,7 @@ fun MapShellCataloguePreview(
     screen: String,
     mapSurface: MapSurface? = null,
     zoomController: MapZoomController? = null,
+    initialMapMode: MapMode? = null,
     onFooterAction: (ShellTab) -> Unit = {},
     onSheetDismiss: () -> Unit = {},
     onLocalAction: (String) -> Unit = {},
@@ -94,7 +95,7 @@ fun MapShellCataloguePreview(
     val live = screen == "map-session" || screen == "map-convoy"
     var panel by remember(screen) { mutableStateOf(screen.takeUnless { live }) }
     var selectedTab by remember { mutableStateOf(ShellTab.Map) }
-    val nightOverride = remember { mutableStateOf<MapMode?>(null) }
+    val nightOverride = remember { mutableStateOf(initialMapMode) }
     var incidentsOn by remember { mutableStateOf(true) }
     var age by remember { mutableStateOf(IncidentAgeOption.ALL) }
     var participating by remember { mutableStateOf(true) }

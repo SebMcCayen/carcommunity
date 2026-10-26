@@ -144,7 +144,8 @@ class Wave2RedesignCaptureTest {
                                                 val surface = if (args.getString("redesignMap") == "configured") rememberMapSurface() else null
                                                 check(surface == null || surface is MapboxMapSurface) { "Configured map capture requires a runtime Mapbox token; a stub is not map evidence." }
                                                 SideEffect { configuredSurface = surface }
-                                                MapShellCataloguePreview(selected, mapSurface = surface, zoomController = zoom)
+                                                MapShellCataloguePreview(selected, mapSurface = surface, zoomController = zoom,
+                                                    initialMapMode = if (args.getString("redesignMapAppearance") == "day") MapMode.Day else null)
                                             }
                                         }
                                         else -> error("Unknown redesign capture case: $selected")
