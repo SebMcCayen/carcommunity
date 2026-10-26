@@ -19,7 +19,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.Button
+import com.kungsbackacarcommunity.app.design.KccButton as Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -76,6 +76,7 @@ import com.kungsbackacarcommunity.app.location.GeoLinks
 import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
 import com.kungsbackacarcommunity.app.moderation.ChatSurface
 import com.kungsbackacarcommunity.app.moderation.MessageActionsSheet
+import com.kungsbackacarcommunity.app.moderation.MessageActionsPreview
 import com.kungsbackacarcommunity.app.moderation.MessageModeration
 import com.kungsbackacarcommunity.app.moderation.ReportAvailability
 import com.kungsbackacarcommunity.app.shell.AeroPage
@@ -313,8 +314,14 @@ fun ChatScreen(
         val canModerate =
             actionsMessage.senderUid != currentUid &&
                 MessageModeration.canActOn(otherUid, currentUid)
+        val actionsAuthorName = when (actionsMessage.senderUid) {
+            currentUid -> stringResource(R.string.shell_userMarkerLabel)
+            otherUid -> otherName
+            else -> null
+        }
         MessageActionsSheet(
-            memberName = otherName,
+            memberName = actionsAuthorName,
+            preview = MessageActionsPreview(actionsAuthorName, actionsMessage.text),
             canReply = chatRepliesEnabled,
             onReply = {
                 replyToId = actionsMessage.id

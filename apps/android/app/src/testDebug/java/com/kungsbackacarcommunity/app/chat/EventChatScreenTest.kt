@@ -1,5 +1,9 @@
 package com.kungsbackacarcommunity.app.chat
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -17,6 +21,7 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.moderation.MESSAGE_ACTIONS_BLOCK_TEST_TAG
 import com.kungsbackacarcommunity.app.moderation.MESSAGE_ACTIONS_REPORT_TEST_TAG
+import com.kungsbackacarcommunity.app.moderation.MESSAGE_ACTIONS_PREVIEW_TEST_TAG
 import com.kungsbackacarcommunity.app.moderation.MESSAGE_ACTIONS_SHEET_TEST_TAG
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -56,6 +61,45 @@ class EventChatScreenTest {
             isAutoHidden = autoHidden,
             createdAtMillis = 0L,
         )
+
+    @Test
+    fun selectedEventQuoteClosesOnHiddenRemovedIneligibleOrLostAccess() {
+        val original = message("local-quote", "Local author", "other")
+        val messages = mutableStateOf(listOf(original))
+        val access = mutableStateOf(true)
+        composeTestRule.setContent {
+            KccTheme {
+                EventChatScreen(state = ChatMessagesState.Loaded(messages.value), currentUid = "me",
+                    canParticipate = access.value, sendStatus = ChatSendStatus.Idle,
+                    reportStatus = ChatReportStatus.Idle, onSend = {}, onReport = { _, _ -> },
+                    onReportDismiss = {}, onBack = {})
+            }
+        }
+        for (change in listOf("hidden", "removed", "own", "missing", "access")) {
+            longPress("Body of local-quote")
+            composeTestRule.onNode(
+                hasText("Body of local-quote") and hasAnyAncestor(hasTestTag(MESSAGE_ACTIONS_PREVIEW_TEST_TAG)),
+                useUnmergedTree = true).assertIsDisplayed()
+            composeTestRule.onNode(
+                hasText("Local author") and hasAnyAncestor(hasTestTag(MESSAGE_ACTIONS_PREVIEW_TEST_TAG)),
+                useUnmergedTree = true).assertIsDisplayed()
+            composeTestRule.runOnIdle {
+                when (change) {
+                    "hidden" -> messages.value = listOf(original.copy(isAutoHidden = true))
+                    "removed" -> messages.value = listOf(original.copy(isRemoved = true, message = ""))
+                    "own" -> messages.value = listOf(original.copy(authorUserId = "me"))
+                    "missing" -> messages.value = emptyList()
+                    "access" -> access.value = false
+                }
+            }
+            composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_PREVIEW_TEST_TAG).assertDoesNotExist()
+            composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_SHEET_TEST_TAG).assertDoesNotExist()
+            composeTestRule.waitForIdle()
+            composeTestRule.runOnIdle { messages.value = listOf(original); access.value = true }
+            // Restoring data/access does not silently reopen a previously invalid selection.
+            composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_SHEET_TEST_TAG).assertDoesNotExist()
+        }
+    }
 
     @Test
     fun nonParticipant_seesGate() {

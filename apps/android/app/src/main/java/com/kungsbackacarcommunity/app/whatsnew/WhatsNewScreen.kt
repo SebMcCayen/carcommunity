@@ -3,13 +3,24 @@ package com.kungsbackacarcommunity.app.whatsnew
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -19,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -72,14 +84,51 @@ fun WhatsNewScreen(entries: List<ChangelogEntry>, modifier: Modifier = Modifier)
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        entries.forEach { entry -> ReleaseCard(entry) }
+        Column {
+            entries.forEachIndexed { index, entry ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                    horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+                ) {
+                    Column(
+                        modifier = Modifier.width(KccSpacing.s6).fillMaxHeight(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        if (index == 0) {
+                            Spacer(Modifier.height(KccSpacing.s4))
+                        } else {
+                            VerticalDivider(
+                                modifier = Modifier.height(KccSpacing.s4),
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                            )
+                        }
+                        Icon(
+                            Icons.Filled.FiberManualRecord,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.size(KccSpacing.s4),
+                        )
+                        if (index < entries.lastIndex) {
+                            VerticalDivider(
+                                modifier = Modifier.weight(1f),
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                            )
+                        }
+                    }
+                    ReleaseCard(entry, Modifier.weight(1f).padding(bottom = KccSpacing.s4))
+                }
+            }
+        }
     }
 }
 
-/** One release: "Version X · date" heading + that update's bulleted changes. */
+/** One release: version heading, subordinate date and that update's changes. */
 @Composable
-private fun ReleaseCard(entry: ChangelogEntry) {
-    OutlinedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(KccRadius.lg)) {
+private fun ReleaseCard(entry: ChangelogEntry, modifier: Modifier = Modifier) {
+    OutlinedCard(
+        modifier = modifier.fillMaxWidth().testTag("release_${entry.versionCode}"),
+        shape = RoundedCornerShape(KccRadius.lg),
+    ) {
         Column(
             modifier = Modifier.padding(KccSpacing.s4),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
@@ -87,13 +136,17 @@ private fun ReleaseCard(entry: ChangelogEntry) {
             Text(
                 text =
                     stringResource(
-                        R.string.whatsNew_entryTitle,
+                        R.string.whatsNew_versionTitle,
                         entry.versionName,
-                        entry.releaseDate,
                     ),
                 modifier = Modifier.semantics { heading() },
                 style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = entry.releaseDate,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             entry.changes.forEach { change -> BulletLine(change) }
         }

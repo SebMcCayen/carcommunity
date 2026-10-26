@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -25,9 +27,13 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import com.kungsbackacarcommunity.app.design.KccButton as Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -37,7 +43,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import com.kungsbackacarcommunity.app.design.KccOutlinedButton as OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -50,6 +56,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLocale
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -67,6 +75,13 @@ import com.kungsbackacarcommunity.app.shell.AeroLazyPage
 import com.kungsbackacarcommunity.app.shell.AeroPage
 import com.kungsbackacarcommunity.app.shell.AeroPageTitle
 import com.kungsbackacarcommunity.app.shell.aeroLazyContentPadding
+import java.text.DateFormat
+import java.time.Instant
+import java.util.Date
+
+const val CONVOY_LIST_TAG = "convoy-catalogue-list"
+const val CONVOY_DETAIL_DESTINATION_TAG = "convoy-detail-destination"
+const val CONVOY_DETAIL_DATE_TAG = "convoy-detail-date"
 
 /** Test tag on the create-convoy submit button, so a UI test can assert it goes
  *  inert (disabled) during the create + post-create hand-off to the map. */
@@ -121,7 +136,7 @@ fun ConvoyListScreen(
     val membershipUncertain = (status as? ConvoyListStatus.Loaded)?.isExhaustive != true
     AeroLazyPage(modifier = modifier) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().testTag(CONVOY_LIST_TAG),
             contentPadding = aeroLazyContentPadding(),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s4),
         ) {
@@ -232,8 +247,12 @@ fun ConvoyListScreen(
                         }
                     }
 
-                    item(key = "mine-header") {
-                        SectionHeader(stringResource(R.string.convoy_myConvoysTitle))
+                    val ongoing = status.myConvoys.filter { it.status != ConvoyStatus.Ended }
+                    val ended = status.myConvoys.filter { it.status == ConvoyStatus.Ended }
+                    if (ongoing.isNotEmpty() || status.myConvoys.isEmpty()) {
+                        item(key = "mine-header") {
+                            SectionHeader(stringResource(R.string.convoy_myConvoysTitle))
+                        }
                     }
                     if (status.myConvoys.isEmpty()) {
                         item(key = "mine-empty") {
@@ -243,8 +262,13 @@ fun ConvoyListScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                    } else {
-                        items(status.myConvoys, key = { "convoy-${it.convoyId}" }) { convoy ->
+                    }
+                    items(ongoing, key = { "convoy-${it.convoyId}" }) { convoy ->
+                        ConvoyCardRow(convoy = convoy, onClick = { onOpenConvoy(convoy.convoyId) })
+                    }
+                    if (ended.isNotEmpty()) {
+                        item(key = "ended-header") { SectionHeader(stringResource(R.string.convoy_statusEnded)) }
+                        items(ended, key = { "convoy-${it.convoyId}" }) { convoy ->
                             ConvoyCardRow(convoy = convoy, onClick = { onOpenConvoy(convoy.convoyId) })
                         }
                     }
@@ -289,6 +313,12 @@ private fun ConvoyCardRow(convoy: ConvoySummary, onClick: () -> Unit) {
                     modifier = Modifier.weight(1f).padding(end = KccSpacing.s3),
                 )
                 StatusChip(convoy.status)
+            }
+            ConvoyDateLine(convoy)
+            ConvoyMetadataLine(Icons.Filled.Groups,
+                stringResource(R.string.convoy_barMembers, convoy.members.count { it.inviteStatus == ConvoyInviteStatus.Accepted }))
+            convoy.destination?.label?.takeIf { it.isNotBlank() }?.let { label ->
+                ConvoyMetadataLine(Icons.Filled.LocationOn, label)
             }
             // A compact cluster of member avatars, each with a green dot when the
             // member has accepted (inviteStatus == Accepted).
@@ -410,7 +440,7 @@ fun CreateConvoyScreen(
     // Blocking both states keeps the surface interaction-proof until it leaves.
     val handingOff =
         createState is CreateConvoyState.Working || createState is CreateConvoyState.Created
-    AeroLazyPage(modifier = modifier) {
+    AeroLazyPage(modifier = modifier, ownerShortcutEnabled = false) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = aeroLazyContentPadding(),
@@ -419,7 +449,7 @@ fun CreateConvoyScreen(
             item(key = "title") { AeroPageTitle(stringResource(R.string.convoy_createTitle)) }
 
             item(key = "pick-header") {
-                SectionHeader(stringResource(R.string.convoy_pickFriendsTitle))
+                SectionHeader("${stringResource(R.string.convoy_pickFriendsTitle)} (${selectedUids.size})")
             }
 
             when (friendsStatus) {
@@ -518,7 +548,7 @@ private fun SelectableFriendRow(
                         role = Role.Checkbox,
                         onValueChange = { onToggle() },
                     )
-                    .padding(KccSpacing.s4),
+                    .padding(KccSpacing.s3),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
@@ -567,7 +597,7 @@ fun ConvoyInvitePickerScreen(
     excludedUids: Set<String> = emptySet(),
 ) {
     val working = inviteState is InviteConvoyState.Working
-    AeroLazyPage(modifier = modifier) {
+    AeroLazyPage(modifier = modifier, ownerShortcutEnabled = false) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = aeroLazyContentPadding(),
@@ -715,18 +745,31 @@ fun ConvoyDetailScreen(
     // plain boolean is enough here (unlike the bar, which re-picks which convoy it
     // describes underneath itself and therefore captures the id).
     var confirmLeave by remember { mutableStateOf(false) }
-    AeroPage(title = convoy.displayTitle(), modifier = modifier) {
-        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(KccSpacing.s4), verticalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
-                StatusChip(convoy.status)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
-                    Icon(Icons.Filled.Groups, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(stringResource(R.string.convoy_summaryParticipants), style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(convoy.members.count { it.inviteStatus == ConvoyInviteStatus.Accepted }.toString(),
-                            style = MaterialTheme.typography.headlineSmall)
-                    }
+    AeroPage(
+        title = convoy.displayTitle(), modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+        ) {
+            StatusChip(convoy.status)
+            ConvoyMetadataLine(Icons.Filled.Groups,
+                stringResource(R.string.convoy_barMembers, convoy.members.count { it.inviteStatus == ConvoyInviteStatus.Accepted }),
+                modifier = Modifier.weight(1f))
+        }
+        ConvoyDateLine(convoy, Modifier.testTag(CONVOY_DETAIL_DATE_TAG))
+        // Display only the parent snapshot's destination. Availability, sharing,
+        // clearing and navigation controls remain owned by the map/session host.
+        convoy.destination?.let { destination ->
+            OutlinedCard(Modifier.fillMaxWidth().testTag(CONVOY_DETAIL_DESTINATION_TAG)) {
+                Column(Modifier.padding(KccSpacing.s3), verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+                    Text(stringResource(R.string.convoy_barDestinationUnnamed), style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    ConvoyMetadataLine(Icons.Filled.LocationOn,
+                        destination.label?.takeIf { it.isNotBlank() }
+                            ?: String.format(LocalLocale.current.platformLocale, "%.5f, %.5f", destination.latitude, destination.longitude))
                 }
             }
         }
@@ -882,7 +925,7 @@ fun ConvoyDetailScreen(
 private fun ConvoyRecapCard(recap: ConvoyRecapState) {
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s3),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
             Text(
@@ -890,20 +933,20 @@ private fun ConvoyRecapCard(recap: ConvoyRecapState) {
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            SummaryStatRow(
-                label = stringResource(R.string.convoy_summaryDuration),
-                value = ConvoyFormat.duration(recap.durationSeconds),
-            )
-            SummaryStatRow(
-                label = stringResource(R.string.convoy_summaryParticipants),
-                value = recap.participantCount.toString(),
-            )
-            SummaryStatRow(
-                label = stringResource(R.string.convoy_summaryDistance),
-                value =
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+                verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+            ) {
+                SummaryStatTile(Icons.Filled.Timer, stringResource(R.string.convoy_summaryDuration),
+                    ConvoyFormat.duration(recap.durationSeconds), Modifier.weight(1f).widthIn(min = 80.dp))
+                SummaryStatTile(Icons.Filled.Groups, stringResource(R.string.convoy_summaryParticipants),
+                    recap.participantCount.toString(), Modifier.weight(1f).widthIn(min = 80.dp))
+                SummaryStatTile(Icons.Filled.Route, stringResource(R.string.convoy_summaryDistance),
                     recap.distanceMeters?.let { ConvoyFormat.distance(it) }
                         ?: stringResource(R.string.convoy_summaryDistanceUnavailable),
-            )
+                    Modifier.weight(1f).widthIn(min = 80.dp))
+            }
             // The roster of who was actually in it. Only when we can name at least
             // one — an empty list (uids not populated) leaves the count row to tell
             // the honest total rather than showing an empty "who" header.
@@ -935,23 +978,32 @@ private fun ConvoyRecapCard(recap: ConvoyRecapState) {
 }
 
 @Composable
-private fun SummaryStatRow(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f),
-        )
+private fun SummaryStatTile(icon: ImageVector, label: String, value: String, modifier: Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+@Composable
+private fun ConvoyDateLine(convoy: ConvoySummary, modifier: Modifier = Modifier) {
+    val raw = when (convoy.status) {
+        ConvoyStatus.Forming -> convoy.createdAt
+        ConvoyStatus.Active -> convoy.startedAt
+        ConvoyStatus.Ended -> convoy.endedAt
+    }
+    val millis = raw?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() } ?: return
+    val locale = LocalLocale.current.platformLocale
+    ConvoyMetadataLine(Icons.Filled.CalendarMonth,
+        DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, locale).format(Date(millis)), modifier)
+}
+
+@Composable
+private fun ConvoyMetadataLine(icon: ImageVector, text: String, modifier: Modifier = Modifier) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -972,7 +1024,7 @@ private fun MemberRow(member: ConvoyMember, isOwner: Boolean, onClick: (() -> Un
                 ),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s3),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {

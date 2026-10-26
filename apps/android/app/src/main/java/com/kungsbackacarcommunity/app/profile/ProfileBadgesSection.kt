@@ -30,7 +30,6 @@ import com.kungsbackacarcommunity.app.badges.BadgeGlyph
 import com.kungsbackacarcommunity.app.badges.BadgeGridRows
 import com.kungsbackacarcommunity.app.badges.BadgeLadder
 import com.kungsbackacarcommunity.app.badges.BadgeMedallion
-import com.kungsbackacarcommunity.app.badges.BadgeMedallionSize
 import com.kungsbackacarcommunity.app.badges.BadgeMedallionTile
 import com.kungsbackacarcommunity.app.badges.BadgeRung
 import com.kungsbackacarcommunity.app.badges.BadgeShowcase
@@ -236,7 +235,7 @@ private fun LadderMedallionGrid(
                 } else {
                     stringResource(tierNameRes(rung.tier))
                 },
-            medallionSize = BadgeMedallionSize,
+            medallionSize = 64.dp,
             onClick = { onSelect(detail) },
         )
     }
@@ -274,7 +273,8 @@ private fun RecentAwardsGrid(
                 earned = true,
                 label = name,
                 contentDescription = stringResource(R.string.badgeShowcase_medallionEarned, name),
-                medallionSize = BadgeMedallionSize,
+                earnedOn = awardDate(award.awardedAtMillis),
+                medallionSize = 64.dp,
                 onClick = { onSelect(detail) },
             )
         } else {
@@ -293,7 +293,8 @@ private fun RecentAwardsGrid(
                         rungDisplayName(ladder, rung),
                     ),
                 caption = stringResource(tierNameRes(rung.tier)),
-                medallionSize = BadgeMedallionSize,
+                earnedOn = awardDate(award.awardedAtMillis),
+                medallionSize = 64.dp,
                 onClick = { onSelect(detail) },
             )
         }
@@ -371,7 +372,7 @@ private fun AllAwardsGrid(showcase: BadgeShowcase, onSelect: (BadgeDetail) -> Un
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            BadgeGridRows(items = ladder.rungs, perRow = 4) { rung ->
+            BadgeGridRows(items = ladder.rungs, perRow = 3) { rung ->
                 val earned = rung.badgeKey in earnedKeys
                 val detail =
                     rememberRungDetail(ladder, rung, earned, showcase.awardedAtByKey[rung.badgeKey])
@@ -386,6 +387,8 @@ private fun AllAwardsGrid(showcase: BadgeShowcase, onSelect: (BadgeDetail) -> Un
                     tier = rung.tier,
                     earned = earned,
                     label = label,
+                    earnedOn = if (earned) awardDate(showcase.awardedAtByKey[rung.badgeKey]) else null,
+                    medallionSize = 64.dp,
                     contentDescription =
                         stringResource(
                             if (earned) {
@@ -406,7 +409,7 @@ private fun AllAwardsGrid(showcase: BadgeShowcase, onSelect: (BadgeDetail) -> Un
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            BadgeGridRows(items = showcase.milestones, perRow = 4) { milestone ->
+            BadgeGridRows(items = showcase.milestones, perRow = 3) { milestone ->
                 val name = milestoneName(milestone)
                 val detail =
                     BadgeDetail(
@@ -423,12 +426,20 @@ private fun AllAwardsGrid(showcase: BadgeShowcase, onSelect: (BadgeDetail) -> Un
                     tier = null,
                     earned = true,
                     label = name,
+                    earnedOn = awardDate(milestone.awardedAtMillis),
+                    medallionSize = 64.dp,
                     contentDescription = stringResource(R.string.badgeShowcase_medallionEarned, name),
                     onClick = { onSelect(detail) },
                 )
             }
         }
     }
+}
+
+/** Render only an award's real timestamp; an undated award remains undated. */
+@Composable
+private fun awardDate(millis: Long?): String? = millis?.let {
+    stringResource(R.string.badgeShowcase_awardedOn, DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it)))
 }
 
 // ---------------------------------------------------------------------------

@@ -2,8 +2,6 @@ package com.kungsbackacarcommunity.app.chatchannels
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.border
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,21 +18,14 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Route
-import androidx.compose.material3.Badge
-import androidx.compose.material3.Button
+import com.kungsbackacarcommunity.app.design.KccButton as Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import com.kungsbackacarcommunity.app.design.KccOutlinedButton as OutlinedButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -52,12 +43,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
-import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -67,12 +54,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.blocking.BlockingRepository
 import com.kungsbackacarcommunity.app.design.KccAlpha
 import com.kungsbackacarcommunity.app.design.KccSpacing
-import com.kungsbackacarcommunity.app.design.KccTypeScale
 import com.kungsbackacarcommunity.app.dm.ChatRoute
 import com.kungsbackacarcommunity.app.dm.ConversationListRoute
 import com.kungsbackacarcommunity.app.dm.DmRepository
@@ -416,36 +401,6 @@ internal fun chatHubLandingTab(target: PushTarget?): ChatTab =
         PushTarget.NOTIFICATIONS -> ChatTab.Notifications
         else -> ChatTab.Community
     }
-
-/**
- * The tab labels' font-size floor and ceiling.
- *
- * A [TabRow] splits the row into four EQUAL tabs, so each label gets a quarter of
- * the card's width — about 86dp on a 360dp phone, and the Material text+icon [Tab]
- * overload spent 16dp of that on padding (which [ChatTabItem] now reclaims). The
- * longest labels ("Notifications", "Community") then ellipsized to "Notificati…" /
- * "Commun…" once the user's font scale was raised. Rather than pick a smaller fixed
- * size (which only moves the cliff to a narrower screen, a longer translation or a
- * larger font scale), the label AUTO-SHRINKS within these bounds to whatever fits:
- * [TAB_LABEL_MAX_SP] is the normal `labelMedium` size, so labels are unaffected at
- * the default font scale — measured, every shipped label in both locales fits at
- * the full size on a 360dp phone — and only a label that would not otherwise fit
- * steps down, never below [TAB_LABEL_MIN_SP].
- *
- * The floor is deliberately below the type scale's smallest token. It is a
- * PRE-font-scale value, so it does not mean "8sp on screen": it only ever binds at
- * a raised accessibility font scale, where 8sp renders at least as large as the
- * 12sp a default-font-scale user already reads comfortably (8 × 1.5 = 12). At the
- * default scale nothing shrinks at all. Measured floor across en/sv × 320/360/411dp
- * × font scales 1.0/1.3/1.5: 8.5sp, reached only by "Notifications" on a 320dp
- * screen at font scale 1.5 — see `ChatHubTabLabelTest`, which pins that every
- * shipped label fits across that whole matrix.
- */
-internal val TAB_LABEL_MIN_SP = 8.sp
-internal val TAB_LABEL_MAX_SP = KccTypeScale.caption
-
-/** Font-size granularity for the tab labels' auto-shrink. */
-internal val TAB_LABEL_STEP_SP = 0.5.sp
 
 /**
  * The chat hub as a full-screen opaque route (legacy presentation, kept
@@ -792,7 +747,7 @@ private fun ChatHubContent(
     // simply flips it back, since the pager returns to the page it came from.
     //
     // Deliberately one-directional (pager → tab): a tab TAP scrolls the pager
-    // directly (see ChatTabItem's onSelect) and lets this reflect the result. The
+    // directly (see ChatChannelStrip's onSelect) and lets this reflect the result. The
     // earlier shape — a LaunchedEffect(selectedTab) that animated the pager — self
     // -cancelled on a multi-page jump, because the intermediate pages this
     // snapshotFlow reports would re-key that effect and abort its own animation
@@ -912,13 +867,8 @@ private fun ChatHubContent(
             // Top bar: back + the conversation's name, composed ONLY inside a
             // sub-screen. At hub level it carried nothing but the redundant "Chat"
             // label — the Back arrow is already conditional on [inSubScreen] — so
-            // there the whole bar is gone and the tabs start at the top of the
-            // card. No control is lost: there is no close (X) button in either
-            // form; the hub is dismissed by dragging the panel's handle down,
-            // tapping the map strip above the card, or system Back (see
-            // [ChatHubPopup] / [TranslucentShellPanel]). The legacy full-screen
-            // [ChatHubRoute] form is likewise dismissed by system Back, consistent
-            // with every other full-screen route.
+            // there the separate bar is gone. The optional hub Back sits beside
+            // the channel strip, while a nested conversation keeps its own Back.
             if (subScreenTitle != null) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = KccSpacing.s2),
@@ -940,91 +890,15 @@ private fun ChatHubContent(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-            } else if (showHubBackArrow) {
-                // Hub level, canonical map-shell presentation: no title (the tabs
-                // below name the section), but a Back arrow so a gesture-nav user
-                // with no system Back button can leave chat back to the map. It runs
-                // the SAME action system Back does at hub level (onClose) — the hub's
-                // BackHandler already pops an open sub-screen first, so this arrow is
-                // only ever the hub-level exit.
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = KccSpacing.s2),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(onClick = onClose) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.chatHub_back),
-                            tint = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                }
             }
 
-            // Hide the tab row while a sub-screen (thread/channel) is open, so the
-            // thread gets the full height and Back is the way out of it.
             if (!inSubScreen) {
-                // The per-tab dot's screen-reader label. Single string reused across
-                // tabs: the visible tab label already names the section, so the dot
-                // only needs to announce "unread".
-                val unreadDotLabel = stringResource(R.string.chatHub_tabUnread)
-                TabRow(
-                    selectedTabIndex = selectedTab.ordinal,
-                    // Transparent so the hub's translucent [Surface] background shows
-                    // through the tab strip too, and the tabs read as part of the one
-                    // frosted panel rather than an opaque `surface` bar sitting on top
-                    // of it. contentColor is pinned to onSurface (the value the opaque
-                    // default derived) so the tab labels and the selection indicator
-                    // keep their prior colour now that the container no longer implies
-                    // it.
-                    containerColor = Color.Transparent,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    indicator = {},
-                    divider = {},
-                ) {
-                    ChatTabItem(
-                        tab = ChatTab.Community,
-                        selected = selectedTab,
-                        icon = Icons.AutoMirrored.Filled.Chat,
-                        label = stringResource(R.string.chatHub_tabCommunity),
-                        showDot = communityUnread,
-                        dotContentDescription = unreadDotLabel,
-                        onSelect = { scope.launch { pagerState.animateScrollToPage(it.ordinal) } },
-                    )
-                    ChatTabItem(
-                        tab = ChatTab.Convoys,
-                        selected = selectedTab,
-                        icon = Icons.Filled.Route,
-                        label = stringResource(R.string.chatHub_tabConvoys),
-                        // "Any convoy unread", derived from a single userPrivate
-                        // listener (convoyChatRepository.observeAnyUnread): the
-                        // backend post fan-out stamps a per-convoy newest-message
-                        // marker the client compares against its last-read markers,
-                        // so this dot costs one document listener — no per-convoy
-                        // message-listener fan-out.
-                        showDot = convoysUnread,
-                        dotContentDescription = unreadDotLabel,
-                        onSelect = { scope.launch { pagerState.animateScrollToPage(it.ordinal) } },
-                    )
-                    ChatTabItem(
-                        tab = ChatTab.Friends,
-                        selected = selectedTab,
-                        icon = Icons.Filled.Person,
-                        label = stringResource(R.string.chatHub_tabFriends),
-                        showDot = friendsUnread,
-                        dotContentDescription = unreadDotLabel,
-                        onSelect = { scope.launch { pagerState.animateScrollToPage(it.ordinal) } },
-                    )
-                    ChatTabItem(
-                        tab = ChatTab.Notifications,
-                        selected = selectedTab,
-                        icon = Icons.Filled.Notifications,
-                        label = stringResource(R.string.chatHub_tabNotifications),
-                        showDot = notificationsUnread,
-                        dotContentDescription = unreadDotLabel,
-                        onSelect = { scope.launch { pagerState.animateScrollToPage(it.ordinal) } },
-                    )
-                }
+                ChatChannelStrip(
+                    selected = selectedTab,
+                    unread = listOf(communityUnread, convoysUnread, friendsUnread, notificationsUnread),
+                    onSelect = { scope.launch { pagerState.animateScrollToPage(it.ordinal) } },
+                    onBack = if (showHubBackArrow) onClose else null,
+                )
             }
 
             // The four sections live in a HorizontalPager so the member can SWIPE
@@ -1176,79 +1050,6 @@ private fun ChatHubContent(
         }
     }
 }
-
-/**
- * One chat-hub tab: the section's icon above its label.
- *
- * Built from the generic content-slot [Tab] rather than the text+icon overload
- * because that overload wraps the label in its own fixed horizontal padding,
- * spending ~16dp of an already-tight quarter-width tab on whitespace. Laying the
- * column out here gives the label the tab's full width; combined with the
- * auto-shrink (see [TAB_LABEL_MIN_SP]) the label always fits whole.
- *
- * `softWrap = false` keeps each label on one line: these are single words in both
- * locales, so wrapping could only break mid-word, and letting the text auto-shrink
- * to fit one line reads better on a tab than two cramped lines.
- */
-@Composable
-private fun ChatTabItem(
-    tab: ChatTab,
-    selected: ChatTab,
-    icon: ImageVector,
-    label: String,
-    onSelect: (ChatTab) -> Unit,
-    showDot: Boolean = false,
-    // Announced by a screen reader when the tab carries an unread DOT, so the
-    // purely-visual dot is not silent. Null when [showDot] is false; the tab's
-    // visible label already names the section, so the dot only needs to add
-    // "unread", not repeat the section name.
-    dotContentDescription: String? = null,
-) {
-    Tab(
-        selected = selected == tab,
-        onClick = { onSelect(tab) },
-        selectedContentColor = MaterialTheme.colorScheme.tertiary,
-        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 2.dp, vertical = KccSpacing.s2)
-            .clip(RoundedCornerShape(24.dp))
-            .border(1.dp, if (selected == tab) MaterialTheme.colorScheme.tertiary
-                else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp)),
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(vertical = KccSpacing.s2),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
-        ) {
-            if (showDot) {
-                androidx.compose.material3.BadgedBox(badge = { Badge() }) {
-                    Icon(imageVector = icon, contentDescription = dotContentDescription)
-                }
-            } else {
-                Icon(imageVector = icon, contentDescription = null)
-            }
-            Text(
-                text = label,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                softWrap = false,
-                // A last resort only: a label that will not fit even at the floor
-                // ellipsizes rather than shrinking into illegibility. No shipped
-                // label in either locale reaches the floor at any width/font scale
-                // the app targets — ChatHubTabLabelTest pins exactly that.
-                overflow = TextOverflow.Ellipsis,
-                autoSize =
-                    TextAutoSize.StepBased(
-                        minFontSize = TAB_LABEL_MIN_SP,
-                        maxFontSize = TAB_LABEL_MAX_SP,
-                        stepSize = TAB_LABEL_STEP_SP,
-                    ),
-                style = MaterialTheme.typography.labelMedium,
-            )
-        }
-    }
-}
-
 
 @Composable
 private fun TabPlaceholder(text: String) {

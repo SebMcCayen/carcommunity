@@ -83,7 +83,7 @@ internal sealed interface VehiclePhotoStyle {
  *   (the surrounding card already names the car).
  */
 @Composable
-private fun VehiclePhoto(
+internal fun VehiclePhoto(
     imagePath: String?,
     style: VehiclePhotoStyle,
     modifier: Modifier = Modifier,
@@ -175,6 +175,7 @@ internal fun VehicleCard(
     contentSpacing: Dp = KccSpacing.s2,
     onOpen: (() -> Unit)? = null,
     overlayActions: (@Composable () -> Unit)? = null,
+    photoModifier: Modifier = Modifier,
     actions: @Composable ColumnScope.() -> Unit = {},
 ) {
     Card(
@@ -196,6 +197,7 @@ internal fun VehicleCard(
                     photoContentDescriptionRes = photoContentDescriptionRes,
                     mainCarLabelRes = mainCarLabelRes,
                     registrationPlateFormatRes = registrationPlateFormatRes,
+                    photoModifier = photoModifier,
                 )
             }
             if (overlayActions != null) {
@@ -237,12 +239,13 @@ private fun ColumnScope.VehicleCardSummary(
     @StringRes photoContentDescriptionRes: Int?,
     @StringRes mainCarLabelRes: Int,
     @StringRes registrationPlateFormatRes: Int?,
+    photoModifier: Modifier,
 ) {
     VehiclePhoto(
         imagePath = vehicle.imagePath,
         style = photoStyle,
         contentDescription = photoContentDescriptionRes?.let { stringResource(it) },
-        modifier = Modifier.align(photoStyle.alignment),
+        modifier = photoModifier.align(photoStyle.alignment),
     )
     Text(
         // Resolved through VehicleDisplay, not read raw: a catalogue vehicle shows

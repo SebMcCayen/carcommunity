@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import com.kungsbackacarcommunity.app.design.KccButton as Button
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
@@ -24,7 +24,7 @@ import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import com.kungsbackacarcommunity.app.design.KccOutlinedButton as OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.Preview
@@ -51,8 +52,13 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
 import java.text.DateFormat
 import java.time.Instant
 import java.time.ZoneId
-import java.time.ZoneOffset
 import java.util.Date
+
+const val EVENT_EDITOR_TITLE_TAG = "event_editor_title"
+const val EVENT_EDITOR_DESCRIPTION_TAG = "event_editor_description"
+const val EVENT_EDITOR_ADDRESS_TAG = "event_editor_address"
+const val EVENT_EDITOR_START_TAG = "event_editor_start"
+const val EVENT_EDITOR_SUBMIT_TAG = "event_editor_submit"
 
 /**
  * User-facing event form (Aero themed) — shared by CREATE and creator EDIT. Owns
@@ -169,6 +175,7 @@ fun CreateEventScreen(
     }
 
     AeroPage(
+        ownerShortcutEnabled = false,
         title = stringResource(if (isEdit) R.string.events_editTitle else R.string.events_createTitle),
         modifier = modifier,
         // Consume the IME (and nav-bar) inset so the create button and lower fields
@@ -182,41 +189,41 @@ fun CreateEventScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        // Sets the expectation the backend actually honours: published on
-        // submit, moderated afterwards. Create-only — an edit is to an event that
-        // is already live, so the notice would be misleading.
-        if (!isEdit) {
-            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = stringResource(R.string.events_createLiveNotice),
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                label = { Text(text = stringResource(R.string.events_createFieldTitle)) },
+                supportingText = { Text("${title.length}/${Events.TITLE_MAX}") },
+                isError = title.length > Events.TITLE_MAX || (showValidation && title.isBlank()),
+                enabled = !saving,
+                singleLine = true,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth().testTag(EVENT_EDITOR_TITLE_TAG),
+            )
+            OutlinedTextField(
+                value = description,
+                onValueChange = { description = it },
+                label = { Text(text = stringResource(R.string.events_createFieldDescription)) },
+                supportingText = { Text("${description.length}/${Events.DESCRIPTION_MAX}") },
+                isError = description.length > Events.DESCRIPTION_MAX,
+                enabled = !saving,
+                minLines = 4,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth().testTag(EVENT_EDITOR_DESCRIPTION_TAG),
+            )
         }
-
-        OutlinedTextField(
-            value = title,
-            onValueChange = { title = it },
-            label = { Text(text = stringResource(R.string.events_createFieldTitle)) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = description,
-            onValueChange = { description = it },
-            label = { Text(text = stringResource(R.string.events_createFieldDescription)) },
-            minLines = 4,
-            modifier = Modifier.fillMaxWidth(),
-        )
         OutlinedTextField(
             value = address,
             onValueChange = { address = it },
             label = { Text(text = stringResource(R.string.events_createFieldAddress)) },
             leadingIcon = { Icon(Icons.Filled.LocationOn, contentDescription = null) },
+            supportingText = { Text("${address.length}/${Events.ADDRESS_MAX}") },
+            isError = address.length > Events.ADDRESS_MAX,
+            enabled = !saving,
             singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier.fillMaxWidth().testTag(EVENT_EDITOR_ADDRESS_TAG),
         )
 
         // Map location picker: opens the full-screen map with a centre pin. The
@@ -237,6 +244,7 @@ fun CreateEventScreen(
         )
         OutlinedButton(
             onClick = { showLocationPicker = true },
+            enabled = !saving,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(
@@ -256,6 +264,7 @@ fun CreateEventScreen(
                     latitude = null
                     longitude = null
                 },
+                enabled = !saving,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(text = stringResource(R.string.events_createLocationClear))
@@ -263,7 +272,12 @@ fun CreateEventScreen(
         }
 
         // The same two-step date/time picker, grouped into one readable row.
-        OutlinedButton(onClick = { showDatePicker = true }, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(
+            onClick = { showDatePicker = true },
+            enabled = !saving,
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier.fillMaxWidth().testTag(EVENT_EDITOR_START_TAG),
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -280,6 +294,20 @@ fun CreateEventScreen(
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                 }
+            }
+        }
+
+        // Sets the expectation the backend actually honours: published on
+        // submit, moderated afterwards. Create-only — an edit is to an event that
+        // is already live, so the notice would be misleading.
+        if (!isEdit) {
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = stringResource(R.string.events_createLiveNotice),
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 
@@ -370,7 +398,7 @@ fun CreateEventScreen(
                 }
             },
             enabled = !saving,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag(EVENT_EDITOR_SUBMIT_TAG),
         ) {
             Text(
                 text =
@@ -391,6 +419,7 @@ fun CreateEventScreen(
 
     if (showDatePicker) {
         StartDatePicker(
+            startsAtMillis = startsAtMillis,
             onDismiss = { showDatePicker = false },
             onDatePicked = { dateMillis ->
                 pendingDateMillis = dateMillis
@@ -402,17 +431,12 @@ fun CreateEventScreen(
 
     if (showTimePicker) {
         StartTimePicker(
+            startsAtMillis = startsAtMillis,
             onDismiss = { showTimePicker = false },
             onTimePicked = { hour, minute ->
                 val date = pendingDateMillis
                 if (date != null) {
-                    val localDate = Instant.ofEpochMilli(date).atZone(ZoneOffset.UTC).toLocalDate()
-                    startsAtMillis =
-                        localDate
-                            .atTime(hour, minute)
-                            .atZone(ZoneId.systemDefault())
-                            .toInstant()
-                            .toEpochMilli()
+                    startsAtMillis = EventEditorTime.combine(date, hour, minute, ZoneId.systemDefault())
                 }
                 showTimePicker = false
             },
@@ -423,10 +447,13 @@ fun CreateEventScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun StartDatePicker(
+    startsAtMillis: Long?,
     onDismiss: () -> Unit,
     onDatePicked: (Long) -> Unit,
 ) {
-    val state = rememberDatePickerState()
+    val state = rememberDatePickerState(
+        initialSelectedDateMillis = startsAtMillis?.let { EventEditorTime.pickerDate(it, ZoneId.systemDefault()) },
+    )
     DatePickerDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
@@ -450,10 +477,12 @@ private fun StartDatePicker(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun StartTimePicker(
+    startsAtMillis: Long?,
     onDismiss: () -> Unit,
     onTimePicked: (Int, Int) -> Unit,
 ) {
-    val state = rememberTimePickerState(is24Hour = true)
+    val start = startsAtMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()) }
+    val state = rememberTimePickerState(initialHour = start?.hour ?: 0, initialMinute = start?.minute ?: 0, is24Hour = true)
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {

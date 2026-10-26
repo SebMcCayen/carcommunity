@@ -8,6 +8,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -22,15 +24,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonRemove
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import com.kungsbackacarcommunity.app.design.KccButton as Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import com.kungsbackacarcommunity.app.design.KccOutlinedButton as OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -45,6 +50,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
@@ -90,6 +97,16 @@ fun FriendsScreen(
     modifier: Modifier = Modifier,
 ) {
     var nickname by remember { mutableStateOf("") }
+    var search by rememberSaveable { mutableStateOf("") }
+    var addExpanded by rememberSaveable { mutableStateOf(false) }
+    val visibleStatus = if (status is FriendsStatus.Loaded && search.isNotBlank()) {
+        val query = search.trim()
+        status.copy(
+            friends = status.friends.filter { it.displayName.orEmpty().contains(query, ignoreCase = true) },
+            incoming = status.incoming.filter { it.otherUser.displayName.orEmpty().contains(query, ignoreCase = true) },
+            outgoing = status.outgoing.filter { it.otherUser.displayName.orEmpty().contains(query, ignoreCase = true) },
+        )
+    } else status
     var removeTarget by remember { mutableStateOf<FriendSummary?>(null) }
     // Client-side ordering of the established list. rememberSaveable (matching the
     // History list's sort in DrivesScreen) so the choice survives config changes
@@ -102,33 +119,48 @@ fun FriendsScreen(
     // friend rows are keyed so recomposition/scroll state is stable.
     AeroLazyPage(modifier = modifier) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().testTag("friends_list"),
             contentPadding = aeroLazyContentPadding(),
-            verticalArrangement = Arrangement.spacedBy(KccSpacing.s4),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
         ) {
             item(key = "title") {
                 AeroPageTitle(stringResource(R.string.shell_friendsTitle))
             }
 
+            item(key = "search") {
+                OutlinedTextField(value = search, onValueChange = { search = it },
+                    label = { Text(stringResource(R.string.shell_searchIcon)) },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                    singleLine = true, shape = MaterialTheme.shapes.large,
+                    modifier = Modifier.fillMaxWidth().testTag("friends_search"))
+            }
             item(key = "add-friend") {
-                AddFriendSection(
-                    nickname = nickname,
-                    onNicknameChange = {
-                        nickname = it
-                        // Clear a stale result/error as soon as the caller edits the field.
-                        if (addState !is AddFriendState.Idle && addState !is AddFriendState.Working) {
+                if (!addExpanded && addState is AddFriendState.Idle) {
+                    OutlinedButton(onClick = { addExpanded = true }, modifier = Modifier.heightIn(min = 48.dp)
+                        .testTag("friends_add")) {
+                        Text(stringResource(R.string.friends_addSectionTitle))
+                    }
+                } else {
+                    AddFriendSection(
+                        nickname = nickname,
+                        onNicknameChange = {
+                            nickname = it
+                            // Clear a stale result/error as soon as the caller edits the field.
+                            if (addState !is AddFriendState.Idle && addState !is AddFriendState.Working) {
+                                onDismissAdd()
+                            }
+                        },
+                        addState = addState,
+                        onSubmit = {
+                            if (nickname.isNotBlank()) onSend(nickname)
+                        },
+                        onDismissResult = {
+                            nickname = ""
+                            addExpanded = false
                             onDismissAdd()
-                        }
-                    },
-                    addState = addState,
-                    onSubmit = {
-                        if (nickname.isNotBlank()) onSend(nickname)
-                    },
-                    onDismissResult = {
-                        nickname = ""
-                        onDismissAdd()
-                    },
-                )
+                        },
+                    )
+                }
             }
 
             actionError?.let { error ->
@@ -140,7 +172,7 @@ fun FriendsScreen(
                 }
             }
 
-            when (status) {
+            when (val status = visibleStatus) {
                 FriendsStatus.Loading -> item(key = "loading") { CircularProgressIndicator() }
 
                 // A load failure (including the member gate) is surfaced as a
@@ -191,7 +223,7 @@ fun FriendsScreen(
                     if (status.friends.isEmpty()) {
                         item(key = "friends-empty") {
                             Text(
-                                text = stringResource(R.string.friends_emptyFriends),
+                                text = stringResource(if (search.isNotBlank()) R.string.userSearch_noMatches else R.string.friends_emptyFriends),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -293,7 +325,7 @@ private fun AddFriendSection(
                 singleLine = true,
                 shape = MaterialTheme.shapes.large,
                 enabled = addState !is AddFriendState.Working,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("friends_add_nickname"),
                 keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = { onSubmit() }),
                 keyboardOptions =
                     androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Send),
@@ -353,21 +385,34 @@ private fun IncomingRequestRow(
     onDecline: () -> Unit,
 ) {
     FriendSurface {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
-            verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
-        ) {
-            MemberHeader(user = request.otherUser)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
-                // Disabled while this row's accept/decline callable is in flight,
-                // so rapid taps can't start overlapping mutations.
-                Button(onClick = onAccept, enabled = !working, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.friends_accept))
+        BoxWithConstraints(Modifier.fillMaxWidth().testTag("friends_incoming_${request.requestId}")
+            .padding(KccSpacing.s2)) {
+            // Two actions must not squeeze a member's identity into a few letters.
+            val inline = maxWidth >= 420.dp && LocalDensity.current.fontScale <= 1.1f
+            if (inline) {
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+                    MemberHeader(request.otherUser, Modifier.weight(1f))
+                    RequestActions(working, onAccept, onDecline)
                 }
-                OutlinedButton(onClick = onDecline, enabled = !working, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.friends_decline))
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
+                    MemberHeader(request.otherUser)
+                    RequestActions(working, onAccept, onDecline)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun RequestActions(working: Boolean, onAccept: () -> Unit, onDecline: () -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+        Button(onClick = onAccept, enabled = !working, modifier = Modifier.heightIn(min = 48.dp)) {
+            Text(stringResource(R.string.friends_accept))
+        }
+        OutlinedButton(onClick = onDecline, enabled = !working, modifier = Modifier.heightIn(min = 48.dp)) {
+            Text(stringResource(R.string.friends_decline))
         }
     }
 }
@@ -417,40 +462,51 @@ private fun FriendRow(
     onRemove: () -> Unit,
 ) {
     FriendSurface {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
-            verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
-        ) {
-            // Tapping the member (avatar + name) opens their read-only profile;
-            // their Crown Points sit at the end of the same row, beside the name.
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        // Announce the row as a button to screen readers — without
-                        // this it reads as plain text and its tap-to-open-profile
-                        // affordance is invisible to accessibility services.
+        BoxWithConstraints(Modifier.fillMaxWidth().testTag("friends_friend_${friend.uid}")
+            .padding(KccSpacing.s2)) {
+            val inline = maxWidth >= 320.dp && LocalDensity.current.fontScale <= 1.1f
+            if (inline) {
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+                    Row(Modifier.weight(1f).heightIn(min = 48.dp)
                         .clickable(role = Role.Button, onClick = onViewProfile),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
-            ) {
-                MemberHeader(
-                    user = FriendUser(friend.uid, friend.displayName, friend.avatarPath),
-                    modifier = Modifier.weight(1f),
-                )
-                // Absent balance renders as 0 — a friend with no wallet genuinely
-                // has no points.
-                FriendPointsChip(points ?: 0L)
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
-                // Opens the 1:1 DM thread with this friend; the conversation is
-                // created on the first message (dm-sendMessage).
-                OutlinedButton(onClick = onMessage, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.friends_message))
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+                        MemberAvatar(friend.avatarPath)
+                        Column(Modifier.weight(1f)) {
+                            Text(friend.displayName ?: stringResource(R.string.friends_unknownMember),
+                                style = MaterialTheme.typography.bodyLarge, maxLines = 2,
+                                overflow = TextOverflow.Ellipsis)
+                            Text("${FriendPointsFormat.grouped(points ?: 0L)} ${stringResource(R.string.profile_pointsTitle)}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    OutlinedButton(onClick = onMessage, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text(stringResource(R.string.friends_message))
+                    }
+                    IconButton(onClick = onRemove, enabled = !working) {
+                        Icon(Icons.Filled.PersonRemove, stringResource(R.string.friends_remove))
+                    }
                 }
-                // Disabled while this friend's removal callable is in flight.
-                OutlinedButton(onClick = onRemove, enabled = !working, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.friends_remove))
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                        .clickable(role = Role.Button, onClick = onViewProfile),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+                        MemberHeader(FriendUser(friend.uid, friend.displayName, friend.avatarPath), Modifier.weight(1f))
+                        FriendPointsChip(points ?: 0L)
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+                        OutlinedButton(onClick = onMessage, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
+                            Text(stringResource(R.string.friends_message))
+                        }
+                        OutlinedButton(onClick = onRemove, enabled = !working,
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
+                            Text(stringResource(R.string.friends_remove))
+                        }
+                    }
                 }
             }
         }

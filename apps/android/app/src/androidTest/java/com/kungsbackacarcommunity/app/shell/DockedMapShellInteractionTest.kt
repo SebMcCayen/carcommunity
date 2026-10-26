@@ -70,6 +70,20 @@ class DockedMapShellInteractionTest {
     private fun str(id: Int) = instrumentation.targetContext.getString(id)
 
     @Test
+    fun convoyAndLiveControlsShareTheDockAboveTheFooter() {
+        val footerActions = AtomicInteger()
+        rule.setContent {
+            KccTheme { MapShellCataloguePreview("map-convoy", onFooterAction = { footerActions.incrementAndGet() }) }
+        }
+        rule.waitForIdle()
+        val dock = rule.onNodeWithTag("map_home_session_dock").fetchSemanticsNode().boundsInRoot
+        val footer = rule.onNodeWithTag(MAP_CATALOGUE_FOOTER_TAG).fetchSemanticsNode().boundsInRoot
+        assertTrue("Convoy dock clears footer: $dock / $footer", dock.bottom <= footer.top + 1f)
+        physicalTap(str(R.string.shell_tabChat))
+        rule.runOnIdle { assertEquals(1, footerActions.get()) }
+    }
+
+    @Test
     fun everyMapPanelLeavesTheActualFooterTouchableAndDismissesOnTabSelection() {
         var screen by mutableStateOf(MAP_SHELL_CATALOGUE_CASES.first())
         val footerActions = AtomicInteger()

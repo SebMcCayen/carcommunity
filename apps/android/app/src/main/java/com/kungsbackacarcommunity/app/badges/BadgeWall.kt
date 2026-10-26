@@ -55,6 +55,7 @@ fun BadgeMedallionTile(
     caption: String? = null,
     medallionSize: Dp = 40.dp,
     onClick: (() -> Unit)? = null,
+    earnedOn: String? = null,
 ) {
     Column(
         modifier =
@@ -86,6 +87,14 @@ fun BadgeMedallionTile(
         if (caption != null) {
             Text(
                 text = caption,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
+        if (earnedOn != null) {
+            Text(
+                text = earnedOn,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,

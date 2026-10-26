@@ -44,7 +44,7 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.WavingHand
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import com.kungsbackacarcommunity.app.design.KccButton as Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -1982,7 +1982,9 @@ fun AuthenticatedApp(
             // re-attaching. garageReloadKey is bumped by the list's "try again"
             // affordance to force a re-subscribe after a listener error.
             var garageReloadKey by rememberSaveable { mutableStateOf(0) }
-            val inGarageSection = selectedTab == ShellTab.Garage
+            // Reuse the same bounded owner stream for the profile's real car
+            // cover, only while either surface is visible; no background read.
+            val inGarageSection = selectedTab == ShellTab.Garage || route == ShellRoute.Profile
             val garageState by
                 remember(garageRepository, uid, inGarageSection, garageReloadKey) {
                     if (garageRepository != null && inGarageSection) {
@@ -4307,7 +4309,15 @@ fun AuthenticatedApp(
                 }
             }
 
-            CompositionLocalProvider(LocalSnackbarHostState provides snackbarHostState) {
+            CompositionLocalProvider(
+                LocalSnackbarHostState provides snackbarHostState,
+                com.kungsbackacarcommunity.app.shell.LocalAeroOwnerHeader provides
+                    if (route == ShellRoute.Profile) null else com.kungsbackacarcommunity.app.shell.AeroOwnerHeader(
+                        avatarUrl = mapAvatarUrl,
+                        showSupporterBadge = profile?.supporterBadge?.visible == true,
+                        onOpenProfile = { pushRoute(ShellRoute.Profile) },
+                    ),
+            ) {
               Box(modifier = Modifier.fillMaxSize()) {
                 // Keep the screen awake (no lock/dim) while the user is actively
                 // sharing live location OR has the turn-by-turn navigation overlay
@@ -6437,6 +6447,8 @@ fun AuthenticatedApp(
                         // repositories / coordinators
                         profile = profile,
                         profileRepository = profileRepository,
+                        profileCoverImagePath = (garageState as? GarageState.Loaded)?.vehicles
+                            ?.let(com.kungsbackacarcommunity.app.garage.VehicleGallery::mainCarCoverPath),
                         profileEditCoordinator = profileEditCoordinator,
                         mediaUploader = mediaUploader,
                         liveLocationRepository = liveLocationRepository,
@@ -6910,8 +6922,8 @@ fun AuthenticatedApp(
                                     // a session runs: elapsed time + distance driven.
                                     liveSessionBar = liveSessionBarSlot,
                                     onManageLiveSession = { mapSheetHost?.dismissAll(); liveManageOpen = true },
-                                    // Convoy status bar, now on its OWN full-width row
-                                    // directly BELOW the search strip. Every control
+                                    // Convoy status bar in the map's bottom dock,
+                                    // directly ABOVE the persistent footer. Every control
                                     // (member count, focus, invite, leave/End) is
                                     // inline — no expand step. The member count opens
                                     // a member-list popup; the shared-destination row
@@ -8671,7 +8683,7 @@ internal fun ShellBottomBar(
             colors = tabColors,
             onClick = { onSelect(ShellTab.Map) },
             icon = { Icon(Icons.Filled.Map, contentDescription = stringResource(R.string.shell_tabMap)) },
-            label = { Text(stringResource(R.string.shell_tabMap)) },
+            label = { Text(stringResource(R.string.shell_tabMap), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
         )
         NavigationBarItem(
             selected = selected == ShellTab.Chat,
@@ -8686,7 +8698,7 @@ internal fun ShellBottomBar(
                     ))
                 }
             },
-            label = { Text(stringResource(R.string.shell_tabChat)) },
+            label = { Text(stringResource(R.string.shell_tabChat), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
         )
         // The centre action is a "+" that starts a session, and — while one RUNS —
         // the live-session disc that raises the stop sheet: one control for the
@@ -8756,7 +8768,7 @@ internal fun ShellBottomBar(
             colors = tabColors,
             onClick = { onSelect(ShellTab.Social) },
             icon = { Icon(Icons.Filled.Groups, contentDescription = stringResource(R.string.shell_tabSocial)) },
-            label = { Text(stringResource(R.string.shell_tabSocial)) },
+            label = { Text(stringResource(R.string.shell_tabSocial), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
             modifier = Modifier.coachMarkAnchor(CoachMarkStep.Social),
         )
         NavigationBarItem(
@@ -8764,7 +8776,7 @@ internal fun ShellBottomBar(
             colors = tabColors,
             onClick = { onSelect(ShellTab.Garage) },
             icon = { Icon(Icons.Filled.DirectionsCar, contentDescription = stringResource(R.string.shell_tabGarage)) },
-            label = { Text(stringResource(R.string.shell_tabGarage)) },
+            label = { Text(stringResource(R.string.shell_tabGarage), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
         )
     }
 }
@@ -8876,6 +8888,7 @@ private fun RouteHost(
     onSignOut: () -> Unit,
     profile: com.kungsbackacarcommunity.app.profile.UserProfile?,
     profileRepository: ProfileRepository?,
+    profileCoverImagePath: String?,
     profileEditCoordinator: ProfileEditCoordinator?,
     mediaUploader: MediaUploader?,
     liveLocationRepository: LiveLocationRepository?,
@@ -9322,6 +9335,7 @@ private fun RouteHost(
                     onSignOut = onSignOut,
                     avatarUrl = avatarUrl,
                     avatarUploadStatus = avatarStatus,
+                    coverImagePath = profileCoverImagePath,
                     onChangeAvatar =
                         if (avatarCoordinator != null && profileRepository != null) {
                             {

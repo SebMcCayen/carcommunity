@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.union
-import androidx.compose.material3.Button
+import com.kungsbackacarcommunity.app.design.KccButton as Button
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
@@ -21,7 +21,7 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import com.kungsbackacarcommunity.app.design.KccOutlinedButton as OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -103,6 +103,8 @@ fun ProfileScreen(
     // config-less build with no points repository wired.
     onOpenPoints: (() -> Unit)? = null,
     onOpenDrives: (() -> Unit)? = null,
+    // Optional already-authorized owner main-car path. Host owns lazy garage observation.
+    coverImagePath: String? = null,
 ) {
     var editing by remember { mutableStateOf(false) }
     var nameField by remember { mutableStateOf("") }
@@ -132,6 +134,7 @@ fun ProfileScreen(
                 avatarUrl = avatarUrl,
                 uploadStatus = avatarUploadStatus,
                 onChangeAvatar = onChangeAvatar,
+                coverImagePath = coverImagePath,
             )
 
             if (editing) {
@@ -148,6 +151,7 @@ fun ProfileScreen(
                     onValueChange = { nameField = it },
                     label = { Text(stringResource(R.string.profile_displayNameLabel)) },
                     isError = validation.displayNameError != null,
+                    enabled = !saving,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -157,6 +161,7 @@ fun ProfileScreen(
                     onValueChange = { bioField = it },
                     label = { Text(stringResource(R.string.profile_bioLabel)) },
                     isError = validation.bioError != null,
+                    enabled = !saving,
                     minLines = 3,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -259,6 +264,7 @@ private fun ProfileIdentitySection(
     avatarUrl: String?,
     uploadStatus: ImageUploadStatus,
     onChangeAvatar: (() -> Unit)?,
+    coverImagePath: String?,
 ) {
     Surface(color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.large) {
         Column(
@@ -270,19 +276,21 @@ private fun ProfileIdentitySection(
                 avatarUrl = avatarUrl,
                 uploadStatus = uploadStatus,
                 onChangeAvatar = onChangeAvatar,
+                centered = editing,
+                coverImagePath = if (editing) null else coverImagePath,
             )
             if (!editing) {
                 // Preserve the social links directly beneath the avatar.
                 ProfileSocialLinksRow(
                     handles = profile?.social ?: SocialHandles.EMPTY,
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    modifier = Modifier.align(Alignment.Start),
                 )
                 Text(
                     text = profile?.displayName?.takeIf { it.isNotBlank() }
                         ?: stringResource(R.string.profile_emptyDisplayName),
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    modifier = Modifier.align(Alignment.Start),
                 )
                 Text(
                     text = profile?.bio?.takeIf { it.isNotBlank() }
@@ -301,13 +309,16 @@ private fun AvatarSection(
     avatarUrl: String?,
     uploadStatus: ImageUploadStatus,
     onChangeAvatar: (() -> Unit)?,
+    centered: Boolean,
+    coverImagePath: String?,
 ) {
     val uploading = uploadStatus == ImageUploadStatus.Uploading
     Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
+        horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
     ) {
+        ProfileVehicleHero(coverImagePath) {
         SupporterAvatarFrame(supporterBadgeVisible) {
             Box(
                 modifier = Modifier
@@ -316,6 +327,12 @@ private fun AvatarSection(
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center,
             ) {
+                Icon(
+                    Icons.Filled.Person,
+                    contentDescription = if (avatarUrl == null) stringResource(R.string.profile_avatarAlt) else null,
+                    modifier = Modifier.size(KccSpacing.s12),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 if (avatarUrl != null) {
                     // Coil renders nothing (keeps the placeholder tint) when no URL
                     // resolves — a config-less build never crashes on rendering.
@@ -325,13 +342,6 @@ private fun AvatarSection(
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),
                     )
-                } else {
-                    Icon(
-                        Icons.Filled.Person,
-                        contentDescription = stringResource(R.string.profile_avatarAlt),
-                        modifier = Modifier.size(KccSpacing.s12),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
                 if (uploading) {
                     CircularProgressIndicator(modifier = Modifier.size(32.dp))
@@ -339,6 +349,7 @@ private fun AvatarSection(
             }
         }
 
+        }
         if (onChangeAvatar != null) {
             OutlinedButton(onClick = onChangeAvatar, enabled = !uploading) {
                 Text(

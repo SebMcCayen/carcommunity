@@ -27,7 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -41,7 +41,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Surface
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import com.kungsbackacarcommunity.app.design.KccButton as Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ButtonDefaults
@@ -49,7 +49,7 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import com.kungsbackacarcommunity.app.design.KccOutlinedButton as OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -221,6 +221,14 @@ fun DrivesListScreen(
                 DrivesHeader(onShowStats = statsEntry)
             }
 
+            item {
+                Text(
+                    text = stringResource(R.string.savedDrives_promptNotPublic),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             // Tier-restriction banner: the callable retains every drive but hides
             // the ones outside this tier's window. Shown whenever the FIRST page
             // reported hidden drives, so a Community/Plus member always sees WHY
@@ -291,13 +299,20 @@ fun DrivesListScreen(
                             // drives exist, they just don't match the active filters.
                             item { NoMatchingDrives(onClear = clearFilters) }
                         } else {
-                            items(filteredDrives, key = { it.rideId }) { drive ->
-                                DriveCard(
-                                    drive = drive,
-                                    onSelect = onSelect,
-                                    onDelete = onDelete,
-                                    deleteInFlight = deleteStatus == DriveDeleteStatus.Deleting,
-                                )
+                            itemsIndexed(filteredDrives, key = { _, drive -> drive.rideId }) { index, drive ->
+                                val month = driveHistoryMonth(drive.createdAtMillis)
+                                val previousMonth = filteredDrives.getOrNull(index - 1)?.let { driveHistoryMonth(it.createdAtMillis) }
+                                Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+                                    if (sort == DriveSort.NEWEST && month != null && month != previousMonth) {
+                                        Text(month, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                                    }
+                                    DriveCard(
+                                        drive = drive,
+                                        onSelect = onSelect,
+                                        onDelete = onDelete,
+                                        deleteInFlight = deleteStatus == DriveDeleteStatus.Deleting,
+                                    )
+                                }
                             }
                         }
                         // Load-more control for a paid tier with another page. The
@@ -1057,39 +1072,6 @@ fun SavedDriveDetailScreen(
     val shareSummary = driveShareText(drive, topSpeedMetersPerSecond = topSpeed)
 
     AeroPage(title = stringResource(R.string.savedDrives_detailTitle), modifier = modifier) {
-            DriveMetricSummary(
-                distance = DriveFormatters.formatDistance(drive.distanceMeters),
-                duration = DriveFormatters.formatDuration(drive.durationSeconds),
-            )
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
-                    verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
-                ) {
-                    if (dateText != null) {
-                        StatRow(stringResource(R.string.savedDrives_date), dateText)
-                    }
-                    if (timeRangeText != null) {
-                        StatRow(stringResource(R.string.savedDrives_timeRange), timeRangeText)
-                    }
-                    StatRow(
-                        stringResource(R.string.savedDrives_averageSpeed),
-                        DriveFormatters.formatSpeed(averageSpeed),
-                    )
-                    // The same neutral row as every other stat — deliberately
-                    // indistinguishable from average speed above it. Absent on
-                    // drives saved before the field existed, which formatSpeed
-                    // renders as the missing-value dash rather than "0 km/h".
-                    StatRow(
-                        stringResource(R.string.savedDrives_maxSpeed),
-                        DriveFormatters.formatSpeed(drive.maxSpeedMetersPerSecond),
-                    )
-                    // Who this drive was driven with, for a convoy drive. Renders
-                    // nothing for a solo drive, so the detail is unchanged for those.
-                    ConvoyMembersRow(members = drive.convoyMembers)
-                }
-            }
-
             // Route replay: the actual driven route drawn on a static map. The
             // route points are read + decoded from member-gated Cloud Storage
             // (`rideRoutes/{uid}/{rideId}/route.bin`) by [routeRepository] and
@@ -1174,6 +1156,25 @@ fun SavedDriveDetailScreen(
                         else ->
                             RouteNote(stringResource(R.string.savedDrives_routeUnavailable))
                     }
+                }
+            }
+
+            // S54 leads with the actual route, then its server-provided facts.
+            Text(driveTitle(drive), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
+            DriveMetricSummary(
+                distance = DriveFormatters.formatDistance(drive.distanceMeters),
+                duration = DriveFormatters.formatDuration(drive.durationSeconds),
+            )
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+                    verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+                ) {
+                    if (dateText != null) StatRow(stringResource(R.string.savedDrives_date), dateText)
+                    if (timeRangeText != null) StatRow(stringResource(R.string.savedDrives_timeRange), timeRangeText)
+                    StatRow(stringResource(R.string.savedDrives_averageSpeed), DriveFormatters.formatSpeed(averageSpeed))
+                    StatRow(stringResource(R.string.savedDrives_maxSpeed), DriveFormatters.formatSpeed(drive.maxSpeedMetersPerSecond))
+                    ConvoyMembersRow(members = drive.convoyMembers)
                 }
             }
 

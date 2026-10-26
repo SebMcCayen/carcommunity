@@ -1,24 +1,24 @@
 package com.kungsbackacarcommunity.app.events
 
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.Button
+import com.kungsbackacarcommunity.app.design.KccButton as Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.Icon
@@ -26,15 +26,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import com.kungsbackacarcommunity.app.R
+import java.time.ZoneId
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import com.kungsbackacarcommunity.app.shell.AeroPage
-import java.text.DateFormat
-import java.util.Date
 import java.util.Locale
 
 /** Which slice of the events collection the list is showing. */
@@ -92,53 +92,39 @@ fun EventsListScreen(
     onSelectDistanceBand: ((DistanceBand) -> Unit)? = null,
 ) {
     AeroPage(title = stringResource(R.string.events_title), modifier = modifier) {
-            if (onSelectTab != null) {
-                TabRow(
-                    selectedTabIndex = tab.ordinal,
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    indicator = {},
-                    divider = {},
-                ) {
-                    Tab(
-                        selected = tab == EventsListTab.UPCOMING,
-                        modifier = Modifier.background(
-                            if (tab == EventsListTab.UPCOMING) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                            MaterialTheme.shapes.medium,
-                        ),
-                        selectedContentColor = MaterialTheme.colorScheme.onPrimary,
-                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        onClick = { onSelectTab(EventsListTab.UPCOMING) },
-                        text = { Text(text = stringResource(R.string.events_tabUpcoming)) },
-                    )
-                    Tab(
-                        selected = tab == EventsListTab.PAST,
-                        modifier = Modifier.background(
-                            if (tab == EventsListTab.PAST) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                            MaterialTheme.shapes.medium,
-                        ),
-                        selectedContentColor = MaterialTheme.colorScheme.onPrimary,
-                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        onClick = { onSelectTab(EventsListTab.PAST) },
-                        text = { Text(text = stringResource(R.string.events_tabPast)) },
-                    )
-                }
-            }
-
             Text(
-                text =
-                    stringResource(
-                        when (tab) {
-                            EventsListTab.UPCOMING -> R.string.events_screenSubtitle
-                            EventsListTab.PAST -> R.string.events_pastSubtitle
-                        },
-                    ),
+                text = stringResource(
+                    if (tab == EventsListTab.UPCOMING) R.string.events_screenSubtitle else R.string.events_pastSubtitle,
+                ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+                verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (onSelectTab != null) {
+                    EventsListTab.entries.forEach { option ->
+                        FilterChip(
+                            selected = tab == option,
+                            onClick = { onSelectTab(option) },
+                            label = { Text(stringResource(
+                                if (option == EventsListTab.UPCOMING) R.string.events_tabUpcoming else R.string.events_tabPast,
+                            )) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                            ),
+                        )
+                    }
+                }
 
-            if (onCreateEvent != null && tab == EventsListTab.UPCOMING) {
-                Button(onClick = onCreateEvent, modifier = Modifier.fillMaxWidth()) {
-                    Text(text = stringResource(R.string.events_createButton))
+                if (onCreateEvent != null && tab == EventsListTab.UPCOMING) {
+                    Button(onClick = onCreateEvent) {
+                        Icon(Icons.Filled.Add, contentDescription = null)
+                        Text(text = stringResource(R.string.events_createButton))
+                    }
                 }
             }
 
@@ -296,7 +282,7 @@ private fun EmptyState(tab: EventsListTab) {
 }
 
 @Composable
-private fun EventCard(event: EventSummary, distanceMeters: Double?, onClick: () -> Unit) {
+internal fun EventCard(event: EventSummary, distanceMeters: Double? = null, onClick: () -> Unit) {
     OutlinedCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
@@ -308,62 +294,66 @@ private fun EventCard(event: EventSummary, distanceMeters: Double?, onClick: () 
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 EventDateBadge(event.startsAtMillis)
-                Text(
-                    text = event.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
+                Column(
                     modifier = Modifier.weight(1f),
-                )
+                    verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
+                ) {
+                    Text(
+                        text = event.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    if (event.isOfficial) {
+                        Text(
+                            text = stringResource(R.string.events_officialBadge),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    if (event.status == EventStatus.CANCELLED) {
+                        Text(
+                            text = stringResource(R.string.events_cancelledBadge),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    // "Held", not an error colour: a completed event ran as planned.
+                    // Cancelled and completed are mutually exclusive statuses, so at
+                    // most one badge shows.
+                    if (event.status == EventStatus.COMPLETED) {
+                        Text(
+                            text = stringResource(R.string.events_completedBadge),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    event.startsAtMillis?.let { millis ->
+                        EventInfoLine(
+                            icon = Icons.Filled.CalendarMonth,
+                            text = EventSchedule.format(millis, event.endsAtMillis, LocalLocale.current.platformLocale, ZoneId.systemDefault()),
+                        )
+                    }
+                    (event.locationName?.takeIf { it.isNotBlank() } ?: event.approximateArea?.takeIf { it.isNotBlank() })?.let { area ->
+                        EventInfoLine(
+                            icon = Icons.Filled.LocationOn,
+                            text = area,
+                        )
+                    }
+                    // Only the public RSVP tally; never a fabricated check-in count.
+                    EventInfoLine(
+                        icon = Icons.Filled.Groups,
+                        text = stringResource(R.string.events_rowGoingCount, event.counts.going),
+                    )
+                    // Nice-to-have: how far the event is, when a location is available.
+                    distanceMeters?.let { meters ->
+                        Text(
+                            text = stringResource(R.string.events_distanceRowAway, formatKm(meters)),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
-            }
-            if (event.isOfficial) {
-                Text(
-                    text = stringResource(R.string.events_officialBadge),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-            if (event.status == EventStatus.CANCELLED) {
-                Text(
-                    text = stringResource(R.string.events_cancelledBadge),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            // "Held", not an error colour: a completed event ran as planned.
-            // Cancelled and completed are mutually exclusive statuses, so at
-            // most one badge shows.
-            if (event.status == EventStatus.COMPLETED) {
-                Text(
-                    text = stringResource(R.string.events_completedBadge),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            event.startsAtMillis?.let { millis ->
-                EventInfoLine(
-                    icon = Icons.Filled.CalendarMonth,
-                    text = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(millis)),
-                )
-            }
-            event.approximateArea?.takeIf { it.isNotBlank() }?.let { area ->
-                EventInfoLine(
-                    icon = Icons.Filled.LocationOn,
-                    text = area,
-                )
-            }
-            // Only the public RSVP tally; never a fabricated check-in count.
-            EventInfoLine(
-                icon = Icons.Filled.Groups,
-                text = stringResource(R.string.events_rowGoingCount, event.counts.going),
-            )
-            // Nice-to-have: how far the event is, when a location is available.
-            distanceMeters?.let { meters ->
-                Text(
-                    text = stringResource(R.string.events_distanceRowAway, formatKm(meters)),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
             }
         }
     }

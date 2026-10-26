@@ -3,21 +3,30 @@ package com.kungsbackacarcommunity.app.memberprofile
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import com.kungsbackacarcommunity.app.design.KccButton as Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import com.kungsbackacarcommunity.app.design.KccOutlinedButton as OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -31,6 +40,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -53,6 +64,8 @@ import com.kungsbackacarcommunity.app.friends.messageRes
 import com.kungsbackacarcommunity.app.garage.Vehicle
 import com.kungsbackacarcommunity.app.garage.VehicleCard
 import com.kungsbackacarcommunity.app.garage.VehiclePhotoStyle
+import com.kungsbackacarcommunity.app.garage.VehicleGallery
+import com.kungsbackacarcommunity.app.profile.ProfileVehicleHero
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
 import com.kungsbackacarcommunity.app.moderation.MessageModeration
@@ -81,9 +94,7 @@ import java.util.Date
  *    loaded profile confirms first, and on success the route settles the screen
  *    on [MemberProfileState.Blocked] — the profile withheld, offering the
  *    Unblock that undoes it.
- *  - **Report user**: rendered DISABLED with an explanatory note, because no
- *    report-a-user callable exists yet — the action must not look like it filed
- *    a report it cannot file. See
+ *  - **Report user**: omitted while no report-a-user callable exists. See
  *    [com.kungsbackacarcommunity.app.moderation.MessageModeration] for the exact
  *    backend this is waiting on.
  *
@@ -101,11 +112,11 @@ import java.util.Date
  *   entirely. It is only ever rendered on a LOADED profile — a withheld
  *   ([MemberProfileState.Blocked]) or missing one offers no friend action, so a
  *   blocked member can never be befriended from here.
- * @param onMessage opens a 1:1 DM with this member; rendered as the bottom
+ * @param onMessage opens a 1:1 DM with this member; rendered below the identity as the
  *   **Message** action ONLY when the viewer is already a friend (and DM is
  *   wired). Null omits it.
  * @param onUnfriend removes the friendship (`friend-remove`); rendered as the
- *   bottom **Unfriend** action ONLY when the viewer is already a friend, and
+ *   **Unfriend** menu action ONLY when the viewer is already a friend, and
  *   confirm-guarded by this screen before it fires. Null omits it. On success
  *   the friend state falls back so Message/Unfriend disappear and Block remains.
  */
@@ -185,11 +196,8 @@ fun MemberProfileScreen(
                 }
 
             is MemberProfileState.Loaded -> {
-                // Already friends is expressed by the bottom actions (Message +
-                // Unfriend), not a top status line — so a member profile leads
-                // straight into the content once you're friends.
                 val isFriend = friendState?.relationship == FriendRelationship.Friends
-                ProfileHeader(state.profile, state.pointsBalance)
+                ProfileHeader(state.profile, state.pointsBalance, VehicleGallery.mainCarCoverPath(state.vehicles))
                 if (friendState != null) {
                     FriendAction(
                         friendState = friendState,
@@ -199,22 +207,19 @@ fun MemberProfileScreen(
                         onDeclineRequest = onDeclineRequest,
                     )
                 }
+                if (isFriend) {
+                    MemberRelationshipActions(
+                        onMessage = onMessage,
+                        onUnfriend = onUnfriend?.let { { confirmingUnfriend = true } },
+                        friendActionEnabled = friendState?.enabled ?: true,
+                    )
+                }
                 CarsSection(state.vehicles)
                 BadgesSection(state.badges)
                 StatsSection(state.profile.createdAtMillis)
                 MemberActions(
                     onBlock = onBlock?.let { { confirmingBlock = true } },
                     blockStatus = blockStatus,
-                    // Message + Unfriend appear only when the viewer IS a friend
-                    // of this member; otherwise the bottom group is just Block.
-                    onMessage = if (isFriend) onMessage else null,
-                    onUnfriend =
-                        if (isFriend && onUnfriend != null) {
-                            { confirmingUnfriend = true }
-                        } else {
-                            null
-                        },
-                    friendActionEnabled = friendState?.enabled ?: true,
                 )
             }
         }
@@ -292,8 +297,8 @@ private fun FriendAction(
     onDeclineRequest: () -> Unit,
 ) {
     val control = friendState.control
-    // Neither None nor Friends draws a top control: None has nothing to offer,
-    // and Friends is now expressed by the bottom Message + Unfriend actions. An
+    // Neither None nor Friends draws a request control: Friends has its own
+    // relationship/menu and Message row directly below the identity. An
     // error is still surfaced in both cases (e.g. an unfriend that failed).
     if (control == MemberFriendControl.None || control == MemberFriendControl.Friends) {
         if (friendState.error == null) return
@@ -353,7 +358,7 @@ private fun FriendAction(
                 }
             }
 
-            // Expressed by the bottom Message + Unfriend actions, not here.
+            // Expressed by MemberRelationshipActions, not a request control.
             MemberFriendControl.Friends -> Unit
         }
 
@@ -368,58 +373,99 @@ private fun FriendAction(
 }
 
 /**
- * The bottom action group on a loaded profile, below the profile content.
- *
- * When the viewer is a FRIEND of this member ([onMessage] / [onUnfriend]
- * non-null), it leads with the two friend actions — **Message** (opens the 1:1
- * DM) and **Unfriend** (confirm-guarded by the screen, then `friend-remove`) —
- * above the safety actions. For a non-friend both are null and the group is just
- * the safety actions, exactly as before.
+ * S63's relationship actions precede the garage. The real relationship supplies
+ * the status; only wired callbacks become actions. Removing a friend still opens
+ * the screen's existing confirmation, and a busy callable disables its menu.
+ */
+@Composable
+private fun MemberRelationshipActions(
+    onMessage: (() -> Unit)?,
+    onUnfriend: (() -> Unit)?,
+    friendActionEnabled: Boolean,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val relationship: @Composable (Modifier) -> Unit = { modifier ->
+        Box(modifier) {
+            if (onUnfriend == null) {
+                Text(stringResource(R.string.shell_friendsTitle), style = MaterialTheme.typography.titleMedium)
+            } else {
+                OutlinedButton(
+                    onClick = { expanded = true },
+                    enabled = friendActionEnabled,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.shell_friendsTitle))
+                    Icon(Icons.Filled.ExpandMore, contentDescription = null)
+                }
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.friends_remove)) },
+                        enabled = friendActionEnabled,
+                        onClick = {
+                            expanded = false
+                            onUnfriend()
+                        },
+                    )
+                }
+            }
+        }
+    }
+    val message: @Composable (Modifier) -> Unit = { modifier ->
+        if (onMessage != null) {
+            Button(
+                onClick = onMessage,
+                modifier = modifier,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary,
+                ),
+            ) {
+                Icon(Icons.Filled.ChatBubbleOutline, contentDescription = null)
+                Text(stringResource(R.string.friends_message), modifier = Modifier.padding(start = KccSpacing.s2))
+            }
+        }
+    }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        if (maxWidth >= 320.dp && LocalDensity.current.fontScale <= 1.3f && onMessage != null) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                relationship(Modifier.weight(1f))
+                message(Modifier.weight(1f))
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+                relationship(Modifier.fillMaxWidth())
+                message(Modifier.fillMaxWidth())
+            }
+        }
+    }
+}
+
+/**
+ * The safety action group stays below the public content.
  *
  * "Report user" is omitted entirely while no `moderation.reportUser` callable
  * exists to submit to ([MessageModeration.reportUserAvailability]) — the same
  * hide-don't-disable rule the message action sheet follows. It reappears when
  * that callable lands; nothing else here changes.
- *
- * @param friendActionEnabled false while a friend callable is already in flight,
- *   which is what stops a double-tap from firing two unfriends.
  */
 @Composable
 private fun MemberActions(
     onBlock: (() -> Unit)?,
     blockStatus: BlockActionStatus,
-    onMessage: (() -> Unit)? = null,
-    onUnfriend: (() -> Unit)? = null,
-    friendActionEnabled: Boolean = true,
 ) {
     val canReportUser =
         MessageModeration.reportUserAvailability == ReportAvailability.Wired
-    if (onBlock == null && onMessage == null && onUnfriend == null && !canReportUser) {
-        // Nothing actionable: not a friend, no blocking wired, reporting has no
-        // backend.
+    if (onBlock == null && !canReportUser) {
+        // No safety callback is wired and reporting has no backend.
         return
     }
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
     ) {
-        if (onMessage != null) {
-            Button(
-                onClick = onMessage,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.friends_message))
-            }
-        }
-        if (onUnfriend != null) {
-            OutlinedButton(
-                onClick = onUnfriend,
-                enabled = friendActionEnabled,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.friends_remove))
-            }
-        }
         if (onBlock != null) {
             OutlinedButton(
                 onClick = onBlock,
@@ -438,15 +484,17 @@ private fun MemberActions(
 }
 
 @Composable
-private fun ProfileHeader(profile: MemberProfile, pointsBalance: Long?) {
+private fun ProfileHeader(profile: MemberProfile, pointsBalance: Long?, coverImagePath: String?) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s5),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+            horizontalAlignment = Alignment.Start,
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
-            com.kungsbackacarcommunity.app.profile.SupporterAvatarFrame(profile.supporterBadge.visible) {
-                Avatar(profile.avatarPath)
+            ProfileVehicleHero(coverImagePath) {
+                com.kungsbackacarcommunity.app.profile.SupporterAvatarFrame(profile.supporterBadge.visible) {
+                    Avatar(profile.avatarPath)
+                }
             }
             // Directly under the profile picture, as asked. Renders NOTHING
             // when this member has filled none in — no empty row, no
@@ -457,7 +505,7 @@ private fun ProfileHeader(profile: MemberProfile, pointsBalance: Long?) {
                     ?: stringResource(R.string.memberProfile_unknownMember),
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
+                textAlign = TextAlign.Start,
             )
             // The member's public points, the eye-catching headline of the
             // profile — a big number directly under the nickname (Seb, 2026-08).
@@ -468,9 +516,9 @@ private fun ProfileHeader(profile: MemberProfile, pointsBalance: Long?) {
             profile.bio?.takeIf { it.isNotBlank() }?.let { bio ->
                 Text(
                     text = bio,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
+                    textAlign = TextAlign.Start,
                 )
             }
         }
@@ -494,7 +542,7 @@ private fun PointsHeadline(balance: Long?) {
     // clearAndSetSemantics) keeps both Text nodes in the tree, so UI tests can
     // still find them by text.
     Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
+        horizontalAlignment = Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
         modifier = Modifier.semantics(mergeDescendants = true) {},
     ) {
@@ -507,7 +555,7 @@ private fun PointsHeadline(balance: Long?) {
             text = stringResource(R.string.profile_pointsTitle),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
+            textAlign = TextAlign.Start,
         )
     }
 }
@@ -596,10 +644,23 @@ private fun CarsSection(vehicles: List<Vehicle>) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     } else {
-        // Main car(s) first so the highlighted photo leads the list.
-        vehicles.sortedByDescending { it.isMainCar }.forEach { MemberVehicleCard(it) }
+        // Keep every permitted car reachable without pushing awards below ten
+        // stacked cards. The next card peeks into view; no fake "view all" route.
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val cardWidth = if (vehicles.size > 1) maxWidth - KccSpacing.s6 else maxWidth
+            LazyRow(
+                modifier = Modifier.fillMaxWidth().testTag(MEMBER_VEHICLES_TAG),
+                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+            ) {
+                items(vehicles.sortedByDescending { it.isMainCar }, key = { it.id }) { vehicle ->
+                    Box(Modifier.width(cardWidth)) { MemberVehicleCard(vehicle) }
+                }
+            }
+        }
     }
 }
+
+internal const val MEMBER_VEHICLES_TAG = "member_profile_vehicles"
 
 /**
  * A public profile shows the car photo as a full-width 16:9 postcard with softly

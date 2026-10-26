@@ -43,6 +43,9 @@ fun EventChatRoute(
     // Opens a message author's read-only member profile; null (no profile
     // repository wired) leaves the author names inert.
     onViewProfile: ((String) -> Unit)? = null,
+    // Optional title from the caller's existing event snapshot. This route only
+    // observes messages; it never fetches an event to manufacture a heading.
+    eventTitle: String? = null,
 ) {
     val scope = rememberCoroutineScope()
     val canParticipate = EventChat.canParticipate(passesMemberGate, eventStatus, myRsvp)
@@ -96,6 +99,7 @@ fun EventChatRoute(
             .collectAsState(initial = BlockActionStatus.Idle)
 
     EventChatScreen(
+        eventTitle = eventTitle,
         state = messagesState,
         currentUid = currentUid,
         canParticipate = canParticipate,

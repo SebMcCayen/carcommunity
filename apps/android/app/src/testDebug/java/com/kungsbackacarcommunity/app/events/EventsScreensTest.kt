@@ -209,10 +209,10 @@ class EventsScreensTest {
                 )
             }
         }
-        // Target the RSVP action BUTTON by its tag: its "Going" label now also
-        // appears as a count in the RSVP breakdown, so onNodeWithText("Going")
-        // would match two nodes.
-        composeTestRule.onNodeWithTag(rsvpButtonTag(RsvpStatus.GOING)).performScrollTo().performClick()
+        // The primary RSVP selector opens the three native response choices.
+        // Counts repeat the labels, so target the actual choice by its tag.
+        composeTestRule.onNodeWithTag(EVENT_RSVP_SELECTOR_TAG).performScrollTo().performClick()
+        composeTestRule.onNodeWithTag(rsvpButtonTag(RsvpStatus.GOING)).performClick()
         assertEquals(RsvpStatus.GOING, answer)
     }
 
@@ -234,7 +234,7 @@ class EventsScreensTest {
         composeTestRule.onNodeWithText(str(R.string.events_memberRequiredTitle)).assertIsDisplayed()
         // Non-members get no RSVP block at all: neither the action button nor the
         // count breakdown (both gated on canRsvp).
-        composeTestRule.onNodeWithTag(rsvpButtonTag(RsvpStatus.GOING)).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(EVENT_RSVP_SELECTOR_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(RSVP_COUNTS_BREAKDOWN_TAG).assertDoesNotExist()
     }
 
@@ -268,7 +268,7 @@ class EventsScreensTest {
         // No "who answered" roster reveal for a free viewer.
         composeTestRule.onNodeWithTag(EVENT_DETAIL_REVEAL_ATTENDEES_TAG).assertDoesNotExist()
         // RSVP + public counts remain: RSVP is a free action, the tally is public.
-        composeTestRule.onNodeWithTag(rsvpButtonTag(RsvpStatus.GOING)).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EVENT_RSVP_SELECTOR_TAG).performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithTag(RSVP_COUNTS_BREAKDOWN_TAG).performScrollTo().assertIsDisplayed()
     }
 
@@ -295,7 +295,7 @@ class EventsScreensTest {
             }
         }
         composeTestRule.onNodeWithText("Bring your car").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("Storgatan 1").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Storgatan 1").performScrollTo().assertIsDisplayed()
         composeTestRule
             .onNodeWithTag(EVENT_DETAIL_REVEAL_ATTENDEES_TAG)
             .performScrollTo()

@@ -1,5 +1,7 @@
 package com.kungsbackacarcommunity.app.events
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +13,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -18,7 +22,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedCard
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -30,11 +33,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import java.time.ZoneId
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.dm.DmRepository
 import com.kungsbackacarcommunity.app.friends.FriendSummary
@@ -78,6 +83,8 @@ fun EventShareSheet(
     onShared: (friendName: String?) -> Unit,
     onSendFailed: () -> Unit,
     onDismiss: () -> Unit,
+    // Optional public teaser already loaded by the parent; never fetch an image or private detail.
+    event: EventSummary? = null,
 ) {
     val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
@@ -100,6 +107,7 @@ fun EventShareSheet(
                 Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
         ) {
@@ -109,26 +117,41 @@ fun EventShareSheet(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(horizontal = KccSpacing.s2),
             )
+            Text(
+                stringResource(R.string.events_shareEventSubtitle,
+                    eventTitle?.takeIf { it.isNotBlank() } ?: stringResource(R.string.events_shareEventUnnamed)),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier.padding(KccSpacing.s4),
                     horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
-                        Icons.Filled.Event, contentDescription = null, modifier = Modifier.size(40.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Text(
-                        text = stringResource(
-                            R.string.events_shareEventSubtitle,
-                            eventTitle?.takeIf { it.isNotBlank() }
+                    val teaser = event?.takeIf { it.id == eventId }
+                    if (teaser != null) {
+                        EventDateBadge(teaser.startsAtMillis)
+                    } else {
+                        Icon(Icons.Filled.Event, contentDescription = null, modifier = Modifier.size(40.dp),
+                            tint = MaterialTheme.colorScheme.primary)
+                    }
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+                        Text(
+                            text = eventTitle?.takeIf { it.isNotBlank() }
                                 ?: stringResource(R.string.events_shareEventUnnamed),
-                        ),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f),
-                    )
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        teaser?.startsAtMillis?.let { start ->
+                            EventInfoLine(Icons.Filled.CalendarMonth,
+                                EventSchedule.format(start, teaser.endsAtMillis, LocalLocale.current.platformLocale, ZoneId.systemDefault()))
+                        }
+                        (teaser?.locationName?.takeIf { it.isNotBlank() }
+                            ?: teaser?.approximateArea?.takeIf { it.isNotBlank() })?.let { place ->
+                            EventInfoLine(Icons.Filled.LocationOn, place)
+                        }
+                    }
                 }
             }
 
@@ -210,13 +233,13 @@ private fun FriendRow(
     val name =
         friend.displayName?.takeIf { it.isNotBlank() }
             ?: stringResource(R.string.events_shareEventUnnamedFriend)
-    OutlinedButton(
+    OutlinedCard(
         onClick = onClick,
         enabled = enabled,
         modifier = Modifier.fillMaxWidth().testTag(shareEventFriendRowTestTag(friend.uid)),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s3),
             horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
             verticalAlignment = Alignment.CenterVertically,
         ) {

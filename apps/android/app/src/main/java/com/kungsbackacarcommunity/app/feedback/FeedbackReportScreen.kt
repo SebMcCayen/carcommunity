@@ -8,11 +8,11 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.union
-import androidx.compose.material3.Button
+import com.kungsbackacarcommunity.app.design.KccButton as Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import com.kungsbackacarcommunity.app.design.KccOutlinedButton as OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -71,6 +71,7 @@ fun FeedbackReportScreen(
     val form = FeedbackReportForm(summary = summary, description = description)
 
     AeroPage(
+        ownerShortcutEnabled = false,
         title = stringResource(R.string.feedback_title),
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp),

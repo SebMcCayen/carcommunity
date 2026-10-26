@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
@@ -117,7 +118,7 @@ class ChatHubTitleTest {
 
         composeTestRule.onNodeWithText(str(R.string.chatHub_title)).assertDoesNotExist()
         composeTestRule.onNodeWithText(str(R.string.chatHub_tabCommunity)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.chatHub_tabFriends)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.chatHub_tabFriends)).performScrollTo().assertIsDisplayed()
     }
 
     /**
@@ -164,7 +165,7 @@ class ChatHubTitleTest {
     fun openingAThread_bringsBackTheBarWithTheNameAndAWorkingBack() {
         showHub(dmRepository = FakeDmRepository(conversation))
 
-        composeTestRule.onNodeWithText(str(R.string.chatHub_tabFriends)).performClick()
+        composeTestRule.onNodeWithText(str(R.string.chatHub_tabFriends)).performScrollTo().performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onAllNodesWithText("Kim").onFirst().performClick()
         composeTestRule.waitForIdle()
@@ -181,7 +182,7 @@ class ChatHubTitleTest {
         composeTestRule.onNodeWithContentDescription(str(R.string.chatHub_back)).performClick()
         composeTestRule.waitForIdle()
 
-        composeTestRule.onNodeWithText(str(R.string.chatHub_tabFriends)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.chatHub_tabFriends)).performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithContentDescription(str(R.string.chatHub_back)).assertDoesNotExist()
         composeTestRule.onNodeWithText(str(R.string.chatHub_title)).assertDoesNotExist()
     }

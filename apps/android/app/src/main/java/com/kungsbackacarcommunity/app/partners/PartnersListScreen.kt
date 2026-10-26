@@ -7,22 +7,28 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Storefront
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.LocalOffer
+import com.kungsbackacarcommunity.app.design.KccButton as Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccRadius
+import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.shell.AeroPage
 import java.util.Locale
 
@@ -312,12 +318,17 @@ private fun CompanyCard(company: PartnerCompany, offerCount: Int?, onClick: () -
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // The company model has no image URL: a native symbol is the honest fallback.
-            Icon(
-                Icons.Filled.Storefront,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(32.dp),
-            )
+            Surface(
+                shape = RoundedCornerShape(KccRadius.md),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+            ) {
+                Icon(
+                    Icons.Filled.Storefront,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(KccSpacing.s4).size(KccSpacing.s10),
+                )
+            }
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -332,20 +343,54 @@ private fun CompanyCard(company: PartnerCompany, offerCount: Int?, onClick: () -
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                company.address?.takeIf { it.isNotBlank() }?.let { address ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
+                        Icon(
+                            Icons.Filled.LocationOn,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(KccSpacing.s5),
+                        )
+                        Text(
+                            text = address,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
                 offerCount?.let { count ->
-                    Text(
-                        text =
-                            stringResource(
-                                if (count == 1) {
-                                    R.string.partnerOffers_offerCountOne
-                                } else {
-                                    R.string.partnerOffers_offerCountOther
-                                },
-                                count,
-                            ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(KccRadius.sm),
+                        color =
+                            if (count > 0) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor =
+                            if (count > 0) MaterialTheme.colorScheme.onPrimary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(KccSpacing.s2),
+                            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s1),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Filled.LocalOffer,
+                                contentDescription = null,
+                                modifier = Modifier.size(KccSpacing.s5),
+                            )
+                            Text(
+                                text =
+                                    stringResource(
+                                        if (count == 1) R.string.partnerOffers_offerCountOne
+                                        else R.string.partnerOffers_offerCountOther,
+                                        count,
+                                    ),
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                        }
+                    }
                 }
             }
             Icon(

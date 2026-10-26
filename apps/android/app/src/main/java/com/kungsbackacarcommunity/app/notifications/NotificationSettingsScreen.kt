@@ -6,20 +6,22 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material3.Button
+import com.kungsbackacarcommunity.app.design.KccButton as Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import com.kungsbackacarcommunity.app.design.KccOutlinedButton as OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -31,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -39,6 +42,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /** Notification settings screen: push-permission status + per-category toggles. */
@@ -175,49 +179,70 @@ private fun CategoryRow(
 ) {
     val essential = NotificationCategories.isEssential(category)
     OutlinedCard(modifier = Modifier.fillMaxWidth().testTag("notification_category_$category")) {
-        Column(
+        BoxWithConstraints(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    if (essential) Icons.Filled.Lock else Icons.Filled.Notifications,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    text = stringResource(categoryLabelRes(category)),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                ChannelToggle(
-                    label = stringResource(R.string.notifications_settingsInApp),
-                    checked = preference.inApp,
-                    enabled = !essential,
-                    onCheckedChange = { onToggle(category, NotificationChannel.IN_APP, it) },
-                    modifier = Modifier.weight(1f).testTag("notification_${category}_in_app"),
-                )
-                ChannelToggle(
-                    label = stringResource(R.string.notifications_settingsPush),
-                    checked = preference.push,
-                    enabled = !essential,
-                    onCheckedChange = { onToggle(category, NotificationChannel.PUSH, it) },
-                    modifier = Modifier.weight(1f).testTag("notification_${category}_push"),
-                )
-            }
-            if (essential) {
-                Text(
-                    text = stringResource(R.string.notifications_settingsEssential),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            // Match the two-channel reference row when there is room. At large
+            // text sizes/narrow widths, give the title and controls separate lines.
+            val compact = maxWidth >= 300.dp && LocalDensity.current.fontScale <= 1.3f
+            Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        if (essential) Icons.Filled.Lock else Icons.Filled.Notifications,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = stringResource(categoryLabelRes(category)),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    if (compact) CategoryChannels(category, preference, essential, onToggle, true)
+                }
+                if (!compact) CategoryChannels(category, preference, essential, onToggle, false)
+                if (essential) {
+                    Text(
+                        text = stringResource(R.string.notifications_settingsEssential),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun CategoryChannels(
+    category: String,
+    preference: CategoryPreference,
+    essential: Boolean,
+    onToggle: (String, NotificationChannel, Boolean) -> Unit,
+    compact: Boolean,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+        ChannelToggle(
+            label = stringResource(R.string.notifications_settingsInApp),
+            checked = preference.inApp,
+            enabled = !essential,
+            onCheckedChange = { onToggle(category, NotificationChannel.IN_APP, it) },
+            modifier = (if (compact) Modifier.width(KccSpacing.s8 * 2) else Modifier.weight(1f))
+                .testTag("notification_${category}_in_app"),
+            compact = compact,
+        )
+        ChannelToggle(
+            label = stringResource(R.string.notifications_settingsPush),
+            checked = preference.push,
+            enabled = !essential,
+            onCheckedChange = { onToggle(category, NotificationChannel.PUSH, it) },
+            modifier = (if (compact) Modifier.width(KccSpacing.s8 * 2) else Modifier.weight(1f))
+                .testTag("notification_${category}_push"),
+            compact = compact,
+        )
     }
 }
 
@@ -228,22 +253,30 @@ private fun ChannelToggle(
     enabled: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
 ) {
     // Whole row is the toggle target with merged semantics so TalkBack reads
     // the label as the switch's accessible name (Role.Switch); the Switch's own
     // callback is null — the row owns the interaction.
+    val target =
+        modifier
+            .heightIn(min = KccSpacing.s12)
+            .toggleable(
+                value = checked,
+                enabled = enabled,
+                role = Role.Switch,
+                onValueChange = onCheckedChange,
+            )
+            .semantics(mergeDescendants = true) {}
+    if (compact) {
+        Column(modifier = target, horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(label, style = MaterialTheme.typography.labelMedium)
+            Switch(checked = checked, enabled = enabled, onCheckedChange = null)
+        }
+        return
+    }
     Row(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .toggleable(
-                    value = checked,
-                    enabled = enabled,
-                    role = Role.Switch,
-                    onValueChange = onCheckedChange,
-                )
-                .semantics(mergeDescendants = true) {},
+        modifier = target.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
