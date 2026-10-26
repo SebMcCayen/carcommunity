@@ -101,8 +101,8 @@ fun MapShellCataloguePreview(
     val action: (String) -> Unit = { onLocalAction(it); dismiss() }
 
     CompositionLocalProvider(LocalMapZoomController provides zoom) {
-        // AuthenticatedApp owns this lifecycle in production. The standalone
-        // fixture must activate rendering too; style-loaded alone is not a frame.
+        // AuthenticatedApp owns this lifecycle in production. Standalone native
+        // captures must activate rendering as well as waiting for a loaded style.
         DisposableEffect(surface) {
             surface.setActive(true)
             onDispose { surface.setActive(false) }

@@ -1086,6 +1086,7 @@ internal fun MapLayersPopup(
         title = stringResource(R.string.shell_layersTitle),
         onDismiss = onDismiss,
         modifier = Modifier.testTag(MAP_HOME_LAYERS_POPUP_TAG),
+        closeContentDescription = stringResource(R.string.shell_layersClose),
         leadingContent = { Icon(Icons.Filled.Layers, contentDescription = null) },
         contentSpacing = KccSpacing.s1,
     ) {
