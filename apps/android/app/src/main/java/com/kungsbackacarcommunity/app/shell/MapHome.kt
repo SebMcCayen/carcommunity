@@ -1027,7 +1027,7 @@ const val MAP_HOME_LAYERS_POPUP_TAG = "map_home_layers_popup"
 /** Test tag on the incidents ("Traffic alerts") layer toggle switch. */
 const val MAP_HOME_LAYERS_INCIDENTS_TAG = "map_home_layers_incidents"
 
-/** Test tag on the map day/night ("Night mode") layer toggle switch. */
+/** Stable test tag on the explicitly selected Night appearance chip. */
 const val MAP_HOME_LAYERS_NIGHT_TAG = "map_home_layers_night"
 
 /** Test tag on the Kronjakt ("Crown Hunt") participation toggle switch. */
@@ -1041,18 +1041,16 @@ const val MAP_HOME_LAYERS_CROWN_HUNT_UPSELL_TAG = "map_home_layers_crown_hunt_up
 const val MAP_HOME_LIVE_POPUP_TAG = "map_home_live_popup"
 
 /**
- * The transparent map-layers popup shown when the layers control is tapped.
- * Rendered as a [Popup] (not a [Dialog]) so there is NO dimming scrim and the
- * live map stays fully visible behind the toggle card; tapping outside the card
- * or pressing Back dismisses it (focusable popup). Each row reflects the current
- * surface state and updates it live:
+ * S03 layers panel, docked through [MapDetailSheet] in the activity's measured
+ * reading viewport. Outside tap, close and Back dismiss it above the footer.
+ * Each row reflects the current surface state and updates it live:
  * - Traffic alerts — the Trafikverket + crowd-sourced incidents layer (accidents,
  *   roadwork, hazards, police, closures) drawn as coloured markers. This is the
  *   row wired to the Trafikverket open-data attribution below; the host draws /
  *   clears the markers as it flips ([onIncidentsChange]).
  * - Traffic — the Mapbox congestion overlay ([MapSurface.setTrafficEnabled]);
  *   a DIFFERENT data source from the Trafikverket alerts above.
- * - Night mode — the Standard style's day/night light preset
+ * - Appearance — Day, Night or following the app theme
  *   ([MapSurface.setMapMode]).
  * - 3D buildings — the tilted 3D vs flat 2D camera ([MapSurface.set3dEnabled]).
  *
@@ -1214,10 +1212,9 @@ private fun LayerToggleRow(
     leading: (@Composable () -> Unit)? = null,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
             .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
-            .then(if (switchTestTag != null) Modifier.testTag(switchTestTag) else Modifier)
-            .padding(vertical = 4.dp),
+            .then(if (switchTestTag != null) Modifier.testTag(switchTestTag) else Modifier),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
     ) {
@@ -1410,11 +1407,8 @@ private fun LayerAlertAgeSlider(
 const val MAP_HOME_EVENT_POPUP_TAG = "map_home_event_popup"
 
 /**
- * The info popup shown when a community EVENT pin is tapped. Rendered as a
- * translucent [Popup] (no dimming scrim) in the SAME floating style as the
- * layers/live popups — `surface.copy(alpha = KccAlpha.aeroSurface)` +
- * [KccRadius.lg] — so the live map stays visible behind it. Tapping outside the
- * card or pressing Back dismisses it (focusable popup).
+ * The shared docked reading panel shown when a community EVENT pin is tapped.
+ * Tapping outside, closing or pressing Back dismisses it above the footer.
  *
  * Shows the event's title, when it is, its place name (the public teaser
  * location) and the going-RSVP count, with a "View details" action that opens
@@ -1469,11 +1463,8 @@ internal fun EventMarkerInfoPopup(
 }
 
 /**
- * The transparent live-location popup shown when the broadcast control is tapped.
- * Rendered as a [Popup] (not a [Dialog]) so there is NO dimming scrim and the
- * live map stays fully visible behind the sheet — the same idiom as the
- * map-layers popup; tapping outside the card or pressing Back dismisses it
- * (focusable popup). The content reflects the current sharing state and reuses
+ * The docked live-location control panel uses [MapDetailSheet], keeping the
+ * persistent footer available. The content reflects the sharing state and reuses
  * the existing live-location logic (wired through to LiveLocationCoordinator by
  * the caller). Which rows appear is decided by the pure-logic
  * [com.kungsbackacarcommunity.app.shell.LiveManageSheet.actions], so the

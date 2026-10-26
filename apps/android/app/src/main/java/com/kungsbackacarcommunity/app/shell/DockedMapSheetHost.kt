@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -75,9 +76,14 @@ internal fun DockedMapSheetHost(ownerKey: Any? = null, content: @Composable BoxS
     val density = LocalDensity.current
     CompositionLocalProvider(LocalDockedMapSheetHost provides state) {
         Box(Modifier.fillMaxSize().onGloballyPositioned { hostBounds = it.boundsInRoot() }) {
-            Box(Modifier.fillMaxSize()) { content() }
+            Box(Modifier.fillMaxSize().then(
+                if (state.active != null && state.viewport == null) Modifier.clearAndSetSemantics {} else Modifier,
+            )) { content() }
             val entry = state.active
-            if (entry != null) {
+            // Do not paint a full-window fallback before the first layout has
+            // registered the actual map body. Reading content cannot overdraw
+            // the persistent footer even during a route/viewport transition.
+            if (entry != null && hostBounds.width > 0f && hostBounds.height > 0f) {
                 val bounds = state.viewport?.intersect(hostBounds)
                     ?.takeIf { it.width > 0f && it.height > 0f }
                 val placement = if (bounds != null) {
@@ -87,7 +93,7 @@ internal fun DockedMapSheetHost(ownerKey: Any? = null, content: @Composable BoxS
                 } else {
                     Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)
                 }
-                Box(placement) { entry.content() }
+                Box(placement.clipToBounds()) { entry.content() }
             }
         }
     }
