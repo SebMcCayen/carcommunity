@@ -3,6 +3,34 @@ name: Deploy Firebase Hosting
 on:
   push:
     branches: [main]
+    # Workflow-only edits require an intentional manual dispatch from main.
+    # Keep iOS, Android, docs and validation-only changes out of production.
+    paths:
+      - 'apps/admin/**'
+      - '!apps/admin/**/*.test.*'
+      - '!apps/admin/**/*.spec.*'
+      - '!apps/admin/**/tests/**'
+      - '!apps/admin/**/__tests__/**'
+      - '!apps/admin/**/*.md'
+      - 'apps/public-events/**'
+      - '!apps/public-events/**/*.test.*'
+      - '!apps/public-events/**/*.md'
+      - 'packages/shared/src/**'
+      - '!packages/shared/src/**/*.test.*'
+      - '!packages/shared/src/**/*.md'
+      - 'packages/shared/package.json'
+      - 'packages/shared/tsconfig.json'
+      - 'package-lock.json'
+      - 'functions/package.json'
+      - 'functions/package-lock.json'
+      - 'functions/.npmrc'
+      - 'firebase.json'
+      - '.firebaserc'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.npmrc'
+      - 'tsconfig.base.json'
   workflow_dispatch:
 
 permissions:

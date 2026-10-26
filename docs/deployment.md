@@ -188,10 +188,27 @@ In CI the check is split in two, deliberately:
 
 Production deployment uses GitHub OIDC and Google Workload Identity Federation. No long-lived Google service account keys are stored as GitHub secrets.
 
-| Workflow                        | What it deploys              | Requirement                                       |
-| ------------------------------- | ---------------------------- | ------------------------------------------------- |
-| `deploy-firebase-functions.yml` | Cloud Functions              | Push to `main`, `production` environment approval |
-| `deploy-firebase-hosting.yml`   | Admin web (Firebase Hosting) | Push to `main`, `production` environment approval |
+| Workflow                        | What it deploys              | Requirement                                                       |
+| ------------------------------- | ---------------------------- | ----------------------------------------------------------------- |
+| `deploy-firebase-functions.yml` | Cloud Functions              | Relevant push to `main` or manual dispatch; `production` approval |
+| `deploy-firebase-hosting.yml`   | Admin web (Firebase Hosting) | Relevant push to `main` or manual dispatch; `production` approval |
+
+### Automatic deploy scope and cost control
+
+Functions deploys run only for backend source/certificates, backend build/dependency
+inputs, or shared root build/Firebase configuration. Hosting deploys run only for
+admin/public-event assets, shared frontend source/build inputs, the Firebase CLI
+installation inputs, or shared root build/Firebase configuration. Test-only source
+files and Markdown documentation are excluded. iOS/Android-only changes do not
+start either production deployment. Mixed changes still deploy when any relevant
+path matches; root dependency/configuration changes can legitimately trigger both.
+
+The deploy workflow files themselves are deliberately not automatic trigger paths.
+After a workflow-only change, use **Run workflow** from `main` only when an actual
+deploy is wanted and any cost is approved. This also lets deploy-policy changes
+merge without starting a production deploy. Manual dispatch, WIF authentication,
+production environment protection and deploy concurrency are unchanged. Firebase
+rules/index deployment is not added or changed by these workflows.
 
 ### Required secrets
 
