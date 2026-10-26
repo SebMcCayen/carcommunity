@@ -57,6 +57,24 @@ iOS app validation and Navigation-SDK/R8 checks are separate CI jobs. Current-he
 check state must be read on GitHub before merging; an earlier successful run is
 not approval for a newer SHA.
 
+### CI harness follow-up
+
+Instrumentation-only source `0cc67dc8a32f8e6efb703672b40cbf320f67a839`
+fixes two CI failures without changing production behavior. A clean emulator's
+notification permission prompt interrupted the third capture (`chat`) and
+removed the active Compose hierarchy. Revoking notification access locally and
+running `map-place,map-live,chat` reproduced the exact failure in 6.995 s.
+The capture class now grants that existing permission through native
+`UiAutomation` before launching its Activity (API 33+), making the fixture's
+already-approved-permission state explicit. No new dependency is added and
+production permission prompts remain unchanged.
+
+The shell chat test now scrolls the natural-width channel row before asserting
+the long Notifications label, rather than requiring all translated labels to
+fit simultaneously. Test-APK compilation and lint pass in 7 s. The complete
+108-test emulator suite is verified separately from these compilation checks;
+its final result belongs in the validation index.
+
 ## Rendered evidence and comparison
 
 100 primary native state captures: 70 Swedish/dark normal, 15 English/light
