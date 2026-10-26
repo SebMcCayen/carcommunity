@@ -53,7 +53,7 @@ class DriveDetailPresentationTest {
                             tier = DriveSubscriptionTier.COMMUNITY, totalDrives = 80,
                             totalDistanceMeters = 620_000.0, totalDurationSeconds = 42_000L,
                             longestDriveMeters = 50_000.0, averageDriveMeters = 7_750.0,
-                            fastestAverageSpeedMps = null, highestMaxSpeedMps = null,
+                            fastestAverageSpeedMps = null, highestMaxSpeedMps = 47.321,
                             thisMonthDrives = 3, thisMonthDistanceMeters = 24_000.0,
                         ),
                     ),
@@ -65,5 +65,8 @@ class DriveDetailPresentationTest {
         compose.onNodeWithText(DriveFormatters.formatDistance(24_000.0)).assertIsDisplayed()
         compose.onNodeWithText("80").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(DriveFormatters.formatDistance(620_000.0)).performScrollTo().assertIsDisplayed()
+        // A populated backend field must not introduce a new maximum-speed UI fact.
+        compose.onNodeWithText(str(R.string.savedDrives_maxSpeed)).assertDoesNotExist()
+        compose.onNodeWithText(DriveFormatters.formatSpeed(47.321)).assertDoesNotExist()
     }
 }

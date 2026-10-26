@@ -104,10 +104,6 @@ private fun StatsContent(stats: DriveStatsSnapshot) {
             stringResource(R.string.savedDrives_statsFastest),
             DriveFormatters.formatSpeed(stats.fastestAverageSpeedMps),
         )
-        StatRow(
-            stringResource(R.string.savedDrives_maxSpeed),
-            DriveFormatters.formatSpeed(stats.highestMaxSpeedMps),
-        )
     }
 }
 

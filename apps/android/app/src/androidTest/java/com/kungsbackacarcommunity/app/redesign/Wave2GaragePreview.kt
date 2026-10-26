@@ -31,6 +31,12 @@ import com.kungsbackacarcommunity.app.profile.ProfileEditStatus
 import com.kungsbackacarcommunity.app.profile.ProfileScreen
 import com.kungsbackacarcommunity.app.profile.ProfileStatsSummary
 import com.kungsbackacarcommunity.app.profile.UserProfile
+import com.kungsbackacarcommunity.app.memberprofile.MemberProfileScreen
+import com.kungsbackacarcommunity.app.memberprofile.MemberProfileState
+import com.kungsbackacarcommunity.app.memberprofile.MemberProfile
+import com.kungsbackacarcommunity.app.memberprofile.MemberFriendState
+import com.kungsbackacarcommunity.app.memberprofile.MemberBadges
+import com.kungsbackacarcommunity.app.friends.FriendRelationship
 
 /**
  * Main owns theme, visible fixture caption and capture harness. These cases use
@@ -40,6 +46,19 @@ import com.kungsbackacarcommunity.app.profile.UserProfile
 @Composable
 fun Wave2GaragePreview(screen: String) {
     when (screen) {
+        "member-profile" -> MemberProfileScreen(
+            state = MemberProfileState.Loaded(
+                profile = MemberProfile(
+                    uid = "local-member", displayName = "Lokal medlemsprofil",
+                    bio = "Lokal testprofil för granskning av relationer, garage och utmärkelser.",
+                ),
+                vehicles = listOf(pass3Vehicle(), pass3Vehicle().copy(id = "local-second-car", isMainCar = false)),
+                badges = MemberBadges.Available(listOf(Badge("garage_created", null, 1_700_000_000_000L))),
+                pointsBalance = 120L,
+            ),
+            onRetry = {}, onBlock = {}, onUnfriend = {}, onMessage = {},
+            friendState = MemberFriendState(relationship = FriendRelationship.Friends),
+        )
         "vehicle-detail" -> VehicleDetailScreen(
             vehicle = pass3Vehicle(), onEdit = {}, onDelete = {}, onSetMain = {}, onAddPhoto = {},
         )
