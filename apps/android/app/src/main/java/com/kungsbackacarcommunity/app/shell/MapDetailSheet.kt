@@ -115,7 +115,7 @@ private fun DockedMapSheetContent(
         Surface(
             modifier = modifier.align(Alignment.BottomCenter).widthIn(max = 600.dp).fillMaxWidth()
                 .heightIn(max = maxHeight * 0.88f)
-                .offset { IntOffset(0, dragOffset.roundToInt()) }.testTag(MAP_DETAIL_SHEET_TAG)
+                .offset { IntOffset(0, dragOffset.roundToInt()) }
                 .pointerInput(Unit) { detectTapGestures {} }
                 .semantics { paneTitle = title; isTraversalGroup = true; dismiss { onDismiss(); true } },
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
@@ -123,7 +123,7 @@ private fun DockedMapSheetContent(
             contentColor = MaterialTheme.colorScheme.onSurface,
             shadowElevation = 6.dp,
         ) {
-        Column(Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().testTag(MAP_DETAIL_SHEET_TAG)) {
             Column(Modifier.draggable(
                 state = rememberDraggableState { dragOffset = (dragOffset + it).coerceAtLeast(0f) },
                 orientation = Orientation.Vertical,
