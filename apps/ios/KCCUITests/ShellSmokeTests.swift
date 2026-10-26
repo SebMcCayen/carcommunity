@@ -64,11 +64,12 @@ final class ShellSmokeTests: XCTestCase {
         for _ in 0..<4 where !expand.isHittable { scroll.swipeUp() }
         XCTAssertTrue(expand.isHittable)
         expand.tap()
+        XCTAssertTrue(app.buttons["Hide map focus distance"].waitForExistence(timeout: 5))
         // Expansion increases the scrollable content; the slider can be below
         // the medium detent and absent from the accessibility snapshot until scrolled.
         let zoom = app.sliders["shell.layersZoom"]
         for _ in 0..<4 where !zoom.isHittable { scroll.swipeUp() }
-        XCTAssertTrue(zoom.waitForExistence(timeout: 5))
+        XCTAssertTrue(zoom.waitForExistence(timeout: 5), "Expanded slider tree: \(app.sliders.debugDescription)")
         XCTAssertTrue(zoom.isHittable)
         app.buttons["Close map layers"].tap()
         app.buttons["shell.mapLayers"].tap()
