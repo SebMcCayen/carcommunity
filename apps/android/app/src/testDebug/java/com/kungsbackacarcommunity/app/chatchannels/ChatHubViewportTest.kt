@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
 import android.content.res.Configuration
+import android.view.ContextThemeWrapper
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
@@ -51,7 +52,11 @@ class ChatHubViewportTest {
         val config = Configuration(compose.activity.resources.configuration).apply {
             setLocale(Locale.forLanguageTag(language))
         }
-        val localized = compose.activity.createConfigurationContext(config)
+        // Keep the Activity in the ContextWrapper chain so permission launchers
+        // and other Activity-owned APIs still resolve their real owner.
+        val localized = ContextThemeWrapper(compose.activity, compose.activity.theme).apply {
+            applyOverrideConfiguration(config)
+        }
         var closed = 0
         compose.setContent {
             CompositionLocalProvider(

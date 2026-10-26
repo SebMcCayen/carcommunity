@@ -9,6 +9,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -80,10 +83,10 @@ class FriendsScreenTest {
         if (scale == 1f) compose.onNodeWithContentDescription(str(R.string.friends_remove)).performClick()
         else compose.onNodeWithText(str(R.string.friends_remove)).performClick()
         compose.runOnIdle { assertTrue(calls.none { it.startsWith("remove:") }) }
-        compose.onNodeWithText(str(R.string.friends_removeCancel)).performClick()
+        compose.onNode(hasText(str(R.string.friends_removeCancel)) and hasAnyAncestor(isDialog())).performClick()
         if (scale == 1f) compose.onNodeWithContentDescription(str(R.string.friends_remove)).performClick()
         else compose.onNodeWithText(str(R.string.friends_remove)).performClick()
-        compose.onNodeWithText(str(R.string.friends_removeConfirmAction)).performClick()
+        compose.onNode(hasText(str(R.string.friends_removeConfirmAction)) and hasAnyAncestor(isDialog())).performClick()
         compose.runOnIdle {
             assertTrue("Profile callback", "profile:local-friend" in calls)
             assertTrue("DM callback", "message:local-friend" in calls)
