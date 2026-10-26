@@ -8683,7 +8683,7 @@ internal fun ShellBottomBar(
             colors = tabColors,
             onClick = { onSelect(ShellTab.Map) },
             icon = { Icon(Icons.Filled.Map, contentDescription = stringResource(R.string.shell_tabMap)) },
-            label = { Text(stringResource(R.string.shell_tabMap)) },
+            label = { Text(stringResource(R.string.shell_tabMap), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
         )
         NavigationBarItem(
             selected = selected == ShellTab.Chat,
@@ -8698,7 +8698,7 @@ internal fun ShellBottomBar(
                     ))
                 }
             },
-            label = { Text(stringResource(R.string.shell_tabChat)) },
+            label = { Text(stringResource(R.string.shell_tabChat), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
         )
         // The centre action is a "+" that starts a session, and — while one RUNS —
         // the live-session disc that raises the stop sheet: one control for the
@@ -8768,7 +8768,7 @@ internal fun ShellBottomBar(
             colors = tabColors,
             onClick = { onSelect(ShellTab.Social) },
             icon = { Icon(Icons.Filled.Groups, contentDescription = stringResource(R.string.shell_tabSocial)) },
-            label = { Text(stringResource(R.string.shell_tabSocial)) },
+            label = { Text(stringResource(R.string.shell_tabSocial), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
             modifier = Modifier.coachMarkAnchor(CoachMarkStep.Social),
         )
         NavigationBarItem(
@@ -8776,7 +8776,7 @@ internal fun ShellBottomBar(
             colors = tabColors,
             onClick = { onSelect(ShellTab.Garage) },
             icon = { Icon(Icons.Filled.DirectionsCar, contentDescription = stringResource(R.string.shell_tabGarage)) },
-            label = { Text(stringResource(R.string.shell_tabGarage)) },
+            label = { Text(stringResource(R.string.shell_tabGarage), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
         )
     }
 }

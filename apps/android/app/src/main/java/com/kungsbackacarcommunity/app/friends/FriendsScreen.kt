@@ -387,7 +387,8 @@ private fun IncomingRequestRow(
     FriendSurface {
         BoxWithConstraints(Modifier.fillMaxWidth().testTag("friends_incoming_${request.requestId}")
             .padding(KccSpacing.s2)) {
-            val inline = maxWidth >= 320.dp && LocalDensity.current.fontScale <= 1.1f
+            // Two actions must not squeeze a member's identity into a few letters.
+            val inline = maxWidth >= 420.dp && LocalDensity.current.fontScale <= 1.1f
             if (inline) {
                 Row(verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {

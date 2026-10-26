@@ -5,6 +5,13 @@ import android.graphics.Bitmap
 import android.os.Build
 import android.os.SystemClock
 import android.provider.MediaStore
+import android.view.View
+import android.view.ViewGroup
+import com.mapbox.maps.MapView
+import com.mapbox.maps.RenderModeType
+import com.kungsbackacarcommunity.app.shell.MapPoint
+import com.kungsbackacarcommunity.app.shell.MapMode
+import java.util.concurrent.atomic.AtomicBoolean
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -179,6 +186,24 @@ class Wave2RedesignCaptureTest {
                 }
                 if (args.getString("redesignMap") == "configured") {
                     rule.waitUntil(30_000) { configuredSurface?.loadState?.value == MapLoadState.Loaded }
+                    val rendered = AtomicBoolean()
+                    var frameSubscription: com.mapbox.common.Cancelable? = null
+                    rule.runOnIdle {
+                        val map = checkNotNull(findMapView(rule.activity.window.decorView)).mapboxMap
+                        frameSubscription = map.subscribeRenderFrameFinished {
+                            if (it.renderMode == RenderModeType.FULL) rendered.set(true)
+                        }
+                        // Stable local fixture camera; cold-start preference
+                        // restoration is tested independently, before this move.
+                        configuredSurface?.centerOn(MapPoint(12.0755, 57.488))
+                        if (args.getString("redesignMapAppearance") == "day") {
+                            configuredSurface?.setMapMode(MapMode.Day)
+                        }
+                        map.triggerRepaint()
+                    }
+                    rule.waitUntil(20_000) { rendered.get() }
+                    rule.runOnIdle { frameSubscription?.cancel() }
+                    SystemClock.sleep(1_000) // Native camera/marker animations use uptime.
                 }
             }
             // Semantic idleness is not a SurfaceFlinger fence: an OS screenshot
@@ -223,6 +248,12 @@ class Wave2RedesignCaptureTest {
             }
         }
     }
+}
+
+private fun findMapView(view: View): MapView? = when (view) {
+    is MapView -> view
+    is ViewGroup -> (0 until view.childCount).firstNotNullOfOrNull { findMapView(view.getChildAt(it)) }
+    else -> null
 }
 
 @Composable

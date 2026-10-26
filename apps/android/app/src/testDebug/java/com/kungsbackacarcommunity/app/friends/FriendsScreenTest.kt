@@ -64,7 +64,10 @@ class FriendsScreenTest {
         }
         scrollTo("friends_incoming_local-request")
         val requestBounds = compose.onNodeWithTag("friends_incoming_local-request").fetchSemanticsNode().boundsInRoot
-        assertTrue("Request density: $requestBounds", requestBounds.height <= if (scale == 1f) 80f else 152f)
+        assertTrue("Request density: $requestBounds", requestBounds.height <= if (scale == 1f) 120f else 152f)
+        val identity = compose.onNodeWithText("Local Lee").fetchSemanticsNode().boundsInRoot
+        val accept = compose.onNodeWithText(str(R.string.friends_accept)).fetchSemanticsNode().boundsInRoot
+        assertTrue("Identity gets its own line above the actions", identity.bottom <= accept.top)
         compose.onNodeWithText(str(R.string.friends_accept)).performClick()
         compose.onNodeWithText(str(R.string.friends_decline)).performClick()
         compose.runOnIdle { busy.value = setOf(FriendsCoordinator.respondBusyKey(request.requestId)) }

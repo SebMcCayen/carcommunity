@@ -218,7 +218,11 @@ fun EventDetailScreen(
                 Text(
                     text = stringResource(R.string.events_officialBadge),
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = if (com.kungsbackacarcommunity.app.design.LocalKccDarkTheme.current) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
                 )
             }
             if (event.status == EventStatus.CANCELLED) {
