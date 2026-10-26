@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -21,12 +21,19 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -45,6 +52,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
@@ -55,23 +63,26 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import java.time.ZoneId
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.shell.AeroPage
-import java.text.DateFormat
-import java.util.Date
 import kotlinx.coroutines.delay
 
+const val EVENT_RSVP_SELECTOR_TAG = "event_rsvp_selector"
+const val EVENT_DETAIL_CHAT_TAG = "event_detail_chat"
+const val EVENT_DETAIL_GROUP_DRIVE_TAG = "event_detail_group_drive"
+
 /**
- * Event detail (Phase 12 slice 9). Stateless: shows the teaser fields to any
- * authenticated user, the member-gated [detail] (exact location/description)
- * or a membership gate, and — for members on a published event — an RSVP row
- * whose current selection reflects [myRsvp], plus the "who's going" section.
+ * Event identity, RSVP and contextual actions precede the longer description.
+ * Full details and RSVP stay free for eligible accounts. Attendee identities and
+ * check-in retain their independent paid/server gates from the route.
  */
 @Composable
 fun EventDetailScreen(
@@ -218,45 +229,43 @@ fun EventDetailScreen(
                     color = MaterialTheme.colorScheme.error,
                 )
             }
-            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    EventDateBadge(event.startsAtMillis)
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        event.startsAtMillis?.let { millis ->
-                            EventInfoLine(
-                                icon = Icons.Filled.CalendarMonth,
-                                text = DateFormat.getDateTimeInstance(DateFormat.FULL, DateFormat.SHORT).format(Date(millis)),
-                            )
-                        }
-                        event.approximateArea?.takeIf { it.isNotBlank() }?.let { area ->
-                            EventInfoLine(icon = Icons.Filled.LocationOn, text = area)
-                        }
-                        organizerName?.takeIf { it.isNotBlank() }?.let { name ->
-                            EventInfoLine(
-                                icon = Icons.Filled.Groups,
-                                text = stringResource(R.string.events_organizerLabel, name),
-                                modifier = Modifier.testTag(EVENT_DETAIL_ORGANIZER_TAG),
-                            )
+            // The model has no event-cover field. Use its actual date/place as
+            // the native header rather than inventing a persisted or sample photo.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                EventDateBadge(event.startsAtMillis)
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    event.startsAtMillis?.let { millis ->
+                        EventInfoLine(
+                            icon = Icons.Filled.CalendarMonth,
+                            text = EventSchedule.format(millis, event.endsAtMillis, LocalLocale.current.platformLocale, ZoneId.systemDefault()),
+                        )
+                    }
+                    (event.locationName?.takeIf { it.isNotBlank() }
+                        ?: event.approximateArea?.takeIf { it.isNotBlank() })?.let { place ->
+                        EventInfoLine(
+                            icon = Icons.Filled.LocationOn,
+                            text = place,
+                            modifier = Modifier.testTag(EVENT_DETAIL_LOCATION_NAME_TAG),
+                        )
+                    }
+                    if (Events.canSeeDetails(passesMemberGate, event.status)) {
+                        detail?.address?.takeIf { it.isNotBlank() }?.let { address ->
+                            Text(address, style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
+                    organizerName?.takeIf { it.isNotBlank() }?.let { name ->
+                        EventInfoLine(
+                            icon = Icons.Filled.Groups,
+                            text = stringResource(R.string.events_organizerLabel, name),
+                            modifier = Modifier.testTag(EVENT_DETAIL_ORGANIZER_TAG),
+                        )
+                    }
                 }
-            }
-            // PUBLIC place name (teaser data since the 2026-07 open-up — it is
-            // what the map pin is labelled with), so it sits OUTSIDE the member
-            // gate below: a non-member who taps a pin must still see where the
-            // event is. Only the precise street address and the long description
-            // stay member-only, in the gated card.
-            event.locationName?.takeIf { it.isNotBlank() }?.let { placeName ->
-                Text(
-                    text = placeName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.testTag(EVENT_DETAIL_LOCATION_NAME_TAG),
-                )
             }
             event.summary?.takeIf { it.isNotBlank() }?.let { summary ->
                 Text(
@@ -298,10 +307,7 @@ fun EventDetailScreen(
                 }
             }
 
-            // Published full details are free for eligible signed-in users.
-            if (Events.canSeeDetails(passesMemberGate, event.status)) {
-                DetailCard(detail)
-            } else if (!passesMemberGate) {
+            if (!passesMemberGate) {
                 InfoCard(
                     title = stringResource(R.string.events_memberRequiredTitle),
                     body = stringResource(R.string.events_memberRequiredBody),
@@ -311,36 +317,17 @@ fun EventDetailScreen(
             // 3. RSVP row — gate-passers only, published events only — then 4. the
             // "Check who answered" button, which reveals the roster on tap.
             if (Events.canRsvp(passesMemberGate, event.status)) {
-                Text(
-                    text = stringResource(R.string.events_rsvpCountsLabel),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    // A light confirm haptic accompanies the RSVP write; the
-                    // failure path is surfaced as a shell snackbar by the route.
-                    val onRsvpHaptic: (RsvpStatus) -> Unit = { answer ->
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onRsvp(answer)
-                    }
-                    RsvpButton(R.string.events_rsvpGoing, RsvpStatus.GOING, myRsvp, rsvpStatus, onRsvpHaptic)
-                    RsvpButton(R.string.events_rsvpMaybe, RsvpStatus.MAYBE, myRsvp, rsvpStatus, onRsvpHaptic)
-                    RsvpButton(R.string.events_rsvpNotGoing, RsvpStatus.NOT_GOING, myRsvp, rsvpStatus, onRsvpHaptic)
-                }
-
-                // How many answered each way (Going / Maybe / Can't go), from the
-                // server-maintained public rsvpCounts tally on the event doc — no
-                // roster read needed, so it is always shown. Neutral tallies at equal
-                // weight; the same three labels the buttons above use, mirrored.
                 OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(12.dp)) {
                         RsvpCountsBreakdown(event.counts)
                     }
                 }
-                if (!canViewAttendees) UpgradeCard(onUpgrade = onUpgrade)
+                key(event.id) {
+                    RsvpSelector(myRsvp, rsvpStatus) { answer ->
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onRsvp(answer)
+                    }
+                }
 
                 // Who answered — behind a button so the roster never makes the page
                 // long, and its events-listAttendees read is deferred until the
@@ -348,7 +335,7 @@ fun EventDetailScreen(
                 // people who answered, grouped by their answer. The attendee LIST is
                 // a paid benefit (Slice D) — server-enforced by events-listAttendees
                 // (requiresPaid for a free caller) and mirrored here: a free viewer
-                // never sees the reveal button (the upgrade card above states the
+                // never sees the reveal button (the upgrade card below states the
                 // roster is paid). The public rsvpCounts tally still shows for
                 // everyone via RsvpCountsBreakdown, so a free viewer sees HOW MANY
                 // answered, just not WHO.
@@ -364,6 +351,33 @@ fun EventDetailScreen(
                     }
                 }
             }
+
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (onOpenChat != null) {
+                    OutlinedButton(onClick = onOpenChat, modifier = Modifier.testTag(EVENT_DETAIL_CHAT_TAG)) {
+                        Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text(stringResource(R.string.chat_eventChatTitle), modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
+                if (onOpenGroupDrive != null) {
+                    OutlinedButton(onClick = onOpenGroupDrive, modifier = Modifier.testTag(EVENT_DETAIL_GROUP_DRIVE_TAG)) {
+                        Icon(Icons.Filled.DirectionsCar, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text(stringResource(R.string.groupDrive_screenTitle), modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
+                if (onShareEvent != null) {
+                    OutlinedButton(onClick = onShareEvent, modifier = Modifier.testTag(EVENT_DETAIL_SHARE_TAG)) {
+                        Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text(stringResource(R.string.events_shareEvent), modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
+            }
+
+            if (Events.canSeeDetails(passesMemberGate, event.status)) DetailCard(detail)
+            if (Events.canRsvp(passesMemberGate, event.status) && !canViewAttendees) UpgradeCard(onUpgrade)
 
             // 5. Location — the embedded map (tap to maximize) + the Navigate
             // button. Shown only when the event has a valid pin ([markerPoint]); the
@@ -404,25 +418,6 @@ fun EventDetailScreen(
                 }
             }
 
-            // 6. Share this event in-app + 7. add it to the phone's calendar. Each
-            // is independent: Share appears when a friends/DM repository is wired,
-            // Add to calendar when the event has a readable start time.
-            if (onShareEvent != null) {
-                OutlinedButton(
-                    onClick = onShareEvent,
-                    modifier = Modifier.fillMaxWidth().testTag(EVENT_DETAIL_SHARE_TAG),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Share,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Text(
-                        text = stringResource(R.string.events_shareEvent),
-                        modifier = Modifier.padding(start = 8.dp),
-                    )
-                }
-            }
             if (onAddToCalendar != null) {
                 OutlinedButton(
                     onClick = onAddToCalendar,
@@ -454,21 +449,6 @@ fun EventDetailScreen(
                 firstSampleAtMillis = firstSampleAtMillis,
                 onCheckIn = onCheckIn,
             )
-
-            // Event chat — offered only when eligible (decided by the caller:
-            // chat flag + member + published + going/maybe RSVP).
-            if (onOpenChat != null) {
-                OutlinedButton(onClick = onOpenChat, modifier = Modifier.fillMaxWidth()) {
-                    Text(text = stringResource(R.string.chat_eventChatTitle))
-                }
-            }
-            // Group drive — offered when eligible (member + published +
-            // going/maybe RSVP).
-            if (onOpenGroupDrive != null) {
-                OutlinedButton(onClick = onOpenGroupDrive, modifier = Modifier.fillMaxWidth()) {
-                    Text(text = stringResource(R.string.groupDrive_screenTitle))
-                }
-            }
 
             // "Check who answered" dialog — the roster, grouped by answer. Opened
             // from the button above; the deferred roster read has already been
@@ -766,9 +746,19 @@ private fun RsvpCountItem(labelRes: Int, count: Int, answer: RsvpStatus, modifie
         modifier = modifier.testTag(rsvpCountTag(answer)),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        Icon(
+            imageVector = when (answer) {
+                RsvpStatus.GOING -> Icons.Filled.Groups
+                RsvpStatus.MAYBE -> Icons.Filled.HelpOutline
+                RsvpStatus.NOT_GOING -> Icons.Filled.Cancel
+            },
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+        )
         Text(
             text = count.toString(),
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onSurface,
         )
         Text(
@@ -1041,38 +1031,18 @@ internal fun attendeeGroupTag(status: RsvpStatus): String = "events_attendee_gro
 
 @Composable
 private fun DetailCard(detail: EventDetail?) {
-    Card(
+    val description = detail?.description?.takeIf { it.isNotBlank() } ?: return
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.events_memberDetailPlaceholder),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            // Member-only precise street address. The public place name is NOT
-            // repeated here — it is rendered above the gate so non-members see it
-            // too.
-            val address = detail?.address
-            if (address != null) {
-                Text(
-                    text = address,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            detail?.description?.takeIf { it.isNotBlank() }?.let { description ->
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+        Text(
+            text = stringResource(R.string.events_memberDetailPlaceholder),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(description, style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -1131,34 +1101,51 @@ private fun InfoCard(title: String, body: String) {
 }
 
 @Composable
-private fun RowScope.RsvpButton(
-    labelRes: Int,
-    answer: RsvpStatus,
+private fun RsvpSelector(
     myRsvp: RsvpStatus?,
     rsvpStatus: RsvpStatusUi,
     onRsvp: (RsvpStatus) -> Unit,
 ) {
-    val label = stringResource(labelRes)
+    var expanded by rememberSaveable { mutableStateOf(false) }
     val enabled = rsvpStatus != RsvpStatusUi.Saving
-    // Distinct per-answer tag on the ACTION button, so a test targets the button
-    // unambiguously — its label ("Going" / "Maybe" / "Can't go") now also appears
-    // as a count label in the RSVP breakdown below, so matching by text alone is
-    // ambiguous.
-    val tag = Modifier.weight(1f).testTag(rsvpButtonTag(answer))
-    if (answer == myRsvp) {
-        Button(onClick = { onRsvp(answer) }, enabled = enabled, modifier = tag) {
-            Text(text = label, textAlign = TextAlign.Center)
-        }
-    } else {
-        OutlinedButton(
-            onClick = { onRsvp(answer) },
-            enabled = enabled,
-            modifier = tag,
-            colors = ButtonDefaults.outlinedButtonColors(),
+    LaunchedEffect(enabled) { if (!enabled) expanded = false }
+    Box(Modifier.fillMaxWidth()) {
+        Button(
+            onClick = { expanded = true }, enabled = enabled,
+            modifier = Modifier.fillMaxWidth().testTag(EVENT_RSVP_SELECTOR_TAG)
+                .semantics { selected = myRsvp != null },
         ) {
-            Text(text = label, textAlign = TextAlign.Center)
+            if (myRsvp != null) Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(20.dp))
+            Text(
+                stringResource(myRsvp?.let(::rsvpLabel) ?: R.string.events_rsvpCountsLabel),
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                textAlign = TextAlign.Center,
+            )
+            Icon(Icons.Filled.ExpandMore, contentDescription = null)
+        }
+        DropdownMenu(expanded = expanded && enabled, onDismissRequest = { expanded = false }) {
+            RsvpStatus.entries.forEach { answer ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(rsvpLabel(answer))) },
+                    trailingIcon = {
+                        if (answer == myRsvp) Icon(Icons.Filled.CheckCircle, contentDescription = null)
+                    },
+                    modifier = Modifier.testTag(rsvpButtonTag(answer)).semantics { selected = answer == myRsvp },
+                    onClick = {
+                        expanded = false
+                        onRsvp(answer)
+                    },
+                    enabled = enabled,
+                )
+            }
         }
     }
+}
+
+private fun rsvpLabel(answer: RsvpStatus): Int = when (answer) {
+    RsvpStatus.GOING -> R.string.events_rsvpGoing
+    RsvpStatus.MAYBE -> R.string.events_rsvpMaybe
+    RsvpStatus.NOT_GOING -> R.string.events_rsvpNotGoing
 }
 
 @Preview(name = "Event detail – member", showBackground = true)

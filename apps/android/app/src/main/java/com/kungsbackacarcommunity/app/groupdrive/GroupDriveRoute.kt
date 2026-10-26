@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import com.kungsbackacarcommunity.app.events.EventStatus
+import com.kungsbackacarcommunity.app.events.EventSummary
 import com.kungsbackacarcommunity.app.events.RsvpStatus
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -25,6 +26,7 @@ fun GroupDriveRoute(
     myRsvp: RsvpStatus?,
     onShowOnMap: ((List<String>) -> Unit)? = null,
     onBack: () -> Unit,
+    event: EventSummary? = null,
 ) {
     val scope = rememberCoroutineScope()
     val participants by
@@ -38,6 +40,7 @@ fun GroupDriveRoute(
             .collectAsState(initial = GroupDriveActionStatus.Idle)
 
     GroupDriveScreen(
+        event = event,
         participants = participants,
         myStatus = myStatus,
         canJoin = GroupDrive.canJoin(passesMemberGate, eventStatus, myRsvp),

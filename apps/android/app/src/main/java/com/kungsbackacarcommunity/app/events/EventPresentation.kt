@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.events
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -27,11 +28,12 @@ internal fun EventDateBadge(startsAtMillis: Long?) {
     val locale = LocalLocale.current.platformLocale
     Surface(
         shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
         modifier = Modifier.clearAndSetSemantics { },
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.defaultMinSize(minWidth = 56.dp).padding(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (startsAtMillis == null) {
