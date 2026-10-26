@@ -1,11 +1,13 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
 import android.content.res.Configuration
+import android.view.ContextThemeWrapper
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -52,11 +54,16 @@ class ChatHubTabLabelTest {
         var selectedCallback: ChatTab? = null
         compose.setContent {
             val current = variant.value
-            val base = LocalContext.current
-            val config = Configuration(base.resources.configuration).apply {
-                setLocale(Locale.forLanguageTag(current.language))
+            val config = remember(current.language) {
+                Configuration(compose.activity.resources.configuration).apply {
+                    setLocale(Locale.forLanguageTag(current.language))
+                }
             }
-            val localized = base.createConfigurationContext(config)
+            val localized = remember(current.language) {
+                ContextThemeWrapper(compose.activity, compose.activity.theme).apply {
+                    applyOverrideConfiguration(config)
+                }
+            }
             CompositionLocalProvider(
                 LocalContext provides localized,
                 LocalConfiguration provides config,
@@ -79,7 +86,9 @@ class ChatHubTabLabelTest {
                 val config = Configuration(compose.activity.resources.configuration).apply {
                     setLocale(Locale.forLanguageTag(language))
                 }
-                val resources = compose.activity.createConfigurationContext(config).resources
+                val resources = ContextThemeWrapper(compose.activity, compose.activity.theme).apply {
+                    applyOverrideConfiguration(config)
+                }.resources
                 val labelIds = listOf(R.string.chatHub_tabCommunity, R.string.chatHub_tabConvoys,
                     R.string.chatHub_tabFriends, R.string.chatHub_tabNotifications)
                 for (tab in ChatTab.entries) {
@@ -96,7 +105,9 @@ class ChatHubTabLabelTest {
                     val layout = layouts.single()
                     assertEquals("$current $tab must not auto-shrink", 14.sp, layout.layoutInput.style.fontSize)
                     assertEquals(scale, layout.layoutInput.density.fontScale, 0.001f)
-                    assertFalse("$current $tab truncated", layout.hasVisualOverflow)
+                    assertFalse("$current $tab truncated: size=${layout.size}, paragraphWidth=${layout.multiParagraph.width}, " +
+                        "widthOverflow=${layout.didOverflowWidth}, heightOverflow=${layout.didOverflowHeight}",
+                        layout.hasVisualOverflow)
                     // The dot remains a named child in every tab, including offscreen ones after scrolling.
                     compose.onNodeWithTag(chatChannelTabTag(tab)).assertIsDisplayed()
                     compose.onNode(

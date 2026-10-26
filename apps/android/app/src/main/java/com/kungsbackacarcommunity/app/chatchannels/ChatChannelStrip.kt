@@ -1,6 +1,12 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
@@ -12,18 +18,25 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntSize
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
@@ -48,45 +61,49 @@ internal fun ChatChannelStrip(
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.chatHub_back))
             }
         }
-        ScrollableTabRow(
-            selectedTabIndex = selected.ordinal,
-            modifier = Modifier.weight(1f).testTag(CHAT_CHANNEL_STRIP_TEST_TAG),
-            edgePadding = 0.dp,
-            containerColor = MaterialTheme.colorScheme.background,
-            contentColor = MaterialTheme.colorScheme.tertiary,
-            indicator = {}, divider = {},
+        // Measure the whole pill (text + unread badge + padding) at its natural
+        // width. The legacy tab-row sizing could constrain the text before
+        // allocating space to the badge, even on the default text scale.
+        Row(
+            modifier = Modifier.weight(1f).testTag(CHAT_CHANNEL_STRIP_TEST_TAG)
+                .horizontalScroll(rememberScrollState()).selectableGroup(),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             ChatTab.entries.forEach { tab ->
                 val active = selected == tab
-                Tab(
-                    selected = active, onClick = { onSelect(tab) },
-                    modifier = Modifier.testTag(chatChannelTabTag(tab)).heightIn(min = 48.dp),
-                    selectedContentColor = MaterialTheme.colorScheme.tertiary,
-                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                val bringIntoView = remember { BringIntoViewRequester() }
+                var placedSize by remember { mutableStateOf(IntSize.Zero) }
+                LaunchedEffect(active, placedSize) {
+                    if (active && placedSize != IntSize.Zero) bringIntoView.bringIntoView()
+                }
+                val shape = RoundedCornerShape(KccRadius.xl)
+                Surface(
+                    modifier = Modifier.padding(horizontal = KccSpacing.s1)
+                        .bringIntoViewRequester(bringIntoView)
+                        .onGloballyPositioned { placedSize = it.size }
+                        .heightIn(min = 48.dp).clip(shape)
+                        .selectable(selected = active, role = Role.Tab, onClick = { onSelect(tab) })
+                        .testTag(chatChannelTabTag(tab)),
+                    shape = shape,
+                    color = MaterialTheme.colorScheme.background,
+                    contentColor = if (active) MaterialTheme.colorScheme.tertiary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    border = BorderStroke(1.dp, if (active) MaterialTheme.colorScheme.tertiary
+                        else MaterialTheme.colorScheme.outlineVariant),
                 ) {
-                    Surface(
-                        modifier = Modifier.padding(horizontal = KccSpacing.s1),
-                        shape = RoundedCornerShape(KccRadius.xl),
-                        color = MaterialTheme.colorScheme.background,
-                        contentColor = if (active) MaterialTheme.colorScheme.tertiary
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                        border = BorderStroke(1.dp, if (active) MaterialTheme.colorScheme.tertiary
-                            else MaterialTheme.colorScheme.outlineVariant),
+                    Row(
+                        modifier = Modifier.padding(horizontal = KccSpacing.s3, vertical = KccSpacing.s2),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = KccSpacing.s3, vertical = KccSpacing.s2),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
-                        ) {
-                            Text(stringResource(labels[tab.ordinal]), style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1, softWrap = false)
-                            if (unread[tab.ordinal]) {
-                                Badge(
-                                    modifier = Modifier.semantics { contentDescription = unreadLabel },
-                                    containerColor = MaterialTheme.colorScheme.tertiary,
-                                    contentColor = MaterialTheme.colorScheme.onTertiary,
-                                )
-                            }
+                        Text(stringResource(labels[tab.ordinal]), style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1, softWrap = false)
+                        if (unread[tab.ordinal]) {
+                            Badge(
+                                modifier = Modifier.semantics { contentDescription = unreadLabel },
+                                containerColor = MaterialTheme.colorScheme.tertiary,
+                                contentColor = MaterialTheme.colorScheme.onTertiary,
+                            )
                         }
                     }
                 }
