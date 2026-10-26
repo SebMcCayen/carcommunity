@@ -228,6 +228,7 @@ struct GarageVehicleCard: View {
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text("garage.photoAlt"))
     }
 
