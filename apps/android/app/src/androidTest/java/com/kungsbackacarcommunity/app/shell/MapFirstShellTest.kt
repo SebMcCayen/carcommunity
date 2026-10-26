@@ -1052,11 +1052,11 @@ class MapFirstShellTest {
             assertEquals(1, surface.contentCompositions)
             assertFalse(surface.isActive)
         }
-        // The hub shows its four top tabs — Community / Convoys / Friends /
-        // Notifications — not the old two-button peek.
+        // Natural-width tabs scroll at narrow widths/long translations. The
+        // off-screen Notifications tab must remain reachable without shrinking.
         composeTestRule.onNodeWithText(str(R.string.chatHub_tabCommunity)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.chatHub_tabConvoys)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.chatHub_tabNotifications)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.chatHub_tabNotifications)).performScrollTo().assertIsDisplayed()
         // The shell's bottom bar stays reachable beneath the hub (it is inset above
         // the bar, not a full-screen takeover).
         tabNode(R.string.shell_tabChat)
