@@ -308,7 +308,7 @@ fun ChannelChatContent(
                 .padding(KccSpacing.s4),
         verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
     ) {
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+        Box(modifier = Modifier.weight(1f).fillMaxWidth().testTag("channel_message_viewport")) {
             if (loading && messages.isEmpty()) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             } else if (messages.isEmpty()) {
