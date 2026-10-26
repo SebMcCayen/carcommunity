@@ -103,6 +103,8 @@ fun ProfileScreen(
     // config-less build with no points repository wired.
     onOpenPoints: (() -> Unit)? = null,
     onOpenDrives: (() -> Unit)? = null,
+    // Optional already-authorized owner main-car path. Host owns lazy garage observation.
+    coverImagePath: String? = null,
 ) {
     var editing by remember { mutableStateOf(false) }
     var nameField by remember { mutableStateOf("") }
@@ -132,6 +134,7 @@ fun ProfileScreen(
                 avatarUrl = avatarUrl,
                 uploadStatus = avatarUploadStatus,
                 onChangeAvatar = onChangeAvatar,
+                coverImagePath = coverImagePath,
             )
 
             if (editing) {
@@ -261,6 +264,7 @@ private fun ProfileIdentitySection(
     avatarUrl: String?,
     uploadStatus: ImageUploadStatus,
     onChangeAvatar: (() -> Unit)?,
+    coverImagePath: String?,
 ) {
     Surface(color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.large) {
         Column(
@@ -273,6 +277,7 @@ private fun ProfileIdentitySection(
                 uploadStatus = uploadStatus,
                 onChangeAvatar = onChangeAvatar,
                 centered = editing,
+                coverImagePath = if (editing) null else coverImagePath,
             )
             if (!editing) {
                 // Preserve the social links directly beneath the avatar.
@@ -305,6 +310,7 @@ private fun AvatarSection(
     uploadStatus: ImageUploadStatus,
     onChangeAvatar: (() -> Unit)?,
     centered: Boolean,
+    coverImagePath: String?,
 ) {
     val uploading = uploadStatus == ImageUploadStatus.Uploading
     Column(
@@ -312,6 +318,7 @@ private fun AvatarSection(
         horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
     ) {
+        ProfileVehicleHero(coverImagePath) {
         SupporterAvatarFrame(supporterBadgeVisible) {
             Box(
                 modifier = Modifier
@@ -342,6 +349,7 @@ private fun AvatarSection(
             }
         }
 
+        }
         if (onChangeAvatar != null) {
             OutlinedButton(onClick = onChangeAvatar, enabled = !uploading) {
                 Text(

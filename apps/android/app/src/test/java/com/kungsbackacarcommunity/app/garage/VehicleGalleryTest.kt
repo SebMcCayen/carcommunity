@@ -3,10 +3,20 @@ package com.kungsbackacarcommunity.app.garage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 /** Pure-logic tests for the car-detail photo gallery ([VehicleGallery]). */
 class VehicleGalleryTest {
+    @Test fun `profile cover uses only the main car and its canonical gallery order`() {
+        val other = vehicle("other.jpg")
+        val main = vehicle("legacy.jpg", listOf("cover.jpg", "second.jpg")).copy(isMainCar = true)
+        assertEquals("cover.jpg", VehicleGallery.mainCarCoverPath(listOf(other, main)))
+        assertEquals("legacy.jpg", VehicleGallery.mainCarCoverPath(listOf(main.copy(photoPaths = emptyList()))))
+        assertNull(VehicleGallery.mainCarCoverPath(listOf(other)))
+        assertNull(VehicleGallery.mainCarCoverPath(listOf(other, main.copy(imagePath = null, photoPaths = listOf(" ")))))
+        assertNull(VehicleGallery.mainCarCoverPath(emptyList()))
+    }
 
     private fun vehicle(imagePath: String?, photoPaths: List<String> = emptyList()) =
         Vehicle(

@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.garage
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
@@ -23,6 +24,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
@@ -154,9 +157,6 @@ fun GarageScreen(
     }
 }
 
-/** Catalogue S57: a wide real photo, with a native car glyph when none exists. */
-private val GarageVehiclePhotoStyle = VehiclePhotoStyle.FullWidth(16f / 9f, KccRadius.md)
-
 /**
  * One of the owner's own cars in the garage list: the shared [VehicleCard] with
  * My Garage's photo-led look plus the manage actions that only
@@ -173,9 +173,11 @@ private fun OwnedVehicleCard(
 ) {
     var menuExpanded by remember(vehicle.id) { mutableStateOf(false) }
     val vehicleName = VehicleDisplay.headline(vehicle, stringResource(R.string.garage_catalogueOther))
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
     VehicleCard(
         vehicle = vehicle,
-        photoStyle = GarageVehiclePhotoStyle,
+        photoStyle = VehiclePhotoStyle.FullWidth(garagePhotoAspectRatio(maxWidth.value, LocalDensity.current.fontScale), KccRadius.md),
+        photoModifier = Modifier.testTag(garagePhotoTag(vehicle.id)),
         mainCarLabelRes = R.string.garage_mainCarBadge,
         photoContentDescriptionRes = R.string.garage_photoAlt,
         contentSpacing = KccSpacing.s2,
@@ -219,4 +221,5 @@ private fun OwnedVehicleCard(
             }
         },
     )
+    }
 }
