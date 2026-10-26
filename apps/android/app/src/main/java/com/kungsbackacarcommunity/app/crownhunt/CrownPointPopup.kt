@@ -1,45 +1,22 @@
 package com.kungsbackacarcommunity.app.crownhunt
 
 import androidx.annotation.StringRes
-import androidx.compose.foundation.background
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import com.kungsbackacarcommunity.app.R
-import com.kungsbackacarcommunity.app.design.KccRadius
-import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.shell.MapDetailSheet
 
 /** Test tag on the whole admin-point popup, so UI tests can find it. */
 const val CROWN_POINT_POPUP_TAG = "crown_point_popup"
@@ -87,102 +64,24 @@ fun CrownPointPopup(
     onDismiss: () -> Unit,
     showLiveShareTip: Boolean = false,
 ) {
-    Popup(
-        alignment = Alignment.BottomCenter,
-        onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true),
+    MapDetailSheet(
+        title = point.title,
+        onDismiss = onDismiss,
+        modifier = Modifier.testTag(CROWN_POINT_POPUP_TAG),
+        leadingContent = {
+            Icon(painterResource(crownPointGlyphRes()), contentDescription = null,
+                modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
+        },
     ) {
-        Surface(
-            modifier =
-                Modifier
-                    .padding(KccSpacing.s4)
-                    .fillMaxWidth()
-                    .testTag(CROWN_POINT_POPUP_TAG),
-            shape = RoundedCornerShape(KccRadius.lg),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-            tonalElevation = 6.dp,
-            shadowElevation = 6.dp,
-        ) {
-            Column(
-                modifier = Modifier.heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.8f).dp)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = KccSpacing.s5, vertical = KccSpacing.s4),
-                verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
-            ) {
-                CrownPointHeader(point = point, onDismiss = onDismiss)
-                // A finished call replaces the whole body: once the server has
-                // answered there is nothing left to collect on this pass, so the
-                // description and button give way to the outcome.
-                val done = status as? CrownHuntClaimStatus.Done
-                if (done != null) {
-                    CrownPointOutcomeBody(result = done.outcome.result, points = done.outcome.pointsAwarded, allowance = done.outcome.allowance, onDismiss = onDismiss)
-                } else {
-                    CrownPointCollectBody(
-                        point = point,
-                        status = status,
-                        collectInRange = collectInRange,
-                        onCollect = onCollect,
-                        onNavigate = onNavigate,
-                    )
-                    // Same live-share nudge as the auto-spawn popup: only while the
-                    // point is still collectable and only when the caller confirms
-                    // the rule is on AND the member is not currently live-sharing.
-                    if (showLiveShareTip) {
-                        CrownLiveShareTip()
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** The admin-point disc + royal silhouette, its name and its value. */
-@Composable
-private fun CrownPointHeader(point: CrownHuntPoint, onDismiss: () -> Unit) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
-    ) {
-        // The same disc + silhouette the marker is drawn from, so the thing in
-        // the popup is recognisably the thing that was tapped.
-        Box(
-            modifier =
-                Modifier
-                    .size(KccSpacing.s12)
-                    .clip(CircleShape)
-                    .background(Color(CrownMarkerStyle.ADMIN_POINT_DISC)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter = painterResource(crownPointGlyphRes()),
-                contentDescription = null,
-                tint = Color(CrownMarkerStyle.adminPointGlyphColorArgb()),
-                modifier = Modifier.size(KccSpacing.s8),
-            )
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = point.title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                // crownHunt_rewardLabel carries a {points} placeholder
-                // ("Reward: {points} KP") — substitute it, don't append.
-                text =
-                    stringResource(R.string.crownHunt_rewardLabel)
-                        .replace("{points}", point.rewardPoints.toString()),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        IconButton(onClick = onDismiss) {
-            Icon(
-                imageVector = Icons.Filled.Close,
-                contentDescription = stringResource(R.string.crownHunt_spawnClose),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        val done = status as? CrownHuntClaimStatus.Done
+        if (done != null) {
+            CrownPointOutcomeBody(result = done.outcome.result, points = done.outcome.pointsAwarded,
+                allowance = done.outcome.allowance, newBalance = done.outcome.newBalance, onDismiss = onDismiss)
+        } else {
+            Text(stringResource(R.string.crownHunt_rewardLabel).replace("{points}", point.rewardPoints.toString()),
+                style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+            CrownPointCollectBody(point, status, collectInRange, onCollect, onNavigate)
+            if (showLiveShareTip) CrownLiveShareTip()
         }
     }
 }
@@ -266,6 +165,7 @@ private fun CrownPointOutcomeBody(
     result: CrownHuntClaimResult,
     points: Int?,
     allowance: CrownAllowance?,
+    newBalance: Int?,
     onDismiss: () -> Unit,
 ) {
     val awarded = result == CrownHuntClaimResult.AWARDED
@@ -279,7 +179,7 @@ private fun CrownPointOutcomeBody(
     if (awarded) {
         // The payoff, from the server's answer — that is what actually landed in
         // the balance, so it is honest even if the document's value drifted.
-        CrownRewardSummary(pointsAwarded = points ?: 0)
+        points?.let { CrownRewardSummary(pointsAwarded = it, newBalance = newBalance) }
     }
     TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
         Text(text = stringResource(R.string.crownHunt_spawnClose))
