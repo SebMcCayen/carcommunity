@@ -6,8 +6,9 @@ The current task covers Android only; iOS feature work is owned on the Mac mini.
 
 ## Integrated pass-3 checks — 2026-10-26
 
-Final Android/test source: `0e4959288f58c3094440e04d54c84f0832849e21`,
-Android subtree `96a4cd7f002277dab0f10589bfedcb249224df7b`.
+Presentation/JVM-package baseline: `0e4959288f58c3094440e04d54c84f0832849e21`,
+Android subtree `96a4cd7f002277dab0f10589bfedcb249224df7b`. The later
+instrumentation-only revision and complete 108-test result are pinned below.
 PR #1189 supplies map/Crown foundations; stacked PR #1190 supplies the screen
 work. These results supersede **execution pending** statements only for the
 specific checks below. The audit farther down remains a dated source snapshot.
