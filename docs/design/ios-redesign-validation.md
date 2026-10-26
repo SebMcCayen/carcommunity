@@ -306,6 +306,12 @@ collapsed disclosure, preserving its existing range, persistence and callbacks.
 Large accessibility text stacks the appearance choices and scrolls content while
 keeping the native close action outside the scroller.
 
+Config-less DEBUG UI tests set their SwiftUI text size before the first frame
+using `-KCCUITestTextSize`; configured/Release builds ignore this fixture. This
+avoids UIKit launch-default state leaking between successive test launches.
+All large-text geometry/readability assertions remain enabled. These controlled
+SwiftUI fixtures do not replace real-device testing of OS-wide text-size changes.
+
 Scope is deliberately limited: this does not claim Android's complete pass-three
 screen design, docked footer geometry, incident-age filters or Crown participation
 controls have been ported. Existing iOS feature/privacy gates, incident attribution,
