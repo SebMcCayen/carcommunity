@@ -93,7 +93,7 @@ class ChatHubViewportTest {
         // Budget includes the real status inset. The old title/source/back/icon stack exceeds it.
         assertTrue("Chrome must leave room for messages: $strip / $root", strip.bottom - root.top <= 144f)
         assertTrue("Sources must be a compact row: $sources", sources.height <= 64f)
-        assertTrue("Conversation viewport: $viewport", viewport.height >= 240f)
+        assertTrue("Conversation viewport: $viewport", viewport.height >= 300f)
         assertTrue("Messages start below chrome", viewport.top >= strip.bottom)
         assertTrue("Composer clears messages", inputBounds.top >= viewport.bottom)
         assertTrue("Composer inside hub", inputBounds.bottom <= root.bottom)

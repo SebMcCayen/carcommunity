@@ -31,7 +31,7 @@ const val CHAT_SOURCE_SELECTOR_TEST_TAG = "chat_source_selector"
 fun ChatFeedHeader(driverSelected: Boolean, onSelect: (Boolean) -> Unit) {
     Box(Modifier.fillMaxWidth().statusBarsPadding()) {
         ChatFeedSelector(driverSelected, onSelect,
-            Modifier.padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s1))
+            Modifier.padding(start = KccSpacing.s4, end = KccSpacing.s4, bottom = KccSpacing.s1))
     }
 }
 
