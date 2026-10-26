@@ -238,19 +238,15 @@ data class MapBillboardMarker(
  * currently a compile-time one, and a tap that opened an incident sheet for a
  * crown would be exactly the bug that costs.
  *
- * @property discColorArgb the rarity disc colour, resolved by the host.
- * @property iconRes drawable for the rarity's crown silhouette. Silhouette is
- *   the primary rarity channel (it survives any colour-vision deficiency and any
- *   basemap); the disc colour reinforces it.
- * @property glyphColorArgb the tint for [iconRes], chosen by the host for
- *   contrast against [discColorArgb].
- * @property glowColorArgb a soft halo drawn OUTSIDE the rings, or null for the
- *   tiers that have none. Only the legendary tier glows — see
- *   `CrownMarkerStyle.glowColorArgb` for why it is not on all four.
- * @property collectedByYou whether to stamp the distinct "you already collected
- *   this" check badge on the marker — true only for a SHARED crown the current
- *   member has picked up but which stays live on the map for others. Baked into
- *   the marker image (not a separate layer), so it scales at every zoom.
+ * @property discColorArgb legacy range/state adapter (slate means no proven range).
+ * @property iconRes existing crown silhouette; never an avatar or vehicle.
+ * @property glyphColorArgb legacy tint adapter retained for source compatibility.
+ * @property glowColorArgb legacy cache input; compact tiles deliberately draw no halo.
+ * @property collectedByYou compatibility for previews; the production host omits
+ *   collected crowns from its next marker set, triggering the bounded exit.
+ * @property rarity actual spawn tier, or null for a curated point.
+ * @property rewardPoints actual point reward, used for a curated point's visual
+ *   band only. Neither field changes backend rewards or eligibility.
  */
 data class MapCrownMarker(
     val id: String,
@@ -261,6 +257,9 @@ data class MapCrownMarker(
     val glyphColorArgb: Int,
     val glowColorArgb: Int?,
     val collectedByYou: Boolean = false,
+    /** Presentation metadata only; reward amounts and collection stay server-authoritative. */
+    val rarity: com.kungsbackacarcommunity.app.crownhunt.CrownRarity? = null,
+    val rewardPoints: Int? = null,
 )
 
 /**

@@ -11,6 +11,9 @@ import androidx.compose.ui.unit.sp
 /** KCC Crown UI brand palette. */
 object KccPalette {
     val crownGold = Color(0xFFEAB54B)
+    val crownCommon = Color(0xFFB4B1AD)
+    val crownUncommon = Color(0xFF70D6A3)
+    val crownRare = Color(0xFFC4A5FF)
     val darkCharcoal = Color(0xFF3F3E3B)
     val inkBlack = Color(0xFF040211)
     val warmIvory = Color(0xFFF8F6EF)

@@ -63,15 +63,19 @@ object CrownPointMarkers {
      *   collectible before a real location proves the member is actually in range.
      *   (Before the fix this defaulted the other way — every crown lit up on app
      *   open, looking reachable while the member was far away.)
+     * @param suppressedIds bounded, uid-local presentation suppression after a
+     *   confirmed admin award; the point documents and backend eligibility stay intact.
      */
     fun markers(
         points: List<CrownHuntPoint>,
         visible: Boolean,
         glyphRes: Int,
         inRangeIds: Set<String>? = null,
+        suppressedIds: Set<String> = emptySet(),
     ): List<MapCrownMarker> {
         if (!visible) return emptyList()
         return points.mapNotNull { point ->
+            if (point.id in suppressedIds) return@mapNotNull null
             val latitude = point.latitude ?: return@mapNotNull null
             val longitude = point.longitude ?: return@mapNotNull null
             // null inRangeIds → no live location, so treat every point as OUT of
@@ -85,9 +89,9 @@ object CrownPointMarkers {
                 discColorArgb = CrownMarkerStyle.adminPointDiscArgb(inRange),
                 iconRes = glyphRes,
                 glyphColorArgb = CrownMarkerStyle.adminPointGlyphColorArgb(inRange),
-                // Admin points carry no glow; the halo stays reserved for the
-                // legendary spawn tier so it keeps meaning "walk to that one".
+                // Compact map tiles carry no halo.
                 glowColorArgb = null,
+                rewardPoints = point.rewardPoints,
             )
         }
     }

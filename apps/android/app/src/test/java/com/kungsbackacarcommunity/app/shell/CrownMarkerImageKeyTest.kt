@@ -23,10 +23,37 @@ import org.junit.Test
  */
 class CrownMarkerImageKeyTest {
     @Test
-    fun `standalone crown renderer invalidates cached filled-disc images`() {
+    fun `compact crown renderer invalidates cached ring images`() {
         val key = CrownMarkerBitmaps.imageId(1, 2, 3, null)
-        assertTrue(key.startsWith("kcc-crown-ring-v2-"))
-        assertNotEquals("kcc-crown-1-2-3-0", key)
+        assertTrue(key.startsWith("kcc-crown-tile-v3-"))
+        assertNotEquals("kcc-crown-ring-v2-1-2-3-0", key)
+    }
+
+    @Test
+    fun `rarity remains part of cached appearance while outside range`() {
+        val common = CrownMarkerBitmaps.imageId(1, CrownMarkerStyle.OUT_OF_RANGE_DISC, 3, null,
+            rarity = CrownRarity.COMMON)
+        val rare = CrownMarkerBitmaps.imageId(1, CrownMarkerStyle.OUT_OF_RANGE_DISC, 3, null,
+            rarity = CrownRarity.RARE)
+        assertNotEquals(common, rare)
+    }
+
+    @Test
+    fun `curated reward bands invalidate the key without per-value image churn`() {
+        fun key(value: Int) = CrownMarkerBitmaps.imageId(1, 2, 3, null, rewardPoints = value)
+        assertNotEquals(key(10), key(100))
+        org.junit.Assert.assertEquals(key(100), key(150))
+    }
+
+    @Test
+    fun `every value accent stays legible on the reading surface`() {
+        val ink = 0xFF121A27.toInt()
+        for (rank in 0..3) {
+            val ratio = com.kungsbackacarcommunity.app.incidents.IncidentMarkerStyle.contrastRatio(
+                CrownMarkerBitmaps.accent(rank), ink,
+            )
+            assertTrue("rank $rank contrast $ratio", ratio >= 4.5)
+        }
     }
 
     /** The image key the surface would compute for a crown in the given state. */

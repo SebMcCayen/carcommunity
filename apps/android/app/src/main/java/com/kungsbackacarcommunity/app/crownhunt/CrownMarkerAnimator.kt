@@ -22,10 +22,9 @@ import kotlin.math.sin
  *
  * ## The two sequences (car/game-inspired)
  *
- *  - SPAWN: a small light shines at the spot, then the crown pops up (scale-in
- *    with a slight overshoot, the way a pickup lands in a driving game), spins a
- *    little as it settles, and comes to rest. See [spawnState].
- *  - DESPAWN: a brief spark, then the crown shrinks and spins out while it fades.
+ *  - SPAWN: the crown scales in with a slight overshoot and stays upright as
+ *    it settles. The legacy shine channel is unused by compact tiles.
+ *  - DESPAWN: the crown shrinks and fades while remaining upright.
  *    See [despawnState].
  *
  * ## Appear / disappear detection, and STAGGERING
@@ -33,10 +32,10 @@ import kotlin.math.sin
  * [sync] is fed the FULL set of crown ids that should currently be on the map
  * (the diff source). An id that is new → starts a spawn; an id that has vanished
  * → starts a despawn (and is kept rendered until that despawn finishes, so a
- * removed crown animates OUT rather than blinking away). A "collected-by-you"
- * crown (#929) never leaves the id set — it stays live for others — so its state
- * change does NOT reach this holder as a despawn; only a genuine expire/removal
- * does.
+ * removed crown animates OUT rather than blinking away). The host excludes
+ * crowns already collected by this member even while they remain live for
+ * others, so a confirmed collection uses this same bounded exit animation.
+ * Reduced-motion callers reconcile immediately with animationsEnabled=false.
  *
  * When several crowns appear in the SAME [sync] (the common case right after a
  * replenish pass fills an area's cells), their spawn starts are STAGGERED by
@@ -83,7 +82,12 @@ class CrownMarkerAnimator(
      * Idempotent for an unchanged set: a crown already spawning or settled is left
      * exactly as it is, so re-syncing the same ids never re-triggers an animation.
      */
-    fun sync(currentIds: Set<String>, nowMs: Long) {
+    fun sync(currentIds: Set<String>, nowMs: Long, animationsEnabled: Boolean = true) {
+        if (!animationsEnabled) {
+            records.clear()
+            for (id in currentIds) records[id] = Record(Kind.SETTLED, nowMs)
+            return
+        }
         // Genuinely-new ids (never seen). Sorted for a STABLE stagger order so the
         // reveal sequence is deterministic and testable rather than dependent on
         // set iteration. A reappearing (despawning) id is handled separately below
@@ -203,8 +207,8 @@ class CrownMarkerAnimator(
         )
 
     /**
-     * SPAWN transforms at normalized progress [t] in [0, 1]: the light shines, the
-     * crown pops up with a slight overshoot, spins a little, and settles.
+     * SPAWN transforms at normalized progress [t] in [0, 1]: a short scale-in
+     * with a slight overshoot. Compact tiles ignore the legacy shine channel.
      */
     private fun spawnState(id: String, t: Float): CrownAnimationState {
         val clamped = t.coerceIn(0f, 1f)
@@ -216,7 +220,7 @@ class CrownMarkerAnimator(
         // nothing up past 1 and settling back — easeOutBack's overshoot.
         val popT = ((clamped - POP_START_FRACTION) / (1f - POP_START_FRACTION)).coerceIn(0f, 1f)
         val scale = if (clamped < POP_START_FRACTION) 0f else easeOutBack(popT)
-        // Spin: starts tilted and unwinds to upright as it settles.
+        // Preserve the rotation channel at zero so compact tiles remain upright.
         val rotation = -SPAWN_SPIN_DEGREES * (1f - easeOutCubic(clamped))
         // Fade the glyph in fast, a beat after the light appears.
         val alpha = ((clamped - ALPHA_START_FRACTION) / ALPHA_RAMP_FRACTION).coerceIn(0f, 1f)
@@ -231,8 +235,8 @@ class CrownMarkerAnimator(
     }
 
     /**
-     * DESPAWN transforms at normalized progress [t] in [0, 1]: a spark, then the
-     * crown shrinks and spins out while it fades.
+     * DESPAWN transforms at normalized progress [t] in [0, 1]: the crown shrinks and
+     * fades without spinning, so a crowded map stays calm.
      */
     private fun despawnState(id: String, t: Float): CrownAnimationState {
         val clamped = t.coerceIn(0f, 1f)
@@ -258,14 +262,14 @@ class CrownMarkerAnimator(
     }
 
     companion object {
-        /** Spawn animation length — long enough to read the pop + spin, short enough not to nag. */
-        const val DEFAULT_SPAWN_DURATION_MS: Long = 620
+        /** Spawn animation length — a short, restrained appearance without an idle loop. */
+        const val DEFAULT_SPAWN_DURATION_MS: Long = 280
 
         /** Despawn animation length — a touch quicker than the spawn; it is an exit, not an entrance. */
-        const val DEFAULT_DESPAWN_DURATION_MS: Long = 420
+        const val DEFAULT_DESPAWN_DURATION_MS: Long = 320
 
         /** Delay between successive crowns' spawn starts when a batch appears together. */
-        const val DEFAULT_STAGGER_STEP_MS: Long = 130
+        const val DEFAULT_STAGGER_STEP_MS: Long = 45
 
         /**
          * Cap on stagger steps: beyond this many crowns in one batch, the extras
@@ -287,11 +291,11 @@ class CrownMarkerAnimator(
         /** …over this much of the spawn. */
         private const val ALPHA_RAMP_FRACTION = 0.15f
 
-        /** How far the crown is tilted at the start of its spin, in degrees. */
-        private const val SPAWN_SPIN_DEGREES = 160f
+        /** Tiles stay upright; retain the transform field for annotation compatibility. */
+        private const val SPAWN_SPIN_DEGREES = 0f
 
-        /** How far a despawning crown spins out, in degrees. */
-        private const val DESPAWN_SPIN_DEGREES = 200f
+        /** The collection exit shrinks/fades, never rotates through nearby markers. */
+        private const val DESPAWN_SPIN_DEGREES = 0f
 
         /** Fraction of the despawn during which the exit spark flashes. */
         private const val SPARK_FRACTION = 0.4f
@@ -309,13 +313,13 @@ class CrownMarkerAnimator(
             return 1f + BACK_C3 * p * p * p + BACK_C1 * p * p
         }
 
-        /** easeOutCubic — fast then gentle, for a spin that unwinds and settles. */
+        /** easeOutCubic — fast then gentle. */
         fun easeOutCubic(x: Float): Float {
             val p = 1f - x
             return 1f - p * p * p
         }
 
-        /** easeInCubic — gentle then fast, for a shrink/spin that accelerates away. */
+        /** easeInCubic — gentle then fast, for the shrinking exit. */
         fun easeInCubic(x: Float): Float = x * x * x
     }
 }
