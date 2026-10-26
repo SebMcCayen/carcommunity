@@ -34,6 +34,8 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.kungsbackacarcommunity.app.AuthenticatedApp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.chatchannels.CHAT_HUB_TEST_TAG
@@ -76,14 +78,15 @@ class MapFirstShellTest {
     val composeTestRule = createAndroidComposeRule<ComponentActivity>()
 
     /**
-     * The device's status-bar height in px, read from the platform resource. Used to
+     * The window's actual status-bar inset in px. Platform dimension resources
+     * can differ after display resizing or in multi-window mode. Used to
      * assert the chat-hub card clears system UI at whatever window size the test
      * runs at (portrait, landscape or a resized/short window).
      */
     private fun statusBarHeightPx(): Int {
-        val res = InstrumentationRegistry.getInstrumentation().targetContext.resources
-        val id = res.getIdentifier("status_bar_height", "dimen", "android")
-        return if (id > 0) res.getDimensionPixelSize(id) else 0
+        return checkNotNull(ViewCompat.getRootWindowInsets(composeTestRule.activity.window.decorView)) {
+            "Status-bar assertions require an attached window with real insets"
+        }.getInsets(WindowInsetsCompat.Type.statusBars()).top
     }
 
     private fun str(id: Int) =
@@ -1255,10 +1258,15 @@ class MapFirstShellTest {
         // (landscape / split-screen) the card's top can never slide under the
         // status bar and hide the page's own title.
         val statusBarTop = with(composeTestRule.density) { statusBarHeightPx().toDp() }
+        // Root coordinates may begin BELOW the status bar when the test Activity
+        // fits system windows. Compare window positions to window insets instead.
+        val cardWindowTop = with(composeTestRule.density) {
+            composeTestRule.onNodeWithTag(tag).fetchSemanticsNode().positionInWindow.y.toDp()
+        }
         assertTrue(
             "panel '$tag' card top was $cardTop — expected it to clear the " +
                 "$statusBarTop status bar",
-            cardTop >= statusBarTop,
+            cardWindowTop >= statusBarTop,
         )
         // Deliberately NOT asserted here: that the map home is findable behind the
         // card. The shell wraps that subtree in `clearAndSetSemantics {}` while
