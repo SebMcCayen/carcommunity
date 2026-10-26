@@ -10,9 +10,9 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
+import com.kungsbackacarcommunity.app.design.KccButton as Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import com.kungsbackacarcommunity.app.design.KccOutlinedButton as OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -133,6 +133,7 @@ fun VehicleFormScreen(
     val error = VehicleValidation.validate(form, currentYear)
 
     AeroPage(
+        ownerShortcutEnabled = false,
         title =
             stringResource(
                 if (isEdit) R.string.garage_formTitleEdit else R.string.garage_formTitleCreate,

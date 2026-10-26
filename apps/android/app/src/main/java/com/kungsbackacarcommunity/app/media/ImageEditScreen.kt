@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
+import com.kungsbackacarcommunity.app.design.KccButton as Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -193,6 +193,7 @@ fun ImageEditScreen(
     CompositionLocalProvider(LocalAeroBackAvailable provides false) {
         AeroPage(
             title = stringResource(R.string.imageEditor_title),
+            ownerShortcutEnabled = false,
             modifier = modifier,
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {

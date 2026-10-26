@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
+import com.kungsbackacarcommunity.app.design.KccButton as Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
@@ -65,6 +65,7 @@ fun PartnerApplicationScreen(
         )
 
     AeroPage(
+        ownerShortcutEnabled = false,
         title = stringResource(R.string.partners_applicationTitle),
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp),

@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -27,7 +26,7 @@ import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import com.kungsbackacarcommunity.app.design.KccButton as Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -37,7 +36,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import com.kungsbackacarcommunity.app.design.KccOutlinedButton as OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -352,27 +351,21 @@ fun EventDetailScreen(
                 }
             }
 
-            FlowRow(
+            Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 if (onOpenChat != null) {
-                    OutlinedButton(onClick = onOpenChat, modifier = Modifier.testTag(EVENT_DETAIL_CHAT_TAG)) {
-                        Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Text(stringResource(R.string.chat_eventChatTitle), modifier = Modifier.padding(start = 8.dp))
-                    }
+                    EventContextAction(stringResource(R.string.chat_eventChatTitle), Icons.AutoMirrored.Filled.Chat,
+                        onOpenChat, Modifier.weight(1f).testTag(EVENT_DETAIL_CHAT_TAG))
                 }
                 if (onOpenGroupDrive != null) {
-                    OutlinedButton(onClick = onOpenGroupDrive, modifier = Modifier.testTag(EVENT_DETAIL_GROUP_DRIVE_TAG)) {
-                        Icon(Icons.Filled.DirectionsCar, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Text(stringResource(R.string.groupDrive_screenTitle), modifier = Modifier.padding(start = 8.dp))
-                    }
+                    EventContextAction(stringResource(R.string.groupDrive_screenTitle), Icons.Filled.DirectionsCar,
+                        onOpenGroupDrive, Modifier.weight(1f).testTag(EVENT_DETAIL_GROUP_DRIVE_TAG))
                 }
                 if (onShareEvent != null) {
-                    OutlinedButton(onClick = onShareEvent, modifier = Modifier.testTag(EVENT_DETAIL_SHARE_TAG)) {
-                        Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Text(stringResource(R.string.events_shareEvent), modifier = Modifier.padding(start = 8.dp))
-                    }
+                    EventContextAction(stringResource(R.string.events_shareEvent), Icons.Filled.Share,
+                        onShareEvent, Modifier.weight(1f).testTag(EVENT_DETAIL_SHARE_TAG))
                 }
             }
 
@@ -505,6 +498,24 @@ fun EventDetailScreen(
                     )
                 }
             }
+    }
+}
+
+/** Three equal-width actions keep the detail spine compact without shrinking text. */
+@Composable
+private fun EventContextAction(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier,
+) {
+    OutlinedButton(onClick = onClick, modifier = modifier,
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 8.dp)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+            Text(label, style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center)
+        }
     }
 }
 

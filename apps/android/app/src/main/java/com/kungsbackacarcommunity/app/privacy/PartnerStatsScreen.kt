@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.material3.Button
+import com.kungsbackacarcommunity.app.design.KccButton as Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Switch
@@ -70,6 +70,7 @@ fun PartnerStatsScreen(
     }
 
     AeroPage(
+        ownerShortcutEnabled = false,
         title = stringResource(R.string.privacySettings_title),
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp),

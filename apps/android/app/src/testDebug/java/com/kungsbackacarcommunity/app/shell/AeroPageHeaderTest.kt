@@ -66,6 +66,18 @@ class AeroPageHeaderTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private var replacedImageLoader = false
 
+    @Test fun editablePagesHaveNoAlternateProfileExit() {
+        compose.setContent {
+            KccTheme {
+                CompositionLocalProvider(LocalAeroOwnerHeader provides AeroOwnerHeader(null, false, {})) {
+                    AeroPage(title = "Editor", ownerShortcutEnabled = false) { Text("Draft") }
+                }
+            }
+        }
+        compose.onNodeWithTag(AeroOwnerAvatarTag).assertDoesNotExist()
+        compose.onNodeWithText("Draft").assertIsDisplayed()
+    }
+
     @After fun resetImageLoader() {
         if (replacedImageLoader) Coil.reset()
     }
@@ -188,6 +200,9 @@ class AeroPageHeaderTest {
         compose.onNodeWithTag(AeroOwnerAvatarFallbackTag, useUnmergedTree = true).assertIsDisplayed()
         assertTrue(requested.isEmpty())
         compose.runOnIdle { owner.value = owner.value.copy(avatarUrl = resolvedUrl) }
+        // Apply the new image constraints/recomposition before awaiting Coil's
+        // background interceptor; waitUntil alone does not pump Robolectric layout.
+        compose.waitForIdle()
         compose.waitUntil(5_000) { requested.contains(resolvedUrl) }
         compose.onNodeWithTag(AeroOwnerAvatarFallbackTag, useUnmergedTree = true).assertIsDisplayed()
         compose.onNodeWithTag(AeroOwnerAvatarTag).assertHasClickAction()

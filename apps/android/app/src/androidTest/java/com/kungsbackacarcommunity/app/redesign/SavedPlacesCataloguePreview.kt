@@ -20,7 +20,7 @@ fun SavedPlacesCataloguePreview(screen: String) {
             .mapIndexed { index, kind ->
                 SavedPlaces.create(kind, PlaceSuggestion(
                     id = "local-fixture-$index", name = "Lokal testdestination ${index + 1}",
-                    address = null, point = LatLng(12.08 + index * 0.001, 57.49),
+                    address = null, point = LatLng(57.49, 12.08 + index * 0.001),
                 ), "Testplats ${index + 1}")
             }
     }

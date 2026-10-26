@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +37,9 @@ import com.kungsbackacarcommunity.app.map.MapZoomPreference
 import com.kungsbackacarcommunity.app.shell.MapSurface
 import com.kungsbackacarcommunity.app.shell.MapLoadState
 import com.kungsbackacarcommunity.app.shell.MapboxMapSurface
+import com.kungsbackacarcommunity.app.shell.LocalAeroOwnerHeader
+import com.kungsbackacarcommunity.app.shell.LocalAeroBackAvailable
+import com.kungsbackacarcommunity.app.shell.AeroOwnerHeader
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -74,7 +78,7 @@ class Wave2RedesignCaptureTest {
             "garage", "profile", "settings", "membership",
             "member-profile", "vehicle-detail", "vehicle-editor", "awards",
             "drive-detail", "drive-history", "drive-stats", "drive-save-failed",
-            "friends", "message-actions",
+            "friends", "message-actions", "saved-places-manage", "saved-place-edit",
             "S65", "S65-saved-locked", "S66", "S66-locked", "S67", "S68", "S68-unresolved", "S69",
             "S71", "S72", "S72-working", "S75", "S75-failed", "S75-deleting", "S76",
             "S80", "S80-plus", "S80-supporter", "S80-pending",
@@ -85,7 +89,7 @@ class Wave2RedesignCaptureTest {
         var selected by mutableStateOf(screens.first())
         var configuredSurface: MapSurface? = null
         rule.setContent {
-            KccTheme(darkTheme = args.getString("redesignTheme") != "light") {
+            CatalogueTheme(selected, args.getString("redesignTheme") != "light") {
                 Surface(Modifier.fillMaxSize()) {
                     Box(Modifier.fillMaxSize()) {
                         Column(Modifier.fillMaxSize()) {
@@ -115,6 +119,7 @@ class Wave2RedesignCaptureTest {
                                         "garage", "profile", "member-profile", "vehicle-detail", "vehicle-editor", "awards",
                                         "drive-detail", "drive-history", "drive-stats", "drive-save-failed" -> Wave2GaragePreview(selected)
                                         "friends", "S36" -> FriendsCataloguePreview()
+                                        "saved-places-manage", "saved-place-edit" -> SavedPlacesCataloguePreview(selected)
                                         "message-actions", "S39" -> MessageActionsCataloguePreview()
                                         "S65", "S65-saved-locked", "S66", "S66-locked", "S67", "S68", "S68-unresolved", "S69",
                                         "S71", "S72", "S72-working", "S75", "S75-failed", "S75-deleting", "S76",
@@ -180,6 +185,8 @@ class Wave2RedesignCaptureTest {
             // can still return the preceding window after a modal is replaced.
             // PixelCopy waits for the current Compose root's draw first. Select
             // the last root so modal windows receive the same fence as pages.
+            rule.mainClock.advanceTimeBy(1_000L)
+            rule.waitForIdle()
             rule.onAllNodes(isRoot()).onLast().captureToImage()
             instrumentation.waitForIdleSync()
             SystemClock.sleep(100) // Let the compositor present the fenced buffer.
@@ -210,6 +217,21 @@ class Wave2RedesignCaptureTest {
                 }
             }
             bitmap.recycle()
+            if (screen == screens.last()) {
+                args.getString("redesignHoldMillis")?.toLongOrNull()?.coerceIn(0L, 60_000L)
+                    ?.takeIf { it > 0L }?.let(SystemClock::sleep)
+            }
         }
+    }
+}
+
+@Composable
+private fun CatalogueTheme(screen: String, dark: Boolean, content: @Composable () -> Unit) {
+    val root = screen.startsWith("map-") || screen in setOf("garage", "chat", "driver", "events", "convoys")
+    CompositionLocalProvider(
+        LocalAeroOwnerHeader provides if (screen == "profile") null else AeroOwnerHeader(null, false, {}),
+        LocalAeroBackAvailable provides !root,
+    ) {
+        KccTheme(darkTheme = dark, content = content)
     }
 }

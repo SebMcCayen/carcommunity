@@ -24,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -183,11 +184,13 @@ fun AeroPage(
     verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(KccSpacing.s4),
     onTitleClick: (() -> Unit)? = null,
     contentWindowInsets: WindowInsets? = null,
+    // Editors retain their existing dirty-draft/Back flow; no alternate exit.
+    ownerShortcutEnabled: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = aeroPageBackground()) {
         val scrollState = rememberScrollState()
-        val ownerHeader = LocalAeroOwnerHeader.current
+        val ownerHeader = LocalAeroOwnerHeader.current.takeIf { ownerShortcutEnabled }
         val backAvailable = LocalAeroBackAvailable.current
         // Fixed chrome: the status-bar inset and the top breathing room live on
         // this outer Column, OUTSIDE the scroll viewport, so they stay pinned and
@@ -241,7 +244,9 @@ fun AeroPage(
                 verticalArrangement = verticalArrangement,
             ) {
                 if (ownerHeader == null) {
-                    AeroPageTitle(title, onClick = onTitleClick)
+                    CompositionLocalProvider(LocalAeroOwnerHeader provides null) {
+                        AeroPageTitle(title, onClick = onTitleClick)
+                    }
                 }
                 content()
             }
@@ -266,6 +271,7 @@ fun AeroPage(
 @Composable
 fun AeroLazyPage(
     modifier: Modifier = Modifier,
+    ownerShortcutEnabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = aeroPageBackground()) {
@@ -287,7 +293,10 @@ fun AeroLazyPage(
             if (LocalAeroBackAvailable.current) {
                 AeroBackButton(horizontalGutter = AeroPageHorizontalPadding)
             }
-            content()
+            CompositionLocalProvider(
+                LocalAeroOwnerHeader provides LocalAeroOwnerHeader.current.takeIf { ownerShortcutEnabled },
+                content = content,
+            )
         }
     }
 }

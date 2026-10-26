@@ -44,7 +44,7 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.WavingHand
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import com.kungsbackacarcommunity.app.design.KccButton as Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -4309,7 +4309,15 @@ fun AuthenticatedApp(
                 }
             }
 
-            CompositionLocalProvider(LocalSnackbarHostState provides snackbarHostState) {
+            CompositionLocalProvider(
+                LocalSnackbarHostState provides snackbarHostState,
+                com.kungsbackacarcommunity.app.shell.LocalAeroOwnerHeader provides
+                    if (route == ShellRoute.Profile) null else com.kungsbackacarcommunity.app.shell.AeroOwnerHeader(
+                        avatarUrl = mapAvatarUrl,
+                        showSupporterBadge = profile?.supporterBadge?.visible == true,
+                        onOpenProfile = { pushRoute(ShellRoute.Profile) },
+                    ),
+            ) {
               Box(modifier = Modifier.fillMaxSize()) {
                 // Keep the screen awake (no lock/dim) while the user is actively
                 // sharing live location OR has the turn-by-turn navigation overlay
