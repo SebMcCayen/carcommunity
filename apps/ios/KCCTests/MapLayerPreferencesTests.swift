@@ -58,6 +58,23 @@ final class MapLayerPreferencesTests: XCTestCase {
         XCTAssertEqual(restored.effectiveMapMode(systemIsDark: true), .night)
     }
 
+    func testAppearanceSelectionAppliesExplicitChoiceImmediately() {
+        let preferences = MapLayerPreferences(defaults: defaults)
+        XCTAssertEqual(preferences.selectMapAppearance(.night, systemIsDark: false), .night)
+        XCTAssertEqual(preferences.selectMapAppearance(.day, systemIsDark: true), .day)
+        XCTAssertEqual(MapLayerPreferences(defaults: defaults).mapModeOverride, .day)
+    }
+
+    func testSystemAppearanceSelectionClearsManualModeAndFollowsChanges() {
+        let preferences = MapLayerPreferences(defaults: defaults)
+        preferences.setMapModeOverride(.night)
+        XCTAssertEqual(preferences.selectMapAppearance(nil, systemIsDark: false), .day)
+        XCTAssertNil(MapLayerPreferences(defaults: defaults).mapModeOverride)
+        XCTAssertEqual(preferences.effectiveMapMode(systemIsDark: true), .night)
+        // Selecting System again still supplies the current mode to the renderer.
+        XCTAssertEqual(preferences.selectMapAppearance(nil, systemIsDark: true), .night)
+    }
+
     func testUnknownStoredModeSafelyFallsBackToSystemAppearance() {
         XCTAssertNil(MapLayerPreferences.decodeMapMode(nil))
         XCTAssertNil(MapLayerPreferences.decodeMapMode("Dusk"))

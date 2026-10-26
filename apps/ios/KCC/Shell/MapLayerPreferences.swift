@@ -127,6 +127,13 @@ final class MapLayerPreferences {
         }
     }
 
+    /// An explicit System choice clears the stored override and immediately
+    /// reapplies the current appearance to the existing map, without recreating it.
+    func selectMapAppearance(_ mode: MapMode?, systemIsDark: Bool) -> MapMode {
+        setMapModeOverride(mode)
+        return effectiveMapMode(systemIsDark: systemIsDark)
+    }
+
     func set3DEnabled(_ enabled: Bool) {
         guard enabled != is3D else { return }
         is3D = enabled

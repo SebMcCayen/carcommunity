@@ -48,6 +48,53 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Map layers"].waitForExistence(timeout: 5))
     }
 
+    func testMapLayersAppearanceChoicesAndFocusControl() {
+        let app = launch(language: "en")
+        app.buttons["shell.mapLayers"].tap()
+        XCTAssertTrue(app.navigationBars["Map layers"].waitForExistence(timeout: 5))
+        let scroll = app.scrollViews.firstMatch
+        for id in ["night", "day", "system"] {
+            let choice = app.buttons["shell.layersAppearance.\(id)"]
+            for _ in 0..<4 where !choice.isHittable { scroll.swipeUp() }
+            XCTAssertTrue(choice.isHittable)
+            choice.tap()
+            assertSelected(choice)
+        }
+        let expand = app.buttons["Show map focus distance"]
+        for _ in 0..<4 where !expand.isHittable { scroll.swipeUp() }
+        XCTAssertTrue(expand.isHittable)
+        expand.tap()
+        XCTAssertTrue(app.sliders["shell.layersZoom"].waitForExistence(timeout: 5))
+        app.buttons["Close map layers"].tap()
+        app.buttons["shell.mapLayers"].tap()
+        let system = app.buttons["shell.layersAppearance.system"]
+        for _ in 0..<4 where !system.isHittable { app.scrollViews.firstMatch.swipeUp() }
+        assertSelected(system)
+    }
+
+    func testSwedishMapLayersWithAccessibilityText() {
+        let app = launch(language: "sv", largeText: true, theme: "Dark")
+        app.buttons["shell.mapLayers"].tap()
+        XCTAssertTrue(app.navigationBars["Kartlager"].waitForExistence(timeout: 5))
+        let scroll = app.scrollViews.firstMatch
+        for (id, label) in [("day", "Dag"), ("night", "Natt"), ("system", "System")] {
+            let choice = app.buttons["shell.layersAppearance.\(id)"]
+            for _ in 0..<8 where !choice.isHittable { scroll.swipeUp() }
+            XCTAssertTrue(choice.isHittable)
+            XCTAssertEqual(choice.label, label)
+            XCTAssertGreaterThanOrEqual(choice.frame.height, 48)
+            choice.tap()
+            assertSelected(choice)
+        }
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "map-layers-sv-dark-accessibility"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        XCTAssertTrue(app.buttons["Stäng kartlager"].isHittable)
+        app.buttons["Stäng kartlager"].tap()
+        XCTAssertTrue(app.buttons["shell.mapLayers"].waitForExistence(timeout: 5))
+    }
+
     func testSwedishShellNavigation() {
         checkShell(language: "sv", labels: ["Karta", "Chatt", "Social", "Garage"])
     }

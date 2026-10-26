@@ -293,3 +293,25 @@ This branch does not claim cross-platform completion. The user subsequently
 authorized pushing this lane and opening a draft PR against the shared design
 foundation to start macOS CI. Main owns screenshot retrieval/review. No PR
 merge, release, production data access or backend deployment is performed.
+
+
+## Android pass-three follow-up: iOS map layers
+
+The first incremental parity slice follows catalogue S03 and the merged Android
+`MapLayersPopup`: supported Traffic / Traffic alerts / 3D rows use semantic
+surfaces, icons and shared supporting copy. Appearance has explicit Day, Night
+and System choices; System clears the device-local manual override and applies
+the current app appearance to the existing renderer. The focus slider is a
+collapsed disclosure, preserving its existing range, persistence and callbacks.
+Large accessibility text stacks the appearance choices and scrolls content while
+keeping the native close action outside the scroller.
+
+Scope is deliberately limited: this does not claim Android's complete pass-three
+screen design, docked footer geometry, incident-age filters or Crown participation
+controls have been ported. Existing iOS feature/privacy gates, incident attribution,
+map instance/session lifetime and external navigation remain unchanged.
+Unit regressions cover explicit and System transitions. Config-less UI cases
+cover English selection/reopening/focus and Swedish dark accessibility text.
+These new native cases require passing CI; authored tests are not executed proof.
+No Mapbox rendering, production Firebase data, Apple service or purchase is needed
+for these UI checks. Physical-device validation remains pending enrollment.
