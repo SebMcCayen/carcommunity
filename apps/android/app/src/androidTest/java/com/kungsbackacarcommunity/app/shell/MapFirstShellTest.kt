@@ -692,7 +692,8 @@ class MapFirstShellTest {
         // toggles.
         composeTestRule.onNodeWithText(str(R.string.shell_layersIncidents)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.shell_layersTraffic)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.shell_layersNightMode)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.shell_layersAppearanceDay)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.shell_layersAppearanceNight)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.shell_layers3d)).assertIsDisplayed()
         // ...and the Kronjakt participation toggle. assertExists rather than
         // scroll-into-view so the header's close button (asserted next) stays put:

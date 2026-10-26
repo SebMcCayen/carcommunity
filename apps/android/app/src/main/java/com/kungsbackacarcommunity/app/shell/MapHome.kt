@@ -9,10 +9,13 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -25,6 +28,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -36,6 +41,10 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Podcasts
@@ -54,6 +63,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
@@ -88,6 +99,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
@@ -294,14 +306,9 @@ fun MapHome(
      * toggle still works in isolation and the first-run default is exercised.
      */
     compassModeState: MutableState<MapCompassMode>? = null,
-    // Optional live-session bar, composed INSIDE the top search row between the
-    // search control and the profile avatar (see [SearchBarRow]) while — and only
-    // while — a live-sharing session is running. Compact (a clock + a distance),
-    // so it sits in the strip the search and avatar frame without crowding either.
-    // A slot for the same reason [convoyBar] is one: the shell stays ignorant of
-    // the live-location domain, and "no session" is the host passing null, which
-    // composes nothing at all (no empty pill, no held gap).
+    // Session chrome docks above the persistent footer (catalogue S16).
     liveSessionBar: (@Composable () -> Unit)? = null,
+    onManageLiveSession: (() -> Unit)? = null,
     // Optional convoy status bar, composed as a FULL-WIDTH bar on its OWN row
     // directly BELOW the top search row (which holds the search control, the
     // live-session bar and the avatar) while — and only while — the caller is in a
@@ -371,6 +378,7 @@ fun MapHome(
 ) {
     val loadState by mapSurface.loadState.collectAsState()
     var topChromeHeightPx by remember { mutableIntStateOf(0) }
+    var bottomChromeHeightPx by remember { mutableIntStateOf(0) }
     val chromeDensity = LocalDensity.current
     val trafficOn by mapSurface.trafficEnabled.collectAsState()
     val is3d by mapSurface.is3d.collectAsState()
@@ -675,10 +683,7 @@ fun MapHome(
                 searchExpanded = searchExpanded,
                 // Open the actual focused field on the first tap.
                 onExpandSearch = onSearch,
-                // Composed between the search control and the avatar so the live
-                // session pill sits in the gap the two frame, never overlapping
-                // either.
-                liveSessionBar = liveSessionBar,
+                liveSessionBar = null,
                 // The profile/account menu popup is composed next to the profile
                 // button (inside SearchBarRow) so the Popup anchors to the
                 // button's real measured bounds instead of a hard-coded offset.
@@ -692,9 +697,6 @@ fun MapHome(
             // row is held open when there is no convoy. Hidden while the search is
             // expanded so the opaque "Where to?" overlay above has the strip to
             // itself and the bar's controls aren't left tappable under it.
-            if (convoyBar != null && !searchExpanded) {
-                convoyBar()
-            }
             if (loadState == MapLoadState.Loading) {
                 LoadingRoadsChip()
             }
@@ -713,7 +715,7 @@ fun MapHome(
                     .padding(
                         top = with(chromeDensity) { topChromeHeightPx.toDp() } + KccSpacing.s3,
                         end = KccSpacing.s4,
-                        bottom = KccSpacing.s4,
+                        bottom = with(chromeDensity) { bottomChromeHeightPx.toDp() } + KccSpacing.s4,
                     )
                     .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.End,
@@ -848,7 +850,33 @@ fun MapHome(
         // ON TOP of the map chrome so the pop is never hidden behind a control and
         // the buttons sit above the shell's bottom bar. Null (not in a convoy)
         // composes nothing at all — no layer, no reserved space.
-        convoyReactions?.invoke()
+        Box(Modifier.fillMaxSize().padding(bottom = with(chromeDensity) { bottomChromeHeightPx.toDp() })) {
+            convoyReactions?.invoke()
+        }
+
+        if (!searchExpanded && (liveSessionBar != null || convoyBar != null)) {
+            Column(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .onSizeChanged { bottomChromeHeightPx = it.height }
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .testTag("map_home_session_dock"),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (liveSessionBar != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Box(Modifier.weight(1f)) { liveSessionBar() }
+                        if (onManageLiveSession != null) {
+                            TextButton(onClick = onManageLiveSession, modifier = Modifier.testTag("map_home_session_manage")) {
+                                Text(stringResource(R.string.liveLocation_stop))
+                            }
+                        }
+                    }
+                }
+                convoyBar?.invoke()
+            }
+        } else {
+            androidx.compose.runtime.SideEffect { bottomChromeHeightPx = 0 }
+        }
 
         // Wave pop (the mid-screen "👋 <name> waved" ReactionOverlay), composed ON
         // TOP of the map chrome so it is never hidden. Null (no WaveRepository)
@@ -956,6 +984,8 @@ fun MapHome(
                 // commits a new one on release, which persists it and applies it to
                 // the map (the LaunchedEffect above pushes it to the surface).
                 browsingZoom = mapZoomController.browsingZoom,
+                followsTheme = desiredMapMode == null,
+                onFollowTheme = { desiredMapMode = null; mapSurface.setMapMode(systemDefaultMode) },
                 onBrowsingZoomChange = { mapZoomController.setBrowsingZoom(it) },
                 // Trafikverket alert max-age filter: the popup shows the current
                 // choice and commits a new one, which persists it and re-filters the
@@ -1054,193 +1084,131 @@ internal fun MapLayersPopup(
     onTrafficChange: (Boolean) -> Unit,
     onNightModeChange: (Boolean) -> Unit,
     on3dChange: (Boolean) -> Unit,
-    // The user's resting-zoom preference ("how far away the focus is") and a
-    // callback to change it. A discrete slider section below the layer toggles —
-    // see [LayerZoomSlider] and [com.kungsbackacarcommunity.app.map.MapZoomPreference].
     browsingZoom: Double,
     onBrowsingZoomChange: (Double) -> Unit,
-    // The Trafikverket alert max-age filter and a callback to change it. A discrete
-    // slider in the Traffic-alerts area — see [LayerAlertAgeSlider] and
-    // [com.kungsbackacarcommunity.app.incidents.IncidentAgeFilter].
     incidentMaxAge: IncidentAgeOption,
     onIncidentMaxAgeChange: (IncidentAgeOption) -> Unit,
-    // Whether the member takes part in Kronjakt (Crown Hunt) and a callback to
-    // change it. A plain toggle row — see
-    // [com.kungsbackacarcommunity.app.crownhunt.CrownHuntParticipation].
     crownHuntParticipating: Boolean,
     onCrownHuntParticipatingChange: (Boolean) -> Unit,
-    // Kronjakt PAYWALL (dark `crownHuntRequirePaid` flag). When [crownHuntUnlocked]
-    // is false the participation row is LOCKED (the switch disabled) and an
-    // upgrade prompt is shown in its place, tapping which invokes
-    // [onUpgradeCrownHunt]. Defaults keep the unlocked (today's) behaviour.
     crownHuntUnlocked: Boolean = true,
     onUpgradeCrownHunt: () -> Unit = {},
     onDismiss: () -> Unit,
+    followsTheme: Boolean = false,
+    onFollowTheme: (() -> Unit)? = null,
 ) {
-    Popup(
-        alignment = Alignment.BottomCenter,
-        onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true),
+    var focusExpanded by rememberSaveable { mutableStateOf(false) }
+    MapDetailSheet(
+        title = stringResource(R.string.shell_layersTitle),
+        onDismiss = onDismiss,
+        modifier = Modifier.testTag(MAP_HOME_LAYERS_POPUP_TAG),
+        leadingContent = { Icon(Icons.Filled.Layers, contentDescription = null) },
+        contentSpacing = KccSpacing.s1,
     ) {
-        Surface(
-            modifier =
-                Modifier
-                    .padding(16.dp)
-                    // Cap first, then fill: use the phone width and retain a
-                    // readable panel width on tablets.
-                    .widthIn(max = 560.dp)
-                    .fillMaxWidth()
-                    .testTag(MAP_HOME_LAYERS_POPUP_TAG),
-            shape = RoundedCornerShape(KccRadius.lg),
-            // Opaque reading surface stays legible over bright map tiles.
-            color = LocalKccMapColors.current.overlay,
-            border = BorderStroke(1.dp, LocalKccMapColors.current.border),
-            tonalElevation = 6.dp,
-            shadowElevation = 6.dp,
-        ) {
-            // Capped to 80% of the screen and scrollable: the layer list has grown
-            // past a short screen (toggles + two sliders + the participation row and
-            // its help), and a fixed Column would push the bottom-most item (the
-            // Trafikverket attribution) off-screen. The cap keeps the popup on
-            // screen; the scroll keeps every row reachable.
-            val maxPopupHeight = (LocalConfiguration.current.screenHeightDp * 0.8f).dp
-            Column(
-                modifier =
-                    Modifier
-                        .heightIn(max = maxPopupHeight)
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+        LayerToggleRow(
+            label = stringResource(R.string.shell_layersTraffic),
+            supportingText = stringResource(R.string.shell_layersTrafficHelp),
+            icon = Icons.Filled.DirectionsCar,
+            checked = trafficOn,
+            onCheckedChange = onTrafficChange,
+        )
+        LayerToggleRow(
+            label = stringResource(R.string.shell_layersIncidents),
+            supportingText = stringResource(R.string.shell_layersIncidentsHelp),
+            icon = Icons.Filled.Warning,
+            checked = incidentsOn,
+            onCheckedChange = onIncidentsChange,
+            switchTestTag = MAP_HOME_LAYERS_INCIDENTS_TAG,
+        )
+        LayerToggleRow(
+            label = stringResource(R.string.shell_layers3d),
+            supportingText = stringResource(R.string.shell_layers3dHelp),
+            icon = Icons.Filled.ViewInAr,
+            checked = is3d,
+            onCheckedChange = on3dChange,
+        )
+        LayerToggleRow(
+            label = stringResource(R.string.shell_layersCrownHunt),
+            supportingText = stringResource(R.string.shell_layersCrownMapHelp),
+            leading = { Icon(painterResource(R.drawable.ic_crown_five_point), contentDescription = null,
+                modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary) },
+            checked = crownHuntParticipating && crownHuntUnlocked,
+            onCheckedChange = onCrownHuntParticipatingChange,
+            switchTestTag = MAP_HOME_LAYERS_CROWN_HUNT_TAG,
+            enabled = crownHuntUnlocked,
+        )
+        if (!crownHuntUnlocked) {
+            TextButton(onClick = onUpgradeCrownHunt, modifier = Modifier.testTag(MAP_HOME_LAYERS_CROWN_HUNT_UPSELL_TAG)) {
+                Text(stringResource(R.string.crownHunt_upsellPrompt))
+            }
+        }
+        Text(stringResource(R.string.shell_layersAppearanceTitle), style = MaterialTheme.typography.titleSmall)
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val columns = if (LocalDensity.current.fontScale > 1.25f) 2 else 3
+        val optionWidth = (maxWidth - KccSpacing.s2 * (columns - 1).toFloat()) / columns.toFloat()
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2), verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+            MapAppearanceChip(
+                label = stringResource(R.string.shell_layersAppearanceDay), icon = Icons.Filled.LightMode,
+                selected = !followsTheme && !nightMode, onClick = { onNightModeChange(false) }, modifier = Modifier.width(optionWidth),
+            )
+            MapAppearanceChip(
+                label = stringResource(R.string.shell_layersAppearanceNight), icon = Icons.Filled.DarkMode,
+                selected = !followsTheme && nightMode, onClick = { onNightModeChange(true) },
+                modifier = Modifier.width(optionWidth).testTag(MAP_HOME_LAYERS_NIGHT_TAG),
+            )
+            if (onFollowTheme != null) {
+                MapAppearanceChip(
+                    label = stringResource(R.string.shell_layersAppearanceSystem), icon = Icons.Filled.Settings,
+                    selected = followsTheme, onClick = onFollowTheme, modifier = Modifier.width(optionWidth),
+                )
+            }
+        }
+        }
+        if (incidentsOn) {
+            Text(stringResource(R.string.shell_layersAlertAgeTitle), style = MaterialTheme.typography.titleSmall)
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag(MAP_HOME_LAYERS_ALERT_AGE_TAG),
+                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Layers,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Text(
-                        text = stringResource(R.string.shell_layersTitle),
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = stringResource(R.string.shell_layersClose),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                // Trafikverket + crowd-sourced incidents layer. Listed first as the
-                // flagship road-info layer; the "Källa: Trafikverket" attribution
-                // below belongs to THIS row and shows only while it is on.
-                LayerToggleRow(
-                    label = stringResource(R.string.shell_layersIncidents),
-                    icon = Icons.Filled.Warning,
-                    checked = incidentsOn,
-                    onCheckedChange = onIncidentsChange,
-                    switchTestTag = MAP_HOME_LAYERS_INCIDENTS_TAG,
-                )
-                // Max-age filter for the Trafikverket alerts drawn by the row above.
-                // In the Traffic-alerts area (directly under its toggle) and shown
-                // only while that layer is on — with it off there is nothing to age
-                // out. Hides Trafikverket alerts older than the chosen age; member
-                // reports are never filtered, and "All" imposes no limit.
-                if (incidentsOn) {
-                    LayerAlertAgeSlider(
-                        maxAge = incidentMaxAge,
-                        onMaxAgeChange = onIncidentMaxAgeChange,
-                    )
-                }
-                LayerToggleRow(
-                    label = stringResource(R.string.shell_layersTraffic),
-                    icon = Icons.Filled.DirectionsCar,
-                    checked = trafficOn,
-                    onCheckedChange = onTrafficChange,
-                )
-                LayerToggleRow(
-                    label = stringResource(R.string.shell_layersNightMode),
-                    icon = Icons.Filled.DarkMode,
-                    checked = nightMode,
-                    onCheckedChange = onNightModeChange,
-                    switchTestTag = MAP_HOME_LAYERS_NIGHT_TAG,
-                )
-                LayerToggleRow(
-                    label = stringResource(R.string.shell_layers3d),
-                    icon = Icons.Filled.ViewInAr,
-                    checked = is3d,
-                    onCheckedChange = on3dChange,
-                )
-                // Kronjakt participation. On (default) draws the crown layer + its
-                // popups; off takes the whole game off this member's screen. Help
-                // text under the row so "where did the crowns go?" is answered in
-                // place. A device-local viewing choice, not an account change.
-                //
-                // KRONJAKT PAYWALL: while [crownHuntUnlocked] is false (the dark
-                // flag is on AND this member is not paid) the toggle is LOCKED —
-                // participating cannot turn the game on when the backend will
-                // serve no crowns and refuse every collect — and an upgrade prompt
-                // replaces the help text, tapping which opens the subscription
-                // screen. While unlocked (the shipped default) this is exactly
-                // today: a live toggle with its help line.
-                LayerToggleRow(
-                    label = stringResource(R.string.shell_layersCrownHunt),
-                    icon = Icons.Filled.WorkspacePremium,
-                    checked = crownHuntParticipating && crownHuntUnlocked,
-                    onCheckedChange = onCrownHuntParticipatingChange,
-                    switchTestTag = MAP_HOME_LAYERS_CROWN_HUNT_TAG,
-                    enabled = crownHuntUnlocked,
-                )
-                if (crownHuntUnlocked) {
-                    Text(
-                        text = stringResource(R.string.shell_layersCrownHuntHelp),
-                        modifier = Modifier.padding(top = KccSpacing.s1),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    Text(
-                        text = stringResource(R.string.crownHunt_upsellPrompt),
-                        modifier =
-                            Modifier
-                                .padding(top = KccSpacing.s1)
-                                // role = Button so TalkBack announces the upsell
-                                // as a button, not plain text.
-                                .clickable(role = Role.Button, onClick = onUpgradeCrownHunt)
-                                .testTag(MAP_HOME_LAYERS_CROWN_HUNT_UPSELL_TAG),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                // Resting-zoom preference: "how far away the focus is" when using the
-                // map as usual. A discrete section of its own so a sibling change to
-                // this same popup stays out of its way.
-                LayerZoomSlider(
-                    browsingZoom = browsingZoom,
-                    onBrowsingZoomChange = onBrowsingZoomChange,
-                )
-                // Attribution for the Trafikverket-sourced incidents drawn on the
-                // map layer (product-owner requirement: credit Trafikverket wherever
-                // we show their open data). Shown only while the incidents layer is
-                // on AND at least one loaded incident actually came from
-                // Trafikverket — with the layer off, or abroad where the Sweden-only
-                // importer contributes nothing, there is no Trafikverket data on
-                // screen to attribute.
-                if (incidentsOn && trafikverketDataShown) {
-                    Text(
-                        text = stringResource(R.string.incidents_sourceTrafikverket),
-                        modifier = Modifier.padding(top = KccSpacing.s2),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                IncidentAgeFilter.orderedOptions.forEach { option ->
+                    FilterChip(
+                        selected = incidentMaxAge == option,
+                        onClick = { onIncidentMaxAgeChange(option) },
+                        label = { Text(incidentAgeOptionLabel(option)) },
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("${MAP_HOME_LAYERS_ALERT_AGE_TAG}_${option.name}"),
                     )
                 }
             }
+            Text(stringResource(R.string.shell_layersAlertAgeHelp), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        TextButton(onClick = { focusExpanded = !focusExpanded }, modifier = Modifier.fillMaxWidth().testTag("map_layers_focus_expand")) {
+            Text(stringResource(if (focusExpanded) R.string.shell_layersZoomCollapse else R.string.shell_layersZoomExpand))
+            Icon(if (focusExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, contentDescription = null)
+        }
+        if (focusExpanded) LayerZoomSlider(browsingZoom, onBrowsingZoomChange)
+        if (incidentsOn && trafikverketDataShown) {
+            Text(stringResource(R.string.incidents_sourceTrafikverket), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
+}
+
+@Composable
+private fun MapAppearanceChip(label: String, icon: ImageVector, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
+    FilterChip(
+        selected = selected, onClick = onClick, modifier = modifier.heightIn(min = 48.dp),
+        label = { Text(label) },
+        leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = MaterialTheme.colorScheme.surface,
+            selectedLabelColor = MaterialTheme.colorScheme.tertiary,
+            selectedLeadingIconColor = MaterialTheme.colorScheme.tertiary,
+        ),
+        border = FilterChipDefaults.filterChipBorder(
+            enabled = true, selected = selected,
+            selectedBorderColor = MaterialTheme.colorScheme.tertiary,
+        ),
+    )
 }
 
 /** A single labelled toggle row in the map-layers popup. */
@@ -1255,19 +1223,24 @@ private fun LayerToggleRow(
     // true so every other row stays interactive.
     enabled: Boolean = true,
     icon: ImageVector? = null,
+    supportingText: String? = null,
+    leading: (@Composable () -> Unit)? = null,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
+            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
+            .then(if (switchTestTag != null) Modifier.testTag(switchTestTag) else Modifier)
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
     ) {
-        if (icon != null) {
+        if (leading != null) leading() else if (icon != null) {
             Icon(icon, contentDescription = null,
                 tint = if (checked && enabled) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        Column(Modifier.weight(1f)) {
         Text(
             text = label,
-            modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.bodyLarge,
             color =
                 if (enabled) {
@@ -1276,13 +1249,15 @@ private fun LayerToggleRow(
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
         )
+        supportingText?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange,
+            onCheckedChange = null,
             enabled = enabled,
             colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.tertiary,
                 checkedThumbColor = MaterialTheme.colorScheme.onTertiary),
-            modifier = if (switchTestTag != null) Modifier.testTag(switchTestTag) else Modifier,
+            modifier = Modifier.clearAndSetSemantics {},
         )
     }
 }
@@ -1473,77 +1448,36 @@ internal fun EventMarkerInfoPopup(
     onViewDetails: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    Popup(
-        alignment = Alignment.BottomCenter,
-        onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true),
+    MapDetailSheet(
+        title = title, onDismiss = onDismiss,
+        modifier = Modifier.testTag(MAP_HOME_EVENT_POPUP_TAG),
+        leadingContent = { Icon(Icons.Filled.Event, contentDescription = null) },
     ) {
-        Surface(
-            modifier =
-                Modifier
-                    .padding(16.dp)
-                    .fillMaxWidth()
-                    .widthIn(max = 360.dp)
-                    .testTag(MAP_HOME_EVENT_POPUP_TAG),
-            shape = RoundedCornerShape(KccRadius.lg),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
-            tonalElevation = 6.dp,
-            shadowElevation = 6.dp,
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Event,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Text(
-                        text = title,
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = stringResource(R.string.events_mapPopupClose),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                if (whenLabel != null) {
-                    Text(
-                        text = whenLabel,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-                if (locationName != null) {
-                    Text(
-                        text = locationName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Text(
-                    text = stringResource(R.string.events_mapPopupGoing, goingCount),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Button(
-                    onClick = onViewDetails,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(text = stringResource(R.string.events_mapPopupViewDetails))
-                }
-            }
-        }
+    if (whenLabel != null) {
+        Text(
+            text = whenLabel,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+    if (locationName != null) {
+        Text(
+            text = locationName,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    Text(
+        text = stringResource(R.string.events_mapPopupGoing, goingCount),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Button(
+        onClick = onViewDetails,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(text = stringResource(R.string.events_mapPopupViewDetails))
+    }
     }
 }
 
@@ -1600,155 +1534,109 @@ internal fun LiveSharePopup(
     onStop: (() -> Unit)? = null,
 ) {
     val rows = LiveManageSheet.actions(isSharing = isSharing, canShareLive = canShareLive, hasStop = onStop != null)
-    Popup(
-        alignment = Alignment.BottomCenter,
-        onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true),
+    MapDetailSheet(
+        title = stringResource(R.string.shell_liveTitle), onDismiss = onDismiss,
+        modifier = Modifier.testTag(MAP_HOME_LIVE_POPUP_TAG),
+        leadingContent = { Icon(Icons.Filled.Podcasts, contentDescription = null) },
     ) {
-        Surface(
-            modifier =
-                Modifier
-                    .padding(16.dp)
-                    // Keep the reading width stable across all session states.
-                    .widthIn(max = 560.dp)
-                    .fillMaxWidth()
-                    .testTag(MAP_HOME_LIVE_POPUP_TAG),
-            shape = RoundedCornerShape(KccRadius.lg),
-            color = LocalKccMapColors.current.overlay,
-            border = BorderStroke(1.dp, LocalKccMapColors.current.border),
-            tonalElevation = 6.dp,
-            shadowElevation = 6.dp,
+    Text(
+        text =
+            stringResource(
+                if (isSharing) {
+                    R.string.liveLocation_statusSharing
+                } else {
+                    R.string.liveLocation_statusNotSharing
+                },
+            ),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    if (rows.showStop) {
+        // The prominent stop action. Only present when the caller wires
+        // [onStop] — i.e. the shell's centre-control sheet, where this
+        // sheet is now how a running session is ended. Stopping raises
+        // the save/discard summary exactly as the bottom-bar control
+        // used to (the host's stop handler flips isSharing). Error
+        // colours make it the unmistakable primary action.
+        Button(
+            onClick = {
+                onStop?.invoke()
+                onDismiss()
+            },
+            modifier = Modifier.fillMaxWidth(),
+            colors =
+                ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
         ) {
-            Column(
-                modifier = Modifier.heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.8f).dp)
-                    .verticalScroll(rememberScrollState()).navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Podcasts,
-                        contentDescription = null,
-                        tint =
-                            if (isSharing) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
-                    )
-                    Text(
-                        text = stringResource(R.string.shell_liveTitle),
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = stringResource(R.string.shell_liveClose),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                Text(
-                    text =
-                        stringResource(
-                            if (isSharing) {
-                                R.string.liveLocation_statusSharing
-                            } else {
-                                R.string.liveLocation_statusNotSharing
-                            },
-                        ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                if (rows.showStop) {
-                    // The prominent stop action. Only present when the caller wires
-                    // [onStop] — i.e. the shell's centre-control sheet, where this
-                    // sheet is now how a running session is ended. Stopping raises
-                    // the save/discard summary exactly as the bottom-bar control
-                    // used to (the host's stop handler flips isSharing). Error
-                    // colours make it the unmistakable primary action.
-                    Button(
-                        onClick = {
-                            onStop?.invoke()
-                            onDismiss()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors =
-                            ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.error,
-                                contentColor = MaterialTheme.colorScheme.onError,
-                            ),
-                    ) {
-                        Icon(Icons.Filled.Stop, contentDescription = null, modifier = Modifier.padding(end = KccSpacing.s2))
-                        Text(text = stringResource(R.string.liveLocation_stop))
-                    }
-                }
-                if (rows.showHideNow) {
-                    // "Hide me now" — the immediate privacy escape hatch. Distinct
-                    // from Stop: it works even while suspended (when stopSession
-                    // does not), so it stays offered for the whole life of a
-                    // session — in turn-by-turn navigation and on the full
-                    // live-location screen. The bottom bar's stop sheet no longer
-                    // carries it (see [LiveManageSheet.actions]).
-                    OutlinedButton(
-                        onClick = {
-                            onHideMeNow()
-                            onDismiss()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    ) {
-                        Icon(Icons.Filled.VisibilityOff, contentDescription = null, modifier = Modifier.padding(end = KccSpacing.s2))
-                        Text(text = stringResource(R.string.liveLocation_hideNow))
-                    }
-                }
-                if (rows.showStart) {
-                    // One-tap start: no duration is chosen inline (or anywhere) —
-                    // the single-session start flow (raised by the host) begins a
-                    // fixed 6h window that auto-stops at the cap.
-                    Button(
-                        onClick = {
-                            onStart()
-                            onDismiss()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(text = stringResource(R.string.liveLocation_start))
-                    }
-                }
-                if (rows.showUnavailableNotice) {
-                    // Reached only when the LIVE_LOCATION flag is off (the
-                    // server-side kill switch). Starting is FLAG-gated here, NOT
-                    // member-gated — sharing your own position is free — so the
-                    // message says the feature is unavailable, not that a
-                    // membership is required.
-                    Text(
-                        text = stringResource(R.string.liveLocation_shareUnavailable),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (rows.showAudienceEntry) {
-                    // The full live-location screen for the complete controls +
-                    // privacy details — this is the "Who can see me" /
-                    // audience-management entry point. Driven by the model so a
-                    // single source of truth decides when it appears (the bottom
-                    // bar's stop sheet drops it), matching what ShellNavTest
-                    // asserts.
-                    TextButton(
-                        onClick = {
-                            onOpenDetails()
-                            onDismiss()
-                        },
-                        modifier = Modifier.align(Alignment.End),
-                    ) {
-                        Text(text = stringResource(R.string.shell_liveDetails))
-                    }
-                }
-            }
+            Icon(Icons.Filled.Stop, contentDescription = null, modifier = Modifier.padding(end = KccSpacing.s2))
+            Text(text = stringResource(R.string.liveLocation_stop))
         }
+    }
+    if (rows.showHideNow) {
+        // "Hide me now" — the immediate privacy escape hatch. Distinct
+        // from Stop: it works even while suspended (when stopSession
+        // does not), so it stays offered for the whole life of a
+        // session — in turn-by-turn navigation and on the full
+        // live-location screen. The bottom bar's stop sheet no longer
+        // carries it (see [LiveManageSheet.actions]).
+        OutlinedButton(
+            onClick = {
+                onHideMeNow()
+                onDismiss()
+            },
+            modifier = Modifier.fillMaxWidth(),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+        ) {
+            Icon(Icons.Filled.VisibilityOff, contentDescription = null, modifier = Modifier.padding(end = KccSpacing.s2))
+            Text(text = stringResource(R.string.liveLocation_hideNow))
+        }
+    }
+    if (rows.showStart) {
+        // One-tap start: no duration is chosen inline (or anywhere) —
+        // the single-session start flow (raised by the host) begins a
+        // fixed 6h window that auto-stops at the cap.
+        Button(
+            onClick = {
+                onStart()
+                onDismiss()
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(text = stringResource(R.string.liveLocation_start))
+        }
+    }
+    if (rows.showUnavailableNotice) {
+        // Reached only when the LIVE_LOCATION flag is off (the
+        // server-side kill switch). Starting is FLAG-gated here, NOT
+        // member-gated — sharing your own position is free — so the
+        // message says the feature is unavailable, not that a
+        // membership is required.
+        Text(
+            text = stringResource(R.string.liveLocation_shareUnavailable),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    if (rows.showAudienceEntry) {
+        // The full live-location screen for the complete controls +
+        // privacy details — this is the "Who can see me" /
+        // audience-management entry point. Driven by the model so a
+        // single source of truth decides when it appears (the bottom
+        // bar's stop sheet drops it), matching what ShellNavTest
+        // asserts.
+        TextButton(
+            onClick = {
+                onOpenDetails()
+                onDismiss()
+            },
+            modifier = Modifier.align(Alignment.End),
+        ) {
+            Text(text = stringResource(R.string.shell_liveDetails))
+        }
+    }
     }
 }
 

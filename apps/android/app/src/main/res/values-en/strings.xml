@@ -1730,6 +1730,16 @@
     <string name="shell_layers3d">3D buildings</string>
     <string name="shell_layersCrownHunt">Crown Hunt</string>
     <string name="shell_layersCrownHuntHelp">Show the Crown Hunt game — crowns to collect on the map. Turn off to hide it.</string>
+    <string name="shell_layersAppearanceTitle">Map appearance</string>
+    <string name="shell_layersAppearanceDay">Day</string>
+    <string name="shell_layersAppearanceNight">Night</string>
+    <string name="shell_layersAppearanceSystem">System</string>
+    <string name="shell_layersTrafficHelp">Show live traffic flow</string>
+    <string name="shell_layersIncidentsHelp">Accidents, roadworks and hazards</string>
+    <string name="shell_layers3dHelp">Show buildings in 3D</string>
+    <string name="shell_layersCrownMapHelp">Show crowns on the map</string>
+    <string name="shell_layersZoomExpand">Show map focus distance</string>
+    <string name="shell_layersZoomCollapse">Hide map focus distance</string>
     <string name="shell_layersZoomTitle">Map focus distance</string>
     <string name="shell_layersZoomHelp">How close the map sits when you\'re using it as usual.</string>
     <string name="shell_layersZoomFar">Farther</string>

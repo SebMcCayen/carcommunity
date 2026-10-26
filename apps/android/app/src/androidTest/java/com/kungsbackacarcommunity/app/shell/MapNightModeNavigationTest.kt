@@ -119,7 +119,7 @@ class MapNightModeNavigationTest {
     private fun turnNightModeOff() {
         composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_TAG).assertIsDisplayed().performClick()
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_NIGHT_TAG).assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithText(composeTestRule.activity.getString(com.kungsbackacarcommunity.app.R.string.shell_layersAppearanceDay)).assertIsDisplayed().performClick()
         composeTestRule.waitForIdle()
     }
 

@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -141,30 +140,26 @@ fun IncidentLocationChoiceDialog(
     onPickOnMap: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {},
-        dismissButton = {
+    MapDetailSheet(
+        title = stringResource(R.string.incidents_reportLocationTitle),
+        onDismiss = onDismiss,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
+            IncidentChoiceRow(
+                label = stringResource(R.string.incidents_reportLocationCurrent),
+                onClick = onUseCurrent,
+                testTag = INCIDENT_LOCATION_CHOICE_CURRENT_TAG,
+            )
+            IncidentChoiceRow(
+                label = stringResource(R.string.incidents_reportLocationPick),
+                onClick = onPickOnMap,
+                testTag = INCIDENT_LOCATION_CHOICE_PICK_TAG,
+            )
+        }
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.incidents_cancel))
             }
-        },
-        title = { Text(stringResource(R.string.incidents_reportLocationTitle)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
-                IncidentChoiceRow(
-                    label = stringResource(R.string.incidents_reportLocationCurrent),
-                    onClick = onUseCurrent,
-                    testTag = INCIDENT_LOCATION_CHOICE_CURRENT_TAG,
-                )
-                IncidentChoiceRow(
-                    label = stringResource(R.string.incidents_reportLocationPick),
-                    onClick = onPickOnMap,
-                    testTag = INCIDENT_LOCATION_CHOICE_PICK_TAG,
-                )
-            }
-        },
-    )
+    }
 }
 
 /** Test tag on the "use my current location" choice. */

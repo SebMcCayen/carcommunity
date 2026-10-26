@@ -32,7 +32,6 @@ import com.kungsbackacarcommunity.app.map.ConvoyFocusPlanner
 import com.kungsbackacarcommunity.app.map.ConvoyLatLng
 import com.kungsbackacarcommunity.app.map.MapMarkerStyle
 import com.kungsbackacarcommunity.app.map.MapMarkers
-import com.kungsbackacarcommunity.app.navigation.NavInitialCamera
 import com.mapbox.android.gestures.MoveGestureDetector
 import com.mapbox.android.gestures.RotateGestureDetector
 import com.mapbox.android.gestures.ShoveGestureDetector
@@ -140,7 +139,7 @@ import kotlin.math.roundToInt
  * that has not finished loading, or an absent location permission degrades to a
  * blank/partial map rather than crashing.
  */
-class MapboxMapSurface : MapSurface {
+class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.app.map.MapZoomPreference.DEFAULT_ZOOM) : MapSurface {
     private val loadStateFlow = MutableStateFlow(MapLoadState.Loading)
     override val loadState: StateFlow<MapLoadState> = loadStateFlow.asStateFlow()
 
@@ -588,7 +587,7 @@ class MapboxMapSurface : MapSurface {
     // value via setBrowsingZoom(). Deliberately NOT read by the active
     // drive-follow step (later fixes only re-centre, keeping whatever zoom the
     // user is at) nor by the convoy-fit / route-preview cameras.
-    private var browsingZoom: Double = MapMarkers.OWN_MARKER_ZOOM
+    private var browsingZoom: Double = com.kungsbackacarcommunity.app.map.MapZoomPreference.snap(initialBrowsingZoom)
 
     override fun setUserMarker(marker: MapUserMarker?) {
         userMarkerFlow.value = marker
@@ -1303,7 +1302,7 @@ class MapboxMapSurface : MapSurface {
                                 MapMarkers.DEFAULT_CAMERA.latitude,
                             ),
                         )
-                        zoom(MapMarkers.DEFAULT_CAMERA.zoom)
+                        zoom(browsingZoom)
                     }
                     // Keep the 3D tilt when the camera re-centres.
                     pitch(this@MapboxMapSurface.pitch)
@@ -1915,7 +1914,9 @@ class MapboxMapSurface : MapSurface {
                     // fresh install. Same resolver navigation uses, so both maps
                     // open where the user is instead of surveying the town.
                     val initialCamera =
-                        NavInitialCamera.resolve(LastKnownLocationStore(context).read())
+                        com.kungsbackacarcommunity.app.map.BrowsingInitialCamera.resolve(
+                            LastKnownLocationStore(context).read(), browsingZoom,
+                        )
                     mapboxMap.setCamera(
                         cameraOptions {
                             center(
@@ -3464,8 +3465,11 @@ class MapboxMapSurface : MapSurface {
 @Composable
 fun rememberMapSurface(): MapSurface {
     val token = stringResource(R.string.mapbox_access_token)
+    // Seed synchronously, before AndroidView's factory sets its first camera.
+    // Do not key remember on zoom: changing a preference must not recreate the map.
+    val initialBrowsingZoom = com.kungsbackacarcommunity.app.map.LocalMapZoomController.current.browsingZoom
     return remember(token) {
-        if (token.isNotBlank()) MapboxMapSurface() else StubMapSurface()
+        if (token.isNotBlank()) MapboxMapSurface(initialBrowsingZoom) else StubMapSurface()
     }
 }
 

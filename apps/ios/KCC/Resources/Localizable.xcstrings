@@ -29853,6 +29853,23 @@
         }
       }
     },
+    "shell.layers3dHelp": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa byggnader i 3D"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show buildings in 3D"
+          }
+        }
+      }
+    },
     "shell.layersAlertAge12h": {
       "extractionState": "manual",
       "localizations": {
@@ -30023,6 +30040,74 @@
         }
       }
     },
+    "shell.layersAppearanceDay": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dag"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Day"
+          }
+        }
+      }
+    },
+    "shell.layersAppearanceNight": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Natt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Night"
+          }
+        }
+      }
+    },
+    "shell.layersAppearanceSystem": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System"
+          }
+        }
+      }
+    },
+    "shell.layersAppearanceTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kartans utseende"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Map appearance"
+          }
+        }
+      }
+    },
     "shell.layersButton": {
       "extractionState": "manual",
       "localizations": {
@@ -30091,6 +30176,23 @@
         }
       }
     },
+    "shell.layersCrownMapHelp": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa kronor på kartan"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show crowns on the map"
+          }
+        }
+      }
+    },
     "shell.layersIncidents": {
       "extractionState": "manual",
       "localizations": {
@@ -30104,6 +30206,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Traffic alerts"
+          }
+        }
+      }
+    },
+    "shell.layersIncidentsHelp": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Olyckor, vägarbeten och hinder"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accidents, roadworks and hazards"
           }
         }
       }
@@ -30155,6 +30274,57 @@
           "stringUnit": {
             "state": "translated",
             "value": "Traffic"
+          }
+        }
+      }
+    },
+    "shell.layersTrafficHelp": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa trafikflöde i realtid"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show live traffic flow"
+          }
+        }
+      }
+    },
+    "shell.layersZoomCollapse": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dölj kartans fokusavstånd"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide map focus distance"
+          }
+        }
+      }
+    },
+    "shell.layersZoomExpand": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa kartans fokusavstånd"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show map focus distance"
           }
         }
       }

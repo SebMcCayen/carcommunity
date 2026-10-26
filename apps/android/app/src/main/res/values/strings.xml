@@ -1730,6 +1730,16 @@
     <string name="shell_layers3d">3D-byggnader</string>
     <string name="shell_layersCrownHunt">Kronjakt</string>
     <string name="shell_layersCrownHuntHelp">Visa spelet Kronjakt – kronor att samla in på kartan. Stäng av för att dölja det.</string>
+    <string name="shell_layersAppearanceTitle">Kartans utseende</string>
+    <string name="shell_layersAppearanceDay">Dag</string>
+    <string name="shell_layersAppearanceNight">Natt</string>
+    <string name="shell_layersAppearanceSystem">System</string>
+    <string name="shell_layersTrafficHelp">Visa trafikflöde i realtid</string>
+    <string name="shell_layersIncidentsHelp">Olyckor, vägarbeten och hinder</string>
+    <string name="shell_layers3dHelp">Visa byggnader i 3D</string>
+    <string name="shell_layersCrownMapHelp">Visa kronor på kartan</string>
+    <string name="shell_layersZoomExpand">Visa kartans fokusavstånd</string>
+    <string name="shell_layersZoomCollapse">Dölj kartans fokusavstånd</string>
     <string name="shell_layersZoomTitle">Kartans fokusavstånd</string>
     <string name="shell_layersZoomHelp">Hur nära kartan ligger när du använder den som vanligt.</string>
     <string name="shell_layersZoomFar">Längre bort</string>

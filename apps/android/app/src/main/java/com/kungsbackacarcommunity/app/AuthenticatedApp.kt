@@ -400,6 +400,9 @@ import com.kungsbackacarcommunity.app.shell.MapMode
 import com.kungsbackacarcommunity.app.shell.HubScreen
 import com.kungsbackacarcommunity.app.shell.SocialHub
 import com.kungsbackacarcommunity.app.shell.MapDetailSheet
+import com.kungsbackacarcommunity.app.shell.DockedMapSheetHost
+import com.kungsbackacarcommunity.app.shell.LocalDockedMapSheetHost
+import com.kungsbackacarcommunity.app.shell.mapSheetViewport
 import com.kungsbackacarcommunity.app.shell.sortedHubEntriesByLabel
 import com.kungsbackacarcommunity.app.shell.SettingsScreen
 import com.kungsbackacarcommunity.app.shell.LiveSessionAnchor
@@ -982,6 +985,8 @@ fun AuthenticatedApp(
                     )
                 }
             } else {
+            DockedMapSheetHost(ownerKey = uid) {
+            val mapSheetHost = LocalDockedMapSheetHost.current
             val profile = (profileState as? ProfileState.Loaded)?.profile
             // One owner-readable subscription listener for the whole signed-in
             // shell. Garage limits and Membership consume the same snapshot.
@@ -6746,7 +6751,8 @@ fun AuthenticatedApp(
                                     // tab still manages its own top inset (the map
                                     // is full-bleed).
                                     .navigationBarsPadding()
-                                    .padding(bottom = ShellBottomBarHeight),
+                                    .padding(bottom = ShellBottomBarHeight)
+                                    .mapSheetViewport(),
                         ) {
                             // The map home's CHROME (search bar, floating controls, CTAs) — the
                             // map itself is the shell's single surface, composed above this and
@@ -6903,6 +6909,7 @@ fun AuthenticatedApp(
                                     // (between the search icon and the avatar) while
                                     // a session runs: elapsed time + distance driven.
                                     liveSessionBar = liveSessionBarSlot,
+                                    onManageLiveSession = { mapSheetHost?.dismissAll(); liveManageOpen = true },
                                     // Convoy status bar, now on its OWN full-width row
                                     // directly BELOW the search strip. Every control
                                     // (member count, focus, invite, leave/End) is
@@ -7810,6 +7817,7 @@ fun AuthenticatedApp(
                             ShellBottomBar(
                                 selected = selectedTab,
                                 onSelect = { tab ->
+                                    mapSheetHost?.dismissAll()
                                     // Tapping ANY bottom-bar destination leaves the
                                     // chat hub: the hub floats over the map with the
                                     // bar still showing, so a tab tap must close it
@@ -7835,7 +7843,7 @@ fun AuthenticatedApp(
                                 // not when the server's session echoes back.
                                 isSharing = isSharingUi,
                                 hasUnreadChat = anyChatUnread,
-                                onManageLiveShare = { liveManageOpen = true },
+                                onManageLiveShare = { mapSheetHost?.dismissAll(); liveManageOpen = true },
                             )
                         }
 
@@ -8493,7 +8501,8 @@ fun AuthenticatedApp(
                                     } else {
                                         Modifier
                                     },
-                                ),
+                                )
+                                .mapSheetViewport(priority = 10),
                     ) {
                         ChatHubRoute(
                             uid = uid,
@@ -8576,6 +8585,7 @@ fun AuthenticatedApp(
                     modifier =
                         Modifier.align(Alignment.BottomCenter).navigationBarsPadding(),
                 )
+              }
               }
             }
             }
