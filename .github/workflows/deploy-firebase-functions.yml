@@ -3,6 +3,26 @@ name: Deploy Firebase Functions
 on:
   push:
     branches: [main]
+    # Workflow-only edits require an intentional manual dispatch from main.
+    # Keep iOS, Android, docs and validation-only changes out of production.
+    paths:
+      - 'functions/src/**'
+      - '!functions/src/**/*.test.ts'
+      - '!functions/src/**/*.md'
+      - 'functions/certs/**'
+      - '!functions/certs/**/*.md'
+      - 'functions/package.json'
+      - 'functions/package-lock.json'
+      - 'functions/tsconfig.json'
+      - 'functions/.npmrc'
+      - 'functions/scripts/deploy-lockfile.mjs'
+      - 'firebase.json'
+      - '.firebaserc'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.npmrc'
+      - 'tsconfig.base.json'
   workflow_dispatch:
 
 permissions:
