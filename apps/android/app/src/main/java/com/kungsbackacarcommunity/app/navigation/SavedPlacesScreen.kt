@@ -7,31 +7,36 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -42,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,6 +76,12 @@ const val SAVED_PLACES_LIST_TEST_TAG = "saved_places_list"
 
 /** Test tag on the long-press actions bottom sheet (Rename / Share / Delete). */
 const val SAVED_PLACES_ACTIONS_SHEET_TEST_TAG = "saved_places_actions_sheet"
+
+const val SAVED_PLACES_ADD_TEST_TAG = "saved_places_add"
+const val SAVED_PLACES_FILTER_EMPTY_TEST_TAG = "saved_places_filter_empty"
+
+/** Null represents All; the other filters use the existing persisted kinds. */
+fun savedPlacesFilterTestTag(kind: SavedPlaceKind?): String = "saved_places_filter_${kind?.name ?: "All"}"
 
 /** Test-tag prefix for one saved-place row (suffixed with the place id). */
 fun savedPlaceRowTestTag(id: String): String = "saved_places_row_$id"
@@ -125,6 +137,8 @@ fun SavedPlacesScreen(
     // so the list reflects a rename/delete on the same frame.
     var places by remember(manager) { mutableStateOf(manager.places()) }
     val refresh = { places = manager.places() }
+    var filter by rememberSaveable(store) { mutableStateOf<SavedPlaceKind?>(null) }
+    val visiblePlaces = places.filter { filter == null || it.kind == filter }
 
     // The place pending a rename / a delete confirmation, null when none is open.
     var renameTarget by remember { mutableStateOf<SavedPlace?>(null) }
@@ -134,41 +148,44 @@ fun SavedPlacesScreen(
 
     AeroPage(
         title = stringResource(R.string.savedPlaces_title),
+        scrollable = false,
         modifier = modifier.testTag(SAVED_PLACES_SCREEN_TEST_TAG),
     ) {
-        Text(
-            text = stringResource(R.string.savedPlaces_intro),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        if (places.isEmpty()) {
-            EmptyState(onAddPlace = onAddPlace)
-        } else {
-            SavedPlacesList(
-                places = places,
-                onRename = { renameTarget = it },
-                onChangeAddress = onChangeLocation,
-                onDelete = { deleteTarget = it },
-                onShare = onShare,
-                onLongPress = { actionsTarget = it },
-            )
-            OutlinedButton(
-                onClick = onAddPlace,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Add,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
+        SavedPlacesFilters(selected = filter, onSelect = { filter = it })
+        Column(
+            modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+        ) {
+            when {
+                places.isEmpty() -> EmptyState(onAddPlace = onAddPlace)
+                visiblePlaces.isEmpty() -> Text(
+                    text = stringResource(R.string.savedPlaces_filterEmpty),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag(SAVED_PLACES_FILTER_EMPTY_TEST_TAG),
                 )
+                else -> SavedPlacesList(
+                    places = visiblePlaces,
+                    onRename = { renameTarget = it },
+                    onChangeAddress = onChangeLocation,
+                    onDelete = { deleteTarget = it },
+                    onShare = onShare,
+                    onLongPress = { actionsTarget = it },
+                )
+            }
+        }
+        if (places.isNotEmpty()) {
+            Button(
+                onClick = onAddPlace,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag(SAVED_PLACES_ADD_TEST_TAG),
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null)
                 Text(
                     text = stringResource(R.string.savedPlaces_addAction),
                     modifier = Modifier.padding(start = KccSpacing.s2),
                 )
             }
         }
-
         Text(
             text = stringResource(R.string.savedPlaces_deviceLocalNote),
             style = MaterialTheme.typography.bodySmall,
@@ -217,6 +234,34 @@ fun SavedPlacesScreen(
             },
             onDismiss = { actionsTarget = null },
         )
+    }
+}
+
+/** Wrap rather than clipping tabs at narrow widths or large system text sizes. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SavedPlacesFilters(selected: SavedPlaceKind?, onSelect: (SavedPlaceKind?) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+        (listOf<SavedPlaceKind?>(null) + SavedPlaceKind.entries).forEach { kind ->
+            FilterChip(
+                selected = selected == kind,
+                onClick = { onSelect(kind) },
+                label = {
+                    Text(stringResource(when (kind) {
+                        null -> R.string.savedPlaces_filterAll
+                        SavedPlaceKind.Home -> R.string.addressSearch_savedHome
+                        SavedPlaceKind.Work -> R.string.addressSearch_savedWork
+                        SavedPlaceKind.Favourite -> R.string.savedPlaces_filterFavourites
+                    }))
+                },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                ),
+                shape = RoundedCornerShape(KccRadius.xl),
+                modifier = Modifier.heightIn(min = 48.dp).testTag(savedPlacesFilterTestTag(kind)),
+            )
+        }
     }
 }
 
@@ -273,10 +318,12 @@ private fun SavedPlaceRow(
             .clip(MaterialTheme.shapes.medium)
             .background(MaterialTheme.colorScheme.surface)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium)
-            // Long-press raises the Rename / Share / Delete sheet. onClick is a
-            // deliberate no-op (a row has no tap action) but combinedClickable
-            // announces the long-press as an accessibility action.
-            .combinedClickable(onClick = {}, onLongClick = onLongPress)
+            // Tap and long-press expose the existing actions; TalkBack has a named action.
+            .combinedClickable(
+                onClick = onLongPress,
+                onClickLabel = stringResource(R.string.savedPlaces_moreActions, label),
+                onLongClick = onLongPress,
+            )
             .padding(start = KccSpacing.s4, top = KccSpacing.s3, bottom = KccSpacing.s3),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
@@ -284,7 +331,9 @@ private fun SavedPlaceRow(
         Icon(
             imageVector = place.kind.icon(),
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.tertiary,
+            tint = if (place.kind == SavedPlaceKind.Favourite) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.tertiary,
+            modifier = Modifier.size(32.dp),
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -298,7 +347,7 @@ private fun SavedPlaceRow(
             if (subtitle != label) {
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

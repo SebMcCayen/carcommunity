@@ -1842,6 +1842,11 @@
     <string name="addressSearch_unitKilometers">km</string>
     <string name="addressSearch_unitMinutes">min</string>
     <string name="addressSearch_unitHours">h</string>
+    <string name="savedPlaces_clearName">Clear name</string>
+    <string name="savedPlaces_filterAll">All</string>
+    <string name="savedPlaces_filterFavourites">Favourites</string>
+    <string name="savedPlaces_filterEmpty">No saved places in this category.</string>
+    <string name="savedPlaces_addressLabel">Address</string>
     <string name="savedPlaces_title">Saved places</string>
     <string name="savedPlaces_intro">Your one-tap destinations. Home, Work and favourites appear in search so you can quickly open them on the map.</string>
     <string name="savedPlaces_addAction">Add a place</string>

@@ -1971,6 +1971,11 @@
     "unitHours": "tim"
   },
   "savedPlaces": {
+    "clearName": "Rensa namn",
+    "filterAll": "Alla",
+    "filterFavourites": "Favoriter",
+    "filterEmpty": "Inga sparade platser i den här kategorin.",
+    "addressLabel": "Adress",
     "title": "Sparade platser",
     "intro": "Dina destinationer med ett tryck. Hem, Jobbet och favoriter visas i sökningen så att du snabbt kan öppna dem på kartan.",
     "addAction": "Lägg till en plats",

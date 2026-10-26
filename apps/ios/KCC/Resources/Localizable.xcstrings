@@ -28425,6 +28425,23 @@
         }
       }
     },
+    "savedPlaces.addressLabel": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adress"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Address"
+          }
+        }
+      }
+    },
     "savedPlaces.cancel": {
       "extractionState": "manual",
       "localizations": {
@@ -28455,6 +28472,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Change address"
+          }
+        }
+      }
+    },
+    "savedPlaces.clearName": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rensa namn"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear name"
           }
         }
       }
@@ -28591,6 +28625,57 @@
           "stringUnit": {
             "state": "translated",
             "value": "No saved places yet"
+          }
+        }
+      }
+    },
+    "savedPlaces.filterAll": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alla"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All"
+          }
+        }
+      }
+    },
+    "savedPlaces.filterEmpty": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inga sparade platser i den här kategorin."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No saved places in this category."
+          }
+        }
+      }
+    },
+    "savedPlaces.filterFavourites": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favoriter"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favourites"
           }
         }
       }
