@@ -47,7 +47,10 @@ class Wave2RedesignCaptureTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val args = InstrumentationRegistry.getArguments()
         val screens = args.getString("wave2Screen")?.let(::listOf) ?: listOf(
-            "map-place", "map-live", "chat", "driver", "driver-detail", "events", "event-detail", "crown",
+            "map-place", "map-live", "chat", "driver", "driver-detail",
+            "events", "event-detail", "event-detail-paid", "event-detail-creator",
+            "event-create", "event-edit", "event-saving", "event-chat", "event-chat-restricted",
+            "event-check-in", "event-group-drive", "event-share", "crown",
             "garage", "profile", "settings", "membership",
         )
         val variant = args.getString("redesignCaptureVariant") ?: "wave2-dark"
@@ -68,7 +71,10 @@ class Wave2RedesignCaptureTest {
                                 when (selected) {
                                     "map-place", "map-live" -> Wave2MapPreview(selected)
                                     "chat", "driver", "driver-detail" -> Wave2ChatPreview(selected)
-                                    "events", "event-detail", "crown" -> Wave2SocialPreview(selected)
+                                    "events", "event-detail", "event-detail-paid", "event-detail-creator",
+                                    "event-create", "event-edit", "event-saving", "event-chat", "event-chat-restricted",
+                                    "event-check-in", "event-group-drive", "event-share" -> EventDesignPreview(selected)
+                                    "crown" -> Wave2SocialPreview(selected)
                                     "garage", "profile" -> Wave2GaragePreview(selected)
                                     "settings", "membership" -> Wave2SettingsPreview(selected)
                                     else -> error("Unknown redesign capture case: $selected")
