@@ -3,7 +3,8 @@
 2026-10-26. PR [#1189](https://github.com/SebMcCayen/carcommunity/pull/1189)
 contains the map/Crown foundation; stacked PR
 [#1190](https://github.com/SebMcCayen/carcommunity/pull/1190) contains the feature
-screens, shared chrome and this evidence. No release/version bump, backend or
+screens and shared chrome. This documentation follow-up records the evidence.
+No release/version bump, backend or
 cloud deployment, account creation or Play publication is included.
 
 ## Provenance and scope
