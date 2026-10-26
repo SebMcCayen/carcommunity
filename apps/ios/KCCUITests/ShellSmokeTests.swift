@@ -64,7 +64,12 @@ final class ShellSmokeTests: XCTestCase {
         for _ in 0..<4 where !expand.isHittable { scroll.swipeUp() }
         XCTAssertTrue(expand.isHittable)
         expand.tap()
-        XCTAssertTrue(app.sliders["shell.layersZoom"].waitForExistence(timeout: 5))
+        // Expansion increases the scrollable content; the slider can be below
+        // the medium detent and absent from the accessibility snapshot until scrolled.
+        let zoom = app.sliders["shell.layersZoom"]
+        for _ in 0..<4 where !zoom.isHittable { scroll.swipeUp() }
+        XCTAssertTrue(zoom.waitForExistence(timeout: 5))
+        XCTAssertTrue(zoom.isHittable)
         app.buttons["Close map layers"].tap()
         app.buttons["shell.mapLayers"].tap()
         let system = app.buttons["shell.layersAppearance.system"]
@@ -185,6 +190,11 @@ final class ShellSmokeTests: XCTestCase {
         for id in ["social", "garage", "map", "chat"] {
             let tab = app.buttons["shell.tab.\(id)"]
             tab.tap()
+            if id == "chat" {
+                // The first cold chat render can outlive XCUITest's idle wait.
+                // Wait for the actual destination, without retrying the tap.
+                XCTAssertTrue(element("chatHub.opaqueScreen", in: app).waitForExistence(timeout: 15))
+            }
             assertSelected(tab)
         }
         for id in ["driver", "chats"] {
@@ -385,7 +395,8 @@ final class ShellSmokeTests: XCTestCase {
             predicate: NSPredicate(format: "selected == true"),
             object: tab
         )
-        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed,
+            "Selection did not settle for \(tab.identifier)")
     }
 
     private func element(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
