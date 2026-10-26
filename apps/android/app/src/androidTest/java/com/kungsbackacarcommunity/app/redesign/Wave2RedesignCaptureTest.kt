@@ -26,6 +26,7 @@ import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -56,7 +57,9 @@ class Wave2RedesignCaptureTest {
             "map-place", "map-live", "chat", "driver", "driver-detail",
             "events", "event-detail", "event-detail-paid", "event-detail-creator",
             "event-create", "event-edit", "event-saving", "event-chat", "event-chat-restricted",
-            "event-check-in", "event-group-drive", "event-share", "crown",
+            "event-check-in", "event-group-drive", "event-share", "crown", "crown-shop", "crown-stats",
+            "convoys", "convoy-invites", "convoy-create", "convoy-create-busy",
+            "convoy-active", "convoy-active-destination", "convoy-ended", "convoy-ended-partial",
             "garage", "profile", "settings", "membership",
             "member-profile", "vehicle-detail", "vehicle-editor", "awards",
             "drive-detail", "drive-history", "drive-stats", "drive-save-failed",
@@ -93,7 +96,10 @@ class Wave2RedesignCaptureTest {
                                         "events", "event-detail", "event-detail-paid", "event-detail-creator",
                                         "event-create", "event-edit", "event-saving", "event-chat", "event-chat-restricted",
                                         "event-check-in", "event-group-drive", "event-share" -> EventDesignPreview(selected)
-                                        "crown" -> Wave2SocialPreview(selected)
+                                        "crown", "crown-shop", "crown-stats" -> Wave2SocialPreview(selected)
+                                        "convoys", "convoy-invites", "convoy-create", "convoy-create-busy",
+                                        "convoy-active", "convoy-active-destination", "convoy-ended", "convoy-ended-partial" ->
+                                            ConvoyCataloguePreview(selected)
                                         "garage", "profile", "member-profile", "vehicle-detail", "vehicle-editor", "awards",
                                         "drive-detail", "drive-history", "drive-stats", "drive-save-failed" -> Wave2GaragePreview(selected)
                                         "friends", "S36" -> FriendsCataloguePreview()
@@ -129,6 +135,10 @@ class Wave2RedesignCaptureTest {
             rule.runOnIdle { selected = screen }
             rule.mainClock.advanceTimeByFrame()
             rule.waitForIdle()
+            if (screen == "crown-stats") {
+                rule.onNodeWithTag("crownHubTab_2").performClick()
+                rule.waitForIdle()
+            }
             rule.onNodeWithTag("wave2-case-$screen").assertExists()
             // Semantic idleness is not a SurfaceFlinger fence: an OS screenshot
             // can still return the preceding window after a modal is replaced.
