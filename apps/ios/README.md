@@ -14,12 +14,12 @@ The native iOS client (Swift / SwiftUI), in scope per
 
 ## Project layout
 
-| Path | Purpose |
-| --- | --- |
-| `project.yml` | XcodeGen spec — the source of truth for `KCC.xcodeproj`. After editing, run `xcodegen generate` from this directory and commit both. |
-| `KCC/` | App sources. `Shell/ShellNav.swift` is the pure navigation state machine ported from Android's `ShellNav.kt`; the two must stay in sync. |
-| `KCCTests/` | Unit tests (XCTest). `ShellNavTests.swift` mirrors Android's `ShellNavTest.kt`. |
-| `scripts/` | Contract codegen (siblings of `apps/android/scripts`): `generate-strings.mjs` → `KCC/Resources/Localizable.xcstrings`, `generate-tokens.mjs` → `KCC/Design/Tokens.swift`. Both outputs are committed and drift-checked by `validate-ios.yml`. |
+| Path          | Purpose                                                                                                                                                                                                                                       |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project.yml` | XcodeGen spec — the source of truth for `KCC.xcodeproj`. After editing, run `xcodegen generate` from this directory and commit both.                                                                                                          |
+| `KCC/`        | App sources. `Shell/ShellNav.swift` is the pure navigation state machine ported from Android's `ShellNav.kt`; the two must stay in sync.                                                                                                      |
+| `KCCTests/`   | Unit tests (XCTest). `ShellNavTests.swift` mirrors Android's `ShellNavTest.kt`.                                                                                                                                                               |
+| `scripts/`    | Contract codegen (siblings of `apps/android/scripts`): `generate-strings.mjs` → `KCC/Resources/Localizable.xcstrings`, `generate-tokens.mjs` → `KCC/Design/Tokens.swift`. Both outputs are committed and drift-checked by `validate-ios.yml`. |
 
 ## Firebase configuration (config-less builds)
 
@@ -133,7 +133,10 @@ signatures:
 1. Start the emulators from the repo root: `firebase emulators:start`
    (auth listens on 127.0.0.1:9099 per `firebase.json`).
 2. Provide any `GoogleService-Info.plist` at `KCC/GoogleService-Info.plist`
-   (values are not validated by the emulator).
+   using an explicit `demo-` project and dummy credentials, never a copy of the
+   production configuration. Configure every Firebase service used by that build
+   to point to its local emulator; the Auth variable alone does not isolate the
+   app's Firestore/Functions/Storage/Database traffic.
 3. Run the app with the environment variable
    `FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099` (Xcode scheme → Run →
    Arguments → Environment Variables).
@@ -143,6 +146,14 @@ In DEBUG builds with that variable set, sign-in uses
 that exercises the real `OAuthProvider.appleCredential` exchange path against
 the emulator. Release builds always use the real
 `ASAuthorizationController` flow.
+
+Build authentication-capable simulator apps with signing enabled and
+`ENTITLEMENTS_REQUIRED=YES`. Do not use the unsigned device-build command for
+this: missing simulator entitlements cause Keychain error `-34018` when Firebase
+tries to save the session. `scripts/simulator-package.py` checks actual built
+packages, including both slices of a universal preview. See the
+[MVP test handoff](../../docs/ios-mvp-test-handoff.md) for the opt-in native SDK
+acceptance command, coverage limits and no-cost TestFlight preparation.
 
 ## Localization
 

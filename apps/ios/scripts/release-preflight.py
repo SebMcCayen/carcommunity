@@ -7,6 +7,7 @@ from pathlib import Path
 import plistlib
 import re
 import sys
+from xml.parsers.expat import ExpatError
 
 
 class PreflightError(Exception):
@@ -22,7 +23,7 @@ def load_plist(path):
     try:
         with path.open("rb") as stream:
             return plistlib.load(stream)
-    except (OSError, ValueError, plistlib.InvalidFileException) as error:
+    except (OSError, ValueError, plistlib.InvalidFileException, ExpatError) as error:
         raise PreflightError(f"Cannot read a valid plist: {path.name}") from error
 
 
@@ -96,6 +97,10 @@ def check_release(root, bundle, environment):
     # Local variables only: never echo a Firebase configuration or token.
     firebase = load_plist(root / "KCC/GoogleService-Info.plist")
     require(firebase.get("BUNDLE_ID") == bundle, "Firebase BUNDLE_ID does not match the app")
+    require(not str(firebase.get("PROJECT_ID", "")).strip().lower().startswith("demo-"),
+            "Release must not use a Firebase demo project")
+    require(firebase.get("API_KEY") != "AIza" + "0" * 35,
+            "Release must not use the simulator dummy API key")
     for field in ("GOOGLE_APP_ID", "PROJECT_ID", "API_KEY", "GCM_SENDER_ID"):
         value = firebase.get(field)
         require(isinstance(value, str) and bool(value.strip()) and "$(" not in value and

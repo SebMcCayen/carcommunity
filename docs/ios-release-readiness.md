@@ -84,20 +84,20 @@ Use dedicated test accounts and avoid real personal content. Exercise the
 shipping Release build. Never operate drive/chat controls while driving; use a
 passenger or stationary setup for interactions. Test actual movement safely.
 
-| Area | Verify on iPhone |
-| --- | --- |
-| Authentication | Apple sign-in completes, cancellation returns to the login screen, sign-out removes the authenticated UI, and relaunch restores the right account. Apple and Android Google accounts are separate (ADR-002). |
-| Onboarding/access | New accounts must accept required consent. Test Community/Plus/Supporter gates and restricted-account handling; sign-out and privacy stop remain available. |
-| Maps/location | Real tiles load; location denial and later grant work; recenter, layer toggles, search, and saved places work. Merely opening the map must not start live sharing. |
-| Background sessions | Explicitly start recording/live sharing, lock the phone and background the app, then resume. Verify position/session behavior and that Stop, Hide, expiry, sign-out, and restriction release background location demand. |
-| Drive saving | Stop offers save/discard; save produces plausible statistics and a visible route; discard leaves no saved drive. Exercise interrupted upload/relaunch recovery, sharing, and owner deletion. |
-| Social/events | Test RSVP, permitted check-in, event/group-drive screens, convoy invitation/start/end, community/event chat, friend requests and DMs using two accounts. Test reporting and blocking. |
-| Garage/profile | Create/edit/delete a vehicle, choose a main car, upload profile/vehicle images, and verify orientation and removal of GPS metadata. Test permission denial/cancel flows. |
-| Notifications | Grant/deny notification permission. Verify foreground/background delivery, cold-start tap navigation, preference opt-out, sign-out token cleanup, and that another account cannot receive the previous account's content. |
-| StoreKit | In sandbox, purchase each allowed plan, restore, cancel the purchase sheet, interrupt/retry backend verification, and confirm backend-approved tier changes. Verify cancellation, expiry, refund/revocation behavior before public paid rollout. |
-| App Check/backend | Verify production-mode App Attest/DeviceCheck tokens are accepted and deployed callables/rules/indexes support the build; a green config-less CI run does not prove this. |
-| Privacy/account | Update privacy preferences; Hide me now removes live visibility; delete a disposable account and confirm session/data cleanup. Test Supporter crown visibility and blocked users. |
-| Stability/accessibility | Confirm symbolicated Crashlytics reports; test airplane mode, network recovery, light/dark mode, Swedish/English, largest Dynamic Type, and VoiceOver on critical flows. |
+| Area                    | Verify on iPhone                                                                                                                                                                                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Authentication          | Apple sign-in completes, cancellation returns to the login screen, sign-out removes the authenticated UI, and relaunch restores the right account. Apple and Android Google accounts are separate (ADR-002).                                     |
+| Onboarding/access       | New accounts must accept required consent. Test Community/Plus/Supporter gates and restricted-account handling; sign-out and privacy stop remain available.                                                                                      |
+| Maps/location           | Real tiles load; location denial and later grant work; recenter, layer toggles, search, and saved places work. Merely opening the map must not start live sharing.                                                                               |
+| Background sessions     | Explicitly start recording/live sharing, lock the phone and background the app, then resume. Verify position/session behavior and that Stop, Hide, expiry, sign-out, and restriction release background location demand.                         |
+| Drive saving            | Stop offers save/discard; save produces plausible statistics and a visible route; discard leaves no saved drive. Exercise interrupted upload/relaunch recovery, sharing, and owner deletion.                                                     |
+| Social/events           | Test RSVP, permitted check-in, event/group-drive screens, convoy invitation/start/end, community/event chat, friend requests and DMs using two accounts. Test reporting and blocking.                                                            |
+| Garage/profile          | Create/edit/delete a vehicle, choose a main car, upload profile/vehicle images, and verify orientation and removal of GPS metadata. Test permission denial/cancel flows.                                                                         |
+| Notifications           | Grant/deny notification permission. Verify foreground/background delivery, cold-start tap navigation, preference opt-out, sign-out token cleanup, and that another account cannot receive the previous account's content.                        |
+| StoreKit                | In sandbox, purchase each allowed plan, restore, cancel the purchase sheet, interrupt/retry backend verification, and confirm backend-approved tier changes. Verify cancellation, expiry, refund/revocation behavior before public paid rollout. |
+| App Check/backend       | Verify production-mode App Attest/DeviceCheck tokens are accepted and deployed callables/rules/indexes support the build; a green config-less CI run does not prove this.                                                                        |
+| Privacy/account         | Update privacy preferences; Hide me now removes live visibility; delete a disposable account and confirm session/data cleanup. Test Supporter crown visibility and blocked users.                                                                |
+| Stability/accessibility | Confirm symbolicated Crashlytics reports; test airplane mode, network recovery, light/dark mode, Swedish/English, largest Dynamic Type, and VoiceOver on critical flows.                                                                         |
 
 ## Submission and evidence
 
@@ -108,9 +108,9 @@ passenger or stationary setup for interactions. Test actual movement safely.
 - [ ] Resolve blocking archive validation warnings and TestFlight feedback.
 - [ ] Record evidence below; leave untested items unchecked.
 
-| Build / commit | Device / iOS | Tester / date | Passed areas | Failures / linked issues |
-| --- | --- | --- | --- | --- |
-| Not yet verified | — | — | — | Apple setup and physical-device validation pending |
+| Build / commit   | Device / iOS | Tester / date | Passed areas | Failures / linked issues                           |
+| ---------------- | ------------ | ------------- | ------------ | -------------------------------------------------- |
+| Not yet verified | —            | —             | —            | Apple setup and physical-device validation pending |
 
 Turn-by-turn navigation is intentionally deferred on iOS. A signed TestFlight
 build, completed device checks, and store configuration are release gates, not
@@ -118,3 +118,9 @@ additional MVP feature implementations. GitHub's Validate iOS workflow runs
 config-less simulator tests and an unsigned Release device build; it does not
 sign or upload builds. A TestFlight delivery workflow can be added separately
 when signing credentials and distribution preferences are available.
+
+Before enrollment, use the [automated-test and TestFlight handoff](ios-mvp-test-handoff.md).
+The manual preparation workflow creates only an unsigned checklist/export-options
+example; it does not contact Apple or deploy anything. Native Auth-emulator
+acceptance is separate from physical-device acceptance and never marks this
+checklist complete. iOS artifact uploads require explicit storage opt-in.

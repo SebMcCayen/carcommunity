@@ -1,9 +1,34 @@
 import XCTest
 import FirebaseFirestore
+import Security
 
 @testable import KCC
 
 final class DiagnosticsTests: XCTestCase {
+    #if targetEnvironment(simulator)
+    func testSimulatorCanPersistAndRemoveItsOwnSyntheticKeychainItem() throws {
+        let probe = UUID().uuidString
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "KCC.simulator-regression." + probe,
+            kSecAttrAccount as String: probe,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        ]
+        let data = Data("synthetic-test-only".utf8)
+        var item = query
+        item[kSecValueData as String] = data
+        let status = SecItemAdd(item as CFDictionary, nil)
+        XCTAssertEqual(status, errSecSuccess, "Simulator signing must support Firebase session persistence")
+        guard status == errSecSuccess else { return }
+        defer { XCTAssertEqual(SecItemDelete(query as CFDictionary), errSecSuccess) }
+        var readQuery = query
+        readQuery[kSecReturnData as String] = true
+        var result: CFTypeRef?
+        XCTAssertEqual(SecItemCopyMatching(readQuery as CFDictionary, &result), errSecSuccess)
+        XCTAssertTrue((result as? Data) == data)
+    }
+    #endif
+
     func testLocalFirestoreUsesPlaintextOnlyForExplicitDebugDemo() throws {
         let settings = try XCTUnwrap(LocalFirestoreEmulator.settings(
             projectID: "demo-kcc-ios", endpoint: "127.0.0.1:18080", isDebugBuild: true
