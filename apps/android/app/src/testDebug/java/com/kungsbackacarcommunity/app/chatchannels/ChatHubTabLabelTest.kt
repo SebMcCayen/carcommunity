@@ -99,15 +99,27 @@ class ChatHubTabLabelTest {
                     assertTrue("$current $tab hit height=$bounds", bounds.height >= 48f)
                     assertTrue("$current $tab hit width=$bounds", bounds.width >= 48f)
                     val layouts = mutableListOf<TextLayoutResult>()
-                    compose.onNodeWithText(resources.getString(labelIds[tab.ordinal]), useUnmergedTree = true)
+                    val label = resources.getString(labelIds[tab.ordinal])
+                    compose.onNodeWithText(label, useUnmergedTree = true)
                         .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
                     assertEquals("$current $tab layout", 1, layouts.size)
                     val layout = layouts.single()
                     assertEquals("$current $tab must not auto-shrink", 14.sp, layout.layoutInput.style.fontSize)
                     assertEquals(scale, layout.layoutInput.density.fontScale, 0.001f)
-                    assertFalse("$current $tab truncated: size=${layout.size}, paragraphWidth=${layout.multiParagraph.width}, " +
-                        "widthOverflow=${layout.didOverflowWidth}, heightOverflow=${layout.didOverflowHeight}",
-                        layout.hasVisualOverflow)
+                    // With softWrap=false Robolectric can expose an unbounded
+                    // paragraph width (Int.MAX_VALUE) even when the actual line
+                    // fits. Check the rendered line and every visible character.
+                    assertEquals("$current $tab source text", label, layout.layoutInput.text.text)
+                    assertEquals("$current $tab must stay on one line", 1, layout.lineCount)
+                    assertFalse("$current $tab ellipsized", layout.isLineEllipsized(0))
+                    assertEquals("$current $tab first visible character", 0, layout.getLineStart(0))
+                    assertEquals("$current $tab last visible character", label.length,
+                        layout.getLineEnd(0, visibleEnd = true))
+                    val left = layout.getLineLeft(0)
+                    val right = layout.getLineRight(0)
+                    assertTrue("$current $tab line outside text width: left=$left right=$right size=${layout.size}",
+                        left >= 0f && right > left && right <= layout.size.width.toFloat())
+                    assertFalse("$current $tab vertical clipping", layout.didOverflowHeight)
                     // The dot remains a named child in every tab, including offscreen ones after scrolling.
                     compose.onNodeWithTag(chatChannelTabTag(tab)).assertIsDisplayed()
                     compose.onNode(
