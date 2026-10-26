@@ -136,8 +136,8 @@ const val CONVOY_BAR_DESTINATION_NAVIGATE_TAG = "convoy_bar_destination_navigate
  * (leave, or — for the leader — leave-or-end) — ALL visible inline, no expand
  * step.
  *
- * Rendered by the map home (wedged full-width into the search row between the
- * search control and the profile avatar) and by turn-by-turn navigation through a
+ * Rendered by the map home's bottom dock above the persistent navigation bar,
+ * and by turn-by-turn navigation through a
  * slot, so there is ONE convoy bar with one set of rules rather than a map version
  * and a navigation version that can drift apart. [state] being null is the
  * caller's signal not to compose it at all — the host omits the slot entirely when

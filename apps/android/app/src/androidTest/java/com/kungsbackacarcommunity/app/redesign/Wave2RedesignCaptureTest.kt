@@ -134,7 +134,7 @@ class Wave2RedesignCaptureTest {
                                         "settings", "membership" -> Wave2SettingsPreview(selected)
                                         // MapShellCataloguePreview is not referenced
                                         // until main cherry-picks map-qa's fixture.
-                                        "map-layers", "map-saved", "map-report", "map-create", "map-perks", "map-session" -> {
+                                        "map-layers", "map-saved", "map-report", "map-create", "map-perks", "map-session", "map-convoy" -> {
                                             val zoom = remember { object : MapZoomController {
                                                 private var value by mutableStateOf(14.5)
                                                 override val browsingZoom get() = value
@@ -175,11 +175,11 @@ class Wave2RedesignCaptureTest {
                 rule.waitForIdle()
             }
             rule.onNodeWithTag("wave2-case-$screen").assertExists()
-            if (screen in MAP_SHELL_CATALOGUE_CASES) {
+            if (screen in MAP_SHELL_CATALOGUE_CASES || screen == "map-convoy") {
                 rule.waitUntil(5_000) {
                     runCatching {
                         val footer = rule.onNodeWithTag(MAP_CATALOGUE_FOOTER_TAG).fetchSemanticsNode().boundsInRoot
-                        val tag = if (screen == "map-session") "map_home_session_dock" else MAP_DETAIL_SHEET_TAG
+                        val tag = if (screen == "map-session" || screen == "map-convoy") "map_home_session_dock" else MAP_DETAIL_SHEET_TAG
                         val body = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
                         footer.height > 0f && body.height > 0f && body.bottom <= footer.top + 1f
                     }.getOrDefault(false)

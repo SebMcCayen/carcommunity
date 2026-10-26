@@ -23,6 +23,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.CreateChooserDialog
+import com.kungsbackacarcommunity.app.convoy.ConvoyBar
+import com.kungsbackacarcommunity.app.convoy.ConvoyBarState
+import com.kungsbackacarcommunity.app.convoy.ConvoyBarMember
+import com.kungsbackacarcommunity.app.convoy.ConvoyStatusBar
 import com.kungsbackacarcommunity.app.ShellBottomBar
 import com.kungsbackacarcommunity.app.ShellBottomBarHeight
 import com.kungsbackacarcommunity.app.crownhunt.PerkDeployItem
@@ -83,11 +87,11 @@ fun MapShellCataloguePreview(
     onSheetDismiss: () -> Unit = {},
     onLocalAction: (String) -> Unit = {},
 ) {
-    require(screen in MAP_SHELL_CATALOGUE_CASES) { "Unknown map shell case: $screen" }
+    require(screen in MAP_SHELL_CATALOGUE_CASES || screen == "map-convoy") { "Unknown map shell case: $screen" }
     val surface = mapSurface ?: remember { StubMapSurface(MapLoadState.Loaded, autoLoad = false) }
     val localZoom = remember { CatalogueZoomController() }
     val zoom = zoomController ?: localZoom
-    val live = screen == "map-session"
+    val live = screen == "map-session" || screen == "map-convoy"
     var panel by remember(screen) { mutableStateOf(screen.takeUnless { live }) }
     var selectedTab by remember { mutableStateOf(ShellTab.Map) }
     val nightOverride = remember { mutableStateOf<MapMode?>(null) }
@@ -141,6 +145,21 @@ fun MapShellCataloguePreview(
                                 speedSample = null, now = { 754_000L }) }
                         } else null,
                         onManageLiveSession = { panel = "map-session" },
+                        convoyBar = if (screen == "map-convoy") {
+                            {
+                                ConvoyStatusBar(
+                                    state = ConvoyBarState(
+                                        convoyId = "local-catalogue-convoy",
+                                        members = (1..4).map { ConvoyBarMember("local-$it", "Testförare $it", null) },
+                                        viewerIsOwner = true, busy = false,
+                                        inviteAvailability = ConvoyBar.inviteAvailability,
+                                        leaveAvailability = ConvoyBar.leaveAvailability,
+                                    ),
+                                    onEndConvoy = {}, onLeaveConvoy = {},
+                                    onInvite = {}, onOpenChat = {},
+                                )
+                            }
+                        } else null,
                     )
                 }
                 Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().testTag(MAP_CATALOGUE_FOOTER_TAG)) {
