@@ -1,0 +1,47 @@
+{
+  "sourceCommit": "9c8c5cdf3fc6ae0da23f78d65f4f74990f5f4d73",
+  "appApkSha256": "c5a21dedafe90de4f27eb0dab0ef013ede3ecdaaf84d0222eaab254c6f9b01eb",
+  "testApkSha256": "1d8cef3bb35cfebfbadaf73dbe6e2e7e49b72e09f7df83f506385695d86ff225",
+  "device": {
+    "api": 34,
+    "physicalPixels": [
+      1170,
+      2532
+    ],
+    "densityDpi": 480,
+    "logicalDp": [
+      390,
+      844
+    ],
+    "fontScale": 1.0,
+    "locale": "sv-SE",
+    "theme": "dark"
+  },
+  "data": "local test fixtures; map-shell cases explicitly use StubMapSurface; no Firebase or Play account",
+  "files": [
+    {
+      "file": "chat.png",
+      "sha256": "48c1203c6274b344498eb58b7c9ff16544c0bd8c5dc22bb6dcd7eeb2c9a0aecd"
+    },
+    {
+      "file": "map-layers.png",
+      "sha256": "0badb6b60c2baa860ec1ee7273dc651112ba9740fdb3f38fadeddfca67f44b33"
+    },
+    {
+      "file": "map-report.png",
+      "sha256": "eb04cd7397e26f83804d2e13116ebbc64ed24b07a0ba846ba396be7ac837e886"
+    },
+    {
+      "file": "event-detail.png",
+      "sha256": "3ebf366c0ee7763e8ccd38ab61395a5c102e0ad7ee3e1b891408573baf27b44f"
+    },
+    {
+      "file": "crown-stats.png",
+      "sha256": "52843351fe1202fdb424485c33b77dd4ccce5167bf0c73d46a90fd9521d40399"
+    },
+    {
+      "file": "saved-places-manage.png",
+      "sha256": "c064f2baa2cbb40e7bd50d710a8ebb52be0460747a698fed6da57559c38fdaab"
+    }
+  ]
+}

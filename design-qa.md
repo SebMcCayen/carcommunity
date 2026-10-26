@@ -60,6 +60,23 @@ acceptance independently from implementation, compilation and unit tests.
 
 ## Comparison history
 
+### Android pass 3 — 2026-10-26
+
+The [pass-3 evidence report](docs/design/android-redesign-pass3-evidence.md)
+and [selected native packet](docs/design/evidence/2026-10-26/README.md) record
+the map docking/camera and detailed screen work separately from the historical
+wave-2 checks. They pin source/APK/file hashes, locale/theme, logical/physical
+viewport and text scale. All source sheets were reviewed; native overview and
+focused same-family comparisons exposed and corrected control density, action
+shape, editor exits, identity wrapping and large-text footer issues.
+
+100 primary local component-state captures plus two final convoy variants are
+not acceptance of all 84 routes. The configured map can render base geometry,
+but annotation/label/GPU composition remains a phone gate; an earlier configured
+multi-map batch timeout is not counted as a pass. Current native/JVM/lint checks
+belong in the platform index, while full authenticated/device/iOS acceptance
+remains blocked here. No version bump or deployment is implied by this report.
+
 ### Current Android wave 2 — feature previews, 2026-10-25
 
 All source sheets S01-S84 were inspected; relevant states were checked against
