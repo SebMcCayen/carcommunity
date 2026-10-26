@@ -172,6 +172,8 @@ describe('selectHomepageEvents', () => {
     const [entry] = selectHomepageEvents([source()], NOW);
     expect(entry).toEqual({
       title: 'Kvällscruising',
+      startsAt: '2026-08-20T17:00:00.000Z',
+      endsAt: '2026-08-20T21:59:59.999Z',
       date: '2026-08-20',
       time: '19:00',
       place: 'Kungsbacka station',
@@ -181,16 +183,52 @@ describe('selectHomepageEvents', () => {
     });
   });
 
-  it('includes ONLY future-starting events', () => {
+  it('includes upcoming and in-progress events, including one starting exactly now', () => {
     const events = selectHomepageEvents(
       [
         source({ eventId: 'past', startsAt: new Date('2026-08-01T10:00:00Z') }),
         source({ eventId: 'now', startsAt: NOW }),
+        source({ eventId: 'running', startsAt: new Date('2026-08-12T09:00:00Z') }),
         source({ eventId: 'future', startsAt: new Date('2026-08-13T10:00:00Z') }),
       ],
       NOW,
     );
-    expect(events.map((event) => event.url)).toEqual([publicEventUrl('future')]);
+    expect(events.map((event) => event.url)).toEqual([
+      publicEventUrl('running'),
+      publicEventUrl('now'),
+      publicEventUrl('future'),
+    ]);
+  });
+
+  it('uses an explicit overnight end and removes the event exactly at that instant', () => {
+    const event = source({
+      startsAt: new Date('2026-08-20T20:00:00+02:00'),
+      endsAt: new Date('2026-08-21T02:00:00+02:00'),
+    });
+    const [entry] = selectHomepageEvents([event], new Date('2026-08-20T23:59:59.999Z'));
+    expect(entry).toMatchObject({
+      startsAt: '2026-08-20T18:00:00.000Z',
+      endsAt: '2026-08-21T00:00:00.000Z',
+      date: '2026-08-20',
+      time: '20:00',
+    });
+    expect(selectHomepageEvents([event], event.endsAt!)).toEqual([]);
+    expect(selectHomepageEvents([event], new Date('2026-08-21T00:00:00.001Z'))).toEqual([]);
+  });
+
+  it.each([
+    ['summer', '2026-08-20T17:00:00Z', '2026-08-20T21:59:59.999Z', '2026-08-20'],
+    ['winter', '2026-01-20T17:00:00Z', '2026-01-20T22:59:59.999Z', '2026-01-20'],
+    ['next Stockholm day', '2026-08-20T23:30:00Z', '2026-08-21T21:59:59.999Z', '2026-08-21'],
+    ['DST spring change', '2026-03-29T00:30:00Z', '2026-03-29T21:59:59.999Z', '2026-03-29'],
+    ['DST autumn change', '2026-10-25T00:30:00Z', '2026-10-25T22:59:59.999Z', '2026-10-25'],
+  ])('defaults missing/null ends to Stockholm end-of-day: %s', (_label, start, end, date) => {
+    for (const endsAt of [null, undefined]) {
+      const event = source({ startsAt: new Date(start), endsAt });
+      const [entry] = selectHomepageEvents([event], new Date(new Date(end).getTime() - 1));
+      expect(entry).toMatchObject({ startsAt: new Date(start).toISOString(), endsAt: end, date });
+      expect(selectHomepageEvents([event], new Date(end))).toEqual([]);
+    }
   });
 
   it('includes ONLY published events even if a stale flag survives elsewhere', () => {
@@ -219,6 +257,24 @@ describe('selectHomepageEvents', () => {
       publicEventUrl('a'),
       publicEventUrl('b'),
       publicEventUrl('c'),
+    ]);
+  });
+
+  it('keeps in-progress events sorted by start rather than end', () => {
+    const events = selectHomepageEvents([
+      source({
+        eventId: 'upcoming',
+        startsAt: new Date('2026-08-12T11:00:00Z'),
+        endsAt: new Date('2026-08-12T12:00:00Z'),
+      }),
+      source({
+        eventId: 'running',
+        startsAt: new Date('2026-08-12T09:00:00Z'),
+        endsAt: new Date('2026-08-13T01:00:00Z'),
+      }),
+    ], NOW);
+    expect(events.map((event) => event.url)).toEqual([
+      publicEventUrl('running'), publicEventUrl('upcoming'),
     ]);
   });
 
@@ -254,8 +310,10 @@ describe('selectHomepageEvents', () => {
     expect(Object.keys(entry!).sort()).toEqual([
       'date',
       'desc',
+      'endsAt',
       'place',
       'source',
+      'startsAt',
       'time',
       'title',
       'url',
@@ -283,6 +341,20 @@ describe('buildHomepageEventsFile / homepageFileEquivalent', () => {
     const a = buildHomepageEventsFile(events, NOW);
     const b = buildHomepageEventsFile([], NOW);
     expect(homepageFileEquivalent(a, b)).toBe(false);
+  });
+
+  it('regenerates when only the end changes, including upgrading the legacy feed shape', () => {
+    const current = buildHomepageEventsFile(events, NOW);
+    const updated = selectHomepageEvents([
+      source({ endsAt: new Date('2026-08-20T20:00:00Z') }),
+    ], NOW);
+    expect(homepageFileEquivalent(current, buildHomepageEventsFile(updated, NOW))).toBe(false);
+    const legacy = JSON.parse(current);
+    for (const entry of legacy.events) {
+      delete entry.startsAt;
+      delete entry.endsAt;
+    }
+    expect(homepageFileEquivalent(JSON.stringify(legacy), current)).toBe(false);
   });
 
   it('treats a missing or unparseable existing file as NOT equivalent', () => {
@@ -323,6 +395,21 @@ describe('isHomepageSyncRelevant', () => {
     expect(
       isHomepageSyncRelevant({ ...enabled, startsAt: ts(1000) }, { ...enabled, startsAt: ts(2000) }),
     ).toBe(true);
+  });
+
+  it('syncs explicit end changes and resets, but ignores equal end instants', () => {
+    const ts = (millis: number) => ({ toMillis: () => millis });
+    const before = { ...enabled, endsAt: ts(1000) };
+    expect(isHomepageSyncRelevant(before, { ...enabled, endsAt: ts(1000) })).toBe(false);
+    expect(isHomepageSyncRelevant(before, { ...enabled, endsAt: ts(2000) })).toBe(true);
+    expect(isHomepageSyncRelevant(before, { ...enabled, endsAt: null })).toBe(true);
+    expect(isHomepageSyncRelevant({ ...enabled, endsAt: null }, before)).toBe(true);
+    expect(isHomepageSyncRelevant(enabled, before)).toBe(true);
+    expect(isHomepageSyncRelevant(before, enabled)).toBe(true);
+    expect(isHomepageSyncRelevant(
+      { publicSiteEnabled: false, endsAt: ts(1000) },
+      { publicSiteEnabled: false, endsAt: ts(2000) },
+    )).toBe(false);
   });
 
   it('ignores irrelevant writes (rsvp counter bumps) on an enabled event', () => {

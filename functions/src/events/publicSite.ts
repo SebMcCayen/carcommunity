@@ -6,7 +6,7 @@
  * `events/{eventId}.publicSiteEnabled` (see publicSite-core.ts) is set by the
  * event's creator (the app's create-form checkbox → events.create, or this
  * callable later) or by an admin (moderation safety valve, e.g. force-
- * unpublish). While an enabled event is `published` and upcoming it appears
+ * unpublish). While an enabled event is `published` and has not ended it appears
  * in the community homepage's data/app-events.json feed and (once the public
  * pages ship) at its /e/{eventId} public page.
  *
@@ -19,8 +19,8 @@
  *    isHomepageSyncRelevant makes every other write a cheap no-op. NO LOOP is
  *    possible: regeneration writes to GitHub only, never to Firestore.
  * 2. events-syncHomepage — daily scheduled sweep. Time itself changes the feed
- *    (an event whose start passed must fall out even when nothing writes to
- *    Firestore), and the sweep also self-heals any missed/failed trigger regen.
+ *    (an event whose effective end passed must fall out even when nothing
+ *    writes to Firestore), and the sweep self-heals missed/failed trigger regen.
  *    With no changes it costs one GitHub GET and commits nothing
  *    (homepageFileEquivalent ignores the generatedAt stamp).
  * 3. The callable itself performs NO regeneration — its flag write fires path 1,
@@ -96,9 +96,9 @@ export interface HomepageRegenResult {
  * The candidate query is two equality filters
  * (`publicSiteEnabled == true AND status == 'published'`) — served by
  * Firestore's built-in single-field index merge, NO composite index and
- * therefore no hand-deploy. The only-upcoming cut and the ascending sort are
- * applied in memory (selectHomepageEvents): the enabled-and-published set for
- * a single-town community is a handful of documents.
+ * therefore no hand-deploy. The effective-end cut and ascending start sort
+ * are applied in memory (selectHomepageEvents): the enabled-and-published set
+ * for a single-town community is a handful of documents.
  *
  * The 160-char `desc` prefers the teaser `summary`; only events lacking one
  * have their details/private description fetched (one batched getAll) as the
@@ -122,6 +122,7 @@ export async function regenerateHomepageEvents(
       status: EventStatus;
       title?: string;
       startsAt: Timestamp;
+      endsAt?: Timestamp | null;
       locationName?: string | null;
       approximateArea?: string | null;
       summary?: string | null;
@@ -131,6 +132,7 @@ export async function regenerateHomepageEvents(
       status: data.status,
       title: String(data.title ?? ''),
       startsAt: data.startsAt.toDate(),
+      endsAt: data.endsAt?.toDate() ?? null,
       locationName: data.locationName ?? null,
       approximateArea: data.approximateArea ?? null,
       summary: data.summary ?? null,

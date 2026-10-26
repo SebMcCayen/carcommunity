@@ -87,6 +87,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -247,6 +248,7 @@ import com.kungsbackacarcommunity.app.events.Events
 import com.kungsbackacarcommunity.app.events.EventsListState
 import com.kungsbackacarcommunity.app.events.EventsRepository
 import com.kungsbackacarcommunity.app.events.EventsRoute
+import com.kungsbackacarcommunity.app.events.EventSchedule
 import com.kungsbackacarcommunity.app.events.RsvpCoordinator
 import com.kungsbackacarcommunity.app.feedback.FeedbackCoordinator
 import com.kungsbackacarcommunity.app.feedback.FeedbackReportRoute
@@ -7444,12 +7446,11 @@ fun AuthenticatedApp(
                                 if (openEvent != null) {
                                     val whenLabel =
                                         openEvent.startsAtMillis?.let { millis ->
-                                            java.text.DateFormat
-                                                .getDateTimeInstance(
-                                                    java.text.DateFormat.MEDIUM,
-                                                    java.text.DateFormat.SHORT,
-                                                )
-                                                .format(java.util.Date(millis))
+                                            EventSchedule.format(
+                                                millis, openEvent.endsAtMillis,
+                                                LocalLocale.current.platformLocale,
+                                                java.time.ZoneId.systemDefault(),
+                                            )
                                         }
                                     EventMarkerInfoPopup(
                                         title = openEvent.title,

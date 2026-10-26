@@ -125,7 +125,7 @@ class EventDesignRegressionTest {
     fun editorSavingDisablesFieldsDateAndSubmit() {
         compose.setContent { KccTheme { CreateEventScreen(true, null, {}, {}, initialInput = input) } }
         listOf(EVENT_EDITOR_TITLE_TAG, EVENT_EDITOR_DESCRIPTION_TAG, EVENT_EDITOR_ADDRESS_TAG,
-            EVENT_EDITOR_START_TAG, EVENT_EDITOR_SUBMIT_TAG).forEach { tag ->
+            EVENT_EDITOR_START_TAG, EVENT_EDITOR_END_TAG, EVENT_EDITOR_SUBMIT_TAG).forEach { tag ->
             compose.onNodeWithTag(tag).performScrollTo().assertIsNotEnabled()
         }
     }
@@ -163,4 +163,80 @@ class EventDesignRegressionTest {
         assertEquals(0, writes)
         compose.onNodeWithText(str(R.string.events_createValidation)).performScrollTo().assertIsDisplayed()
     }
+
+    @Test
+    fun editorEndPickerPreservesSelectedEndAndStartThroughSubmission() {
+        val withEnd = input.copy(endsAtMillis = input.startsAtMillis + 3_600_000L)
+        var submitted: CreateEventInput? = null
+        compose.setContent {
+            KccTheme { CreateEventScreen(false, null, { submitted = it }, {}, initialInput = withEnd) }
+        }
+        compose.onNodeWithTag(EVENT_EDITOR_END_TAG).performScrollTo().performClick()
+        compose.onNodeWithText(str(R.string.events_createDialogNext)).performClick()
+        compose.onNodeWithText(str(R.string.events_createPickEndTime)).assertIsDisplayed()
+        compose.onNodeWithText(str(R.string.events_createDialogConfirm)).performClick()
+        compose.onNodeWithTag(EVENT_EDITOR_SUBMIT_TAG).performScrollTo().performClick()
+        assertEquals(withEnd, submitted)
+    }
+
+    @Test
+    fun editorCanClearEndWhenEditing_withoutChangingTheStart() {
+        val withEnd = input.copy(endsAtMillis = input.startsAtMillis + 3_600_000L)
+        var submitted: CreateEventInput? = null
+        compose.setContent {
+            KccTheme { CreateEventScreen(false, null, { submitted = it }, {}, initialInput = withEnd, isEdit = true) }
+        }
+        compose.onNodeWithTag(EVENT_EDITOR_CLEAR_END_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag(EVENT_EDITOR_CLEAR_END_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(EVENT_EDITOR_SUBMIT_TAG).performScrollTo().performClick()
+        assertEquals(input, submitted)
+    }
+
+    @Test
+    fun editorRejectsAnEndEqualToTheStart_beforeAnyWrite() {
+        var writes = 0
+        compose.setContent {
+            KccTheme {
+                CreateEventScreen(false, null, { writes++ }, {},
+                    initialInput = input.copy(endsAtMillis = input.startsAtMillis))
+            }
+        }
+        compose.onNodeWithTag(EVENT_EDITOR_SUBMIT_TAG).performScrollTo().performClick()
+        assertEquals(0, writes)
+        compose.onNodeWithText(str(R.string.events_createEndAfterStart)).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun editorRejectsAnEndBeyondTheServerDurationLimit_beforeAnyWrite() {
+        var writes = 0
+        compose.setContent {
+            KccTheme {
+                CreateEventScreen(false, null, { writes++ }, {},
+                    initialInput = input.copy(endsAtMillis = input.startsAtMillis + 72L * 3_600_000 + 1))
+            }
+        }
+        compose.onNodeWithTag(EVENT_EDITOR_SUBMIT_TAG).performScrollTo().performClick()
+        assertEquals(0, writes)
+        compose.onNodeWithText(str(R.string.events_createEndTooLate)).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun editorEndAndClearAreDisabledWhileSaving() {
+        compose.setContent {
+            KccTheme {
+                CreateEventScreen(true, null, {}, {},
+                    initialInput = input.copy(endsAtMillis = input.startsAtMillis + 3_600_000L))
+            }
+        }
+        compose.onNodeWithTag(EVENT_EDITOR_END_TAG).performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithTag(EVENT_EDITOR_CLEAR_END_TAG).performScrollTo().assertIsNotEnabled()
+    }
+
+
+    @Test
+    fun editorEndIsDisabledUntilAStartIsSelected() {
+        compose.setContent { KccTheme { CreateEventScreen(false, null, {}, {}) } }
+        compose.onNodeWithTag(EVENT_EDITOR_END_TAG).performScrollTo().assertIsNotEnabled()
+    }
+
 }

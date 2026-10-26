@@ -389,6 +389,13 @@
     <string name="events_mapPopupViewDetails">Visa detaljer</string>
     <string name="events_createNoDate">Ingen starttid vald än.</string>
     <string name="events_createPickStart">Välj startdatum och tid</string>
+    <string name="events_createPickEnd">Välj slutdatum och tid (valfritt)</string>
+    <string name="events_createNoEnd">Ingen sluttid vald.</string>
+    <string name="events_createEndHint">Utan sluttid avslutas träffen vid slutet av startdagen i svensk tid.</string>
+    <string name="events_createClearEnd">Ta bort sluttiden</string>
+    <string name="events_createPickEndTime">Välj en sluttid</string>
+    <string name="events_createEndAfterStart">Sluttiden måste vara efter starttiden.</string>
+    <string name="events_createEndTooLate">Träffen får vara högst 72 timmar lång.</string>
     <string name="events_createPickTime">Välj en starttid</string>
     <string name="events_createSubmit">Skapa träff</string>
     <string name="events_createSaving">Skapar…</string>

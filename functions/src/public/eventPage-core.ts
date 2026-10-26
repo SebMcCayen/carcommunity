@@ -302,6 +302,28 @@ function stockholmLongDate(instant: Date): string {
   }).format(instant);
 }
 
+/** Local interval, with both dates overnight and offsets across a DST change. */
+function stockholmInterval(startsAt: Date, endsAt: Date): string {
+  const start = stockholmDateTimeParts(startsAt);
+  const end = stockholmDateTimeParts(endsAt);
+  const zoneFormat = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Europe/Stockholm',
+    timeZoneName: 'shortOffset',
+  });
+  const offset = (instant: Date) =>
+    zoneFormat
+      .formatToParts(instant)
+      .find((part) => part.type === 'timeZoneName')!
+      .value.replace('GMT', 'UTC');
+  const startOffset = offset(startsAt);
+  const endOffset = offset(endsAt);
+  const startTime = `${start.time}${startOffset !== endOffset ? ` (${startOffset})` : ''}`;
+  const endTime = `${end.time}${startOffset !== endOffset ? ` (${endOffset})` : ''}`;
+  return start.date === end.date
+    ? `${stockholmLongDate(startsAt)} kl ${startTime}–${endTime}`
+    : `${stockholmLongDate(startsAt)} kl ${startTime} – ${stockholmLongDate(endsAt)} kl ${endTime}`;
+}
+
 const PAGE_CSS = `
   :root { color-scheme: light; }
   * { box-sizing: border-box; margin: 0; }
@@ -365,11 +387,22 @@ export function renderLiveEventPage(
   model: PublicEventModel,
   options: { mapImageUrl: string | null },
 ): string {
-  const { date, time } = stockholmDateTimeParts(model.startsAt);
+  const whenLine = stockholmInterval(model.startsAt, model.endsAt);
   const pageUrl = `${PUBLIC_EVENT_BASE_URL}/e/${model.eventId}`;
   const ogDescription =
     metaDescription(model.description) ||
-    `${date} kl ${time}${model.locationName ? ` – ${model.locationName}` : ''}`;
+    `${whenLine}${model.locationName ? ` – ${model.locationName}` : ''}`;
+
+  // Escaping '<' prevents user text from closing the script element while
+  // retaining valid JSON (HTML entities are not decoded inside scripts).
+  const structuredEvent = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'Event',
+    name: model.title,
+    startDate: model.startsAt.toISOString(),
+    endDate: model.endsAt.toISOString(),
+    url: pageUrl,
+  }).replace(/</g, '\\u003c');
 
   const headExtra = [
     `<meta name="description" content="${escapeHtml(ogDescription)}">`,
@@ -382,9 +415,9 @@ export function renderLiveEventPage(
       ? [`<meta property="og:image" content="${escapeHtml(options.mapImageUrl)}">`]
       : []),
     `<meta name="twitter:card" content="summary${options.mapImageUrl ? '_large_image' : ''}">`,
+    `<script type="application/ld+json">${structuredEvent}</script>`,
   ].join('\n');
 
-  const whenLine = `${stockholmLongDate(model.startsAt)} kl ${time}`;
   const body = `<article class="card">
 <h1>${escapeHtml(model.title)}</h1>
 <p class="meta">📅 ${escapeHtml(whenLine)}</p>

@@ -78,7 +78,18 @@ class EventTest {
         assertFalse(Events.isValidForCreate(ok.copy(approximateArea = "x".repeat(201))))
         assertFalse(Events.isValidForCreate(ok.copy(title = "x".repeat(201))))
         assertFalse(Events.isValidForCreate(ok.copy(endsAtMillis = ok.startsAtMillis - 1)))
+        assertFalse(Events.isValidForCreate(ok.copy(endsAtMillis = ok.startsAtMillis)))
         assertTrue(Events.isValidForCreate(ok.copy(endsAtMillis = ok.startsAtMillis + 1)))
+    }
+
+    @Test
+    fun `isValidForCreate enforces 72 elapsed hours and allows the server default`() {
+        val input = createInput()
+        val limit = input.startsAtMillis + 72L * 60 * 60 * 1000
+        assertTrue(Events.isValidForCreate(input.copy(endsAtMillis = null)))
+        assertTrue(Events.isValidForCreate(input.copy(endsAtMillis = limit)))
+        assertFalse(Events.isValidForCreate(input.copy(endsAtMillis = limit + 1)))
+        assertFalse(Events.isValidForCreate(input.copy(startsAtMillis = Long.MIN_VALUE, endsAtMillis = Long.MAX_VALUE)))
     }
 
     @Test
@@ -102,12 +113,17 @@ class EventTest {
         assertEquals("2026-07-11T18:30:00Z", payload["startsAt"])
         assertEquals("hi", payload["summary"]) // trimmed
         assertFalse(payload.containsKey("description")) // blank dropped
-        assertTrue(payload.containsKey("endsAt"))
+        assertEquals("2026-07-11T19:30:00Z", payload["endsAt"])
         assertFalse(payload.containsKey("locationName"))
         // The app has no draft/publish UI, so every in-app create publishes
         // immediately — otherwise an admin's in-app event lands as an invisible
         // draft. See Events.createPayload / events-core.ts initialEventStatus.
         assertEquals(true, payload["publishNow"])
+    }
+
+    @Test
+    fun `createPayload omits absent end so the server chooses end of start day`() {
+        assertFalse(Events.createPayload(createInput().copy(endsAtMillis = null)).containsKey("endsAt"))
     }
 
     @Test

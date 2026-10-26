@@ -13074,6 +13074,23 @@
         }
       }
     },
+    "events.createClearEnd": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ta bort sluttiden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove end time"
+          }
+        }
+      }
+    },
     "events.createDialogConfirm": {
       "extractionState": "manual",
       "localizations": {
@@ -13104,6 +13121,57 @@
           "stringUnit": {
             "state": "translated",
             "value": "Next"
+          }
+        }
+      }
+    },
+    "events.createEndAfterStart": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sluttiden måste vara efter starttiden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The end time must be after the start time."
+          }
+        }
+      }
+    },
+    "events.createEndHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utan sluttid avslutas träffen vid slutet av startdagen i svensk tid."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Without an end time, the event ends at the end of its start date in Swedish time."
+          }
+        }
+      }
+    },
+    "events.createEndTooLate": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Träffen får vara högst 72 timmar lång."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The event can last no more than 72 hours."
           }
         }
       }
@@ -13291,6 +13359,57 @@
           "stringUnit": {
             "state": "translated",
             "value": "No start time chosen yet."
+          }
+        }
+      }
+    },
+    "events.createNoEnd": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ingen sluttid vald."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No end time selected."
+          }
+        }
+      }
+    },
+    "events.createPickEnd": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Välj slutdatum och tid (valfritt)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose end date and time (optional)"
+          }
+        }
+      }
+    },
+    "events.createPickEndTime": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Välj en sluttid"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose an end time"
           }
         }
       }

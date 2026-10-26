@@ -281,17 +281,18 @@ object Events {
     /**
      * Builds the `events-update` callable payload for a creator edit from a
      * validated [input]. Carries ONLY the fields the app's shared event form
-     * manages (title, start, description, address, map pin), so the update is a
-     * genuine PARTIAL one: fields the form never surfaces — endsAt, summary,
+     * manages (title, start, end, description, address, map pin), so the update is a
+     * genuine PARTIAL one: fields the form never surfaces — summary,
      * approximateArea, locationName, isOfficial — are omitted and therefore left
      * untouched server-side, and `publicSiteEnabled` is deliberately never sent
      * (the update schema forbids it; the public-site flag is toggled only via
      * events.setPublicSite).
      *
-     * Unlike [createPayload], the form-managed OPTIONAL text/coordinate fields are
+     * Unlike [createPayload], the form-managed OPTIONAL fields are
      * sent even when blank/absent (as JSON null) because the creator can
-     * deliberately CLEAR them — a removed description, address or map pin must
-     * actually clear server-side, not silently persist. The coordinate pair stays
+     * deliberately CLEAR them — a removed end, description, address or map pin must
+     * actually clear server-side, not silently persist. A cleared end restores the
+     * server's end-of-start-day default. The coordinate pair stays
      * both-or-neither ([isValidCoordinatePair], gated before submit).
      */
     fun updatePayload(eventId: String, input: CreateEventInput): Map<String, Any?> {
@@ -301,6 +302,7 @@ object Events {
             "eventId" to eventId,
             "title" to input.title.trim(),
             "startsAt" to toIsoUtc(input.startsAtMillis),
+            "endsAt" to input.endsAtMillis?.let(::toIsoUtc),
             "description" to input.description?.trim()?.takeIf { it.isNotEmpty() },
             "address" to input.address?.trim()?.takeIf { it.isNotEmpty() },
             // Both set (a positioned pin) or both null (pin cleared) — never a
@@ -359,7 +361,8 @@ object Events {
     /**
      * Whether a [CreateEventInput] satisfies the backend's required-field and
      * length rules — a non-blank title within bounds, an optional area within
-     * bounds when present, and (when present) an end no earlier than the start.
+     * bounds when present, and (when present) an end strictly after the start and
+     * at most 72 elapsed hours later. Null ends use the server-authoritative default.
      * Pure so the form and the coordinator can gate submission without Firebase.
      */
     fun isValidForCreate(input: CreateEventInput): Boolean {
@@ -370,7 +373,7 @@ object Events {
         if ((input.description?.length ?: 0) > DESCRIPTION_MAX) return false
         if ((input.locationName?.length ?: 0) > LOCATION_NAME_MAX) return false
         if ((input.address?.length ?: 0) > ADDRESS_MAX) return false
-        input.endsAtMillis?.let { if (it < input.startsAtMillis) return false }
+        if (EventEditorTime.endError(input.startsAtMillis, input.endsAtMillis) != null) return false
         if (!isValidCoordinatePair(input.latitude, input.longitude)) return false
         return true
     }
