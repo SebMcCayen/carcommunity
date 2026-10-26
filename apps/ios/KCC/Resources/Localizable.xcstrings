@@ -8314,6 +8314,40 @@
         }
       }
     },
+    "crownHunt.dailyBudgetBody": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Community: 2 250 KP per dag. Plus och Supporter: 3 000 KP per dag. Återställs vid midnatt svensk tid. Servern bekräftar din återstående budget och hur många poäng du får."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Community: 2,250 CP per day. Plus and Supporter: 3,000 CP per day. Resets at midnight in Sweden. The server confirms your remaining budget and awarded points."
+          }
+        }
+      }
+    },
+    "crownHunt.dailyBudgetTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Daglig KP-budget"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Daily CP budget"
+          }
+        }
+      }
+    },
     "crownHunt.deployActivateButton": {
       "extractionState": "manual",
       "localizations": {
@@ -8327,6 +8361,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Activate"
+          }
+        }
+      }
+    },
+    "crownHunt.deployActivating": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktiverar…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activating…"
           }
         }
       }
@@ -8497,6 +8548,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Something went wrong. Try again."
+          }
+        }
+      }
+    },
+    "crownHunt.deployIntro": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Välj en perk att använda. Pågående effekter och ditt förråd visas nedan."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a perk to use. Your inventory and active effects are shown below."
           }
         }
       }
@@ -8752,6 +8820,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Location permission is required to collect."
+          }
+        }
+      }
+    },
+    "crownHunt.historyTab": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Historik"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "History"
           }
         }
       }
@@ -9232,6 +9317,91 @@
         }
       }
     },
+    "crownHunt.ledgerAll": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alla händelser"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All entries"
+          }
+        }
+      }
+    },
+    "crownHunt.ledgerAmount": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ KP"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ CP"
+          }
+        }
+      }
+    },
+    "crownHunt.ledgerBalanceAfter": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saldo: %1$lld KP"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Balance: %1$lld CP"
+          }
+        }
+      }
+    },
+    "crownHunt.ledgerCredits": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intäkter"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credits"
+          }
+        }
+      }
+    },
+    "crownHunt.ledgerDebits": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utgifter"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Debits"
+          }
+        }
+      }
+    },
     "crownHunt.legendDisappearBody": {
       "extractionState": "manual",
       "localizations": {
@@ -9504,6 +9674,40 @@
         }
       }
     },
+    "crownHunt.openShop": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Till butiken"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open shop"
+          }
+        }
+      }
+    },
+    "crownHunt.overviewTab": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Översikt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overview"
+          }
+        }
+      }
+    },
     "crownHunt.perkBlurbBoost": {
       "extractionState": "manual",
       "localizations": {
@@ -9619,6 +9823,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$llds left"
+          }
+        }
+      }
+    },
+    "crownHunt.perkInactive": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inte aktiv"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inactive"
           }
         }
       }
@@ -9755,6 +9976,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Spike strip · show details"
+          }
+        }
+      }
+    },
+    "crownHunt.perksGameOnly": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speleffekter påverkar endast Kronpoäng."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Game effects only affect Crown Points."
           }
         }
       }
@@ -9925,6 +10163,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Uncommon"
+          }
+        }
+      }
+    },
+    "crownHunt.recentPoints": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Senaste Kronpoäng"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recent Crown Points"
           }
         }
       }
@@ -10218,6 +10473,74 @@
         }
       }
     },
+    "crownHunt.seasonDates": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ – %2$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ – %2$@"
+          }
+        }
+      }
+    },
+    "crownHunt.seasonDetails": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se detaljer"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View details"
+          }
+        }
+      }
+    },
+    "crownHunt.seasonPoints": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intjänat denna säsong"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Earned this season"
+          }
+        }
+      }
+    },
+    "crownHunt.serverConfirmed": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serverbekräftad"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server confirmed"
+          }
+        }
+      }
+    },
     "crownHunt.shopAlreadyBoughtMessage": {
       "extractionState": "manual",
       "localizations": {
@@ -10299,6 +10622,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Buying…"
+          }
+        }
+      }
+    },
+    "crownHunt.shopCurrencyNote": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perks köps med Kronpoäng som du samlar i appen. Ingen betalning med pengar."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perks cost Crown Points earned in the app. No payment with money."
           }
         }
       }
@@ -10445,13 +10785,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Lägg dina Kronpoäng på perks. De hamnar i ditt förråd – du använder dem i en kommande uppdatering."
+            "value": "Använd dina Kronpoäng för speleffekter. Köpta perks finns i ditt förråd och aktiveras från kartans perksmeny."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Spend your Crown Points on perks. They land in your inventory — you use them in a later update."
+            "value": "Use your Crown Points for game effects. Purchased perks go into your inventory and can be activated from the map's perks menu."
           }
         }
       }
@@ -11153,6 +11493,23 @@
         }
       }
     },
+    "crownHunt.statisticsTab": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Statistik"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Statistics"
+          }
+        }
+      }
+    },
     "crownHunt.statsComplete": {
       "extractionState": "manual",
       "localizations": {
@@ -11370,6 +11727,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Upgrade to play Crown Hunt"
+          }
+        }
+      }
+    },
+    "crownHunt.viewAll": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa alla"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View all"
           }
         }
       }
@@ -29853,6 +30227,23 @@
         }
       }
     },
+    "shell.layers3dHelp": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa byggnader i 3D"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show buildings in 3D"
+          }
+        }
+      }
+    },
     "shell.layersAlertAge12h": {
       "extractionState": "manual",
       "localizations": {
@@ -30023,6 +30414,74 @@
         }
       }
     },
+    "shell.layersAppearanceDay": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dag"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Day"
+          }
+        }
+      }
+    },
+    "shell.layersAppearanceNight": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Natt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Night"
+          }
+        }
+      }
+    },
+    "shell.layersAppearanceSystem": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System"
+          }
+        }
+      }
+    },
+    "shell.layersAppearanceTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kartans utseende"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Map appearance"
+          }
+        }
+      }
+    },
     "shell.layersButton": {
       "extractionState": "manual",
       "localizations": {
@@ -30091,6 +30550,23 @@
         }
       }
     },
+    "shell.layersCrownMapHelp": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa kronor på kartan"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show crowns on the map"
+          }
+        }
+      }
+    },
     "shell.layersIncidents": {
       "extractionState": "manual",
       "localizations": {
@@ -30104,6 +30580,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Traffic alerts"
+          }
+        }
+      }
+    },
+    "shell.layersIncidentsHelp": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Olyckor, vägarbeten och hinder"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accidents, roadworks and hazards"
           }
         }
       }
@@ -30155,6 +30648,57 @@
           "stringUnit": {
             "state": "translated",
             "value": "Traffic"
+          }
+        }
+      }
+    },
+    "shell.layersTrafficHelp": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa trafikflöde i realtid"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show live traffic flow"
+          }
+        }
+      }
+    },
+    "shell.layersZoomCollapse": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dölj kartans fokusavstånd"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide map focus distance"
+          }
+        }
+      }
+    },
+    "shell.layersZoomExpand": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa kartans fokusavstånd"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show map focus distance"
           }
         }
       }

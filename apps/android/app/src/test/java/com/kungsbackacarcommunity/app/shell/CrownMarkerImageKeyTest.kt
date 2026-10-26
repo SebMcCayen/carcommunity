@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.shell
 import com.kungsbackacarcommunity.app.crownhunt.CrownMarkerStyle
 import com.kungsbackacarcommunity.app.crownhunt.CrownRarity
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -21,6 +22,12 @@ import org.junit.Test
  * [CrownMarkerStyle.spawnMarkerAppearance] is pure, so this needs no device.
  */
 class CrownMarkerImageKeyTest {
+    @Test
+    fun `standalone crown renderer invalidates cached filled-disc images`() {
+        val key = CrownMarkerBitmaps.imageId(1, 2, 3, null)
+        assertTrue(key.startsWith("kcc-crown-ring-v2-"))
+        assertNotEquals("kcc-crown-1-2-3-0", key)
+    }
 
     /** The image key the surface would compute for a crown in the given state. */
     private fun imageKey(

@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -109,13 +110,18 @@ fun IncidentTypePickerDialog(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = KccSpacing.s2),
         )
-        IncidentType.entries.chunked(2).forEach { types ->
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val columns = if (maxWidth.value / LocalDensity.current.fontScale >= 340f) 3 else 2
+        Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
+        IncidentType.entries.chunked(columns).forEach { types ->
             Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
                 types.forEach { type ->
                     IncidentTypeRow(type = type, onClick = { onPick(type) }, modifier = Modifier.weight(1f))
                 }
-                if (types.size == 1) Spacer(Modifier.weight(1f))
+                repeat(columns - types.size) { Spacer(Modifier.weight(1f)) }
             }
+        }
+        }
         }
         TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.incidents_cancel))
@@ -141,30 +147,26 @@ fun IncidentLocationChoiceDialog(
     onPickOnMap: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {},
-        dismissButton = {
+    MapDetailSheet(
+        title = stringResource(R.string.incidents_reportLocationTitle),
+        onDismiss = onDismiss,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
+            IncidentChoiceRow(
+                label = stringResource(R.string.incidents_reportLocationCurrent),
+                onClick = onUseCurrent,
+                testTag = INCIDENT_LOCATION_CHOICE_CURRENT_TAG,
+            )
+            IncidentChoiceRow(
+                label = stringResource(R.string.incidents_reportLocationPick),
+                onClick = onPickOnMap,
+                testTag = INCIDENT_LOCATION_CHOICE_PICK_TAG,
+            )
+        }
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.incidents_cancel))
             }
-        },
-        title = { Text(stringResource(R.string.incidents_reportLocationTitle)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
-                IncidentChoiceRow(
-                    label = stringResource(R.string.incidents_reportLocationCurrent),
-                    onClick = onUseCurrent,
-                    testTag = INCIDENT_LOCATION_CHOICE_CURRENT_TAG,
-                )
-                IncidentChoiceRow(
-                    label = stringResource(R.string.incidents_reportLocationPick),
-                    onClick = onPickOnMap,
-                    testTag = INCIDENT_LOCATION_CHOICE_PICK_TAG,
-                )
-            }
-        },
-    )
+    }
 }
 
 /** Test tag on the "use my current location" choice. */

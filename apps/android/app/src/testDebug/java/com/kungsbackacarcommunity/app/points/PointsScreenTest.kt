@@ -3,6 +3,8 @@ package com.kungsbackacarcommunity.app.points
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
@@ -19,8 +21,8 @@ class PointsScreenTest {
     @get:Rule
     val composeTestRule = createComposeRule()
 
-    private fun str(id: Int) =
-        InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
+    private fun str(id: Int, vararg args: Any) =
+        InstrumentationRegistry.getInstrumentation().targetContext.getString(id, *args)
 
     @Test
     fun showsBalanceAndTransactions() {
@@ -35,9 +37,9 @@ class PointsScreenTest {
                 )
             }
         }
-        composeTestRule.onNodeWithText("125").assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_kpValue, 125)).assertIsDisplayed()
         composeTestRule.onNodeWithText("Kronjakt reward").assertIsDisplayed()
-        composeTestRule.onNodeWithText("+25").assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_ledgerAmount, "+25")).assertIsDisplayed()
     }
 
     @Test
@@ -67,7 +69,7 @@ class PointsScreenTest {
                 )
             }
         }
-        composeTestRule.onNodeWithText("-25").assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_ledgerAmount, "-25")).assertIsDisplayed()
         composeTestRule.onNodeWithText("Perk purchase").assertIsDisplayed()
     }
 
@@ -83,5 +85,25 @@ class PointsScreenTest {
             }
         }
         composeTestRule.onNodeWithText(str(R.string.points_error)).assertIsDisplayed()
+    }
+
+    @Test
+    fun filters_areLocalAndRetainTheAuthoritativeBalance() {
+        composeTestRule.setContent {
+            KccTheme {
+                PointsScreen(91L, PointsEntriesState.Loaded(listOf(
+                    PointsEntry("credit", 7, 98, "Credit fixture", 200L),
+                    PointsEntry("debit", -7, 91, "Debit fixture", 100L),
+                )), {})
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_ledgerCredits)).performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Credit fixture").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Debit fixture").assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_ledgerDebits)).performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Debit fixture").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Credit fixture").assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_ledgerBalanceAfter, 91)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_kpValue, 91)).performScrollTo().assertIsDisplayed()
     }
 }

@@ -115,6 +115,27 @@ remain visible above the sheet. Priority is OS/permission and session controls,
 navigation/incident warning, selected detail, convoy/live status, other markers,
 then decoration. Stop and Hide me now are always reachable.
 
+Android reading panels use `MapDetailSheet` inside the activity-window
+`DockedMapSheetHost`. The shell registers its measured body through
+`mapSheetViewport`; that body already excludes the persistent navigation bar and
+the device's system navigation inset. A chat overlay registers its own viewport
+at higher priority, including the existing keyboard clearance. Do not use a new
+`Popup` or modal window for a bottom-docked map reading panel: a window's bottom
+is not the shell body's bottom. Keep destructive confirmations as explicit
+confirmations. Tab changes dismiss reading panels before navigation, and the
+footer must remain both visible and physically tappable. Validate geometry and
+OS-injected taps, rather than semantics-only clicks, at narrow widths and large
+text sizes. Header close/back actions stay reachable while panel content scrolls.
+
+In map browsing, active live/convoy controls dock immediately above the footer
+(S16); they must not occupy the search/avatar row. Reserve their measured height
+for other bottom overlays. Browsing starts at the synchronously restored focus
+distance before the first GPS fix, including when using a cached location.
+Changing focus distance must not recreate the map or alter navigation/convoy-fit
+camera policies. S03 appearance choices are Day, Night and System; keep the
+existing traffic/incident/3D/Crown gates and all supported incident-age filters.
+Large text wraps or scrolls controls instead of shrinking reading text.
+
 Driver markers use permitted avatar/vehicle data, a cyan position ring and
 selection emphasis. Only show names when selected or at useful zoom. Do not
 invent positions after updates stop. Driver preview shows permitted name/car,

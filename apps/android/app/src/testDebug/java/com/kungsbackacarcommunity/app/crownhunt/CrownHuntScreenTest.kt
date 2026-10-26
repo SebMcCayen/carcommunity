@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.crownhunt
 
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -8,6 +9,9 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Assert.assertEquals
+import com.kungsbackacarcommunity.app.points.PointsEntriesState
+import com.kungsbackacarcommunity.app.points.PointsEntry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.badges.BadgeTier
 import com.kungsbackacarcommunity.app.design.KccTheme
@@ -27,8 +31,8 @@ class CrownHuntScreenTest {
     @get:Rule
     val composeTestRule = createComposeRule()
 
-    private fun str(id: Int) =
-        InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
+    private fun str(id: Int, vararg args: Any) =
+        InstrumentationRegistry.getInstrumentation().targetContext.getString(id, *args)
 
     private fun board() =
         CrownSeasonBoard(
@@ -82,9 +86,12 @@ class CrownHuntScreenTest {
                 )
             }
         }
-        // Own stats block.
+        // Overview uses this season's counts, not lifetime totals or wallet balance.
+        composeTestRule.onNodeWithText("3").assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_kpValue, 120)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_kpValue, 300)).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("crownHubTab_2").performClick()
         composeTestRule.onNodeWithText(str(R.string.crownHunt_myStatsTitle)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.crownHunt_statCrowns)).assertIsDisplayed()
         // Season leaderboard block + a top scorer's name.
         composeTestRule.onNodeWithText(str(R.string.crownHunt_leaderboardTitle)).performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("Alice").performScrollTo().assertIsDisplayed()
@@ -111,10 +118,10 @@ class CrownHuntScreenTest {
             }
         }
         // Hub is shown first, and has no Back arrow of its own here.
-        composeTestRule.onNodeWithText(str(R.string.crownHunt_myStatsTitle)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_statCrowns)).assertIsDisplayed()
         composeTestRule.onNodeWithTag(AeroBackButtonTag).assertDoesNotExist()
         // Tapping the Instructions button (by testTag) opens the rules surface.
-        composeTestRule.onNodeWithTag(CrownHuntInstructionsButtonTag).performClick()
+        composeTestRule.onNodeWithTag(CrownHuntInstructionsButtonTag).performScrollTo().performClick()
         composeTestRule.onNodeWithText(str(R.string.crownHunt_instrIntroTitle)).assertIsDisplayed()
         // The crown legend ("how they work") now lives HERE, on the Instructions
         // surface (moved off the hub) — scroll it into view to prove it is present.
@@ -124,7 +131,7 @@ class CrownHuntScreenTest {
         // The surface shows the pinned Aero Back arrow; tapping it returns to the
         // hub (via the BackHandler), not out of the route.
         composeTestRule.onNodeWithTag(AeroBackButtonTag).assertIsDisplayed().performClick()
-        composeTestRule.onNodeWithText(str(R.string.crownHunt_myStatsTitle)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_statCrowns)).assertIsDisplayed()
     }
 
     @Test
@@ -162,7 +169,7 @@ class CrownHuntScreenTest {
                 )
             }
         }
-        composeTestRule.onNodeWithText(str(R.string.crownHunt_myStatsTitle)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_statCrowns)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.crownHunt_shopLoading)).assertDoesNotExist()
     }
 
@@ -182,7 +189,8 @@ class CrownHuntScreenTest {
             }
         }
         composeTestRule.onNodeWithText(str(R.string.crownHunt_noStatsYet)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.crownHunt_leaderboardEmpty)).assertIsDisplayed()
+        composeTestRule.onNodeWithTag("crownHubTab_2").performClick()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_leaderboardEmpty)).performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -216,8 +224,9 @@ class CrownHuntScreenTest {
                 )
             }
         }
-        composeTestRule.onNodeWithText(str(R.string.crownHunt_statsTitle)).assertIsDisplayed()
-        composeTestRule.onNodeWithText("250", substring = true).assertIsDisplayed()
+        composeTestRule.onNodeWithTag("crownHubTab_2").performClick()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_statsTitle)).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("250", substring = true).performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -238,9 +247,55 @@ class CrownHuntScreenTest {
                 )
             }
         }
+        composeTestRule.onNodeWithTag("crownHubTab_2").performClick()
         // The non-misleading "no rung yet" copy is shown (no "first crown"),
-        composeTestRule.onNodeWithText(str(R.string.crownHunt_statsRankNone)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_statsRankNone)).performScrollTo().assertIsDisplayed()
         // and the honest progress figure against the goal line.
-        composeTestRule.onNodeWithText("9 / 10", substring = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText("9 / 10", substring = true).performScrollTo().assertIsDisplayed()
     }
+
+    @Test
+    fun turningPerksOff_hidesAnAlreadyOpenShopImmediately() {
+        val enabled = mutableStateOf(true)
+        composeTestRule.setContent {
+            KccTheme {
+                CrownHuntScreen(CrownStatsUiState.Loaded(personal(), board()), true, {},
+                    perksEnabled = enabled.value, openShop = true)
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_shopLoading)).assertIsDisplayed()
+        composeTestRule.runOnIdle { enabled.value = false }
+        composeTestRule.onNodeWithTag("crownHubTab_3").assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_shopLoading)).assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_statCrowns)).assertIsDisplayed()
+    }
+
+    @Test
+    fun mapTab_invokesExistingReturnCallback_withoutClaiming() {
+        var returns = 0
+        composeTestRule.setContent {
+            KccTheme { CrownHuntScreen(CrownStatsUiState.Loading, true, { returns++ }) }
+        }
+        composeTestRule.onNodeWithTag("crownHubTab_1").performClick()
+        assertEquals(1, returns)
+    }
+
+    @Test
+    fun viewAll_opensRealLedgerHistory_includingDebits() {
+        composeTestRule.setContent {
+            KccTheme {
+                CrownHuntScreen(CrownStatsUiState.Loaded(personal(), board()), true, {},
+                    historyState = PointsEntriesState.Loaded(listOf(
+                        PointsEntry("credit", 7, 100, "Actual credit", 200L),
+                        PointsEntry("debit", -3, 93, "Actual debit", 100L),
+                    )))
+            }
+        }
+        composeTestRule.onNodeWithText("Actual credit").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Actual debit").assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_viewAll)).performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Actual debit").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_ledgerAmount, "-3")).assertIsDisplayed()
+    }
+
 }

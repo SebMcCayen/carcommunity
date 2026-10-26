@@ -1,43 +1,27 @@
 package com.kungsbackacarcommunity.app.crownhunt
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Dangerous
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import com.kungsbackacarcommunity.app.R
-import com.kungsbackacarcommunity.app.design.KccRadius
+import com.kungsbackacarcommunity.app.shell.MapDetailSheet
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import kotlinx.coroutines.delay
 
@@ -46,9 +30,6 @@ const val DEPLOYED_TRAP_POPUP_TAG = "deployed_trap_popup"
 
 /** Test tag on the live remaining-time line, so UI tests can assert the countdown. */
 const val DEPLOYED_TRAP_REMAINING_TAG = "deployed_trap_remaining"
-
-/** Bear-trap purple, matched to the map glyph so the popup reads as the tapped thing. */
-private val TRAP_PURPLE = Color(0xFF9B5CFF)
 
 /**
  * The panel opened by TAPPING the placer's OWN deployed Spikmatta on the map.
@@ -96,104 +77,40 @@ fun DeployedTrapPopup(
     }
     val clock = PerkMapVisuals.remainingClock(trap.expiresAtMillis, now)
 
-    Popup(
-        alignment = Alignment.BottomCenter,
-        onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true),
+    MapDetailSheet(
+        title = perkDisplayName("spike_strip", stringResource(R.string.crownHunt_perkNameSpikeStrip)),
+        onDismiss = onDismiss,
+        modifier = Modifier.testTag(DEPLOYED_TRAP_POPUP_TAG),
+        leadingContent = { PerkIcon(PerkKind.TRAP, Modifier.size(40.dp)) },
     ) {
-        Surface(
-            modifier =
-                Modifier
-                    .padding(KccSpacing.s4)
-                    .fillMaxWidth()
-                    .testTag(DEPLOYED_TRAP_POPUP_TAG),
-            shape = RoundedCornerShape(KccRadius.lg),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-            tonalElevation = 6.dp,
-            shadowElevation = 6.dp,
+        // What it does.
+        Text(
+            text = stringResource(R.string.crownHunt_perkTrapEffect),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+
+        // Live remaining time — WITH numbers here (unlike the map bar). Uses an
+        // accessible THEME colour (not the decorative #9B5CFF purple, which only
+        // clears ~3.7:1 on the translucent light surface — below WCAG AA 4.5:1
+        // for this text size): the purple identity stays on the trap ICON, the
+        // readable countdown meets contrast in both light and dark themes.
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(
-                modifier = Modifier.padding(horizontal = KccSpacing.s5, vertical = KccSpacing.s4),
-                verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
-            ) {
-                // Header: the purple trap glyph + its name and family, so the panel is
-                // recognisably the marker that was tapped.
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
-                ) {
-                    Box(
-                        modifier =
-                            Modifier
-                                    .size(KccSpacing.s12)
-                                .clip(CircleShape)
-                                .background(TRAP_PURPLE.copy(alpha = 0.18f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Dangerous,
-                            // The name is announced as text right beside this.
-                            contentDescription = null,
-                            tint = TRAP_PURPLE,
-                            modifier = Modifier.size(KccSpacing.s8),
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text =
-                                perkDisplayName(
-                                    perkId = "spike_strip",
-                                    nameSv = stringResource(R.string.crownHunt_perkNameSpikeStrip),
-                                ),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = stringResource(R.string.crownHunt_perkKindTrap),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = stringResource(R.string.crownHunt_spawnClose),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-
-                // What it does.
-                Text(
-                    text = stringResource(R.string.crownHunt_perkTrapEffect),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-
-                // Live remaining time — WITH numbers here (unlike the map bar). Uses an
-                // accessible THEME colour (not the decorative #9B5CFF purple, which only
-                // clears ~3.7:1 on the translucent light surface — below WCAG AA 4.5:1
-                // for this text size): the purple identity stays on the trap ICON, the
-                // readable countdown meets contrast in both light and dark themes.
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Filled.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(
-                        text = remainingClockText(clock),
-                        modifier = Modifier.testTag(DEPLOYED_TRAP_REMAINING_TAG),
-                        style = MaterialTheme.typography.titleSmall,
-                        color =
-                            if (clock.isExpired) {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                    )
-                }
-            }
+            Icon(Icons.Filled.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                text = remainingClockText(clock),
+                modifier = Modifier.testTag(DEPLOYED_TRAP_REMAINING_TAG),
+                style = MaterialTheme.typography.titleSmall,
+                color =
+                    if (clock.isExpired) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+            )
         }
     }
 }

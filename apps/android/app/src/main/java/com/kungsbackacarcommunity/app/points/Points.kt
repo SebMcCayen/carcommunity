@@ -15,7 +15,19 @@ data class PointsEntry(
     val createdAtMillis: Long?,
 )
 
+/** Filters the already bounded ledger page; does not issue additional reads. */
+enum class PointsFilter { ALL, CREDITS, DEBITS }
+
 object Points {
+    fun filteredEntries(entries: List<PointsEntry>, filter: PointsFilter): List<PointsEntry> =
+        sortedForList(entries.filter {
+            when (filter) {
+                PointsFilter.ALL -> true
+                PointsFilter.CREDITS -> it.amount > 0
+                PointsFilter.DEBITS -> it.amount < 0
+            }
+        })
+
     /** Newest transaction first; undated entries sort last. */
     fun sortedForList(entries: List<PointsEntry>): List<PointsEntry> =
         entries.sortedByDescending { it.createdAtMillis ?: Long.MIN_VALUE }
