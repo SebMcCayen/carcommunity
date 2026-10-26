@@ -398,10 +398,10 @@ final class ShellSmokeTests: XCTestCase {
             if target.exists && target.isHittable && frame.height >= minimumHeight
                 && viewport.insetBy(dx: 0, dy: 1).contains(frame) { return }
             let above = !frame.isEmpty && frame.midY < viewport.midY
-            let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-            let end = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.7 : 0.3))
-            // Short drag + hold avoids overshooting the next large-text choice.
-            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
+            // A press-and-drag can grab a switch/slider instead of scrolling.
+            // Use the native scroll gesture, which also negotiates sheet detents.
+            if above { scroll.swipeDown(velocity: .slow) }
+            else { scroll.swipeUp(velocity: .slow) }
         }
     }
 

@@ -159,14 +159,10 @@ struct MapLayersSheet: View {
                 .accessibilityAddTraits(.isHeader)
             // Never shrink labels to fit the three-column catalogue layout.
             // Accessibility text stacks full-width choices instead.
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(spacing: KccSpacing.s2) { appearanceChoices }
-            } else {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: KccSpacing.s2) { appearanceChoices }
-                    VStack(spacing: KccSpacing.s2) { appearanceChoices }
-                }
-            }
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(spacing: KccSpacing.s2))
+                : AnyLayout(HStackLayout(spacing: KccSpacing.s2))
+            layout { appearanceChoices }
         }
     }
 
