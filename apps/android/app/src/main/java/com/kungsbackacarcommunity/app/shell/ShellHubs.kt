@@ -2,7 +2,6 @@ package com.kungsbackacarcommunity.app.shell
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -18,8 +17,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.res.stringResource
-import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import java.text.Collator
 import java.util.Locale
@@ -108,16 +105,12 @@ fun SocialHub(
                             modifier = Modifier.padding(KccSpacing.s3).size(KccSpacing.s8),
                         )
                     }
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
-                        Text(entry.label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-                        if (entry.label == stringResource(R.string.shell_socialEvents)) {
-                            Text(
-                                stringResource(R.string.events_screenSubtitle),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
+                    Text(
+                        entry.label,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
                 }
             }
