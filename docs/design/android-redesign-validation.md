@@ -22,8 +22,9 @@ The matrix's snapshot table pins committed chat, Crown, event, garage/profile
 and settings source against base `345a9f11693374d1e52a88f3ed4c20c1bc67edbd`.
 Main's `map-shell` changes are explicitly uncommitted WIP, fingerprinted there.
 No sibling changes were copied or merged by this audit. The garage/profile
-snapshot is `5979d4dcfee274d0d7d80842e82f04525ceaa704`; subsequent real-cover and
-responsive-ratio work must be identified by its own source commit and captures.
+snapshot was initially `5979d4dcfee274d0d7d80842e82f04525ceaa704`. Follow-up source
+`108c7e443137e96e0584454960f86db1d5472ed8` now adds real covers and responsive
+garage ratios; this changes source status, not runtime/visual acceptance.
 
 | Area | Source finding | New evidence status |
 | --- | --- | --- |
@@ -31,7 +32,7 @@ responsive-ratio work must be identified by its own source commit and captures.
 | Chat | Compact source/channel strips, native conversation context, real friend picker/search, responsive friend rows, selected-message actions. Existing original Driver read path remains account-scoped. | New/updated tests and local fixtures exist; compilation, interaction execution and matched captures are pending. |
 | Crown / KP | Native rarity assets, overview/statistics/history/shop organization, shared docked details/deploy controls and ledger filters/month groups. | Source tests exist; shared `MapDetailSheet` integration plus actual flag/account/claim/duplicate/budget/DST evidence pending. |
 | Events | Native date badges and schedules, grouped detail actions/check-in, date/time editor, real event chat title, group-drive context and single-friend share teaser. | Source tests/fixtures exist. Event lane's capture dispatch was edited locally; no capture execution is inferred. |
-| Garage/profile/drives | Real fact hierarchy, gallery controls, month headings, responsive metrics, award dates, S63 relationship actions/carousel. Lifetime maximum-speed row introduced during pass 3 was removed again. | Eleven original added regression methods plus four S63 methods and strengthened existing assertions are source-reviewed, not executed here. |
+| Garage/profile/drives | Real fact hierarchy, gallery controls, month headings, responsive metrics, award dates, S63 relationship actions/carousel. Follow-up adds actual main-car covers and responsive S57 ratio. New lifetime maximum-speed row was removed again. | Eleven original added regression methods, four S63 methods, six cover/density/helper methods and strengthened existing assertions are source-reviewed, not executed here. |
 | Settings/partners/account | Real partner address/count, responsive notification channel columns, truthful block fallback/date, deletion acknowledgement/confirmation, release timeline. | Lane handoff records generators/static checks only. Auth, Play, permissions and configured account transitions remain unverified. |
 
 Paths in the first table row are relative to
@@ -51,6 +52,26 @@ that it compiled, ran, rendered or matched the reference.
 - `apps/android/app/src/androidTest/java/com/kungsbackacarcommunity/app/redesign/Pass3SettingsFixtures.kt`: partner/free-paid/privacy/settings/channel/block/deletion/release/membership variants. Exact keys and static-only lane evidence are in `apps/android/app/src/androidTest/fixtures/settings-pass3/README.md` in the settings snapshot.
 - Existing `Wave2SocialPreview.kt` and `Wave2MapPreview.kt` under that `redesign/` test package cover selected Crown/map/live inputs only. They do not cover every claim, convoy, GPS or feature-flag state.
 
+### Lazy owner cover reuse: RouteHost seam and cost
+
+`ProfileScreen.coverImagePath: String? = null` is presentation input only. Main
+owns `apps/android/app/src/main/java/com/kungsbackacarcommunity/app/AuthenticatedApp.kt`:
+expand the existing `inGarageSection` condition to Garage tab **or** Profile route,
+derive `VehicleGallery.mainCarCoverPath((garageState as? GarageState.Loaded)?.vehicles.orEmpty())`,
+and pass that nullable path through `RouteHost` to the ProfileScreen call. Keep
+the single existing owner stream bounded to those visible surfaces; no second
+listener, background listener or new profile-state watcher is added by G.
+
+This is lazy reuse, **not a zero-read feature**. Opening Profile from another tab
+can activate a garage query and cause additional owner-vehicle document reads
+when data is not already cached/current; cache/server reconciliation can also
+cost reads. Main must verify subscription disposal on route/tab/account changes.
+S63 reuses its already-authorized `MemberProfileState.Loaded.vehicles` with no
+additional garage query. Both covers use the existing cached Storage URL/Coil
+adapter: a URL-cache miss may request a download URL, and an image-cache miss
+may fetch image bytes. These requests are separate from garage document reads.
+No billed-read count, zero-network behavior or runtime cost measurement is claimed.
+
 ### Concrete differences and unresolved acceptance
 
 - **S01–S16 / shared host:** map viewport/marker clearance, pinned close/footer and camera restoration need final-head captures and interaction evidence in both navigation variants. Source-only docking is not proof of bottom-bar visibility/tappability. S07/S08 retain device-local saved places and the real naming dialog, not reference account sync/full editor. S12's popup lacks the illustrated image input. S13/S14 retain existing car/session control models rather than inventing photo/timer inputs.
@@ -58,8 +79,8 @@ that it compiled, ran, rendered or matched the reference.
 - **S29–S40 / Driver:** the compact reading hub differs from S29's landing tiles; S33's illustrated search layout is not complete. S37/S38 implement original feed/post/comments reading; create/like/save/comment/reply/report writes and any unsupported Driver onboarding destination remain outside this delivery. Driver reading itself is not deferred. S40 uses single-friend send without the illustrated map/selection page.
 - **S41–S52:** event models have no photographic cover/view-count field. S45 check-in is embedded in detail; S46 lacks illustrated car/seat/arrival fields; S47 is single-recipient, not bulk select. S48 currently contains destination cards, not the illustrated upcoming-event dashboard. Convoy list/detail/recap remain native data-driven views, not the photographic S49/S51/S52 compositions. Never claim automatic save success or invent a drive link from a sample.
 - **S53–S60:** no per-drive reward, driving-category distribution or 7/30/90-day chart data is available to reproduce those S53–S55 sample facts. S56 retains the real failure dialog. S60 retains the real crop/rotation/compression path without dedicated rendered acceptance. `docs/product-decisions.md` excludes top speed while `docs/gamification-system.md` records a neutral per-drive display amendment; this audit resolves neither policy document. The new lifetime maximum-speed UI fact was removed; pre-existing source facts were not expanded.
-- **S57 is explicitly pending:** the G snapshot proposes 16:9 instead of the previously compact 2.5:1 card. Main must compare identical populated two-car-plus-Add states at 320 × 640, recording physical size, logical width, density and font scale. Do not approve 16:9 on source alone; retain the compact ratio if it regresses density. The subsequently requested responsive-ratio implementation is a separate source change and requires the same evidence.
-- **S61–S64:** at the pinned G snapshot, profile cover inputs/rendering are absent and real-cover reuse is a separate authorized follow-up. Owner reference shortcuts exceed the existing ProfileScreen callback surface. S63 public identity/relationships/garage must retain authorized fields only. S64 is an inline expandable profile wall, not a standalone category-tab page; canonical badge IDs/tiers/counters supersede sample achievements.
+- **S57 visual acceptance is explicitly pending:** source `108c7e443137e96e0584454960f86db1d5472ed8` restores 2.5:1 below 360dp effective reading width and uses 16:9 at larger widths. Main must compare identical populated two-car-plus-Add states at 320 × 640, recording physical size, logical width, density and font scale. The unexecuted new test checks compact photo geometry and scroll reachability, not simultaneous visibility or a visual pass. Keep the density fix if wider-photo layouts regress.
+- **S61–S64:** the follow-up implements optional owner cover rendering and member cover selection from real authorized main-car data, with native fallback and hidden owner cover while editing. Owner RouteHost/visible-only garage listener integration belongs to main (cost note above). Owner reference shortcuts still exceed ProfileScreen callbacks. S63 retains authorized fields only. S64 remains an inline expandable wall, not a standalone category-tab page; canonical badge IDs/tiers/counters supersede sample achievements.
 - **S65–S80:** companies have no sample hero-photo field; do not synthesize partners, offers or discount codes. S70 All/Unread and S74 Closed tabs are not newly implemented. S73 uses actual backend text bounds. S77 branding/footer, S78 native consent steps without an avatar uploader, and S79's four-step welcome differ from the drawings. S80 has no formatted-price input at this layer: actual Play checkout must show store-localized prices; sample planning prices cannot fill the gap.
 - **S81/S82:** catalogue page 24 explicitly identifies S81 as iOS Apple sign-in, owned on Mac mini, and S82 as the deferred cosmetic-frame picker. S81 is not Driver. Existing Supporter decoration is not evidence of a frame store, ownership, equip or purchase lifecycle.
 - **S83/S84:** existing account/permission guards are retained; standalone reference compositions are not implemented or accepted. Verify restricted-account access to permitted settings/support/account exits, live-data withdrawal, denial/permanent denial/services-off and settings recovery. Granting location must never start a session.
