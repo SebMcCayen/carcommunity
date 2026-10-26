@@ -112,7 +112,7 @@ final class ShellSmokeTests: XCTestCase {
         app.buttons["shell.tab.social"].tap()
         let social = element("shell.socialHub", in: app)
         XCTAssertTrue(social.waitForExistence(timeout: 5))
-        app.buttons["Events"].tap()
+        social.buttons["Events"].tap()
         XCTAssertTrue(app.navigationBars["Events"].waitForExistence(timeout: 5))
         XCTAssertTrue(element("events.screen", in: app).exists)
         attach(app, name: "feature-design-events-configless-en-dark-accessibility")

@@ -126,6 +126,9 @@ struct ChatHubScreen: View {
                 .padding(.horizontal, KccSpacing.s3)
                 .padding(.vertical, KccSpacing.s2)
                 .frame(maxWidth: .infinity, minHeight: 48)
+                // The unselected segment is transparent, but its entire 48pt
+                // label must remain a physical and accessible tap target.
+                .contentShape(Rectangle())
                 .foregroundStyle(showsDriver == driver ? KccTheme.onDriver : KccTheme.text)
                 .background(showsDriver == driver ? KccTheme.driver : .clear, in: Capsule())
         }
