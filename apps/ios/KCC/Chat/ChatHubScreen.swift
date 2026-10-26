@@ -76,7 +76,7 @@ struct ChatHubScreen: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .kccReadingSurface()
+        .kccReadingSurface(pageBackground: true)
         .navigationTitle(Text("chatHub.title"))
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityElement(children: .contain)

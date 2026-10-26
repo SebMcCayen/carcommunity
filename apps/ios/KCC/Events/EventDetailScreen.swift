@@ -56,7 +56,7 @@ struct EventDetailScreen: View {
 
     var body: some View {
         content
-            .kccReadingSurface()
+            .kccReadingSurface(pageBackground: true)
             .accessibilityIdentifier("events.detail")
             .navigationTitle(titleText)
             .navigationBarTitleDisplayMode(.inline)
@@ -195,8 +195,11 @@ struct EventDetailScreen: View {
             VStack(alignment: .leading, spacing: KccSpacing.s3) {
                 if event.isOfficial {
                     Text("events.officialBadge")
-                        .font(.system(size: KccTypeScale.caption, weight: KccTypeScale.semibold))
-                        .foregroundStyle(KccPalette.crownGold)
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, KccSpacing.s2)
+                        .padding(.vertical, KccSpacing.s1)
+                        .foregroundStyle(KccTheme.onGold)
+                        .background(KccPalette.crownGold, in: Capsule())
                 }
                 if event.status == .cancelled {
                     Text("events.cancelledNotice")

@@ -23,7 +23,7 @@ struct EventsScreen: View {
 
     var body: some View {
         content
-            .kccReadingSurface()
+            .kccReadingSurface(pageBackground: true)
             .accessibilityIdentifier("events.screen")
             .navigationTitle(Text("events.title"))
             .task { coordinator?.start() }
@@ -160,7 +160,8 @@ struct EventRow: View {
                         .font(.subheadline)
                         .padding(.horizontal, KccSpacing.s2)
                         .padding(.vertical, KccSpacing.s1 / 2)
-                        .background(KccPalette.crownGold.opacity(0.2))
+                        .foregroundStyle(KccTheme.onGold)
+                        .background(KccPalette.crownGold)
                         .clipShape(Capsule())
                 }
             }
@@ -191,6 +192,11 @@ struct EventScheduleContent: View {
     let event: EventSummary
     var detailed = false
 
+    private var dateStyle: Date.FormatStyle {
+        if detailed { return .dateTime.weekday(.wide).day().month(.wide).year().hour().minute() }
+        return .dateTime.day().month(.abbreviated).year().hour().minute()
+    }
+
     private var placeName: String? { nonEmpty(event.locationName) ?? nonEmpty(event.approximateArea) }
 
     private func nonEmpty(_ value: String?) -> String? {
@@ -217,7 +223,7 @@ struct EventScheduleContent: View {
             VStack(alignment: .leading, spacing: KccSpacing.s2) {
                 if let date = event.startsAt {
                     Label {
-                        Text(date, format: detailed ? .dateTime.weekday(.wide).day().month(.wide).year().hour().minute() : .dateTime.day().month(.abbreviated).year().hour().minute())
+                        Text(date, format: dateStyle)
                     } icon: { Image(systemName: "calendar").accessibilityHidden(true) }
                 }
                 if let place = placeName {

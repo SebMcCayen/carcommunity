@@ -46,11 +46,11 @@ extension View {
             .overlay { Circle().strokeBorder(KccTheme.border, lineWidth: 1) }
     }
 
-    func kccReadingSurface() -> some View {
+    func kccReadingSurface(pageBackground: Bool = false) -> some View {
         foregroundStyle(KccTheme.text)
-            .background(KccTheme.surface, ignoresSafeAreaEdges: .all)
+            .background(pageBackground ? KccTheme.page : KccTheme.surface, ignoresSafeAreaEdges: .all)
             .scrollContentBackground(.hidden)
-            .toolbarBackground(KccTheme.surface, for: .navigationBar)
+            .toolbarBackground(pageBackground ? KccTheme.page : KccTheme.surface, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
     }
 }

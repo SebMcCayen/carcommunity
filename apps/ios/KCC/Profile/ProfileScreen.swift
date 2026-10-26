@@ -208,7 +208,7 @@ struct ProfileScreen: View {
                 .padding(KccSpacing.s4)
             }
         }
-        .kccReadingSurface()
+        .kccReadingSurface(pageBackground: true)
         .accessibilityIdentifier("profile.screen")
         .task {
             coordinator.start()

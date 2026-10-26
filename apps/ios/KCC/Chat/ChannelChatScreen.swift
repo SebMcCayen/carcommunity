@@ -33,6 +33,7 @@ struct ChannelChatScreen: View {
                 content
             }
         }
+            .kccReadingSurface(pageBackground: true)
             .navigationBarTitleDisplayMode(.inline)
             .task { coordinator?.start() }
             .onChange(of: readingActive, initial: true) { _, active in
@@ -266,7 +267,7 @@ struct MessageRow: View {
                     .font(.body)
                     .padding(.horizontal, KccSpacing.s3)
                     .padding(.vertical, KccSpacing.s2)
-                    .background(isOwn ? KccTheme.driver : KccTheme.subtle)
+                    .background(isOwn ? KccTheme.driver : KccTheme.surface)
                     .foregroundStyle(isOwn ? KccTheme.onDriver : KccTheme.text)
                     .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
                 if let timestamp = message.createdAt {

@@ -275,7 +275,7 @@ struct VehicleDetailSheet: View {
                     if vehicle.isMainCar {
                         Text("garage.mainCarBadge")
                             .font(.system(size: KccTypeScale.caption, weight: KccTypeScale.semibold))
-                            .foregroundStyle(KccPalette.crownGold)
+                            .foregroundStyle(KccTheme.driver)
                     }
 
                     if let plate = vehicle.registrationPlate, !plate.isEmpty {
@@ -346,7 +346,7 @@ struct VehicleDetailSheet: View {
                 }
                 .padding(KccSpacing.s6)
             }
-            .kccReadingSurface()
+            .kccReadingSurface(pageBackground: true)
             .navigationTitle(Text("garage.detailTitle"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
