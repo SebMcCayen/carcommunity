@@ -5,7 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,15 +18,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -41,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -50,6 +48,7 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.friends.FriendSummary
 import com.kungsbackacarcommunity.app.friends.FriendsRepository
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
+import com.kungsbackacarcommunity.app.shell.MapDetailSheet
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 
@@ -59,6 +58,7 @@ const val NEW_DIALOGUE_SHEET_TEST_TAG = "new_dialogue_sheet"
 const val NEW_DIALOGUE_EMPTY_TEST_TAG = "new_dialogue_empty"
 const val NEW_DIALOGUE_ERROR_TEST_TAG = "new_dialogue_error"
 const val NEW_DIALOGUE_RETRY_TEST_TAG = "new_dialogue_retry"
+const val NEW_DIALOGUE_FRIENDS_TEST_TAG = "new_dialogue_friends"
 
 /** Test-tag prefix for one friend row (suffixed with the friend uid). */
 fun newDialogueFriendRowTestTag(uid: String): String = "new_dialogue_friend_$uid"
@@ -76,14 +76,12 @@ fun newDialogueFriendRowTestTag(uid: String): String = "new_dialogue_friend_$uid
  * @param onPick invoked with the chosen friend; the host resolves the open target
  *   ([NewDialogue.openTargetFor]) and opens the thread. The sheet dismisses after.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewDialogueSheet(
     friendsRepository: FriendsRepository,
     onPick: (FriendSummary) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
     val coordinator =
         remember(friendsRepository) { NewDialogueCoordinator.fromFriendsRepository(friendsRepository) }
@@ -92,25 +90,15 @@ fun NewDialogueSheet(
 
     LaunchedEffect(coordinator) { coordinator.load() }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
+    MapDetailSheet(
+        title = stringResource(R.string.dm_newDialogue_title),
+        onDismiss = onDismiss,
         modifier = Modifier.testTag(NEW_DIALOGUE_SHEET_TEST_TAG),
     ) {
         Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
+            modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
         ) {
-            Text(
-                text = stringResource(R.string.dm_newDialogue_title),
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = KccSpacing.s2),
-            )
             Text(
                 text = stringResource(R.string.dm_newDialogue_subtitle),
                 style = MaterialTheme.typography.bodyMedium,
@@ -168,14 +156,24 @@ fun NewDialogueSheet(
                         }
                         if (matches.isEmpty()) Text(stringResource(R.string.userSearch_noMatches),
                             modifier = Modifier.padding(KccSpacing.s3), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        LazyColumn {
-                            items(matches, key = { it.uid }) { friend ->
-                                FriendRow(friend = friend, onClick = { onPick(friend) })
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                            }
-                        }
+                        NewDialogueFriendList(matches, onPick)
                     }
             }
+        }
+    }
+}
+
+/** Keep avatar work lazy and give the nested list finite constraints in the reading host. */
+@Composable
+internal fun NewDialogueFriendList(friends: List<FriendSummary>, onPick: (FriendSummary) -> Unit) {
+    LazyColumn(
+        modifier = Modifier.fillMaxWidth()
+            .heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.5f).dp)
+            .testTag(NEW_DIALOGUE_FRIENDS_TEST_TAG),
+    ) {
+        items(friends, key = { it.uid }) { friend ->
+            FriendRow(friend = friend, onClick = { onPick(friend) })
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
     }
 }

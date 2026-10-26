@@ -95,6 +95,7 @@ import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
 import com.kungsbackacarcommunity.app.moderation.ChatSurface
 import com.kungsbackacarcommunity.app.moderation.MessageActionsSheet
+import com.kungsbackacarcommunity.app.moderation.MessageActionsPreview
 import com.kungsbackacarcommunity.app.moderation.MessageModeration
 import com.kungsbackacarcommunity.app.moderation.ReportReasonDialog
 import kotlinx.coroutines.delay
@@ -308,7 +309,7 @@ fun ChannelChatContent(
                 .padding(KccSpacing.s4),
         verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
     ) {
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+        Box(modifier = Modifier.weight(1f).fillMaxWidth().testTag("channel_message_viewport")) {
             if (loading && messages.isEmpty()) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             } else if (messages.isEmpty()) {
@@ -556,6 +557,7 @@ fun ChannelChatContent(
         val canModerate = MessageModeration.canActOn(actionsMessage.senderUid, currentUid)
         MessageActionsSheet(
             memberName = actionsMessage.senderDisplayName,
+            preview = MessageActionsPreview(actionsMessage.senderDisplayName, actionsMessage.text),
             canReply = chatRepliesEnabled,
             onReply = {
                 replyToId = actionsMessage.id
