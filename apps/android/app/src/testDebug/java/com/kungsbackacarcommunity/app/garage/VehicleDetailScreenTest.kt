@@ -1,10 +1,16 @@
 package com.kungsbackacarcommunity.app.garage
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -12,11 +18,14 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -78,6 +87,40 @@ class VehicleDetailScreenTest {
         composeTestRule.onNodeWithText("Lowered on Bilstein").performScrollTo().assertIsDisplayed()
         // With no uploader the "add more photos" affordance is hidden entirely.
         composeTestRule.onNodeWithText(str(R.string.garage_photoAddMore)).assertDoesNotExist()
+    }
+
+    @Test
+    fun detailFactsKeepLegacyMakeModelYearAndOptionalPlate() {
+        composeTestRule.setContent {
+            KccTheme {
+                VehicleDetailScreen(
+                    vehicle = vehicle().copy(registrationPlate = "ABC 123"),
+                    onEdit = {}, onDelete = {}, onSetMain = {},
+                )
+            }
+        }
+        // Separate facts must preserve pre-catalogue text rather than guessing IDs.
+        listOf("Volvo", "240", "1988", "ABC 123").forEach {
+            composeTestRule.onNodeWithText(it).performScrollTo().assertIsDisplayed()
+        }
+    }
+
+    @Test
+    fun largeTextFactsStackWithoutHidingTheStoredValue() {
+        composeTestRule.setContent {
+            KccTheme {
+                CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 1.5f)) {
+                    Box(Modifier.width(320.dp)) {
+                        VehicleDetailScreen(vehicle = vehicle(), onEdit = {}, onDelete = {}, onSetMain = {})
+                    }
+                }
+            }
+        }
+        val label = composeTestRule.onNodeWithText(str(R.string.garage_make))
+        val value = composeTestRule.onNodeWithText("Volvo")
+        label.performScrollTo()
+        value.performScrollTo().assertIsDisplayed()
+        assertTrue(value.getUnclippedBoundsInRoot().top >= label.getUnclippedBoundsInRoot().bottom)
     }
 
     @Test
@@ -186,7 +229,7 @@ class VehicleDetailScreenTest {
         val photoPaths = List(10) { "vehicleImages/u/v1/photo_$it.jpg" }
         composeTestRule.setContent {
             KccTheme {
-                VehicleGalleryPager(photoPaths = photoPaths)
+                Column { VehicleGalleryPager(photoPaths = photoPaths) }
             }
         }
         // A late thumbnail past the screen width is unreachable without a

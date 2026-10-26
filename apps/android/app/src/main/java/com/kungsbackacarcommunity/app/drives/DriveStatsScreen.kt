@@ -68,6 +68,18 @@ fun DriveStatsScreen(
 
 @Composable
 private fun StatsContent(stats: DriveStatsSnapshot) {
+    // Only the server's actual month aggregate is offered; no inferred 7/30/90-day chart.
+    StatsCard(stringResource(R.string.savedDrives_statsThisMonth)) {
+        StatRow(
+            stringResource(R.string.savedDrives_statsTotalDrives),
+            stats.thisMonthDrives.toString(),
+        )
+        StatRow(
+            stringResource(R.string.savedDrives_statsTotalDistance),
+            DriveFormatters.formatDistance(stats.thisMonthDistanceMeters),
+        )
+    }
+
     StatsCard(stringResource(R.string.savedDrives_statsAllTime)) {
         DriveMetricSummary(
             distance = DriveFormatters.formatDistance(stats.totalDistanceMeters),
@@ -92,16 +104,9 @@ private fun StatsContent(stats: DriveStatsSnapshot) {
             stringResource(R.string.savedDrives_statsFastest),
             DriveFormatters.formatSpeed(stats.fastestAverageSpeedMps),
         )
-    }
-
-    StatsCard(stringResource(R.string.savedDrives_statsThisMonth)) {
         StatRow(
-            stringResource(R.string.savedDrives_statsTotalDrives),
-            stats.thisMonthDrives.toString(),
-        )
-        StatRow(
-            stringResource(R.string.savedDrives_statsTotalDistance),
-            DriveFormatters.formatDistance(stats.thisMonthDistanceMeters),
+            stringResource(R.string.savedDrives_maxSpeed),
+            DriveFormatters.formatSpeed(stats.highestMaxSpeedMps),
         )
     }
 }

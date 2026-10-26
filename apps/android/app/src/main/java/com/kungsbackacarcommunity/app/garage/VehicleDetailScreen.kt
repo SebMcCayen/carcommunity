@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -41,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -99,51 +101,58 @@ fun VehicleDetailScreen(
             photoPaths = photoPaths,
             onSetCover = onSetCover,
             onRemovePhoto = onRemovePhoto,
-        )
-
-        Text(
-            // See VehicleDisplay: catalogue name / localized "Other" / legacy text.
-            text = VehicleDisplay.headline(vehicle, stringResource(R.string.garage_catalogueOther)),
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        if (vehicle.isMainCar) {
-            Surface(
-                color = MaterialTheme.colorScheme.tertiary,
-                contentColor = MaterialTheme.colorScheme.onTertiary,
-                shape = MaterialTheme.shapes.small,
-            ) {
+            photoDetails = {
                 Text(
-                    text = stringResource(R.string.garage_mainCarBadge),
-                    modifier = Modifier.padding(horizontal = KccSpacing.s3, vertical = KccSpacing.s2),
-                    style = MaterialTheme.typography.labelLarge,
+                    text = VehicleDisplay.headline(vehicle, stringResource(R.string.garage_catalogueOther)),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
-            }
-        }
+                if (vehicle.isMainCar) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiary,
+                        contentColor = MaterialTheme.colorScheme.onTertiary,
+                        shape = MaterialTheme.shapes.small,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.garage_mainCarBadge),
+                            modifier = Modifier.padding(horizontal = KccSpacing.s3, vertical = KccSpacing.s2),
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
+                }
 
-        Surface(
-            color = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(KccRadius.lg),
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
-                verticalArrangement = Arrangement.spacedBy(KccSpacing.s4),
-            ) {
-                vehicle.registrationPlate?.takeIf { it.isNotBlank() }?.let { plate ->
-                    InfoRow(label = stringResource(R.string.garage_registrationPlate), value = plate)
+                Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(KccRadius.lg)) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+                        verticalArrangement = Arrangement.spacedBy(KccSpacing.s4),
+                    ) {
+                        val otherLabel = stringResource(R.string.garage_catalogueOther)
+                        InfoRow(
+                            label = stringResource(R.string.garage_make),
+                            value = VehicleDisplay.makeLabel(vehicle.makeId, vehicle.make, otherLabel),
+                        )
+                        InfoRow(
+                            label = stringResource(R.string.garage_model),
+                            value = VehicleDisplay.modelLabel(vehicle.makeId, vehicle.modelId, vehicle.model, otherLabel),
+                        )
+                        InfoRow(label = stringResource(R.string.garage_modelYear), value = vehicle.modelYear.toString())
+                        vehicle.registrationPlate?.takeIf { it.isNotBlank() }?.let { plate ->
+                            InfoRow(label = stringResource(R.string.garage_registrationPlate), value = plate)
+                        }
+                        InfoRow(
+                            label = stringResource(R.string.garage_powertrain),
+                            value = stringResource(vehicle.powertrain.labelRes()),
+                        )
+                        vehicle.engineDescription?.takeIf { it.isNotBlank() }?.let { engine ->
+                            InfoRow(label = stringResource(R.string.garage_engineDescription), value = engine)
+                        }
+                        vehicle.modifications?.takeIf { it.isNotBlank() }?.let { mods ->
+                            InfoRow(label = stringResource(R.string.garage_modifications), value = mods)
+                        }
+                    }
                 }
-                InfoRow(
-                    label = stringResource(R.string.garage_powertrain),
-                    value = stringResource(vehicle.powertrain.labelRes()),
-                )
-                vehicle.engineDescription?.takeIf { it.isNotBlank() }?.let { engine ->
-                    InfoRow(label = stringResource(R.string.garage_engineDescription), value = engine)
-                }
-                vehicle.modifications?.takeIf { it.isNotBlank() }?.let { mods ->
-                    InfoRow(label = stringResource(R.string.garage_modifications), value = mods)
-                }
-            }
-        }
+            },
+        )
 
         AddMorePhotosAffordance(
             onAddPhoto = onAddPhoto,
@@ -169,19 +178,14 @@ fun VehicleDetailScreen(
                 Text(text = stringResource(R.string.garage_setMainCar))
             }
         }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+        OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
+            Text(text = stringResource(R.string.garage_editVehicle))
+        }
+        OutlinedButton(
+            onClick = { pendingDelete = true }, modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
         ) {
-            OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) {
-                Text(text = stringResource(R.string.garage_editVehicle))
-            }
-            OutlinedButton(
-                onClick = { pendingDelete = true }, modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-            ) {
-                Text(text = stringResource(R.string.garage_deleteVehicle))
-            }
+            Text(text = stringResource(R.string.garage_deleteVehicle))
         }
     }
 
@@ -238,9 +242,11 @@ internal fun VehicleGalleryPager(
     photoPaths: List<String>,
     onSetCover: ((path: String) -> Unit)? = null,
     onRemovePhoto: ((path: String) -> Unit)? = null,
+    photoDetails: @Composable () -> Unit = {},
 ) {
     if (photoPaths.isEmpty()) {
         GalleryPlaceholder()
+        photoDetails()
         return
     }
 
@@ -248,28 +254,40 @@ internal fun VehicleGalleryPager(
     val pagerState = rememberPagerState(pageCount = { photoPaths.size })
     var pendingPhotoRemoval by remember { mutableStateOf<String?>(null) }
 
-    HorizontalPager(
-        state = pagerState,
-        modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(4f / 3f)
-            .clip(RoundedCornerShape(KccRadius.lg)),
-    ) { page ->
-        GalleryPhoto(path = photoPaths[page], modifier = Modifier.fillMaxSize())
-    }
-
     // Safe index for the visible photo — used by the counter AND the per-photo
     // actions below, so it must be computed for a single-photo gallery too.
     val current = VehicleGallery.clampIndex(pagerState.currentPage, photoPaths.size)
     val currentPath = photoPaths[current]
     val currentIsCover = VehicleGallery.isCover(photoPaths, currentPath)
 
+    Box(modifier = Modifier.fillMaxWidth()) {
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(4f / 3f)
+                .clip(RoundedCornerShape(KccRadius.lg)),
+        ) { page ->
+            GalleryPhoto(path = photoPaths[page], modifier = Modifier.fillMaxSize())
+        }
+        Surface(
+            modifier = Modifier.align(Alignment.BottomEnd).padding(KccSpacing.s3),
+            color = MaterialTheme.colorScheme.surface,
+            shape = MaterialTheme.shapes.small,
+        ) {
+            Text(
+                text = stringResource(R.string.garage_photoCounter, current + 1, photoPaths.size),
+                modifier = Modifier.padding(horizontal = KccSpacing.s2, vertical = KccSpacing.s1),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+
+    // S58 puts the vehicle identity/facts between the hero and the gallery controls.
+    photoDetails()
+
     if (VehicleGallery.hasMultiple(photoPaths.size)) {
-        Text(
-            text = stringResource(R.string.garage_photoCounter, current + 1, photoPaths.size),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
         // Horizontally scrollable strip: the gallery is built for N photos, so a
         // fixed Row would clip (and make unreachable) any thumbnail past the
         // screen width once the backend stores more than a screenful. LazyRow
@@ -329,16 +347,16 @@ internal fun VehicleGalleryPager(
                 color = MaterialTheme.colorScheme.primary,
             )
         }
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
         ) {
             if (onSetCover != null) {
                 // Making the already-cover photo the cover is a no-op, so disable it.
                 OutlinedButton(
                     onClick = { onSetCover(currentPath) },
                     enabled = !currentIsCover,
-                    modifier = Modifier.weight(1f).testTag(VEHICLE_GALLERY_SET_COVER_TAG),
+                    modifier = Modifier.fillMaxWidth().testTag(VEHICLE_GALLERY_SET_COVER_TAG),
                 ) {
                     Text(text = stringResource(R.string.garage_photoSetCover))
                 }
@@ -346,7 +364,7 @@ internal fun VehicleGalleryPager(
             if (onRemovePhoto != null) {
                 OutlinedButton(
                     onClick = { pendingPhotoRemoval = currentPath },
-                    modifier = Modifier.weight(1f).testTag(VEHICLE_GALLERY_REMOVE_TAG),
+                    modifier = Modifier.fillMaxWidth().testTag(VEHICLE_GALLERY_REMOVE_TAG),
                 ) {
                     Text(text = stringResource(R.string.garage_photoRemove))
                 }
@@ -459,22 +477,26 @@ private fun AddMorePhotosAffordance(
     }
 }
 
-/** A labelled read-only field: small caption label above the value. */
+/** S58: aligned facts at normal size, stacked facts with larger text or narrow windows. */
 @Composable
 private fun InfoRow(label: String, value: String) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val labelContent: @Composable () -> Unit = {
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        val valueContent: @Composable () -> Unit = {
+            Text(value, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+        }
+        if (maxWidth >= 280.dp && LocalDensity.current.fontScale <= 1.3f) {
+            Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
+                Box(Modifier.weight(1f)) { labelContent() }
+                Box(Modifier.weight(1f)) { valueContent() }
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
+                labelContent()
+                valueContent()
+            }
+        }
     }
 }

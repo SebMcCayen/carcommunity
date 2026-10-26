@@ -8,6 +8,25 @@ import com.kungsbackacarcommunity.app.garage.GarageScreen
 import com.kungsbackacarcommunity.app.garage.GarageState
 import com.kungsbackacarcommunity.app.garage.Vehicle
 import com.kungsbackacarcommunity.app.garage.VehiclePowertrain
+import com.kungsbackacarcommunity.app.garage.VehicleDetailScreen
+import com.kungsbackacarcommunity.app.garage.VehicleForm
+import com.kungsbackacarcommunity.app.garage.VehicleFormScreen
+import com.kungsbackacarcommunity.app.garage.VehicleSaveStatus
+import com.kungsbackacarcommunity.app.drives.DriveDeleteStatus
+import com.kungsbackacarcommunity.app.drives.DriveStatsScreen
+import com.kungsbackacarcommunity.app.drives.DriveStatsSnapshot
+import com.kungsbackacarcommunity.app.drives.DriveStatsUiState
+import com.kungsbackacarcommunity.app.drives.DriveSubscriptionTier
+import com.kungsbackacarcommunity.app.drives.DrivesListScreen
+import com.kungsbackacarcommunity.app.drives.DriveHistoryListState
+import com.kungsbackacarcommunity.app.drives.RecordingState
+import com.kungsbackacarcommunity.app.drives.SavedDrive
+import com.kungsbackacarcommunity.app.drives.SavedDriveDetailScreen
+import com.kungsbackacarcommunity.app.drives.SessionSummaryDialog
+import com.kungsbackacarcommunity.app.profile.ProfileBadgesSection
+import com.kungsbackacarcommunity.app.shell.AeroPage
+import androidx.compose.ui.res.stringResource
+import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.profile.ProfileEditStatus
 import com.kungsbackacarcommunity.app.profile.ProfileScreen
 import com.kungsbackacarcommunity.app.profile.ProfileStatsSummary
@@ -21,6 +40,50 @@ import com.kungsbackacarcommunity.app.profile.UserProfile
 @Composable
 fun Wave2GaragePreview(screen: String) {
     when (screen) {
+        "vehicle-detail" -> VehicleDetailScreen(
+            vehicle = pass3Vehicle(), onEdit = {}, onDelete = {}, onSetMain = {}, onAddPhoto = {},
+        )
+        "vehicle-editor" -> VehicleFormScreen(
+            initial = VehicleForm(
+                makeId = "volvo", modelId = "240", modelYear = 1988,
+                powertrain = VehiclePowertrain.PETROL, modifications = "Lokal testanteckning",
+            ),
+            isEdit = true, saveStatus = VehicleSaveStatus.Idle, currentYear = 2026,
+            onSave = {}, onCancel = {}, onChangePhoto = {},
+        )
+        "awards" -> AeroPage(title = stringResource(R.string.badgeShowcase_title)) {
+            ProfileBadgesSection(
+                BadgeShowcase.from(
+                    badges = listOf(Badge("garage_created", null, 1_700_000_000_000L)),
+                    counters = BadgeCounters(vehiclesInGarage = 1),
+                ),
+            )
+        }
+        "drive-detail" -> SavedDriveDetailScreen(
+            drive = pass3Drive(), deleteStatus = DriveDeleteStatus.Idle, onDelete = {}, onBack = {},
+        )
+        "drive-history" -> DrivesListScreen(
+            state = DriveHistoryListState.Loaded(
+                drives = listOf(pass3Drive()), tier = DriveSubscriptionTier.COMMUNITY,
+                hiddenDriveCount = 2, hasMore = false,
+            ),
+            onSelect = {}, onDelete = {}, deleteStatus = DriveDeleteStatus.Idle, onShowStats = {},
+        )
+        "drive-stats" -> DriveStatsScreen(
+            state = DriveStatsUiState.Loaded(
+                DriveStatsSnapshot(
+                    tier = DriveSubscriptionTier.COMMUNITY, totalDrives = 8,
+                    totalDistanceMeters = 80_000.0, totalDurationSeconds = 7_200L,
+                    longestDriveMeters = 20_000.0, averageDriveMeters = 10_000.0,
+                    fastestAverageSpeedMps = null, highestMaxSpeedMps = null,
+                    thisMonthDrives = 2, thisMonthDistanceMeters = 24_000.0,
+                ),
+            ),
+        )
+        "drive-save-failed" -> SessionSummaryDialog(
+            state = RecordingState.Failed(pointCount = 0, elapsedMillis = 60_000L, code = "UNAVAILABLE"),
+            pointsProvider = { emptyList() }, onRetry = {}, onDiscard = {},
+        )
         "garage" -> GarageScreen(
             state = GarageState.Loaded(
                 listOf(
@@ -67,3 +130,17 @@ fun Wave2GaragePreview(screen: String) {
         else -> error("Unknown garage preview case: $screen")
     }
 }
+
+private fun pass3Vehicle() = Vehicle(
+    id = "local-detail-car", make = "Volvo", model = "240",
+    makeId = "volvo", modelId = "240", modelYear = 1988,
+    powertrain = VehiclePowertrain.PETROL, engineDescription = "B230",
+    modifications = "Lokal testanteckning", isMainCar = true,
+)
+
+private fun pass3Drive() = SavedDrive(
+    rideId = "local-saved-drive", title = "Lokal testkörning", distanceMeters = 12_400.0,
+    durationSeconds = 2_520L, averageSpeedMetersPerSecond = null,
+    startedAtMillis = 1_700_000_000_000L, endedAtMillis = 1_700_002_520_000L,
+    createdAtMillis = 1_700_002_520_000L,
+)

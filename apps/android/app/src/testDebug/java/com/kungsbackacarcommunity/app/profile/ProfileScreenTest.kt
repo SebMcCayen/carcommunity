@@ -12,7 +12,9 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.runtime.mutableStateOf
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
@@ -69,6 +71,33 @@ class ProfileScreenTest {
         composeTestRule.onNodeWithText(str(R.string.profile_editButton)).performScrollTo().performClick()
         // Edit mode: the display-name field label appears.
         composeTestRule.onNodeWithText(str(R.string.profile_displayNameLabel)).assertIsDisplayed()
+    }
+
+    @Test
+    fun failedSaveKeepsEditedFieldsAndCanonicalSocialHandles() {
+        val status = mutableStateOf<ProfileEditStatus>(ProfileEditStatus.Idle)
+        var savedSocial: SocialHandles? = null
+        composeTestRule.setContent {
+            KccTheme {
+                ProfileScreen(
+                    profile = profile.copy(social = SocialHandles(instagram = "local.test")),
+                    saveStatus = status.value,
+                    onSave = { _, _, social ->
+                        savedSocial = social
+                        status.value = ProfileEditStatus.Failed
+                    },
+                    onBack = {}, onSignOut = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.profile_editButton)).performScrollTo().performClick()
+        composeTestRule.onNodeWithText(str(R.string.profile_displayNameLabel)).performTextReplacement("Edited name")
+        composeTestRule.onNodeWithText(str(R.string.profile_bioLabel)).performScrollTo().performTextReplacement("Edited bio")
+        composeTestRule.onNodeWithText(str(R.string.profile_saveButton)).performScrollTo().performClick()
+        assertEquals("local.test", savedSocial?.instagram)
+        composeTestRule.onNodeWithText(str(R.string.profile_saveError)).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Edited name").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Edited bio").performScrollTo().assertIsDisplayed()
     }
 
     @Test

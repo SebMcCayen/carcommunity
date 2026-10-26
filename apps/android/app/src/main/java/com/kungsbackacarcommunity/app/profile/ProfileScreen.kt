@@ -148,6 +148,7 @@ fun ProfileScreen(
                     onValueChange = { nameField = it },
                     label = { Text(stringResource(R.string.profile_displayNameLabel)) },
                     isError = validation.displayNameError != null,
+                    enabled = !saving,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -157,6 +158,7 @@ fun ProfileScreen(
                     onValueChange = { bioField = it },
                     label = { Text(stringResource(R.string.profile_bioLabel)) },
                     isError = validation.bioError != null,
+                    enabled = !saving,
                     minLines = 3,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -270,19 +272,20 @@ private fun ProfileIdentitySection(
                 avatarUrl = avatarUrl,
                 uploadStatus = uploadStatus,
                 onChangeAvatar = onChangeAvatar,
+                centered = editing,
             )
             if (!editing) {
                 // Preserve the social links directly beneath the avatar.
                 ProfileSocialLinksRow(
                     handles = profile?.social ?: SocialHandles.EMPTY,
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    modifier = Modifier.align(Alignment.Start),
                 )
                 Text(
                     text = profile?.displayName?.takeIf { it.isNotBlank() }
                         ?: stringResource(R.string.profile_emptyDisplayName),
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    modifier = Modifier.align(Alignment.Start),
                 )
                 Text(
                     text = profile?.bio?.takeIf { it.isNotBlank() }
@@ -301,11 +304,12 @@ private fun AvatarSection(
     avatarUrl: String?,
     uploadStatus: ImageUploadStatus,
     onChangeAvatar: (() -> Unit)?,
+    centered: Boolean,
 ) {
     val uploading = uploadStatus == ImageUploadStatus.Uploading
     Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
+        horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
     ) {
         SupporterAvatarFrame(supporterBadgeVisible) {
@@ -316,6 +320,12 @@ private fun AvatarSection(
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center,
             ) {
+                Icon(
+                    Icons.Filled.Person,
+                    contentDescription = if (avatarUrl == null) stringResource(R.string.profile_avatarAlt) else null,
+                    modifier = Modifier.size(KccSpacing.s12),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 if (avatarUrl != null) {
                     // Coil renders nothing (keeps the placeholder tint) when no URL
                     // resolves — a config-less build never crashes on rendering.
@@ -324,13 +334,6 @@ private fun AvatarSection(
                         contentDescription = stringResource(R.string.profile_avatarAlt),
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),
-                    )
-                } else {
-                    Icon(
-                        Icons.Filled.Person,
-                        contentDescription = stringResource(R.string.profile_avatarAlt),
-                        modifier = Modifier.size(KccSpacing.s12),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 if (uploading) {
