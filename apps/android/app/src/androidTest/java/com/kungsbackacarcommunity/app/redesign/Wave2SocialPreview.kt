@@ -6,6 +6,10 @@ import com.kungsbackacarcommunity.app.crownhunt.CrownLeaderboardRow
 import com.kungsbackacarcommunity.app.crownhunt.CrownPersonalStats
 import com.kungsbackacarcommunity.app.crownhunt.CrownSeasonBoard
 import com.kungsbackacarcommunity.app.crownhunt.CrownStatsUiState
+import com.kungsbackacarcommunity.app.crownhunt.PerkCatalogEntry
+import com.kungsbackacarcommunity.app.crownhunt.PerkKind
+import com.kungsbackacarcommunity.app.crownhunt.PerkShopItem
+import com.kungsbackacarcommunity.app.crownhunt.PerkShopUiState
 import com.kungsbackacarcommunity.app.events.EventDetail
 import com.kungsbackacarcommunity.app.events.EventDetailScreen
 import com.kungsbackacarcommunity.app.events.EventStatus
@@ -45,7 +49,7 @@ fun Wave2SocialPreview(screen: String) {
             onSelectTab = {},
             onCreateEvent = {},
         )
-        "crown" -> CrownHuntScreen(
+        "crown", "crown-stats", "crown-shop" -> CrownHuntScreen(
             statsState = CrownStatsUiState.Loaded(
                 personal = CrownPersonalStats(
                     points = 1250,
@@ -70,6 +74,15 @@ fun Wave2SocialPreview(screen: String) {
             ),
             passesMemberGate = true,
             onBack = {},
+            perksEnabled = true,
+            openShop = screen == "crown-shop",
+            shopState = PerkShopUiState.Loaded(1250, PerkKind.entries.mapIndexed { index, kind ->
+                PerkShopItem(
+                    PerkCatalogEntry("fixture-perk-$index", kind, "Testperk", "", (index + 1) * 100L,
+                        "Lokal testdata. Speleffekt som endast påverkar Kronpoäng."),
+                    ownedCount = 2, affordable = true,
+                )
+            }),
         )
         "event-detail" -> EventDetailScreen(
             event = previewEvent(),

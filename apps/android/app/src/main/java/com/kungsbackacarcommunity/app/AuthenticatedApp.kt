@@ -1982,7 +1982,9 @@ fun AuthenticatedApp(
             // re-attaching. garageReloadKey is bumped by the list's "try again"
             // affordance to force a re-subscribe after a listener error.
             var garageReloadKey by rememberSaveable { mutableStateOf(0) }
-            val inGarageSection = selectedTab == ShellTab.Garage
+            // Reuse the same bounded owner stream for the profile's real car
+            // cover, only while either surface is visible; no background read.
+            val inGarageSection = selectedTab == ShellTab.Garage || route == ShellRoute.Profile
             val garageState by
                 remember(garageRepository, uid, inGarageSection, garageReloadKey) {
                     if (garageRepository != null && inGarageSection) {
@@ -6437,6 +6439,8 @@ fun AuthenticatedApp(
                         // repositories / coordinators
                         profile = profile,
                         profileRepository = profileRepository,
+                        profileCoverImagePath = (garageState as? GarageState.Loaded)?.vehicles
+                            ?.let(com.kungsbackacarcommunity.app.garage.VehicleGallery::mainCarCoverPath),
                         profileEditCoordinator = profileEditCoordinator,
                         mediaUploader = mediaUploader,
                         liveLocationRepository = liveLocationRepository,
@@ -8876,6 +8880,7 @@ private fun RouteHost(
     onSignOut: () -> Unit,
     profile: com.kungsbackacarcommunity.app.profile.UserProfile?,
     profileRepository: ProfileRepository?,
+    profileCoverImagePath: String?,
     profileEditCoordinator: ProfileEditCoordinator?,
     mediaUploader: MediaUploader?,
     liveLocationRepository: LiveLocationRepository?,
@@ -9322,6 +9327,7 @@ private fun RouteHost(
                     onSignOut = onSignOut,
                     avatarUrl = avatarUrl,
                     avatarUploadStatus = avatarStatus,
+                    coverImagePath = profileCoverImagePath,
                     onChangeAvatar =
                         if (avatarCoordinator != null && profileRepository != null) {
                             {

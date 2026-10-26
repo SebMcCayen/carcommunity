@@ -94,7 +94,7 @@ fun AccountDeletionScreen(
                 ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Checkbox(checked = acknowledged, onCheckedChange = null)
+            Checkbox(checked = acknowledged, enabled = !busy, onCheckedChange = null)
             Text(
                 text = stringResource(R.string.settings_accountDeletionAcknowledgement),
                 modifier = Modifier.weight(1f).padding(start = KccSpacing.s3),

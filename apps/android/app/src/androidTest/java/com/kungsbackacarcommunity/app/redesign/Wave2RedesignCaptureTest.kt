@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.shell.rememberMapSurface
 import com.kungsbackacarcommunity.app.friends.FriendsCataloguePreview
 import com.kungsbackacarcommunity.app.moderation.MessageActionsCataloguePreview
 import java.io.File
@@ -111,7 +112,8 @@ class Wave2RedesignCaptureTest {
                                         // MapShellCataloguePreview is not referenced
                                         // until main cherry-picks map-qa's fixture.
                                         "map-layers", "map-saved", "map-report", "map-create", "map-perks", "map-session" ->
-                                            error("Integrate map-qa's MapShellCataloguePreview and wire its dispatch before capturing $selected")
+                                            MapShellCataloguePreview(selected,
+                                                mapSurface = if (args.getString("redesignMap") == "configured") rememberMapSurface() else null)
                                         else -> error("Unknown redesign capture case: $selected")
                                     }
                                 }
