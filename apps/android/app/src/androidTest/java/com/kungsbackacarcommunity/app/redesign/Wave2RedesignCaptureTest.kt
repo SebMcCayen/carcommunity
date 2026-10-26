@@ -58,6 +58,7 @@ import com.kungsbackacarcommunity.app.moderation.MessageActionsCataloguePreview
 import java.io.File
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.ExternalResource
 
 /**
  * Runs production Compose views with local test-only inputs, never a live account.
@@ -68,7 +69,21 @@ import org.junit.Test
  */
 @org.junit.runner.RunWith(AndroidJUnit4::class)
 class Wave2RedesignCaptureTest {
-    @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
+    // A populated chat legitimately requests notification access. These are
+    // app-component captures, so grant it before Activity launch instead of
+    // letting an OS permission window remove the active Compose hierarchy.
+    @get:Rule(order = 0) val notificationPermission: ExternalResource = object : ExternalResource() {
+        override fun before() {
+            if (Build.VERSION.SDK_INT >= 33) {
+                val instrumentation = InstrumentationRegistry.getInstrumentation()
+                instrumentation.uiAutomation.grantRuntimePermission(
+                    instrumentation.targetContext.packageName,
+                    android.Manifest.permission.POST_NOTIFICATIONS,
+                )
+            }
+        }
+    }
+    @get:Rule(order = 1) val rule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
     fun captureProductionViewsWithLocalTestData() {
