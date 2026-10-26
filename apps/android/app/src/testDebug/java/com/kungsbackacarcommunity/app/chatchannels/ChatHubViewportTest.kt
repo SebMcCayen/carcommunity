@@ -12,10 +12,15 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -103,7 +108,14 @@ class ChatHubViewportTest {
             assertTrue("Source hit target: $target", target.height >= 48f && target.width >= 48f)
         }
         input.assertIsDisplayed().performTextInput("Local draft")
-        val back = compose.onNodeWithContentDescription(localized.getString(R.string.chatHub_back))
+        // The description belongs to the 24dp icon. Measure/click its actual
+        // 48dp button ancestor rather than treating the glyph as the hit target.
+        val back = compose.onNode(
+            SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button) and
+                hasClickAction() and
+                hasAnyDescendant(hasContentDescription(localized.getString(R.string.chatHub_back))),
+            useUnmergedTree = true,
+        )
         val backBounds = back.fetchSemanticsNode().boundsInRoot
         assertTrue("Back shares the channel row", backBounds.top < strip.bottom && backBounds.bottom > strip.top)
         assertTrue("Back hit target", backBounds.height >= 48f && backBounds.width >= 48f)
@@ -113,7 +125,7 @@ class ChatHubViewportTest {
         compose.onNodeWithText("Local Driver surface").assertIsDisplayed()
         compose.onNodeWithText(localized.getString(R.string.chatHub_tabChats)).performClick()
         compose.onNodeWithTag(CHANNEL_INPUT_TEST_TAG).assertTextContains("Local draft")
-        compose.onNodeWithContentDescription(localized.getString(R.string.chatHub_back)).performClick()
+        back.performClick()
         compose.runOnIdle { assertEquals(1, closed) }
     }
 
