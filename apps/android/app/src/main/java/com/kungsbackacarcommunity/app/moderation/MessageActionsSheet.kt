@@ -2,24 +2,34 @@ package com.kungsbackacarcommunity.app.moderation
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Reply
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.chat.ChatReportReason
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.shell.MapDetailSheet
 
 /** Test tags so UI tests can address the sheet's rows without matching copy. */
 const val MESSAGE_ACTIONS_SHEET_TEST_TAG = "message_actions_sheet"
@@ -57,7 +67,6 @@ const val MESSAGE_ACTIONS_REPORT_TEST_TAG = "message_actions_report"
  *   as a lie (a button that quietly does nothing) or as a permanently dead
  *   control. It reappears when its callable lands.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessageActionsSheet(
     memberName: String?,
@@ -69,88 +78,75 @@ fun MessageActionsSheet(
     canReply: Boolean = false,
     onReply: () -> Unit = {},
 ) {
-    val sheetState = rememberModalBottomSheetState()
     val name = memberName?.takeIf { it.isNotBlank() }
-    val reportWired = reportAvailability == ReportAvailability.Wired
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
+    MapDetailSheet(
+        title = stringResource(R.string.moderation_messageActionsTitle,
+            name ?: stringResource(R.string.chat_unknownAuthor)),
+        onDismiss = onDismiss,
         modifier = Modifier.testTag(MESSAGE_ACTIONS_SHEET_TEST_TAG),
     ) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    // The sheet draws to the bottom edge, so its own content must
-                    // clear the navigation bar / gesture pill.
-                    .navigationBarsPadding()
-                    .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
-            verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
-        ) {
-            Text(
-                text =
-                    stringResource(
-                        R.string.moderation_messageActionsTitle,
-                        name ?: stringResource(R.string.chat_unknownAuthor),
-                    ),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = KccSpacing.s2),
-            )
+        MessageActionsContent(name, canBlock, reportAvailability, onBlock, onReport, onDismiss, canReply, onReply)
+    }
+}
 
-            // Reply is the primary action, so it leads. A future React / Copy row
-            // would sit here beside it — this ordering is the reserved anchor.
-            if (canReply) {
-                SheetAction(
-                    text = stringResource(R.string.moderation_reply),
-                    onClick = onReply,
-                    testTag = MESSAGE_ACTIONS_REPLY_TEST_TAG,
-                )
-            }
-
-            if (canBlock) {
-                SheetAction(
-                    text =
-                        if (name != null) {
-                            stringResource(R.string.moderation_blockMember, name)
-                        } else {
-                            stringResource(R.string.blocking_blockUser)
-                        },
-                    onClick = onBlock,
-                    testTag = MESSAGE_ACTIONS_BLOCK_TEST_TAG,
-                )
-            }
-
-            if (reportWired) {
-                SheetAction(
-                    text = stringResource(R.string.moderation_reportMessage),
-                    onClick = onReport,
-                    testTag = MESSAGE_ACTIONS_REPORT_TEST_TAG,
-                )
-            }
-
-            SheetAction(text = stringResource(R.string.moderation_close), onClick = onDismiss)
+/** Shared reading host owns title, scrolling and dismissal; callers still own every policy/confirmation. */
+@Composable
+internal fun MessageActionsContent(
+    memberName: String?,
+    canBlock: Boolean,
+    reportAvailability: ReportAvailability,
+    onBlock: () -> Unit,
+    onReport: () -> Unit,
+    onDismiss: () -> Unit,
+    canReply: Boolean = false,
+    onReply: () -> Unit = {},
+) {
+    val name = memberName?.takeIf { it.isNotBlank() }
+    Column(Modifier.fillMaxWidth()) {
+        if (canReply) {
+            SheetAction(stringResource(R.string.moderation_reply), Icons.AutoMirrored.Filled.Reply,
+                onReply, testTag = MESSAGE_ACTIONS_REPLY_TEST_TAG)
+            HorizontalDivider()
         }
+        if (reportAvailability == ReportAvailability.Wired) {
+            SheetAction(stringResource(R.string.moderation_reportMessage), Icons.Filled.Flag,
+                onReport, testTag = MESSAGE_ACTIONS_REPORT_TEST_TAG)
+            HorizontalDivider()
+        }
+        if (canBlock) {
+            SheetAction(
+                text = if (name != null) stringResource(R.string.moderation_blockMember, name)
+                    else stringResource(R.string.blocking_blockUser),
+                icon = Icons.Filled.Block, onClick = onBlock, destructive = true,
+                testTag = MESSAGE_ACTIONS_BLOCK_TEST_TAG,
+            )
+            HorizontalDivider()
+        }
+        SheetAction(stringResource(R.string.moderation_close), Icons.Filled.Close, onDismiss)
     }
 }
 
 @Composable
 private fun SheetAction(
     text: String,
+    icon: ImageVector,
     onClick: () -> Unit,
-    enabled: Boolean = true,
+    destructive: Boolean = false,
     testTag: String? = null,
 ) {
     TextButton(
         onClick = onClick,
-        enabled = enabled,
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
+        colors = ButtonDefaults.textButtonColors(contentColor =
+            if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+            .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
     ) {
-        Text(text = text, modifier = Modifier.fillMaxWidth())
+        Row(Modifier.fillMaxWidth().padding(vertical = KccSpacing.s1),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s4)) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(KccSpacing.s6))
+            Text(text, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        }
     }
 }
 
