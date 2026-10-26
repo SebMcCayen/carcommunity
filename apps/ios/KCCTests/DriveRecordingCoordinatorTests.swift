@@ -4,7 +4,10 @@ import XCTest
 
 @MainActor
 final class DriveRecordingCoordinatorTests: XCTestCase {
-    private final class FakeRepository: DriveRecordingRepository, @unchecked Sendable {
+    // Assertions and the delayed-save gate share the test's actor. Otherwise
+    // requests.append can become visible before the continuation is installed,
+    // and resolveDelayedSave can lose the release on a different executor.
+    @MainActor private final class FakeRepository: DriveRecordingRepository {
         var requests: [DriveSaveRequest] = []
         var uploads: [(String, [RecordedDrivePoint])] = []
         var failures: [Error] = []
