@@ -2664,7 +2664,10 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
      */
     private fun syncCrownMarkers(markers: List<MapCrownMarker>, nowMs: Long) {
         for (marker in markers) crownMarkerById[marker.id] = marker
-        crownAnimator.sync(markers.map { it.id }.toSet(), nowMs)
+        crownAnimator.sync(
+            markers.map { it.id }.toSet(), nowMs,
+            animationsEnabled = android.animation.ValueAnimator.areAnimatorsEnabled(),
+        )
     }
 
     /**
@@ -2793,6 +2796,8 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
             glyphColorArgb = marker.glyphColorArgb,
             glowColorArgb = marker.glowColorArgb,
             collectedBadge = marker.collectedByYou,
+            rarity = marker.rarity,
+            rewardPoints = marker.rewardPoints,
         )
 
     /**
@@ -2819,6 +2824,8 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
                     glyphColorArgb = marker.glyphColorArgb,
                     glowColorArgb = marker.glowColorArgb,
                     collectedBadge = marker.collectedByYou,
+                    rarity = marker.rarity,
+                    rewardPoints = marker.rewardPoints,
                 )
             } else {
                 null

@@ -115,7 +115,7 @@ class CrownMarkerAnimatorTest {
         assertNotNull("despawning crown is still drawn", mid)
         assertEquals(CrownAnimationPhase.DESPAWNING, mid!!.phase)
         assertTrue("shrinking", mid.scale < 1f)
-        assertTrue("spinning out", mid.rotationDegrees > 0f)
+        assertEquals("exit stays upright", 0f, mid.rotationDegrees, 1e-4f)
 
         // After the despawn duration it is gone from the draw set.
         assertNull(a.frame(1400).byId("c1"))
@@ -185,6 +185,33 @@ class CrownMarkerAnimatorTest {
         a.clear()
         assertTrue(a.frame(0).isEmpty())
         assertFalse(a.isAnimating(0))
+    }
+
+    @Test
+    fun `disabled animations show present crowns and remove collected crowns immediately`() {
+        val a = animator()
+        a.sync(setOf("c1", "c2"), nowMs = 0, animationsEnabled = false)
+        assertFalse(a.isAnimating(0))
+        assertEquals(setOf("c1", "c2"), a.frame(0).map { it.id }.toSet())
+        a.sync(setOf("c2"), nowMs = 1, animationsEnabled = false)
+        assertNull(a.frame(1).byId("c1"))
+        assertEquals(1f, a.frame(1).byId("c2")!!.contentAlpha, 0f)
+    }
+
+    @Test
+    fun `exit fades monotonically and cannot replay on a repeated absent snapshot`() {
+        val a = animator()
+        a.sync(setOf("c1"), 0)
+        a.frame(600)
+        a.sync(emptySet(), 1000)
+        val first = a.frame(1100).byId("c1")!!
+        a.sync(emptySet(), 1150)
+        val second = a.frame(1250).byId("c1")!!
+        assertTrue(second.scale < first.scale)
+        assertTrue(second.contentAlpha < first.contentAlpha)
+        assertEquals(0f, second.rotationDegrees, 0f)
+        assertNull(a.frame(1400).byId("c1"))
+        assertFalse(a.isAnimating(1400))
     }
 
     // ── Easing helpers ──────────────────────────────────────────────────────────

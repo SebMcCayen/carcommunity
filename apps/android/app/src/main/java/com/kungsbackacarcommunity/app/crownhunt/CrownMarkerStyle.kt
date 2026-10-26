@@ -3,18 +3,11 @@ package com.kungsbackacarcommunity.app.crownhunt
 import com.kungsbackacarcommunity.app.incidents.IncidentMarkerStyle
 
 /**
- * Stable map-state adapter for crown rarity, range and collected status.
- *
- * The legacy `discColorArgb` / `glyphColorArgb` inputs remain compatible with
- * MapCrownMarker and its style-image cache. CrownMarkerBitmaps now translates
- * these into standalone crown silhouettes and transparent rings; they are not
- * filled incident discs. It uses source gold/silver accents, a distinct rare
- * accent, and a checked collected state. Curated points have a dashed ring.
- *
- * The four existing silhouettes remain the primary rarity channel under colour
- * vision deficiency. The original adapter palette's contrast/separation tests
- * continue to guard legacy consumers; they do not establish rendered acceptance
- * of the new ring renderer, which also needs bitmap and configured-map QA.
+ * Backwards-compatible range and claim-state adapter. The compact map renderer
+ * uses explicit rarity/reward metadata and semantic crown palette tokens rather
+ * than painting these legacy disc colours. Out-of-range still fails closed;
+ * collection authority, silhouette selection and reward semantics are unchanged.
+ * Legacy glow/check inputs remain for callers outside the map rendering seam.
  */
 object CrownMarkerStyle {
     /**

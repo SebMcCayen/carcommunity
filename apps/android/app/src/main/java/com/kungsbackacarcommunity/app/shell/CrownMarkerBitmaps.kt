@@ -3,12 +3,9 @@ package com.kungsbackacarcommunity.app.shell
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PorterDuff
-import android.graphics.RadialGradient
-import android.graphics.Shader
 import androidx.annotation.DrawableRes
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
@@ -16,44 +13,57 @@ import androidx.compose.ui.graphics.toArgb
 import com.kungsbackacarcommunity.app.design.KccPalette
 import com.kungsbackacarcommunity.app.crownhunt.CrownMarkerStyle
 import com.kungsbackacarcommunity.app.crownhunt.CrownRarity
-import com.kungsbackacarcommunity.app.incidents.IncidentMarkerStyle
+import com.kungsbackacarcommunity.app.crownhunt.crownGlyphRes
 import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 /**
- * Standalone licensed crown silhouettes inside transparent rings (catalogue S18/S19).
- * The legacy disc/glyph arguments remain compatible with the map's state/cache adapter;
- * the disc colour now identifies the accent, never a filled incident-like badge.
- * Distinct silhouettes carry rarity without colour; curated points have a dashed ring.
- * Dark and light outlines keep both the ring and silhouette legible on either basemap.
- * Rasterisation still happens only when the map registers a new style-image key.
+ * Compact crown tiles: one source glyph, one hairline and a non-colour rank cue.
+ * No stacked glyph outlines, fuzzy halo or repeated idle animation. Images are
+ * cached per appearance rather than generated in the animation frame loop.
  */
 internal object CrownMarkerBitmaps {
-    /**
-     * A stable style-image name for one tier's marker.
-     *
-     * Namespaced `kcc-crown-` so it cannot collide with `kcc-incident-` (or with
-     * the `kcc-event-marker` image the events layer registers), and keyed on
-     * everything that changes the pixels — glyph, disc, glyph tint and glow — so
-     * a palette change produces a NEW image rather than silently reusing the old
-     * one from the style's image cache.
-     */
     fun imageId(
         @DrawableRes iconRes: Int,
         discColorArgb: Int,
         glyphColorArgb: Int,
         glowColorArgb: Int?,
         collectedBadge: Boolean = false,
+        rarity: CrownRarity? = null,
+        rewardPoints: Int? = null,
     ): String =
-        "kcc-crown-ring-v2-$iconRes-$discColorArgb-$glyphColorArgb-${glowColorArgb ?: 0}" +
-            if (collectedBadge) "-collected" else ""
+        "kcc-crown-tile-v3-$iconRes-$discColorArgb-$glyphColorArgb-${glowColorArgb ?: 0}" +
+            "-rank${rank(rarity, rewardPoints)}" + if (collectedBadge) "-collected" else ""
 
-    /**
-     * Rasterises one crown marker. Returns null if the drawable cannot be
-     * inflated, so a missing or broken asset degrades to "this crown is not
-     * drawn" rather than crashing the map — the same defensive posture as the
-     * rest of this surface.
-     */
+    /** Curated points use their actual reward's band, never a fabricated rarity. */
+    internal fun rank(rarity: CrownRarity?, rewardPoints: Int?): Int =
+        rarity?.ordinal ?: when {
+            rewardPoints == null -> 0
+            rewardPoints >= CrownRarity.LEGENDARY.rewardPoints -> 3
+            rewardPoints >= CrownRarity.RARE.rewardPoints -> 2
+            rewardPoints >= CrownRarity.UNCOMMON.rewardPoints -> 1
+            else -> 0
+        }
+
+    internal fun accent(rank: Int): Int = when (rank) {
+        0 -> KccPalette.crownCommon.toArgb()
+        1 -> KccPalette.crownUncommon.toArgb()
+        2 -> KccPalette.crownRare.toArgb()
+        else -> KccPalette.crownGold.toArgb()
+    }
+
+    /** Accent adapter also used by existing crown detail/list components. */
+    internal fun ringAccent(legacyDisc: Int): Int = when (legacyDisc) {
+        CrownMarkerStyle.discColorArgb(CrownRarity.COMMON),
+        CrownMarkerStyle.OUT_OF_RANGE_DISC -> accent(0)
+        CrownMarkerStyle.discColorArgb(CrownRarity.UNCOMMON) -> accent(1)
+        CrownMarkerStyle.discColorArgb(CrownRarity.RARE) -> accent(2)
+        CrownMarkerStyle.ADMIN_POINT_DISC,
+        CrownMarkerStyle.discColorArgb(CrownRarity.LEGENDARY) -> accent(3)
+        CrownMarkerStyle.COLLECTED_DISC -> CrownMarkerStyle.COLLECTED_DISC
+        else -> legacyDisc
+    }
+
     fun create(
         context: Context,
         @DrawableRes iconRes: Int,
@@ -61,170 +71,94 @@ internal object CrownMarkerBitmaps {
         glyphColorArgb: Int,
         glowColorArgb: Int?,
         collectedBadge: Boolean = false,
+        rarity: CrownRarity? = null,
+        rewardPoints: Int? = null,
     ): Bitmap? {
+        val glyph = runCatching { ContextCompat.getDrawable(context, iconRes)?.mutate() }
+            .getOrNull() ?: return null
         val density = context.resources.displayMetrics.density
         fun px(dp: Float) = dp * density
-
-        val discDiameter = px(CrownMarkerStyle.DISC_DIAMETER_DP)
-        val lightRing = px(IncidentMarkerStyle.RING_LIGHT_WIDTH_DP)
-        val darkRing = px(IncidentMarkerStyle.RING_DARK_WIDTH_DP)
-        val glow = if (glowColorArgb != null) px(CrownMarkerStyle.GLOW_WIDTH_DP) else 0f
-        // Rings and the halo all sit OUTSIDE the disc; the marker's own radius is
-        // that whole stack. Computed from the dp constants — NOT derived from the
-        // bitmap size — so growing the bitmap to fit a badge (below) cannot grow
-        // the marker with it.
-        val ringOuterRadius = discDiameter / 2f + darkRing + lightRing
-        val markerRadius = ringOuterRadius + glow
-
-        // The check badge sits on the ring circle at the lower-right (45°) and
-        // overhangs the marker, so the bitmap must be large enough to hold it. A
-        // collected crown never glows, so the two are mutually exclusive and the
-        // canvas simply takes whichever reach is larger. The badge is baked in
-        // here (not a second annotation) so it scales with the crown at every
-        // zoom rather than being culled independently (#867/#897).
-        val badgeDiameter = if (collectedBadge) px(CrownMarkerStyle.COLLECTED_BADGE_DIAMETER_DP) else 0f
-        val badgeRadius = badgeDiameter / 2f
-        val badgeReach = if (collectedBadge) ringOuterRadius * SIN_45 + badgeRadius else 0f
-        val halfExtent = maxOf(markerRadius, badgeReach)
-        // CEIL, never round: `halfExtent` is a dp->px float, and rounding DOWN
-        // would give a bitmap fractionally smaller than the geometry drawn into
-        // it, clipping the outermost element — the dark hairline on a plain crown,
-        // the halo on a legendary, or the badge on a collected one. Losing any to
-        // a rounding artefact would quietly undo a guarantee the tests assert.
-        val sizePx = ceil(2f * halfExtent).toInt().coerceAtLeast(1)
-
-        val bitmap = createBitmap(sizePx, sizePx)
+        // Legacy callers still supply a real source glyph; recover its tier if
+        // they predate explicit presentation metadata. No reward is invented.
+        val resolvedRarity = rarity ?: if (rewardPoints == null) {
+            CrownRarity.entries.firstOrNull { crownGlyphRes(it) == iconRes }
+        } else null
+        val rank = rank(resolvedRarity, rewardPoints)
+        val side = 26f + 2f * rank
+        val padding = 1f
+        val size = ceil(px(side + padding * 2f)).toInt().coerceAtLeast(1)
+        val bitmap = createBitmap(size, size)
         val canvas = Canvas(bitmap)
-        // The MARKER stays centred on the point (the annotation is CENTER-anchored)
-        // whether or not the bitmap grew for a badge, because the disc is drawn at
-        // the bitmap centre and only the surrounding canvas grew.
-        val centre = sizePx / 2f
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        val centre = size / 2f
+        val half = px(side) / 2f
+        val left = centre - half
+        val top = centre - half
+        val right = centre + half
+        val bottom = centre + half
+        val corner = px(8f)
+        val colour = accent(rank)
+        val inRange = discColorArgb != CrownMarkerStyle.OUT_OF_RANGE_DISC && !collectedBadge
+        val ink = KccPalette.nightOverlay.toArgb()
+        val foreground = if (inRange) ink else colour
 
-        // 1. Legendary halo. A radial gradient from the ring's edge outwards,
-        //    opaque at the marker and fully transparent at the bitmap edge, so
-        //    it fades into the map instead of ending in a hard circle. Drawn
-        //    first and then painted over, so the rings and disc stay crisp.
-        if (glowColorArgb != null && glow > 0f && ringOuterRadius > 0f) {
-            val transparent = glowColorArgb and 0x00FFFFFF
-            paint.shader =
-                RadialGradient(
-                    centre,
-                    centre,
-                    markerRadius,
-                    intArrayOf(transparent, transparent, glowColorArgb, transparent),
-                    // Keep the interior transparent; peak only at the ring and
-                    // fade across the outer halo band.
-                    floatArrayOf(0f, (ringOuterRadius - px(1f)) / markerRadius, ringOuterRadius / markerRadius, 1f),
-                    Shader.TileMode.CLAMP,
-                )
-            canvas.drawCircle(centre, centre, markerRadius, paint)
-            paint.shader = null
-        }
-
-        // Transparent centre: retain road context instead of painting an incident disc.
-        val accent = ringAccent(discColorArgb)
+        // A single opaque reading surface keeps the source glyph crisp on both
+        // day and night maps. Ready uses a solid accent, distant uses navy.
+        paint.color = if (inRange) colour else ink
+        canvas.drawRoundRect(left, top, right, bottom, corner, corner, paint)
         paint.style = Paint.Style.STROKE
-        paint.strokeWidth = px(4f)
-        if (discColorArgb == CrownMarkerStyle.ADMIN_POINT_DISC) {
-            paint.pathEffect = DashPathEffect(floatArrayOf(px(5f), px(3f)), 0f)
-        }
-        paint.color = IncidentMarkerStyle.RING_DARK
-        val ringRadius = ringOuterRadius - px(2f)
-        canvas.drawCircle(centre, centre, ringRadius, paint)
-        paint.strokeWidth = px(2.5f)
-        paint.color = IncidentMarkerStyle.RING_LIGHT
-        canvas.drawCircle(centre, centre, ringRadius, paint)
-        paint.strokeWidth = px(1.5f)
-        paint.color = accent
-        canvas.drawCircle(centre, centre, ringRadius, paint)
-        paint.pathEffect = null
+        paint.strokeWidth = px(if (inRange) 1.5f else 1f)
+        paint.color = if (inRange) KccPalette.warmIvory.toArgb() else colour
+        canvas.drawRoundRect(
+            left + paint.strokeWidth / 2f, top + paint.strokeWidth / 2f,
+            right - paint.strokeWidth / 2f, bottom - paint.strokeWidth / 2f,
+            corner, corner, paint,
+        )
         paint.style = Paint.Style.FILL
 
-        // Crown silhouette with outlines that separate it from either basemap.
-        val drawable =
-            runCatching { ContextCompat.getDrawable(context, iconRes) }.getOrNull()
-                ?: return null
-        // Mutate before tinting: drawables share a constant state, so tinting the
-        // shared instance would recolour every other user of this resource.
-        val glyph = drawable.mutate()
-        // Leave breathing room inside the ring: the earlier enlarged silhouette
-        // and thick outlines filled the rare crown's valleys into a solid badge.
-        val glyphSize = discDiameter * 0.75f
-        val half = glyphSize / 2f
+        // Draw the existing licensed silhouette ONCE. Outlining it repeatedly
+        // filled the small gaps and made the previous design look smudged.
+        val glyphSide = px(17f + rank)
+        val glyphY = centre - px(2f)
         glyph.setBounds(
-            (centre - half).roundToInt(),
-            (centre - half).roundToInt(),
-            (centre + half).roundToInt(),
-            (centre + half).roundToInt(),
+            (centre - glyphSide / 2f).roundToInt(), (glyphY - glyphSide / 2f).roundToInt(),
+            (centre + glyphSide / 2f).roundToInt(), (glyphY + glyphSide / 2f).roundToInt(),
         )
-        // Outline the actual source drawable, not a hand-drawn replacement crown.
-        // Eight offset draws happen once at bitmap creation, never in the frame loop.
-        glyph.setColorFilter(IncidentMarkerStyle.RING_LIGHT, PorterDuff.Mode.SRC_IN)
-        for (dx in -1..1) for (dy in -1..1) {
-            if (dx == 0 && dy == 0) continue
-            canvas.save()
-            canvas.translate(px(0.9f) * dx, px(0.9f) * dy)
-            glyph.draw(canvas)
-            canvas.restore()
-        }
-        glyph.setColorFilter(IncidentMarkerStyle.RING_DARK, PorterDuff.Mode.SRC_IN)
-        for (dx in -1..1) for (dy in -1..1) {
-            if (dx == 0 && dy == 0) continue
-            canvas.save()
-            canvas.translate(px(0.5f) * dx, px(0.5f) * dy)
-            glyph.draw(canvas)
-            canvas.restore()
-        }
-        glyph.setColorFilter(accent, PorterDuff.Mode.SRC_IN)
+        glyph.setColorFilter(foreground, PorterDuff.Mode.SRC_IN)
         glyph.draw(canvas)
 
-        // 6. The "collected by you" check badge, lower-right, when this is a
-        //    shared crown the member already picked up. A white-ringed green disc
-        //    with a tick — the "checkpoint cleared" cue — carrying the meaning on
-        //    a SHAPE channel that survives any colour-vision deficiency, so a
-        //    collected crown never reads as merely out-of-range.
-        if (collectedBadge && badgeRadius > 0f) {
-            val bcx = centre + ringOuterRadius * SIN_45
-            val bcy = centre + ringOuterRadius * SIN_45
-            // A light collar so the badge separates from both the disc and the
-            // basemap, reusing the same ring colour the marker already carries.
-            paint.color = IncidentMarkerStyle.RING_LIGHT
-            canvas.drawCircle(bcx, bcy, badgeRadius, paint)
+        // 1–4 equal bars retain the reward hierarchy without relying on colour
+        // or tiny text. Exact, server-provided KP stays in the selected popup.
+        val count = rank + 1
+        val barWidth = px(3f)
+        val gap = px(2f)
+        val start = centre - (count * barWidth + (count - 1) * gap) / 2f
+        paint.color = foreground
+        for (i in 0 until count) {
+            val x = start + i * (barWidth + gap)
+            canvas.drawRoundRect(x, bottom - px(6f), x + barWidth, bottom - px(4f), px(1f), px(1f), paint)
+        }
+
+        // Compatibility for older preview callers only. Production filters
+        // already-collected crowns before this renderer receives its next set.
+        if (collectedBadge) {
+            val x = right - px(4f)
+            val y = bottom - px(4f)
+            paint.color = KccPalette.nightOverlay.toArgb()
+            canvas.drawCircle(x, y, px(6f), paint)
             paint.color = CrownMarkerStyle.COLLECTED_BADGE_FILL
-            canvas.drawCircle(bcx, bcy, badgeRadius - darkRing, paint)
-            val tick =
-                Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = CrownMarkerStyle.collectedBadgeGlyphColorArgb()
-                    style = Paint.Style.STROKE
-                    strokeWidth = (badgeRadius * 0.30f).coerceAtLeast(1f)
-                    strokeCap = Paint.Cap.ROUND
-                    strokeJoin = Paint.Join.ROUND
-                }
-            val path =
-                Path().apply {
-                    moveTo(bcx - badgeRadius * 0.42f, bcy + badgeRadius * 0.02f)
-                    lineTo(bcx - badgeRadius * 0.08f, bcy + badgeRadius * 0.34f)
-                    lineTo(bcx + badgeRadius * 0.46f, bcy - badgeRadius * 0.36f)
-                }
-            canvas.drawPath(path, tick)
+            canvas.drawCircle(x, y, px(5f), paint)
+            paint.color = KccPalette.warmIvory.toArgb()
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = px(1.5f)
+            paint.strokeCap = Paint.Cap.ROUND
+            paint.strokeJoin = Paint.Join.ROUND
+            canvas.drawPath(Path().apply {
+                moveTo(x - px(2.5f), y)
+                lineTo(x - px(0.5f), y + px(2f))
+                lineTo(x + px(3f), y - px(2f))
+            }, paint)
         }
         return bitmap
-    }
-
-    /** sin 45° — the badge sits on the ring circle at the lower-right diagonal. */
-    private const val SIN_45 = 0.70710677f
-
-    /** Translate the existing state adapter to source gold/silver and semantic states. */
-    internal fun ringAccent(legacyDisc: Int): Int = when (legacyDisc) {
-        CrownMarkerStyle.ADMIN_POINT_DISC,
-        CrownMarkerStyle.discColorArgb(CrownRarity.COMMON),
-        CrownMarkerStyle.discColorArgb(CrownRarity.LEGENDARY),
-        -> KccPalette.crownGold.toArgb()
-        CrownMarkerStyle.discColorArgb(CrownRarity.UNCOMMON) ->
-            KccPalette.silverGrey.toArgb()
-        CrownMarkerStyle.OUT_OF_RANGE_DISC -> KccPalette.silverGrey.toArgb()
-        CrownMarkerStyle.COLLECTED_DISC -> CrownMarkerStyle.COLLECTED_DISC
-        else -> legacyDisc
     }
 }

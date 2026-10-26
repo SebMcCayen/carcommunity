@@ -202,7 +202,7 @@ import com.kungsbackacarcommunity.app.crownhunt.CrownHuntPointsState
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRoute
 import com.kungsbackacarcommunity.app.crownhunt.CrownLocation
-import com.kungsbackacarcommunity.app.crownhunt.CrownMarkerStyle
+import com.kungsbackacarcommunity.app.crownhunt.CrownPointCollectionPresentation
 import com.kungsbackacarcommunity.app.crownhunt.CrownPointMarkers
 import com.kungsbackacarcommunity.app.crownhunt.CrownProofSelection
 import com.kungsbackacarcommunity.app.crownhunt.CrownRange
@@ -218,6 +218,7 @@ import com.kungsbackacarcommunity.app.crownhunt.CrownQueryCenter
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawn
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnController
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnLimits
+import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnMarkers
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnPopup
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnQuery
 import com.kungsbackacarcommunity.app.crownhunt.CrownZoomThinning
@@ -436,7 +437,6 @@ import com.kungsbackacarcommunity.app.incidents.incidentGlyphRes
 import com.kungsbackacarcommunity.app.shell.EventMarkerInfoPopup
 import com.kungsbackacarcommunity.app.shell.MapHome
 import com.kungsbackacarcommunity.app.shell.LocalAeroBackAvailable
-import com.kungsbackacarcommunity.app.shell.MapCrownMarker
 import com.kungsbackacarcommunity.app.shell.MapBillboardMarker
 import com.kungsbackacarcommunity.app.shell.MapEventMarker
 import com.kungsbackacarcommunity.app.police.PoliceController
@@ -2396,9 +2396,9 @@ fun AuthenticatedApp(
                         ?: MutableStateFlow(emptyList<CrownSpawn>())
                 }
             val crownSpawns by crownSpawnsFlow.collectAsState()
-            // The SHARED crowns this member already collected but which stay live
-            // for others — drawn with the distinct "collected by you" marker rather
-            // than hidden. Survives a map refresh and self-prunes on expiry.
+            // Confirmed pickups are omitted from THIS member's marker list, while
+            // shared crowns stay live for others. The uid-scoped durable set
+            // survives refresh/restart and self-prunes on the crown's expiry.
             val crownCollectedIdsFlow =
                 remember(crownSpawnController) {
                     crownSpawnController?.collectedSpawnIds
@@ -2406,7 +2406,7 @@ fun AuthenticatedApp(
                 }
             val crownCollectedIds by crownCollectedIdsFlow.collectAsState()
             // Reconcile the "collected by you" set for the current user: the local
-            // cache loads THIS uid's durable marks so they show INSTANTLY on cold
+            // cache loads THIS uid's durable marks so they hide pickups on cold
             // start (before any network round-trip), then the SERVER-authoritative
             // crownSpawnCollectors listener merges in — correct even after a
             // reinstall / on a new device. Re-binds on an account switch so account
@@ -2550,11 +2550,11 @@ fun AuthenticatedApp(
             // marker rebuild fires only when a crown actually crosses the range
             // boundary, not on every location tick.
             val inRangeSpawnIds =
-                remember(crownSpawns, crownUserLocation) {
+                remember(crownSpawns, crownCollectedIds, crownUserLocation) {
                     val loc = crownUserLocation ?: return@remember null
                     crownSpawns
                         .filter {
-                            CrownRange.isInRange(
+                            it.id !in crownCollectedIds && CrownRange.isInRange(
                                 loc.latitude, loc.longitude, it.latitude, it.longitude,
                                 it.collectRadiusMeters,
                             )
@@ -2563,8 +2563,8 @@ fun AuthenticatedApp(
                         .toSet()
                 }
             // Crowns → drawing primitives for the map seam, exactly as incidents
-            // are above: the surface is handed a colour, a silhouette and a tint
-            // and knows nothing about rarities. Empty whenever the feature is off,
+            // are above: the surface is handed draw inputs plus rarity/reward
+            // metadata for its rank treatment. Empty whenever the feature is off,
             // so a flag flipped mid-session takes the markers off the map without
             // waiting for a poll pass. A crown OUT of collect range is drawn in the
             // neutral out-of-range slate; it lights up to its rarity colour once
@@ -2593,40 +2593,14 @@ fun AuthenticatedApp(
                     crownCollectedIds,
                     crownsZoomedOut,
                 ) {
-                    if (!crownSpawnEnabled) {
-                        emptyList()
-                    } else {
-                        // Zoomed out → keep only the top tiers (see CrownZoomThinning);
-                        // the full set returns on zoom-in.
-                        CrownZoomThinning.visibleSpawns(crownSpawns, crownsZoomedOut).map { spawn ->
-                            // null in-range set = no fix yet → fail closed and grey
-                            // every crown. A crown lights to its rarity colour only
-                            // once a real location proves the member is inside the
-                            // ring; before the first fix nothing looks collectible.
-                            val inRange = inRangeSpawnIds != null && spawn.id in inRangeSpawnIds
-                            // A SHARED crown this member already collected stays on
-                            // the map (it is still live for others) but is drawn with
-                            // the distinct "collected by you" marker. The pure helper
-                            // owns the collectable-vs-collected decision, so the
-                            // choice is unit-tested rather than inlined here.
-                            val appearance =
-                                CrownMarkerStyle.spawnMarkerAppearance(
-                                    rarity = spawn.rarity,
-                                    inRange = inRange,
-                                    collectedByYou = spawn.id in crownCollectedIds,
-                                )
-                            MapCrownMarker(
-                                id = spawn.id,
-                                longitude = spawn.longitude,
-                                latitude = spawn.latitude,
-                                discColorArgb = appearance.discColorArgb,
-                                iconRes = crownGlyphRes(spawn.rarity),
-                                glyphColorArgb = appearance.glyphColorArgb,
-                                glowColorArgb = appearance.glowColorArgb,
-                                collectedByYou = appearance.collectedBadge,
-                            )
-                        }
-                    }
+                    CrownSpawnMarkers.markers(
+                        spawns = crownSpawns,
+                        visible = crownSpawnEnabled,
+                        collectedIds = crownCollectedIds,
+                        inRangeIds = inRangeSpawnIds,
+                        zoomedOut = crownsZoomedOut,
+                        glyphRes = ::crownGlyphRes,
+                    )
                 }
             // ── Kronjakt crown layer (the HAND-PLACED admin half) ───────────
             //
@@ -2652,6 +2626,21 @@ fun AuthenticatedApp(
             val crownPointsState by
                 crownPointsFlow.collectAsState(initial = CrownHuntPointsState.Loading)
             val crownPointGlyph = crownPointGlyphRes()
+            // Presentation only, owned by this uid's composition. Do not persist
+            // admin IDs as permanently collected: their repeat windows live on
+            // the server and are absent from the map's point model.
+            val crownPointSuppressedUntil = remember(uid) { mutableStateOf(emptyMap<String, Long>()) }
+            LaunchedEffect(crownPointSuppressedUntil, crownPointSuppressedUntil.value) {
+                while (true) {
+                    val nextExpiry = crownPointSuppressedUntil.value.values.minOrNull() ?: break
+                    delay((nextExpiry - System.currentTimeMillis()).coerceAtLeast(1L))
+                    crownPointSuppressedUntil.value =
+                        CrownPointCollectionPresentation.prune(
+                            crownPointSuppressedUntil.value,
+                            System.currentTimeMillis(),
+                        )
+                }
+            }
             // Admin points the member is within collect range of — the same
             // greying rule as the spawns, over each point's own geofence radius.
             val inRangePointIds =
@@ -2673,7 +2662,13 @@ fun AuthenticatedApp(
                         .toSet()
                 }
             val crownPointMarkers =
-                remember(crownPointsState, adminCrownsVisible, crownPointGlyph, inRangePointIds) {
+                remember(
+                    crownPointsState,
+                    adminCrownsVisible,
+                    crownPointGlyph,
+                    inRangePointIds,
+                    crownPointSuppressedUntil.value,
+                ) {
                     val points =
                         (crownPointsState as? CrownHuntPointsState.Loaded)?.points ?: emptyList()
                     CrownPointMarkers.markers(
@@ -2681,6 +2676,7 @@ fun AuthenticatedApp(
                         adminCrownsVisible,
                         crownPointGlyph,
                         inRangeIds = inRangePointIds,
+                        suppressedIds = crownPointSuppressedUntil.value.keys,
                     )
                 }
             // Both crown sources share the ONE surface layer: the admin points and
@@ -7419,6 +7415,16 @@ fun AuthenticatedApp(
                                                         // costs one attempt, not two.
                                                         crownIdempotencyKey,
                                                     )
+                                                    // Capture the confirmed outcome in this
+                                                    // uid's state without clearing the popup's
+                                                    // latched point or its readable result.
+                                                    crownPointSuppressedUntil.value =
+                                                        CrownPointCollectionPresentation.afterClaim(
+                                                            crownPointSuppressedUntil.value,
+                                                            pointForPopup.id,
+                                                            coordinator.status.value,
+                                                            System.currentTimeMillis(),
+                                                        )
                                                 }
                                             }
                                         },

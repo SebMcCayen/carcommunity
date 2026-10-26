@@ -158,8 +158,10 @@ Driver markers use permitted avatar/vehicle data, a cyan position ring and
 selection emphasis. Only show names when selected or at useful zoom. Do not
 invent positions after updates stop. Driver preview shows permitted name/car,
 actual sharing state, and View profile. DM/friend actions retain existing rules.
-Crown markers are standalone crown shapes with tier and claim-state cues, never
-an avatar or car inside. Sponsored pins retain a sponsored label and action.
+Crown markers use compact rounded-square tiles with one crown silhouette,
+value-tier and claim-state cues, never an avatar or car inside. Follow
+[crown-map-markers.md](crown-map-markers.md) for the 2026-10-26 refinement;
+it replaces the noisy multiply outlined transparent rings. Sponsored pins retain a sponsored label and action.
 
 ## Independent modules and state
 

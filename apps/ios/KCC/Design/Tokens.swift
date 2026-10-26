@@ -7,6 +7,9 @@ import SwiftUI
 /// KCC Crown UI brand palette.
 enum KccPalette {
     static let crownGold = Color(red: 234 / 255, green: 181 / 255, blue: 75 / 255)
+    static let crownCommon = Color(red: 180 / 255, green: 177 / 255, blue: 173 / 255)
+    static let crownUncommon = Color(red: 112 / 255, green: 214 / 255, blue: 163 / 255)
+    static let crownRare = Color(red: 196 / 255, green: 165 / 255, blue: 255 / 255)
     static let darkCharcoal = Color(red: 63 / 255, green: 62 / 255, blue: 59 / 255)
     static let inkBlack = Color(red: 4 / 255, green: 2 / 255, blue: 17 / 255)
     static let warmIvory = Color(red: 248 / 255, green: 246 / 255, blue: 239 / 255)
