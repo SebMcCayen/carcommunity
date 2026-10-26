@@ -37,7 +37,7 @@ class GaragePhotoDensityTest {
             }
         }
         val photo = compose.onNodeWithTag(garagePhotoTag("a"), useUnmergedTree = true).getUnclippedBoundsInRoot()
-        assertEquals(2.5f, photo.width.value / photo.height.value, 0.03f)
+        assertEquals(2.5f, (photo.right.value - photo.left.value) / (photo.bottom.value - photo.top.value), 0.03f)
         compose.onNodeWithText("Volvo V60 (2020)").assertIsDisplayed()
         compose.onNodeWithText("Saab 900 (1990)").performScrollTo().assertIsDisplayed()
         val add = InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.garage_addVehicle)
