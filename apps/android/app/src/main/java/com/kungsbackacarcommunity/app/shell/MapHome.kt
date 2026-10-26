@@ -845,8 +845,8 @@ fun MapHome(
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                     .onSizeChanged { bottomChromeHeightPx = it.height }
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                    .testTag("map_home_session_dock"),
+                    .testTag("map_home_session_dock")
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 if (liveSessionBar != null) {
