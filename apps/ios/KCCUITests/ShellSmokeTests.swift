@@ -52,29 +52,29 @@ final class ShellSmokeTests: XCTestCase {
         let app = launch(language: "en")
         app.buttons["shell.mapLayers"].tap()
         XCTAssertTrue(app.navigationBars["Map layers"].waitForExistence(timeout: 5))
-        let scroll = app.scrollViews.firstMatch
+        let scroll = app.scrollViews["shell.layers.content"]
         for id in ["night", "day", "system"] {
             let choice = app.buttons["shell.layersAppearance.\(id)"]
-            for _ in 0..<4 where !choice.isHittable { scroll.swipeUp() }
+            reveal(choice, in: scroll, minimumHeight: 48)
             XCTAssertTrue(choice.isHittable)
             choice.tap()
             assertSelected(choice)
         }
         let expand = app.buttons["Show map focus distance"]
-        for _ in 0..<4 where !expand.isHittable { scroll.swipeUp() }
+        reveal(expand, in: scroll, minimumHeight: 48)
         XCTAssertTrue(expand.isHittable)
         expand.tap()
         XCTAssertTrue(app.buttons["Hide map focus distance"].waitForExistence(timeout: 5))
         // Expansion increases the scrollable content; the slider can be below
         // the medium detent and absent from the accessibility snapshot until scrolled.
         let zoom = app.sliders["shell.layersZoom"]
-        for _ in 0..<4 where !zoom.isHittable { scroll.swipeUp() }
+        reveal(zoom, in: scroll, minimumHeight: 0)
         XCTAssertTrue(zoom.waitForExistence(timeout: 5), "Expanded slider tree: \(app.sliders.debugDescription)")
         XCTAssertTrue(zoom.isHittable)
         app.buttons["Close map layers"].tap()
         app.buttons["shell.mapLayers"].tap()
         let system = app.buttons["shell.layersAppearance.system"]
-        for _ in 0..<4 where !system.isHittable { app.scrollViews.firstMatch.swipeUp() }
+        reveal(system, in: app.scrollViews["shell.layers.content"], minimumHeight: 48)
         assertSelected(system)
     }
 
@@ -82,13 +82,14 @@ final class ShellSmokeTests: XCTestCase {
         let app = launch(language: "sv", largeText: true, theme: "Dark")
         app.buttons["shell.mapLayers"].tap()
         XCTAssertTrue(app.navigationBars["Kartlager"].waitForExistence(timeout: 5))
-        let scroll = app.scrollViews.firstMatch
+        let scroll = app.scrollViews["shell.layers.content"]
         for (id, label) in [("day", "Dag"), ("night", "Natt"), ("system", "System")] {
             let choice = app.buttons["shell.layersAppearance.\(id)"]
-            for _ in 0..<8 where !choice.isHittable { scroll.swipeUp() }
+            reveal(choice, in: scroll, minimumHeight: 48)
             XCTAssertTrue(choice.isHittable)
             XCTAssertEqual(choice.label, label)
-            XCTAssertGreaterThanOrEqual(choice.frame.height, 48)
+            XCTAssertGreaterThanOrEqual(choice.frame.height, 48,
+                "Choice \(id) frame=\(choice.frame), viewport=\(scroll.frame)")
             choice.tap()
             assertSelected(choice)
         }
@@ -386,6 +387,22 @@ final class ShellSmokeTests: XCTestCase {
         let result = XCTWaiter.wait(for: [selected], timeout: 5)
         if result != .completed { diagnosePrimaryControls(XCUIApplication()) }
         XCTAssertEqual(result, .completed, "Selection did not settle for \(tab.identifier)")
+    }
+
+    private func reveal(_ target: XCUIElement, in scroll: XCUIElement, minimumHeight: CGFloat) {
+        // Hittable can mean only a clipped sliver is visible. Inspect the full
+        // control before measuring/tapping, in this sheet's actual scroll view.
+        for _ in 0..<12 {
+            let viewport = scroll.frame
+            let frame = target.exists ? target.frame : .zero
+            if target.exists && target.isHittable && frame.height >= minimumHeight
+                && viewport.insetBy(dx: 0, dy: 1).contains(frame) { return }
+            let above = !frame.isEmpty && frame.midY < viewport.midY
+            let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            let end = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.7 : 0.3))
+            // Short drag + hold avoids overshooting the next large-text choice.
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
+        }
     }
 
     private func diagnosePrimaryControls(_ app: XCUIApplication) {

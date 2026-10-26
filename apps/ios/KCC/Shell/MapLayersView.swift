@@ -94,6 +94,7 @@ struct MapLayersSheet: View {
                 }
                 .padding(KccSpacing.s4)
             }
+            .accessibilityIdentifier("shell.layers.content")
             .tint(KccTheme.driver)
             .kccReadingSurface()
             .navigationTitle("shell.layersTitle")
@@ -187,6 +188,7 @@ struct MapLayersSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, minHeight: 48)
                 .padding(.horizontal, KccSpacing.s2)
+                .contentShape(Rectangle())
                 .foregroundStyle(selected ? KccTheme.driver : KccTheme.text)
                 .background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.sm))
                 .overlay {
