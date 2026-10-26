@@ -1,6 +1,8 @@
 package com.kungsbackacarcommunity.app.shell
 
 import android.graphics.Color
+import android.graphics.Bitmap
+import java.io.File
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.crownhunt.CrownMarkerStyle
@@ -24,6 +26,10 @@ class CrownMarkerBitmapTest {
             val appearance = CrownMarkerStyle.spawnMarkerAppearance(rarity, true, false)
             val bitmap = requireNotNull(CrownMarkerBitmaps.create(context, crownGlyphRes(rarity),
                 appearance.discColorArgb, appearance.glyphColorArgb, appearance.glowColorArgb))
+            val folder = File("build/reports/design-markers").apply { mkdirs() }
+            File(folder, "${rarity.name.lowercase()}.png").outputStream().use {
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
             val centre = bitmap.width / 2f
             // Inspect the whole former disc interior, including the spaces
             // around the silhouette. Its solid centre is legitimately opaque.

@@ -148,7 +148,9 @@ internal object CrownMarkerBitmaps {
         // Mutate before tinting: drawables share a constant state, so tinting the
         // shared instance would recolour every other user of this resource.
         val glyph = drawable.mutate()
-        val glyphSize = discDiameter * 0.9f
+        // Leave breathing room inside the ring: the earlier enlarged silhouette
+        // and thick outlines filled the rare crown's valleys into a solid badge.
+        val glyphSize = discDiameter * 0.75f
         val half = glyphSize / 2f
         glyph.setBounds(
             (centre - half).roundToInt(),
@@ -162,7 +164,7 @@ internal object CrownMarkerBitmaps {
         for (dx in -1..1) for (dy in -1..1) {
             if (dx == 0 && dy == 0) continue
             canvas.save()
-            canvas.translate(px(1.5f) * dx, px(1.5f) * dy)
+            canvas.translate(px(0.9f) * dx, px(0.9f) * dy)
             glyph.draw(canvas)
             canvas.restore()
         }
@@ -170,7 +172,7 @@ internal object CrownMarkerBitmaps {
         for (dx in -1..1) for (dy in -1..1) {
             if (dx == 0 && dy == 0) continue
             canvas.save()
-            canvas.translate(px(0.75f) * dx, px(0.75f) * dy)
+            canvas.translate(px(0.5f) * dx, px(0.5f) * dy)
             glyph.draw(canvas)
             canvas.restore()
         }
