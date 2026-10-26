@@ -35,7 +35,6 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 @SdkSuppress(minSdkVersion = 29)
-@androidx.annotation.RequiresApi(29)
 class CrownMarkerDesignCaptureTest {
     @get:Rule val rule = ActivityScenarioRule(ComponentActivity::class.java)
 
