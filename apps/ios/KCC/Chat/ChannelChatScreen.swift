@@ -11,6 +11,7 @@ import SwiftUI
 /// renders the unavailable placeholder rather than crashing, the same seam every
 /// Firebase-backed surface honors.
 struct ChannelChatScreen: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.chatReadingActive) private var readingActive
     let coordinator: ChannelChatCoordinator?
     /// The channel's title (`chatHub.tabCommunity` for community, the convoy's
@@ -98,7 +99,7 @@ struct ChannelChatScreen: View {
                 coordinator.loadOlder()
             } label: {
                 Text(coordinator.olderPaging == .failed ? "dm.retry" : "dm.loadOlder")
-                    .font(.system(size: KccTypeScale.bodySm))
+                    .font(.subheadline)
                     .frame(maxWidth: .infinity)
             }
             .padding(.vertical, KccSpacing.s1)
@@ -137,7 +138,7 @@ struct ChannelChatScreen: View {
     ) -> some View {
         HStack(spacing: KccSpacing.s2) {
             Text(replyingToText(target))
-                .font(.system(size: KccTypeScale.bodySm))
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer()
@@ -148,7 +149,7 @@ struct ChannelChatScreen: View {
         }
         .padding(.horizontal, KccSpacing.s3)
         .padding(.vertical, KccSpacing.s2)
-        .background(KccPalette.softSand.opacity(0.5))
+        .background(KccTheme.surface)
     }
 
     private func replyingToText(_ target: ChannelMessage) -> String {
@@ -162,7 +163,10 @@ struct ChannelChatScreen: View {
     // MARK: - Composer
 
     private func composer(_ coordinator: ChannelChatCoordinator) -> some View {
-        HStack(spacing: KccSpacing.s2) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: KccSpacing.s2))
+            : AnyLayout(HStackLayout(spacing: KccSpacing.s2))
+        return layout {
             TextField("chat.inputPlaceholder", text: Binding(
                 get: { coordinator.draft }, set: { coordinator.draft = $0 }
             ), axis: .vertical)
@@ -170,8 +174,11 @@ struct ChannelChatScreen: View {
                 .lineLimit(1...4)
                 .padding(.horizontal, KccSpacing.s3)
                 .padding(.vertical, KccSpacing.s2)
-                .background(KccTheme.subtle)
-                .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
+                .font(.body)
+                .frame(minHeight: 48)
+                .background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.lg))
+                .overlay { RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.border) }
+                .accessibilityIdentifier("chat.composer.input")
             Button {
                 // Only clear the draft when something was actually sent — a
                 // signed-out caller (no currentUserId) has send(_:) ignored and
@@ -181,8 +188,14 @@ struct ChannelChatScreen: View {
                 }
             } label: {
                 Text("chat.sendButton")
-                    .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
+                    .font(.body.weight(.semibold))
+                    .frame(minHeight: 48)
+                    .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
             }
+            .buttonStyle(.borderedProminent)
+            .tint(KccTheme.driver)
+            .foregroundStyle(KccTheme.onDriver)
+            .accessibilityIdentifier("chat.composer.send")
             .disabled(!ChannelThread.isSendable(coordinator.draft) || coordinator.currentUserId == nil)
         }
         .padding(KccSpacing.s3)
@@ -209,7 +222,7 @@ struct ChannelChatScreen: View {
 /// One message bubble: the sender name (for other-authored messages), the text,
 /// an optional reply quote, and a delivery-status line for the caller's own
 /// pending/failed bubbles.
-private struct MessageRow: View {
+struct MessageRow: View {
     let message: ChannelMessage
     let isOwn: Bool
 
@@ -217,19 +230,19 @@ private struct MessageRow: View {
         VStack(alignment: isOwn ? .trailing : .leading, spacing: KccSpacing.s1) {
             if !isOwn {
                 Text(message.senderDisplayName ?? String(localized: "chat.unknownAuthor"))
-                    .font(.system(size: KccTypeScale.caption, weight: KccTypeScale.semibold))
-                    .foregroundStyle(.secondary)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(KccTheme.driver)
             }
             if let reply = message.replyTo {
                 Text(reply.textPreview)
                     .font(.system(size: KccTypeScale.caption))
                     .foregroundStyle(.secondary)
                     .padding(KccSpacing.s2)
-                    .background(KccPalette.softSand.opacity(0.4))
+                    .background(KccTheme.surface)
                     .clipShape(RoundedRectangle(cornerRadius: KccRadius.sm))
             }
             Text(message.text)
-                .font(.system(size: KccTypeScale.bodyMd))
+                .font(.body)
                 .padding(.horizontal, KccSpacing.s3)
                 .padding(.vertical, KccSpacing.s2)
                 .background(isOwn ? KccTheme.driver : KccTheme.subtle)

@@ -107,12 +107,14 @@ struct ChatHubScreen: View {
     }
 
     private var sourcePicker: some View {
-        HStack(spacing: KccSpacing.s2) {
+        HStack(spacing: 0) {
             sourceButton("chatHub.tabChats", driver: false)
             sourceButton("chatHub.tabDriver", driver: true)
         }
-        .padding(KccSpacing.s3)
-        .background(KccTheme.subtle)
+        .padding(KccSpacing.s1)
+        .background(KccTheme.surface, in: Capsule())
+        .overlay { Capsule().strokeBorder(KccTheme.border, lineWidth: 1) }
+        .padding(KccSpacing.s4)
     }
 
     private func sourceButton(_ title: LocalizedStringKey, driver: Bool) -> some View {
@@ -125,7 +127,7 @@ struct ChatHubScreen: View {
                 .padding(.vertical, KccSpacing.s2)
                 .frame(maxWidth: .infinity, minHeight: 48)
                 .foregroundStyle(showsDriver == driver ? KccTheme.onDriver : KccTheme.text)
-                .background(showsDriver == driver ? KccTheme.driver : KccTheme.overlay, in: Capsule())
+                .background(showsDriver == driver ? KccTheme.driver : .clear, in: Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(driver ? "chatHub.source.driver" : "chatHub.source.chats")
