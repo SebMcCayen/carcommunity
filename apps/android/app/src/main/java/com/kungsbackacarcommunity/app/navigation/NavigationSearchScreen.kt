@@ -2,10 +2,12 @@ package com.kungsbackacarcommunity.app.navigation
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,12 +31,13 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Place
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -85,6 +88,7 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalKccMapColors
 import com.kungsbackacarcommunity.app.diagnostics.NoopCrashTelemetry
 import com.kungsbackacarcommunity.app.diagnostics.rememberCrashTelemetry
+import com.kungsbackacarcommunity.app.shell.MapDetailSheet
 import com.kungsbackacarcommunity.app.shell.MapPoint
 import com.kungsbackacarcommunity.app.shell.MapRouteOverlay
 import com.kungsbackacarcommunity.app.shell.MapSurface
@@ -120,6 +124,11 @@ const val NAV_SAVE_TEST_TAG = "nav_save"
 
 /** Test tag on the save dialog's confirm button. */
 const val NAV_SAVE_CONFIRM_TEST_TAG = "nav_save_confirm"
+const val NAV_SAVE_EDITOR_TEST_TAG = "nav_save_editor"
+const val NAV_SAVE_NAME_TEST_TAG = "nav_save_name"
+const val NAV_SAVE_CANCEL_TEST_TAG = "nav_save_cancel"
+const val NAV_SAVE_REMOVE_TEST_TAG = "nav_save_remove"
+fun savedPlaceKindTestTag(kind: SavedPlaceKind): String = "nav_save_kind_${kind.name}"
 
 /**
  * Full-screen address-search + directions overlay behind the map-home "Where
@@ -691,17 +700,13 @@ private fun SavedPlacesCard(
 }
 
 /**
- * Save / edit dialog for a destination: pick the kind (Home / Work / Favourite),
- * name it, save. Opened either from the route preview's save button or from a
- * saved row's edit button; [existing] non-null puts it in edit mode — pre-filled
- * and with a Remove action.
- *
- * The label field is hidden for the singletons: their display name is the
- * localized "Home"/"Work", so asking for a name there would offer text that is
- * then never shown (see [displayLabel]).
+ * Docked S08 save/edit presentation. All writes remain in the caller's existing
+ * controller path. Home/Work retain their localized labels; the custom name is
+ * shown only for favourites, exactly as in the original save dialog.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SavePlaceDialog(
+internal fun SavePlaceDialog(
     place: PlaceSuggestion,
     existing: SavedPlace?,
     pendingEdit: SavedPlaceEdit?,
@@ -709,103 +714,113 @@ private fun SavePlaceDialog(
     onSave: (SavedPlaceKind, String) -> Unit,
     onRemove: (String) -> Unit,
 ) {
-    // A pending re-point ("Change Home address") pre-selects that kind + label, so
-    // the dialog opens on Home rather than the Favourite default; otherwise it
-    // falls back to an existing match, then to a fresh Favourite (see
-    // [SavedPlaces.resolveSaveDefaults]).
     val defaults = SavedPlaces.resolveSaveDefaults(place, existing, pendingEdit)
-    var kind by remember(existing, pendingEdit) { mutableStateOf(defaults.first) }
-    var label by remember(existing, pendingEdit) { mutableStateOf(defaults.second) }
+    var kind by remember(place, existing, pendingEdit) { mutableStateOf(defaults.first) }
+    var label by remember(place, existing, pendingEdit) { mutableStateOf(defaults.second) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                stringResource(
-                    if (existing != null) {
-                        R.string.addressSearch_savedDialogEditTitle
-                    } else {
-                        R.string.addressSearch_savedDialogTitle
-                    },
-                ),
+    MapDetailSheet(
+        title = stringResource(
+            if (existing != null) R.string.addressSearch_savedDialogEditTitle
+            else R.string.addressSearch_savedDialogTitle,
+        ),
+        onDismiss = onDismiss,
+        modifier = Modifier.testTag(NAV_SAVE_EDITOR_TEST_TAG),
+    ) {
+        if (kind == SavedPlaceKind.Favourite) {
+            OutlinedTextField(
+                value = label,
+                onValueChange = { label = it.take(SavedPlaces.MAX_LABEL) },
+                singleLine = true,
+                label = { Text(stringResource(R.string.addressSearch_savedLabelHint)) },
+                trailingIcon = {
+                    if (label.isNotEmpty()) {
+                        IconButton(onClick = { label = "" }) {
+                            Icon(Icons.Filled.Clear, contentDescription = stringResource(R.string.savedPlaces_clearName))
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().testTag(NAV_SAVE_NAME_TEST_TAG),
             )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
-                // The address being saved, so the user can tell what this shortcut
-                // will point at before naming it.
-                Text(
-                    text = place.address ?: place.name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+        }
+        Text(
+            text = stringResource(R.string.addressSearch_savedKindLabel),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+            SavedPlaceKind.entries.forEach { option ->
+                FilterChip(
+                    selected = kind == option,
+                    onClick = { kind = option },
+                    label = {
+                        Text(stringResource(when (option) {
+                            SavedPlaceKind.Home -> R.string.addressSearch_savedHome
+                            SavedPlaceKind.Work -> R.string.addressSearch_savedWork
+                            SavedPlaceKind.Favourite -> R.string.addressSearch_savedFavourite
+                        }))
+                    },
+                    leadingIcon = {
+                        Icon(option.icon(), contentDescription = null, modifier = Modifier.size(20.dp))
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    ),
+                    border = BorderStroke(1.dp,
+                        if (kind == option) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.heightIn(min = 48.dp).testTag(savedPlaceKindTestTag(option)),
                 )
-                Text(
-                    text = stringResource(R.string.addressSearch_savedKindLabel),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
-                    SavedPlaceKind.entries.forEach { option ->
-                        FilterChip(
-                            selected = kind == option,
-                            onClick = { kind = option },
-                            label = {
-                                Text(
-                                    stringResource(
-                                        when (option) {
-                                            SavedPlaceKind.Home -> R.string.addressSearch_savedHome
-                                            SavedPlaceKind.Work -> R.string.addressSearch_savedWork
-                                            SavedPlaceKind.Favourite ->
-                                                R.string.addressSearch_savedFavourite
-                                        },
-                                    ),
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = option.icon(),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                            },
-                        )
-                    }
-                }
-                if (kind == SavedPlaceKind.Favourite) {
-                    OutlinedTextField(
-                        value = label,
-                        onValueChange = { label = it.take(SavedPlaces.MAX_LABEL) },
-                        singleLine = true,
-                        label = { Text(stringResource(R.string.addressSearch_savedLabelHint)) },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
             }
-        },
-        confirmButton = {
-            TextButton(
+        }
+        Text(
+            text = stringResource(R.string.savedPlaces_addressLabel),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+        ) {
+            Icon(Icons.Filled.LocationOn, contentDescription = null)
+            Text(
+                text = place.address ?: place.name,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        HorizontalDivider()
+        Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
+            Icon(Icons.Filled.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                text = stringResource(R.string.savedPlaces_deviceLocalNote),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        // Intrinsic height follows scaled text; both actions stay in the sheet's
+        // scrollable body and remain reachable with the keyboard showing.
+        Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
+            OutlinedButton(
+                onClick = onDismiss,
+                modifier = Modifier.weight(1f).heightIn(min = 56.dp).testTag(NAV_SAVE_CANCEL_TEST_TAG),
+            ) { Text(stringResource(R.string.addressSearch_savedCancel)) }
+            Button(
                 onClick = { onSave(kind, label) },
-                modifier = Modifier.testTag(NAV_SAVE_CONFIRM_TEST_TAG),
+                modifier = Modifier.weight(1f).heightIn(min = 56.dp).testTag(NAV_SAVE_CONFIRM_TEST_TAG),
+            ) { Text(stringResource(R.string.addressSearch_savedSave)) }
+        }
+        if (existing != null) {
+            TextButton(
+                onClick = { onRemove(existing.id) },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(NAV_SAVE_REMOVE_TEST_TAG),
             ) {
-                Text(stringResource(R.string.addressSearch_savedSave))
+                Text(stringResource(R.string.addressSearch_savedRemove), color = MaterialTheme.colorScheme.error)
             }
-        },
-        dismissButton = {
-            Row {
-                if (existing != null) {
-                    TextButton(onClick = { onRemove(existing.id) }) {
-                        Text(
-                            text = stringResource(R.string.addressSearch_savedRemove),
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                }
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.addressSearch_savedCancel))
-                }
-            }
-        },
-    )
+        }
+    }
 }
 
 @Composable

@@ -1842,6 +1842,11 @@
     <string name="addressSearch_unitKilometers">km</string>
     <string name="addressSearch_unitMinutes">min</string>
     <string name="addressSearch_unitHours">tim</string>
+    <string name="savedPlaces_clearName">Rensa namn</string>
+    <string name="savedPlaces_filterAll">Alla</string>
+    <string name="savedPlaces_filterFavourites">Favoriter</string>
+    <string name="savedPlaces_filterEmpty">Inga sparade platser i den här kategorin.</string>
+    <string name="savedPlaces_addressLabel">Adress</string>
     <string name="savedPlaces_title">Sparade platser</string>
     <string name="savedPlaces_intro">Dina destinationer med ett tryck. Hem, Jobbet och favoriter visas i sökningen så att du snabbt kan öppna dem på kartan.</string>
     <string name="savedPlaces_addAction">Lägg till en plats</string>

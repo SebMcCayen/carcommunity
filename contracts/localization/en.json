@@ -1971,6 +1971,11 @@
     "unitHours": "h"
   },
   "savedPlaces": {
+    "clearName": "Clear name",
+    "filterAll": "All",
+    "filterFavourites": "Favourites",
+    "filterEmpty": "No saved places in this category.",
+    "addressLabel": "Address",
     "title": "Saved places",
     "intro": "Your one-tap destinations. Home, Work and favourites appear in search so you can quickly open them on the map.",
     "addAction": "Add a place",
