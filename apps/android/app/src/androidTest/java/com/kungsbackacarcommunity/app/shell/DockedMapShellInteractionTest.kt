@@ -194,11 +194,12 @@ class DockedMapShellInteractionTest {
             assertEquals(13.5, BrowsingInitialCamera.resolve(null, reopened.browsingZoom.value).zoom, 0.0)
             var generation by mutableStateOf(0)
             val surfaces = List(2) { StubMapSurface(MapLoadState.Loaded, autoLoad = false) }
+            val restoredZooms = List(2) { MapZoomPreferenceStore(context).browsingZoom.value }
             rule.setContent {
                 KccTheme {
                     key(generation) {
                         MapShellCataloguePreview("map-session", surfaces[generation],
-                            RecordingZoomController(MapZoomPreferenceStore(context).browsingZoom.value))
+                            RecordingZoomController(restoredZooms[generation]))
                     }
                 }
             }
