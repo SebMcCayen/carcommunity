@@ -8,5 +8,6 @@ fun MessageActionsCataloguePreview() {
     MessageActionsSheet(
         memberName = "Testmedlem", canBlock = true, reportAvailability = ReportAvailability.Wired,
         onBlock = {}, onReport = {}, onDismiss = {}, canReply = true, onReply = {},
+        preview = MessageActionsPreview("Testmedlem", "Ska vi ses vid stationen ikväll?"),
     )
 }

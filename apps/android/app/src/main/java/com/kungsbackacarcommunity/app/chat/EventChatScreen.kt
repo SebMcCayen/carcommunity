@@ -61,6 +61,7 @@ import com.kungsbackacarcommunity.app.chattime.rememberChatDateContext
 import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
 import com.kungsbackacarcommunity.app.moderation.ChatSurface
 import com.kungsbackacarcommunity.app.moderation.MessageActionsSheet
+import com.kungsbackacarcommunity.app.moderation.MessageActionsPreview
 import com.kungsbackacarcommunity.app.moderation.MessageModeration
 import com.kungsbackacarcommunity.app.moderation.ReportReasonDialog
 
@@ -333,9 +334,20 @@ fun EventChatScreen(
     // message vanished closes rather than acting on a message that is gone.
     val actionsMessage =
         (state as? ChatMessagesState.Loaded)?.messages?.firstOrNull { it.id == actionsMessageId }
+            ?.takeIf {
+                // Recheck the same eligibility as long-press: live moderation or access
+                // changes must not expose a now-hidden body through the quoted preview.
+                canParticipate && !it.isRemoved && !it.isAutoHidden &&
+                    MessageModeration.canActOn(it.authorUserId, currentUid) &&
+                    MessageModeration.hasActions(canBlock, MessageModeration.reportAvailability(ChatSurface.EventChat))
+            }
+    LaunchedEffect(actionsMessageId, actionsMessage == null) {
+        if (actionsMessage == null) actionsMessageId = null
+    }
     if (actionsMessage != null) {
         MessageActionsSheet(
             memberName = actionsMessage.authorDisplayName,
+            preview = MessageActionsPreview(actionsMessage.authorDisplayName, actionsMessage.message),
             // Directional; never on own messages (already excluded from the
             // long-press) and only when blocking is wired.
             canBlock = canBlock && EventChat.canBlock(actionsMessage, currentUid),

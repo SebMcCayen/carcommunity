@@ -17,6 +17,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -24,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import com.kungsbackacarcommunity.app.R
@@ -36,6 +39,10 @@ const val MESSAGE_ACTIONS_SHEET_TEST_TAG = "message_actions_sheet"
 const val MESSAGE_ACTIONS_REPLY_TEST_TAG = "message_actions_reply"
 const val MESSAGE_ACTIONS_BLOCK_TEST_TAG = "message_actions_block"
 const val MESSAGE_ACTIONS_REPORT_TEST_TAG = "message_actions_report"
+const val MESSAGE_ACTIONS_PREVIEW_TEST_TAG = "message_actions_preview"
+
+/** Ephemeral, already-visible selection data. No identity lookup, persistence, or interactive links. */
+data class MessageActionsPreview(val authorName: String?, val text: String)
 
 /**
  * The long-press action sheet behind every chat surface (community + convoy
@@ -66,6 +73,8 @@ const val MESSAGE_ACTIONS_REPORT_TEST_TAG = "message_actions_report"
  *   as [canBlock] — the user is never shown a report they cannot file, whether
  *   as a lie (a button that quietly does nothing) or as a permanently dead
  *   control. It reappears when its callable lands.
+ * @param preview optional quote of the currently selected, visible message. Callers
+ *   resolve it from their live loaded list on each composition; never retain a body snapshot.
  */
 @Composable
 fun MessageActionsSheet(
@@ -77,6 +86,7 @@ fun MessageActionsSheet(
     onDismiss: () -> Unit,
     canReply: Boolean = false,
     onReply: () -> Unit = {},
+    preview: MessageActionsPreview? = null,
 ) {
     val name = memberName?.takeIf { it.isNotBlank() }
     MapDetailSheet(
@@ -85,7 +95,7 @@ fun MessageActionsSheet(
         onDismiss = onDismiss,
         modifier = Modifier.testTag(MESSAGE_ACTIONS_SHEET_TEST_TAG),
     ) {
-        MessageActionsContent(name, canBlock, reportAvailability, onBlock, onReport, onDismiss, canReply, onReply)
+        MessageActionsContent(name, canBlock, reportAvailability, onBlock, onReport, onDismiss, canReply, onReply, preview)
     }
 }
 
@@ -100,9 +110,25 @@ internal fun MessageActionsContent(
     onDismiss: () -> Unit,
     canReply: Boolean = false,
     onReply: () -> Unit = {},
+    preview: MessageActionsPreview? = null,
 ) {
     val name = memberName?.takeIf { it.isNotBlank() }
     Column(Modifier.fillMaxWidth()) {
+        if (preview != null) {
+            Card(
+                modifier = Modifier.fillMaxWidth().testTag(MESSAGE_ACTIONS_PREVIEW_TEST_TAG)
+                    .padding(bottom = KccSpacing.s2),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            ) {
+                Column(Modifier.padding(KccSpacing.s3), verticalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
+                    Text(preview.authorName?.takeIf { it.isNotBlank() } ?: stringResource(R.string.chat_unknownAuthor),
+                        style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    // Plain text deliberately avoids the original bubble's actionable URL/location spans.
+                    Text(preview.text, style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 4, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
         if (canReply) {
             SheetAction(stringResource(R.string.moderation_reply), Icons.AutoMirrored.Filled.Reply,
                 onReply, testTag = MESSAGE_ACTIONS_REPLY_TEST_TAG)

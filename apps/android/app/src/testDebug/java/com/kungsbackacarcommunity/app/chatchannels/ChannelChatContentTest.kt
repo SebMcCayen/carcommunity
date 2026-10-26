@@ -1,5 +1,9 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -15,6 +19,7 @@ import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.moderation.ChatSurface
 import com.kungsbackacarcommunity.app.moderation.MESSAGE_ACTIONS_BLOCK_TEST_TAG
 import com.kungsbackacarcommunity.app.moderation.MESSAGE_ACTIONS_REPORT_TEST_TAG
+import com.kungsbackacarcommunity.app.moderation.MESSAGE_ACTIONS_PREVIEW_TEST_TAG
 import com.kungsbackacarcommunity.app.moderation.MESSAGE_ACTIONS_SHEET_TEST_TAG
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -76,6 +81,34 @@ class ChannelChatContentTest {
 
     private fun str(id: Int) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
+
+    @Test
+    fun selectedChannelQuoteTracksLoadedTextAndDisappearsWithMessage() {
+        val messages = mutableStateOf(listOf(message("local-one", "other", "Local author")))
+        composeTestRule.setContent {
+            KccTheme {
+                ChannelChatContent(messages = messages.value, currentUid = "me", loading = false,
+                    emptyText = "empty", canLoadOlder = false, isLoadingOlder = false,
+                    onSend = { _, _, _ -> }, onRetry = {}, onLoadOlder = {},
+                    surface = ChatSurface.CommunityChannel, onBlock = {})
+            }
+        }
+        longPress("Body of local-one")
+        fun quote(text: String) = composeTestRule.onNode(
+            hasText(text) and hasAnyAncestor(hasTestTag(MESSAGE_ACTIONS_PREVIEW_TEST_TAG)),
+            useUnmergedTree = true)
+        quote("Local author").assertIsDisplayed()
+        quote("Body of local-one").assertIsDisplayed()
+        composeTestRule.runOnIdle {
+            messages.value = listOf(messages.value.single().copy(text = "Local updated body", senderDisplayName = "Local updated author"))
+        }
+        quote("Body of local-one").assertDoesNotExist()
+        quote("Local updated body").assertIsDisplayed()
+        quote("Local updated author").assertIsDisplayed()
+        composeTestRule.runOnIdle { messages.value = emptyList() }
+        composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_PREVIEW_TEST_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_SHEET_TEST_TAG).assertDoesNotExist()
+    }
 
     @Test
     fun tappingSenderName_opensThatMembersProfile() {

@@ -76,6 +76,7 @@ import com.kungsbackacarcommunity.app.location.GeoLinks
 import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
 import com.kungsbackacarcommunity.app.moderation.ChatSurface
 import com.kungsbackacarcommunity.app.moderation.MessageActionsSheet
+import com.kungsbackacarcommunity.app.moderation.MessageActionsPreview
 import com.kungsbackacarcommunity.app.moderation.MessageModeration
 import com.kungsbackacarcommunity.app.moderation.ReportAvailability
 import com.kungsbackacarcommunity.app.shell.AeroPage
@@ -313,8 +314,14 @@ fun ChatScreen(
         val canModerate =
             actionsMessage.senderUid != currentUid &&
                 MessageModeration.canActOn(otherUid, currentUid)
+        val actionsAuthorName = when (actionsMessage.senderUid) {
+            currentUid -> stringResource(R.string.shell_userMarkerLabel)
+            otherUid -> otherName
+            else -> null
+        }
         MessageActionsSheet(
-            memberName = otherName,
+            memberName = actionsAuthorName,
+            preview = MessageActionsPreview(actionsAuthorName, actionsMessage.text),
             canReply = chatRepliesEnabled,
             onReply = {
                 replyToId = actionsMessage.id
