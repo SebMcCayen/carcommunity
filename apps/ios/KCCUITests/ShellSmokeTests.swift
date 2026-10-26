@@ -386,6 +386,17 @@ final class ShellSmokeTests: XCTestCase {
             "Build without GoogleService-Info.plist to test the config-less shell"
         )
         XCTAssertEqual(app.buttons["shell.menu"].label, language == "sv" ? "Inställningar" : "Settings")
+        // The top menu can be exposed before the safe-area footer finishes its
+        // first layout (especially after changing language/text size). Readiness
+        // means actual interactive controls, not just an existing title/menu.
+        for id in ["map", "chat", "create", "social", "garage"] {
+            let button = app.buttons["shell.tab.\(id)"]
+            let ready = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "exists == true AND hittable == true"), object: button
+            )
+            XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 15), .completed,
+                "Primary action \(id) was not interactive after launch")
+        }
         return app
     }
 
