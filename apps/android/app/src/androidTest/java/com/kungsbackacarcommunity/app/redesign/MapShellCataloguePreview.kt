@@ -12,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -100,6 +101,12 @@ fun MapShellCataloguePreview(
     val action: (String) -> Unit = { onLocalAction(it); dismiss() }
 
     CompositionLocalProvider(LocalMapZoomController provides zoom) {
+        // AuthenticatedApp owns this lifecycle in production. Standalone native
+        // captures must activate rendering as well as waiting for a loaded style.
+        DisposableEffect(surface) {
+            surface.setActive(true)
+            onDispose { surface.setActive(false) }
+        }
         // Local visual fixtures, never spawned/claimed through a backend.
         LaunchedEffect(surface) {
             surface.setCrownMarkers(CrownRarity.entries.mapIndexed { index, rarity ->
