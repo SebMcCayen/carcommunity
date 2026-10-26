@@ -78,6 +78,14 @@ describe('decidePublicPageState', () => {
     expect(decidePublicPageState(source(), 'e1', insideGrace, null).kind).toBe('live');
   });
 
+  it('preserves the existing inclusive public-page grace boundary', () => {
+    const boundary = new Date(source().endsAt!.getTime() + AUTO_CLOSE_GRACE_MS);
+    expect(decidePublicPageState(source(), 'e1', boundary, null).kind).toBe('live');
+    expect(decidePublicPageState(
+      source(), 'e1', new Date(boundary.getTime() + 1), null,
+    ).kind).toBe('ended');
+  });
+
   it('flips to ended once the effective end + grace has passed, even while still `published`', () => {
     const pastGrace = new Date(
       new Date('2026-08-20T21:00:00Z').getTime() + AUTO_CLOSE_GRACE_MS + 60_000,
@@ -203,6 +211,15 @@ describe('escaping', () => {
     expect(html).toContain('&lt;b&gt;fet&lt;/b&gt;');
   });
 
+  it('keeps a hostile title inside valid JSON-LD without allowing script injection', () => {
+    const title = '</script><script>alert("x")</script> & <b>Träff</b>';
+    const html = renderLiveEventPage(liveModel({ title }), { mapImageUrl: null });
+    expect(html).not.toContain('</script><script>');
+    const json = html.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)![1]!;
+    expect(JSON.parse(json).name).toBe(title);
+    expect(json).not.toContain('<');
+  });
+
   it('ICS-escapes commas, semicolons, backslashes and newlines', () => {
     expect(escapeIcsText('a,b;c\\d\ne')).toBe('a\\,b\\;c\\\\d\\ne');
     const ics = buildEventIcs(
@@ -293,10 +310,71 @@ describe('page rendering', () => {
     expect(html).not.toContain('play.google.com');
   });
 
-  it('renders Stockholm wall-clock time on the page', () => {
+  it('renders the full same-day Stockholm interval on the page', () => {
     const html = renderLiveEventPage(liveModel(), { mapImageUrl: null });
     // 17:00 UTC in August is 19:00 local.
-    expect(html).toContain('kl 19:00');
+    expect(html).toContain('torsdag 20 augusti 2026 kl 19:00–23:00');
+  });
+
+  it.each([
+    {
+      label: 'overnight',
+      start: '2026-08-20T20:00:00Z',
+      end: '2026-08-21T01:00:00Z',
+      interval: 'torsdag 20 augusti 2026 kl 22:00 – fredag 21 augusti 2026 kl 03:00',
+    },
+    {
+      label: 'winter',
+      start: '2026-01-20T17:00:00Z',
+      end: '2026-01-20T19:00:00Z',
+      interval: 'tisdag 20 januari 2026 kl 18:00–20:00',
+    },
+    {
+      label: 'spring DST gap',
+      start: '2026-03-29T00:30:00Z',
+      end: '2026-03-29T01:30:00Z',
+      interval: 'söndag 29 mars 2026 kl 01:30 (UTC+1)–03:30 (UTC+2)',
+    },
+    {
+      label: 'autumn repeated hour',
+      start: '2026-10-25T00:30:00Z',
+      end: '2026-10-25T01:30:00Z',
+      interval: 'söndag 25 oktober 2026 kl 02:30 (UTC+2)–02:30 (UTC+1)',
+    },
+  ])('keeps visible dates, JSON-LD and calendars consistent: $label', ({ start, end, interval }) => {
+    const model = liveModel({ startsAt: new Date(start), endsAt: new Date(end), description: null });
+    const html = renderLiveEventPage(model, { mapImageUrl: null });
+    expect(html).toContain(`<p class="meta">📅 ${interval}</p>`);
+    expect(html).toContain(`<meta property="og:description" content="${interval} – Kungsbacka station">`);
+    const json = html.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)![1]!;
+    expect(JSON.parse(json)).toMatchObject({
+      '@type': 'Event',
+      startDate: model.startsAt.toISOString(),
+      endDate: model.endsAt.toISOString(),
+    });
+    const ics = buildEventIcs(model, NOW);
+    expect(ics).toContain(`DTSTART:${calendarUtcStamp(model.startsAt)}\r\n`);
+    expect(ics).toContain(`DTEND:${calendarUtcStamp(model.endsAt)}\r\n`);
+    expect(new URL(googleCalendarUrl(model)).searchParams.get('dates')).toBe(
+      `${calendarUtcStamp(model.startsAt)}/${calendarUtcStamp(model.endsAt)}`,
+    );
+  });
+
+  it.each([null, undefined])('uses the effective end in every output for legacy endsAt=%s', (endsAt) => {
+    const mapped = toPageSource({
+      publicSiteEnabled: true,
+      status: 'published',
+      startsAt: ts('2026-10-25T00:30:00Z'),
+      endsAt,
+    });
+    const state = decidePublicPageState(mapped, 'legacy', NOW, null);
+    expect(state.kind).toBe('live');
+    if (state.kind !== 'live') throw new Error('expected live');
+    expect(state.model.endsAt.toISOString()).toBe('2026-10-25T22:59:59.999Z');
+    const html = renderLiveEventPage(state.model, { mapImageUrl: null });
+    expect(html).toContain('02:30 (UTC+2)–23:59 (UTC+1)');
+    expect(html).toContain('"endDate":"2026-10-25T22:59:59.999Z"');
+    expect(buildEventIcs(state.model, NOW)).toContain('DTEND:20261025T225959Z');
   });
 
   it('renders distinct ended / cancelled / not-found messages, all noindexed', () => {

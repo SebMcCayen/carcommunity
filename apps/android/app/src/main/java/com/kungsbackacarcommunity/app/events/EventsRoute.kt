@@ -411,6 +411,7 @@ fun EventsRoute(
                     // fallback only guards a malformed teaser, and the user re-picks
                     // a real time before submit (validation requires it).
                     startsAtMillis = currentEvent.startsAtMillis ?: System.currentTimeMillis(),
+                    endsAtMillis = currentEvent.endsAtMillis,
                     description = detail?.description,
                     address = detail?.address,
                     latitude = currentEvent.latitude,

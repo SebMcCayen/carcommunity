@@ -17,6 +17,8 @@ const TOKEN = 'test-token';
 const EVENTS = [
   {
     title: 'Träff',
+    startsAt: '2026-09-01T17:00:00.000Z',
+    endsAt: '2026-09-01T21:59:59.999Z',
     date: '2026-09-01',
     time: '19:00',
     place: 'Kungsbacka station',

@@ -389,6 +389,13 @@
     <string name="events_mapPopupViewDetails">View details</string>
     <string name="events_createNoDate">No start time chosen yet.</string>
     <string name="events_createPickStart">Pick start date and time</string>
+    <string name="events_createPickEnd">Choose end date and time (optional)</string>
+    <string name="events_createNoEnd">No end time selected.</string>
+    <string name="events_createEndHint">Without an end time, the event ends at the end of its start date in Swedish time.</string>
+    <string name="events_createClearEnd">Remove end time</string>
+    <string name="events_createPickEndTime">Choose an end time</string>
+    <string name="events_createEndAfterStart">The end time must be after the start time.</string>
+    <string name="events_createEndTooLate">The event can last no more than 72 hours.</string>
     <string name="events_createPickTime">Choose a start time</string>
     <string name="events_createSubmit">Create event</string>
     <string name="events_createSaving">Creating…</string>

@@ -58,6 +58,8 @@ const val EVENT_EDITOR_TITLE_TAG = "event_editor_title"
 const val EVENT_EDITOR_DESCRIPTION_TAG = "event_editor_description"
 const val EVENT_EDITOR_ADDRESS_TAG = "event_editor_address"
 const val EVENT_EDITOR_START_TAG = "event_editor_start"
+const val EVENT_EDITOR_END_TAG = "event_editor_end"
+const val EVENT_EDITOR_CLEAR_END_TAG = "event_editor_clear_end"
 const val EVENT_EDITOR_SUBMIT_TAG = "event_editor_submit"
 
 /**
@@ -107,11 +109,13 @@ fun CreateEventScreen(
     // Create-only: hidden and never submitted in edit mode.
     var publicSiteEnabled by rememberSaveable { mutableStateOf(initialInput?.publicSiteEnabled ?: false) }
     var startsAtMillis by rememberSaveable { mutableStateOf(initialInput?.startsAtMillis) }
+    var endsAtMillis by rememberSaveable { mutableStateOf(initialInput?.endsAtMillis) }
     // Map-pin coordinates captured by the location picker (both set or both null).
     var latitude by rememberSaveable { mutableStateOf(initialInput?.latitude) }
     var longitude by rememberSaveable { mutableStateOf(initialInput?.longitude) }
     var showLocationPicker by rememberSaveable { mutableStateOf(false) }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
+    var pickingEnd by rememberSaveable { mutableStateOf(false) }
     var showTimePicker by rememberSaveable { mutableStateOf(false) }
     // Date chosen in the date step, held until the time step completes it.
     var pendingDateMillis by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -273,7 +277,7 @@ fun CreateEventScreen(
 
         // The same two-step date/time picker, grouped into one readable row.
         OutlinedButton(
-            onClick = { showDatePicker = true },
+            onClick = { pickingEnd = false; showDatePicker = true },
             enabled = !saving,
             shape = MaterialTheme.shapes.medium,
             modifier = Modifier.fillMaxWidth().testTag(EVENT_EDITOR_START_TAG),
@@ -296,6 +300,40 @@ fun CreateEventScreen(
                 }
             }
         }
+
+        OutlinedButton(
+            onClick = { pickingEnd = true; showDatePicker = true },
+            enabled = !saving && startsAt != null,
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier.fillMaxWidth().testTag(EVENT_EDITOR_END_TAG),
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.CalendarMonth, contentDescription = null)
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(stringResource(R.string.events_createPickEnd), color = MaterialTheme.colorScheme.onSurface)
+                    Text(
+                        endsAtMillis?.let {
+                            DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(it))
+                        } ?: stringResource(R.string.events_createNoEnd),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+        }
+        if (endsAtMillis != null) {
+            TextButton(
+                onClick = { endsAtMillis = null; showValidation = false },
+                enabled = !saving,
+                modifier = Modifier.testTag(EVENT_EDITOR_CLEAR_END_TAG),
+            ) { Text(stringResource(R.string.events_createClearEnd)) }
+        }
+        Text(stringResource(R.string.events_createEndHint),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         // Sets the expectation the backend actually honours: published on
         // submit, moderated afterwards. Create-only — an edit is to an event that
@@ -357,7 +395,13 @@ fun CreateEventScreen(
 
         if (showValidation) {
             Text(
-                text = stringResource(R.string.events_createValidation),
+                text = stringResource(
+                    when (startsAt?.let { EventEditorTime.endError(it, endsAtMillis) }) {
+                        EventEndTimeError.NOT_AFTER_START -> R.string.events_createEndAfterStart
+                        EventEndTimeError.TOO_LONG -> R.string.events_createEndTooLate
+                        null -> R.string.events_createValidation
+                    },
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
             )
@@ -383,6 +427,7 @@ fun CreateEventScreen(
                         CreateEventInput(
                             title = title,
                             startsAtMillis = it,
+                            endsAtMillis = endsAtMillis,
                             description = description.ifBlank { null },
                             address = address.ifBlank { null },
                             latitude = latitude,
@@ -418,8 +463,8 @@ fun CreateEventScreen(
     }
 
     if (showDatePicker) {
-        StartDatePicker(
-            startsAtMillis = startsAtMillis,
+        EventDatePicker(
+            selectedAtMillis = if (pickingEnd) endsAtMillis ?: startsAtMillis else startsAtMillis,
             onDismiss = { showDatePicker = false },
             onDatePicked = { dateMillis ->
                 pendingDateMillis = dateMillis
@@ -430,13 +475,16 @@ fun CreateEventScreen(
     }
 
     if (showTimePicker) {
-        StartTimePicker(
-            startsAtMillis = startsAtMillis,
+        EventTimePicker(
+            selectedAtMillis = if (pickingEnd) endsAtMillis ?: startsAtMillis else startsAtMillis,
+            titleRes = if (pickingEnd) R.string.events_createPickEndTime else R.string.events_createPickTime,
             onDismiss = { showTimePicker = false },
             onTimePicked = { hour, minute ->
                 val date = pendingDateMillis
                 if (date != null) {
-                    startsAtMillis = EventEditorTime.combine(date, hour, minute, ZoneId.systemDefault())
+                    val value = EventEditorTime.combine(date, hour, minute, ZoneId.systemDefault())
+                    if (pickingEnd) endsAtMillis = value else startsAtMillis = value
+                    showValidation = false
                 }
                 showTimePicker = false
             },
@@ -446,13 +494,13 @@ fun CreateEventScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun StartDatePicker(
-    startsAtMillis: Long?,
+private fun EventDatePicker(
+    selectedAtMillis: Long?,
     onDismiss: () -> Unit,
     onDatePicked: (Long) -> Unit,
 ) {
     val state = rememberDatePickerState(
-        initialSelectedDateMillis = startsAtMillis?.let { EventEditorTime.pickerDate(it, ZoneId.systemDefault()) },
+        initialSelectedDateMillis = selectedAtMillis?.let { EventEditorTime.pickerDate(it, ZoneId.systemDefault()) },
     )
     DatePickerDialog(
         onDismissRequest = onDismiss,
@@ -476,12 +524,13 @@ private fun StartDatePicker(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun StartTimePicker(
-    startsAtMillis: Long?,
+private fun EventTimePicker(
+    selectedAtMillis: Long?,
+    @androidx.annotation.StringRes titleRes: Int,
     onDismiss: () -> Unit,
     onTimePicked: (Int, Int) -> Unit,
 ) {
-    val start = startsAtMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()) }
+    val start = selectedAtMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()) }
     val state = rememberTimePickerState(initialHour = start?.hour ?: 0, initialMinute = start?.minute ?: 0, is24Hour = true)
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -497,7 +546,7 @@ private fun StartTimePicker(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(text = stringResource(R.string.events_createPickTime))
+                Text(text = stringResource(titleRes))
                 Row { TimePicker(state = state) }
             }
         },

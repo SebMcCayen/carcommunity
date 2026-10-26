@@ -13,12 +13,14 @@
  *   operator trace; null while disabled).
  *
  * The homepage stores NO MORE THAN NEEDED (its data/app-events.json holds only
- * UPCOMING enabled events with minimal public fields — details live in the
- * app/public page):
+ * upcoming/in-progress enabled events with minimal public fields — details
+ * live in the app/public page):
  * - field names deliberately match the hand-edited data/events.json the
  *   homepage already renders (title/date/time/place/desc/url), so the site
  *   merges both files with one code path;
  * - date/time are Europe/Stockholm wall-clock (the site's audience);
+ * - startsAt/endsAt are canonical UTC ISO instants, including the effective
+ *   Stockholm end-of-day fallback for legacy events without an explicit end;
  * - `place` is the event's public location name only (locationName, falling
  *   back to the coarse approximateArea) — NEVER the member-gated street
  *   address;
@@ -32,7 +34,7 @@
  */
 
 import { z } from 'zod';
-import type { EventStatus, GuardResult } from './events-core';
+import { effectiveEndInstant, type EventStatus, type GuardResult } from './events-core';
 
 // ---------------------------------------------------------------------------
 // The public event page (served on the dedicated public hosting site)
@@ -186,6 +188,8 @@ export interface PublicSiteEventSource {
   status: EventStatus;
   title: string;
   startsAt: Date;
+  /** Legacy documents may have no explicit end; use the shared end-of-day default. */
+  endsAt?: Date | null;
   /** Public place name from the teaser doc (never the street address). */
   locationName: string | null;
   /** Coarse area fallback when no place name is set (also public teaser data). */
@@ -203,6 +207,10 @@ export interface PublicSiteEventSource {
 /** One entry of data/app-events.json — mirrors the hand-edited events.json shape. */
 export interface HomepageEvent {
   title: string;
+  /** Canonical UTC ISO start instant. */
+  startsAt: string;
+  /** Canonical UTC ISO effective end instant (never absent). */
+  endsAt: string;
   /** Europe/Stockholm calendar date, YYYY-MM-DD. */
   date: string;
   /** Europe/Stockholm wall-clock time, HH:MM. */
@@ -216,22 +224,27 @@ export interface HomepageEvent {
 }
 
 /**
- * The UPCOMING publicly-enabled events, mapped and sorted for the homepage:
- * `published` status, a start strictly in the future at `now`, ascending by
- * start. Past events simply fall out of the generated file — the homepage
- * must never carry more than needed.
+ * Upcoming and in-progress publicly-enabled events, sorted by start:
+ * `published` status and effective end strictly after `now`. At the end
+ * boundary the event falls out, without the public detail page's grace.
  */
 export function selectHomepageEvents(
   events: PublicSiteEventSource[],
   now: Date,
 ): HomepageEvent[] {
   return events
-    .filter((event) => event.status === 'published' && event.startsAt.getTime() > now.getTime())
+    .filter(
+      (event) =>
+        event.status === 'published' &&
+        effectiveEndInstant(event.startsAt, event.endsAt).getTime() > now.getTime(),
+    )
     .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())
     .map((event) => {
       const { date, time } = stockholmDateTimeParts(event.startsAt);
       return {
         title: event.title,
+        startsAt: event.startsAt.toISOString(),
+        endsAt: effectiveEndInstant(event.startsAt, event.endsAt).toISOString(),
         date,
         time,
         // Trimmed-non-empty preference on BOTH fallback chains: '' and '   '

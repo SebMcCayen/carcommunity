@@ -46,6 +46,7 @@ class EventManageTest {
             CreateEventInput(
                 title = "  Cars & Coffee  ",
                 startsAtMillis = 1_800_000_000_000L,
+                endsAtMillis = 1_800_003_600_000L,
                 description = " Bring your car ",
                 address = " Storgatan 1 ",
                 latitude = 57.4874,
@@ -55,6 +56,7 @@ class EventManageTest {
         assertEquals("evt-1", payload["eventId"])
         assertEquals("Cars & Coffee", payload["title"])
         assertEquals(Events.toIsoUtc(1_800_000_000_000L), payload["startsAt"])
+        assertEquals("2027-01-15T09:00:00Z", payload["endsAt"])
         assertEquals("Bring your car", payload["description"])
         assertEquals("Storgatan 1", payload["address"])
         assertEquals(57.4874, payload["latitude"])
@@ -67,6 +69,7 @@ class EventManageTest {
             CreateEventInput(
                 title = "Title",
                 startsAtMillis = 1_800_000_000_000L,
+                endsAtMillis = null,
                 description = "   ",
                 address = null,
                 latitude = null,
@@ -74,6 +77,8 @@ class EventManageTest {
             )
         val payload = Events.updatePayload("evt-2", input)
         // Keys present but null — a partial update that CLEARS them.
+        assertTrue(payload.containsKey("endsAt"))
+        assertNull(payload["endsAt"])
         assertTrue(payload.containsKey("description"))
         assertNull(payload["description"])
         assertTrue(payload.containsKey("address"))
@@ -87,12 +92,18 @@ class EventManageTest {
         val payload =
             Events.updatePayload(
                 "evt-3",
-                CreateEventInput(title = "T", startsAtMillis = 1_800_000_000_000L, publicSiteEnabled = true),
+                CreateEventInput(
+                    title = "T",
+                    startsAtMillis = 1_800_000_000_000L,
+                    summary = "Unmanaged summary",
+                    approximateArea = "Unmanaged area",
+                    locationName = "Unmanaged name",
+                    publicSiteEnabled = true,
+                ),
             )
-        // publicSiteEnabled is forbidden by the update schema; endsAt/summary/
+        // publicSiteEnabled is forbidden by the update schema; summary/
         // approximateArea/locationName/isOfficial are left untouched server-side.
         assertFalse(payload.containsKey("publicSiteEnabled"))
-        assertFalse(payload.containsKey("endsAt"))
         assertFalse(payload.containsKey("summary"))
         assertFalse(payload.containsKey("approximateArea"))
         assertFalse(payload.containsKey("locationName"))
