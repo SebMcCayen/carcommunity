@@ -325,8 +325,9 @@ surfaces and borders rather than copying image assets, portraits or sample data.
 
 - Chat keeps every existing channel/source and coordinator. The source selector
   shares one outlined capsule; reply surfaces and message typography use semantic
-  roles. The actual composer retains its draft/send policy and stacks at
-  accessibility sizes instead of squeezing the field beside Send.
+  roles. The composer retains its full draft/send policy with a bounded native
+  multiline editor viewport. At accessibility sizes Send uses a labelled icon;
+  extra lines scroll inside the field so the keyboard does not push Send away.
 - Events use public-teaser calendar/place cards in the list and detail. No private
   address/description is moved outside its existing gate. RSVP remains server-driven;
   choices wrap/stack, tallies remain neutral, and recovery copy can scroll.

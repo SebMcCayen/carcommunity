@@ -11,7 +11,6 @@ import SwiftUI
 /// renders the unavailable placeholder rather than crashing, the same seam every
 /// Firebase-backed surface honors.
 struct ChannelChatScreen: View {
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.chatReadingActive) private var readingActive
     let coordinator: ChannelChatCoordinator?
     /// The channel's title (`chatHub.tabCommunity` for community, the convoy's
@@ -163,42 +162,14 @@ struct ChannelChatScreen: View {
     // MARK: - Composer
 
     private func composer(_ coordinator: ChannelChatCoordinator) -> some View {
-        let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(spacing: KccSpacing.s2))
-            : AnyLayout(HStackLayout(spacing: KccSpacing.s2))
-        return layout {
-            TextField("chat.inputPlaceholder", text: Binding(
-                get: { coordinator.draft }, set: { coordinator.draft = $0 }
-            ), axis: .vertical)
-                .textFieldStyle(.plain)
-                .lineLimit(1...4)
-                .padding(.horizontal, KccSpacing.s3)
-                .padding(.vertical, KccSpacing.s2)
-                .font(.body)
-                .frame(minHeight: 48)
-                .background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.lg))
-                .overlay { RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.border) }
-                .accessibilityIdentifier("chat.composer.input")
-            Button {
-                // Only clear the draft when something was actually sent — a
-                // signed-out caller (no currentUserId) has send(_:) ignored and
-                // must not silently lose their draft.
-                if coordinator.send(coordinator.draft) != nil {
-                    coordinator.draft = ""
-                }
-            } label: {
-                Text("chat.sendButton")
-                    .font(.body.weight(.semibold))
-                    .frame(minHeight: 48)
-                    .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(KccTheme.driver)
-            .foregroundStyle(KccTheme.onDriver)
-            .accessibilityIdentifier("chat.composer.send")
-            .disabled(!ChannelThread.isSendable(coordinator.draft) || coordinator.currentUserId == nil)
+        ChannelComposer(
+            draft: Binding(get: { coordinator.draft }, set: { coordinator.draft = $0 }),
+            canSend: ChannelThread.isSendable(coordinator.draft) && coordinator.currentUserId != nil
+        ) {
+            // Keep the original guarded send/draft policy; UI never clears a
+            // signed-out or rejected message merely because Send was tapped.
+            if coordinator.send(coordinator.draft) != nil { coordinator.draft = "" }
         }
-        .padding(KccSpacing.s3)
     }
 
     // MARK: - Placeholder states
@@ -216,6 +187,46 @@ struct ChannelChatScreen: View {
 
     private var placeholder: some View {
         ChatUnavailableState()
+    }
+}
+
+/// A bounded editor viewport keeps Send reachable with the keyboard on a
+/// narrow phone. The complete draft stays in the coordinator; extra lines scroll
+/// inside the native vertical field instead of displacing the action offscreen.
+struct ChannelComposer: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Binding var draft: String
+    let canSend: Bool
+    let onSend: () -> Void
+
+    var body: some View {
+        HStack(spacing: KccSpacing.s2) {
+            TextField("chat.inputPlaceholder", text: $draft, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.body)
+                .lineLimit(1...(dynamicTypeSize.isAccessibilitySize ? 1 : 2))
+                .padding(.horizontal, KccSpacing.s3)
+                .padding(.vertical, KccSpacing.s2)
+                .frame(minHeight: 48)
+                .background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.lg))
+                .overlay { RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.border) }
+                .accessibilityIdentifier("chat.composer.input")
+            Button(action: onSend) {
+                if dynamicTypeSize.isAccessibilitySize {
+                    Image(systemName: "paperplane.fill").font(.title3)
+                        .frame(width: 48, height: 48)
+                } else {
+                    Text("chat.sendButton").font(.body.weight(.semibold)).frame(minHeight: 48)
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(KccTheme.driver)
+            .foregroundStyle(KccTheme.onDriver)
+            .accessibilityLabel(Text("chat.sendButton"))
+            .accessibilityIdentifier("chat.composer.send")
+            .disabled(!canSend)
+        }
+        .padding(KccSpacing.s3)
     }
 }
 

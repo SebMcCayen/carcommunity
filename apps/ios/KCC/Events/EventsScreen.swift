@@ -217,7 +217,7 @@ struct EventScheduleContent: View {
             VStack(alignment: .leading, spacing: KccSpacing.s2) {
                 if let date = event.startsAt {
                     Label {
-                        Text(date, format: detailed ? .dateTime.weekday().day().month(.wide).year().hour().minute() : .dateTime.day().month(.abbreviated).hour().minute())
+                        Text(date, format: detailed ? .dateTime.weekday(.wide).day().month(.wide).year().hour().minute() : .dateTime.day().month(.abbreviated).year().hour().minute())
                     } icon: { Image(systemName: "calendar").accessibilityHidden(true) }
                 }
                 if let place = placeName {

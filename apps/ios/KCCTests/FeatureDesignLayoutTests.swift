@@ -43,6 +43,18 @@ final class FeatureDesignLayoutTests: XCTestCase {
         assertWrapping(ProfilePointsSection(balance: 120, recentEarnings: [], onOpenLedger: {}))
     }
 
+    func testComposerKeepsSendInCompactRowAtLargestTextSize() {
+        let composer = ChannelComposer(
+            draft: .constant("En längre text med flera rader\nsom ska behållas i utkastet."),
+            canSend: true, onSend: {}
+        )
+        let result = measure(composer, width: 320, size: .accessibility5, language: "sv", style: .dark)
+        XCTAssertLessThanOrEqual(result.width, 321)
+        XCTAssertGreaterThan(result.height, 48)
+        XCTAssertLessThanOrEqual(result.height, 112,
+            "Composer must not consume a second full row above the narrow-phone keyboard")
+    }
+
     private func assertWrapping<Content: View>(
         _ content: Content, file: StaticString = #filePath, line: UInt = #line
     ) {
