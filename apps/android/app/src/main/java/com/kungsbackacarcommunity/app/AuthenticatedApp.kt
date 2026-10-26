@@ -6922,8 +6922,8 @@ fun AuthenticatedApp(
                                     // a session runs: elapsed time + distance driven.
                                     liveSessionBar = liveSessionBarSlot,
                                     onManageLiveSession = { mapSheetHost?.dismissAll(); liveManageOpen = true },
-                                    // Convoy status bar, now on its OWN full-width row
-                                    // directly BELOW the search strip. Every control
+                                    // Convoy status bar in the map's bottom dock,
+                                    // directly ABOVE the persistent footer. Every control
                                     // (member count, focus, invite, leave/End) is
                                     // inline — no expand step. The member count opens
                                     // a member-list popup; the shared-destination row

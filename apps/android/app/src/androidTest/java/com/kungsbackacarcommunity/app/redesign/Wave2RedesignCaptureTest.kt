@@ -153,7 +153,7 @@ class Wave2RedesignCaptureTest {
                                 }
                             }
                         }
-                        if (selected.startsWith("map-") && selected !in MAP_SHELL_CATALOGUE_CASES) {
+                        if (selected.startsWith("map-") && selected !in MAP_SHELL_CATALOGUE_CASES && selected != "map-convoy") {
                             Surface(Modifier.align(Alignment.TopCenter)) {
                                 Text(
                                     "DESIGNPREVIEW · LOKALA TESTDATA",

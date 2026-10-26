@@ -149,6 +149,7 @@ fun MapShellCataloguePreview(
                         convoyBar = if (screen == "map-convoy") {
                             {
                                 ConvoyStatusBar(
+                                    showDestination = false, // Same slot options as map-home production.
                                     state = ConvoyBarState(
                                         convoyId = "local-catalogue-convoy",
                                         members = (1..4).map { ConvoyBarMember("local-$it", "Testförare $it", null) },
