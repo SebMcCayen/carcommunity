@@ -94,6 +94,24 @@ The map instance is composed once. A readable full-screen Chat or detail uses
 live/convoy session. Closing it resumes the same map. Transparent panels keep
 the visible map active. Tab changes must not start or stop sharing.
 
+## Shared Android page chrome and actions
+
+Use `AeroPage` / `AeroLazyPage` and the existing native Back dispatcher. The
+authenticated shell may provide `LocalAeroOwnerHeader` with the already-resolved
+owner avatar and effective Supporter visibility. It is a profile shortcut, not a
+new image resolver or entitlement. Keep its 48dp hit target and native fallback.
+Do not show a duplicate shortcut on the owner's Profile. Editors, crop flows and
+modal pickers that own save/cancel/discard must set `ownerShortcutEnabled = false`
+so a decorative header never adds an exit that loses their draft or bypasses a
+confirmation. Lazy screens retain their list position and pinned Back behavior.
+
+Use `KccButton` and `KccOutlinedButton` for ordinary filled/outlined actions:
+shared medium corner radius, at least 48dp height, existing Material disabled,
+focus, ripple and semantics behavior. Explicit shapes/colours for specialist
+controls remain supported. Text/icon actions retain their own native roles;
+compact chat navigation must not grow into full-width primary actions. Event
+detail secondary actions use equal-width columns with wrapping native labels.
+
 ## Map composition
 
 At the 390 x 844 reference size, aim to leave two thirds of the map visible

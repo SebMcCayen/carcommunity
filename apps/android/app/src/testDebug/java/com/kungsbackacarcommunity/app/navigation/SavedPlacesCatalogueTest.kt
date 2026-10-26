@@ -8,9 +8,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
-import androidx.compose.ui.test.hasAnyAncestor
-import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -80,43 +77,10 @@ class SavedPlacesCatalogueTest {
         compose.runOnIdle { assertEquals(1, adds); assertEquals(listOf(favourite), store.saved()) }
     }
 
-    @Test fun management_retainsRenameCancelConfirmShareRepointAndDeleteConfirmation() {
-        val store = InMemorySavedPlacesStore(listOf(home, work, favourite))
-        val shared = mutableListOf<Pair<String, LatLng>>()
-        val changed = mutableListOf<SavedPlace>()
-        compose.setContent {
-            Frame { SavedPlacesScreen(store, {}, { changed += it }, { name, point -> shared += name to point }) }
-        }
-        openMenu(favourite)
-        compose.onNodeWithText(str(R.string.savedPlaces_rename)).performClick()
-        compose.onNodeWithText(str(R.string.savedPlaces_renameLabel)).performTextReplacement("Cancelled")
-        compose.onNodeWithText(str(R.string.savedPlaces_cancel)).performClick()
-        compose.runOnIdle { assertEquals(favourite, store.saved().last()) }
-        openMenu(favourite)
-        compose.onNodeWithText(str(R.string.savedPlaces_rename)).performClick()
-        compose.onNodeWithText(str(R.string.savedPlaces_renameLabel)).performTextReplacement("Renamed")
-        compose.onNodeWithText(str(R.string.savedPlaces_renameSave)).performClick()
-        val renamed = favourite.copy(label = "Renamed")
-        compose.runOnIdle { assertEquals(listOf(home, work, renamed), store.saved()) }
-        openMenu(renamed)
-        compose.onNodeWithText(str(R.string.savedPlaces_share)).performClick()
-        openMenu(home)
-        compose.onNodeWithText(str(R.string.savedPlaces_rename)).assertDoesNotExist()
-        compose.onNodeWithText(str(R.string.savedPlaces_changeAddress)).performClick()
-        openMenu(work)
-        compose.onNodeWithText(str(R.string.savedPlaces_delete)).performClick()
-        compose.runOnIdle { assertEquals(3, store.saved().size) }
-        compose.onNode(hasText(str(R.string.savedPlaces_cancel)) and hasAnyAncestor(isDialog())).performClick()
-        compose.runOnIdle { assertEquals(3, store.saved().size) }
-        openMenu(work)
-        compose.onNodeWithText(str(R.string.savedPlaces_delete)).performClick()
-        compose.onNode(hasText(str(R.string.savedPlaces_deleteConfirm)) and hasAnyAncestor(isDialog())).performClick()
-        compose.runOnIdle {
-            assertEquals(listOf(home, renamed), store.saved())
-            assertEquals(listOf("Renamed" to favourite.place.point), shared)
-            assertEquals(listOf(home), changed)
-        }
-    }
+    // Native menu -> AlertDialog window transitions, rename/cancel/share/repoint
+    // and confirmed deletion run in SavedPlacesManagementInteractionTest on an
+    // emulator. Robolectric loops indefinitely idling that window transition;
+    // the native test preserves all assertions instead of disabling the flow.
 
     @Test fun editor_largeText_kindChangesRetainBoundedName_andOnlyExplicitSaveCallsBack() {
         var result: Pair<SavedPlaceKind, String>? = null
@@ -261,16 +225,6 @@ class SavedPlacesCatalogueTest {
             compose.onAllNodes(androidx.compose.ui.test.hasTestTag(NAV_SAVE_TEST_TAG))
                 .fetchSemanticsNodes().isNotEmpty()
         }
-    }
-
-    private fun openMenu(place: SavedPlace) {
-        compose.onNodeWithTag(savedPlaceRowTestTag(place.id)).performScrollTo()
-        val label = when (place.kind) {
-            SavedPlaceKind.Home -> str(R.string.addressSearch_savedHome)
-            SavedPlaceKind.Work -> str(R.string.addressSearch_savedWork)
-            SavedPlaceKind.Favourite -> place.label
-        }
-        compose.onNodeWithContentDescription(str(R.string.savedPlaces_moreActions, label)).performClick()
     }
 
     @Composable private fun Frame(scale: Float = 1f, content: @Composable () -> Unit) {
