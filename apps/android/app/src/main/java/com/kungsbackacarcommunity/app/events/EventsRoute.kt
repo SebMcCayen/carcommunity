@@ -321,6 +321,7 @@ fun EventsRoute(
             repository = chatRepository,
             coordinator = chatCoordinator,
             eventId = selected,
+            eventTitle = event?.title,
             currentUid = uid,
             passesMemberGate = passesMemberGate,
             eventStatus = event?.status,
