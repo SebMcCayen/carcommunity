@@ -227,28 +227,42 @@ struct MessageRow: View {
     let isOwn: Bool
 
     var body: some View {
-        VStack(alignment: isOwn ? .trailing : .leading, spacing: KccSpacing.s1) {
+        HStack(alignment: .top, spacing: KccSpacing.s3) {
             if !isOwn {
-                Text(message.senderDisplayName ?? String(localized: "chat.unknownAuthor"))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(KccTheme.driver)
+                // No per-message Storage lookup: use the native fallback until
+                // an authorized, resolved avatar is supplied by the data layer.
+                Image(systemName: "person.fill")
+                    .foregroundStyle(KccTheme.secondary)
+                    .frame(width: 32, height: 32)
+                    .background(KccTheme.subtle, in: Circle())
+                    .accessibilityHidden(true)
             }
-            if let reply = message.replyTo {
-                Text(reply.textPreview)
-                    .font(.system(size: KccTypeScale.caption))
-                    .foregroundStyle(.secondary)
-                    .padding(KccSpacing.s2)
-                    .background(KccTheme.surface)
-                    .clipShape(RoundedRectangle(cornerRadius: KccRadius.sm))
+            VStack(alignment: isOwn ? .trailing : .leading, spacing: KccSpacing.s1) {
+                if !isOwn {
+                    Text(message.senderDisplayName ?? String(localized: "chat.unknownAuthor"))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(KccTheme.driver)
+                }
+                if let reply = message.replyTo {
+                    Text(reply.textPreview)
+                        .font(.system(size: KccTypeScale.caption))
+                        .foregroundStyle(.secondary)
+                        .padding(KccSpacing.s2)
+                        .background(KccTheme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: KccRadius.sm))
+                }
+                Text(message.text)
+                    .font(.body)
+                    .padding(.horizontal, KccSpacing.s3)
+                    .padding(.vertical, KccSpacing.s2)
+                    .background(isOwn ? KccTheme.driver : KccTheme.subtle)
+                    .foregroundStyle(isOwn ? KccTheme.onDriver : KccTheme.text)
+                    .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
+                if let timestamp = message.createdAt {
+                    Text(timestamp, style: .time).font(.caption).foregroundStyle(KccTheme.secondary)
+                }
+                statusLine
             }
-            Text(message.text)
-                .font(.body)
-                .padding(.horizontal, KccSpacing.s3)
-                .padding(.vertical, KccSpacing.s2)
-                .background(isOwn ? KccTheme.driver : KccTheme.subtle)
-                .foregroundStyle(isOwn ? KccTheme.onDriver : KccTheme.text)
-                .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
-            statusLine
         }
         .frame(maxWidth: .infinity, alignment: isOwn ? .trailing : .leading)
     }

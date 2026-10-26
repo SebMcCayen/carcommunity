@@ -32,7 +32,8 @@ final class FeatureDesignLayoutTests: XCTestCase {
         let message = ChannelMessage(
             id: "layout-message", senderUid: "synthetic-sender",
             text: "Var samlas vi inför kvällens runda? Vi tar en lugn tur tillsammans.",
-            senderDisplayName: "Testmedlem med ett längre visningsnamn"
+            senderDisplayName: "Testmedlem med ett längre visningsnamn",
+            createdAt: Date(timeIntervalSince1970: 1_800_000_000)
         )
         assertWrapping(MessageRow(message: message, isOwn: false))
         assertWrapping(MessageRow(message: message, isOwn: true))
