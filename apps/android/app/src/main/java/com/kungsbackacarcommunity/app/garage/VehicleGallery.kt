@@ -14,6 +14,10 @@ package com.kungsbackacarcommunity.app.garage
  * shrinks (a remove-photo) underneath a remembered pager position.
  */
 object VehicleGallery {
+    /** Only an explicitly selected main car supplies a profile cover; never guess another car. */
+    fun mainCarCoverPath(vehicles: List<Vehicle>): String? =
+        vehicles.firstOrNull { it.isMainCar }?.let { photoPaths(it).firstOrNull() }
+
     /**
      * The vehicle's photo Storage paths, in display order (cover first), blanks
      * dropped. Uses [Vehicle.photoPaths] when present; for a legacy document

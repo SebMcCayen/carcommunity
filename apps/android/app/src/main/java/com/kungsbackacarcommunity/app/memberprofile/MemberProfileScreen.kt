@@ -64,6 +64,8 @@ import com.kungsbackacarcommunity.app.friends.messageRes
 import com.kungsbackacarcommunity.app.garage.Vehicle
 import com.kungsbackacarcommunity.app.garage.VehicleCard
 import com.kungsbackacarcommunity.app.garage.VehiclePhotoStyle
+import com.kungsbackacarcommunity.app.garage.VehicleGallery
+import com.kungsbackacarcommunity.app.profile.ProfileVehicleHero
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
 import com.kungsbackacarcommunity.app.moderation.MessageModeration
@@ -195,7 +197,7 @@ fun MemberProfileScreen(
 
             is MemberProfileState.Loaded -> {
                 val isFriend = friendState?.relationship == FriendRelationship.Friends
-                ProfileHeader(state.profile, state.pointsBalance)
+                ProfileHeader(state.profile, state.pointsBalance, VehicleGallery.mainCarCoverPath(state.vehicles))
                 if (friendState != null) {
                     FriendAction(
                         friendState = friendState,
@@ -482,15 +484,17 @@ private fun MemberActions(
 }
 
 @Composable
-private fun ProfileHeader(profile: MemberProfile, pointsBalance: Long?) {
+private fun ProfileHeader(profile: MemberProfile, pointsBalance: Long?, coverImagePath: String?) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
             horizontalAlignment = Alignment.Start,
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
-            com.kungsbackacarcommunity.app.profile.SupporterAvatarFrame(profile.supporterBadge.visible) {
-                Avatar(profile.avatarPath)
+            ProfileVehicleHero(coverImagePath) {
+                com.kungsbackacarcommunity.app.profile.SupporterAvatarFrame(profile.supporterBadge.visible) {
+                    Avatar(profile.avatarPath)
+                }
             }
             // Directly under the profile picture, as asked. Renders NOTHING
             // when this member has filled none in — no empty row, no
