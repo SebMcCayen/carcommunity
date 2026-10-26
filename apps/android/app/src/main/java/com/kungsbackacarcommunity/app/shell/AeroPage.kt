@@ -187,6 +187,8 @@ fun AeroPage(
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = aeroPageBackground()) {
         val scrollState = rememberScrollState()
+        val ownerHeader = LocalAeroOwnerHeader.current
+        val backAvailable = LocalAeroBackAvailable.current
         // Fixed chrome: the status-bar inset and the top breathing room live on
         // this outer Column, OUTSIDE the scroll viewport, so they stay pinned and
         // the title/content can never scroll up under the status bar. Any caller
@@ -207,15 +209,25 @@ fun AeroPage(
                     )
                     .padding(top = AeroPageTopSpacing),
         ) {
-            // Pinned Back affordance: rendered in the FIXED chrome (outside the
-            // scroll viewport below), so it stays visible while the page scrolls.
-            // Its gutter matches the content's [horizontalPadding] so the arrow
-            // aligns with the title. Only pushed sub-routes see it (== true).
-            if (LocalAeroBackAvailable.current) {
+            // Opted-in pages share one compact pinned row. Keep the legacy
+            // Back + scrolling title geometry exactly when no owner is supplied.
+            if (ownerHeader != null) {
+                AeroPageHeader(
+                    title = title,
+                    owner = ownerHeader,
+                    modifier = Modifier.padding(horizontal = horizontalPadding),
+                    onTitleClick = onTitleClick,
+                    back = if (backAvailable) {
+                        { AeroBackButton(horizontalGutter = 0.dp) }
+                    } else {
+                        null
+                    },
+                )
+            } else if (backAvailable) {
                 AeroBackButton(horizontalGutter = horizontalPadding)
             }
-            // Scrollable content: only the title + caller content (and the gutter /
-            // bottom padding around them) move when the user scrolls.
+            // Scrollable content, gutters and bottom padding. Without an owner
+            // provider the title retains its original place in this viewport.
             Column(
                 modifier =
                     Modifier
@@ -228,7 +240,9 @@ fun AeroPage(
                         ),
                 verticalArrangement = verticalArrangement,
             ) {
-                AeroPageTitle(title, onClick = onTitleClick)
+                if (ownerHeader == null) {
+                    AeroPageTitle(title, onClick = onTitleClick)
+                }
                 content()
             }
         }
@@ -294,6 +308,15 @@ fun AeroPageTitle(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
 ) {
+    val ownerHeader = LocalAeroOwnerHeader.current
+    if (ownerHeader != null) {
+        // Lazy pages own this title as their first list item. Keep it in that
+        // viewport (including saved list position and IME behavior), with one
+        // owner shortcut beside it. AeroLazyPage still pins its sole Back above
+        // the list; do not add another Back action inside the scrolling item.
+        AeroPageHeader(title, ownerHeader, modifier, onTitleClick = onClick)
+        return
+    }
     // No surrounding box: the title sits directly on the page background as a
     // clean page heading. It aligns to the page's own horizontal gutter (applied
     // by AeroPage / aeroLazyContentPadding), so no horizontal padding is added
