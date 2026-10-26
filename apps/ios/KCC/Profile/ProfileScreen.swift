@@ -85,7 +85,8 @@ struct ProfileScreen: View {
         VStack(spacing: 0) {
             HStack {
                 Button(action: onBack) {
-                    Label("profile.back", systemImage: "chevron.backward").frame(minHeight: 48)
+                    Label("profile.back", systemImage: "chevron.backward")
+                        .frame(minHeight: 48).contentShape(Rectangle())
                 }
                     .accessibilityIdentifier("profile.back")
                 Spacer()
@@ -101,6 +102,7 @@ struct ProfileScreen: View {
                         if editing {
                             PhotosPicker(selection: $pickedPhoto, matching: .images) {
                                 Text(editor.status == .uploading ? "profile.avatarUploading" : "profile.avatarChange")
+                                .frame(minHeight: 48).contentShape(Rectangle())
                             }
                             .disabled(editor.status == .uploading || editor.status == .saving)
                         }
@@ -161,7 +163,8 @@ struct ProfileScreen: View {
                             Image(systemName: "chevron.forward")
                                 .accessibilityHidden(true)
                         }
-                        .frame(minHeight: 44)
+                        .frame(minHeight: 48)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("profile.blockedUsers")
@@ -174,7 +177,8 @@ struct ProfileScreen: View {
                                 Image(systemName: "chevron.forward")
                                     .accessibilityHidden(true)
                             }
-                            .frame(minHeight: 44)
+                            .frame(minHeight: 48)
+                        .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("profile.whatsNew")
@@ -188,7 +192,8 @@ struct ProfileScreen: View {
                                 Image(systemName: "chevron.forward")
                                     .accessibilityHidden(true)
                             }
-                            .frame(minHeight: 44)
+                            .frame(minHeight: 48)
+                        .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("profile.accountDeletion")
