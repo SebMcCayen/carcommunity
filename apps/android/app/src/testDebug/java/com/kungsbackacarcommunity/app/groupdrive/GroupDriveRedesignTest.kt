@@ -72,4 +72,38 @@ class GroupDriveRedesignTest {
         }
         compose.onNodeWithText(str(R.string.groupDrive_joinButton)).performScrollTo().assertIsNotEnabled()
     }
+
+    @Test
+    fun existingParticipantCanLeaveAfterJoinEligibilityIsLost() {
+        var leaves = 0
+        compose.setContent {
+            KccTheme {
+                GroupDriveScreen(
+                    participants = List(30) { GroupDriveParticipant("test-$it", "Test participant $it", GroupDriveStatus.JOINED) },
+                    myStatus = GroupDriveStatus.JOINED, canJoin = false,
+                    actionStatus = GroupDriveActionStatus.Idle,
+                    onJoin = {}, onSetStatus = {}, onLeave = { leaves++ }, onBack = {},
+                )
+            }
+        }
+        // Participation controls precede the long roster; loss of RSVP eligibility
+        // must not trap an existing participant or imply starting location sharing.
+        compose.onNodeWithText(str(R.string.groupDrive_leaveButton)).performScrollTo().performClick()
+        assertEquals(1, leaves)
+        compose.onNodeWithText(str(R.string.groupDrive_joinButton)).assertDoesNotExist()
+    }
+
+    @Test
+    fun failedActionFeedbackRemainsVisibleBeforeLongRoster() {
+        compose.setContent {
+            KccTheme {
+                GroupDriveScreen(
+                    participants = List(30) { GroupDriveParticipant("test-$it", "Test participant $it", GroupDriveStatus.JOINED) },
+                    myStatus = null, canJoin = true, actionStatus = GroupDriveActionStatus.Failed,
+                    onJoin = {}, onSetStatus = {}, onLeave = {}, onBack = {},
+                )
+            }
+        }
+        compose.onNodeWithText(str(R.string.groupDrive_error)).assertIsDisplayed()
+    }
 }

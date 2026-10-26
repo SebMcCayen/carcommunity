@@ -334,6 +334,7 @@ fun EventsRoute(
 
     if (showGroupDrive && groupDriveRepository != null) {
         GroupDriveRoute(
+            event = event,
             repository = groupDriveRepository,
             coordinator = groupDriveCoordinator,
             eventId = selected,
@@ -609,6 +610,7 @@ fun EventsRoute(
         }
     if (showShare && friendsRepository != null && dmRepository != null && event != null) {
         EventShareSheet(
+            event = event,
             eventId = event.id,
             eventTitle = event.title,
             friendsRepository = friendsRepository,
