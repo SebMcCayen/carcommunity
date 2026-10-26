@@ -4,7 +4,40 @@ Updated 2026-10-26. **Implementation, automated checks, rendered previews and
 configured-device acceptance are separate statuses.** This is not release approval.
 The current task covers Android only; iOS feature work is owned on the Mac mini.
 
-## Pass-3 source audit — 2026-10-26
+## Integrated pass-3 checks — 2026-10-26
+
+Final Android/test source: `0e4959288f58c3094440e04d54c84f0832849e21`,
+Android subtree `96a4cd7f002277dab0f10589bfedcb249224df7b`.
+PR #1189 supplies map/Crown foundations; stacked PR #1190 supplies the screen
+work. These results supersede **execution pending** statements only for the
+specific checks below. The audit farther down remains a dated source snapshot.
+
+| Check | Executed result | Evidence / boundary |
+| --- | --- | --- |
+| Debug JVM / Robolectric | **3,705 tests; 0 failures, 0 errors; 1 existing skip.** | `:app:testDebugUnitTest`; includes actual shared header, saved-place filters/editor, compact chat, event, garage/cover, Crown marker transparency and cold-camera regression tests. The existing keyboard-down `ChatHubInsetsTest` case remains skipped. |
+| Debug packages | **PASS** | `:app:assembleDebug :app:assembleDebugAndroidTest`; config-less local QA, no Firebase/Play account. |
+| Native API-34 interaction | **8 tests PASS**, 46.893 s; final convoy retest **PASS**, 3.544 s | `DockedMapShellInteractionTest` (7), `SavedPlacesManagementInteractionTest` (1), source `9c8c5cd`; final production-slot convoy retest at `0e49592`. OS-injected physical footer taps while each map panel is open, narrow/large-text end-action reachability, live/convoy dock, layer controls, camera preference recreation and rename/cancel/save/share/repoint/confirmed delete. |
+| Earlier integrated shell baseline | **50 tests PASS**, 162.882 s, at `47576c0` | Six docking cases + saved-place native case + 43 `MapFirstShellTest` cases. This additionally exercises tab/back/search/map lifecycle; not relabelled as a final-head run. |
+| Generators | **PASS; no diff** | Android strings/tokens and iOS String Catalog regenerated from canonical contracts. This is not an iOS app run. |
+| Final local lint and packaging | **PASS**, combined build 3m35s | `:app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest`, config-less, final source above. |
+| Rendered capture | **100 local component-state captures + 2 final convoy variants** | See [the evidence report](android-redesign-pass3-evidence.md) and [selected images](evidence/2026-10-26/README.md). Configured map visual acceptance remains limited. |
+| Release/Nav/iOS CI | **Read current-head CI separately** | R8 and Navigation SDK have their own required CI jobs; iOS is separately owned. Do not substitute an older green check for a new head. |
+
+The native saved-place menu-to-AlertDialog test runs in `androidTest` rather than
+Robolectric: the latter's window-transition idling loop persisted with both
+graphics modes and the real activity viewport, while the same unchanged
+production flow passed on API 34. All original interaction assertions now run
+in the emulator test; the ten layout/editor/store regressions remain on the JVM.
+No timeout increase, ignored failing method or production workaround was added.
+
+Integrated refinements beyond the source audit include S07 filter chips,
+the S08 docked editor, real owner-avatar page chrome, shared native action
+radii/48dp targets, compact three-column event actions and editor/picker opt-outs
+that prevent the profile shortcut bypassing save/cancel/discard behavior.
+Own Profile uses the explicit main car from its visible-only shared garage
+subscription; actual network cost and photo loading remain configured gates.
+
+## Historical pass-3 source audit snapshot — 2026-10-26
 
 This documentation-only audit inspected the reference JPEG sheets and native
 source in the independent pass-3 worktrees. It ran **no builds, Gradle/JUnit,

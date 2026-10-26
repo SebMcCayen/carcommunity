@@ -12,6 +12,15 @@ work is owned separately on the Mac mini, not by this Android wave.
 
 ## Android source audit — 2026-10-26 (pass 3)
 
+**Integration follow-up:** PRs #1189 / #1190 now combine these lanes. Read
+[the integrated validation results](android-redesign-validation.md#integrated-pass-3-checks--2026-10-26)
+before treating this earlier audit's WIP/U labels as the latest execution
+status. The integrated source also adds S07 filters, an S08 docked editor and
+real owner-avatar shared headers; the owner-profile garage wiring is complete.
+The table below is preserved as a source-audit snapshot, including its honest
+contract gaps. A passing component fixture is not full-route/device acceptance
+of an entire S-number.
+
 This is a point-in-time **source review of all 84 catalogue states**, not a
 rendered comparison, combined-build result or visual pass. All reference sheets
 `catalogue-04.jpg` through `catalogue-24.jpg` were opened across this lane's
@@ -24,9 +33,12 @@ it is not an exhaustive correctness/security review. **Changed** means local
 source exists, **Retained** means an existing implementation was reviewed,
 **Partial** records a concrete reference difference, **WIP** is uncommitted sibling
 source, and **Guard only** is an existing fallback rather than a new page.
-**U** means runtime and visual acceptance are unverified for this pass. The 82
-Android-applicable rows are U; S81 is iOS-only and S82 is deliberately deferred.
-Historical previews/checks below do not change those statuses.
+**U** means runtime and visual acceptance were unverified at this audit snapshot.
+Its 82 Android-applicable rows were U; S81 is iOS-only and S82 is deferred.
+For subsequent executed checks and intentional differences, use the
+[integrated evidence report](android-redesign-pass3-evidence.md). These dated
+audit labels must not be read as failures or pending execution of already-passed
+tests. They also must not be upgraded wholesale from a component fixture.
 
 ### Audited source snapshots (not a combined app revision)
 
