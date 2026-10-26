@@ -374,12 +374,9 @@ final class ShellSmokeTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
         app.launchArguments += ["-KCCUITestTheme", theme]
-        // UIKit can retain a previous launch's preferred category. Reset it
-        // explicitly so the Swedish scenario does not inherit the large-text one.
-        app.launchArguments += [
-            "-UIPreferredContentSizeCategoryName",
-            largeText ? "UICTContentSizeCategoryAccessibilityXXXL" : "UICTContentSizeCategoryL"
-        ]
+        // Resolve the SwiftUI fixture before the first frame. UIKit's launch
+        // default can retain/transition the preceding test's category.
+        app.launchArguments += ["-KCCUITestTextSize", largeText ? "AccessibilityXXXL" : "Large"]
         app.launch()
         XCTAssertTrue(
             app.buttons["shell.menu"].waitForExistence(timeout: 15),
@@ -407,8 +404,20 @@ final class ShellSmokeTests: XCTestCase {
             predicate: NSPredicate(format: "selected == true"),
             object: tab
         )
-        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed,
-            "Selection did not settle for \(tab.identifier)")
+        let result = XCTWaiter.wait(for: [selected], timeout: 5)
+        if result != .completed { diagnosePrimaryControls(XCUIApplication()) }
+        XCTAssertEqual(result, .completed, "Selection did not settle for \(tab.identifier)")
+    }
+
+    private func diagnosePrimaryControls(_ app: XCUIApplication) {
+        // Fixed control IDs, geometry and booleans only: never user content.
+        for id in ["map", "chat", "create", "social", "garage"] {
+            let button = app.buttons["shell.tab.\(id)"]
+            if button.exists {
+                print("Shell diagnostic \(id): selected=\(button.isSelected) hittable=\(button.isHittable) frame=\(button.frame)")
+            } else { print("Shell diagnostic \(id): absent") }
+        }
+        print("Shell diagnostic alertCount=\(app.alerts.count)")
     }
 
     private func element(_ identifier: String, in app: XCUIApplication) -> XCUIElement {

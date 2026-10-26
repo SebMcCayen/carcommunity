@@ -213,6 +213,7 @@
 		8A1CC2875C7C6BEF0B395170 /* LiveLocationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9FA025EB2C5F3449909E116 /* LiveLocationModels.swift */; };
 		8B3D0292A205E690A9358586 /* CoreLocationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E4C03FA8C06EBF9AD50A5D8 /* CoreLocationProvider.swift */; };
 		8B75BDB3A7C902502757F3E3 /* FriendsCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56D26AF9194CCB2CAD756735 /* FriendsCoordinator.swift */; };
+		8C13BE7C61CA3DF641E20D10 /* UITestAppearanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0590402E58114B7EE11368AC /* UITestAppearanceTests.swift */; };
 		8D0B56DF9BD0EB28E457338C /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = C10372A5B1FF04CFD7520C67 /* FirebaseAuth */; };
 		8D0CDB06998CF7ABCBF2BCE1 /* GroupDriveScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0040FFA2D492771F82FC6863 /* GroupDriveScreen.swift */; };
 		8D473760D4F1F5805D73CB37 /* DriveRecordingJournalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5F6FBBFC2D0767100DF9FB7 /* DriveRecordingJournalTests.swift */; };
@@ -419,6 +420,7 @@
 		02D47DC5F4210E2337814CE4 /* SavedPlacesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedPlacesTests.swift; sourceTree = "<group>"; };
 		03086898EF9A4C5C8962F4EA /* GroupDriveCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupDriveCoordinator.swift; sourceTree = "<group>"; };
 		0323E8145E9403B744C5203A /* ConvoyManagementModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyManagementModelsTests.swift; sourceTree = "<group>"; };
+		0590402E58114B7EE11368AC /* UITestAppearanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestAppearanceTests.swift; sourceTree = "<group>"; };
 		067E2BB76B6CF76133B32D0E /* FirebaseBlockingRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseBlockingRepository.swift; sourceTree = "<group>"; };
 		069781D3E332EF902D6FD90D /* SavedDriveDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedDriveDetailScreen.swift; sourceTree = "<group>"; };
 		079FEECDA23952119AF7FC2C /* CommunityChatScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityChatScreen.swift; sourceTree = "<group>"; };
@@ -1539,6 +1541,7 @@
 				45D702136883AEC86ED3811C /* StartDrivingSelectionTests.swift */,
 				C310CC90173A772AE9997E6D /* StubLocationProviderTests.swift */,
 				6FA0D010B14EA9F2CFA15A70 /* SubscriptionCoordinatorTests.swift */,
+				0590402E58114B7EE11368AC /* UITestAppearanceTests.swift */,
 				3251B8E9A0D98C310036E4E0 /* UserProfileModelsTests.swift */,
 				9AA2251CD692FAE6F150A56A /* VehicleCatalogueTests.swift */,
 				E75EB6E2E820DCDA7E57E20C /* WelcomeFlowTests.swift */,
@@ -2119,6 +2122,7 @@
 				A8324B69156CB325CD42D7E3 /* StartDrivingSelectionTests.swift in Sources */,
 				D1E66A16F2B15F088788BAFF /* StubLocationProviderTests.swift in Sources */,
 				EC58DBB0CFEDAAF67C8A4D14 /* SubscriptionCoordinatorTests.swift in Sources */,
+				8C13BE7C61CA3DF641E20D10 /* UITestAppearanceTests.swift in Sources */,
 				EBAED2446DD015CA190171AC /* UserProfileModelsTests.swift in Sources */,
 				62938187623A99172E77D9D8 /* VehicleCatalogueTests.swift in Sources */,
 				F093F651023320CCBAA60281 /* WelcomeFlowTests.swift in Sources */,

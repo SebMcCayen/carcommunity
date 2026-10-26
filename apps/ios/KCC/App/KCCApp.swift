@@ -66,6 +66,7 @@ struct KCCApp: App {
                 diagnostics: diagnostics
             )
             .preferredColorScheme(configlessUITestColorScheme)
+            .modifier(ConfiglessUITestDynamicType())
         }
     }
 
@@ -101,6 +102,40 @@ struct KCCApp: App {
         return AppleSignInProvider()
     }
 }
+
+/// Match the existing config-less appearance fixture: UIKit launch-default
+/// caching must not animate a previous test's text size into the next launch.
+/// Release and Firebase-configured apps keep the user's real system text size.
+private struct ConfiglessUITestDynamicType: ViewModifier {
+    @ViewBuilder func body(content: Content) -> some View {
+        #if DEBUG
+        if let size = ConfiglessUITestSizing.override(
+            arguments: ProcessInfo.processInfo.arguments,
+            firebaseConfigured: FirebaseApp.app() != nil
+        ) {
+            content.dynamicTypeSize(size)
+        } else { content }
+        #else
+        content
+        #endif
+    }
+}
+
+#if DEBUG
+enum ConfiglessUITestSizing {
+    static func override(arguments: [String], firebaseConfigured: Bool) -> DynamicTypeSize? {
+        guard !firebaseConfigured,
+              let index = arguments.firstIndex(of: "-KCCUITestTextSize"),
+              arguments.indices.contains(index + 1)
+        else { return nil }
+        switch arguments[index + 1] {
+        case "Large": return .large
+        case "AccessibilityXXXL": return .accessibility5
+        default: return nil
+        }
+    }
+}
+#endif
 
 /// Stand-in provider for config-less builds: fails immediately with
 /// ``SignInUnavailableError`` instead of launching the Apple sheet against a
