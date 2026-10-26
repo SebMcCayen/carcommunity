@@ -54,7 +54,23 @@ struct MapLayersSheet: View {
                              icon: "cube", binding: threeDBinding, id: "shell.layers3d")
                     Divider()
                     appearanceControls
-                    DisclosureGroup(isExpanded: $focusExpanded) {
+                    Button { focusExpanded.toggle() } label: {
+                        HStack(spacing: KccSpacing.s2) {
+                            Text(focusExpanded ? LocalizedStringKey("shell.layersZoomCollapse") : LocalizedStringKey("shell.layersZoomExpand"))
+                                .font(.body)
+                            Spacer(minLength: KccSpacing.s2)
+                            Image(systemName: focusExpanded ? "chevron.up" : "chevron.down")
+                                .font(.caption.weight(.semibold))
+                                .accessibilityHidden(true)
+                        }
+                        .frame(minHeight: 48)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("shell.layersFocus")
+                    // Keep the slider outside the expandable button's AX subtree:
+                    // a container identifier must not replace the child's identity.
+                    if focusExpanded {
                         VStack(alignment: .leading, spacing: KccSpacing.s3) {
                             Slider(
                                 value: zoomBinding,
@@ -74,12 +90,7 @@ struct MapLayersSheet: View {
                                 .foregroundStyle(KccTheme.secondary)
                         }
                         .padding(.top, KccSpacing.s3)
-                    } label: {
-                        Text(focusExpanded ? LocalizedStringKey("shell.layersZoomCollapse") : LocalizedStringKey("shell.layersZoomExpand"))
-                            .font(.body)
-                            .frame(minHeight: 48)
                     }
-                    .accessibilityIdentifier("shell.layersFocus")
                 }
                 .padding(KccSpacing.s4)
             }
