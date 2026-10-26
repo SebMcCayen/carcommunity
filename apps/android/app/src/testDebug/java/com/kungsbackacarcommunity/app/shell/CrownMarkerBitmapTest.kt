@@ -25,7 +25,9 @@ class CrownMarkerBitmapTest {
             val bitmap = requireNotNull(CrownMarkerBitmaps.create(context, crownGlyphRes(rarity),
                 appearance.discColorArgb, appearance.glyphColorArgb, appearance.glowColorArgb))
             val centre = bitmap.width / 2f
-            val innerRadius = 11f * density
+            // Inspect the whole former disc interior, including the spaces
+            // around the silhouette. Its solid centre is legitimately opaque.
+            val innerRadius = (CrownMarkerStyle.DISC_DIAMETER_DP / 2f - 0.5f) * density
             var transparent = 0
             var total = 0
             for (y in 0 until bitmap.height) for (x in 0 until bitmap.width) {

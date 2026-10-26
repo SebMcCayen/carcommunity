@@ -172,7 +172,7 @@ class DockedMapShellInteractionTest {
         rule.runOnIdle { assertEquals(MapMode.Night, surface.mapMode.value) }
         rule.onNodeWithTag("map_layers_focus_expand").performScrollTo().performClick()
         rule.onNodeWithTag(MAP_HOME_LAYERS_ZOOM_TAG).performScrollTo().assertIsDisplayed()
-            .performTouchInput { click(Offset(size.width * 0.75f, size.height / 2f)) }
+            .performTouchInput { click(Offset(width * 0.75f, height / 2f)) }
         rule.waitForIdle()
         rule.runOnIdle {
             assertTrue("The actual slider must invoke its completion callback", controller.browsingZoom > 14.5)
@@ -290,9 +290,9 @@ class DockedMapShellInteractionTest {
     }
 
     private class RecordingZoomController(initial: Double) : MapZoomController {
-        override var browsingZoom by mutableStateOf(initial)
-            private set
-        override fun setBrowsingZoom(zoom: Double) { browsingZoom = MapZoomPreference.snap(zoom) }
+        private var value by mutableStateOf(initial)
+        override val browsingZoom get() = value
+        override fun setBrowsingZoom(zoom: Double) { value = MapZoomPreference.snap(zoom) }
     }
 
     private class IsolatedZoomContext(base: Context) : ContextWrapper(base) {

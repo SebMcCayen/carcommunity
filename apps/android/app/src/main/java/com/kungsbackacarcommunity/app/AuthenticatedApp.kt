@@ -8779,7 +8779,7 @@ internal fun ShellBottomBar(
  * selected tab).
  */
 @Composable
-private fun CreateChooserDialog(
+internal fun CreateChooserDialog(
     onSingleSession: () -> Unit,
     onConvoy: () -> Unit,
     onDismiss: () -> Unit,

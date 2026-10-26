@@ -11,6 +11,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,6 +29,10 @@ import com.kungsbackacarcommunity.app.crownhunt.PerkDeployMenuState
 import com.kungsbackacarcommunity.app.crownhunt.PerkDeployPopup
 import com.kungsbackacarcommunity.app.crownhunt.PerkDeployStatus
 import com.kungsbackacarcommunity.app.crownhunt.PerkKind
+import com.kungsbackacarcommunity.app.crownhunt.CrownRarity
+import com.kungsbackacarcommunity.app.crownhunt.CrownMarkerStyle
+import com.kungsbackacarcommunity.app.crownhunt.crownGlyphRes
+import com.kungsbackacarcommunity.app.shell.MapCrownMarker
 import com.kungsbackacarcommunity.app.incidents.IncidentAgeOption
 import com.kungsbackacarcommunity.app.incidents.IncidentTypePickerDialog
 import com.kungsbackacarcommunity.app.map.LocalMapZoomController
@@ -95,9 +100,18 @@ fun MapShellCataloguePreview(
     val action: (String) -> Unit = { onLocalAction(it); dismiss() }
 
     CompositionLocalProvider(LocalMapZoomController provides zoom) {
+        // Local visual fixtures, never spawned/claimed through a backend.
+        LaunchedEffect(surface) {
+            surface.setCrownMarkers(CrownRarity.entries.mapIndexed { index, rarity ->
+                MapCrownMarker("fixture-crown-$index", 12.071 + index * 0.003, 57.488,
+                    CrownMarkerStyle.discColorArgb(rarity), crownGlyphRes(rarity),
+                    CrownMarkerStyle.glyphColorArgb(rarity), CrownMarkerStyle.glowColorArgb(rarity))
+            })
+        }
         DockedMapSheetHost {
             val host = LocalDockedMapSheetHost.current
             Box(Modifier.fillMaxSize().testTag(MAP_CATALOGUE_ROOT_TAG)) {
+                surface.Content(Modifier.fillMaxSize())
                 Box(Modifier.fillMaxSize().navigationBarsPadding()
                     .padding(bottom = ShellBottomBarHeight).mapSheetViewport()) {
                     MapHome(
@@ -195,9 +209,9 @@ fun MapShellCataloguePreview(
 }
 
 private class CatalogueZoomController : MapZoomController {
-    override var browsingZoom by mutableStateOf(14.5)
-        private set
-    override fun setBrowsingZoom(zoom: Double) { browsingZoom = MapZoomPreference.snap(zoom) }
+    private var value by mutableStateOf(14.5)
+    override val browsingZoom get() = value
+    override fun setBrowsingZoom(zoom: Double) { value = MapZoomPreference.snap(zoom) }
 }
 
 private val catalogueSavedPlaces = List(8) { index ->
