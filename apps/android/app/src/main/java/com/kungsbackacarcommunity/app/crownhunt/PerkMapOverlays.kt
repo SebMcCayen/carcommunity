@@ -26,6 +26,11 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.res.painterResource
+import com.kungsbackacarcommunity.app.design.KccPalette
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -64,9 +69,8 @@ const val OWN_DOT_PERK_OVERLAY_TAG = "perk_own_dot_overlay"
  * (same seam as the nearby-live overlay), NOT a Mapbox annotation, so it stays
  * out of the map-surface file and is testable without a device.
  *
- * A car/game-inspired glyph: a purple bear-trap — two opposing jaws of
- * inward-pointing teeth around a spring plate — with a slow purple pulse and a
- * faint "only you can see this" halo. Under each glyph a SMALL purple bar depletes
+ * A purple crown with a transparent ring, reusing the licensed silhouette from
+ * the catalogue's trap presentation, with a restrained decorative outline. Under each glyph a SMALL purple bar depletes
  * full→empty as the trap nears expiry ([PerkMapVisuals.remainingLifeFraction]) —
  * numbers-free at map scale. Expired traps are filtered against a moving now
  * ([nowProvider]) so a trap that runs out while the map is open drops off without a
@@ -171,10 +175,7 @@ private fun ActiveTrapLayer(
     onTrapTap: ((OwnTrapMarker) -> Unit)?,
 ) {
     val pulse = rememberPerkPulse()
-    // One reusable Path for the bear-trap teeth, so the continuously-animated Canvas
-    // re-fills it (reset per tooth) instead of allocating a fresh Path each frame —
-    // the tooth geometry is static, only the purple pulse animates.
-    val toothPath = remember { Path() }
+    val crownPainter = painterResource(crownGlyphRes(CrownRarity.RARE))
     val density = LocalDensity.current
     // Half the tap target, so the positioned clickable's footprint is CENTRED on the
     // projected coordinate (offset places by top-left). Computed once per density.
@@ -183,7 +184,7 @@ private fun ActiveTrapLayer(
     Canvas(modifier = Modifier.fillMaxSize()) {
         for (placement in placements) {
             val centre = Offset(placement.x, placement.y)
-            drawSpikeStrip(centre, pulse, toothPath)
+            drawSpikeStrip(centre, pulse, crownPainter)
             // The depleting lifetime bar, beneath the glyph. Numbers-free; the exact
             // remaining time is in the tapped-trap popup. Allocation-free.
             drawTrapLifeBar(
@@ -449,90 +450,21 @@ private fun DrawScope.drawBoostPluses(centre: Offset, appear: Float) {
     }
 }
 
-/**
- * One bear-trap tooth as STATIC unit directions (radius 1) from the trap centre:
- * the two base corners on the ring and the inward apex. Precomputed once — the jaw
- * geometry never changes frame to frame, only the purple pulse animates — so the
- * animated Canvas just scales these by the current ring radius per frame.
- */
-private class TrapTooth(val base1: Offset, val base2: Offset, val apex: Offset)
-
-/** The 12 static bear-trap teeth (two opposing jaws), computed a single time. */
-private val TRAP_TEETH: List<TrapTooth> =
-    run {
-        val teethPerJaw = 6
-        val half = Math.toRadians(7.0)
-        val jaws = listOf(20.0 to 160.0, 200.0 to 340.0)
-        buildList {
-            for ((startDeg, endDeg) in jaws) {
-                for (i in 0 until teethPerJaw) {
-                    val t = i / (teethPerJaw - 1.0)
-                    val ang = Math.toRadians(startDeg + (endDeg - startDeg) * t)
-                    add(TrapTooth(dir(ang - half), dir(ang + half), dir(ang)))
-                }
-            }
+/** The owner-only trap reuses the licensed crown silhouette and ring from S27. */
+private fun DrawScope.drawSpikeStrip(centre: Offset, pulse: Float, crownPainter: Painter) {
+    val radius = 17.5.dp.toPx()
+    // The pulse stays a decorative outer outline; never obscure the map centre.
+    drawCircle(TRAP_PURPLE.copy(alpha = 0.2f * (1f - pulse)), radius + 6.dp.toPx() * pulse,
+        centre, style = Stroke(2.dp.toPx()))
+    drawCircle(KccPalette.inkBlack, radius, centre, style = Stroke(5.dp.toPx()))
+    drawCircle(KccPalette.warmIvory, radius, centre, style = Stroke(3.dp.toPx()))
+    drawCircle(TRAP_PURPLE, radius, centre, style = Stroke(2.dp.toPx()))
+    val glyphSize = 26.dp.toPx()
+    translate(centre.x - glyphSize / 2, centre.y - glyphSize / 2) {
+        with(crownPainter) {
+            draw(Size(glyphSize, glyphSize), colorFilter = ColorFilter.tint(TRAP_PURPLE))
         }
     }
-
-/** Static hinge directions (left / right) as unit vectors, computed once. */
-private val TRAP_HINGES: List<Offset> = listOf(dir(0.0), dir(Math.toRadians(180.0)))
-
-/**
- * The placer-only SPIKMATTA marker: a bear-trap glyph — two opposing jaws of
- * inward-pointing teeth around a spring plate, tinted purple with a slow purple
- * [pulse]. Drawn with Compose Canvas (no external asset). The tooth geometry is
- * precomputed ([TRAP_TEETH] / [TRAP_HINGES]) and each tooth re-fills the caller's
- * single reusable [toothPath], so this continuously-animated draw allocates no
- * per-frame Path/list garbage — only the purple paint varies.
- */
-private fun DrawScope.drawSpikeStrip(centre: Offset, pulse: Float, toothPath: Path) {
-    val ringR = 15.dp.toPx() * (1f + 0.06f * pulse)
-    val toothLen = 6.dp.toPx()
-    val alpha = 0.55f + 0.45f * pulse
-
-    // Pulsing "only you can see this" halo.
-    drawCircle(
-        color = TRAP_PURPLE.copy(alpha = 0.28f * (1f - pulse)),
-        radius = ringR + 10.dp.toPx() * pulse,
-        center = centre,
-        style = Stroke(width = 2.dp.toPx()),
-    )
-
-    // The spring plate (soft fill + purple ring).
-    drawCircle(color = TRAP_PURPLE.copy(alpha = 0.18f), radius = ringR, center = centre)
-    drawCircle(
-        color = TRAP_PURPLE.copy(alpha = alpha),
-        radius = ringR,
-        center = centre,
-        style = Stroke(width = 2.5.dp.toPx()),
-    )
-
-    // Two opposing jaws of inward-pointing teeth (static offsets scaled per frame).
-    val apexR = ringR - toothLen
-    for (tooth in TRAP_TEETH) {
-        val base1 = centre + tooth.base1 * ringR
-        val base2 = centre + tooth.base2 * ringR
-        val apex = centre + tooth.apex * apexR
-        toothPath.reset()
-        toothPath.moveTo(base1.x, base1.y)
-        toothPath.lineTo(apex.x, apex.y)
-        toothPath.lineTo(base2.x, base2.y)
-        toothPath.close()
-        drawPath(toothPath, color = TRAP_PURPLE.copy(alpha = alpha))
-    }
-
-    // Spring nubs at the two hinges (left / right).
-    val nubR = ringR + 4.dp.toPx()
-    for (hinge in TRAP_HINGES) {
-        drawCircle(
-            color = TRAP_PURPLE.copy(alpha = alpha),
-            radius = 3.dp.toPx(),
-            center = centre + hinge * nubR,
-        )
-    }
-
-    // The pressure plate at the centre.
-    drawCircle(color = TRAP_PURPLE.copy(alpha = alpha), radius = 3.5.dp.toPx(), center = centre)
 }
 
 /**
@@ -569,8 +501,5 @@ private fun DrawScope.drawTrapLifeBar(centre: Offset, fraction: Float) {
         )
     }
 }
-
-private fun dir(angleRad: Double): Offset =
-    Offset(cos(angleRad).toFloat(), sin(angleRad).toFloat())
 
 private operator fun Offset.times(scalar: Float): Offset = Offset(x * scalar, y * scalar)

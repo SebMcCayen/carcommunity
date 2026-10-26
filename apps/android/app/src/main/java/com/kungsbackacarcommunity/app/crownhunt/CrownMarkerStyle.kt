@@ -3,59 +3,18 @@ package com.kungsbackacarcommunity.app.crownhunt
 import com.kungsbackacarcommunity.app.incidents.IncidentMarkerStyle
 
 /**
- * How a crown is drawn on the map: a crown glyph on a rarity-coloured disc,
- * inside the same two-tone ring the incident badges use, with a glow reserved
- * for the legendary tier.
+ * Stable map-state adapter for crown rarity, range and collected status.
  *
- * Android-free on purpose — plain ARGB ints and enums, no `Color`, no
- * `Drawable`, no Mapbox — for exactly the reason
- * [IncidentMarkerStyle] is: the legibility claims below are then MEASURED by
- * JVM tests in CI, not asserted in a comment and checked by eye once.
+ * The legacy `discColorArgb` / `glyphColorArgb` inputs remain compatible with
+ * MapCrownMarker and its style-image cache. CrownMarkerBitmaps now translates
+ * these into standalone crown silhouettes and transparent rings; they are not
+ * filled incident discs. It uses source gold/silver accents, a distinct rare
+ * accent, and a checked collected state. Curated points have a dashed ring.
  *
- * ## Two independent channels, and which one carries what
- *
- * **Silhouette carries rarity.** Each tier has its own crown outline — a plain
- * band, a banded crown with a centre stone, a five-point crown, and a five-point
- * crown with an orb finial. That is the channel that survives any colour-vision
- * deficiency, any night basemap, and a 32 dp marker seen at a glance.
- *
- * **Colour reinforces it.** The four discs are separated by CIE76 ΔE >= 20 from
- * each other under normal vision AND under simulated protanopia, deuteranopia
- * and tritanopia (`CrownMarkerStyleTest`, worst measured pair 20.89 — tritan
- * uncommon/rare). A luminance ratio would not have caught that; the test
- * simulates the deficiency and measures in L*a*b*, following the method
- * `TrafficPaletteTest` established.
- *
- * ## The honest gap: crowns versus incidents
- *
- * TWO cross-layer pairs sit below the ΔE 20 bar the crown tiers hold against
- * each other, and both are stated rather than hidden because the mitigation is
- * the same and is real:
- *
- *  - [RARE]'s indigo against the incidents layer's purple `road_closed` — ΔE 16.7;
- *  - [LEGENDARY]'s gold against the amber `hazard` disc — ΔE 19.0.
- *
- * In both cases the two markers are different SHAPES — a crown against a barred
- * circle, a crown against a warning triangle — and shape is the primary channel
- * on BOTH layers, so the pair a user must tell apart at a glance is distinguished
- * by the strongest cue available. Legendary additionally carries the only halo in
- * either palette. Pushing rare away from purple would collide it with the police
- * blue, and pushing legendary away from amber would stop it reading as gold at
- * all, which is the one thing the top tier has to do; the palette has four
- * incident hues and four crown tiers to fit around them, and these are the
- * least-bad seats. `CrownMarkerStyleTest` measures both numbers, so the gap
- * cannot silently widen.
- *
- * ## Why one icon set serves BOTH day and night
- *
- * The map does not reload its style for day/night — it flips the Standard
- * basemap's `lightPreset`, which re-lights only the basemap. App-owned images do
- * not follow. So, exactly as with the incident badges, the marker is built
- * mode-independent instead: [IncidentMarkerStyle.RING_LIGHT] separates it from a
- * dark basemap and [IncidentMarkerStyle.RING_DARK] from a light one, and
- * whichever way the map is lit one of the two is doing the work. The ring
- * constants are REUSED rather than redeclared so the two layers cannot drift
- * into looking like they come from different apps.
+ * The four existing silhouettes remain the primary rarity channel under colour
+ * vision deficiency. The original adapter palette's contrast/separation tests
+ * continue to guard legacy consumers; they do not establish rendered acceptance
+ * of the new ring renderer, which also needs bitmap and configured-map QA.
  */
 object CrownMarkerStyle {
     /**

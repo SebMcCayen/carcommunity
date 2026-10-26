@@ -1,44 +1,25 @@
 package com.kungsbackacarcommunity.app.crownhunt
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Dangerous
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import com.kungsbackacarcommunity.app.R
-import com.kungsbackacarcommunity.app.design.KccRadius
+import com.kungsbackacarcommunity.app.shell.MapDetailSheet
 import com.kungsbackacarcommunity.app.design.KccSpacing
 
 /** Test tags for the deploy menu (used by instrumented UI tests). */
@@ -78,91 +59,66 @@ fun PerkDeployPopup(
     onDismiss: () -> Unit,
     onOpenShop: () -> Unit,
 ) {
-    Popup(
-        alignment = Alignment.BottomCenter,
-        onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true),
+    MapDetailSheet(
+        title = stringResource(R.string.crownHunt_deployTitle),
+        onDismiss = onDismiss,
+        modifier = Modifier.testTag(PERK_DEPLOY_POPUP_TAG),
     ) {
-        Surface(
-            modifier =
-                Modifier
-                    .padding(16.dp)
-                    .fillMaxWidth()
-                    .widthIn(max = 360.dp)
-                    .testTag(PERK_DEPLOY_POPUP_TAG),
-            shape = RoundedCornerShape(KccRadius.lg),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-            tonalElevation = 6.dp,
-            shadowElevation = 6.dp,
-        ) {
-            val maxPopupHeight = (LocalConfiguration.current.screenHeightDp * 0.8f).dp
-            Column(
-                modifier =
-                    Modifier
-                        .heightIn(max = maxPopupHeight)
-                        .verticalScroll(rememberScrollState())
-                        .padding(KccSpacing.s4),
-                verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
-            ) {
+        Text(stringResource(R.string.crownHunt_deployIntro), style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        when (menuState) {
+            PerkDeployMenuState.Loading ->
                 Text(
-                    text = stringResource(R.string.crownHunt_deployTitle),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    text = stringResource(R.string.crownHunt_deployLoading),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                when (menuState) {
-                    PerkDeployMenuState.Loading ->
-                        Text(
-                            text = stringResource(R.string.crownHunt_deployLoading),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
 
-                    PerkDeployMenuState.Error ->
-                        Text(
-                            text = stringResource(R.string.crownHunt_deployError),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
-                        )
+            PerkDeployMenuState.Error ->
+                Text(
+                    text = stringResource(R.string.crownHunt_deployError),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
 
-                    is PerkDeployMenuState.Loaded ->
-                        // Empty = owns none of any perk AND nothing active (the
-                        // catalog-built rows are never literally empty), so the
-                        // first-run user gets guidance, not a wall of disabled rows.
-                        if (menuState.isEmpty) {
-                            Text(
-                                text = stringResource(R.string.crownHunt_deployEmpty),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        } else {
-                            for (item in menuState.items) {
-                                PerkDeployRow(
-                                    item = item,
-                                    status = status,
-                                    nowMillis = nowMillis,
-                                    onDeploy = onDeploy,
-                                )
-                            }
-                        }
+            is PerkDeployMenuState.Loaded ->
+                // Empty = owns none of any perk AND nothing active (the
+                // catalog-built rows are never literally empty), so the
+                // first-run user gets guidance, not a wall of disabled rows.
+                if (menuState.isEmpty) {
+                    Text(
+                        text = stringResource(R.string.crownHunt_deployEmpty),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    for (item in menuState.items) {
+                        PerkDeployRow(
+                            item = item,
+                            status = status,
+                            nowMillis = nowMillis,
+                            onDeploy = onDeploy,
+                        )
+                    }
                 }
-                DeployStatusBanner(status = status, menuState = menuState)
-                // A clear jump to the Crown Hunt Shop so a member reviewing their
-                // perks can buy more without hunting for the shop tab. Closes the
-                // popup first, then asks the host to open the shop (issue #1009).
-                TextButton(
-                    onClick = {
-                        onDismiss()
-                        onOpenShop()
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag(PERK_DEPLOY_OPEN_SHOP_TAG),
-                ) {
-                    Text(stringResource(R.string.crownHunt_deployOpenShop))
-                }
-            }
         }
+        DeployStatusBanner(status = status, menuState = menuState)
+        // A clear jump to the Crown Hunt Shop so a member reviewing their
+        // perks can buy more without hunting for the shop tab. Closes the
+        // popup first, then asks the host to open the shop (issue #1009).
+        TextButton(
+            onClick = {
+                onDismiss()
+                onOpenShop()
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(PERK_DEPLOY_OPEN_SHOP_TAG),
+        ) {
+            Text(stringResource(R.string.crownHunt_deployOpenShop))
+        }
+        Text(stringResource(R.string.crownHunt_perksGameOnly), style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -189,21 +145,7 @@ private fun PerkDeployRow(
                 horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // BIG kind icon in a tinted disc.
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier.size(56.dp),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = perkKindIcon(item.kind),
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.tertiary,
-                            modifier = Modifier.size(32.dp),
-                        )
-                    }
-                }
+                PerkIcon(item.kind, Modifier.size(56.dp))
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
@@ -235,6 +177,7 @@ private fun PerkDeployRow(
                         strokeWidth = 2.dp,
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
+                    Text(stringResource(R.string.crownHunt_deployActivating), modifier = Modifier.padding(start = 8.dp))
                 } else {
                     Text(stringResource(R.string.crownHunt_deployActivateButton))
                 }
@@ -262,7 +205,7 @@ private fun ActiveStateLine(item: PerkDeployItem, nowMillis: Long) {
                     item.activeTrapCount,
                 ),
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.onSurface,
             )
 
         item.active && item.activeUntilMillis != null -> {
@@ -274,10 +217,12 @@ private fun ActiveStateLine(item: PerkDeployItem, nowMillis: Long) {
                         formatRemaining(remaining),
                     ),
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
         }
+        else -> Text(stringResource(R.string.crownHunt_perkInactive), style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -309,7 +254,7 @@ private fun DeployStatusBanner(
             Text(
                 text = message,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
 
@@ -321,14 +266,6 @@ private fun DeployStatusBanner(
             )
     }
 }
-
-/** Big Material glyph per perk kind (consistent with the map control styling). */
-private fun perkKindIcon(kind: PerkKind): ImageVector =
-    when (kind) {
-        PerkKind.TRAP -> Icons.Filled.Dangerous
-        PerkKind.SHIELD -> Icons.Filled.Shield
-        PerkKind.BOOST -> Icons.Filled.Bolt
-    }
 
 /** Resource id for a deploy-success message, keyed on the effect kind. */
 private fun deploySuccessMessageRes(kind: PerkKind): Int =

@@ -6,9 +6,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.key
 import com.kungsbackacarcommunity.app.badges.BadgesRepository
 import com.kungsbackacarcommunity.app.badges.BadgesState
 import com.kungsbackacarcommunity.app.points.PointsRepository
+import com.kungsbackacarcommunity.app.points.PointsEntriesState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
@@ -54,86 +56,96 @@ fun CrownHuntRoute(
     openShop: Boolean = false,
     onShopOpened: () -> Unit = {},
 ) {
-    // Fire-and-forget consume: clear the host's one-shot request the moment this
-    // route mounts with the shop requested, so it seeds the initial tab only and a
-    // subsequent open of Kronjakt starts on Home rather than re-landing on Shop.
-    LaunchedEffect(openShop) {
-        if (openShop) onShopOpened()
+    // Account changes recreate all owner-scoped reads and in-flight presentation.
+    key(uid, passesMemberGate) {
+        // Fire-and-forget consume: clear the host's one-shot request the moment this
+        // route mounts with the shop requested, so it seeds the initial tab only and a
+        // subsequent open of Kronjakt starts on Home rather than re-landing on Shop.
+        LaunchedEffect(openShop) {
+            if (openShop) onShopOpened()
+        }
+        val statsState by
+            remember(statsRepository, uid, passesMemberGate) {
+                if (statsRepository != null && uid != null && passesMemberGate) {
+                    statsRepository.observeStats(uid)
+                } else {
+                    flowOf(CrownStatsUiState.Loading)
+                }
+            }
+                .collectAsState(initial = CrownStatsUiState.Loading)
+
+        // The member's own crown-hunter badge standing. Only subscribed when the
+        // member gate passes (a non-member sees the teaser) and a repo + uid are
+        // wired; otherwise it stays null and the badge band is omitted.
+        val badgesState by
+            remember(badgesRepository, uid, passesMemberGate) {
+                if (badgesRepository != null && uid != null && passesMemberGate) {
+                    badgesRepository.observeBadges(uid)
+                } else {
+                    flowOf(BadgesState.Loading)
+                }
+            }
+                .collectAsState(initial = BadgesState.Loading)
+        // The client-readable lifetime crown count (all-time leaderboard mirror),
+        // known only once the stats read has loaded a personal row. Threaded into the
+        // standing so the badge card can draw honest "X / 10 crowns" progress; null
+        // while stats are Loading/Error → the card shows the fixed goal line instead.
+        val crownsCollected =
+            (statsState as? CrownStatsUiState.Loaded)?.personal?.crownsCollected?.toLong()
+        val kronjagare =
+            remember(badgesState, crownsCollected) {
+                (badgesState as? BadgesState.Loaded)?.let {
+                    CrownHuntStats.kronjagare(it.badges, crownsCollected)
+                }
+            }
+
+        // SHOP. Only wired when the flag is on, the gate passes and the repos + uid
+        // exist — otherwise every shop flow is a single Loading emission and nothing
+        // subscribes to the catalog/inventory/ledger. Combines the three independent
+        // reads into one render state through the pure [PerkShop.toUiState].
+        val shopEnabled =
+            perksEnabled && perkShopRepository != null && pointsRepository != null &&
+                uid != null && passesMemberGate
+        val shopState by
+            remember(shopEnabled, perkShopRepository, pointsRepository, uid) {
+                if (shopEnabled) {
+                    combineShop(perkShopRepository!!, pointsRepository!!, uid!!)
+                } else {
+                    flowOf(PerkShopUiState.Loading)
+                }
+            }
+                .collectAsState(initial = PerkShopUiState.Loading)
+
+        val coordinator =
+            remember(perkShopRepository) { perkShopRepository?.let { PerkShopCoordinator(it) } }
+        val buyStatus: PerkBuyStatus =
+            coordinator?.status?.collectAsState()?.value ?: PerkBuyStatus.Idle
+        val scope = rememberCoroutineScope()
+        // Reuse the existing bounded owner-ledger read. Never subscribe without the
+        // same account gate as the personal statistics, and reset on account change.
+        val historyState by remember(pointsRepository, uid, passesMemberGate) {
+            if (pointsRepository != null && uid != null && passesMemberGate) pointsRepository.observeEntries(uid)
+            else flowOf(PointsEntriesState.Loading)
+        }.collectAsState(initial = PointsEntriesState.Loading)
+
+        CrownHuntScreen(
+            statsState = statsState,
+            passesMemberGate = passesMemberGate,
+            onBack = onBack,
+            kronjagare = kronjagare,
+            perksEnabled = perksEnabled,
+            liveShareScoringEnabled = liveShareScoringEnabled,
+            shopState = shopState,
+            buyStatus = buyStatus,
+            openShop = openShop,
+            historyState = historyState,
+            onBuyPerk = { item ->
+                coordinator?.let { active ->
+                    scope.launch { active.buy(item.entry.perkId, item.affordable) }
+                }
+            },
+        )
     }
-    val statsState by
-        remember(statsRepository, uid, passesMemberGate) {
-            if (statsRepository != null && uid != null && passesMemberGate) {
-                statsRepository.observeStats(uid)
-            } else {
-                flowOf(CrownStatsUiState.Loading)
-            }
-        }
-            .collectAsState(initial = CrownStatsUiState.Loading)
-
-    // The member's own crown-hunter badge standing. Only subscribed when the
-    // member gate passes (a non-member sees the teaser) and a repo + uid are
-    // wired; otherwise it stays null and the badge band is omitted.
-    val badgesState by
-        remember(badgesRepository, uid, passesMemberGate) {
-            if (badgesRepository != null && uid != null && passesMemberGate) {
-                badgesRepository.observeBadges(uid)
-            } else {
-                flowOf(BadgesState.Loading)
-            }
-        }
-            .collectAsState(initial = BadgesState.Loading)
-    // The client-readable lifetime crown count (all-time leaderboard mirror),
-    // known only once the stats read has loaded a personal row. Threaded into the
-    // standing so the badge card can draw honest "X / 10 crowns" progress; null
-    // while stats are Loading/Error → the card shows the fixed goal line instead.
-    val crownsCollected =
-        (statsState as? CrownStatsUiState.Loaded)?.personal?.crownsCollected?.toLong()
-    val kronjagare =
-        remember(badgesState, crownsCollected) {
-            (badgesState as? BadgesState.Loaded)?.let {
-                CrownHuntStats.kronjagare(it.badges, crownsCollected)
-            }
-        }
-
-    // SHOP. Only wired when the flag is on, the gate passes and the repos + uid
-    // exist — otherwise every shop flow is a single Loading emission and nothing
-    // subscribes to the catalog/inventory/ledger. Combines the three independent
-    // reads into one render state through the pure [PerkShop.toUiState].
-    val shopEnabled =
-        perksEnabled && perkShopRepository != null && pointsRepository != null &&
-            uid != null && passesMemberGate
-    val shopState by
-        remember(shopEnabled, perkShopRepository, pointsRepository, uid) {
-            if (shopEnabled) {
-                combineShop(perkShopRepository!!, pointsRepository!!, uid!!)
-            } else {
-                flowOf(PerkShopUiState.Loading)
-            }
-        }
-            .collectAsState(initial = PerkShopUiState.Loading)
-
-    val coordinator =
-        remember(perkShopRepository) { perkShopRepository?.let { PerkShopCoordinator(it) } }
-    val buyStatus: PerkBuyStatus =
-        coordinator?.status?.collectAsState()?.value ?: PerkBuyStatus.Idle
-    val scope = rememberCoroutineScope()
-
-    CrownHuntScreen(
-        statsState = statsState,
-        passesMemberGate = passesMemberGate,
-        onBack = onBack,
-        kronjagare = kronjagare,
-        perksEnabled = perksEnabled,
-        liveShareScoringEnabled = liveShareScoringEnabled,
-        shopState = shopState,
-        buyStatus = buyStatus,
-        openShop = openShop,
-        onBuyPerk = { item ->
-            coordinator?.let { active ->
-                scope.launch { active.buy(item.entry.perkId, item.affordable) }
-            }
-        },
-    )
 }
 
 /** Combines the catalog + inventory + KP balance into one shop render state. */

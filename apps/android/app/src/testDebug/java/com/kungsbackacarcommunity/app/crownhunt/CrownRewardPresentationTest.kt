@@ -38,7 +38,14 @@ class CrownRewardPresentationTest {
         compose.onNodeWithTag(CROWN_SPAWN_COLLECT_TAG).assertDoesNotExist()
     }
 
-    private fun showOutcome(result: CrownSpawnClaimResult, points: Int) {
+    @Test
+    fun missingAwardAmount_doesNotInventZeroOrTheBaseReward() {
+        showOutcome(CrownSpawnClaimResult.AWARDED, null)
+        compose.onNodeWithText(str(R.string.crownHunt_spawnResultAwardedPoints, 0)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.crownHunt_spawnResultAwardedPoints, 500)).assertDoesNotExist()
+    }
+
+    private fun showOutcome(result: CrownSpawnClaimResult, points: Int?) {
         compose.setContent {
             KccTheme {
                 CrownSpawnPopup(

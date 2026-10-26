@@ -1,55 +1,34 @@
 package com.kungsbackacarcommunity.app.crownhunt
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.foundation.background
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
-import kotlinx.coroutines.launch
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.shell.MapDetailSheet
+import com.kungsbackacarcommunity.app.shell.CrownMarkerBitmaps
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 
@@ -110,55 +89,25 @@ fun CrownSpawnPopup(
     onDismiss: () -> Unit,
     showLiveShareTip: Boolean = false,
 ) {
-    Popup(
-        alignment = Alignment.BottomCenter,
-        onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true),
+    MapDetailSheet(
+        title = stringResource(CrownSpawnMessages.rarityLabelRes(spawn.rarity)),
+        onDismiss = onDismiss,
+        modifier = Modifier.testTag(CROWN_SPAWN_POPUP_TAG),
+        leadingContent = {
+            Icon(painterResource(crownGlyphRes(spawn.rarity)), contentDescription = null,
+                modifier = Modifier.size(40.dp),
+                tint = Color(CrownMarkerBitmaps.ringAccent(CrownMarkerStyle.discColorArgb(spawn.rarity))))
+        },
     ) {
-        Surface(
-            modifier =
-                Modifier
-                    .padding(KccSpacing.s4)
-                    .fillMaxWidth()
-                    .testTag(CROWN_SPAWN_POPUP_TAG),
-            shape = RoundedCornerShape(KccRadius.lg),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-            tonalElevation = 6.dp,
-            shadowElevation = 6.dp,
-        ) {
-            Column(
-                modifier = Modifier.heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.8f).dp)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = KccSpacing.s5, vertical = KccSpacing.s4),
-                verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
-            ) {
-                CrownHeader(spawn = spawn, onDismiss = onDismiss)
-                // A finished call replaces the whole body: once the server has
-                // answered, the distance and the gate are history — showing them
-                // beside "someone got there first" would invite a second tap on
-                // a crown that no longer exists.
-                val done = status as? CrownClaimStatus.Done
-                if (done != null) {
-                    CrownOutcomeBody(outcome = done.outcome, onDismiss = onDismiss)
-                } else {
-                    CrownCollectBody(
-                        state = state,
-                        status = status,
-                        distanceMeters = distanceMeters,
-                        collectRadiusMeters = spawn.collectRadiusMeters,
-                        onCollect = onCollect,
-                        onNavigate = onNavigate,
-                    )
-                    // A nudge to go live for full Kronpoäng, shown only while the
-                    // crown is still collectable (never over the outcome) and only
-                    // when the caller confirms the rule is on AND the member is not
-                    // already live-sharing.
-                    if (showLiveShareTip) {
-                        CrownLiveShareTip()
-                    }
-                }
-            }
+        val done = status as? CrownClaimStatus.Done
+        if (done != null) {
+            CrownOutcomeBody(outcome = done.outcome, onDismiss = onDismiss)
+        } else {
+            // Base reward comes from the crown; actual awarded points only from the server outcome.
+            Text(stringResource(R.string.crownHunt_spawnReward, spawn.rewardPoints),
+                style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+            CrownCollectBody(state, status, distanceMeters, spawn.collectRadiusMeters, onCollect, onNavigate)
+            if (showLiveShareTip) CrownLiveShareTip()
         }
     }
 }
@@ -189,59 +138,6 @@ internal fun CrownLiveShareTip(modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-    }
-}
-
-/** The tier badge, its name and its value — the crown as the map drew it. */
-@Composable
-private fun CrownHeader(spawn: CrownSpawn, onDismiss: () -> Unit) {
-    val rarityLabel = stringResource(CrownSpawnMessages.rarityLabelRes(spawn.rarity))
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
-    ) {
-        // The same disc + silhouette the marker is drawn from, so the thing in
-        // the popup is recognisably the thing that was tapped. Built from the
-        // same CrownMarkerStyle the bitmap uses, not a second palette.
-        Box(
-            modifier =
-                Modifier
-                    .size(KccSpacing.s12)
-                    .clip(CircleShape)
-                    .background(Color(CrownMarkerStyle.discColorArgb(spawn.rarity))),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter = painterResource(crownGlyphRes(spawn.rarity)),
-                // The rarity is announced as text right beside this; a second
-                // announcement would just be noise.
-                contentDescription = null,
-                tint = Color(CrownMarkerStyle.glyphColorArgb(spawn.rarity)),
-                modifier = Modifier.size(KccSpacing.s8),
-            )
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = rarityLabel,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                // The crown's OWN reward, as the server stamped it — not the
-                // tier's table value, so a server-side retune shows up here
-                // without an app release.
-                text = stringResource(R.string.crownHunt_spawnReward, spawn.rewardPoints),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        IconButton(onClick = onDismiss) {
-            Icon(
-                imageVector = Icons.Filled.Close,
-                contentDescription = stringResource(R.string.crownHunt_spawnClose),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
     }
 }
 
@@ -337,51 +233,13 @@ private fun CrownCollectBody(
         } else {
             stringResource(CrownSpawnMessages.collectActionLabelRes(state, collecting))
         }
-    // When the gate flips to Ready — in range AND stopped AND the dwell proof has
-    // aged in — the button POPS IN: a brief spring from small-and-tilted up to its
-    // resting size, a car/game-flavoured "go!" that rewards arriving. It is purely
-    // a transition effect: out of range, moving, or still confirming, the button
-    // sits at its normal size, visible-but-disabled, so the honesty of #915's
-    // "confirming you're stopped…" step is untouched.
-    val isReady = state == CrownCollectState.Ready
-    val popScale = remember { Animatable(1f) }
-    val popRotation = remember { Animatable(0f) }
-    LaunchedEffect(isReady) {
-        if (isReady) {
-            popScale.snapTo(0.62f)
-            popRotation.snapTo(-14f)
-            // Two springs in parallel: an overshooting scale (dampingRatio < 1 so it
-            // bounces just past full size and settles) and a small spin that unwinds
-            // to level. Brief by construction — springs, not a looped animation.
-            launch {
-                popScale.animateTo(
-                    targetValue = 1f,
-                    animationSpec = spring(dampingRatio = 0.42f, stiffness = Spring.StiffnessMedium),
-                )
-            }
-            launch {
-                popRotation.animateTo(
-                    targetValue = 0f,
-                    animationSpec = spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessLow),
-                )
-            }
-        } else {
-            // Leaving Ready (or opening not-Ready): rest at normal size, no lingering
-            // tilt — the disabled button must look ordinary, not mid-animation.
-            popScale.snapTo(1f)
-            popRotation.snapTo(0f)
-        }
-    }
+    // Keep claim readiness static: no ornamental bounce or rotation, including
+    // when the OS requests reduced motion or its preference is unavailable.
     Button(
         onClick = onCollect,
         modifier =
             Modifier
                 .fillMaxWidth()
-                .graphicsLayer {
-                    scaleX = popScale.value
-                    scaleY = popScale.value
-                    rotationZ = popRotation.value
-                }
                 .testTag(CROWN_SPAWN_COLLECT_TAG),
         // The gate is the single source of truth for enablement; the in-flight
         // guard is the only thing added here, so one press is one call.
@@ -415,11 +273,6 @@ private fun CrownCollectBody(
 @Composable
 private fun CrownProximityBar(distanceMeters: Double, collectRadiusMeters: Double) {
     val target = CrownProximity.proximityFraction(distanceMeters, collectRadiusMeters)
-    val animatedFraction by animateFloatAsState(
-        targetValue = target,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
-        label = "crownProximityFill",
-    )
     Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -449,7 +302,7 @@ private fun CrownProximityBar(distanceMeters: Double, collectRadiusMeters: Doubl
             )
         }
         LinearProgressIndicator(
-            progress = { animatedFraction },
+            progress = { target },
             modifier =
                 Modifier
                     .fillMaxWidth()
@@ -480,8 +333,9 @@ private fun CrownOutcomeBody(outcome: CrownSpawnClaimOutcome, onDismiss: () -> U
         // server's answer rather than the crown document, because THAT is what
         // actually landed in the balance — showing the document's value would be
         // a guess that could disagree with the ledger.
-        val points = outcome.pointsAwarded ?: 0
-        CrownRewardSummary(pointsAwarded = points)
+        outcome.pointsAwarded?.let { points ->
+            CrownRewardSummary(pointsAwarded = points, newBalance = outcome.newBalance)
+        }
     }
     TextButton(
         onClick = onDismiss,

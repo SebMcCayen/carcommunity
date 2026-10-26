@@ -4,6 +4,20 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class PointsTest {
+    @Test
+    fun `ledger filters preserve signed server values and date order including undated rows`() {
+        val entries = listOf(
+            PointsEntry("credit", 7, 22, "Credit", 100L),
+            PointsEntry("debit", -5, 15, "Debit", 200L),
+            PointsEntry("unknown-date", -2, null, "Adjustment", null),
+            PointsEntry("zero", 0, 20, "No change", 300L),
+        )
+        assertEquals(listOf("zero", "debit", "credit", "unknown-date"), Points.filteredEntries(entries, PointsFilter.ALL).map { it.id })
+        assertEquals(listOf(entries[0]), Points.filteredEntries(entries, PointsFilter.CREDITS))
+        assertEquals(listOf(entries[1], entries[2]), Points.filteredEntries(entries, PointsFilter.DEBITS))
+        assertEquals(7L, Points.filteredEntries(entries, PointsFilter.CREDITS).single().amount)
+        assertEquals(emptyList<PointsEntry>(), Points.filteredEntries(emptyList(), PointsFilter.DEBITS))
+    }
 
     @Test
     fun `sortedForList is newest first with undated last`() {
