@@ -1,7 +1,14 @@
 package com.kungsbackacarcommunity.app.account
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -39,6 +46,10 @@ class AccountDeletionScreenTest {
                 )
             }
         }
+        composeTestRule
+            .onNodeWithText(str(R.string.settings_accountDeletionAcknowledgement))
+            .performScrollTo()
+            .performClick()
         // First delete button opens the confirm dialog; the dialog's confirm
         // (same label, rendered last in the tree) triggers the callback.
         composeTestRule
@@ -66,6 +77,7 @@ class AccountDeletionScreenTest {
         }
         composeTestRule
             .onNodeWithText(str(R.string.settings_accountDeletionError))
+            .performScrollTo()
             .assertIsDisplayed()
     }
 
@@ -92,6 +104,10 @@ class AccountDeletionScreenTest {
             KccTheme { AccountDeletionScreen(AccountDeletionStatus.Deleting, {}, {}) }
         }
         composeTestRule
+            .onNodeWithText(str(R.string.settings_accountDeletionAcknowledgement))
+            .performScrollTo()
+            .assertIsNotEnabled()
+        composeTestRule
             .onNode(hasText(str(R.string.settings_deleteAccount)) and hasClickAction())
             .performScrollTo()
             .assertIsNotEnabled()
@@ -99,5 +115,44 @@ class AccountDeletionScreenTest {
             .onNodeWithText(str(R.string.profile_cancelButton))
             .performScrollTo()
             .assertIsNotEnabled()
+    }
+
+    @Test
+    fun acknowledgement_isNamedCheckbox_andRequiredBeforeDialog() {
+        composeTestRule.setContent {
+            KccTheme { AccountDeletionScreen(AccountDeletionStatus.Idle, {}, {}) }
+        }
+        val delete = composeTestRule.onNode(
+            hasText(str(R.string.settings_deleteAccount)) and hasClickAction()
+        )
+        delete.performScrollTo().assertIsNotEnabled()
+        val acknowledgement = composeTestRule.onNodeWithText(
+            str(R.string.settings_accountDeletionAcknowledgement)
+        )
+        acknowledgement.performScrollTo().assertIsOff().assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Checkbox)
+        ).performClick().assertIsOn()
+        delete.performScrollTo().assertIsEnabled()
+        acknowledgement.performScrollTo().performClick()
+        delete.performScrollTo().assertIsNotEnabled()
+    }
+
+    @Test
+    fun dismissingSecondConfirmation_doesNotDelete() {
+        var deletes = 0
+        composeTestRule.setContent {
+            KccTheme { AccountDeletionScreen(AccountDeletionStatus.Idle, { deletes++ }, {}) }
+        }
+        composeTestRule.onNodeWithText(str(R.string.settings_accountDeletionAcknowledgement))
+            .performScrollTo().performClick()
+        composeTestRule.onNode(hasText(str(R.string.settings_deleteAccount)) and hasClickAction())
+            .performScrollTo().performClick()
+        composeTestRule.onNodeWithText(str(R.string.settings_accountDeletionConfirmTitle))
+            .assertIsDisplayed()
+        composeTestRule.onAllNodesWithText(str(R.string.profile_cancelButton))
+            .onLast().performClick()
+        composeTestRule.onNodeWithText(str(R.string.settings_accountDeletionConfirmTitle))
+            .assertDoesNotExist()
+        assertEquals(0, deletes)
     }
 }

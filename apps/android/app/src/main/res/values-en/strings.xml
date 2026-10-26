@@ -68,6 +68,7 @@
     <string name="settings_github">GitHub / Open Source</string>
     <string name="settings_blockedUsers">Blocked users</string>
     <string name="settings_accountDeletionWarning">Deleting your account ends access and schedules eligible data for deletion. Some records must be retained. This cannot be undone.</string>
+    <string name="settings_accountDeletionAcknowledgement">I understand that this deletes my entire account in this app and cannot be undone.</string>
     <string name="settings_accountDeletionError">Could not delete your account. Please try again.</string>
     <string name="settings_accountDeletionConfirmTitle">Delete your account?</string>
     <string name="settings_accountDeletionConfirmBody">Access ends immediately. After a 30-day retention period, a bounded daily purge removes eligible account data; retries or backlog may delay completion. A deletion proof and certain moderation, audit, de-identified insight and claim, convoy ownership, event chat and RSVP records are retained.</string>
@@ -573,6 +574,9 @@
     <string name="blocking_blockCancelAction">Cancel</string>
     <string name="blocking_blockSuccess">User has been blocked.</string>
     <string name="blocking_blockedUsersTitle">Blocked users</string>
+    <string name="blocking_aboutTitle">About blocking</string>
+    <string name="blocking_aboutBody">Blocked users cannot see your live location or interact with you.</string>
+    <string name="blocking_blockedOn">Blocked %1$s</string>
     <string name="blocking_blockedUsersEmpty">You have not blocked anyone.</string>
     <string name="blocking_unblock">Unblock</string>
     <string name="blocking_unblockConfirmTitle">Unblock user?</string>
@@ -1961,6 +1965,7 @@
     <string name="whatsNew_dialogShowAll">Show all updates</string>
     <string name="whatsNew_dialogClose">Close</string>
     <string name="whatsNew_entryTitle">Version %1$s · %2$s</string>
+    <string name="whatsNew_versionTitle">Version %1$s</string>
     <string name="whatsNew_empty">No release notes yet.</string>
     <string name="whatsNew_release010Highlight">The first native iOS MVP is taking shape.</string>
     <string name="whatsNew_release010Change">A native map-first experience with community, drive and profile features.</string>

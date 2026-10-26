@@ -3486,6 +3486,40 @@
         }
       }
     },
+    "blocking.aboutBody": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blockerade användare kan inte se din liveposition eller interagera med dig."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blocked users cannot see your live location or interact with you."
+          }
+        }
+      }
+    },
+    "blocking.aboutTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Om blockeringar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "About blocking"
+          }
+        }
+      }
+    },
     "blocking.blockCancelAction": {
       "extractionState": "manual",
       "localizations": {
@@ -3584,6 +3618,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Block user"
+          }
+        }
+      }
+    },
+    "blocking.blockedOn": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blockerad %1$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blocked %1$@"
           }
         }
       }
@@ -28765,6 +28816,23 @@
         }
       }
     },
+    "settings.accountDeletionAcknowledgement": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jag förstår att detta raderar hela mitt konto i appen och att det inte kan ångras."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I understand that this deletes my entire account in this app and cannot be undone."
+          }
+        }
+      }
+    },
     "settings.accountDeletionAuthenticationRequired": {
       "extractionState": "manual",
       "localizations": {
@@ -33725,6 +33793,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "What’s new"
+          }
+        }
+      }
+    },
+    "whatsNew.versionTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version %1$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version %1$@"
           }
         }
       }
