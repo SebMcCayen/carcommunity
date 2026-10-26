@@ -27,8 +27,6 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocalParking
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -79,7 +77,7 @@ import androidx.compose.ui.platform.LocalLocale
  *   client-readable all-time leaderboard mirror, never a fabricated one (see
  *   [KronjagareStanding.crownsCollected]).
  * @param perksEnabled the `crownHuntPerks` flag. DEFAULT FALSE, and load-bearing:
- *   when off the shop tab and shop shortcut are absent. Overview, Map and
+ *   when off the shop tab is absent. Overview and
  *   Statistics remain available independently of the perk shop.
  * @param liveShareScoringEnabled the `crownHuntLiveShareScoring` flag. DEFAULT
  *   FALSE: when off the Instructions surface omits the live-share scoring section
@@ -115,6 +113,7 @@ fun CrownHuntScreen(
     // returns to the hub rather than popping the whole Kronjakt route. No new nav
     // graph entry and no repository data — the copy is static.
     var showInstructions by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = !showInstructions, onBack = onBack)
     BackHandler(enabled = showInstructions) { showInstructions = false }
     if (showInstructions) {
         // Provide LocalAeroBackAvailable = true AROUND the Instructions surface so
@@ -145,38 +144,21 @@ fun CrownHuntScreen(
         var savedTab by rememberSaveable { mutableIntStateOf(if (openShop && perksEnabled) 3 else 0) }
         var historySelected by rememberSaveable { mutableStateOf(false) }
         // An open shop disappears immediately when the flag is revoked.
-        val selectedTab = if (savedTab == 3 && !perksEnabled) 0 else savedTab
-        val labels = listOf(R.string.crownHunt_overviewTab, R.string.shell_tabMap, R.string.crownHunt_statisticsTab) +
-            if (perksEnabled) listOf(R.string.crownHunt_tabShop) else emptyList()
-        TabRow(
-            selectedTabIndex = selectedTab,
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            indicator = {},
-            divider = {},
-        ) {
-            labels.forEachIndexed { index, label ->
-                Tab(
-                    selected = selectedTab == index,
-                    modifier = Modifier.testTag("crownHubTab_$index").background(
-                        if (selectedTab == index) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                        MaterialTheme.shapes.medium,
-                    ),
-                    selectedContentColor = MaterialTheme.colorScheme.onPrimary,
-                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    onClick = { if (index == 1) onBack() else savedTab = index },
-                    text = { Text(stringResource(label), style = MaterialTheme.typography.labelLarge) },
-                )
-            }
-        }
+        // Keep persisted IDs and automation tags stable after removing the Map slot (1).
+        val selectedTab = savedTab.takeIf { it == 0 || it == 2 || (it == 3 && perksEnabled) } ?: 0
+        val tabs = listOf(
+            CrownHubTab(0, stringResource(R.string.crownHunt_overviewTab)),
+            CrownHubTab(2, stringResource(R.string.crownHunt_statisticsTab)),
+        ) + if (perksEnabled) listOf(CrownHubTab(3, stringResource(R.string.crownHunt_tabShop))) else emptyList()
+        CrownHubTabs(tabs, selectedTab, onSelect = { savedTab = it })
         when (selectedTab) {
             3 -> PerkShopContent(shopState, buyStatus, onBuyPerk)
             2 -> CrownStatisticsContent(statsState, kronjagare, historyState, historySelected) { historySelected = it }
             else -> CrownHuntHubContent(
-                statsState, historyState, perksEnabled,
+                statsState, historyState,
                 onShowInstructions = { showInstructions = true },
                 onShowStatistics = { historySelected = false; savedTab = 2 },
                 onShowHistory = { historySelected = true; savedTab = 2 },
-                onShowShop = { savedTab = 3 },
             )
         }
     }
@@ -191,11 +173,9 @@ fun CrownHuntScreen(
 private fun ColumnScope.CrownHuntHubContent(
     statsState: CrownStatsUiState,
     historyState: PointsEntriesState,
-    perksEnabled: Boolean,
     onShowInstructions: () -> Unit,
     onShowStatistics: () -> Unit,
     onShowHistory: () -> Unit,
-    onShowShop: () -> Unit,
 ) {
     when (statsState) {
         CrownStatsUiState.Loading ->
@@ -223,17 +203,7 @@ private fun ColumnScope.CrownHuntHubContent(
                 TextButton(onClick = onShowHistory) { Text(stringResource(R.string.crownHunt_viewAll)) }
             }
             CrownHistoryContent(historyState, compact = true)
-            if (perksEnabled) {
-                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Icon(painterResource(crownPointGlyphRes()), null, Modifier.size(40.dp), MaterialTheme.colorScheme.primary)
-                        Text(stringResource(R.string.crownHunt_tabShop), modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.titleMedium)
-                        Button(onClick = onShowShop) { Text(stringResource(R.string.crownHunt_openShop)) }
-                    }
-                }
-            }
+
         }
     }
     OutlinedButton(onClick = onShowInstructions,
@@ -279,17 +249,15 @@ private fun ColumnScope.CrownStatisticsContent(
     history: Boolean,
     onHistoryChange: (Boolean) -> Unit,
 ) {
-    TabRow(selectedTabIndex = if (history) 1 else 0, indicator = {}, divider = {}) {
-        listOf(R.string.crownHunt_statisticsTab, R.string.crownHunt_historyTab).forEachIndexed { index, label ->
-            val selected = history == (index == 1)
-            Tab(selected = selected, onClick = { onHistoryChange(index == 1) },
-                modifier = Modifier.background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-                    MaterialTheme.shapes.medium),
-                selectedContentColor = MaterialTheme.colorScheme.onPrimary,
-                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                text = { Text(stringResource(label)) })
-        }
-    }
+    CrownHubTabs(
+        listOf(
+            CrownHubTab(0, stringResource(R.string.crownHunt_statisticsTab)),
+            CrownHubTab(1, stringResource(R.string.crownHunt_historyTab)),
+        ),
+        selectedId = if (history) 1 else 0,
+        onSelect = { onHistoryChange(it == 1) },
+        tagPrefix = "crownStatsTab",
+    )
     if (history) {
         Text(stringResource(R.string.crownHunt_recentPoints), style = MaterialTheme.typography.titleMedium)
         CrownHistoryContent(historyState)
