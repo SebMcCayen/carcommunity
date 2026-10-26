@@ -135,10 +135,6 @@ fun MapShellCataloguePreview(
                         } else null,
                         onManageLiveSession = { panel = "map-session" },
                     )
-                    Text("DESIGNPREVIEW · LOKALA TESTDATA",
-                        Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 64.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.tertiary)
                 }
                 Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().testTag(MAP_CATALOGUE_FOOTER_TAG)) {
                     ShellBottomBar(
@@ -157,12 +153,10 @@ fun MapShellCataloguePreview(
                 }
                 // This label is outside mapSheetViewport, so the preview remains
                 // identifiable when the host hides covered map accessibility nodes.
-                if (panel != null) {
                     Surface(Modifier.align(Alignment.TopCenter).statusBarsPadding()) {
                         Text("DESIGNPREVIEW · LOKALA TESTDATA", Modifier.padding(4.dp),
                             style = MaterialTheme.typography.labelSmall)
                     }
-                }
             }
             when (panel) {
                 "map-layers" -> MapLayersPopup(
