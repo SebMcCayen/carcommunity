@@ -200,6 +200,10 @@
     <string name="settingsMenu_aboutSection">About the app</string>
     <string name="settingsMenu_whatsNew">What’s new</string>
     <string name="settingsMenu_appearanceSection">Appearance</string>
+    <string name="settingsMenu_themeSystem">System</string>
+    <string name="settingsMenu_themeSystemDescription">Follows your phone’s light or dark theme</string>
+    <string name="settingsMenu_themeScheduled">Automatic</string>
+    <string name="settingsMenu_themeScheduledDescription">Light 07:00–19:00, dark otherwise. Local time, independent of your phone’s theme.</string>
     <string name="settingsMenu_themeAutomatic">Automatic</string>
     <string name="settingsMenu_themeAutomaticDescription">Follows your device’s light or dark setting</string>
     <string name="settingsMenu_themeLight">Light</string>
@@ -889,6 +893,15 @@
     <string name="savedDrives_routeLoading">Loading route...</string>
     <string name="savedDrives_routeUnavailable">The route map isn\'t available for this drive.</string>
     <string name="savedDrives_routeEmpty">This drive has no recorded route to show.</string>
+    <string name="savedDrives_driveReplay_simplifiedOverview">Simplified saved route. Exact GPS detail is unavailable.</string>
+    <string name="savedDrives_driveReplay_missing">No full route is stored for this drive. If this drive was just saved, try again after the upload finishes. Missing older GPS data cannot be recovered.</string>
+    <string name="savedDrives_driveReplay_signInRequired">Sign in to the drive\'s account to view its route.</string>
+    <string name="savedDrives_driveReplay_accessDenied">You do not have access to this route. Check your account and your plan\'s history access.</string>
+    <string name="savedDrives_driveReplay_notFound">This drive is no longer available to this account.</string>
+    <string name="savedDrives_driveReplay_serviceUnavailable">The route service is temporarily unavailable. Please try again.</string>
+    <string name="savedDrives_driveReplay_downloadFailed">Could not download the full route. Check your connection and try again.</string>
+    <string name="savedDrives_driveReplay_corrupt">The saved route file could not be read.</string>
+    <string name="savedDrives_driveReplay_exactRouteEmpty">No full recorded GPS points are available for this drive.</string>
     <string name="savedDrives_routeExpand">Open full-screen map</string>
     <string name="savedDrives_routeMapThumbnailLabel">Drive route map, tap to expand</string>
     <string name="savedDrives_routeTopSpeedMarkerDescription">Top speed here</string>
@@ -2001,6 +2014,9 @@
     <string name="driver_feed_restricted">Driver is unavailable for your account.</string>
     <string name="driver_feed_image">Post image</string>
     <string name="driver_feed_likes">Likes</string>
+    <string name="driver_feed_openPost">Open this post in Driver</string>
+    <string name="driver_feed_postLinkHint">If Driver is missing or needs an update, the website opens instead.</string>
+    <string name="driver_feed_postOpenError">Neither Driver nor the website could be opened. Try again.</string>
     <string name="moderation_messageActionsTitle">Message from %1$s</string>
     <string name="moderation_reply">Reply</string>
     <string name="moderation_blockMember">Block %1$s</string>

@@ -1114,6 +1114,93 @@ class DriveRecordingTest {
     }
 
     @Test
+    fun `new auto-kept drive uploads full recorded fixes that replay through the signed URL contract`() = runTest {
+        val repo = RecordingFakeRepository(shouldFail = false)
+        val uploader = CapturingUploader()
+        val coordinator = DriveRecordingCoordinator(
+            repository = repo,
+            sourceSessionId = "session-round-trip",
+            routeUploadRunner = RouteUploadRunner(uploader, delayFn = {}),
+            uploadScope = CoroutineScope(StandardTestDispatcher(testScheduler)),
+        )
+        coordinator.start()
+        coordinator.addFix(57.0, 12.0, 1_000L)
+        coordinator.addFix(57.001, 12.002, 2_000L)
+        coordinator.stop()
+        coordinator.autoSave(title = "Trip")
+        coordinator.keep() // Keep before the background save and upload land.
+        advanceUntilIdle()
+        assertEquals(RecordingState.Kept, coordinator.state.value)
+        assertEquals("rideRoutes/uid/ride/route.bin", uploader.lastPath)
+        assertEquals(RouteUploadRunner.CONTENT_TYPE_GZIP, uploader.lastContentType)
+
+        val reader = FirebaseRouteReplayRepository.createForTest(
+            authenticatedUid = { "uid" },
+            fetchSignedUrl = { rideId ->
+                assertEquals("ride", rideId)
+                // The server resolves the stored path and signs it; no guessed
+                // path or direct Storage read on the client replay side.
+                "https://signed.example/route.bin"
+            },
+            downloadBytes = { uploader.lastBytes!! },
+        )
+        val replay = reader.loadRoute("uid", "ride") as RouteReplayState.Ready
+        assertEquals(
+            listOf(RoutePoint(57.0, 12.0, 1_000L), RoutePoint(57.001, 12.002, 2_000L)),
+            replay.points,
+        )
+    }
+
+    @Test
+    fun `new drive can retry replay after its pending background upload finishes`() = runTest {
+        val releaseUpload = CompletableDeferred<Unit>()
+        val uploadedBytes = CompletableDeferred<ByteArray>()
+        val uploader = object : MediaUploader {
+            override suspend fun upload(path: String, bytes: ByteArray, contentType: String): String {
+                assertEquals("rideRoutes/uid/ride/route.bin", path)
+                releaseUpload.await()
+                uploadedBytes.complete(bytes)
+                return path
+            }
+        }
+        val coordinator = DriveRecordingCoordinator(
+            repository = RecordingFakeRepository(shouldFail = false),
+            sourceSessionId = "pending-upload",
+            routeUploadRunner = RouteUploadRunner(uploader, delayFn = {}),
+            uploadScope = CoroutineScope(StandardTestDispatcher(testScheduler)),
+        )
+        coordinator.start()
+        coordinator.addFix(57.0, 12.0, 1_000L)
+        coordinator.addFix(57.001, 12.002, 2_000L)
+        coordinator.stop()
+        coordinator.autoSave(title = null)
+        coordinator.keep()
+        advanceUntilIdle()
+        assertEquals(RecordingState.Kept, coordinator.state.value)
+        assertFalse(uploadedBytes.isCompleted)
+
+        val reader = FirebaseRouteReplayRepository.createForTest(
+            authenticatedUid = { "uid" },
+            fetchSignedUrl = {
+                if (!uploadedBytes.isCompleted) {
+                    throw RouteReplayCallableException(
+                        "FAILED_PRECONDITION",
+                        "This drive has no stored route to replay.",
+                    )
+                }
+                "https://signed.example/route.bin"
+            },
+            downloadBytes = { uploadedBytes.await() },
+        )
+        assertEquals(RouteReplayState.Unavailable(RouteReplayFailure.MISSING), reader.loadRoute("uid", "ride"))
+        releaseUpload.complete(Unit)
+        advanceUntilIdle()
+        val replay = reader.loadRoute("uid", "ride") as RouteReplayState.Ready
+        assertEquals(2, replay.points.size)
+        assertEquals(listOf(1_000L, 2_000L), replay.points.map { it.timestampMs })
+    }
+
+    @Test
     fun `save still succeeds and skips upload when there are no route points`() = runTest {
         val repo = RecordingFakeRepository(shouldFail = false)
         val uploader = CapturingUploader()
@@ -1323,12 +1410,14 @@ private class CapturingUploader(private val alwaysFail: Boolean = false) : Media
     var attempts = 0
     var lastPath: String? = null
     var lastBytes: ByteArray? = null
+    var lastContentType: String? = null
 
     override suspend fun upload(path: String, bytes: ByteArray, contentType: String): String {
         attempts++
         if (alwaysFail) throw IllegalStateException("upload failed")
         lastPath = path
         lastBytes = bytes
+        lastContentType = contentType
         return path
     }
 }

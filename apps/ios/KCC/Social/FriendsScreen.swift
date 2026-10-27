@@ -31,6 +31,7 @@ struct FriendsScreen: View {
     var body: some View {
         content
             .navigationTitle(Text("shell.friendsTitle"))
+            .kccReadingSurface(pageBackground: true)
             .task { await coordinator?.load() }
     }
 
@@ -39,59 +40,55 @@ struct FriendsScreen: View {
         if let coordinator {
             loaded(coordinator)
         } else {
-            VStack(spacing: KccSpacing.s2) {
-                Text("shell.friendsTitle")
-                    .font(.system(size: KccTypeScale.titleMd, weight: KccTypeScale.semibold))
-                Text("common.placeholder")
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-            .padding(KccSpacing.s4)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            SocialReadingState(title: "shell.friendsTitle", message: "common.placeholder", symbol: "person.2")
         }
     }
 
     @ViewBuilder
     private func loaded(_ coordinator: FriendsCoordinator) -> some View {
         List {
-            addFriendSection(coordinator)
-            switch coordinator.status {
-            case .loading:
-                Section {
-                    HStack(spacing: KccSpacing.s3) {
-                        ProgressView()
-                        Text("friends.listTitle")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            case .error(let error):
-                Section {
-                    VStack(alignment: .leading, spacing: KccSpacing.s3) {
-                        Text(FriendsScreenStrings.statusErrorKey(error))
-                        Button {
-                            Task { await coordinator.load() }
-                        } label: {
-                            Text("friends.retry")
-                        }
-                        .buttonStyle(.bordered)
-                    }
-                }
-            case .loaded(let friends, let incoming, let outgoing, let points):
-                if let actionError = coordinator.actionError {
+            Group {
+                addFriendSection(coordinator)
+                switch coordinator.status {
+                case .loading:
                     Section {
-                        actionErrorBanner(actionError, coordinator: coordinator)
+                        HStack(spacing: KccSpacing.s3) {
+                            ProgressView()
+                            Text("friends.listTitle")
+                                .foregroundStyle(.secondary)
+                        }
                     }
+                case .error(let error):
+                    Section {
+                        VStack(alignment: .leading, spacing: KccSpacing.s3) {
+                            Text(FriendsScreenStrings.statusErrorKey(error))
+                            Button {
+                                Task { await coordinator.load() }
+                            } label: {
+                                Text("friends.retry").frame(minHeight: 48)
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                case .loaded(let friends, let incoming, let outgoing, let points):
+                    if let actionError = coordinator.actionError {
+                        Section {
+                            actionErrorBanner(actionError, coordinator: coordinator)
+                        }
+                    }
+                    if !incoming.isEmpty {
+                        incomingSection(incoming, coordinator: coordinator)
+                    }
+                    if !outgoing.isEmpty {
+                        outgoingSection(outgoing, coordinator: coordinator)
+                    }
+                    friendsSection(friends, points: points, coordinator: coordinator)
                 }
-                if !incoming.isEmpty {
-                    incomingSection(incoming, coordinator: coordinator)
-                }
-                if !outgoing.isEmpty {
-                    outgoingSection(outgoing, coordinator: coordinator)
-                }
-                friendsSection(friends, points: points, coordinator: coordinator)
             }
+            .listRowBackground(KccTheme.surface)
         }
         .listStyle(.insetGrouped)
+        .listRowSpacing(KccSpacing.s2)
         .confirmationDialog(
             Text(verbatim: removeConfirmTitle),
             isPresented: Binding(
@@ -135,12 +132,16 @@ struct FriendsScreen: View {
     @ViewBuilder
     private func addFriendSection(_ coordinator: FriendsCoordinator) -> some View {
         Section {
-            HStack(spacing: KccSpacing.s2) {
+            VStack(alignment: .leading, spacing: KccSpacing.s3) {
                 TextField(text: $nickname) {
                     Text("friends.nicknameLabel")
                 }
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .font(.body)
+                .padding(KccSpacing.s3)
+                .frame(minHeight: 48)
+                .background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.md))
                 .onChange(of: nickname) { _, _ in
                     // Clear a stale result/error as soon as the caller edits
                     // the field.
@@ -154,12 +155,12 @@ struct FriendsScreen: View {
                     Task { await coordinator.sendRequest(nickname: value) }
                 } label: {
                     if coordinator.add == .working {
-                        Text("friends.addWorking")
+                        Text("friends.addWorking").frame(minHeight: 48)
                     } else {
-                        Text("friends.addAction")
+                        Text("friends.addAction").frame(minHeight: 48)
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .kccPrimaryAction()
                 .disabled(
                     coordinator.add == .working
                         || nickname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -168,32 +169,32 @@ struct FriendsScreen: View {
             switch coordinator.add {
             case .sent(let nowFriends):
                 Text(nowFriends ? "friends.nowFriends" : "friends.requestSent")
-                    .font(.system(size: KccTypeScale.bodySm))
+                    .font(.subheadline)
                     .foregroundStyle(KccPalette.successGreen)
             case .error(let error):
                 Text(FriendsScreenStrings.addErrorKey(error))
-                    .font(.system(size: KccTypeScale.bodySm))
+                    .font(.subheadline)
                     .foregroundStyle(KccPalette.errorRed)
             case .chooser(let candidates):
                 // The nickname matched several members — an inline picker
                 // (Android renders a dialog; a list section keeps this dumb).
                 VStack(alignment: .leading, spacing: KccSpacing.s2) {
                     Text("friends.chooseMember")
-                        .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
+                        .font(.headline)
                     Text("friends.chooseMemberBody")
-                        .font(.system(size: KccTypeScale.bodySm))
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                     ForEach(candidates, id: \.uid) { candidate in
                         Button {
                             Task { await coordinator.chooseCandidate(uid: candidate.uid) }
                         } label: {
-                            memberLabel(candidate.displayName)
+                            SocialMemberLabel(name: candidate.displayName).frame(minHeight: 48)
                         }
                     }
                     Button(role: .cancel) {
                         coordinator.resetAdd()
                     } label: {
-                        Text("friends.chooseCancel")
+                        Text("friends.chooseCancel").frame(minHeight: 48)
                     }
                 }
             case .idle, .working:
@@ -215,27 +216,9 @@ struct FriendsScreen: View {
                 let busy = coordinator.busyRows.contains(
                     FriendsCoordinator.respondBusyKey(request.requestId)
                 )
-                HStack(spacing: KccSpacing.s2) {
-                    memberLabel(request.otherUser.displayName)
-                    Spacer()
-                    Button {
-                        Task { await coordinator.accept(requestId: request.requestId) }
-                    } label: {
-                        Text("friends.accept")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(busy)
-                    Button(role: .destructive) {
-                        Task { await coordinator.decline(requestId: request.requestId) }
-                    } label: {
-                        Text("friends.decline")
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(busy)
-                }
-                // Row-scoped buttons: without this, a List row treats every
-                // button tap as a whole-row tap.
-                .buttonStyle(.borderless)
+                FriendRequestContent(name: request.otherUser.displayName, busy: busy,
+                    onAccept: { Task { await coordinator.accept(requestId: request.requestId) } },
+                    onDeclineOrCancel: { Task { await coordinator.decline(requestId: request.requestId) } })
             }
         } header: {
             Text("friends.incomingTitle")
@@ -251,23 +234,9 @@ struct FriendsScreen: View {
                 let busy = coordinator.busyRows.contains(
                     FriendsCoordinator.cancelBusyKey(request.toUid)
                 )
-                HStack(spacing: KccSpacing.s2) {
-                    VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                        memberLabel(request.otherUser.displayName)
-                        Text("friends.outgoingPendingLabel")
-                            .font(.system(size: KccTypeScale.caption))
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button(role: .destructive) {
-                        Task { await coordinator.cancel(toUid: request.toUid) }
-                    } label: {
-                        Text("friends.cancelRequestAction")
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(busy)
-                }
-                .buttonStyle(.borderless)
+                FriendRequestContent(name: request.otherUser.displayName, busy: busy,
+                    onAccept: nil,
+                    onDeclineOrCancel: { Task { await coordinator.cancel(toUid: request.toUid) } })
             }
         } header: {
             Text("friends.outgoingTitle")
@@ -292,9 +261,9 @@ struct FriendsScreen: View {
                 }
             }
         } header: {
-            HStack {
+            SocialFlow {
                 Text("friends.listTitle")
-                Spacer()
+                SocialFlowSpacer()
                 if friends.count > 1 {
                     sortMenu
                 }
@@ -319,7 +288,8 @@ struct FriendsScreen: View {
             } icon: {
                 Image(systemName: "arrow.up.arrow.down")
             }
-            .font(.system(size: KccTypeScale.caption))
+            .font(.caption)
+            .frame(minHeight: 48)
         }
     }
 
@@ -329,33 +299,9 @@ struct FriendsScreen: View {
         coordinator: FriendsCoordinator
     ) -> some View {
         let busy = coordinator.busyRows.contains(FriendsCoordinator.removeBusyKey(friend.uid))
-        return HStack(spacing: KccSpacing.s3) {
-            VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                memberLabel(friend.displayName)
-                pointsChip(points)
-            }
-            Spacer()
-            if let onMessageFriend {
-                Button {
-                    onMessageFriend(friend)
-                } label: {
-                    Text("friends.message")
-                }
-                .buttonStyle(.bordered)
-            }
-            if let onViewProfile {
-                Button {
-                    onViewProfile(friend)
-                } label: {
-                    Image(systemName: "person.crop.circle")
-                }
-                .buttonStyle(.borderless)
-                // Same fallback as the visible label, so VoiceOver never
-                // announces an unlabeled control for a nameless friend.
-                .accessibilityLabel(memberLabel(friend.displayName))
-            }
-        }
-        .buttonStyle(.borderless)
+        return FriendRowContent(friend: friend, points: points,
+            onMessage: onMessageFriend.map { action in { action(friend) } },
+            onProfile: onViewProfile.map { action in { action(friend) } })
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(role: .destructive) {
                 removeTarget = friend
@@ -366,45 +312,19 @@ struct FriendsScreen: View {
         }
     }
 
-    /// Compact "1 240 Kronpoäng" chip beside a friend's name; a friend absent
-    /// from the balances map renders as 0 (Android: `FriendPointsChip`).
-    private func pointsChip(_ points: Int64) -> some View {
-        HStack(spacing: KccSpacing.s1) {
-            Text(verbatim: FriendPointsFormat.grouped(points))
-                .font(.system(size: KccTypeScale.caption, weight: KccTypeScale.semibold))
-            Text("profile.pointsTitle")
-                .font(.system(size: KccTypeScale.caption))
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, KccSpacing.s2)
-        .padding(.vertical, KccSpacing.s1 / 2)
-        .background(KccPalette.crownGold.opacity(0.2))
-        .clipShape(Capsule())
-    }
-
-    /// The friend's name, or the unknown-member fallback — trimming first,
-    /// so a whitespace-only name never renders (or is announced) as blank.
-    private func memberLabel(_ displayName: String?) -> Text {
-        if let name = displayName.trimmedNonBlank {
-            Text(verbatim: name)
-        } else {
-            Text("friends.unknownMember")
-        }
-    }
-
     private func actionErrorBanner(
         _ error: FriendActionError,
         coordinator: FriendsCoordinator
     ) -> some View {
-        HStack(spacing: KccSpacing.s2) {
+        SocialFlow {
             Text(FriendsScreenStrings.actionErrorKey(error))
-                .font(.system(size: KccTypeScale.bodySm))
+                .font(.subheadline)
                 .foregroundStyle(KccPalette.errorRed)
-            Spacer()
+            SocialFlowSpacer()
             Button {
                 coordinator.clearActionError()
             } label: {
-                Text("friends.close")
+                Text("friends.close").frame(minHeight: 48)
             }
             .buttonStyle(.borderless)
         }

@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.BarChart
@@ -31,6 +33,7 @@ import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Stars
+import androidx.compose.material.icons.filled.SettingsBrightness
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -158,38 +161,43 @@ fun SettingsScreen(
             }
         }
 
-        // Appearance: Automatic / Light / Dark. Automatic is the default and
-        // reproduces the original behaviour (follow the device). Light and Dark
-        // are sticky — the app stops reacting to the system flipping (scheduled
-        // sunset->sunrise, battery saver), which is the point of the setting.
-        // Applies immediately: the store's StateFlow re-themes the running app,
-        // so this screen restyles under the user's finger with no restart.
+        // Keep the persisted SYSTEM meaning; the clock schedule is a separate choice.
         SettingsGroup(stringResource(R.string.settingsMenu_appearanceSection)) {
             val themeController = LocalThemeController.current
-            ThemeOptionRow(
-                label = stringResource(R.string.settingsMenu_themeAutomatic),
-                description = stringResource(R.string.settingsMenu_themeAutomaticDescription),
-                icon = Icons.Filled.BrightnessAuto,
-                selected = themeController.preference == ThemePreference.SYSTEM,
-                testTag = SETTINGS_THEME_AUTOMATIC_TAG,
-                onClick = { themeController.setPreference(ThemePreference.SYSTEM) },
-            )
-            ThemeOptionRow(
-                label = stringResource(R.string.settingsMenu_themeLight),
-                description = stringResource(R.string.settingsMenu_themeLightDescription),
-                icon = Icons.Filled.LightMode,
-                selected = themeController.preference == ThemePreference.LIGHT,
-                testTag = SETTINGS_THEME_LIGHT_TAG,
-                onClick = { themeController.setPreference(ThemePreference.LIGHT) },
-            )
-            ThemeOptionRow(
-                label = stringResource(R.string.settingsMenu_themeDark),
-                description = stringResource(R.string.settingsMenu_themeDarkDescription),
-                icon = Icons.Filled.DarkMode,
-                selected = themeController.preference == ThemePreference.DARK,
-                testTag = SETTINGS_THEME_DARK_TAG,
-                onClick = { themeController.setPreference(ThemePreference.DARK) },
-            )
+            Column(modifier = Modifier.selectableGroup()) {
+                ThemeOptionRow(
+                    label = stringResource(R.string.settingsMenu_themeSystem),
+                    description = stringResource(R.string.settingsMenu_themeSystemDescription),
+                    icon = Icons.Filled.SettingsBrightness,
+                    selected = themeController.preference == ThemePreference.SYSTEM,
+                    testTag = SETTINGS_THEME_SYSTEM_TAG,
+                    onClick = { themeController.setPreference(ThemePreference.SYSTEM) },
+                )
+                ThemeOptionRow(
+                    label = stringResource(R.string.settingsMenu_themeScheduled),
+                    description = stringResource(R.string.settingsMenu_themeScheduledDescription),
+                    icon = Icons.Filled.BrightnessAuto,
+                    selected = themeController.preference == ThemePreference.AUTOMATIC,
+                    testTag = SETTINGS_THEME_AUTOMATIC_TAG,
+                    onClick = { themeController.setPreference(ThemePreference.AUTOMATIC) },
+                )
+                ThemeOptionRow(
+                    label = stringResource(R.string.settingsMenu_themeLight),
+                    description = stringResource(R.string.settingsMenu_themeLightDescription),
+                    icon = Icons.Filled.LightMode,
+                    selected = themeController.preference == ThemePreference.LIGHT,
+                    testTag = SETTINGS_THEME_LIGHT_TAG,
+                    onClick = { themeController.setPreference(ThemePreference.LIGHT) },
+                )
+                ThemeOptionRow(
+                    label = stringResource(R.string.settingsMenu_themeDark),
+                    description = stringResource(R.string.settingsMenu_themeDarkDescription),
+                    icon = Icons.Filled.DarkMode,
+                    selected = themeController.preference == ThemePreference.DARK,
+                    testTag = SETTINGS_THEME_DARK_TAG,
+                    onClick = { themeController.setPreference(ThemePreference.DARK) },
+                )
+            }
         }
 
         // Language: Svenska / English. Swedish is the app default (res/values/);
@@ -284,7 +292,8 @@ fun SettingsScreen(
     }
 }
 
-/** Test tags for the three Appearance options, so UI tests can drive them. */
+/** Test tags for the four Appearance options, so UI tests can drive them. */
+const val SETTINGS_THEME_SYSTEM_TAG = "settings_theme_system"
 const val SETTINGS_THEME_AUTOMATIC_TAG = "settings_theme_automatic"
 const val SETTINGS_THEME_LIGHT_TAG = "settings_theme_light"
 const val SETTINGS_THEME_DARK_TAG = "settings_theme_dark"
@@ -321,7 +330,7 @@ private fun applyAppLanguage(language: AppLanguage) {
  *
  * Mirrors [HubRow]'s Surface/Row shape so the section sits visually with the rest of Settings, but
  * carries `selectableGroup`-style semantics ([Role.RadioButton] + `selected`) instead of a
- * button's: these three rows are a single-choice set, and TalkBack should announce them as such.
+ * button's: these four rows are a single-choice set, and TalkBack should announce them as such.
  * The radio is non-clickable — the whole row is the target, so the click is declared once on the
  * Surface and the radio is decoration.
  */
@@ -335,7 +344,7 @@ private fun ThemeOptionRow(
     onClick: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth().testTag(testTag).semantics { role = Role.RadioButton },
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(testTag).semantics { role = Role.RadioButton },
         shape = MaterialTheme.shapes.medium,
         color =
             if (selected) MaterialTheme.colorScheme.secondaryContainer
@@ -344,9 +353,9 @@ private fun ThemeOptionRow(
         onClick = onClick,
     ) {
         Row(
-            modifier = Modifier.padding(KccSpacing.s4),
+            modifier = Modifier.padding(horizontal = KccSpacing.s3, vertical = KccSpacing.s2),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s4),
+            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
             Icon(
                 imageVector = icon,
@@ -357,12 +366,12 @@ private fun ThemeOptionRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     text = description,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

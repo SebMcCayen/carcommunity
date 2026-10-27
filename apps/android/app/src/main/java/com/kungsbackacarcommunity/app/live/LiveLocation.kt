@@ -80,6 +80,8 @@ data class LiveSessionInfo(
      * driven in onto the saved ride, linking it back to the garage vehicle.
      */
     val vehicleId: String? = null,
+    /** Backend-stamped owner of a convoy-auto session; absent on manual sessions. */
+    val convoyId: String? = null,
 )
 
 object LiveLocation {

@@ -223,6 +223,10 @@
     "aboutSection": "About the app",
     "whatsNew": "What’s new",
     "appearanceSection": "Appearance",
+    "themeSystem": "System",
+    "themeSystemDescription": "Follows your phone’s light or dark theme",
+    "themeScheduled": "Automatic",
+    "themeScheduledDescription": "Light 07:00–19:00, dark otherwise. Local time, independent of your phone’s theme.",
     "themeAutomatic": "Automatic",
     "themeAutomaticDescription": "Follows your device’s light or dark setting",
     "themeLight": "Light",
@@ -964,6 +968,17 @@
     "routeLoading": "Loading route...",
     "routeUnavailable": "The route map isn't available for this drive.",
     "routeEmpty": "This drive has no recorded route to show.",
+    "driveReplay": {
+      "simplifiedOverview": "Simplified saved route. Exact GPS detail is unavailable.",
+      "missing": "No full route is stored for this drive. If this drive was just saved, try again after the upload finishes. Missing older GPS data cannot be recovered.",
+      "signInRequired": "Sign in to the drive's account to view its route.",
+      "accessDenied": "You do not have access to this route. Check your account and your plan's history access.",
+      "notFound": "This drive is no longer available to this account.",
+      "serviceUnavailable": "The route service is temporarily unavailable. Please try again.",
+      "downloadFailed": "Could not download the full route. Check your connection and try again.",
+      "corrupt": "The saved route file could not be read.",
+      "exactRouteEmpty": "No full recorded GPS points are available for this drive."
+    },
     "routeExpand": "Open full-screen map",
     "routeMapThumbnailLabel": "Drive route map, tap to expand",
     "routeTopSpeedMarkerDescription": "Top speed here",
@@ -2146,7 +2161,10 @@
       "canonicalOnboarding": "Complete your CarCommunity profile to read Driver posts.",
       "restricted": "Driver is unavailable for your account.",
       "image": "Post image",
-      "likes": "Likes"
+      "likes": "Likes",
+      "openPost": "Open this post in Driver",
+      "postLinkHint": "If Driver is missing or needs an update, the website opens instead.",
+      "postOpenError": "Neither Driver nor the website could be opened. Try again."
     }
   },
   "moderation": {

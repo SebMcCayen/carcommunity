@@ -36,8 +36,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -46,6 +48,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -140,6 +144,7 @@ fun DriverFeedContent(
     state: DriverFeedState, strings: DriverFeedStrings, modifier: Modifier = Modifier,
     onBack: () -> Unit, onRefresh: () -> Unit, onMore: () -> Unit, onOpen: (String) -> Unit,
     listState: LazyListState = rememberLazyListState(),
+    onOpenDriver: (String) -> Boolean = driverPostLauncher(),
 ) {
     Surface(modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column {
@@ -175,7 +180,7 @@ fun DriverFeedContent(
                         Card(onClick = { onOpen(post.id) }, modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-                            DriverPostBody(post, strings)
+                            DriverPostBody(post, strings, onOpenDriver)
                         }
                     }
                     if (!state.loading && state.failure == null && state.posts.isEmpty()) item {
@@ -183,7 +188,7 @@ fun DriverFeedContent(
                     }
                 } else state.post?.let { post ->
                     item { Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                        DriverPostBody(post, strings)
+                        DriverPostBody(post, strings, onOpenDriver)
                     } }
                     item { Text(strings["comments"], Modifier.padding(KccSpacing.s4).semantics { heading() },
                         style = MaterialTheme.typography.titleMedium) }
@@ -219,7 +224,8 @@ fun DriverFeedContent(
 }
 
 @Composable
-private fun DriverPostBody(post: DriverPost, strings: DriverFeedStrings) {
+private fun DriverPostBody(post: DriverPost, strings: DriverFeedStrings, onOpenDriver: (String) -> Boolean) {
+    var appOpenFailed by remember(post.id) { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(KccSpacing.s4), verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
         Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3), verticalAlignment = Alignment.CenterVertically) {
             DriverAuthorIcon()
@@ -237,6 +243,13 @@ private fun DriverPostBody(post: DriverPost, strings: DriverFeedStrings) {
         }
         Text("${strings["likes"]}: ${post.likes} · ${strings["comments"]}: ${post.replies}",
             style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TextButton(onClick = { appOpenFailed = !onOpenDriver(post.id) }) { Text(strings["openPost"]) }
+        Text(strings["postLinkHint"], style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (appOpenFailed) Text(strings["postOpenError"],
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error)
     }
 }
 

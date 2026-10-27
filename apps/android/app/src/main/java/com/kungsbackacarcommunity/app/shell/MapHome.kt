@@ -9,7 +9,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -122,7 +121,6 @@ import com.kungsbackacarcommunity.app.design.LocalKccDarkTheme
 import com.kungsbackacarcommunity.app.design.LocalKccMapColors
 import androidx.compose.foundation.BorderStroke
 import com.kungsbackacarcommunity.app.incidents.IncidentLocationChoiceDialog
-import com.kungsbackacarcommunity.app.incidents.IncidentAgeFilter
 import com.kungsbackacarcommunity.app.incidents.IncidentAgeOption
 import com.kungsbackacarcommunity.app.incidents.IncidentLocationPickerDialog
 import com.kungsbackacarcommunity.app.incidents.IncidentType
@@ -1141,19 +1139,7 @@ internal fun MapLayersPopup(
         }
         if (incidentsOn) {
             Text(stringResource(R.string.shell_layersAlertAgeTitle), style = MaterialTheme.typography.titleSmall)
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag(MAP_HOME_LAYERS_ALERT_AGE_TAG),
-                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
-            ) {
-                IncidentAgeFilter.orderedOptions.forEach { option ->
-                    FilterChip(
-                        selected = incidentMaxAge == option,
-                        onClick = { onIncidentMaxAgeChange(option) },
-                        label = { Text(incidentAgeOptionLabel(option)) },
-                        modifier = Modifier.heightIn(min = 48.dp).testTag("${MAP_HOME_LAYERS_ALERT_AGE_TAG}_${option.name}"),
-                    )
-                }
-            }
+            LayerAlertAgeOptions(incidentMaxAge, onIncidentMaxAgeChange)
             Text(stringResource(R.string.shell_layersAlertAgeHelp), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -1296,103 +1282,8 @@ private fun LayerZoomSlider(
     }
 }
 
-/** Test tag on the Trafikverket alert max-age slider in the layers popup. */
+/** Test tag on the Trafikverket alert max-age choices in the layers popup. */
 const val MAP_HOME_LAYERS_ALERT_AGE_TAG = "map_home_layers_alert_age"
-
-/** Localized label for a single [IncidentAgeOption] (the current value + end caps). */
-@Composable
-private fun incidentAgeOptionLabel(option: IncidentAgeOption): String =
-    stringResource(
-        when (option) {
-            IncidentAgeOption.HOURS_6 -> R.string.shell_layersAlertAge6h
-            IncidentAgeOption.HOURS_12 -> R.string.shell_layersAlertAge12h
-            IncidentAgeOption.DAY_1 -> R.string.shell_layersAlertAge1d
-            IncidentAgeOption.DAYS_3 -> R.string.shell_layersAlertAge3d
-            IncidentAgeOption.WEEK_1 -> R.string.shell_layersAlertAge1w
-            IncidentAgeOption.DAYS_30 -> R.string.shell_layersAlertAge30d
-            IncidentAgeOption.ALL -> R.string.shell_layersAlertAgeAll
-        },
-    )
-
-/**
- * The "alert age" section of the map-layers popup: a discrete slider choosing the
- * MAX AGE of Trafikverket alerts drawn on the map — the fix for Trafikverket's
- * long-lived backlog filling the map with stale notifications. Left is strictest
- * (newest only), right is [IncidentAgeOption.ALL] (no limit); the ordered options
- * and step count come from [com.kungsbackacarcommunity.app.incidents.IncidentAgeFilter].
- *
- * The slider value is an OPTION INDEX, so each notch is a named age rather than a
- * raw duration. The thumb AND the text label track the finger locally as it drags
- * (both read the live index through
- * [com.kungsbackacarcommunity.app.incidents.IncidentAgeFilter.optionForSliderIndex]);
- * the choice is COMMITTED (persisted + applied to the alert layer, which re-filters
- * live) only on release ([Slider.onValueChangeFinished]), not on every delta.
- * Seeded from [maxAge] and re-seeded if it changes underneath (`remember(maxAge)`),
- * so an external change is reflected. The selected age is shown as text so the
- * unlabelled notches are legible — and, per issue #871, that text now updates while
- * dragging and not only on a tap.
- */
-@Composable
-private fun LayerAlertAgeSlider(
-    maxAge: IncidentAgeOption,
-    onMaxAgeChange: (IncidentAgeOption) -> Unit,
-) {
-    val options = IncidentAgeFilter.orderedOptions
-    var sliderIndex by
-        remember(maxAge) { mutableFloatStateOf(options.indexOf(maxAge).toFloat()) }
-    // The option the thumb currently sits on — tracks the finger LIVE while
-    // dragging, so the label updates continuously and not only on release. The
-    // committed [maxAge] is re-seeded above, so an external change is reflected too.
-    val displayedOption = IncidentAgeFilter.optionForSliderIndex(sliderIndex)
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.shell_layersAlertAgeTitle),
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            // The live choice, so the unlabelled notches read at a glance and the
-            // shown value moves as the thumb is dragged (issue #871).
-            Text(
-                text = incidentAgeOptionLabel(displayedOption),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-        Text(
-            text = stringResource(R.string.shell_layersAlertAgeHelp),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Slider(
-            value = sliderIndex,
-            onValueChange = { sliderIndex = it },
-            onValueChangeFinished = { onMaxAgeChange(IncidentAgeFilter.optionForSliderIndex(sliderIndex)) },
-            valueRange = 0f..options.lastIndex.toFloat(),
-            steps = IncidentAgeFilter.sliderSteps,
-            modifier = Modifier.fillMaxWidth().testTag(MAP_HOME_LAYERS_ALERT_AGE_TAG),
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                text = stringResource(R.string.shell_layersAlertAgeNewest),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = stringResource(R.string.shell_layersAlertAgeAll),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
 
 /** Test tag on the event-marker info popup card. */
 const val MAP_HOME_EVENT_POPUP_TAG = "map_home_event_popup"
