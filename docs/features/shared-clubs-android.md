@@ -38,8 +38,10 @@ club lookup. Logos use the existing public-image sanitizer, downscale to 512 px
 above 256 KiB. Club writes go through Driver callables; no client membership,
 role, statistics, attendance or message document writes are permitted.
 
-The message cursor uses a fresh server document snapshot rather than a truncated
-millisecond timestamp. Private views require server-confirmed current membership
+The message cursor preserves the raw server timestamp including nanoseconds,
+and raw page exhaustion is independent of visible/redacted rows. Loaded older
+message IDs and later event-participant pages retain bounded live listeners, so
+remote redactions and withdrawn attendance also disappear beyond the first page. Private views require server-confirmed current membership
 and never open using only Firestore's offline cache. This cannot remotely erase
 knowledge already read or externally captured; it prevents continued access in
 the app. Previously loaded history is not persisted as Compose saveable state.

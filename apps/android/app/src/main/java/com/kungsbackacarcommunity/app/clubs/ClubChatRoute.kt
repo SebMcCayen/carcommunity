@@ -36,17 +36,24 @@ fun ClubChatRoute(uid: String, repository: ClubRepository? = null) {
 @Composable
 private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubChatState.Ready) {
     val membership = ready.membership
-    var older by remember { mutableStateOf<List<ClubMessage>>(emptyList()) }
+    var pages by remember { mutableStateOf<List<ClubMessagePage>>(emptyList()) }
+    var pageCursor by remember { mutableStateOf<ClubMessageCursor?>(null) }
     var draft by remember { mutableStateOf("") }
     var operationId by remember { mutableStateOf(UUID.randomUUID().toString()) }
     var busy by remember { mutableStateOf(false) }
     var paging by remember { mutableStateOf(false) }
-    var hasOlder by remember { mutableStateOf(true) }
+    var pageHasOlder by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<Throwable?>(null) }
     var reporting by remember { mutableStateOf<ClubMessage?>(null) }
     var reported by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val rawMessages = (ready.messages + older).distinctBy { it.id }
+    val olderRows = mutableListOf<ClubMessage>()
+    pages.forEach { page -> key(page.ids) {
+        val source = remember(repository, page.ids) { repository.observeMessageRows(membership.clubId, page.ids) }
+        val rows by source.collectAsState(initial = emptyList())
+        olderRows.addAll(rows)
+    } }
+    val rawMessages = (ready.messages + olderRows).distinctBy { it.id }
         .sortedWith(compareByDescending<ClubMessage> { it.createdAtMillis ?: Long.MAX_VALUE }.thenByDescending { it.id })
     val messages = rawMessages.filter { it.authorUid !in ready.hiddenUids }
     Column(Modifier.fillMaxSize().imePadding().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -69,7 +76,7 @@ private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubCha
                                 DropdownMenuItem(text = { Text(stringResource(R.string.clubs_report)) }, onClick = { menu = false; reporting = message })
                                 DropdownMenuItem(text = { Text(stringResource(R.string.clubs_block)) }, onClick = {
                                     menu = false; busy = true; scope.launch {
-                                        try { repository.blockAuthor(message.authorUid); older = older.filter { it.authorUid != message.authorUid }; error = null }
+                                        try { repository.blockAuthor(message.authorUid); error = null }
                                         catch (e: CancellationException) { throw e } catch (e: Exception) { error = e }
                                         finally { busy = false }
                                     }
@@ -77,7 +84,7 @@ private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubCha
                             }
                             if (membership.role.managesMembers) DropdownMenuItem(text = { Text(stringResource(R.string.clubs_hideMessage)) }, onClick = {
                                 menu = false; busy = true; scope.launch {
-                                    try { repository.manage("removeMessage", mapOf("clubId" to membership.clubId, "messageId" to message.id), UUID.randomUUID().toString()); older = older.filter { it.id != message.id }; error = null }
+                                    try { repository.manage("removeMessage", mapOf("clubId" to membership.clubId, "messageId" to message.id), UUID.randomUUID().toString()); error = null }
                                     catch (e: CancellationException) { throw e } catch (e: Exception) { error = e }
                                     finally { busy = false }
                                 }
@@ -86,10 +93,11 @@ private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubCha
                     }
                 } }
             }
-            if (hasOlder && rawMessages.isNotEmpty()) item {
+            val nextCursor = pageCursor ?: ready.oldestCursor
+            if (nextCursor != null && (if (pages.isEmpty()) ready.hasOlder else pageHasOlder)) item {
                 TextButton(enabled = !paging, onClick = {
                     paging = true; scope.launch {
-                        try { val page = repository.olderMessages(membership.clubId, rawMessages.last()); older = (older + page).distinctBy { it.id }; hasOlder = page.size == 25; error = null }
+                        try { val page = repository.olderMessages(membership.clubId, nextCursor); pages = pages + page; pageCursor = page.nextCursor; pageHasOlder = page.hasMore; error = null }
                         catch (e: CancellationException) { throw e } catch (e: Exception) { error = e }
                         finally { paging = false }
                     }

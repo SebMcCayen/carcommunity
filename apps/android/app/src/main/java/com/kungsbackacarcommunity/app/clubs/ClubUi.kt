@@ -23,6 +23,8 @@ internal fun clubError(error: Throwable): String = stringResource(when ((error a
     "cooldown", "join-cooldown", "cooldown-active" -> R.string.clubs_cooldownError
     "moderator-limit", "moderator-limit-reached" -> R.string.clubs_moderatorLimit
     "owner-transfer-required", "owner-must-transfer" -> R.string.clubs_ownershipError
+    "feature-disabled" -> R.string.clubs_unavailable
+    "legacy-conflict" -> R.string.clubs_conflict
     "invalid-logo" -> R.string.clubs_logoError
     "permission-denied", "not-member" -> R.string.clubs_permissionError
     else -> R.string.clubs_error

@@ -47,11 +47,11 @@ class FirebaseClubRepository private constructor(
         awaitClose { registration.remove() }
     }
     override fun observeEnabled(): Flow<Boolean> = document("config/sharedClubs")
-        .map { it.confirmed && it.snapshot?.getBoolean("enabled") == true }
+        .map { it.confirmed && it.snapshot?.getBoolean("enabled") == true && it.snapshot?.getTimestamp("activatedAt") != null }
         .distinctUntilChanged()
 
     override fun observePublicAttendanceReady(): Flow<Boolean> = document("config/sharedClubs")
-        .map { it.confirmed && it.snapshot?.getBoolean("enabled") == true && it.snapshot?.getBoolean("publicAttendanceReady") == true }
+        .map { it.confirmed && it.snapshot?.getBoolean("enabled") == true && it.snapshot?.getTimestamp("activatedAt") != null && it.snapshot?.getBoolean("publicAttendanceReady") == true }
         .distinctUntilChanged()
     override fun observeAccess(): Flow<ClubAccess> = combine(observeEnabled(), document("driverClubAccounts/$uid")) { enabled, account ->
         if (enabled) account else ServerDocument(false, null)
@@ -114,30 +114,49 @@ class FirebaseClubRepository private constructor(
         val membership = access.membership
         combine(messages(membership.clubId), FirebaseBlockVisibilityRepository.createOrEmpty(context).observeHiddenUids()) { result, hidden ->
             if (result == null) ClubChatState.Unavailable
-            else ClubChatState.Ready(membership, result, hidden)
+            else ClubChatState.Ready(membership, result.rows, hidden, result.cursor, result.hasMore)
         }
     }
-    private fun messages(clubId: String): Flow<List<ClubMessage>?> = callbackFlow {
+    private data class MessageSnapshot(val rows: List<ClubMessage>, val cursor: ClubMessageCursor?, val hasMore: Boolean)
+    private fun cursor(doc: DocumentSnapshot?): ClubMessageCursor? = doc?.getTimestamp("createdAt")?.let {
+        ClubMessageCursor(doc.id, it.seconds, it.nanoseconds)
+    }
+    private fun messages(clubId: String): Flow<MessageSnapshot?> = callbackFlow {
         val registration = messagesQuery(clubId).limit(25).addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
             if (error != null || snapshot == null || snapshot.metadata.isFromCache || auth.currentUser?.uid != uid) trySend(null)
-            else trySend(snapshot.documents.mapNotNull(::message))
+            else trySend(MessageSnapshot(snapshot.documents.mapNotNull(::message), cursor(snapshot.documents.lastOrNull()), snapshot.size() == 25))
         }
         awaitClose { registration.remove() }
     }
     private fun messagesQuery(clubId: String) = db.collection("driverClubs").document(clubId).collection("messages")
         .orderBy("createdAt", Query.Direction.DESCENDING).orderBy(FieldPath.documentId(), Query.Direction.DESCENDING)
-    override suspend fun olderMessages(clubId: String, before: ClubMessage): List<ClubMessage> {
-        // Snapshot cursor preserves nanoseconds; a millis cursor can skip same-millisecond messages.
-        val cursor = db.document("driverClubs/$clubId/messages/${before.id}").get(Source.SERVER).clubAwait()
-        if (!cursor.exists()) return emptyList()
-        val result = messagesQuery(clubId).startAfter(cursor)
-            .limit(25).get(Source.SERVER).clubAwait().documents.mapNotNull(::message)
+    override suspend fun olderMessages(clubId: String, before: ClubMessageCursor): ClubMessagePage {
+        // Preserve raw document cursor and exhaustion separately from redacted/blocked rows.
+        val result = messagesQuery(clubId).startAfter(Timestamp(before.seconds, before.nanoseconds), before.id)
+            .limit(25).get(Source.SERVER).clubAwait()
         val account = db.document("driverClubAccounts/$uid").get(Source.SERVER).clubAwait()
         val member = db.document("driverClubs/$clubId/members/$uid").get(Source.SERVER).clubAwait()
         val club = db.document("driverClubs/$clubId").get(Source.SERVER).clubAwait()
         if (auth.currentUser?.uid != uid || !member.exists() || account.getString("activeClubId") != clubId ||
             club.getString("status") != "active") throw ClubException("permission-denied")
-        return result
+        return ClubMessagePage(result.documents.map { it.id }, cursor(result.documents.lastOrNull()), result.size() == 25)
+    }
+    override fun observeMessageRows(clubId: String, messageIds: List<String>): Flow<List<ClubMessage>> {
+        require(messageIds.size <= 25)
+        if (messageIds.isEmpty()) return flowOf(emptyList())
+        return observeAccess().flatMapLatest { access ->
+            if (access !is ClubAccess.Member || access.membership.clubId != clubId) flowOf(emptyList())
+            else messageRows(clubId, messageIds)
+        }
+    }
+    private fun messageRows(clubId: String, ids: List<String>): Flow<List<ClubMessage>> = callbackFlow {
+        val registration = db.collection("driverClubs").document(clubId).collection("messages")
+            .whereIn(FieldPath.documentId(), ids).limit(25)
+            .addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
+                if (error != null || snapshot == null || snapshot.metadata.isFromCache || auth.currentUser?.uid != uid) trySend(emptyList())
+                else trySend(snapshot.documents.mapNotNull(::message))
+            }
+        awaitClose { registration.remove() }
     }
     override suspend fun send(clubId: String, text: String, operationId: String) {
         if (text.isBlank() || text.codePointCount(0, text.length) > 2000) throw ClubException("invalid-argument")
@@ -165,6 +184,24 @@ class FirebaseClubRepository private constructor(
             }
         awaitClose { registration.remove() }
     }
+    override fun observeEventParticipants(eventId: String, clubIds: List<String>): Flow<List<Club>> {
+        require(clubIds.size <= 25)
+        if (clubIds.isEmpty()) return flowOf(emptyList())
+        return observePublicAttendanceReady().flatMapLatest { ready ->
+            if (ready) participantRows(eventId, clubIds) else flowOf(emptyList())
+        }
+    }
+    private fun participantRows(eventId: String, ids: List<String>): Flow<List<Club>> = callbackFlow {
+        val registration = db.collection("events").document(eventId).collection("clubs")
+            .whereIn(FieldPath.documentId(), ids).limit(25)
+            .addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
+                if (error != null || snapshot == null || snapshot.metadata.isFromCache || auth.currentUser?.uid != uid) trySend(emptyList())
+                else trySend(snapshot.documents.mapNotNull { doc ->
+                    parseClub(doc.data.orEmpty() + mapOf("id" to doc.id, "name" to (doc.getString("name") ?: doc.getString("clubName"))))
+                })
+            }
+        awaitClose { registration.remove() }
+    }
     override fun eventAttendance(eventId: String, clubId: String): Flow<Boolean?> =
         observePublicAttendanceReady().flatMapLatest { ready ->
             if (ready) document("events/$eventId/clubs/$clubId").map { if (it.confirmed) it.snapshot?.exists() == true else null }
@@ -181,7 +218,7 @@ class FirebaseClubRepository private constructor(
     }
     private suspend fun requirePublicAttendance() {
         val config = db.document("config/sharedClubs").get(Source.SERVER).clubAwait()
-        if (auth.currentUser?.uid != uid || config.getBoolean("enabled") != true || config.getBoolean("publicAttendanceReady") != true)
+        if (auth.currentUser?.uid != uid || config.getBoolean("enabled") != true || config.getTimestamp("activatedAt") == null || config.getBoolean("publicAttendanceReady") != true)
             throw ClubException("permission-denied")
     }
     override suspend fun setEventAttendance(clubId: String, eventId: String, attending: Boolean, operationId: String) {
@@ -191,7 +228,7 @@ class FirebaseClubRepository private constructor(
         functions.getHttpsCallable("blocking-block").call(mapOf("targetUserId" to uid)).clubAwait()
     }
     private fun message(doc: DocumentSnapshot): ClubMessage? {
-        if (doc.getString("status") == "hidden") return null
+        if (doc.getString("status") in setOf("hidden", "removed")) return null
         val author = doc.getString("authorUid") ?: return null
         val text = doc.getString("text")?.takeIf { it.isNotBlank() } ?: return null
         return ClubMessage(doc.id, author, doc.getString("authorName"), text, doc.getTimestamp("createdAt")?.toDate()?.time)

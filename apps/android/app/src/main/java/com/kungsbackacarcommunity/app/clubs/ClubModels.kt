@@ -24,6 +24,8 @@ data class ClubState(
 data class ClubMember(val uid: String, val displayName: String, val role: ClubRole, val avatarUrl: String? = null)
 data class ClubEvent(val eventId: String, val title: String, val startMillis: Long, val endMillis: Long?, val locationName: String?)
 data class ClubMessage(val id: String, val authorUid: String, val authorName: String?, val text: String, val createdAtMillis: Long?)
+data class ClubMessageCursor(val id: String, val seconds: Long, val nanoseconds: Int)
+data class ClubMessagePage(val ids: List<String>, val nextCursor: ClubMessageCursor?, val hasMore: Boolean)
 data class ClubPage<T>(val items: List<T>, val nextCursor: String?)
 
 /** Fresh server proof, never an offline membership cache or a UI authorization decision. */
@@ -34,7 +36,7 @@ sealed interface ClubAccess {
 }
 sealed interface ClubChatState {
     data object Unavailable : ClubChatState
-    data class Ready(val membership: ClubMembership, val messages: List<ClubMessage>, val hiddenUids: Set<String> = emptySet()) : ClubChatState
+    data class Ready(val membership: ClubMembership, val messages: List<ClubMessage>, val hiddenUids: Set<String> = emptySet(), val oldestCursor: ClubMessageCursor? = null, val hasOlder: Boolean = false) : ClubChatState
 }
 class ClubException(val code: String) : Exception(code)
 
