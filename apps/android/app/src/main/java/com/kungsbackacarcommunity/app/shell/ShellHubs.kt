@@ -89,7 +89,8 @@ fun SocialHub(
     entries: List<HubEntry>,
     modifier: Modifier = Modifier,
 ) {
-    AeroPage(title = title, modifier = modifier) {
+    // The map shell already exposes the owner's profile shortcut above this panel.
+    AeroPage(title = title, modifier = modifier, ownerShortcutEnabled = false) {
         entries.forEach { entry ->
             val onClick = entry.onClick ?: return@forEach
             OutlinedCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {

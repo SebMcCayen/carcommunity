@@ -100,9 +100,11 @@ Use `AeroPage` / `AeroLazyPage` and the existing native Back dispatcher. The
 authenticated shell may provide `LocalAeroOwnerHeader` with the already-resolved
 owner avatar and effective Supporter visibility. It is a profile shortcut, not a
 new image resolver or entitlement. Keep its 48dp hit target and native fallback.
-Do not show a duplicate shortcut on the owner's Profile. Editors, crop flows and
-modal pickers that own save/cancel/discard must set `ownerShortcutEnabled = false`
-so a decorative header never adds an exit that loses their draft or bypasses a
+Do not show a duplicate shortcut on the owner's Profile or inside the Social hub;
+Social keeps the existing profile shortcut on the map shell above its panel.
+Editors, crop flows and modal pickers that own save/cancel/discard must set
+`ownerShortcutEnabled = false` so a decorative header never adds an exit that
+loses their draft or bypasses a
 confirmation. Lazy screens retain their list position and pinned Back behavior.
 
 Use `KccButton` and `KccOutlinedButton` for ordinary filled/outlined actions:
