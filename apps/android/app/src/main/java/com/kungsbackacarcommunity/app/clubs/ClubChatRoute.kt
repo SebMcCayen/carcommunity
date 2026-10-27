@@ -12,6 +12,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.kungsbackacarcommunity.app.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.flowOf
@@ -22,13 +25,30 @@ import java.util.UUID
 fun ClubChatRoute(uid: String, repository: ClubRepository? = null) {
     val context = LocalContext.current
     val repo = remember(uid, repository) { repository ?: FirebaseClubRepository.createIfAvailable(context, uid) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var foreground by remember(lifecycle) { mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) }
+    var entryEpoch by remember(lifecycle) { mutableIntStateOf(0) }
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            // Increment even if no background frame is drawn: rapid stop/start must
+            // recreate the private composition and require fresh server proof.
+            if (event == Lifecycle.Event.ON_STOP) entryEpoch++
+            foreground = lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    if (foreground) key(uid, repo, entryEpoch) { VerifiedClubChat(uid, repo) }
+}
+
+@Composable
+private fun VerifiedClubChat(uid: String, repo: ClubRepository?) {
     val source = remember(repo) { repo?.chat() ?: flowOf(ClubChatState.Unavailable) }
     val state by source.collectAsState(initial = ClubChatState.Unavailable)
     val ready = state as? ClubChatState.Ready
     if (ready == null || repo == null) {
         Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) { Text(stringResource(R.string.clubs_noClubChat)) }
     } else {
-        // No saveable messages/draft. Disposed on cache-only access, revocation, role/UID/club/epoch change.
         key(uid, repo, ready.membership) { ClubChatRoom(uid, repo, ready) }
     }
 }
@@ -52,6 +72,7 @@ private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubCha
         val source = remember(repository, page.ids) { repository.observeMessageRows(membership.clubId, page.ids) }
         val rows by source.collectAsState(initial = emptyList())
         olderRows.addAll(rows)
+        Unit
     } }
     val rawMessages = (ready.messages + olderRows).distinctBy { it.id }
         .sortedWith(compareByDescending<ClubMessage> { it.createdAtMillis ?: Long.MAX_VALUE }.thenByDescending { it.id })

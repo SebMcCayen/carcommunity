@@ -44,7 +44,10 @@ message IDs and later event-participant pages retain bounded live listeners, so
 remote redactions and withdrawn attendance also disappear beyond the first page. Private views require server-confirmed current membership
 and never open using only Firestore's offline cache. This cannot remotely erase
 knowledge already read or externally captured; it prevents continued access in
-the app. Previously loaded history is not persisted as Compose saveable state.
+the app. Previously loaded history is not persisted as Compose saveable state. A lifecycle
+entry generation also recreates chat after background/foreground transitions,
+including rapid transitions with no intervening frame, requiring new membership
+proof and discarding the previous draft.
 
 ## Rollout dependencies — not deployment authorization
 

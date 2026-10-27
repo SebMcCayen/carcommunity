@@ -20,14 +20,15 @@ fun ClubEventAttendanceSection(uid: String, eventId: String, repository: ClubRep
     key(uid, eventId, repo) {
         val enabledSource = remember { repo?.observePublicAttendanceReady() ?: flowOf(false) }
         val enabled by enabledSource.collectAsState(initial = false)
-        if (!enabled || repo == null) return@key
-        val source = remember { repo.eventParticipants(eventId) }
-        val first by source.collectAsState(initial = emptyList())
-        val accessSource = remember { repo.observeAccess() }
-        val access by accessSource.collectAsState(initial = ClubAccess.Unverified)
-        // A changed first-page boundary starts a new paging session and cancels old requests.
-        // Presentation-only changes must not discard the live observers for later pages.
-        key(first.map { it.id }) { ClubAttendancePages(repo, eventId, first, access) }
+        if (enabled && repo != null) {
+            val source = remember { repo.eventParticipants(eventId) }
+            val first by source.collectAsState(initial = emptyList())
+            val accessSource = remember { repo.observeAccess() }
+            val access by accessSource.collectAsState(initial = ClubAccess.Unverified)
+            // A changed first-page boundary starts a new paging session and cancels old requests.
+            // Presentation-only changes must not discard the live observers for later pages.
+            key(first.map { it.id }) { ClubAttendancePages(repo, eventId, first, access) }
+        }
     }
 }
 
@@ -39,11 +40,13 @@ private fun ClubAttendancePages(repo: ClubRepository, eventId: String, first: Li
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<Throwable?>(null) }
     val scope = rememberCoroutineScope()
-    val rest = pages.flatMap { ids ->
+    val rest = mutableListOf<Club>()
+    for (ids in pages) {
         key(ids) {
-            val source = remember { repo.observeEventParticipants(eventId, ids) }
+            val source = remember(repo, eventId, ids) { repo.observeEventParticipants(eventId, ids) }
             val rows by source.collectAsState(initial = emptyList())
-            rows.filter { it.id in ids }
+            rest.addAll(rows.filter { it.id in ids })
+            Unit
         }
     }
     val clubs = (first + rest).distinctBy { it.id }.sortedBy { it.id }

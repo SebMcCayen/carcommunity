@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.clubs
 
 import androidx.activity.ComponentActivity
+import androidx.lifecycle.Lifecycle
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
@@ -48,6 +49,17 @@ class ClubChatRevocationTest {
         compose.waitUntil { repo.cursorRequests.size == 2 }
         compose.runOnIdle { assertEquals(listOf(start, next), repo.cursorRequests) }
     }
+    @Test fun backgroundReturnRequiresFreshProofAndDiscardsDraft() {
+        val repo = FakeClubRepository(ClubChatState.Ready(member, listOf(ClubMessage("one", "friend", "Friend", "Before background", 1L))))
+        compose.setContent { KccTheme { ClubChatRoute("me", repo) } }
+        compose.onNodeWithText(str(R.string.clubs_message)).performTextInput("Private unsent text")
+        compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        repo.messages.value = ClubChatState.Unavailable
+        compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        compose.onNodeWithText("Before background").assertDoesNotExist()
+        compose.onNodeWithText("Private unsent text").assertDoesNotExist()
+        compose.runOnIdle { assertTrue(repo.chatCalls >= 2) }
+    }
     @Test fun textAndEmojiAreSentWithoutTransformation() {
         val repo = FakeClubRepository(ClubChatState.Ready(member, emptyList()))
         compose.setContent { KccTheme { ClubChatRoute("me", repo) } }
@@ -73,7 +85,8 @@ private class FakeClubRepository(initial: ClubChatState) : ClubRepository {
     val cursorRequests = mutableListOf<ClubMessageCursor>()
     var sent: String? = null
     var operation: String? = null
-    override fun chat(): Flow<ClubChatState> = messages
+    var chatCalls = 0
+    override fun chat(): Flow<ClubChatState> { chatCalls++; return messages }
     override fun observeEnabled() = flowOf(true)
     override fun observePublicAttendanceReady() = flowOf(true)
     override fun observeAccess(): Flow<ClubAccess> = flowOf(ClubAccess.None)
