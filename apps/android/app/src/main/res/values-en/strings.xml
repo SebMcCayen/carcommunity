@@ -3,6 +3,7 @@
      Source: contracts/localization/en.json
      Regenerate: node apps/android/scripts/generate-strings.mjs -->
 <resources>
+    <string name="clubBadge_accessibility">Club: %1$s</string>
     <string name="supporterBadge_accessibility">Supporter crown</string>
     <string name="supporterBadge_settingTitle">Show Supporter crown</string>
     <string name="supporterBadge_settingBody">Shows a small crown on your profile picture while your Supporter membership is active. Your choice is saved even when your membership ends.</string>
