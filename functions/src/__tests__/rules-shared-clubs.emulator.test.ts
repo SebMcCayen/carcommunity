@@ -331,13 +331,17 @@ describe('shared clubs canonical identity and public scope', () => {
     },
   );
 
-  it('revokes the public listener atomically with archival until projection cleanup is ready', async () => {
-    const db = dbFor('outsider');
-    const page = query(
-      collection(db, 'events/rules-club-page-event/clubs'),
-      orderBy(documentId()),
-      limit(25),
-    );
+  it('denies fresh reads on archive and revokes the listener before cleanup can deliver a changed page', async () => {
+    const archivedId = 'rules-page-club-000';
+    const archivedPath = `driverClubs/${archivedId}`;
+    const summaryPath = `events/rules-club-page-event/clubs/${archivedId}`;
+    const freshPage = () =>
+      query(
+        collection(dbFor('outsider'), 'events/rules-club-page-event/clubs'),
+        orderBy(documentId()),
+        limit(25),
+      );
+    const page = freshPage();
     let markStarted!: () => void;
     const started = new Promise<void>((resolve) => {
       markStarted = resolve;
@@ -346,63 +350,60 @@ describe('shared clubs canonical identity and public scope', () => {
     const denied = new Promise<string>((resolve) => {
       markDenied = resolve;
     });
+    let gateClosed = false;
+    const deliveredAfterClosure: string[][] = [];
     let unsubscribe = () => {};
     const timer = setTimeout(() => markDenied('timeout'), 10000);
     unsubscribe = onSnapshot(
       page,
       (snapshot) => {
-        if (!snapshot.metadata.fromCache && snapshot.size === 25) markStarted();
+        if (!snapshot.metadata.fromCache) {
+          if (gateClosed) deliveredAfterClosure.push(snapshot.docs.map((entry) => entry.id));
+          else if (snapshot.size === 25) markStarted();
+        }
       },
-      (error) => {
-        markDenied(error.code);
-      },
+      (error) => markDenied(error.code),
     );
     try {
-      // Race the first server page against permission failure/timeout so a
-      // broken initial subscription cannot leave the test awaiting forever.
-      const first = await Promise.race([started.then(() => 'started'), denied]);
-      expect(first).toBe('started');
+      expect(await Promise.race([started.then(() => 'started'), denied])).toBe('started');
       await env.withSecurityRulesDisabled(async (context) => {
         const admin = context.firestore();
         const batch = writeBatch(admin);
-        batch.update(doc(admin, clubPath), { status: 'archived' });
+        batch.update(doc(admin, archivedPath), { status: 'archived' });
         batch.update(doc(admin, 'config/sharedClubs'), { publicAttendanceReady: false });
         await batch.commit();
       });
-      expect(await denied).toBe('permission-denied');
-      await assertFails(getDocsFromServer(page));
-      await assertFails(read('outsider', `events/rules-club-event/clubs/${clubId}`));
-      await assertFails(read('member', `${clubPath}/messages/m1`));
-      // Simulate the server withdrawing the stale row before its completion
-      // CAS reopens the shared readiness marker. The listener above stays dead.
+      gateClosed = true;
+      // A new context forces a new server request, instead of joining the
+      // already-current target of the existing listener in the same SDK app.
+      await assertFails(getDocsFromServer(freshPage()));
+      await assertFails(read('outsider', summaryPath));
+      await assertSucceeds(read('member', `${clubPath}/messages/m1`));
+      // The emulator does not invalidate this watch on the dependency-only
+      // config write. Exercise the real cleanup source mutation: reevaluation
+      // must deny the listener before it can deliver the changed public page.
       await env.withSecurityRulesDisabled(async (context) => {
-        const admin = context.firestore();
-        await deleteDoc(doc(admin, `events/rules-club-event/clubs/${clubId}`));
-        await updateDoc(doc(admin, 'config/sharedClubs'), { publicAttendanceReady: true });
+        await deleteDoc(doc(context.firestore(), summaryPath));
       });
-      expect((await assertSucceeds(getDocsFromServer(page))).size).toBe(25);
-      expect(
-        (
-          await assertSucceeds(
-            getDocsFromServer(
-              query(
-                collection(db, 'events/rules-club-event/clubs'),
-                where(documentId(), '==', clubId),
-                limit(25),
-              ),
-            ),
-          )
-        ).empty,
-      ).toBe(true);
-      await assertFails(read('member', `${clubPath}/messages/m1`));
+      expect(await denied).toBe('permission-denied');
+      expect(deliveredAfterClosure).toEqual([]);
+      await env.withSecurityRulesDisabled(async (context) => {
+        await updateDoc(doc(context.firestore(), 'config/sharedClubs'), {
+          publicAttendanceReady: true,
+        });
+      });
+      const reopened = await assertSucceeds(getDocsFromServer(freshPage()));
+      expect(reopened.size).toBe(25);
+      expect(reopened.docs.some((entry) => entry.id === archivedId)).toBe(false);
+      await assertSucceeds(read('member', `${clubPath}/messages/m1`));
     } finally {
       clearTimeout(timer);
       unsubscribe();
       await env.withSecurityRulesDisabled(async (context) => {
-        await updateDoc(doc(context.firestore(), clubPath), { status: 'active' });
-        await setDoc(doc(context.firestore(), `events/rules-club-event/clubs/${clubId}`), {
-          clubId,
-          name: 'Shared club',
+        await updateDoc(doc(context.firestore(), archivedPath), { status: 'active' });
+        await setDoc(doc(context.firestore(), summaryPath), {
+          clubId: archivedId,
+          name: 'Club 0',
           logoUrl: null,
         });
         await setDoc(doc(context.firestore(), 'config/sharedClubs'), enabledConfig);

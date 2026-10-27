@@ -69,7 +69,8 @@ service firebase.storage {
           && club.ownerUid == request.auth.uid;
       }
       allow get: if isAuthenticated();
-      allow create: if isOwner(ownerUid) && isNotSuspended() && canCreateClubLogo()
+      allow create: if resource == null
+        && isOwner(ownerUid) && isNotSuspended() && canCreateClubLogo()
         && request.resource.size > 0 && request.resource.size <= 256 * 1024
         && ((request.resource.contentType == 'image/jpeg' && fileName.matches('.+\\.(jpg|jpeg)'))
           || (request.resource.contentType == 'image/webp' && fileName.matches('.+\\.webp')));
