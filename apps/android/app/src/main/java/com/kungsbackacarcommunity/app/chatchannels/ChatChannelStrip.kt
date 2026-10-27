@@ -53,7 +53,7 @@ internal fun ChatChannelStrip(
     onBack: (() -> Unit)?,
 ) {
     val labels = listOf(R.string.chatHub_tabCommunity, R.string.chatHub_tabConvoys,
-        R.string.chatHub_tabFriends, R.string.chatHub_tabNotifications)
+        R.string.chatHub_tabFriends, R.string.chatHub_tabNotifications, R.string.clubs_chatTab)
     val labelTexts = labels.map { stringResource(it) }
     val labelStyle = MaterialTheme.typography.labelMedium
     val measurer = rememberTextMeasurer()
@@ -66,21 +66,21 @@ internal fun ChatChannelStrip(
     }
     val unreadLabel = stringResource(R.string.chatHub_tabUnread)
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val availableWidth = maxWidth - (if (onBack != null) 48.dp else 0.dp) - KccSpacing.s1 * 3
+        val availableWidth = maxWidth - (if (onBack != null) 48.dp else 0.dp) - KccSpacing.s1 * (labels.size - 1)
         val naturalTotal = naturalWidths.fold(0.dp) { total, width -> total + width }
         val tabWidths = if (availableWidth >= naturalTotal) {
             // Keep short labels compact and give each full label the width it
             // actually needs before distributing the remaining space evenly.
-            naturalWidths.map { it + (availableWidth - naturalTotal) / 4 }
+            naturalWidths.map { it + (availableWidth - naturalTotal) / labels.size }
         } else {
             // All targets retain 48dp first. Share the remaining width by each
             // label's extra space requirement; wrapping is the accessibility
             // fallback, never font shrinking, truncation or horizontal scrolling.
             val extraWidths = naturalWidths.map { (it - 48.dp).value }
             val extraTotal = extraWidths.sum()
-            val remaining = (availableWidth - 48.dp * 4).coerceAtLeast(0.dp)
+            val remaining = (availableWidth - 48.dp * labels.size).coerceAtLeast(0.dp)
             extraWidths.map { extra ->
-                48.dp + remaining * (if (extraTotal > 0f) extra / extraTotal else 0.25f)
+                48.dp + remaining * (if (extraTotal > 0f) extra / extraTotal else 1f / labels.size)
             }
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -121,7 +121,7 @@ internal fun ChatChannelStrip(
                                     modifier = Modifier.fillMaxWidth().height(KccSpacing.s2),
                                     contentAlignment = Alignment.Center,
                                 ) {
-                                    if (unread[tab.ordinal]) {
+                                    if (unread.getOrElse(tab.ordinal) { false }) {
                                         Badge(
                                             modifier = Modifier.semantics { contentDescription = unreadLabel },
                                             containerColor = MaterialTheme.colorScheme.tertiary,

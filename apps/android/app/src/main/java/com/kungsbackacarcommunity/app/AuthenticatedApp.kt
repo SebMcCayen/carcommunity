@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app
 
+import com.kungsbackacarcommunity.app.clubs.SharedClubRoute
 import android.Manifest
 import android.content.Intent
 import android.graphics.Bitmap
@@ -7539,6 +7540,11 @@ fun AuthenticatedApp(
                                                             // option and the chat hub's Convoys
                                                             // tab. Only this menu entry is gone.
                                                             HubEntry(
+                                                                stringResource(R.string.clubs_title),
+                                                                Icons.Filled.Groups,
+                                                                { openRootRoute(ShellRoute.Clubs) },
+                                                            ),
+                                                            HubEntry(
                                                                 stringResource(R.string.shell_socialEvents),
                                                                 Icons.Filled.Event,
                                                                 if (eventsRepository != null) {
@@ -9663,6 +9669,8 @@ private fun RouteHost(
                 // Always available: the changelog ships bundled with the app.
                 onWhatsNew = { onOpenRoute(ShellRoute.WhatsNew) },
             )
+
+        ShellRoute.Clubs -> SharedClubRoute(uid = uid, onOpenEvent = openEventFromNotification)
 
         ShellRoute.WhatsNew -> WhatsNewRoute()
 

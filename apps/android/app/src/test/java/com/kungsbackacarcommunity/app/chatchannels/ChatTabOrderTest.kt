@@ -26,6 +26,7 @@ class ChatTabOrderTest {
                 ChatTab.Convoys,
                 ChatTab.Friends,
                 ChatTab.Notifications,
+                ChatTab.Club,
             ),
             ChatTab.entries,
         )
