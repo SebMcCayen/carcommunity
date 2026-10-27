@@ -328,6 +328,9 @@ import com.kungsbackacarcommunity.app.location.LocationAccessPrompt
 import com.kungsbackacarcommunity.app.location.LocationShare
 import com.kungsbackacarcommunity.app.location.ShareableLocation
 import com.kungsbackacarcommunity.app.location.LocationPermissionRemedy
+import com.kungsbackacarcommunity.app.location.ObserveLocationProviderChanges
+import com.kungsbackacarcommunity.app.location.foregroundLocationPermissions
+import com.kungsbackacarcommunity.app.live.BindLivePositionPublisher
 import com.kungsbackacarcommunity.app.location.currentLocationAccess
 import com.kungsbackacarcommunity.app.location.locationPermissionRemedy
 import com.kungsbackacarcommunity.app.location.openAppLocationSettings
@@ -1788,20 +1791,26 @@ fun AuthenticatedApp(
             // saveable guard) so returning to the Map tab does not re-nag after a
             // denial; the stub (config-less / CI) no-ops refreshLocationComponent.
             // Bumped whenever the runtime location state may have changed (a
-            // permission answer, or coming back from Settings). The platform
-            // exposes no observable for either, so the state is re-read on this
-            // key rather than polled.
+            // permission answer, provider broadcast, or coming back from Settings).
+            // Re-read on this key instead of polling or trusting broadcast extras.
             var locationAccessProbe by remember { mutableIntStateOf(0) }
             val locationPermissionLauncher =
                 rememberLauncherForActivityResult(
-                    ActivityResultContracts.RequestPermission(),
-                ) { granted ->
-                    if (granted) mapSurface.refreshLocationComponent()
+                    ActivityResultContracts.RequestMultiplePermissions(),
+                ) { grants ->
+                    if (grants[Manifest.permission.ACCESS_FINE_LOCATION] == true) mapSurface.refreshLocationComponent()
                     // Re-read on BOTH answers: a denial is what raises the
                     // explanation card, and it used to be dropped silently.
                     locationAccessProbe++
                 }
             var mapLocationPermissionRequested by rememberSaveable { mutableStateOf(false) }
+
+            // Quick Settings can toggle location while this Activity remains
+            // RESUMED. Observe protected provider broadcasts while STARTED so
+            // access and the session-bound publisher recover without ON_RESUME.
+            if (hasMapboxToken) {
+                ObserveLocationProviderChanges { locationAccessProbe++ }
+            }
 
             // Re-read on every resume so returning from the system settings page
             // — the one place a permanent denial or the device location switch
@@ -1859,7 +1868,7 @@ fun AuthenticatedApp(
                         !mapLocationPermissionRequested -> {
                         mapLocationPermissionRequested = true
                         locationPermissionLauncher.launch(
-                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            foregroundLocationPermissions(),
                         )
                     }
                 }
@@ -3745,11 +3754,14 @@ fun AuthenticatedApp(
             // disk (DriveRecordingJournal): if the OS kills the process in that
             // window, the relaunched-but-still-live session resumes the drive rather
             // than losing it.
-            LaunchedEffect(isSharing, uid) {
-                if (isSharing && uid.isNotBlank()) {
-                    BackgroundLocationController.start(context, uid)
-                }
-            }
+            BindLivePositionPublisher(
+                sharing = isSharing,
+                uid = uid,
+                sessionId = liveSession?.sessionId,
+                locationAccess = locationAccess,
+                recoveryKey = locationAccessProbe,
+                startPublisher = { ownerUid -> BackgroundLocationController.start(context, ownerUid) },
+            )
 
             // Auto-file the drive-save failure the moment the user is shown it.
             // Keyed on the failure's code so ONE issue is filed per distinct
@@ -7415,7 +7427,7 @@ fun AuthenticatedApp(
                                                     LocationPermissionRemedy.REQUEST_AGAIN -> {
                                                     mapLocationPermissionRequested = true
                                                     locationPermissionLauncher.launch(
-                                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                                        foregroundLocationPermissions(),
                                                     )
                                                 }
                                                 // Master switch off → the device
