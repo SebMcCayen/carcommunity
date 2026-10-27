@@ -207,6 +207,7 @@ describe('events/offers permanent access policy', () => {
 
   it('enforces entitlement again between the arrival and confirmation stages', async () => {
     const uid = 'downgrade';
+    await localProductAccount(uid);
     await db
       .doc('users/' + uid)
       .set({ role: 'user', activeMember: true, suspended: false, deleted: false });

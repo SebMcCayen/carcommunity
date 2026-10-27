@@ -140,6 +140,7 @@ final class FirebaseEmulatorIntegrationTests: XCTestCase {
         try actorAuth.signOut()
     }
 
+    @MainActor
     private func waitForAccess(_ repository: FirebaseAccountAccessRepository, restricted: Bool) async throws -> AccountAccess {
         try await withThrowingTaskGroup(of: AccountAccess.self) { group in
             group.addTask {
