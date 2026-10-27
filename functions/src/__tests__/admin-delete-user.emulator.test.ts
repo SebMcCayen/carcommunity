@@ -46,6 +46,14 @@ import {
   httpsCallable,
   type Functions,
 } from 'firebase/functions';
+import {
+  connectFirestoreEmulator,
+  deleteDoc,
+  doc,
+  getFirestore,
+  setDoc,
+  updateDoc,
+} from 'firebase/firestore';
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
@@ -142,6 +150,7 @@ beforeAll(() => {
   );
   auth = getAuth(app);
   connectAuthEmulator(auth, `http://${EMULATOR_HOST}:9099`, { disableWarnings: true });
+  connectFirestoreEmulator(getFirestore(app), EMULATOR_HOST, 8080);
   functions = getFunctions(app, REGION);
   connectFunctionsEmulator(functions, EMULATOR_HOST, 5001);
 }, 120_000);
@@ -201,6 +210,36 @@ describe('admin-deleteUser – authorization & guards', () => {
     ).toBe('functions/permission-denied');
     // The owner is untouched.
     expect((await adminDb.collection('users').doc(owner.uid).get()).exists).toBe(true);
+    await expect(adminAuth.getUser(owner.uid)).resolves.toBeTruthy();
+  });
+
+  it('direct profile writes cannot bypass owner protection in the same admin session', async () => {
+    const actor = await createProvisionedUser('adu-direct-admin');
+    await promoteOutOfBand(actor, 'admin');
+    const owner = await createProvisionedUser('adu-protected-owner');
+    await promoteOutOfBand(owner, 'owner');
+    await signInAs(actor);
+    const fs = getFirestore(app);
+    const ownProfile = doc(fs, 'users', actor.uid);
+    const ownerProfile = doc(fs, 'users', owner.uid);
+    for (const write of [
+      () => updateDoc(ownProfile, { role: 'owner' }),
+      () => setDoc(ownProfile, { role: 'owner' }, { merge: true }),
+      () => updateDoc(ownerProfile, { role: 'user' }),
+      () => deleteDoc(ownerProfile),
+    ]) {
+      expect(await callableErrorCode(write())).toBe('permission-denied');
+    }
+    expect(
+      await callableErrorCode(
+        call('admin-deleteUser', {
+          targetUid: owner.uid,
+          reason: 'Owner protection regression',
+        }),
+      ),
+    ).toBe('functions/permission-denied');
+    expect((await adminDb.collection('users').doc(actor.uid).get()).data()?.role).toBe('admin');
+    expect((await adminDb.collection('users').doc(owner.uid).get()).data()?.role).toBe('owner');
     await expect(adminAuth.getUser(owner.uid)).resolves.toBeTruthy();
   });
 
@@ -475,8 +514,8 @@ describe('admin-deleteUser – erasure', () => {
     expect(marker?.status).toBe('processed');
     expect(marker?.targetRole).toBe('user');
     expect(marker?.processedAt).toBeTruthy();
-    expect((await adminDb.collection('adminAuditEvents').doc(`user-delete_${uid}`).get()).exists).toBe(
-      true,
-    );
+    expect(
+      (await adminDb.collection('adminAuditEvents').doc(`user-delete_${uid}`).get()).exists,
+    ).toBe(true);
   });
 });

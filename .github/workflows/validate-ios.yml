@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'apps/ios/**'
+      - 'firebase/firestore.rules'
       - 'contracts/localization/**'
       - 'contracts/design-tokens/**'
       - '.github/workflows/validate-ios.yml'
@@ -15,6 +16,7 @@ on:
   pull_request:
     paths:
       - 'apps/ios/**'
+      - 'firebase/firestore.rules'
       - 'contracts/localization/**'
       - 'contracts/design-tokens/**'
       - '.github/workflows/validate-ios.yml'

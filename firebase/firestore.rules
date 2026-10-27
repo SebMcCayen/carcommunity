@@ -41,15 +41,6 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.token.admin == true && isNotSuspended();
     }
 
-    // Profile restrictions must not be reset by an administrator's stale token.
-    // Check the acting admin's stored account before any client profile mutation.
-    function canAdministerProfiles() {
-      return isAdmin()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true;
-    }
-
     // Active member: subscription entitlement verified by backend and stored
     // as a custom claim. Clients must not self-elevate this claim.
     // Suspension always overrides entitlement (canAccessMemberFeatures).
@@ -347,14 +338,12 @@ service cloud.firestore {
       // validation (Phase 9a). Suspended users may not edit their profile
       // (suspension overrides feature access); they retain read access.
       allow update: if isOwner(userId) && isNotSuspended() && validUserProfileUpdate(userId);
-      // Crown eligibility is backend-only, even for admin clients. Its saved
-      // preference remains owner-only; other admin profile operations survive.
-      allow delete: if canAdministerProfiles();
-      allow create: if canAdministerProfiles()
-        && !request.resource.data.keys().hasAny(['supporterBadgeEligible', 'showSupporterBadge']);
-      allow update: if canAdministerProfiles()
-        && !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['supporterBadgeEligible', 'showSupporterBadge']);
+      // Administrative mutations use audited backend callables, not a second
+      // client grant. Access fields (role, entitlement, restrictions) must stay
+      // backend-owned, including for admin/owner clients. Creation and deletion
+      // also stay backend-only so provisioning and the account-erasure guards
+      // cannot be bypassed. Admins retain the same validated own-profile edits
+      // as every other user through the owner update rule above.
 
       // Badges (Phase 9f + tiered ladders) — users/{uid}/badges/{badgeKey}.
       // Awarded by the backend only (automatic tier evaluators +
