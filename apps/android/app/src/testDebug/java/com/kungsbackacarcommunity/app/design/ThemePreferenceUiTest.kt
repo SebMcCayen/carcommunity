@@ -67,14 +67,22 @@ class ThemePreferenceUiTest {
     }
 
     @Test
-    fun automaticRendersTheDarkSchemeWhenTheSystemIsDark() {
+    fun systemRendersTheDarkSchemeWhenTheSystemIsDark() {
         val (dark, background, _) = renderedScheme(ThemePreference.SYSTEM, systemInDark = true)
         assertEquals(true, dark)
         assertEquals(KccDarkColors.pageBackground, background)
     }
 
     @Test
-    fun automaticRendersTheLightSchemeWhenTheSystemIsLight() {
+    fun allFourSavedChoicesSurviveReopeningTheStore() {
+        ThemePreference.entries.forEach { preference ->
+            ThemePreferenceStore(context).set(preference)
+            assertEquals(preference, ThemePreferenceStore(context).preference.value)
+        }
+    }
+
+    @Test
+    fun systemRendersTheLightSchemeWhenTheSystemIsLight() {
         val (dark, background, _) = renderedScheme(ThemePreference.SYSTEM, systemInDark = false)
         assertEquals(false, dark)
         assertEquals(KccLightColors.pageBackground, background)
