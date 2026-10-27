@@ -95,6 +95,9 @@ class ChatHubTabLabelTest {
                 val stripNode = compose.onNodeWithTag(CHAT_CHANNEL_STRIP_TEST_TAG).fetchSemanticsNode()
                 val stripBounds = stripNode.boundsInRoot
                 assertEquals("$current fills the available width", (width - if (back) 48 else 0).toFloat(), stripBounds.width, 0.01f)
+                if (width >= 360 && scale == 1f) {
+                    assertEquals("$current compact strip height", 48f, stripBounds.height, 0.01f)
+                }
                 assertFalse("$current no horizontal scrolling", stripNode.config.contains(SemanticsProperties.HorizontalScrollAxisRange))
                 var previousRight = stripBounds.left
                 for (tab in ChatTab.entries) {
@@ -116,8 +119,11 @@ class ChatHubTabLabelTest {
                     labelNode.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
                     assertEquals("$current $tab layout", 1, layouts.size)
                     val layout = layouts.single()
-                    assertEquals("$current $tab must not auto-shrink", 14.sp, layout.layoutInput.style.fontSize)
+                    assertEquals("$current $tab must not auto-shrink", 12.sp, layout.layoutInput.style.fontSize)
                     assertEquals(scale, layout.layoutInput.density.fontScale, 0.001f)
+                    if (width >= 360 && scale == 1f) {
+                        assertEquals("$current $tab complete single-line label at normal width", 1, layout.lineCount)
+                    }
                     assertEquals("$current $tab source text", label, layout.layoutInput.text.text)
                     assertEquals("$current $tab first visible character", 0, layout.getLineStart(0))
                     assertEquals("$current $tab last visible character", label.length,

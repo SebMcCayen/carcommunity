@@ -51,6 +51,7 @@ class ChatHubViewportTest {
     @Test fun swedishDarkNormalText() = checkViewport(320, 1f, "sv", true)
     @Test fun swedishDarkEnlargedText() = checkViewport(320, 1.5f, "sv", true)
     @Test fun englishLightNormalText() = checkViewport(390, 1f, "en", false)
+    @Test fun englishLightCompactPhoneNormalText() = checkViewport(360, 1f, "en", false)
     @Test fun englishLightEnlargedText() = checkViewport(390, 1.5f, "en", false)
 
     private fun checkViewport(width: Int, scale: Float, language: String, dark: Boolean) {
@@ -100,6 +101,10 @@ class ChatHubViewportTest {
                 bounds.left >= strip.left && bounds.right <= strip.right &&
                     bounds.top >= strip.top && bounds.bottom <= strip.bottom)
             assertTrue("$tab minimum hit target: $bounds", bounds.width >= 48f && bounds.height >= 48f)
+        }
+        if (scale == 1f && width >= 360) {
+            assertEquals("Normal-width tab strip stays compact", 48f, strip.height, 0.01f)
+            assertTrue("Normal-width chrome leaves extra reading space", strip.bottom - root.top <= 124f)
         }
         // Budget includes the real status inset. The old title/source/back/icon stack exceeds it.
         assertTrue("Chrome must leave room for messages: $strip / $root", strip.bottom - root.top <= 144f)
