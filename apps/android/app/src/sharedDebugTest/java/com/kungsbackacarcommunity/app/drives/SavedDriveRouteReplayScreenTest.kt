@@ -36,6 +36,10 @@ import org.junit.runner.RunWith
 class SavedDriveRouteReplayScreenTest {
     @get:Rule val compose = createComposeRule()
 
+    // Always inject the available fake, including legacy screen setups. A real
+    // pk-token in a configured build must never initialize Mapbox JNI on the JVM.
+    private val defaultRenderer = CapturingMapRenderer()
+
     private fun text(id: Int) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
     private fun node(id: Int) = compose.onNodeWithText(text(id))
 
@@ -64,7 +68,7 @@ class SavedDriveRouteReplayScreenTest {
         }
         compose.setContent {
             KccTheme {
-                SavedDriveDetailScreen(drive, DriveDeleteStatus.Idle, {}, {}, routeRepository = repo, uid = "owner")
+                SavedDriveDetailScreen(drive, DriveDeleteStatus.Idle, {}, {}, routeRepository = repo, uid = "owner", routeMapRenderer = defaultRenderer)
             }
         }
         node(R.string.savedDrives_driveReplay_missing).assertExists()
@@ -83,7 +87,7 @@ class SavedDriveRouteReplayScreenTest {
         val repo = immediate(RouteReplayFailure.MISSING)
         compose.setContent {
             KccTheme {
-                SavedDriveDetailScreen(drive.copy(routeThumbnail = null), DriveDeleteStatus.Idle, {}, {}, routeRepository = repo, uid = "owner")
+                SavedDriveDetailScreen(drive.copy(routeThumbnail = null), DriveDeleteStatus.Idle, {}, {}, routeRepository = repo, uid = "owner", routeMapRenderer = defaultRenderer)
             }
         }
         node(R.string.savedDrives_driveReplay_missing).assertExists()
@@ -95,7 +99,7 @@ class SavedDriveRouteReplayScreenTest {
         val repo = immediate(RouteReplayFailure.ACCESS_DENIED)
         compose.setContent {
             KccTheme {
-                SavedDriveDetailScreen(drive, DriveDeleteStatus.Idle, {}, {}, routeRepository = repo, uid = "owner")
+                SavedDriveDetailScreen(drive, DriveDeleteStatus.Idle, {}, {}, routeRepository = repo, uid = "owner", routeMapRenderer = defaultRenderer)
             }
         }
         node(R.string.savedDrives_driveReplay_accessDenied).assertExists()
@@ -113,7 +117,7 @@ class SavedDriveRouteReplayScreenTest {
         }
         compose.setContent {
             KccTheme {
-                SavedDriveDetailScreen(drive, DriveDeleteStatus.Idle, {}, {}, routeRepository = repo, uid = "owner")
+                SavedDriveDetailScreen(drive, DriveDeleteStatus.Idle, {}, {}, routeRepository = repo, uid = "owner", routeMapRenderer = defaultRenderer)
             }
         }
         node(R.string.savedDrives_driveReplay_serviceUnavailable).assertExists()
@@ -127,7 +131,7 @@ class SavedDriveRouteReplayScreenTest {
         val repo = immediate(RouteReplayFailure.CORRUPT)
         compose.setContent {
             KccTheme {
-                SavedDriveDetailScreen(drive.copy(routeThumbnail = "_"), DriveDeleteStatus.Idle, {}, {}, routeRepository = repo, uid = "owner")
+                SavedDriveDetailScreen(drive.copy(routeThumbnail = "_"), DriveDeleteStatus.Idle, {}, {}, routeRepository = repo, uid = "owner", routeMapRenderer = defaultRenderer)
             }
         }
         node(R.string.savedDrives_driveReplay_corrupt).assertExists()
@@ -161,7 +165,7 @@ class SavedDriveRouteReplayScreenTest {
         val reader = mutableStateOf<RouteReplayRepository>(repo)
         compose.setContent {
             KccTheme {
-                SavedDriveDetailScreen(selectedDrive.value, DriveDeleteStatus.Idle, {}, {}, routeRepository = reader.value, uid = owner.value)
+                SavedDriveDetailScreen(selectedDrive.value, DriveDeleteStatus.Idle, {}, {}, routeRepository = reader.value, uid = owner.value, routeMapRenderer = defaultRenderer)
             }
         }
         node(R.string.savedDrives_routeLoading).assertExists()
@@ -205,7 +209,7 @@ class SavedDriveRouteReplayScreenTest {
         compose.setContent {
             KccTheme {
                 if (visible.value) {
-                    SavedDriveDetailScreen(drive.copy(title = title.value), DriveDeleteStatus.Idle, {}, {}, routeRepository = repo, uid = "owner")
+                    SavedDriveDetailScreen(drive.copy(title = title.value), DriveDeleteStatus.Idle, {}, {}, routeRepository = repo, uid = "owner", routeMapRenderer = defaultRenderer)
                 }
             }
         }
@@ -307,6 +311,31 @@ class SavedDriveRouteReplayScreenTest {
             node(R.string.savedDrives_retry).assertDoesNotExist()
             compose.onNodeWithTag(DRIVE_ROUTE_MAP_PREVIEW_TAG).assertDoesNotExist()
             compose.onNodeWithTag(FULLSCREEN_FIXTURE_TAG).assertDoesNotExist()
+        }
+    }
+
+    @Test
+    fun configuredMapAvailabilityUsesInjectedRendererForFullRecordedRoute() {
+        // The fake reports available=true independently of mapbox_access_token,
+        // exercising the configured production branch in token-less CI as well.
+        val renderer = CapturingMapRenderer()
+        val points = listOf(RoutePoint(57.0, 12.0, 1_000L), RoutePoint(57.0001, 12.0, 11_000L))
+        val repo = object : RouteReplayRepository {
+            override suspend fun loadRoute(uid: String, rideId: String) = RouteReplayState.Ready(points)
+        }
+        compose.setContent {
+            KccTheme {
+                SavedDriveDetailScreen(drive, DriveDeleteStatus.Idle, {}, {}, routeRepository = repo, uid = "owner", routeMapRenderer = renderer)
+            }
+        }
+        compose.onNodeWithTag(DRIVE_ROUTE_MAP_PREVIEW_TAG).assertHeightIsEqualTo(240.dp)
+        node(R.string.savedDrives_routeOverviewPlaceholder).assertDoesNotExist()
+        node(R.string.savedDrives_driveReplay_simplifiedOverview).assertDoesNotExist()
+        compose.onNodeWithContentDescription(text(R.string.savedDrives_routeExpand)).performScrollTo().performClick()
+        compose.onNodeWithTag(FULLSCREEN_FIXTURE_TAG).assertExists()
+        compose.runOnIdle {
+            assertEquals(points, (renderer.preview as DriveRouteGeometry.Recorded).points)
+            assertEquals(renderer.preview, renderer.fullscreen)
         }
     }
 
