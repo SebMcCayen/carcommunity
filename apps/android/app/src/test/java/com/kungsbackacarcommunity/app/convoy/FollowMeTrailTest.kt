@@ -57,15 +57,15 @@ class FollowMeTrailTest {
     }
 
     @Test
-    fun `shouldDraw gates on leader, self, membership and freshness`() {
+    fun `shouldDraw includes the leader and gates on membership and freshness`() {
         val now = 1_000_000L
         val fresh = now - 1_000L
         // A fresh trail led by another member draws.
         assertTrue(FollowMeTrail.shouldDraw("bob", "me", true, fresh, now))
         // No leader -> nothing.
         assertFalse(FollowMeTrail.shouldDraw(null, "me", true, fresh, now))
-        // The viewer's own trail is not drawn as the shared line.
-        assertFalse(FollowMeTrail.shouldDraw("me", "me", true, fresh, now))
+        // The leader sees the same shared route as every other participant.
+        assertTrue(FollowMeTrail.shouldDraw("me", "me", true, fresh, now))
         // Leader no longer a member -> nothing.
         assertFalse(FollowMeTrail.shouldDraw("bob", "me", false, fresh, now))
         // Stale (vanished leader) -> nothing.
@@ -78,6 +78,14 @@ class FollowMeTrailTest {
         assertFalse(FollowMeTrail.isFresh(null, now))
         assertTrue(FollowMeTrail.isFresh(now - (FollowMeTrail.STALE_MS - 1), now))
         assertFalse(FollowMeTrail.isFresh(now - FollowMeTrail.STALE_MS, now))
+    }
+
+    @Test
+    fun `freshness outlasts the stationary heartbeat without increasing writes`() {
+        val heartbeat = com.kungsbackacarcommunity.app.location.BackgroundLocation.STATIONARY_HEARTBEAT_MS
+        assertTrue(FollowMeTrail.STALE_MS > heartbeat)
+        assertTrue(FollowMeTrail.isFresh(1_000_000L, 1_000_000L + heartbeat - 1))
+        assertFalse(FollowMeTrail.isFresh(1_000_000L, 1_000_000L + FollowMeTrail.STALE_MS))
     }
 
     @Test

@@ -1099,14 +1099,19 @@ service cloud.firestore {
         && followMeId == 'current'
         && resource.data.leaderUid == request.auth.uid
         && request.resource.data.leaderUid == resource.data.leaderUid
-        && request.resource.data.keys().hasOnly(['leaderUid', 'polyline', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['leaderUid', 'polyline', 'updatedAt', 'activationId'])
+        // Optional for legacy docs/writers; only the callable may create or
+        // rotate this generation. Partial updates preserve an existing id.
+        && request.resource.data.get('activationId', null) == resource.data.get('activationId', null)
+        && (!('activationId' in request.resource.data) || request.resource.data.activationId is string)
         && request.resource.data.polyline is string
         && request.resource.data.polyline.size() <= 200000
         // updatedAt MUST be the server clock — otherwise the leader could stamp a
         // future time and keep the freshness gate green (the trail "live") forever.
         && request.resource.data.updatedAt == request.time
-        // Re-checks live membership (single get) so a leader who has since left
-        // cannot keep writing.
+        // Re-check lifecycle as well as membership. Cleanup is best-effort, so
+        // an ended convoy's retained trail must never accept further points.
+        && get(/databases/$(database)/documents/convoys/$(convoyId)).data.status == 'active'
         && isAcceptedConvoyMember(convoyId, request.auth.uid);
 
       // create + delete: convoy.setFollowMe callable only (takeover/toggle-off).

@@ -351,6 +351,10 @@ android {
     //               nothing references com.mapbox.navigationcore.* and the build
     //               resolves without the secret. Never both, so no duplicate class.
     sourceSets {
+        // The same Follow-me integration tests run under Robolectric and on a
+        // native emulator; no duplicated protocol fixture or assertion set.
+        getByName("testDebug").java.srcDir("src/sharedDebugTest/java")
+        getByName("androidTest").java.srcDir("src/sharedDebugTest/java")
         getByName("main") {
             java.srcDir(if (navSdkEnabled) "src/nav/java" else "src/noNav/java")
         }
