@@ -1,11 +1,14 @@
 package com.kungsbackacarcommunity.app.convoy
 
+import androidx.compose.ui.test.*
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.friends.FriendSummary
 import com.kungsbackacarcommunity.app.friends.FriendsStatus
@@ -113,4 +116,41 @@ class CreateConvoyScreenTest {
         }
         composeTestRule.onNodeWithTag(CONVOY_CREATE_SUBMIT_TAG).assertIsNotEnabled()
     }
+    @Test
+    fun capDisablesOnlyUnselectedRowsAndSearchPreservesDeselect() {
+        val people = (1..51).map { FriendSummary("u$it", "Friend $it", null, null) }
+        composeTestRule.setContent {
+            KccTheme {
+                var selected by androidx.compose.runtime.remember {
+                    androidx.compose.runtime.mutableStateOf((1..50).map { "u$it" }.toSet())
+                }
+                CreateConvoyScreen(
+                    friendsStatus = FriendsStatus.Loaded(people, emptyList(), emptyList()),
+                    createState = CreateConvoyState.Idle, selectedUids = selected,
+                    onToggleFriend = { uid -> selected = if (uid in selected) selected - uid else selected + uid },
+                    onRetryFriends = null, onSubmit = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag(CONVOY_CREATE_SEARCH_TAG).performTextReplacement("Friend 51")
+        composeTestRule.onNodeWithText("Friend 51").assertIsNotEnabled()
+        composeTestRule.onNodeWithTag(CONVOY_CREATE_SEARCH_TAG).performTextReplacement("Friend 50")
+        composeTestRule.onNodeWithText("Friend 50").assertIsEnabled().performClick()
+        composeTestRule.onNodeWithTag(CONVOY_CREATE_SEARCH_TAG).performTextReplacement("Friend 51")
+        composeTestRule.onNodeWithText("Friend 51").assertIsEnabled()
+    }
+
+    @Test
+    fun staleSelectionCannotSubmitWhileFriendsAreLoadingOrUnavailable() {
+        var status by androidx.compose.runtime.mutableStateOf<FriendsStatus>(FriendsStatus.Loading)
+        composeTestRule.setContent {
+            KccTheme {
+                CreateConvoyScreen(status, CreateConvoyState.Idle, setOf("u2"), {}, null, {})
+            }
+        }
+        composeTestRule.onNodeWithTag(CONVOY_CREATE_SUBMIT_TAG).assertIsNotEnabled()
+        composeTestRule.runOnIdle { status = FriendsStatus.Error(com.kungsbackacarcommunity.app.friends.FriendActionError.Network) }
+        composeTestRule.onNodeWithTag(CONVOY_CREATE_SUBMIT_TAG).assertIsNotEnabled()
+    }
+
 }
