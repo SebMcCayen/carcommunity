@@ -23,6 +23,8 @@ struct EventsScreen: View {
 
     var body: some View {
         content
+            .kccReadingSurface(pageBackground: true)
+            .accessibilityIdentifier("events.screen")
             .navigationTitle(Text("events.title"))
             .task { coordinator?.start() }
             .toolbar {
@@ -96,21 +98,23 @@ struct EventsScreen: View {
             } label: {
                 Text("events.retry")
             }
-            .buttonStyle(.borderedProminent)
+            .kccPrimaryAction()
         }
         .padding(KccSpacing.s4)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func messageState(title: LocalizedStringKey, body: LocalizedStringKey) -> some View {
-        VStack(spacing: KccSpacing.s2) {
-            Text(title)
-                .font(.system(size: KccTypeScale.titleMd, weight: KccTypeScale.semibold))
-            Text(body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+        ScrollView {
+            VStack(spacing: KccSpacing.s3) {
+                Text(title).font(.title2.weight(.semibold))
+                Text(body).font(.body).foregroundStyle(KccTheme.secondary)
+            }
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity)
+            .padding(KccSpacing.s4)
         }
-        .padding(KccSpacing.s4)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -121,12 +125,14 @@ struct EventsScreen: View {
                     NavigationLink(value: EventDetailRoute(eventId: event.id)) {
                         EventRow(event: event)
                     }
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
                 }
             } header: {
                 Text("events.screenSubtitle")
             }
         }
-        .listStyle(.insetGrouped)
+        .listStyle(.plain)
     }
 }
 
@@ -141,40 +147,33 @@ struct EventDetailRoute: Hashable, Sendable {
 
 /// One teaser row: title, start time, place, official badge, going tally —
 /// the same teaser fields Android's upcoming list renders.
-private struct EventRow: View {
+struct EventRow: View {
     let event: EventSummary
 
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s1) {
             HStack(spacing: KccSpacing.s2) {
                 Text(event.title)
-                    .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
+                    .font(.headline)
                 if event.isOfficial {
                     Text("events.officialBadge")
-                        .font(.system(size: KccTypeScale.caption))
+                        .font(.subheadline)
                         .padding(.horizontal, KccSpacing.s2)
                         .padding(.vertical, KccSpacing.s1 / 2)
-                        .background(KccPalette.crownGold.opacity(0.2))
+                        .foregroundStyle(KccTheme.onGold)
+                        .background(KccPalette.crownGold)
                         .clipShape(Capsule())
                 }
             }
-            if let startsAt = event.startsAt {
-                Text(startsAt.formatted(date: .abbreviated, time: .shortened))
-                    .font(.system(size: KccTypeScale.bodySm))
-                    .foregroundStyle(.secondary)
-            }
-            if let place = event.locationName ?? event.approximateArea {
-                Text(place)
-                    .font(.system(size: KccTypeScale.bodySm))
-                    .foregroundStyle(.secondary)
-            }
+            EventScheduleContent(event: event)
             if event.counts.going > 0 {
                 Text(goingCountText(event.counts.going))
-                    .font(.system(size: KccTypeScale.caption))
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, KccSpacing.s1)
+        .kccContentCard()
+        .accessibilityIdentifier("events.row.\(event.id)")
     }
 
     /// "%1$lld going" (events.rowGoingCount) with the going tally.
@@ -183,6 +182,63 @@ private struct EventRow: View {
             NSLocalizedString("events.rowGoingCount", comment: "Going tally on an event row"),
             going
         )
+    }
+}
+
+/// Shared list/detail schedule built from the public teaser only. Missing dates
+/// or places stay absent; decorative calendar tiles are not read twice.
+struct EventScheduleContent: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let event: EventSummary
+    var detailed = false
+
+    private var dateStyle: Date.FormatStyle {
+        if detailed { return .dateTime.weekday(.wide).day().month(.wide).year().hour().minute() }
+        return .dateTime.day().month(.abbreviated).year().hour().minute()
+    }
+
+    private var placeName: String? { nonEmpty(event.locationName) ?? nonEmpty(event.approximateArea) }
+
+    private func nonEmpty(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    var body: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: KccSpacing.s3))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: KccSpacing.s3))
+        layout {
+            if let date = event.startsAt {
+                VStack(spacing: KccSpacing.s1) {
+                    Text(date, format: .dateTime.day()).font(.title2.weight(.semibold))
+                    Text(date, format: .dateTime.month(.abbreviated)).font(.subheadline)
+                }
+                .padding(KccSpacing.s2)
+                .frame(minWidth: 48)
+                .background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.md))
+                .accessibilityHidden(true)
+            }
+            VStack(alignment: .leading, spacing: KccSpacing.s2) {
+                if let date = event.startsAt {
+                    Label {
+                        Text(date, format: dateStyle)
+                    } icon: { Image(systemName: "calendar").accessibilityHidden(true) }
+                }
+                if let place = placeName {
+                    Label(place, systemImage: "mappin.and.ellipse")
+                }
+                if detailed, let area = nonEmpty(event.approximateArea), area != placeName {
+                    Text(area)
+                }
+            }
+            .font(.subheadline)
+            .foregroundStyle(KccTheme.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

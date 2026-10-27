@@ -43,9 +43,12 @@ struct GaragePanel: View {
 
                 content
             }
-            .padding(KccSpacing.s6)
+            .padding(KccSpacing.s4)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .foregroundStyle(KccTheme.text)
+        .background(KccTheme.page)
+        .accessibilityIdentifier("garage.screen")
         .task { coordinator.start() }
         .sheet(isPresented: $isAddPresented) {
             VehicleFormSheet(coordinator: coordinator, vehicle: nil)
@@ -67,7 +70,7 @@ struct GaragePanel: View {
         switch coordinator.state {
         case .loading:
             Text("garage.loading")
-                .font(.system(size: KccTypeScale.bodyMd))
+                .font(.body)
                 .foregroundStyle(.secondary)
         case .unavailable:
             // The config-less build. There is no dedicated "unavailable" key
@@ -75,16 +78,16 @@ struct GaragePanel: View {
             // the generic load-error copy is the closest honest message —
             // the same reuse posture as EventsScreen's placeholder.
             Text("garage.error")
-                .font(.system(size: KccTypeScale.bodyMd))
+                .font(.body)
                 .foregroundStyle(.secondary)
         case .failed:
             Text("garage.error")
-                .font(.system(size: KccTypeScale.bodyMd))
+                .font(.body)
                 .foregroundStyle(KccPalette.errorRed)
             Button(action: { coordinator.reload() }) {
                 Text("garage.retryButton")
                     .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
-                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .frame(maxWidth: .infinity, minHeight: 48)
             }
             .buttonStyle(.bordered)
         case .empty:
@@ -102,7 +105,7 @@ struct GaragePanel: View {
     private func garageContent(vehicles: [Vehicle]) -> some View {
         if vehicles.isEmpty {
             Text("garage.empty")
-                .font(.system(size: KccTypeScale.bodyMd))
+                .font(.body)
                 .foregroundStyle(.secondary)
         } else {
             ForEach(vehicles) { vehicle in
@@ -124,7 +127,7 @@ struct GaragePanel: View {
                 Int64(limit)
             )
         )
-        .font(.system(size: KccTypeScale.bodySm))
+        .font(.subheadline)
         .foregroundStyle(.secondary)
 
         if GarageAllowance.canAddVehicle(
@@ -139,7 +142,7 @@ struct GaragePanel: View {
                     Int64(limit)
                 )
             )
-            .font(.system(size: KccTypeScale.bodyMd))
+            .font(.body)
             .foregroundStyle(.secondary)
         }
     }
@@ -151,7 +154,7 @@ struct GaragePanel: View {
         } label: {
             Text("garage.addVehicle")
                 .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
-                .frame(maxWidth: .infinity, minHeight: 44)
+                .frame(maxWidth: .infinity, minHeight: 48)
         }
         .kccPrimaryAction()
     }
@@ -168,86 +171,73 @@ struct GaragePanel: View {
     }
 }
 
-/// One of the owner's own cars: circular cover photo, the display headline
-/// ("Volvo 240 (1988)"), powertrain, engine note, and the main-car badge —
-/// the display half of Android's `OwnedVehicleCard`/`VehicleCard`.
+/// Photo-led card using the same resolved cover and owner actions as before.
+/// The Android catalogue's main-car emphasis never changes vehicle allowance.
 struct GarageVehicleCard: View {
     let vehicle: Vehicle
-    /// The resolved cover-photo URL; nil keeps the placeholder (a missing
-    /// picture is cosmetic, never an error state).
     let imageURL: URL?
 
-    /// Diameter of the circular car photo in the list. Smaller than
-    /// Android's 180dp because the iOS card puts the photo beside the text,
-    /// not above it — sized like the 96pt profile avatar.
-    private static let photoDiameter: CGFloat = 72
-
     var body: some View {
-        HStack(alignment: .center, spacing: KccSpacing.s4) {
+        VStack(alignment: .leading, spacing: KccSpacing.s3) {
             photo
-
-            VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                Text(
-                    VehicleDisplay.headline(
-                        vehicle, otherLabel: String(localized: "garage.catalogueOther")
-                    )
-                )
-                .font(.system(size: KccTypeScale.titleMd, weight: KccTypeScale.medium))
-
-                Text(LocalizedStringKey(vehicle.powertrain.localizationKey))
-                    .font(.system(size: KccTypeScale.bodySm))
-                    .foregroundStyle(.secondary)
-
-                if let engine = vehicle.engineDescription, !engine.isEmpty {
-                    Text(engine)
-                        .font(.system(size: KccTypeScale.bodySm))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-
-                if vehicle.isMainCar {
-                    Text("garage.mainCarBadge")
-                        .font(.system(size: KccTypeScale.caption, weight: KccTypeScale.semibold))
-                        .padding(.horizontal, KccSpacing.s2)
-                        .padding(.vertical, KccSpacing.s1)
-                        .background(KccPalette.crownGold.opacity(0.25))
-                        .clipShape(Capsule())
-                }
+            Text(VehicleDisplay.headline(vehicle, otherLabel: String(localized: "garage.catalogueOther")))
+                .font(.title3.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+            Text(LocalizedStringKey(vehicle.powertrain.localizationKey))
+                .font(.subheadline)
+                .foregroundStyle(KccTheme.secondary)
+            if let engine = vehicle.engineDescription, !engine.isEmpty {
+                Text(engine)
+                    .font(.subheadline)
+                    .foregroundStyle(KccTheme.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-
-            Spacer(minLength: 0)
+            if vehicle.isMainCar {
+                Text("garage.mainCarBadge")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, KccSpacing.s3)
+                    .padding(.vertical, KccSpacing.s1)
+                    .foregroundStyle(KccTheme.onDriver)
+                    .background(KccTheme.driver, in: Capsule())
+            }
         }
-        .padding(KccSpacing.s4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(KccTheme.subtle)
-        .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
+        .kccContentCard(border: vehicle.isMainCar ? KccTheme.driver : KccTheme.border,
+                        lineWidth: vehicle.isMainCar ? 2 : 1)
+        .accessibilityIdentifier("garage.vehicle.\(vehicle.id)")
     }
 
     private var photo: some View {
-        ZStack {
-            Circle()
-                .fill(Color(.tertiarySystemBackground))
-            if let imageURL {
-                AsyncImage(url: imageURL) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } placeholder: {
-                    photoPlaceholder
+        Color.clear
+            .aspectRatio(16.0 / 9.0, contentMode: .fit)
+            .overlay {
+                GeometryReader { geometry in
+                    ZStack {
+                        KccTheme.subtle
+                        if let imageURL {
+                            AsyncImage(url: imageURL) { phase in
+                                if case .success(let image) = phase {
+                                    image.resizable().scaledToFill()
+                                        .frame(width: geometry.size.width, height: geometry.size.height)
+                                } else { photoPlaceholder }
+                            }
+                        } else { photoPlaceholder }
+                    }
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped()
                 }
-            } else {
-                photoPlaceholder
             }
-        }
-        .frame(width: Self.photoDiameter, height: Self.photoDiameter)
-        .clipShape(Circle())
-        .accessibilityLabel(Text("garage.photoAlt"))
+            .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text("garage.photoAlt"))
     }
 
     private var photoPlaceholder: some View {
-        Image(systemName: "car")
-            .font(.system(size: KccTypeScale.headingLg))
-            .foregroundStyle(.secondary)
+        Image(systemName: "car.fill")
+            .font(.largeTitle)
+            .foregroundStyle(KccTheme.secondary)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityHidden(true)
     }
 }
 
@@ -285,7 +275,7 @@ struct VehicleDetailSheet: View {
                     if vehicle.isMainCar {
                         Text("garage.mainCarBadge")
                             .font(.system(size: KccTypeScale.caption, weight: KccTypeScale.semibold))
-                            .foregroundStyle(KccPalette.crownGold)
+                            .foregroundStyle(KccTheme.driver)
                     }
 
                     if let plate = vehicle.registrationPlate, !plate.isEmpty {
@@ -356,6 +346,7 @@ struct VehicleDetailSheet: View {
                 }
                 .padding(KccSpacing.s6)
             }
+            .kccReadingSurface(pageBackground: true)
             .navigationTitle(Text("garage.detailTitle"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

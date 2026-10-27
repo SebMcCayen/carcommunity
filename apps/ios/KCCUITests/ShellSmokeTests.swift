@@ -102,6 +102,27 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(app.buttons["shell.mapLayers"].waitForExistence(timeout: 5))
     }
 
+    func testRedesignedFeaturePagesRetainNativeNavigationWithLargeText() {
+        let app = launch(language: "en", largeText: true, theme: "Dark")
+        app.buttons["shell.tab.chat"].tap()
+        XCTAssertTrue(element("chatHub.opaqueScreen", in: app).waitForExistence(timeout: 5))
+        attach(app, name: "feature-design-chat-en-dark-accessibility")
+        app.buttons["shell.tab.garage"].tap()
+        XCTAssertTrue(element("garage.screen", in: app).waitForExistence(timeout: 5))
+        attach(app, name: "feature-design-garage-configless-en-dark-accessibility")
+        app.buttons["shell.tab.social"].tap()
+        let social = element("shell.socialHub", in: app)
+        XCTAssertTrue(social.waitForExistence(timeout: 5))
+        social.buttons["Events"].tap()
+        XCTAssertTrue(app.navigationBars["Events"].waitForExistence(timeout: 5))
+        XCTAssertTrue(element("events.screen", in: app).exists)
+        attach(app, name: "feature-design-events-configless-en-dark-accessibility")
+        app.buttons["Back"].firstMatch.tap()
+        XCTAssertTrue(social.waitForExistence(timeout: 5))
+        app.buttons["shell.tab.map"].tap()
+        XCTAssertTrue(app.buttons["shell.mapLayers"].isHittable)
+    }
+
     func testSwedishShellNavigation() {
         checkShell(language: "sv", labels: ["Karta", "Chatt", "Social", "Garage"])
     }

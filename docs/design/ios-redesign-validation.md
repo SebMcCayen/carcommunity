@@ -321,3 +321,34 @@ cover English selection/reopening/focus and Swedish dark accessibility text.
 These new native cases require passing CI; authored tests are not executed proof.
 No Mapbox rendering, production Firebase data, Apple service or purchase is needed
 for these UI checks. Physical-device validation remains pending enrollment.
+
+
+## Android pass-three follow-up: feature reading screens (2026-10-26)
+
+Compared the merged Android chat/event/garage/profile presentation and the checked-in
+`android-wave2-2026-10-25` previews. Native iOS reading cards now share semantic
+surfaces and borders rather than copying image assets, portraits or sample data.
+
+- Chat keeps every existing channel/source and coordinator. The source selector
+  shares one outlined capsule; reply surfaces and message typography use semantic
+  roles. The composer retains its full draft/send policy with a bounded native
+  multiline editor viewport. At accessibility sizes Send uses a labelled icon;
+  extra lines scroll inside the field so the keyboard does not push Send away.
+- Events use public-teaser calendar/place cards in the list and detail. No private
+  address/description is moved outside its existing gate. RSVP remains server-driven;
+  choices wrap/stack, tallies remain neutral, and recovery copy can scroll.
+- Garage keeps its owner detail/edit/photo/delete/main-car actions and allowance.
+  Cover cards use the resolved real image, a 16:9 crop, a native missing-image
+  fallback and cyan main-car emphasis. Nothing is hidden after a downgrade.
+- Profile groups the real avatar/name/bio, retains the existing edit/upload state,
+  and puts Back outside the scroller. The existing points ledger entry is kept.
+
+`FeatureDesignLayoutTests` measures the actual SwiftUI garage/event/chat/points
+widgets at 320/390 points, Swedish/English, dark/light and normal/accessibility
+text using synthetic data without image URLs. These are wrapping/width checks,
+not screenshot-similarity tests or a full profile-edit/purchase/authentication test.
+The config-less UI navigation case captures Chat, unavailable Garage and Events,
+then returns through the native Back/tab routes. Config-less mode intentionally
+has no owner-profile shortcut; no authentication bypass was added for testing.
+PR CI is the source of executed native test results. Final physical-device and
+real-data visual acceptance still remains separate from these checks.

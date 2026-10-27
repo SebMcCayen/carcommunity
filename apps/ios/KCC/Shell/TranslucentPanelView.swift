@@ -29,17 +29,28 @@ extension View {
             .foregroundStyle(KccTheme.onGold)
     }
 
+    /// Reading card shared by the feature pages; no material blur over tiles.
+    func kccContentCard(border: Color = KccTheme.border, lineWidth: CGFloat = 1) -> some View {
+        padding(KccSpacing.s4)
+            .foregroundStyle(KccTheme.text)
+            .background(KccTheme.surface, in: RoundedRectangle(cornerRadius: KccRadius.lg))
+            .overlay {
+                RoundedRectangle(cornerRadius: KccRadius.lg)
+                    .strokeBorder(border, lineWidth: lineWidth)
+            }
+    }
+
     func kccMapControl() -> some View {
         foregroundStyle(KccTheme.text)
             .background(KccTheme.overlay, in: Circle())
             .overlay { Circle().strokeBorder(KccTheme.border, lineWidth: 1) }
     }
 
-    func kccReadingSurface() -> some View {
+    func kccReadingSurface(pageBackground: Bool = false) -> some View {
         foregroundStyle(KccTheme.text)
-            .background(KccTheme.surface, ignoresSafeAreaEdges: .all)
+            .background(pageBackground ? KccTheme.page : KccTheme.surface, ignoresSafeAreaEdges: .all)
             .scrollContentBackground(.hidden)
-            .toolbarBackground(KccTheme.surface, for: .navigationBar)
+            .toolbarBackground(pageBackground ? KccTheme.page : KccTheme.surface, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
     }
 }

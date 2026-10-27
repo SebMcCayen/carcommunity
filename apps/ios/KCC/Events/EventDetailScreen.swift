@@ -21,6 +21,7 @@ import UIKit
 /// the events feature's own `NavigationStack` (the one hosting the list), so
 /// no shell wiring is involved.
 struct EventDetailScreen: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     /// Builds the coordinator on first appearance; returns nil in a
@@ -55,6 +56,8 @@ struct EventDetailScreen: View {
 
     var body: some View {
         content
+            .kccReadingSurface(pageBackground: true)
+            .accessibilityIdentifier("events.detail")
             .navigationTitle(titleText)
             .navigationBarTitleDisplayMode(.inline)
             .task {
@@ -158,11 +161,16 @@ struct EventDetailScreen: View {
     }
 
     private func messageState(_ body: LocalizedStringKey) -> some View {
-        Text(body)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .padding(KccSpacing.s4)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ScrollView {
+            Text(body)
+                .font(.body)
+                .foregroundStyle(KccTheme.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity)
+                .padding(KccSpacing.s4)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     /// The teaser settled nil — missing or unreadable. Android renders
@@ -176,7 +184,7 @@ struct EventDetailScreen: View {
             } label: {
                 Text("events.retry")
             }
-            .buttonStyle(.borderedProminent)
+            .kccPrimaryAction()
         }
         .padding(KccSpacing.s4)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -187,36 +195,26 @@ struct EventDetailScreen: View {
             VStack(alignment: .leading, spacing: KccSpacing.s3) {
                 if event.isOfficial {
                     Text("events.officialBadge")
-                        .font(.system(size: KccTypeScale.caption, weight: KccTypeScale.semibold))
-                        .foregroundStyle(KccPalette.crownGold)
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, KccSpacing.s2)
+                        .padding(.vertical, KccSpacing.s1)
+                        .foregroundStyle(KccTheme.onGold)
+                        .background(KccPalette.crownGold, in: Capsule())
                 }
                 if event.status == .cancelled {
                     Text("events.cancelledNotice")
-                        .font(.system(size: KccTypeScale.bodyMd))
+                        .font(.body)
                         .foregroundStyle(KccPalette.errorRed)
                 }
-                if let startsAt = event.startsAt {
-                    // Android: DateFormat.FULL date + SHORT time.
-                    Text(startsAt.formatted(date: .complete, time: .shortened))
-                        .font(.system(size: KccTypeScale.bodyMd))
-                        .foregroundStyle(.secondary)
-                }
-                if let area = trimmed(event.approximateArea) {
-                    Text(area)
-                        .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
-                }
-                // PUBLIC place name (teaser data since the 2026-07 open-up),
-                // so it sits OUTSIDE the member gate below: a non-member must
-                // still see where the event is. Only the precise street
-                // address and the long description stay member-only.
-                if let place = trimmed(event.locationName) {
-                    Text(place)
-                        .font(.system(size: KccTypeScale.bodyMd))
-                        .foregroundStyle(.secondary)
-                }
+                Text(event.title)
+                    .font(.title2.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                EventScheduleContent(event: event, detailed: true)
+                    .kccContentCard()
                 if let summary = trimmed(event.summary) {
                     Text(summary)
-                        .font(.system(size: KccTypeScale.bodyMd))
+                        .font(.body)
                         .foregroundStyle(.secondary)
                 }
 
@@ -366,7 +364,7 @@ struct EventDetailScreen: View {
                             coordinator.checkInState == .working
                                 || permissionCoordinator.state == .requesting
                         )
-                        .buttonStyle(.borderedProminent)
+                        .kccPrimaryAction()
                     }
                     if coordinator.checkInState == .working {
                         ProgressView()
@@ -387,9 +385,7 @@ struct EventDetailScreen: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(KccSpacing.s3)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: KccSpacing.s2))
+        .kccContentCard()
     }
 
     @ViewBuilder
@@ -482,19 +478,17 @@ struct EventDetailScreen: View {
                 .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
             if let address = detail?.address {
                 Text(address)
-                    .font(.system(size: KccTypeScale.bodyMd))
+                    .font(.body)
                     .foregroundStyle(.secondary)
             }
             if let description = trimmed(detail?.description) {
                 Text(description)
-                    .font(.system(size: KccTypeScale.bodyMd))
+                    .font(.body)
                     .foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(KccSpacing.s3)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: KccSpacing.s2))
+        .kccContentCard()
     }
 
     /// The membership gate (Android's `InfoCard` with the member-required
@@ -505,13 +499,11 @@ struct EventDetailScreen: View {
             Text(title)
                 .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
             Text(body)
-                .font(.system(size: KccTypeScale.bodyMd))
+                .font(.body)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(KccSpacing.s3)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: KccSpacing.s2))
+        .kccContentCard()
     }
 
     /// RSVP: the three answer buttons (selection driven by the OBSERVED rsvp
@@ -524,14 +516,17 @@ struct EventDetailScreen: View {
             Text("events.rsvpCountsLabel")
                 .font(.system(size: KccTypeScale.caption, weight: KccTypeScale.semibold))
                 .foregroundStyle(.secondary)
-            HStack(spacing: KccSpacing.s2) {
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(spacing: KccSpacing.s2))
+                : AnyLayout(HStackLayout(spacing: KccSpacing.s2))
+            layout {
                 rsvpButton("events.rsvpGoing", answer: .going, coordinator: coordinator)
                 rsvpButton("events.rsvpMaybe", answer: .maybe, coordinator: coordinator)
                 rsvpButton("events.rsvpNotGoing", answer: .notGoing, coordinator: coordinator)
             }
             if case .failed = coordinator.rsvpState {
                 Text("events.rsvpSubmitError")
-                    .font(.system(size: KccTypeScale.bodySm))
+                    .font(.subheadline)
                     .foregroundStyle(KccPalette.errorRed)
             }
             // How many answered each way, from the server-maintained public
@@ -542,6 +537,7 @@ struct EventDetailScreen: View {
                 rsvpCount("events.rsvpMaybe", count: event.counts.maybe)
                 rsvpCount("events.rsvpNotGoing", count: event.counts.notGoing)
             }
+            .kccContentCard()
         }
     }
 
@@ -558,13 +554,15 @@ struct EventDetailScreen: View {
             coordinator.submitRsvp(answer)
         } label: {
             Text(label)
-                .font(.system(size: KccTypeScale.bodySm))
-                .frame(maxWidth: .infinity)
+                .font(.subheadline)
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, minHeight: 48)
         }
         .disabled(coordinator.rsvpState == .saving)
 
         if coordinator.myRsvp == answer {
-            button.buttonStyle(.borderedProminent)
+            button.kccPrimaryAction().accessibilityAddTraits(.isSelected)
         } else {
             button.buttonStyle(.bordered)
         }
@@ -577,7 +575,7 @@ struct EventDetailScreen: View {
             Text("\(count)")
                 .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
             Text(label)
-                .font(.system(size: KccTypeScale.caption))
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }

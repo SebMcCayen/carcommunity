@@ -82,121 +82,139 @@ struct ProfileScreen: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: KccSpacing.s4) {
-                HStack {
-                    Button(action: onBack) { Label("profile.back", systemImage: "chevron.backward") }
-                    Spacer()
-                    if !editing {
-                        Button("profile.editButton") { beginEditing() }
-                            .disabled(!canEdit)
-                    }
+        VStack(spacing: 0) {
+            HStack {
+                Button(action: onBack) {
+                    Label("profile.back", systemImage: "chevron.backward")
+                        .frame(minHeight: 48).contentShape(Rectangle())
                 }
-                Text("profile.title")
-                    .font(.system(size: KccTypeScale.headingLg, weight: .semibold))
+                    .accessibilityIdentifier("profile.back")
+                Spacer()
+            }
+            .padding(.horizontal, KccSpacing.s4)
+            ScrollView {
+                VStack(alignment: .leading, spacing: KccSpacing.s4) {
+                    Text("profile.title")
+                        .font(.system(size: KccTypeScale.headingLg, weight: .semibold))
 
-                VStack(spacing: KccSpacing.s2) {
-                    avatar
-                    if editing {
-                        PhotosPicker(selection: $pickedPhoto, matching: .images) {
-                            Text(editor.status == .uploading ? "profile.avatarUploading" : "profile.avatarChange")
+                    VStack(spacing: KccSpacing.s2) {
+                        avatar
+                        if editing {
+                            PhotosPicker(selection: $pickedPhoto, matching: .images) {
+                                Text(editor.status == .uploading ? "profile.avatarUploading" : "profile.avatarChange")
+                                .frame(minHeight: 48).contentShape(Rectangle())
+                            }
+                            .disabled(editor.status == .uploading || editor.status == .saving)
                         }
-                        .disabled(editor.status == .uploading || editor.status == .saving)
+                        nameText
+                        if !editing { profileDetails }
                     }
-                    nameText
-                }
-                .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity)
+                    .kccContentCard()
+                    .accessibilityIdentifier("profile.identityCard")
 
-                if editing {
-                    editForm
-                } else {
-                    profileDetails
-                    if let onOpenDrives {
-                        Button(action: onOpenDrives) {
+                    if !editing {
+                        Button { beginEditing() } label: {
+                            Text("profile.editButton").frame(maxWidth: .infinity, minHeight: 48)
+                        }
+                            .kccPrimaryAction()
+                            .disabled(!canEdit)
+                            .accessibilityIdentifier("profile.edit")
+                    }
+                    if editing {
+                        editForm
+                    } else {
+                        if let onOpenDrives {
+                            Button(action: onOpenDrives) {
+                                HStack {
+                                    Label("shell.moreDrives", systemImage: "chart.bar.xaxis")
+                                    Spacer()
+                                    Image(systemName: "chevron.forward").accessibilityHidden(true)
+                                }
+                                .frame(minHeight: 48)
+                                .padding(KccSpacing.s3)
+                                .background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.md))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("profile.myDrives")
+                        }
+                        ProfilePointsSection(
+                            balance: pointsCoordinator.balance,
+                            recentEarnings: pointsCoordinator.recentEarnings,
+                            onOpenLedger: onOpenPoints
+                        )
+                        BadgesWall(coordinator: badgesCoordinator, isEmbedded: true)
+                    }
+
+                    if editor.status == .failed {
+                        Text("profile.saveError").foregroundStyle(.red)
+                    } else if editor.status == .tooLarge {
+                        Text("profile.avatarTooLarge").foregroundStyle(.red)
+                    } else if editor.status == .saved {
+                        Text("profile.saved").foregroundStyle(.secondary)
+                    }
+
+                    Button {
+                        showsBlockedUsers = true
+                    } label: {
+                        HStack {
+                            Label("settings.blockedUsers", systemImage: "person.crop.circle.badge.xmark")
+                            Spacer()
+                            Image(systemName: "chevron.forward")
+                                .accessibilityHidden(true)
+                        }
+                        .frame(minHeight: 48)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("profile.blockedUsers")
+
+                    if let onOpenWhatsNew {
+                        Button(action: onOpenWhatsNew) {
                             HStack {
-                                Label("shell.moreDrives", systemImage: "chart.bar.xaxis")
+                                Label("whatsNew.title", systemImage: "sparkles")
                                 Spacer()
-                                Image(systemName: "chevron.forward").accessibilityHidden(true)
+                                Image(systemName: "chevron.forward")
+                                    .accessibilityHidden(true)
                             }
                             .frame(minHeight: 48)
-                            .padding(KccSpacing.s3)
-                            .background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.md))
+                        .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityIdentifier("profile.myDrives")
+                        .accessibilityIdentifier("profile.whatsNew")
                     }
-                    ProfilePointsSection(
-                        balance: pointsCoordinator.balance,
-                        recentEarnings: pointsCoordinator.recentEarnings,
-                        onOpenLedger: onOpenPoints
-                    )
-                    BadgesWall(coordinator: badgesCoordinator, isEmbedded: true)
-                }
 
-                if editor.status == .failed {
-                    Text("profile.saveError").foregroundStyle(.red)
-                } else if editor.status == .tooLarge {
-                    Text("profile.avatarTooLarge").foregroundStyle(.red)
-                } else if editor.status == .saved {
-                    Text("profile.saved").foregroundStyle(.secondary)
-                }
-
-                Button {
-                    showsBlockedUsers = true
-                } label: {
-                    HStack {
-                        Label("settings.blockedUsers", systemImage: "person.crop.circle.badge.xmark")
-                        Spacer()
-                        Image(systemName: "chevron.forward")
-                            .accessibilityHidden(true)
-                    }
-                    .frame(minHeight: 44)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("profile.blockedUsers")
-
-                if let onOpenWhatsNew {
-                    Button(action: onOpenWhatsNew) {
-                        HStack {
-                            Label("whatsNew.title", systemImage: "sparkles")
-                            Spacer()
-                            Image(systemName: "chevron.forward")
-                                .accessibilityHidden(true)
+                    if let onOpenAccountDeletion {
+                        Button(role: .destructive, action: onOpenAccountDeletion) {
+                            HStack {
+                                Label("settings.accountDeletion", systemImage: "trash")
+                                Spacer()
+                                Image(systemName: "chevron.forward")
+                                    .accessibilityHidden(true)
+                            }
+                            .frame(minHeight: 48)
+                        .contentShape(Rectangle())
                         }
-                        .frame(minHeight: 44)
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("profile.accountDeletion")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("profile.whatsNew")
-                }
 
-                if let onOpenAccountDeletion {
-                    Button(role: .destructive, action: onOpenAccountDeletion) {
-                        HStack {
-                            Label("settings.accountDeletion", systemImage: "trash")
-                            Spacer()
-                            Image(systemName: "chevron.forward")
-                                .accessibilityHidden(true)
-                        }
-                        .frame(minHeight: 44)
+                    if signOutFailed {
+                        Text("auth.signOutError")
+                            .foregroundStyle(KccPalette.errorRed)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("profile.accountDeletion")
-                }
 
-                if signOutFailed {
-                    Text("auth.signOutError")
-                        .foregroundStyle(KccPalette.errorRed)
+                    Button(action: attemptSignOut) {
+                        Text("auth.signOut").frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.bordered)
+                    .padding(.top, KccSpacing.s6)
                 }
-
-                Button(action: attemptSignOut) {
-                    Text("auth.signOut").frame(maxWidth: .infinity, minHeight: 44)
-                }
-                .buttonStyle(.bordered)
-                .padding(.top, KccSpacing.s6)
+                .padding(KccSpacing.s4)
             }
-            .padding(KccSpacing.s6)
         }
-        .kccReadingSurface()
+        .kccReadingSurface(pageBackground: true)
+        .accessibilityIdentifier("profile.screen")
         .task {
             coordinator.start()
             pointsCoordinator.start()
@@ -245,11 +263,11 @@ struct ProfileScreen: View {
     }
 
     private var avatarPlaceholder: some View {
-        Text(verbatim: "?").font(.system(size: KccTypeScale.headingLg)).foregroundStyle(.secondary)
+        Image(systemName: "person.fill").font(.largeTitle).foregroundStyle(KccTheme.secondary)
     }
 
     @ViewBuilder private var nameText: some View {
-        if let resolvedDisplayName { Text(resolvedDisplayName).font(.system(size: KccTypeScale.titleMd, weight: .medium)) }
+        if let resolvedDisplayName { Text(resolvedDisplayName).font(.title2.weight(.semibold)).multilineTextAlignment(.center) }
         else { Text("profile.emptyDisplayName").foregroundStyle(.secondary) }
     }
 
@@ -258,7 +276,7 @@ struct ProfileScreen: View {
         case .loading: ProgressView().frame(maxWidth: .infinity)
         case .loaded(let profile):
             if let bio = profile?.bio?.trimmingCharacters(in: .whitespacesAndNewlines), !bio.isEmpty {
-                Text(bio)
+                Text(bio).font(.body).frame(maxWidth: .infinity, alignment: .leading)
             } else { Text("profile.emptyBio").foregroundStyle(.secondary) }
         case .failed: Text("profile.loadError").foregroundStyle(.secondary)
         case .unavailable: EmptyView()

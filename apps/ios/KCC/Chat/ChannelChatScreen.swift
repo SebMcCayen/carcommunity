@@ -33,6 +33,7 @@ struct ChannelChatScreen: View {
                 content
             }
         }
+            .kccReadingSurface(pageBackground: true)
             .navigationBarTitleDisplayMode(.inline)
             .task { coordinator?.start() }
             .onChange(of: readingActive, initial: true) { _, active in
@@ -98,7 +99,7 @@ struct ChannelChatScreen: View {
                 coordinator.loadOlder()
             } label: {
                 Text(coordinator.olderPaging == .failed ? "dm.retry" : "dm.loadOlder")
-                    .font(.system(size: KccTypeScale.bodySm))
+                    .font(.subheadline)
                     .frame(maxWidth: .infinity)
             }
             .padding(.vertical, KccSpacing.s1)
@@ -137,7 +138,7 @@ struct ChannelChatScreen: View {
     ) -> some View {
         HStack(spacing: KccSpacing.s2) {
             Text(replyingToText(target))
-                .font(.system(size: KccTypeScale.bodySm))
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer()
@@ -148,7 +149,7 @@ struct ChannelChatScreen: View {
         }
         .padding(.horizontal, KccSpacing.s3)
         .padding(.vertical, KccSpacing.s2)
-        .background(KccPalette.softSand.opacity(0.5))
+        .background(KccTheme.surface)
     }
 
     private func replyingToText(_ target: ChannelMessage) -> String {
@@ -162,30 +163,14 @@ struct ChannelChatScreen: View {
     // MARK: - Composer
 
     private func composer(_ coordinator: ChannelChatCoordinator) -> some View {
-        HStack(spacing: KccSpacing.s2) {
-            TextField("chat.inputPlaceholder", text: Binding(
-                get: { coordinator.draft }, set: { coordinator.draft = $0 }
-            ), axis: .vertical)
-                .textFieldStyle(.plain)
-                .lineLimit(1...4)
-                .padding(.horizontal, KccSpacing.s3)
-                .padding(.vertical, KccSpacing.s2)
-                .background(KccTheme.subtle)
-                .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
-            Button {
-                // Only clear the draft when something was actually sent — a
-                // signed-out caller (no currentUserId) has send(_:) ignored and
-                // must not silently lose their draft.
-                if coordinator.send(coordinator.draft) != nil {
-                    coordinator.draft = ""
-                }
-            } label: {
-                Text("chat.sendButton")
-                    .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
-            }
-            .disabled(!ChannelThread.isSendable(coordinator.draft) || coordinator.currentUserId == nil)
+        ChannelComposer(
+            draft: Binding(get: { coordinator.draft }, set: { coordinator.draft = $0 }),
+            canSend: ChannelThread.isSendable(coordinator.draft) && coordinator.currentUserId != nil
+        ) {
+            // Keep the original guarded send/draft policy; UI never clears a
+            // signed-out or rejected message merely because Send was tapped.
+            if coordinator.send(coordinator.draft) != nil { coordinator.draft = "" }
         }
-        .padding(KccSpacing.s3)
     }
 
     // MARK: - Placeholder states
@@ -206,36 +191,90 @@ struct ChannelChatScreen: View {
     }
 }
 
+/// A bounded editor viewport keeps Send reachable with the keyboard on a
+/// narrow phone. The complete draft stays in the coordinator; extra lines scroll
+/// inside the native vertical field instead of displacing the action offscreen.
+struct ChannelComposer: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Binding var draft: String
+    let canSend: Bool
+    let onSend: () -> Void
+
+    var body: some View {
+        HStack(spacing: KccSpacing.s2) {
+            TextField("chat.inputPlaceholder", text: $draft, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.body)
+                .lineLimit(1...(dynamicTypeSize.isAccessibilitySize ? 1 : 2))
+                .padding(.horizontal, KccSpacing.s3)
+                .padding(.vertical, KccSpacing.s1)
+                .frame(minHeight: 48)
+                .background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.lg))
+                .overlay { RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.border) }
+                .accessibilityIdentifier("chat.composer.input")
+            Button(action: onSend) {
+                if dynamicTypeSize.isAccessibilitySize {
+                    Image(systemName: "paperplane.fill").font(.system(size: 20, weight: .semibold))
+                        .frame(width: 48, height: 48)
+                } else {
+                    Text("chat.sendButton").font(.body.weight(.semibold)).frame(minHeight: 48)
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(KccTheme.driver)
+            .foregroundStyle(KccTheme.onDriver)
+            .accessibilityLabel(Text("chat.sendButton"))
+            .accessibilityIdentifier("chat.composer.send")
+            .disabled(!canSend)
+        }
+        .padding(KccSpacing.s2)
+    }
+}
+
 /// One message bubble: the sender name (for other-authored messages), the text,
 /// an optional reply quote, and a delivery-status line for the caller's own
 /// pending/failed bubbles.
-private struct MessageRow: View {
+struct MessageRow: View {
     let message: ChannelMessage
     let isOwn: Bool
 
     var body: some View {
-        VStack(alignment: isOwn ? .trailing : .leading, spacing: KccSpacing.s1) {
+        HStack(alignment: .top, spacing: KccSpacing.s3) {
             if !isOwn {
-                Text(message.senderDisplayName ?? String(localized: "chat.unknownAuthor"))
-                    .font(.system(size: KccTypeScale.caption, weight: KccTypeScale.semibold))
-                    .foregroundStyle(.secondary)
+                // No per-message Storage lookup: use the native fallback until
+                // an authorized, resolved avatar is supplied by the data layer.
+                Image(systemName: "person.fill")
+                    .foregroundStyle(KccTheme.secondary)
+                    .frame(width: 32, height: 32)
+                    .background(KccTheme.subtle, in: Circle())
+                    .accessibilityHidden(true)
             }
-            if let reply = message.replyTo {
-                Text(reply.textPreview)
-                    .font(.system(size: KccTypeScale.caption))
-                    .foregroundStyle(.secondary)
-                    .padding(KccSpacing.s2)
-                    .background(KccPalette.softSand.opacity(0.4))
-                    .clipShape(RoundedRectangle(cornerRadius: KccRadius.sm))
+            VStack(alignment: isOwn ? .trailing : .leading, spacing: KccSpacing.s1) {
+                if !isOwn {
+                    Text(message.senderDisplayName ?? String(localized: "chat.unknownAuthor"))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(KccTheme.driver)
+                }
+                if let reply = message.replyTo {
+                    Text(reply.textPreview)
+                        .font(.system(size: KccTypeScale.caption))
+                        .foregroundStyle(.secondary)
+                        .padding(KccSpacing.s2)
+                        .background(KccTheme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: KccRadius.sm))
+                }
+                Text(message.text)
+                    .font(.body)
+                    .padding(.horizontal, KccSpacing.s3)
+                    .padding(.vertical, KccSpacing.s2)
+                    .background(isOwn ? KccTheme.driver : KccTheme.surface)
+                    .foregroundStyle(isOwn ? KccTheme.onDriver : KccTheme.text)
+                    .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
+                if let timestamp = message.createdAt {
+                    Text(timestamp, style: .time).font(.caption).foregroundStyle(KccTheme.secondary)
+                }
+                statusLine
             }
-            Text(message.text)
-                .font(.system(size: KccTypeScale.bodyMd))
-                .padding(.horizontal, KccSpacing.s3)
-                .padding(.vertical, KccSpacing.s2)
-                .background(isOwn ? KccTheme.driver : KccTheme.subtle)
-                .foregroundStyle(isOwn ? KccTheme.onDriver : KccTheme.text)
-                .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
-            statusLine
         }
         .frame(maxWidth: .infinity, alignment: isOwn ? .trailing : .leading)
     }

@@ -30,11 +30,11 @@ struct ProfilePointsSection: View {
                     .font(.headline)
                     .foregroundStyle(.secondary)
             }
-            Text("profile.pointsSubtitle").font(.caption).foregroundStyle(.secondary)
+            Text("profile.pointsSubtitle").font(.subheadline).foregroundStyle(.secondary)
             Divider()
             Text("profile.pointsRecentTitle").font(.subheadline.weight(.semibold))
             if recentEarnings.isEmpty {
-                Text("profile.pointsRecentEmpty").font(.caption).foregroundStyle(.secondary)
+                Text("profile.pointsRecentEmpty").font(.subheadline).foregroundStyle(.secondary)
             } else {
                 ForEach(recentEarnings, id: \.id) { entry in
                     HStack(spacing: KccSpacing.s2) {
@@ -52,12 +52,11 @@ struct ProfilePointsSection: View {
                     Image(systemName: "chevron.forward").accessibilityHidden(true)
                 }
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.tint)
+                .foregroundStyle(KccTheme.driver)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(KccSpacing.s4)
-        .background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.lg))
+        .kccContentCard(border: KccPalette.crownGold)
         .contentShape(Rectangle())
     }
 }
