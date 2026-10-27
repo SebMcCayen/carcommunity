@@ -200,6 +200,10 @@
     <string name="settingsMenu_aboutSection">About the app</string>
     <string name="settingsMenu_whatsNew">What’s new</string>
     <string name="settingsMenu_appearanceSection">Appearance</string>
+    <string name="settingsMenu_themeSystem">System</string>
+    <string name="settingsMenu_themeSystemDescription">Follows your phone’s light or dark theme</string>
+    <string name="settingsMenu_themeScheduled">Automatic</string>
+    <string name="settingsMenu_themeScheduledDescription">Light 07:00–19:00, dark otherwise. Local time, independent of your phone’s theme.</string>
     <string name="settingsMenu_themeAutomatic">Automatic</string>
     <string name="settingsMenu_themeAutomaticDescription">Follows your device’s light or dark setting</string>
     <string name="settingsMenu_themeLight">Light</string>

@@ -200,6 +200,10 @@
     <string name="settingsMenu_aboutSection">Om appen</string>
     <string name="settingsMenu_whatsNew">Vad är nytt</string>
     <string name="settingsMenu_appearanceSection">Utseende</string>
+    <string name="settingsMenu_themeSystem">System</string>
+    <string name="settingsMenu_themeSystemDescription">Följer telefonens ljusa eller mörka tema</string>
+    <string name="settingsMenu_themeScheduled">Automatiskt</string>
+    <string name="settingsMenu_themeScheduledDescription">Ljust 07:00–19:00, annars mörkt. Lokal tid, oavsett telefonens tema.</string>
     <string name="settingsMenu_themeAutomatic">Automatiskt</string>
     <string name="settingsMenu_themeAutomaticDescription">Följer enhetens ljusa eller mörka läge</string>
     <string name="settingsMenu_themeLight">Ljust</string>
