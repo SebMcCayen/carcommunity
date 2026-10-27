@@ -39,6 +39,7 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
 import com.kungsbackacarcommunity.app.shell.MAP_DETAIL_SHEET_TAG
 import com.kungsbackacarcommunity.app.map.LocalMapZoomController
@@ -205,12 +206,28 @@ class Wave2RedesignCaptureTest {
                 rule.onNodeWithTag("crownHubTab_2").performClick()
                 rule.waitForIdle()
             }
+            if (screen == "map-convoy") {
+                when (args.getString("redesignConvoyPanel")) {
+                    "members", "member-actions" -> {
+                        rule.onNodeWithTag(com.kungsbackacarcommunity.app.convoy.CONVOY_BAR_MEMBERS_TAG).performClick()
+                        rule.waitForIdle()
+                        if (args.getString("redesignConvoyPanel") == "member-actions") {
+                            rule.onNodeWithText("Testförare 1").performClick()
+                            rule.waitForIdle()
+                        }
+                    }
+                }
+            }
             rule.onNodeWithTag("wave2-case-$screen").assertExists()
             if (screen in MAP_SHELL_CATALOGUE_CASES || screen == "map-convoy") {
                 rule.waitUntil(5_000) {
                     runCatching {
                         val footer = rule.onNodeWithTag(MAP_CATALOGUE_FOOTER_TAG).fetchSemanticsNode().boundsInRoot
-                        val tag = if (screen == "map-session" || screen == "map-convoy") "map_home_session_dock" else MAP_DETAIL_SHEET_TAG
+                        val tag = when {
+                            screen == "map-convoy" && args.getString("redesignConvoyPanel") != null -> MAP_DETAIL_SHEET_TAG
+                            screen == "map-session" || screen == "map-convoy" -> "map_home_session_dock"
+                            else -> MAP_DETAIL_SHEET_TAG
+                        }
                         val body = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
                         footer.height > 0f && body.height > 0f && body.bottom <= footer.top + 1f
                     }.getOrDefault(false)
