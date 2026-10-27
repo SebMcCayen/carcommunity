@@ -11,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -37,6 +38,7 @@ internal fun clubCalendarDays(month: YearMonth): List<LocalDate?> {
 
 @Composable
 internal fun ClubCalendar(repository: ClubRepository, clubId: String, canManage: Boolean, onOpenEvent: (String) -> Unit) {
+    val locale = LocalLocale.current.platformLocale
     var month by remember { mutableStateOf(YearMonth.now(clubZone)) }
     var page by remember { mutableStateOf(ClubPage<ClubEvent>(emptyList(), null)) }
     var error by remember { mutableStateOf<Throwable?>(null) }
@@ -52,10 +54,10 @@ internal fun ClubCalendar(repository: ClubRepository, clubId: String, canManage:
     Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { month = month.minusMonths(1) }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, stringResource(R.string.clubs_previousMonth)) }
-            Text(month.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault())), Modifier.weight(1f), textAlign = TextAlign.Center)
+            Text(month.format(DateTimeFormatter.ofPattern("MMMM yyyy", locale)), Modifier.weight(1f), textAlign = TextAlign.Center)
             IconButton(onClick = { month = month.plusMonths(1) }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, stringResource(R.string.clubs_nextMonth)) }
         }
-        Row(Modifier.fillMaxWidth()) { DayOfWeek.entries.forEach { day -> Text(day.getDisplayName(TextStyle.NARROW, Locale.getDefault()), Modifier.weight(1f), textAlign = TextAlign.Center) } }
+        Row(Modifier.fillMaxWidth()) { DayOfWeek.entries.forEach { day -> Text(day.getDisplayName(TextStyle.NARROW, locale), Modifier.weight(1f), textAlign = TextAlign.Center) } }
         val dates = page.items.groupBy { Instant.ofEpochMilli(it.startMillis).atZone(clubZone).toLocalDate() }
         clubCalendarDays(month).chunked(7).forEach { week ->
             Row(Modifier.fillMaxWidth()) { week.forEach { date ->

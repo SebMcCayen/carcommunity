@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
@@ -23,6 +24,7 @@ import java.util.Locale
 @Composable
 internal fun ClubMemberContent(uid: String, club: Club, membership: ClubMembership, repository: ClubRepository,
     onOpenEvent: (String) -> Unit, onUpdated: () -> Unit) {
+    val locale = LocalLocale.current.platformLocale
     var members by remember { mutableStateOf(ClubPage<ClubMember>(emptyList(), null)) }
     var refresh by remember { mutableIntStateOf(0) }
     var busy by remember { mutableStateOf(false) }
@@ -67,8 +69,8 @@ internal fun ClubMemberContent(uid: String, club: Club, membership: ClubMembersh
     // A wrapping column keeps long translated labels and enlarged text fully readable.
     Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         StatLine(stringResource(R.string.clubs_drives), club.stats.driveCount.toString())
-        StatLine(stringResource(R.string.clubs_distance), String.format(Locale.getDefault(), "%.1f", club.stats.distanceMeters / 1000))
-        StatLine(stringResource(R.string.clubs_duration), String.format(Locale.getDefault(), "%.1f", club.stats.durationSeconds / 3600.0))
+        StatLine(stringResource(R.string.clubs_distance), String.format(locale, "%.1f", club.stats.distanceMeters / 1000))
+        StatLine(stringResource(R.string.clubs_duration), String.format(locale, "%.1f", club.stats.durationSeconds / 3600.0))
         Text(stringResource(R.string.clubs_statsNote), style = MaterialTheme.typography.bodySmall)
     } }
     ClubCalendar(repository, club.id, membership.role.managesMembers, onOpenEvent)

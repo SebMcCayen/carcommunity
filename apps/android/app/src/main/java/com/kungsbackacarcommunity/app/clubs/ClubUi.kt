@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
@@ -41,7 +42,7 @@ internal fun ClubLogo(club: Club, modifier: Modifier = Modifier) {
         if (club.logoUrl != null && !failed) AsyncImage(model = club.logoUrl,
             contentDescription = stringResource(R.string.clubs_logoDescription, club.name),
             contentScale = ContentScale.Crop, onError = { failed = true })
-        else Box(contentAlignment = Alignment.Center) { Text(club.name.take(2).uppercase(Locale.getDefault()), style = MaterialTheme.typography.titleMedium) }
+        else Box(contentAlignment = Alignment.Center) { Text(club.name.take(2).uppercase(Locale.ROOT), style = MaterialTheme.typography.titleMedium) }
     }
 }
 
@@ -66,7 +67,8 @@ internal fun ClubCard(club: Club, onOpen: (() -> Unit)? = null, content: @Compos
 }
 
 internal val clubZone: ZoneId = ZoneId.of("Europe/Stockholm")
-internal fun clubDate(millis: Long): String = DateTimeFormatter.ofPattern("d MMM yyyy HH:mm", Locale.getDefault())
+@Composable
+internal fun clubDate(millis: Long): String = DateTimeFormatter.ofPattern("d MMM yyyy HH:mm", LocalLocale.current.platformLocale)
     .withZone(clubZone).format(Instant.ofEpochMilli(millis))
 internal fun clubCooldownActive(state: ClubState, nowMillis: Long) =
     state.legacyConflict || (clubInstant(state.joinAllowedAt)?.let { it > nowMillis } == true)
