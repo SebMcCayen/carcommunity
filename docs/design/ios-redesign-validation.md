@@ -481,3 +481,47 @@ phone visual inspection or production social acceptance. Testing real friend
 requests, notification delivery and Driver roles remains a separate acceptance
 step with isolated accounts. No production backend deploy, signed distribution,
 Mapbox runtime, paid service or artifact-upload opt-in is needed for this PR.
+
+## Settings, notification preferences, privacy and block management (2026-10-27)
+
+Settings destinations retain their existing callback availability and canonical
+HTTPS legal-link policy. Navigation rows use semantic surface/icon roles,
+uncapped body text, 48 pt labels and distinct external/destructive affordances.
+The account-only destinations stay absent in config-less builds; this change
+adds no authentication bypass or new settings destination. Android's separate
+automatic-theme scheduling feature is outside this iOS presentation pass.
+
+Notification preferences use semantic permission/category cards and native
+labelled switches. Essential account notices remain enabled and disabled for
+editing; their view bindings also reject edits before invoking the existing
+coordinator. Every existing category/channel, save-error state, permission
+request guard and OS-settings destination is retained. Permission is refreshed
+on entry as before; no authorization prompt is requested automatically by
+rendering a card or running its layout tests.
+
+Privacy explanations, switches and independent Save/status controls now share
+two reading cards. Both bind to the existing pending draft, require an
+authoritative loaded snapshot, and retain independent single-flight commands.
+Leaderboard opt-out inversion, defaults, dirty drafts and subscription teardown
+remain in the unchanged coordinator/repository. Rendering is not consent and
+never automatically saves a preference.
+
+Blocked users retain the caller-owned outgoing list, actual optional dates,
+neutral missing-name fallback and confirmation-gated unblock request. The
+structured task, global working guard and errors stay with the original screen
+and coordinator. Only Back stays outside the reading scroller so long names,
+empty/unavailable/retry cards and action errors cannot displace it. No symmetric
+hidden-set data, avatar lookup or private user lookup is introduced.
+
+Shared reading-card border strokes explicitly ignore hit testing; interactive
+content keeps its native targets. SettingsDesignTests measure the actual row,
+permission/category, privacy/status, blocked-user and recovery widgets at
+288/358 pt, SV/EN, light/dark and normal/largest accessibility text. A binding
+regression test verifies essential switches reject writes while the independent
+social channels still forward the selected edit. Existing config-less Settings
+navigation tests retain real News/Back taps and now check 48 pt legal targets;
+existing coordinator and legal URL tests remain part of the full native suite.
+These checks do not establish real-account privacy writes, OS permission-return
+acceptance, production unblock behavior or physical-iPhone visual comparison.
+No backend, rules, workflow, token, localization or paid-service changes are
+required; native PR CI must pass before merge and records the executed result.

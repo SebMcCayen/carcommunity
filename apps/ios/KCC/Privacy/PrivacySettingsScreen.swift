@@ -8,6 +8,7 @@ struct PrivacySettingsScreen: View {
     var body: some View {
         content
             .navigationTitle(Text("privacySettings.title"))
+            .kccReadingSurface(pageBackground: true)
             .task { coordinator.start() }
             .onDisappear { coordinator.stop() }
     }
@@ -21,115 +22,45 @@ struct PrivacySettingsScreen: View {
         case .unavailable:
             unavailable
         case .failed:
-            VStack(spacing: KccSpacing.s3) {
-                Text("privacySettings.error")
-                    .multilineTextAlignment(.center)
-                Button("privacySettings.retry") { coordinator.reload() }
-                    .buttonStyle(.borderedProminent)
+            ScrollView {
+                SettingsStateCard(title: "privacySettings.title", message: "privacySettings.error", symbol: "lock.shield",
+                    retryTitle: "privacySettings.retry", onRetry: coordinator.reload).padding(KccSpacing.s4)
             }
-            .padding(KccSpacing.s6)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .loaded:
             settingsList
         }
     }
 
     private var unavailable: some View {
-        VStack(spacing: KccSpacing.s2) {
-            Text("privacySettings.unavailable")
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+        ScrollView {
+            SettingsStateCard(title: "privacySettings.title", message: "privacySettings.unavailable", symbol: "lock.shield")
+                .padding(KccSpacing.s4)
         }
-        .padding(KccSpacing.s4)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var settingsList: some View {
-        List {
-            partnerStatsSection
-            leaderboardSection
-        }
-        .listStyle(.insetGrouped)
-    }
-
-    private var partnerStatsSection: some View {
-        Section {
-            Toggle(
-                "privacySettings.partnerStatsBody",
-                isOn: Binding(
-                    get: { coordinator.draft?.partnerStatsOptIn ?? true },
-                    set: { value in coordinator.setPendingPartnerStatsOptIn(value) }
-                )
-            )
-            .disabled(!coordinator.canEdit || coordinator.partnerSaveStatus == .saving)
-
-            Button {
-                Task { await coordinator.savePartnerStats() }
-            } label: {
-                saveButtonLabel(status: coordinator.partnerSaveStatus)
-            }
-            .disabled(!coordinator.canEdit || coordinator.partnerSaveStatus == .saving)
-            .accessibilityIdentifier("privacySettings.partnerStats.save")
-        } header: {
-            Text("privacySettings.partnerStatsTitle")
-        } footer: {
-            VStack(alignment: .leading, spacing: KccSpacing.s2) {
-                Text("privacySettings.partnerStatsExplainer")
-                Text("privacySettings.partnerStatsNotice")
-                Text("privacySettings.partnerStatsNote")
-                statusText(coordinator.partnerSaveStatus)
-            }
+        ScrollView {
+            LazyVStack(spacing: KccSpacing.s4) {
+                PrivacyPreferenceCard(title: "privacySettings.partnerStatsTitle", label: "privacySettings.partnerStatsBody",
+                    explanations: ["privacySettings.partnerStatsExplainer", "privacySettings.partnerStatsNotice", "privacySettings.partnerStatsNote"],
+                    value: Binding(
+                        get: { coordinator.draft?.partnerStatsOptIn ?? true },
+                        set: { coordinator.setPendingPartnerStatsOptIn($0) }),
+                    status: coordinator.partnerSaveStatus, canEdit: coordinator.canEdit,
+                    saveIdentifier: "privacySettings.partnerStats.save",
+                    onSave: { Task { await coordinator.savePartnerStats() } })
+                PrivacyPreferenceCard(title: "privacySettings.leaderboardTitle", label: "privacySettings.leaderboardBody",
+                    explanations: ["privacySettings.leaderboardExplainer"],
+                    value: Binding(
+                        get: { coordinator.draft?.leaderboardShown ?? true },
+                        set: { coordinator.setPendingLeaderboardShown($0) }),
+                    status: coordinator.leaderboardSaveStatus, canEdit: coordinator.canEdit,
+                    saveIdentifier: "privacySettings.leaderboard.save",
+                    onSave: { Task { await coordinator.saveLeaderboardVisibility() } })
+            }.padding(KccSpacing.s4)
         }
     }
 
-    private var leaderboardSection: some View {
-        Section {
-            Toggle(
-                "privacySettings.leaderboardBody",
-                isOn: Binding(
-                    get: { coordinator.draft?.leaderboardShown ?? true },
-                    set: { value in coordinator.setPendingLeaderboardShown(value) }
-                )
-            )
-            .disabled(!coordinator.canEdit || coordinator.leaderboardSaveStatus == .saving)
-
-            Button {
-                Task { await coordinator.saveLeaderboardVisibility() }
-            } label: {
-                saveButtonLabel(status: coordinator.leaderboardSaveStatus)
-            }
-            .disabled(!coordinator.canEdit || coordinator.leaderboardSaveStatus == .saving)
-            .accessibilityIdentifier("privacySettings.leaderboard.save")
-        } header: {
-            Text("privacySettings.leaderboardTitle")
-        } footer: {
-            VStack(alignment: .leading, spacing: KccSpacing.s2) {
-                Text("privacySettings.leaderboardExplainer")
-                statusText(coordinator.leaderboardSaveStatus)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func saveButtonLabel(status: PrivacySettingsSaveStatus) -> some View {
-        if status == .saving {
-            ProgressView().frame(maxWidth: .infinity)
-        } else {
-            Text("privacySettings.saveButton").frame(maxWidth: .infinity)
-        }
-    }
-
-    @ViewBuilder
-    private func statusText(_ status: PrivacySettingsSaveStatus) -> some View {
-        switch status {
-        case .saved:
-            Text("privacySettings.saved").foregroundStyle(.green)
-        case .failed:
-            Text("privacySettings.error").foregroundStyle(KccPalette.errorRed)
-        case .idle, .saving:
-            EmptyView()
-        }
-    }
 }
 
 #Preview {

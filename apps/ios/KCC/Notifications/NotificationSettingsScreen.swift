@@ -30,6 +30,7 @@ struct NotificationSettingsScreen: View {
     var body: some View {
         content
             .navigationTitle(Text("notifications.settingsTitle"))
+            .kccReadingSurface(pageBackground: true)
             .task { coordinator?.start() }
             .task { await pushNotifications.refreshPermissionState() }
     }
@@ -54,18 +55,10 @@ struct NotificationSettingsScreen: View {
     }
 
     private var loadErrorState: some View {
-        VStack(spacing: KccSpacing.s3) {
-            Text("notifications.settingsLoadError")
-                .multilineTextAlignment(.center)
-            Button {
-                coordinator?.reload()
-            } label: {
-                Text("notifications.retry")
-            }
-            .buttonStyle(.borderedProminent)
+        ScrollView {
+            SettingsStateCard(title: "notifications.settingsTitle", message: "notifications.settingsLoadError", symbol: "bell.badge",
+                retryTitle: "notifications.retry", onRetry: { coordinator?.reload() }).padding(KccSpacing.s4)
         }
-        .padding(KccSpacing.s4)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     /// Config-less build / no session: the shared cross-feature unavailable
@@ -74,80 +67,37 @@ struct NotificationSettingsScreen: View {
     /// misdescribes a build that cannot observe preferences at all (Copilot
     /// review on PR #1055).
     private var placeholder: some View {
-        VStack(spacing: KccSpacing.s2) {
-            Text("notifications.settingsTitle")
-                .font(.system(size: KccTypeScale.titleMd, weight: KccTypeScale.semibold))
-            Text("shell.unavailable")
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+        ScrollView {
+            SettingsStateCard(title: "notifications.settingsTitle", message: "shell.unavailable", symbol: "bell.badge")
+                .padding(KccSpacing.s4)
         }
-        .padding(KccSpacing.s4)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func form(
         preferences: NotificationPreferences,
         coordinator: NotificationSettingsCoordinator
     ) -> some View {
-        List {
-            pushSection
-
-            Section {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: KccSpacing.s4) {
+                NotificationPermissionCard(state: pushNotifications.permissionState,
+                    requesting: pushNotifications.isRequestingPermission,
+                    onRequest: { Task { await pushNotifications.requestPermission() } },
+                    onOpenSettings: openSystemSettings)
+                if case .failed = coordinator.saveStatus {
+                    Text("privacySettings.error").font(.body).foregroundStyle(KccPalette.errorRed)
+                } else if coordinator.saveStatus == .saving {
+                    ProgressView("notifications.settingsSaving").font(.body)
+                }
+                Text("notifications.settingsCategoriesTitle").font(.title3.bold()).accessibilityAddTraits(.isHeader)
                 ForEach(NotificationCategories.active, id: \.self) { category in
-                    CategoryRow(
-                        category: category,
-                        preference: preferences.effective(category),
+                    NotificationPreferenceRow(category: category, preference: preferences.effective(category),
                         isEssential: NotificationCategories.isEssential(category),
                         onToggle: { channel, enabled in
                             Task { await coordinator.toggle(category, channel: channel, enabled: enabled) }
-                        }
-                    )
+                        })
+                        .kccContentCard()
                 }
-            } header: {
-                Text("notifications.settingsCategoriesTitle")
-            } footer: {
-                // The notifications.* vocabulary has no settings-save-error
-                // key (see PR notes: notifications.settingsSaveError is
-                // MISSING and must be generated, never hand-added); the
-                // generic privacySettings.error — "Something went wrong.
-                // Please try again." — is the closest accurate existing
-                // string for a settings write failure.
-                if case .failed = coordinator.saveStatus {
-                    Text("privacySettings.error")
-                        .foregroundStyle(KccPalette.errorRed)
-                } else if coordinator.saveStatus == .saving {
-                    Text("notifications.settingsSaving")
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .listStyle(.insetGrouped)
-    }
-
-    private var pushSection: some View {
-        Section {
-            switch pushNotifications.permissionState {
-            case .notDetermined:
-                Button {
-                    Task { await pushNotifications.requestPermission() }
-                } label: {
-                    Text("notifications.permissionEnable")
-                }
-                .disabled(pushNotifications.isRequestingPermission)
-            case .denied:
-                Button {
-                    openSystemSettings()
-                } label: {
-                    Text("notifications.settingsOpenSystemSettings")
-                }
-            case .enabled:
-                Label("notifications.permissionEnabled", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(KccPalette.successGreen)
-            }
-        } header: {
-            Text("notifications.settingsPushTitle")
-        } footer: {
-            Text("notifications.permissionRationale")
+            }.padding(KccSpacing.s4)
         }
     }
 
@@ -160,7 +110,7 @@ struct NotificationSettingsScreen: View {
 /// One category's toggles: the label, the in-app + push switches, and (for the
 /// essential account notices) the "always on" note. Essential switches are
 /// on and disabled — Android's `CategoryRow`.
-private struct CategoryRow: View {
+struct NotificationPreferenceRow: View {
     let category: NotificationCategory
     let preference: CategoryPreference
     let isEssential: Bool
@@ -169,30 +119,37 @@ private struct CategoryRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s2) {
             Text(LocalizedStringKey(category.labelKey))
-                .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
+                .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             Toggle(isOn: channelBinding(.inApp)) {
                 Text("notifications.settingsInApp")
-                    .font(.system(size: KccTypeScale.bodySm))
+                    .font(.body)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .tint(KccTheme.driver)
+            .frame(minHeight: 48)
             .disabled(isEssential)
 
             Toggle(isOn: channelBinding(.push)) {
                 Text("notifications.settingsPush")
-                    .font(.system(size: KccTypeScale.bodySm))
+                    .font(.body)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .tint(KccTheme.driver)
+            .frame(minHeight: 48)
             .disabled(isEssential)
 
             if isEssential {
-                Text("notifications.settingsEssential")
-                    .font(.system(size: KccTypeScale.caption))
+                Label("notifications.settingsEssential", systemImage: "lock.fill")
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
         .padding(.vertical, KccSpacing.s1)
     }
 
-    private func channelBinding(_ channel: NotificationChannel) -> Binding<Bool> {
+    func channelBinding(_ channel: NotificationChannel) -> Binding<Bool> {
         Binding(
             get: {
                 switch channel {
@@ -200,7 +157,10 @@ private struct CategoryRow: View {
                 case .push: return preference.push
                 }
             },
-            set: { onToggle(channel, $0) }
+            set: { enabled in
+                guard !isEssential else { return }
+                onToggle(channel, enabled)
+            }
         )
     }
 }
