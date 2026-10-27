@@ -24,8 +24,8 @@ import org.junit.Test
  * classpath) to cover the success / non-200 / oversize behaviour that the fake
  * downloader cannot.
  *
- * The single observable contract is: success → [RouteReplayState.Ready];
- * EVERYTHING else → [RouteReplayState.Unavailable].
+ * Successful loads decode full fixes; categorized failures remain distinguishable.
+ * Every open rechecks authority and cancellation always propagates.
  */
 class FirebaseRouteReplayRepositoryTest {
 
@@ -44,6 +44,7 @@ class FirebaseRouteReplayRepositoryTest {
         val expected = RouteCodec.decode(encoded)!!
         val repo =
             FirebaseRouteReplayRepository.createForTest(
+                authenticatedUid = { "uid-1" },
                 fetchSignedUrl = { "https://signed.example/route.bin" },
                 downloadBytes = { encoded },
             )
@@ -55,50 +56,54 @@ class FirebaseRouteReplayRepositoryTest {
     }
 
     @Test
-    fun `callable not-found collapses to Unavailable`() = runTest {
-        assertUnavailableWhenCallableThrows(RuntimeException("not-found"))
-    }
-
-    @Test
-    fun `callable permission-denied collapses to Unavailable`() = runTest {
-        assertUnavailableWhenCallableThrows(RuntimeException("permission-denied"))
-    }
-
-    @Test
-    fun `callable failed-precondition collapses to Unavailable`() = runTest {
-        assertUnavailableWhenCallableThrows(RuntimeException("failed-precondition"))
-    }
-
-    @Test
-    fun `callable network error collapses to Unavailable`() = runTest {
-        assertUnavailableWhenCallableThrows(IOException("offline"))
-    }
-
-    private suspend fun assertUnavailableWhenCallableThrows(thrown: Throwable) {
-        val repo =
-            FirebaseRouteReplayRepository.createForTest(
-                fetchSignedUrl = { throw thrown },
-                downloadBytes = { throw AssertionError("downloader must not run when the callable fails") },
+    fun `callable errors retain missing auth access and service distinctions`() = runTest {
+        val cases = listOf(
+            Triple("NOT_FOUND", "Saved drive not found.", RouteReplayFailure.NOT_FOUND),
+            Triple("UNAUTHENTICATED", "Sign in to continue.", RouteReplayFailure.SIGN_IN_REQUIRED),
+            Triple("PERMISSION_DENIED", "Account access is restricted.", RouteReplayFailure.ACCESS_DENIED),
+            Triple("PERMISSION_DENIED", "This drive is outside your plan’s history window.", RouteReplayFailure.ACCESS_DENIED),
+            Triple("FAILED_PRECONDITION", "This drive has no stored route to replay.", RouteReplayFailure.MISSING),
+            Triple("FAILED_PRECONDITION", "Route replay is temporarily unavailable.", RouteReplayFailure.SERVICE_UNAVAILABLE),
+            Triple("FAILED_PRECONDITION", "future precondition", RouteReplayFailure.SERVICE_UNAVAILABLE),
+            Triple("UNAVAILABLE", "unavailable", RouteReplayFailure.SERVICE_UNAVAILABLE),
+        )
+        for ((code, message, expected) in cases) {
+            val repo = FirebaseRouteReplayRepository.createForTest(
+                authenticatedUid = { "uid-1" },
+                fetchSignedUrl = { throw RouteReplayCallableException(code, message) },
+                downloadBytes = { throw AssertionError("Denied calls must never download") },
             )
-
-        assertEquals(RouteReplayState.Unavailable, repo.loadRoute("uid-1", "ride-1"))
+            assertEquals(RouteReplayState.Unavailable(expected), repo.loadRoute("uid-1", "ride-1"))
+        }
     }
 
     @Test
-    fun `download failure collapses to Unavailable`() = runTest {
+    fun `callable network error is a retryable service error`() = runTest {
+        val repo = FirebaseRouteReplayRepository.createForTest(
+            authenticatedUid = { "uid-1" },
+            fetchSignedUrl = { throw IOException("offline") },
+            downloadBytes = { throw AssertionError("must not download") },
+        )
+        assertEquals(RouteReplayState.Unavailable(RouteReplayFailure.SERVICE_UNAVAILABLE), repo.loadRoute("uid-1", "ride-1"))
+    }
+
+    @Test
+    fun `download failure is distinct from a callable service failure`() = runTest {
         val repo =
             FirebaseRouteReplayRepository.createForTest(
+                authenticatedUid = { "uid-1" },
                 fetchSignedUrl = { "https://signed.example/route.bin" },
                 downloadBytes = { throw IOException("connection reset") },
             )
 
-        assertEquals(RouteReplayState.Unavailable, repo.loadRoute("uid-1", "ride-1"))
+        assertEquals(RouteReplayState.Unavailable(RouteReplayFailure.DOWNLOAD_FAILED), repo.loadRoute("uid-1", "ride-1"))
     }
 
     @Test
     fun `cancellation propagates and is not collapsed to Unavailable`() = runTest {
         val repo =
             FirebaseRouteReplayRepository.createForTest(
+                authenticatedUid = { "uid-1" },
                 fetchSignedUrl = { throw CancellationException("cancelled") },
                 downloadBytes = { throw AssertionError("downloader must not run") },
             )
@@ -117,20 +122,22 @@ class FirebaseRouteReplayRepositoryTest {
     fun `decode returning null collapses to Unavailable`() = runTest {
         val repo =
             FirebaseRouteReplayRepository.createForTest(
+                authenticatedUid = { "uid-1" },
                 fetchSignedUrl = { "https://signed.example/route.bin" },
                 downloadBytes = { byteArrayOf(0x00, 0x01, 0x02, 0x03) }, // not a CCRB payload
             )
 
-        assertEquals(RouteReplayState.Unavailable, repo.loadRoute("uid-1", "ride-1"))
+        assertEquals(RouteReplayState.Unavailable(RouteReplayFailure.CORRUPT), repo.loadRoute("uid-1", "ride-1"))
     }
 
     @Test
-    fun `second load for the same uid and rideId hits the cache`() = runTest {
+    fun `second load for the same uid and rideId rechecks server authority`() = runTest {
         val encoded = RouteCodec.encode(samplePoints)
         val callableCalls = AtomicInteger(0)
         val downloads = AtomicInteger(0)
         val repo =
             FirebaseRouteReplayRepository.createForTest(
+                authenticatedUid = { "uid-1" },
                 fetchSignedUrl = {
                     callableCalls.incrementAndGet()
                     "https://signed.example/route.bin"
@@ -146,8 +153,8 @@ class FirebaseRouteReplayRepositoryTest {
 
         assertTrue(first is RouteReplayState.Ready)
         assertTrue(second is RouteReplayState.Ready)
-        assertEquals(1, callableCalls.get())
-        assertEquals(1, downloads.get())
+        assertEquals(2, callableCalls.get())
+        assertEquals(2, downloads.get())
     }
 
     @Test
@@ -156,6 +163,7 @@ class FirebaseRouteReplayRepositoryTest {
         val attempts = AtomicInteger(0)
         val repo =
             FirebaseRouteReplayRepository.createForTest(
+                authenticatedUid = { "uid-1" },
                 fetchSignedUrl = { "https://signed.example/route.bin" },
                 downloadBytes = {
                     // First attempt fails, second succeeds — proves failures are
@@ -164,9 +172,93 @@ class FirebaseRouteReplayRepositoryTest {
                 },
             )
 
-        assertEquals(RouteReplayState.Unavailable, repo.loadRoute("uid-1", "ride-1"))
+        assertEquals(RouteReplayState.Unavailable(RouteReplayFailure.DOWNLOAD_FAILED), repo.loadRoute("uid-1", "ride-1"))
         assertTrue(repo.loadRoute("uid-1", "ride-1") is RouteReplayState.Ready)
         assertEquals(2, attempts.get())
+    }
+
+    @Test
+    fun `a cached success cannot bypass a later tier or account denial`() = runTest {
+        var calls = 0
+        var downloads = 0
+        val repo = FirebaseRouteReplayRepository.createForTest(
+            authenticatedUid = { "uid-1" },
+            fetchSignedUrl = {
+                if (calls++ > 0) throw RouteReplayCallableException("PERMISSION_DENIED", "denied")
+                "https://signed.example/route.bin"
+            },
+            downloadBytes = { downloads++; RouteCodec.encode(samplePoints, gzip = true) },
+        )
+        assertTrue(repo.loadRoute("uid-1", "ride-1") is RouteReplayState.Ready)
+        assertEquals(RouteReplayState.Unavailable(RouteReplayFailure.ACCESS_DENIED), repo.loadRoute("uid-1", "ride-1"))
+        assertEquals(1, downloads)
+    }
+
+    @Test
+    fun `wrong owner and signed out loads do not call backend`() = runTest {
+        for (currentUid in listOf(null, "uid-2")) {
+            val repo = FirebaseRouteReplayRepository.createForTest(
+                authenticatedUid = { currentUid },
+                fetchSignedUrl = { throw AssertionError("must not call under different auth") },
+                downloadBytes = { throw AssertionError("must not download") },
+            )
+            assertEquals(RouteReplayState.Unavailable(RouteReplayFailure.SIGN_IN_REQUIRED), repo.loadRoute("uid-1", "ride-1"))
+        }
+    }
+
+    @Test
+    fun `account switch during URL fetch prevents download`() = runTest {
+        var uid = "uid-1"
+        val repo = FirebaseRouteReplayRepository.createForTest(
+            authenticatedUid = { uid },
+            fetchSignedUrl = { uid = "uid-2"; "https://signed.example/route.bin" },
+            downloadBytes = { throw AssertionError("must not download after switch") },
+        )
+        assertEquals(RouteReplayState.Unavailable(RouteReplayFailure.SIGN_IN_REQUIRED), repo.loadRoute("uid-1", "ride-1"))
+    }
+
+    @Test
+    fun `account switch during download drops the private points`() = runTest {
+        var uid = "uid-1"
+        val repo = FirebaseRouteReplayRepository.createForTest(
+            authenticatedUid = { uid },
+            fetchSignedUrl = { "https://signed.example/route.bin" },
+            downloadBytes = { uid = "uid-2"; RouteCodec.encode(samplePoints) },
+        )
+        assertEquals(RouteReplayState.Unavailable(RouteReplayFailure.SIGN_IN_REQUIRED), repo.loadRoute("uid-1", "ride-1"))
+    }
+
+    @Test
+    fun `retry requests a new signed URL after an expired download URL`() = runTest {
+        var calls = 0
+        val urls = mutableListOf<String>()
+        val repo = FirebaseRouteReplayRepository.createForTest(
+            authenticatedUid = { "uid-1" },
+            fetchSignedUrl = { "https://signed.example/route.bin?attempt=${++calls}" },
+            downloadBytes = { url ->
+                urls += url
+                if (urls.size == 1) throw IOException("HTTP 403")
+                RouteCodec.encode(samplePoints, gzip = true)
+            },
+        )
+        assertEquals(RouteReplayState.Unavailable(RouteReplayFailure.DOWNLOAD_FAILED), repo.loadRoute("uid-1", "ride-1"))
+        assertTrue(repo.loadRoute("uid-1", "ride-1") is RouteReplayState.Ready)
+        assertEquals(2, urls.distinct().size)
+    }
+
+    @Test
+    fun `download cancellation propagates too`() = runTest {
+        val repo = FirebaseRouteReplayRepository.createForTest(
+            authenticatedUid = { "uid-1" },
+            fetchSignedUrl = { "https://signed.example/route.bin" },
+            downloadBytes = { throw CancellationException("left detail") },
+        )
+        try {
+            repo.loadRoute("uid-1", "ride-1")
+            throw AssertionError("cancellation must propagate")
+        } catch (_: CancellationException) {
+            // Expected, never an error state.
+        }
     }
 
     // ---- real HttpURLConnection download path against a loopback server ----

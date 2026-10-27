@@ -1,37 +1,56 @@
 package com.kungsbackacarcommunity.app.drives
 
-/**
- * The outcome of loading a saved drive's driven route for History replay.
- *
- * [Ready] carries the decoded points (possibly EMPTY — a summary-only drive that
- * was saved without route points); [Unavailable] is the single clean failure
- * state for everything that can go wrong reading `route.bin` — the file does not
- * exist, the storage read is denied (route files are member-gated), a network
- * error, or a corrupt/truncated payload. The reader NEVER surfaces a crash to
- * the UI; every fault collapses to [Unavailable].
- *
- * [Loading] is a UI-only starting state and is never returned by the repository.
- */
+/** Failures are safe, stable categories; never expose a signed URL or raw backend error. */
+enum class RouteReplayFailure(val canRetry: Boolean) {
+    /** May also be an upload still in flight immediately after saving. */
+    MISSING(true),
+    SIGN_IN_REQUIRED(false),
+    ACCESS_DENIED(false),
+    NOT_FOUND(false),
+    SERVICE_UNAVAILABLE(true),
+    DOWNLOAD_FAILED(true),
+    CORRUPT(false),
+    UNAVAILABLE(true),
+}
+
 sealed interface RouteReplayState {
     data object Loading : RouteReplayState
 
-    data object Unavailable : RouteReplayState
+    data class Unavailable(val reason: RouteReplayFailure = RouteReplayFailure.UNAVAILABLE) : RouteReplayState
 
+    /** Only full recorded fixes carry timestamps and may supply replay-derived statistics. */
     data class Ready(val points: List<RoutePoint>) : RouteReplayState
 }
 
 /**
- * Reads a saved drive's route file (`rideRoutes/{uid}/{rideId}/route.bin`) from
- * member-gated Cloud Storage and decodes it via [RouteCodec]. Firebase-free
- * interface so the drive-detail screen and its tests do not depend on Storage.
+ * Loads full CCRB route bytes through the owner/tier-authorized `drives-routeUrl`
+ * callable. Each load must recheck server authority, including repeat opens.
+ * Missing legacy GPS is never reconstructed from the simplified thumbnail.
  */
 interface RouteReplayRepository {
-    /**
-     * Loads and decodes the route for [rideId] owned by [uid]. Returns
-     * [RouteReplayState.Ready] on success (points may be empty) or
-     * [RouteReplayState.Unavailable] for any missing-file / permission / network
-     * / decode failure. Implementations should cache a successful result in
-     * memory so re-opening the same drive does not refetch.
-     */
+    /** Cancellation propagates; other faults return a categorized [RouteReplayState.Unavailable]. */
     suspend fun loadRoute(uid: String, rideId: String): RouteReplayState
 }
+
+/** Firebase's Android-dependent exception is translated at the callable boundary. */
+internal class RouteReplayCallableException(
+    val code: String?,
+    val publicMessage: String?,
+) : Exception()
+
+/**
+ * Current deployed routeUrl has no structured details for preconditions. Match
+ * only its exact public missing-file message; unknown preconditions stay retryable.
+ */
+internal fun routeReplayCallableFailure(code: String?, publicMessage: String?): RouteReplayFailure =
+    when (code) {
+        "UNAUTHENTICATED" -> RouteReplayFailure.SIGN_IN_REQUIRED
+        "PERMISSION_DENIED" -> RouteReplayFailure.ACCESS_DENIED
+        "NOT_FOUND" -> RouteReplayFailure.NOT_FOUND
+        "FAILED_PRECONDITION" ->
+            if (publicMessage == "This drive has no stored route to replay.") RouteReplayFailure.MISSING
+            else RouteReplayFailure.SERVICE_UNAVAILABLE
+        "UNAVAILABLE", "DEADLINE_EXCEEDED", "RESOURCE_EXHAUSTED", "INTERNAL" ->
+            RouteReplayFailure.SERVICE_UNAVAILABLE
+        else -> RouteReplayFailure.UNAVAILABLE
+    }

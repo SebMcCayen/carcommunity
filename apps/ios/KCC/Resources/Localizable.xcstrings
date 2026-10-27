@@ -26912,6 +26912,159 @@
         }
       }
     },
+    "savedDrives.driveReplay.accessDenied": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du har inte åtkomst till rutten. Kontrollera ditt konto och historiken som ingår i din prenumeration."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You do not have access to this route. Check your account and your plan's history access."
+          }
+        }
+      }
+    },
+    "savedDrives.driveReplay.corrupt": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Den sparade ruttfilen kunde inte läsas."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The saved route file could not be read."
+          }
+        }
+      }
+    },
+    "savedDrives.driveReplay.downloadFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Den fullständiga rutten kunde inte hämtas. Kontrollera anslutningen och försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not download the full route. Check your connection and try again."
+          }
+        }
+      }
+    },
+    "savedDrives.driveReplay.exactRouteEmpty": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inga fullständiga inspelade GPS-punkter finns att visa för den här körningen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No full recorded GPS points are available for this drive."
+          }
+        }
+      }
+    },
+    "savedDrives.driveReplay.missing": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ingen fullständig rutt finns lagrad för den här körningen. Om körningen nyss sparades kan du försöka igen när uppladdningen är klar. Äldre GPS-data som saknas kan inte återskapas."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No full route is stored for this drive. If this drive was just saved, try again after the upload finishes. Missing older GPS data cannot be recovered."
+          }
+        }
+      }
+    },
+    "savedDrives.driveReplay.notFound": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Körningen är inte längre tillgänglig för det här kontot."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This drive is no longer available to this account."
+          }
+        }
+      }
+    },
+    "savedDrives.driveReplay.serviceUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rutttjänsten är tillfälligt otillgänglig. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The route service is temporarily unavailable. Please try again."
+          }
+        }
+      }
+    },
+    "savedDrives.driveReplay.signInRequired": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Logga in på körningens konto för att visa rutten."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in to the drive's account to view its route."
+          }
+        }
+      }
+    },
+    "savedDrives.driveReplay.simplifiedOverview": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Förenklad sparad rutt. Exakta GPS-detaljer saknas."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Simplified saved route. Exact GPS detail is unavailable."
+          }
+        }
+      }
+    },
     "savedDrives.duration": {
       "extractionState": "manual",
       "localizations": {
