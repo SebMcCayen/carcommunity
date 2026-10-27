@@ -354,15 +354,24 @@ struct ShellView: View {
             }
         }
         .onChange(of: incidentMapCoordinator?.selectedIncident?.id) { _, id in
-            if let id { mapReadingSelection = .incident(id) }
+            if let id {
+                billboardsCoordinator?.dismiss()
+                mapReadingSelection = .incident(id)
+            }
             else if case .incident = mapReadingSelection { mapReadingSelection = nil }
         }
         .onChange(of: incidentMapCoordinator?.selectedPolice?.id) { _, id in
-            if let id { mapReadingSelection = .police(id) }
+            if let id {
+                billboardsCoordinator?.dismiss()
+                mapReadingSelection = .police(id)
+            }
             else if case .police = mapReadingSelection { mapReadingSelection = nil }
         }
         .onChange(of: crownHuntComposition?.mapCoordinator?.selectedTarget) { _, target in
             if target != nil { dismissMapReading() }
+        }
+        .onChange(of: billboardsCoordinator?.selectedBillboardId) { _, id in
+            if id != nil { dismissMapReading() }
         }
         .onChange(of: showStartDriving) { _, open in
             if open { dismissMapReading() }
@@ -1001,6 +1010,7 @@ struct ShellView: View {
 
     private func selectMapReading(_ selection: MapReadingSelection) {
         // The marker coordinator still owns authorization, freshness and actions.
+        billboardsCoordinator?.dismiss()
         if case .incident = selection, let pin = incidentMapCoordinator?.selectedPolice {
             mapReadingSelection = .police(pin.id)
         } else { mapReadingSelection = selection }
