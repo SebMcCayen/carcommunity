@@ -54,8 +54,8 @@ class SavedDriveRouteReplayScreenTest {
                 SavedDriveDetailScreen(drive, DriveDeleteStatus.Idle, {}, {}, routeRepository = repo, uid = "owner")
             }
         }
-        node(R.string.driveReplay_missing).assertExists()
-        node(R.string.driveReplay_simplifiedOverview).assertExists()
+        node(R.string.savedDrives_driveReplay_missing).assertExists()
+        node(R.string.savedDrives_driveReplay_simplifiedOverview).assertExists()
         node(R.string.savedDrives_retry).performScrollTo().performClick()
         node(R.string.savedDrives_routeLoading).assertExists()
         node(R.string.savedDrives_retry).assertDoesNotExist()
@@ -73,8 +73,8 @@ class SavedDriveRouteReplayScreenTest {
                 SavedDriveDetailScreen(drive.copy(routeThumbnail = null), DriveDeleteStatus.Idle, {}, {}, routeRepository = repo, uid = "owner")
             }
         }
-        node(R.string.driveReplay_missing).assertExists()
-        node(R.string.driveReplay_simplifiedOverview).assertDoesNotExist()
+        node(R.string.savedDrives_driveReplay_missing).assertExists()
+        node(R.string.savedDrives_driveReplay_simplifiedOverview).assertDoesNotExist()
     }
 
     @Test
@@ -85,8 +85,8 @@ class SavedDriveRouteReplayScreenTest {
                 SavedDriveDetailScreen(drive, DriveDeleteStatus.Idle, {}, {}, routeRepository = repo, uid = "owner")
             }
         }
-        node(R.string.driveReplay_accessDenied).assertExists()
-        node(R.string.driveReplay_simplifiedOverview).assertDoesNotExist()
+        node(R.string.savedDrives_driveReplay_accessDenied).assertExists()
+        node(R.string.savedDrives_driveReplay_simplifiedOverview).assertDoesNotExist()
         node(R.string.savedDrives_retry).assertDoesNotExist()
     }
 
@@ -103,10 +103,10 @@ class SavedDriveRouteReplayScreenTest {
                 SavedDriveDetailScreen(drive, DriveDeleteStatus.Idle, {}, {}, routeRepository = repo, uid = "owner")
             }
         }
-        node(R.string.driveReplay_serviceUnavailable).assertExists()
+        node(R.string.savedDrives_driveReplay_serviceUnavailable).assertExists()
         node(R.string.savedDrives_retry).performScrollTo().performClick()
-        node(R.string.driveReplay_downloadFailed).assertExists()
-        node(R.string.driveReplay_serviceUnavailable).assertDoesNotExist()
+        node(R.string.savedDrives_driveReplay_downloadFailed).assertExists()
+        node(R.string.savedDrives_driveReplay_serviceUnavailable).assertDoesNotExist()
     }
 
     @Test
@@ -117,8 +117,8 @@ class SavedDriveRouteReplayScreenTest {
                 SavedDriveDetailScreen(drive.copy(routeThumbnail = "_"), DriveDeleteStatus.Idle, {}, {}, routeRepository = repo, uid = "owner")
             }
         }
-        node(R.string.driveReplay_corrupt).assertExists()
-        node(R.string.driveReplay_simplifiedOverview).assertDoesNotExist()
+        node(R.string.savedDrives_driveReplay_corrupt).assertExists()
+        node(R.string.savedDrives_driveReplay_simplifiedOverview).assertDoesNotExist()
     }
 
     @Test
@@ -159,13 +159,13 @@ class SavedDriveRouteReplayScreenTest {
             firstResult.complete(RouteReplayState.Unavailable(RouteReplayFailure.MISSING))
             secondResult.complete(RouteReplayState.Unavailable(RouteReplayFailure.ACCESS_DENIED))
         }
-        node(R.string.driveReplay_accessDenied).assertExists()
-        node(R.string.driveReplay_missing).assertDoesNotExist()
+        node(R.string.savedDrives_driveReplay_accessDenied).assertExists()
+        node(R.string.savedDrives_driveReplay_missing).assertDoesNotExist()
         compose.runOnIdle { selectedDrive.value = drive.copy(rideId = "drive-two") }
         node(R.string.savedDrives_routeLoading).assertExists()
-        node(R.string.driveReplay_accessDenied).assertDoesNotExist()
+        node(R.string.savedDrives_driveReplay_accessDenied).assertDoesNotExist()
         compose.runOnIdle { reader.value = immediate(RouteReplayFailure.SIGN_IN_REQUIRED) }
-        node(R.string.driveReplay_signInRequired).assertExists()
+        node(R.string.savedDrives_driveReplay_signInRequired).assertExists()
         compose.runOnIdle {
             assertEquals(2, cancellations)
             assertEquals(listOf("first-owner" to "drive-one", "second-owner" to "drive-one", "second-owner" to "drive-two"), calls)

@@ -964,6 +964,16 @@
     "routeLoading": "Laddar rutt...",
     "routeUnavailable": "Ruttkartan är inte tillgänglig för den här körningen.",
     "routeEmpty": "Den här körningen har ingen inspelad rutt att visa.",
+    "driveReplay": {
+      "simplifiedOverview": "Sparad, förenklad ruttöversikt. Den fullständiga ruttkartan kunde inte visas.",
+      "missing": "Ingen fullständig rutt finns lagrad för den här körningen. Om körningen nyss sparades kan du försöka igen när uppladdningen är klar. Äldre GPS-data som saknas kan inte återskapas.",
+      "signInRequired": "Logga in på körningens konto för att visa rutten.",
+      "accessDenied": "Du har inte åtkomst till rutten. Kontrollera ditt konto och historiken som ingår i din prenumeration.",
+      "notFound": "Körningen är inte längre tillgänglig för det här kontot.",
+      "serviceUnavailable": "Rutttjänsten är tillfälligt otillgänglig. Försök igen.",
+      "downloadFailed": "Den fullständiga rutten kunde inte hämtas. Kontrollera anslutningen och försök igen.",
+      "corrupt": "Den sparade ruttfilen kunde inte läsas."
+    },
     "routeExpand": "Öppna karta i helskärm",
     "routeMapThumbnailLabel": "Körningens ruttkarta, tryck för att förstora",
     "routeTopSpeedMarkerDescription": "Toppfart här",

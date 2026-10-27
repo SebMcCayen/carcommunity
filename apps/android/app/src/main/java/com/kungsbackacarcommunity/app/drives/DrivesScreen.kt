@@ -1159,7 +1159,7 @@ fun SavedDriveDetailScreen(
                                     horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
                                 ) {
                                     RouteThumbnailImage(encodedPolyline = drive.routeThumbnail)
-                                    RouteNote(stringResource(R.string.driveReplay_simplifiedOverview))
+                                    RouteNote(stringResource(R.string.savedDrives_driveReplay_simplifiedOverview))
                                 }
                             }
                             val message = when {
@@ -1256,13 +1256,13 @@ fun SavedDriveDetailScreen(
 
 /** Map stable categories to localized copy, never raw backend error messages. */
 private fun routeFailureMessage(reason: RouteReplayFailure?): Int = when (reason) {
-    RouteReplayFailure.MISSING -> R.string.driveReplay_missing
-    RouteReplayFailure.SIGN_IN_REQUIRED -> R.string.driveReplay_signInRequired
-    RouteReplayFailure.ACCESS_DENIED -> R.string.driveReplay_accessDenied
-    RouteReplayFailure.NOT_FOUND -> R.string.driveReplay_notFound
-    RouteReplayFailure.SERVICE_UNAVAILABLE -> R.string.driveReplay_serviceUnavailable
-    RouteReplayFailure.DOWNLOAD_FAILED -> R.string.driveReplay_downloadFailed
-    RouteReplayFailure.CORRUPT -> R.string.driveReplay_corrupt
+    RouteReplayFailure.MISSING -> R.string.savedDrives_driveReplay_missing
+    RouteReplayFailure.SIGN_IN_REQUIRED -> R.string.savedDrives_driveReplay_signInRequired
+    RouteReplayFailure.ACCESS_DENIED -> R.string.savedDrives_driveReplay_accessDenied
+    RouteReplayFailure.NOT_FOUND -> R.string.savedDrives_driveReplay_notFound
+    RouteReplayFailure.SERVICE_UNAVAILABLE -> R.string.savedDrives_driveReplay_serviceUnavailable
+    RouteReplayFailure.DOWNLOAD_FAILED -> R.string.savedDrives_driveReplay_downloadFailed
+    RouteReplayFailure.CORRUPT -> R.string.savedDrives_driveReplay_corrupt
     else -> R.string.savedDrives_routeUnavailable
 }
 

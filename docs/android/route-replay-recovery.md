@@ -1,8 +1,10 @@
 # Android saved-drive route recovery
 
 Scope: S54 drive detail and its replay reader. Android-only maintenance at the
-owner's explicit request; iOS, Firebase, Storage rules, subscription policy,
-Play, versioning and release artifacts are outside this patch.
+owner's explicit request. The owner also approved mechanical synchronization
+of the iOS localization catalog from the shared contracts; no Swift/UI changes
+are included. Firebase, Storage rules, subscription policy, Play, versioning and
+release artifacts are outside this patch.
 
 ## Root cause and data contract
 
@@ -66,9 +68,11 @@ or written for this patch.
   private route cache. Owner, ride and reader changes reset UI state and cancel
   the old effect; navigation away cancels loading. Ordinary recomposition does
   not reload the route.
-- Swedish and English Android recovery strings are in separate, non-generated
-  `drive_replay_strings.xml` files. Shared generated catalogs are untouched to
-  honor the Android-only scope and avoid an iOS catalog regeneration requirement.
+- Swedish and English recovery strings live in canonical localization contracts
+  under `savedDrives.driveReplay.*`. Android resources and the iOS string catalog
+  are generated from those contracts. The handwritten Android resource duplicates
+  were removed. The owner approved this mechanical iOS catalog synchronization;
+  replay functionality remains Android-only, with no Swift or iOS UI changes.
 
 ## Verification
 
@@ -91,6 +95,11 @@ Parent validation command (from `apps/android`):
 source /home/sebmccayen/android-toolchain/env.sh
 ./gradlew :app:testDebugUnitTest --tests '*drives.*' --max-workers=2 -Pkotlin.daemon.jvmargs=-Xmx3g
 ```
+
+The localization follow-up passed canonical duplicate-key/key-parity checks,
+verified exactly eight new iOS catalog entries and unchanged existing
+translations, checked generated Android resource uniqueness, and reran both
+generators with identical output. It did not run Gradle.
 
 The root npm lint/typecheck/test/build checks require the separate Node workspace
 dependencies (eslint/tsc/vitest/vite). They are not installed in this assigned
