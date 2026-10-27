@@ -32,6 +32,8 @@ import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.core.view.ViewCompat
@@ -39,6 +41,9 @@ import androidx.core.view.WindowInsetsCompat
 import com.kungsbackacarcommunity.app.AuthenticatedApp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.chatchannels.CHAT_HUB_TEST_TAG
+import com.kungsbackacarcommunity.app.chatchannels.CHAT_CHANNEL_STRIP_TEST_TAG
+import com.kungsbackacarcommunity.app.chatchannels.ChatTab
+import com.kungsbackacarcommunity.app.chatchannels.chatChannelTabTag
 import com.kungsbackacarcommunity.app.coachmark.CoachMarkStore
 import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.design.KccSpacing
@@ -1055,11 +1060,53 @@ class MapFirstShellTest {
             assertEquals(1, surface.contentCompositions)
             assertFalse(surface.isActive)
         }
-        // Natural-width tabs scroll at narrow widths/long translations. The
-        // off-screen Notifications tab must remain reachable without shrinking.
-        composeTestRule.onNodeWithText(str(R.string.chatHub_tabCommunity)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.chatHub_tabConvoys)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.chatHub_tabNotifications)).performScrollTo().assertIsDisplayed()
+        // All four complete labels must be visible together. A scroll action
+        // would both contradict that contract and fail on the fixed-width strip.
+        val strip = composeTestRule.onNodeWithTag(CHAT_CHANNEL_STRIP_TEST_TAG).fetchSemanticsNode()
+        assertFalse("Chat destinations must not scroll horizontally",
+            strip.config.contains(SemanticsProperties.HorizontalScrollAxisRange))
+        val stripBounds = strip.boundsInRoot
+        val hubBounds = composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).fetchSemanticsNode().boundsInRoot
+        assertTrue("Channel strip fits inside the actual hub: $stripBounds / $hubBounds",
+            stripBounds.left >= hubBounds.left && stripBounds.right <= hubBounds.right &&
+                stripBounds.top >= hubBounds.top && stripBounds.bottom <= hubBounds.bottom)
+        val minimumTargetPx = with(composeTestRule.density) { 48.dp.roundToPx().toFloat() }
+        val labelIds = listOf(R.string.chatHub_tabCommunity, R.string.chatHub_tabConvoys,
+            R.string.chatHub_tabFriends, R.string.chatHub_tabNotifications)
+        var previousRight = stripBounds.left
+        for (tab in ChatTab.entries) {
+            val target = composeTestRule.onNodeWithTag(chatChannelTabTag(tab))
+            target.assertIsDisplayed()
+            val bounds = target.fetchSemanticsNode().boundsInRoot
+            assertTrue("$tab fully inside strip: $bounds / $stripBounds",
+                bounds.left >= stripBounds.left && bounds.right <= stripBounds.right &&
+                    bounds.top >= stripBounds.top && bounds.bottom <= stripBounds.bottom)
+            assertTrue("$tab minimum 48dp target: $bounds",
+                bounds.width >= minimumTargetPx && bounds.height >= minimumTargetPx)
+            assertTrue("$tab does not overlap the previous target", bounds.left >= previousRight)
+            previousRight = bounds.right
+
+            val label = str(labelIds[tab.ordinal])
+            val labelNode = composeTestRule.onNodeWithText(label, useUnmergedTree = true)
+            labelNode.assertIsDisplayed()
+            val layouts = mutableListOf<TextLayoutResult>()
+            labelNode.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            val layout = layouts.single()
+            assertEquals("$tab full label source", label, layout.layoutInput.text.text)
+            assertEquals("$tab first visible character", 0, layout.getLineStart(0))
+            assertEquals("$tab last visible character", label.length,
+                layout.getLineEnd(layout.lineCount - 1, visibleEnd = true))
+            assertFalse("$tab vertical clipping", layout.didOverflowHeight)
+            for (line in 0 until layout.lineCount) {
+                assertFalse("$tab ellipsized line $line", layout.isLineEllipsized(line))
+                assertTrue("$tab line $line fits the text layout",
+                    layout.getLineLeft(line) >= 0f && layout.getLineRight(line) <= layout.size.width.toFloat())
+            }
+            val labelBounds = labelNode.fetchSemanticsNode().boundsInRoot
+            assertTrue("$tab label inside its target: $labelBounds / $bounds",
+                labelBounds.left >= bounds.left && labelBounds.right <= bounds.right &&
+                    labelBounds.top >= bounds.top && labelBounds.bottom <= bounds.bottom)
+        }
         // The shell's bottom bar stays reachable beneath the hub (it is inset above
         // the bar, not a full-screen takeover).
         tabNode(R.string.shell_tabChat)
