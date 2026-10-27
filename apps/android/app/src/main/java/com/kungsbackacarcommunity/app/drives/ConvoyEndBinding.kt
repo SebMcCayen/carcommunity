@@ -85,23 +85,56 @@ fun rememberConvoyEndBinding(
     var failed by rememberSaveable { mutableStateOf(false) }
     var deadline by rememberSaveable { mutableStateOf(0L) }
     var timedOut by rememberSaveable { mutableStateOf(false) }
+    var endWaitSessionId by rememberSaveable { mutableStateOf<String?>(null) }
+    var endWaitDeadline by rememberSaveable { mutableStateOf(0L) }
     val currentLoad by rememberUpdatedState(sessionLoad)
     val currentNow by rememberUpdatedState(now)
     val stopRecording by rememberUpdatedState(onStopRecording)
     val commandFailed by rememberUpdatedState(onCommandFailed)
     val currentUserEnded by rememberUpdatedState(userEndedSession)
 
+    // The shell's derived sharing producer can lag a new session by one frame.
+    // End/transfer decisions must use this observed session's actual status/expiry.
+    val observedSharing = LiveLocation.isSharing(session, now())
     val confirmedEnd = ConvoyEndObservation.ended(session, convoy, userEndedSession, now())
     val eligible = ConvoyEndObservation.eligible(session, userEndedSession, now())
     val oldId = pending ?: prompt
     val replaced = sessionLoad.observed && session != null && oldId != null && session.sessionId != oldId
     val cancelled = sessionLoad.observed && session != null && !eligible
     val visiblePrompt = prompt?.takeUnless { replaced || cancelled }
+    val awaitingEndDocument = eligible && !observedSharing && convoyId != null &&
+        session?.sessionId != decided && !confirmedEnd && prompt == null && pending == null &&
+        (!observation.first || (convoy != null && convoy.convoyId == convoyId && convoy.status != ConvoyStatus.Ended))
+    val currentAwaitingEndDocument by rememberUpdatedState(awaitingEndDocument)
 
-    LaunchedEffect(confirmedEnd, session?.sessionId, decided, pending, userEndedSession, sharing) {
+    LaunchedEffect(awaitingEndDocument, session?.sessionId, sessionLoad.observed) {
+        // Loading after recreation preserves the saved deadline; it cannot restart
+        // the grace period or consume an old account/session's stopped observation.
+        if (!sessionLoad.observed) return@LaunchedEffect
+        if (!awaitingEndDocument) {
+            endWaitSessionId = null
+            endWaitDeadline = 0L
+            return@LaunchedEffect
+        }
+        val id = session?.sessionId ?: return@LaunchedEffect
+        if (endWaitSessionId != id) {
+            endWaitSessionId = id
+            endWaitDeadline = currentNow() + timeoutMillis
+        }
+        delay((endWaitDeadline - currentNow()).coerceAtLeast(0L))
+        if (currentAwaitingEndDocument) {
+            // No ended document arrived in the bounded reconciliation window.
+            // Release the ordinary stop/save path and consume this session so a
+            // much later Firestore emission cannot offer Continue after it saved.
+            decided = id
+        }
+    }
+
+    LaunchedEffect(confirmedEnd, session?.sessionId, decided, pending, userEndedSession,
+        observedSharing, eligible, sessionLoad.observed, sharing) {
         // Consume deliberate stops before the shell clears its self-stop marker.
         // Otherwise the same stopped session could raise a convoy choice later.
-        if (session != null && sessionLoad.observed && !sharing && !eligible) {
+        if (session?.convoyAutoStarted == true && sessionLoad.observed && !observedSharing && !eligible) {
             decided = session.sessionId
         }
         if (confirmedEnd && session != null && session.sessionId != decided && pending == null) {
@@ -144,14 +177,14 @@ fun rememberConvoyEndBinding(
         if (!sessionLoad.observed) return@LaunchedEffect
         val different = session != null && session.sessionId != id
         val manual = ConvoyEndObservation.manualReplacement(id, session, now())
-        val endConfirmed = operation == ConvoyEndChoice.EndSession.name && !sharing
+        val endConfirmed = operation == ConvoyEndChoice.EndSession.name && !observedSharing
         when {
             // A newer unrelated session owns the recorder now. Never stop it.
             operation == ConvoyEndChoice.ContinueAsSingle.name && manual -> {
                 decided = id
                 pending = null
             }
-            different && sharing -> {
+            different && observedSharing -> {
                 decided = id
                 pending = null
             }
@@ -161,7 +194,7 @@ fun rememberConvoyEndBinding(
                 pending = null
                 prompt = null
             }
-            endConfirmed || (failed || timedOut) && !sharing -> {
+            endConfirmed || (failed || timedOut) && !observedSharing -> {
                 decided = id
                 pending = null
                 stopRecording()
@@ -178,9 +211,12 @@ fun rememberConvoyEndBinding(
     ConvoyEndBinding(
         promptSessionId = visiblePrompt,
         holdRecording = (confirmedEnd && session?.sessionId != decided) || prompt != null || pending != null ||
-            // If RTDB stops first, wait for the document's initial answer so the
-            // recorder cannot be saved before the end choice has been evaluated.
-            (eligible && convoyId != null && !observation.first),
+            // Reconcile independent listeners even after an ACTIVE document has
+            // already emitted. Neither ordering may stop the recorder before choice.
+            awaitingEndDocument ||
+            (eligible && session?.sessionId != decided && convoyId != null && !observation.first) ||
+            // Bridge a stale derived false on the first ACTIVE manual-session echo.
+            (sessionLoad.observed && observedSharing && !sharing),
         suppressOldSessionStart = session != null && session.sessionId == decided,
         choose = { choice ->
             val id = visiblePrompt

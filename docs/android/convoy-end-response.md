@@ -15,6 +15,15 @@ active manual session with no convoy ID. Old active echoes do not complete it. A
 still live returns the choice; after sharing ends it stops and saves. A newer
 unrelated active session dismisses the old choice without stopping that session.
 The recording coordinator and existing points survive the successful transfer.
+If RTDB stops before an already-observed active convoy document changes to ended,
+the recorder is held for a bounded reconciliation window (20 seconds). Only the
+matching ended document opens the choice. A missing/denied document or deliberate
+stop releases the hold; an elapsed window consumes the old session and releases
+ordinary stop/save so a much later document cannot offer an already-saved transfer.
+This deadline survives recreation and still honors expiry/account/session changes.
+All decisions use the observed session status/expiry directly, so a one-frame lag
+in the shell's derived sharing producer cannot consume a newly active manual
+session or prematurely complete End.
 
 End checks the latest observed ID before issuing the existing stop command for a
 still-active old session, and waits for an observed end before stopping/saving the
@@ -62,7 +71,17 @@ package-private `DataSnapshot` constructor. The fixture now uses the SDK's publi
 `InternalHelpers.createDataSnapshot` factory with the same reference and actual
 node. The pinned Firebase 22.0.1 runtime's signatures were verified with `javap`;
 assertions and production lifecycle/cancellation/ownership code are unchanged.
-The correction requires a fresh CI run; no local Gradle was started.
+The correction passed CI run `40557833985` at head `1dc9276`: unit tests, lint,
+debug/release builds, nav variant/alignment and 141 instrumented tests all passed.
+
+Ready-for-review Codex review `5672316203` reported a P1 stale-sharing/manual-start
+race and a P2 RTDB-before-Firestore delivery-order race. Both are addressed solely
+in the end binding with six additional regressions (manual start, early End,
+inverted delivery order, bounded no-document fallback, deadline across rotation,
+and null/self-stop release). The resulting head requires fresh CI/central tests.
+No further local Gradle or emulator use; no shared AuthenticatedApp integration
+hunks were edited for these review fixes. Copilot review could not be dispatched:
+GitHub's reviewer picker reports "Monthly limit reached" despite API success.
 
 Parent sequential JVM command (existing JDK/SDK/Gradle-home environment):
 

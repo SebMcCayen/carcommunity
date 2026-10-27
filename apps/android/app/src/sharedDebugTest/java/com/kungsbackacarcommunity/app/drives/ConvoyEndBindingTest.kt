@@ -35,10 +35,12 @@ class ConvoyEndBindingTest {
     private val load = mutableStateOf<LiveSessionLoad>(LiveSessionLoad.Loaded(auto()))
     private val uid = mutableStateOf("member")
     private val userStop = mutableStateOf(false)
+    private val sharingOverride = mutableStateOf<Boolean?>(null)
     private var stops = 0
     private var errors = 0
     private lateinit var binding: ConvoyEndBinding
-    private val now = 10_000L
+    private val clockMillis = mutableStateOf(10_000L)
+    private val now: Long get() = clockMillis.value
 
     private fun auto(id: String = "old", convoy: String = "convoy") = LiveSessionInfo(
         id, LiveSessionStatus.ACTIVE, LiveSessionDuration.SIX_HOURS, 1_000_000L,
@@ -55,7 +57,7 @@ class ConvoyEndBindingTest {
             KccTheme {
                 binding = rememberConvoyEndBinding(
                     uid.value, documents, load.value,
-                    LiveLocation.isSharing(load.value.sessionOrNull, now), userStop.value,
+                    sharingOverride.value ?: LiveLocation.isSharing(load.value.sessionOrNull, now), userStop.value,
                     coordinator, true, { now },
                     onStopRecording = { stops++; SingleSessionRecording.stop(SavePromptReason.ConvoyEnded) },
                     onCommandFailed = { errors++ }, timeoutMillis = 1_000L,
@@ -100,6 +102,93 @@ class ConvoyEndBindingTest {
         assertRecording()
         rule.runOnIdle { assertEquals(listOf("convoy" to "member"), documents.observed) }
         assertEquals("old", load.value.sessionOrNull?.sessionId)
+    }
+
+    @Test fun activeManualEchoIsNeverConsumedAsStopWhileSharingProducerCatchesUp() {
+        load.value = LiveSessionLoad.Loading
+        sharingOverride.value = false
+        render()
+        rule.runOnIdle { load.value = LiveSessionLoad.Loaded(manual()) }
+        rule.runOnIdle {
+            assertFalse(binding.suppressOldSessionStart)
+            assertTrue(binding.holdRecording)
+        }
+        rule.runOnIdle { sharingOverride.value = true }
+        rule.runOnIdle {
+            assertFalse(binding.suppressOldSessionStart)
+            assertFalse(binding.holdRecording)
+            assertNull(binding.promptSessionId)
+        }
+        assertRecording()
+    }
+
+    @Test fun earlyEndDoesNotSaveOldActiveSessionWhenSharingProducerIsStaleFalse() {
+        live.stopGate = CompletableDeferred()
+        render()
+        endDocument()
+        rule.runOnIdle { sharingOverride.value = false }
+        chooseEnd()
+        rule.runOnIdle { assertEquals(1, live.stops); assertTrue(binding.holdRecording) }
+        assertRecording()
+        rule.runOnIdle {
+            live.stopGate!!.complete(Unit)
+            load.value = LiveSessionLoad.Loaded(auto().copy(status = LiveSessionStatus.STOPPED))
+        }
+        rule.runOnIdle { assertEquals(1, stops) }
+    }
+
+    @Test fun stoppedRtdbBeforeEndedDocumentKeepsSameRecorderAndStillRequiresDocumentConfirmation() {
+        render()
+        val recording = SingleSessionRecording.active.value
+        // Firestore has already emitted ACTIVE; only RTDB delivers STOPPED now.
+        rule.runOnIdle { load.value = LiveSessionLoad.Loaded(auto().copy(status = LiveSessionStatus.STOPPED)) }
+        rule.runOnIdle {
+            assertTrue(binding.holdRecording)
+            assertNull(binding.promptSessionId)
+        }
+        assertRecording()
+        endDocument()
+        chooseContinue()
+        rule.runOnIdle { assertEquals(1, live.starts); assertTrue(binding.holdRecording) }
+        rule.runOnIdle { load.value = LiveSessionLoad.Loaded(manual()) }
+        rule.runOnIdle { assertFalse(binding.holdRecording); assertSame(recording, SingleSessionRecording.active.value) }
+        assertRecording()
+    }
+
+    @Test fun missingEndedDocumentReleasesStopAfterDeadlineWithoutLateChoice() {
+        render()
+        rule.runOnIdle { load.value = LiveSessionLoad.Loaded(auto().copy(status = LiveSessionStatus.STOPPED)) }
+        rule.runOnIdle { assertTrue(binding.holdRecording); assertNull(binding.promptSessionId) }
+        rule.mainClock.advanceTimeBy(1_100L)
+        rule.runOnIdle { assertFalse(binding.holdRecording); assertNull(binding.promptSessionId) }
+        rule.runOnIdle { documents.snapshot.value = doc(status = ConvoyStatus.Ended) }
+        rule.runOnIdle { assertFalse(binding.holdRecording); assertNull(binding.promptSessionId) }
+    }
+
+    @Test fun stoppedSessionDocumentWaitKeepsItsDeadlineAcrossRotation() {
+        render()
+        rule.runOnIdle { load.value = LiveSessionLoad.Loaded(auto().copy(status = LiveSessionStatus.STOPPED)) }
+        rule.runOnIdle {
+            assertTrue(binding.holdRecording)
+            clockMillis.value += 400L
+            load.value = LiveSessionLoad.Loading
+        }
+        restoration.emulateSavedInstanceStateRestore()
+        rule.runOnIdle { load.value = LiveSessionLoad.Loaded(auto().copy(status = LiveSessionStatus.STOPPED)) }
+        rule.runOnIdle { assertTrue(binding.holdRecording) }
+        // Only 600 ms remain on the original deadline, not a fresh full second.
+        rule.mainClock.advanceTimeBy(650L)
+        rule.runOnIdle { assertFalse(binding.holdRecording); assertNull(binding.promptSessionId) }
+    }
+
+    @Test fun nullDocumentOrSelfStopReleasesStoppedSessionWaitWithoutChoice() {
+        render()
+        rule.runOnIdle { load.value = LiveSessionLoad.Loaded(auto().copy(status = LiveSessionStatus.STOPPED)) }
+        rule.runOnIdle { assertTrue(binding.holdRecording) }
+        rule.runOnIdle { documents.snapshot.value = null }
+        rule.runOnIdle { assertFalse(binding.holdRecording); assertNull(binding.promptSessionId) }
+        rule.runOnIdle { documents.snapshot.value = doc(); userStop.value = true }
+        rule.runOnIdle { assertFalse(binding.holdRecording); assertNull(binding.promptSessionId) }
     }
 
     @Test fun continueWaitsForDifferentManualSessionAndPreservesRecorderThroughSlowStop() {
