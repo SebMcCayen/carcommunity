@@ -46,19 +46,21 @@ struct BadgesWall: View {
                 ScrollView {
                     wallContent
                 }
+                .kccReadingSurface(pageBackground: true)
             }
         }
+        .tint(KccTheme.driver)
         .task { coordinator.start() }
     }
 
     private var wallContent: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s5) {
             Text("badges.screenTitle")
-                .font(.system(size: KccTypeScale.headingLg, weight: KccTypeScale.semibold))
+                .font(.title2.bold()).accessibilityAddTraits(.isHeader)
 
             content
         }
-        .padding(KccSpacing.s6)
+        .padding(isEmbedded ? 0 : KccSpacing.s4)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -71,15 +73,15 @@ struct BadgesWall: View {
                 .padding(.vertical, KccSpacing.s8)
         case .unavailable:
             Text("memberProfile.badgesUnavailable")
-                .font(.system(size: KccTypeScale.bodyMd))
-                .foregroundStyle(.secondary)
+                .font(.body)
+                .foregroundStyle(KccTheme.secondary)
         case .failed:
             VStack(alignment: .leading, spacing: KccSpacing.s3) {
                 Text("memberProfile.badgesLoadError")
-                    .font(.system(size: KccTypeScale.bodyMd))
-                    .foregroundStyle(.secondary)
+                    .font(.body)
+                    .foregroundStyle(KccTheme.secondary)
                 Button { coordinator.reload() } label: {
-                    Text("badges.retry")
+                    Text("badges.retry").frame(minHeight: 48)
                 }
                 .buttonStyle(.bordered)
             }
@@ -92,7 +94,7 @@ struct BadgesWall: View {
 /// The wall itself, given a folded showcase — shared by the earned and
 /// zero-earned states (the zero-earned wall is the same catalog rendered as a
 /// menu of goals, so the only difference is the header copy).
-private struct BadgeWallContent: View {
+struct BadgeWallContent: View {
     let showcase: BadgeShowcase
 
     var body: some View {
@@ -101,15 +103,13 @@ private struct BadgeWallContent: View {
 
             let unfinished = showcase.laddersInProgress
             if !unfinished.isEmpty {
-                Divider()
                 Text("badgeShowcase.progressTitle")
-                    .font(.system(size: KccTypeScale.titleMd, weight: KccTypeScale.semibold))
+                    .font(.title3.bold()).accessibilityAddTraits(.isHeader)
                 ForEach(unfinished) { progress in
                     LadderProgressRow(progress: progress)
                 }
             }
 
-            Divider()
             AllAwardsGrid(showcase: showcase)
         }
     }
@@ -118,17 +118,19 @@ private struct BadgeWallContent: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s2) {
             Text(BadgeText.subtitle(earned: showcase.earnedCount, total: showcase.totalCount))
-                .font(.system(size: KccTypeScale.bodySm))
-                .foregroundStyle(.secondary)
+                .font(.subheadline)
+                .foregroundStyle(KccTheme.secondary)
 
             if !showcase.hasAnyBadge {
                 Text("badgeShowcase.emptyTitle")
-                    .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
+                    .font(.headline)
                 Text("badgeShowcase.emptyBody")
-                    .font(.system(size: KccTypeScale.bodySm))
-                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                    .foregroundStyle(KccTheme.secondary)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .kccContentCard()
     }
 }
 
@@ -136,7 +138,7 @@ private struct BadgeWallContent: View {
 
 /// The climb: target rung, what it takes, and a bar when the counter is
 /// knowable — Android's `LadderProgressRow`.
-private struct LadderProgressRow: View {
+struct LadderProgressRow: View {
     let progress: LadderProgress
 
     var body: some View {
@@ -144,35 +146,37 @@ private struct LadderProgressRow: View {
         if let next = progress.nextRung {
             let threshold = formatLadderValue(unit: ladder.unit, value: next.threshold)
             VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                HStack {
+                SocialFlow {
                     Text(LocalizedStringKey(BadgeStrings.ladderNameKey(ladder.id)))
-                        .font(.system(size: KccTypeScale.bodyMd))
-                    Spacer()
+                        .font(.body)
+                    SocialFlowSpacer()
                     Text(BadgeText.nextTier(tierName: tierName(next.tier)))
-                        .font(.system(size: KccTypeScale.bodySm))
-                        .foregroundStyle(.secondary)
+                        .font(.subheadline)
+                        .foregroundStyle(KccTheme.secondary)
                 }
                 Text(BadgeText.ladderRequirement(ladder.id, threshold: threshold))
-                    .font(.system(size: KccTypeScale.bodySm))
-                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                    .foregroundStyle(KccTheme.secondary)
 
                 if let fraction = progress.fractionToNext, let observed = progress.observedValue {
                     ProgressView(value: fraction)
-                        .tint(KccPalette.crownGold)
+                        .tint(KccTheme.driver)
                     Text(BadgeText.progressCount(
                         current: formatLadderValue(unit: ladder.unit, value: observed),
                         target: threshold
                     ))
-                    .font(.system(size: KccTypeScale.caption))
-                    .foregroundStyle(.secondary)
+                    .font(.footnote)
+                    .foregroundStyle(KccTheme.secondary)
                 } else {
                     // No honest client-readable counter yet — say so rather
                     // than draw a bar the app cannot back up.
                     Text(LocalizedStringKey(BadgeStrings.ladderTaglineKey(ladder.id)))
-                        .font(.system(size: KccTypeScale.caption))
-                        .foregroundStyle(.secondary)
+                        .font(.footnote)
+                        .foregroundStyle(KccTheme.secondary)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .kccContentCard()
         }
     }
 
@@ -189,7 +193,11 @@ private struct LadderProgressRow: View {
 private struct AllAwardsGrid: View {
     let showcase: BadgeShowcase
 
-    private let columns = [GridItem(.adaptive(minimum: 78), spacing: KccSpacing.s3)]
+    @Environment(\.dynamicTypeSize) private var typeSize
+    private var columns: [GridItem] {
+        typeSize.isAccessibilitySize ? [GridItem(.flexible())]
+            : [GridItem(.adaptive(minimum: 104), spacing: KccSpacing.s3)]
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s5) {
@@ -197,7 +205,7 @@ private struct AllAwardsGrid: View {
                 let earnedKeys = Set(progress.earnedRungs.map(\.badgeKey))
                 VStack(alignment: .leading, spacing: KccSpacing.s3) {
                     Text(LocalizedStringKey(BadgeStrings.ladderNameKey(progress.ladder.id)))
-                        .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
+                        .font(.headline)
                     LazyVGrid(columns: columns, alignment: .leading, spacing: KccSpacing.s3) {
                         ForEach(progress.ladder.rungs, id: \.badgeKey) { rung in
                             let earned = earnedKeys.contains(rung.badgeKey)
@@ -211,12 +219,14 @@ private struct AllAwardsGrid: View {
                         }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .kccContentCard()
             }
 
             if !showcase.milestones.isEmpty {
                 VStack(alignment: .leading, spacing: KccSpacing.s3) {
                     Text("badgeShowcase.milestonesTitle")
-                        .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
+                        .font(.headline)
                     LazyVGrid(columns: columns, alignment: .leading, spacing: KccSpacing.s3) {
                         ForEach(showcase.milestones) { milestone in
                             let name = milestoneName(milestone)
@@ -230,6 +240,8 @@ private struct AllAwardsGrid: View {
                         }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .kccContentCard()
             }
         }
     }
@@ -255,7 +267,7 @@ private struct AllAwardsGrid: View {
 /// One badge in the wall: a tier-coloured medallion, its label, and either its
 /// unlock date (earned) or a "no tier yet" caption (locked) — Android's
 /// `BadgeMedallionTile`.
-private struct BadgeMedallionTile: View {
+struct BadgeMedallionTile: View {
     let tier: BadgeTier?
     let earned: Bool
     let label: String
@@ -266,17 +278,21 @@ private struct BadgeMedallionTile: View {
         VStack(spacing: KccSpacing.s1) {
             BadgeMedallion(tier: tier, earned: earned)
             Text(label)
-                .font(.system(size: KccTypeScale.caption, weight: KccTypeScale.medium))
-                .foregroundStyle(earned ? Color.primary : Color.secondary)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(earned ? KccTheme.text : KccTheme.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             if let caption {
                 Text(caption)
-                    .font(.system(size: KccTypeScale.caption))
-                    .foregroundStyle(.secondary)
+                    .font(.footnote)
+                    .foregroundStyle(KccTheme.secondary)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: .infinity, alignment: .top)
+        .padding(KccSpacing.s2)
+        .background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.md))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(accessibilityLabel))
     }
@@ -318,7 +334,7 @@ private struct BadgeMedallionTile: View {
 /// The medallion glyph: a tier-coloured rosette, dimmed when locked. A single
 /// SF Symbol stands in for Android's per-ladder drawn glyph; the tier colour
 /// carries the rank, and the greyed treatment carries the locked state.
-private struct BadgeMedallion: View {
+struct BadgeMedallion: View {
     let tier: BadgeTier?
     let earned: Bool
 
