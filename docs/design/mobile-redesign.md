@@ -186,6 +186,18 @@ ADR-003's canonical `users` and `vehicles` remain the only shared identity/garag
 Keep avatar, cosmetic frame, membership badge, map position, and game state
 separate. A decorative frame must never imply verified identity.
 
+## Android chat reading density (S29–S33)
+
+Prefer more reading space over decorative vertical padding. Keep the existing
+16 dp side margins, 16 sp message text, source/channel tabs, quick reactions and
+48 dp action targets. The Android community/convoy body uses 8 dp vertical outer
+padding and 8 dp gaps between the reading viewport and composer rows. The source
+selector retains a 4 dp gap below it; its tabs keep their 48 dp targets.
+Message bubbles may use up to 320 dp of the available width, with 8 dp vertical
+and 16 dp horizontal text padding and a minimum 48 dp long-press target. Text
+scaling, keyboard/system insets, replies and moderation remain unchanged. These
+Android layout refinements do not alter iOS implementation or chat behavior.
+
 ## Driver feed inside Chat
 
 Use a native adapter to actual Driver APIs and `driver*` data. Each post/detail

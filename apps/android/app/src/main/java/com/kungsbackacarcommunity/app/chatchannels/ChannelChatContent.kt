@@ -306,8 +306,8 @@ fun ChannelChatContent(
             modifier
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
-                .padding(KccSpacing.s4),
-        verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+                .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
+        verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
     ) {
         Box(modifier = Modifier.weight(1f).fillMaxWidth().testTag("channel_message_viewport")) {
             if (loading && messages.isEmpty()) {
@@ -1011,7 +1011,9 @@ private fun ChannelBubble(
         shape = bubbleShape,
         modifier =
             Modifier
-                .widthIn(max = 280.dp)
+                .widthIn(max = 320.dp)
+                // Keep a comfortable long-press target even for a short reply.
+                .heightIn(min = 48.dp)
                 // A brief outline while this message is the tap-to-scroll target of
                 // a quote header, so the reader's eye lands on the original.
                 .then(
@@ -1040,8 +1042,8 @@ private fun ChannelBubble(
         // is purely additive — a reactions row slots in after the text with no
         // change to the quote header or the text above it.
         Column(
-            modifier = Modifier.padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s3),
-            verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
+            modifier = Modifier.padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s1, Alignment.CenterVertically),
         ) {
             message.replyTo?.let { reply ->
                 ChatQuoteHeader(
