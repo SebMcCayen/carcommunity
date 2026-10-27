@@ -330,6 +330,8 @@ import com.kungsbackacarcommunity.app.location.LocationAccessPrompt
 import com.kungsbackacarcommunity.app.location.LocationShare
 import com.kungsbackacarcommunity.app.location.ShareableLocation
 import com.kungsbackacarcommunity.app.location.LocationPermissionRemedy
+import com.kungsbackacarcommunity.app.location.foregroundLocationPermissions
+import com.kungsbackacarcommunity.app.live.BindLivePositionPublisher
 import com.kungsbackacarcommunity.app.location.currentLocationAccess
 import com.kungsbackacarcommunity.app.location.locationPermissionRemedy
 import com.kungsbackacarcommunity.app.location.openAppLocationSettings
@@ -1796,9 +1798,9 @@ fun AuthenticatedApp(
             var locationAccessProbe by remember { mutableIntStateOf(0) }
             val locationPermissionLauncher =
                 rememberLauncherForActivityResult(
-                    ActivityResultContracts.RequestPermission(),
-                ) { granted ->
-                    if (granted) mapSurface.refreshLocationComponent()
+                    ActivityResultContracts.RequestMultiplePermissions(),
+                ) { grants ->
+                    if (grants[Manifest.permission.ACCESS_FINE_LOCATION] == true) mapSurface.refreshLocationComponent()
                     // Re-read on BOTH answers: a denial is what raises the
                     // explanation card, and it used to be dropped silently.
                     locationAccessProbe++
@@ -1861,7 +1863,7 @@ fun AuthenticatedApp(
                         !mapLocationPermissionRequested -> {
                         mapLocationPermissionRequested = true
                         locationPermissionLauncher.launch(
-                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            foregroundLocationPermissions(),
                         )
                     }
                 }
@@ -3831,11 +3833,14 @@ fun AuthenticatedApp(
             // disk (DriveRecordingJournal): if the OS kills the process in that
             // window, the relaunched-but-still-live session resumes the drive rather
             // than losing it.
-            LaunchedEffect(isSharing, uid) {
-                if (isSharing && uid.isNotBlank()) {
-                    BackgroundLocationController.start(context, uid)
-                }
-            }
+            BindLivePositionPublisher(
+                sharing = isSharing,
+                uid = uid,
+                sessionId = liveSession?.sessionId,
+                locationAccess = locationAccess,
+                recoveryKey = locationAccessProbe,
+                startPublisher = { ownerUid -> BackgroundLocationController.start(context, ownerUid) },
+            )
 
             // Auto-file the drive-save failure the moment the user is shown it.
             // Keyed on the failure's code so ONE issue is filed per distinct
@@ -7491,7 +7496,7 @@ fun AuthenticatedApp(
                                                     LocationPermissionRemedy.REQUEST_AGAIN -> {
                                                     mapLocationPermissionRequested = true
                                                     locationPermissionLauncher.launch(
-                                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                                        foregroundLocationPermissions(),
                                                     )
                                                 }
                                                 // Master switch off → the device

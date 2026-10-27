@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.drives
 
 import android.Manifest
+import com.kungsbackacarcommunity.app.location.foregroundLocationPermissions
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -102,8 +103,8 @@ fun RecordDriveScreen(
     }
 
     val permissionLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) {
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+            if (grants[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
                 beginRecording()
             } else {
                 permissionDenied = true
@@ -117,7 +118,7 @@ fun RecordDriveScreen(
         if (alreadyGranted) {
             beginRecording()
         } else {
-            permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+            permissionLauncher.launch(foregroundLocationPermissions())
         }
     }
 
