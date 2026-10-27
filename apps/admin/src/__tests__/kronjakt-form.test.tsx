@@ -6,7 +6,7 @@
  * must:
  *   - render NO Title / Description fields (gone from the UI, not just optional);
  *   - choose the reward from a colour-coded RARITY TIER preset
- *     (Common/Rare/Epic/Legendary → 10/25/100/500 KP), default Common;
+ *     (Common/Uncommon/Rare/Legendary → 10/25/100/500 KP), default Common;
  *   - send no title/description and a fixed 75 m collect radius on submit; and
  *   - keep the safe-location confirmation gate on activation.
  *
@@ -40,6 +40,8 @@ const mocks = vi.hoisted(() => ({
   activate: vi.fn(),
   pause: vi.fn(),
 }));
+
+vi.mock('@/features/feature-flags', () => ({ subscribeFeatureFlagRows: vi.fn() }));
 
 vi.mock('@/features/crown-hunt', () => ({
   adminCreateCrownHuntPoint: mocks.create,
@@ -115,9 +117,7 @@ function buttonByText(label: string): HTMLButtonElement {
 /** A button whose text CONTAINS the label (multi-span buttons, e.g. the
  *  collector-headcount options that render a name + a hint). */
 function buttonContaining(label: string): HTMLButtonElement {
-  const btn = [...container.querySelectorAll('button')].find((b) =>
-    b.textContent?.includes(label),
-  );
+  const btn = [...container.querySelectorAll('button')].find((b) => b.textContent?.includes(label));
   if (!btn) throw new Error(`No button containing "${label}"`);
   return btn as HTMLButtonElement;
 }
@@ -208,7 +208,7 @@ describe('Kronjakt point form — collectable redesign', () => {
     const tiers = tierButtons();
     expect(tiers).toHaveLength(4);
     const labels = tiers.map((r) => r.textContent);
-    for (const key of ['tier_common', 'tier_rare', 'tier_epic', 'tier_legendary']) {
+    for (const key of ['tier_common', 'tier_uncommon', 'tier_rare', 'tier_legendary']) {
       expect(labels.some((l) => l?.includes(t(`crownHunt.${key}`)))).toBe(true);
     }
     // Default tier is Common (aria-pressed toggle group).
@@ -233,25 +233,35 @@ describe('Kronjakt point form — collectable redesign', () => {
     expect(payload.longitude).toBeCloseTo(11.97);
   });
 
-  it('resolves the Legendary tier to its 500 KP preset', async () => {
-    await render();
-    await openCreateForm();
-    await fillCoordinates();
+  it.each([
+    ['common', 10],
+    ['uncommon', 25],
+    ['rare', 100],
+    ['legendary', 500],
+  ] as const)(
+    'sends the canonical %s preset as %i KP without changing availability',
+    async (tier, points) => {
+      await render();
+      await openCreateForm();
+      await fillCoordinates();
 
-    const legendary = tierButtons().find((r) =>
-      r.textContent?.includes(t('crownHunt.tier_legendary')),
-    )!;
-    await act(async () => {
-      legendary.click();
-    });
-    await submitForm();
+      const selected = tierButtons().find((r) =>
+        r.textContent?.includes(t(`crownHunt.tier_${tier}`)),
+      )!;
+      await act(async () => {
+        selected.click();
+      });
+      await submitForm();
 
-    const payload = mocks.create.mock.calls[0]![0] as Record<string, unknown>;
-    expect(payload.rewardPoints).toBe(500);
-    expect(payload).not.toHaveProperty('title');
-  });
+      const payload = mocks.create.mock.calls[0]![0] as Record<string, unknown>;
+      expect(payload.rewardPoints).toBe(points);
+      expect(payload.availableFrom).toBeUndefined();
+      expect(payload.availableUntil).toBeUndefined();
+      expect(payload).not.toHaveProperty('title');
+    },
+  );
 
-  it('reverse-maps an existing reward to its tier when editing (25 KP → Rare)', async () => {
+  it('reverse-maps an existing reward to its tier when editing (25 KP → Uncommon)', async () => {
     mocks.listPoints.mockResolvedValue(pointsResponse([makePoint({ rewardPoints: 25 })]));
     await render();
 
@@ -260,7 +270,7 @@ describe('Kronjakt point form — collectable redesign', () => {
     });
 
     const pressed = tierButtons().find((r) => r.getAttribute('aria-pressed') === 'true');
-    expect(pressed?.textContent).toContain(t('crownHunt.tier_rare'));
+    expect(pressed?.textContent).toContain(t('crownHunt.tier_uncommon'));
   });
 
   it('PRESERVES a legacy custom reward (250 KP) when editing + saving without picking a tier', async () => {
@@ -293,9 +303,9 @@ describe('Kronjakt point form — collectable redesign', () => {
     await act(async () => {
       buttonByText(t('crownHunt.editPoint')).click();
     });
-    const epic = tierButtons().find((r) => r.textContent?.includes(t('crownHunt.tier_epic')))!;
+    const rare = tierButtons().find((r) => r.textContent?.includes(t('crownHunt.tier_rare')))!;
     await act(async () => {
-      epic.click();
+      rare.click();
     });
     await submitForm();
 
@@ -432,9 +442,9 @@ describe('Kronjakt point form — collectable redesign', () => {
     const [lat, lng] = numberInputs();
     expect(lat!.value).toBe('58.41');
     expect(lng!.value).toBe('15.62');
-    // Rarity resolved to the Epic tier (100 KP).
+    // Rarity resolved to the Rare preset (100 KP).
     const pressed = tierButtons().find((r) => r.getAttribute('aria-pressed') === 'true');
-    expect(pressed?.textContent).toContain(t('crownHunt.tier_epic'));
+    expect(pressed?.textContent).toContain(t('crownHunt.tier_rare'));
 
     await submitForm();
 

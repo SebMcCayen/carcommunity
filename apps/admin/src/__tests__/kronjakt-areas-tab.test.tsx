@@ -24,6 +24,12 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   update: vi.fn(),
   del: vi.fn(),
+  subscribeFlags: vi.fn(),
+  unsubscribeFlags: vi.fn(),
+}));
+
+vi.mock('@/features/feature-flags', () => ({
+  subscribeFeatureFlagRows: mocks.subscribeFlags,
 }));
 
 // Cut every path from the crown-hunt barrel to lib/firebase (which reads
@@ -93,7 +99,9 @@ function makeArea(overrides: Record<string, unknown> = {}) {
 }
 
 function buttonByText(label: string): HTMLButtonElement {
-  const btn = [...container.querySelectorAll('button')].find((b) => b.textContent?.trim() === label);
+  const btn = [...container.querySelectorAll('button')].find(
+    (b) => b.textContent?.trim() === label,
+  );
   if (!btn) throw new Error(`No button "${label}"`);
   return btn as HTMLButtonElement;
 }
@@ -120,11 +128,65 @@ beforeEach(() => {
   mocks.create.mockReset();
   mocks.update.mockReset();
   mocks.del.mockReset();
+  mocks.unsubscribeFlags.mockReset();
+  mocks.subscribeFlags.mockReset().mockImplementation((onRows) => {
+    onRows([{ key: 'crownHuntSpawn', enabled: false }]);
+    return mocks.unsubscribeFlags;
+  });
 });
 
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+});
+
+describe('AreasTab — effective spawn status', () => {
+  it('shows the flag state and follows changes without claiming a spawn occurred', async () => {
+    mocks.list.mockResolvedValue([]);
+    await render();
+    expect(container.querySelector('[role="status"]')?.textContent).toContain(
+      t('crownHunt.spawnFlag_disabled'),
+    );
+    const onRows = mocks.subscribeFlags.mock.calls[0]![0];
+    act(() => onRows([{ key: 'crownHuntSpawn', enabled: true }]));
+    const status = container.querySelector('[role="status"]')!.textContent;
+    expect(status).toContain(t('crownHunt.spawnFlag_enabled'));
+    expect(status).not.toContain(t('crownHunt.spawnFlag_disabled'));
+    act(() => onRows([{ key: 'crownHuntSpawn', enabled: false }], true));
+    expect(container.querySelector('[role="status"]')?.textContent).toContain(
+      t('crownHunt.spawnFlag_loading'),
+    );
+  });
+
+  it('does not report off while loading or when the read fails, and can retry', async () => {
+    mocks.list.mockResolvedValue([]);
+    mocks.subscribeFlags.mockImplementation(() => mocks.unsubscribeFlags);
+    await render();
+    expect(container.querySelector('[role="status"]')?.textContent).toContain(
+      t('crownHunt.spawnFlag_loading'),
+    );
+    act(() => mocks.subscribeFlags.mock.calls[0]![1](new Error('permission-denied')));
+    expect(container.querySelector('[role="status"]')?.textContent).toContain(
+      t('crownHunt.spawnFlag_error'),
+    );
+    expect(container.textContent).not.toContain(t('crownHunt.spawnFlag_disabled'));
+    // Area management remains available even if the status read fails.
+    expect(container.textContent).toContain(t('crownHunt.areaNoAreas'));
+    await act(async () => buttonByText(t('crownHunt.spawnFlagRetry')).click());
+    expect(mocks.unsubscribeFlags).toHaveBeenCalledOnce();
+    expect(mocks.subscribeFlags).toHaveBeenCalledTimes(2);
+    act(() => mocks.subscribeFlags.mock.calls[1]![0]([{ key: 'crownHuntSpawn', enabled: true }]));
+    expect(container.querySelector('[role="status"]')?.textContent).toContain(
+      t('crownHunt.spawnFlag_enabled'),
+    );
+  });
+
+  it('unsubscribes when leaving the tab', async () => {
+    mocks.list.mockResolvedValue([]);
+    await render();
+    act(() => root.render(null));
+    expect(mocks.unsubscribeFlags).toHaveBeenCalledOnce();
+  });
 });
 
 describe('AreasTab — list', () => {
@@ -159,7 +221,12 @@ describe('AreasTab — list', () => {
 describe('AreasTab — activation safety gate', () => {
   it('will not activate an area until the safe-area confirmation is ticked', async () => {
     mocks.list.mockResolvedValue([makeArea()]);
-    mocks.update.mockResolvedValue({ areaId: 'a1', active: true, safeAreaConfirmed: true, removedCrowns: 0 });
+    mocks.update.mockResolvedValue({
+      areaId: 'a1',
+      active: true,
+      safeAreaConfirmed: true,
+      removedCrowns: 0,
+    });
     await render();
 
     // Open the activate modal from the row.
@@ -195,7 +262,12 @@ describe('AreasTab — activation safety gate', () => {
 describe('AreasTab — create gate', () => {
   it('creates a draft (inactive) area when "activate now" is not chosen', async () => {
     mocks.list.mockResolvedValue([]);
-    mocks.create.mockResolvedValue({ areaId: 'new', active: false, safeAreaConfirmed: false, removedCrowns: 0 });
+    mocks.create.mockResolvedValue({
+      areaId: 'new',
+      active: false,
+      safeAreaConfirmed: false,
+      removedCrowns: 0,
+    });
     await render();
 
     await act(async () => buttonByText(t('crownHunt.areaDrawButton')).click());
@@ -205,7 +277,10 @@ describe('AreasTab — create gate', () => {
     await act(async () => buttonByText(t('crownHunt.areaSaveCreate')).click());
 
     expect(mocks.create).toHaveBeenCalledTimes(1);
-    const request = mocks.create.mock.calls[0]![0] as { active?: boolean; safeAreaConfirmed?: boolean };
+    const request = mocks.create.mock.calls[0]![0] as {
+      active?: boolean;
+      safeAreaConfirmed?: boolean;
+    };
     expect(request.active).toBeUndefined();
     expect(request.safeAreaConfirmed).toBeUndefined();
   });
