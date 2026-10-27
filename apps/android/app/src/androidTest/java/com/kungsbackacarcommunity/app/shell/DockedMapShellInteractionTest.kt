@@ -241,7 +241,9 @@ class DockedMapShellInteractionTest {
         val footer = rule.onNodeWithTag(MAP_CATALOGUE_FOOTER_TAG).fetchSemanticsNode().boundsInRoot
         assertTrue("Live dock must clear the real footer", dock.bottom <= footer.top + 1f)
         assertTrue("Live dock must be bottom-anchored, not left in the top search row", footer.top - dock.bottom <= 2f)
-        physicalTap(str(R.string.liveLocation_stop))
+        // Live management opens through the persistent centre footer control;
+        // the duplicate dock text action was intentionally removed.
+        physicalTap(str(R.string.shell_liveControls))
         awaitSheet()
         assertPanelClearsFooter("live management")
         physicalTap(str(R.string.shell_tabChat))
