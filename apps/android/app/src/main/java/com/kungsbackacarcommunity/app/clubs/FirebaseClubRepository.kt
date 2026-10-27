@@ -51,7 +51,7 @@ class FirebaseClubRepository private constructor(
         .distinctUntilChanged()
 
     override fun observePublicAttendanceReady(): Flow<Boolean> = document("config/sharedClubs")
-        .map { it.confirmed && it.snapshot?.getBoolean("enabled") == true && it.snapshot.getBoolean("publicAttendanceReady") == true }
+        .map { it.confirmed && it.snapshot?.getBoolean("enabled") == true && it.snapshot?.getBoolean("publicAttendanceReady") == true }
         .distinctUntilChanged()
     override fun observeAccess(): Flow<ClubAccess> = combine(observeEnabled(), document("driverClubAccounts/$uid")) { enabled, account ->
         if (enabled) account else ServerDocument(false, null)

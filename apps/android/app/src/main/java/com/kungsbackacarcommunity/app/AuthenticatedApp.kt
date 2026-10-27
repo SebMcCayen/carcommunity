@@ -4246,6 +4246,7 @@ fun AuthenticatedApp(
                 com.kungsbackacarcommunity.app.shell.LocalAeroOwnerHeader provides
                     if (route == ShellRoute.Profile) null else com.kungsbackacarcommunity.app.shell.AeroOwnerHeader(
                         avatarUrl = mapAvatarUrl,
+                        clubBadge = profile?.clubBadge,
                         showSupporterBadge = profile?.supporterBadge?.visible == true,
                         onOpenProfile = { pushRoute(ShellRoute.Profile) },
                     ),
@@ -6664,6 +6665,7 @@ fun AuthenticatedApp(
                                     isLiveSharing = isSharing,
                                     participantCount = mapParticipantUids.size,
                                     avatarUrl = mapAvatarUrl,
+                                    clubBadge = profile?.clubBadge,
                                     userLabel =
                                         stringResource(R.string.shell_userMarkerLabel),
                                     // Tapping "Where to?" opens the address
