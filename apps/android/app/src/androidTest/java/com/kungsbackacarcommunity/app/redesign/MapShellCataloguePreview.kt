@@ -158,7 +158,8 @@ fun MapShellCataloguePreview(
                         onOpenPerks = { panel = "map-perks" },
                         liveSessionBar = if (live) {
                             { LiveSessionBar(sessionStartMillis = 0L, distanceMeters = 12_400.0,
-                                speedSample = null, now = { 754_000L }) }
+                                speedSample = com.kungsbackacarcommunity.app.location.SpeedSample(15.0, 754_000L),
+                                now = { 754_000L }) }
                         } else null,
                         convoyBar = if (screen == "map-convoy") {
                             {

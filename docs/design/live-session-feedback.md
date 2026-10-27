@@ -11,6 +11,15 @@ band, allowing that band to use the dock's available width. Keep the existing
 confirmation and convoy leave/end choices, and the background notification's
 safety stop action.
 
+The statistics dock fills the map body's available width. Time, neutral current
+speed (including km/h) and distance use their natural scaled text widths, then
+share each row's spare width equally. Keep reading order time → speed → distance.
+If they cannot fit together, flow whole metric cells onto another row and grow
+the dock above the footer. Do not ellipsize values/units, auto-shrink text or
+force a fixed height; very long individual values may wrap inside their cell.
+An exceptionally short window can scroll the dock contents rather than clip
+the lower row. Existing measured dock clearance still protects other map overlays.
+
 ## Stop → saving → confirmed save
 
 When an eligible stop is initiated with an active recorder, show a full-screen

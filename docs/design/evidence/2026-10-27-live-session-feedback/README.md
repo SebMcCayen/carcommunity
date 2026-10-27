@@ -41,3 +41,22 @@ Still-image captures do not demonstrate animation timing; Compose tests exercise
 that transition with a controlled clock. A physical-phone GPS drive and real
 stop→backend-save round trip remain device checks. These are debug test artifacts,
 not a signed release or proof of Play/Firebase deployment.
+
+## Follow-up: full-width, adaptive statistics dock
+
+[Normal text](stats-width.png) and [200% text](stats-large.png) show the actual
+production statistics bar in its map/footer fixture. These two captures use the
+local **stub map**, not configured Mapbox: they verify dock geometry and text,
+not map rendering. Inputs are synthetic 12:34 / 54 km/h / 12.4 km. Both native
+capture runs passed and screenshots were visually reviewed; font scale was
+restored to 1.0 afterwards. The footer's separate enlarged-label behaviour is
+outside this statistics-only follow-up.
+
+The bar now distributes each row's available width between the natural-width
+metric cells. It adds rows instead of ellipsizing numbers or reducing type size.
+Twenty-three focused JVM tests passed: the two layout tests include 18 width /
+font-scale / short-or-long-value combinations (280/350/600 dp, 100/150/200%)
+and a 72 dp-high scrollable viewport; the remaining tests cover elapsed formatting
+and current-speed behaviour. Glyph bounds, full text offsets, original typography,
+row width coverage and reading order are asserted. The native TalkBack-order
+semantics test also passed. Lint and debug/instrumentation assembly were rerun.
