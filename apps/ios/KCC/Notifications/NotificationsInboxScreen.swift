@@ -26,6 +26,7 @@ struct NotificationsInboxScreen: View {
 
     var body: some View {
         titledContent
+            .kccReadingSurface(pageBackground: true)
             .task { coordinator?.start() }
             .toolbar { toolbarContent }
             .alert(
@@ -120,30 +121,20 @@ struct NotificationsInboxScreen: View {
     }
 
     private var errorState: some View {
-        VStack(spacing: KccSpacing.s3) {
-            Text("notifications.loadError")
-                .multilineTextAlignment(.center)
-            Button {
-                coordinator?.reload()
-            } label: {
-                Text("notifications.retry")
+        ScrollView {
+            VStack(alignment: .leading, spacing: KccSpacing.s3) {
+                Text("notifications.loadError").font(.body)
+                Button { coordinator?.reload() } label: {
+                    Text("notifications.retry").frame(minHeight: 48)
+                }.kccPrimaryAction()
             }
-            .buttonStyle(.borderedProminent)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .kccContentCard().padding(KccSpacing.s4)
         }
-        .padding(KccSpacing.s4)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func messageState(title: LocalizedStringKey, body: LocalizedStringKey) -> some View {
-        VStack(spacing: KccSpacing.s2) {
-            Text(title)
-                .font(.system(size: KccTypeScale.titleMd, weight: KccTypeScale.semibold))
-            Text(body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .padding(KccSpacing.s4)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        SocialReadingState(title: title, message: body, symbol: "bell")
     }
 
     private func list(_ items: [AppNotification], coordinator: NotificationsInboxCoordinator) -> some View {
@@ -152,57 +143,64 @@ struct NotificationsInboxScreen: View {
             // list itself updates from the next listener snapshot, so the row's
             // read styling follows the server, never an optimistic flip.
             ForEach(items) { item in
-                Button {
-                    guard !item.isRead else { return }
-                    Task { await coordinator.markRead(notificationId: item.id) }
-                } label: {
-                    NotificationRow(item: item)
+                Group {
+                    if item.isRead {
+                        NotificationRow(item: item)
+                    } else {
+                        Button {
+                            Task { await coordinator.markRead(notificationId: item.id) }
+                        } label: {
+                            NotificationRow(item: item)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(coordinator.markReadStatus == .working)
+                    }
                 }
-                .buttonStyle(.plain)
-                .disabled(item.isRead)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
             }
         }
-        .listStyle(.insetGrouped)
+        .listStyle(.plain)
     }
 }
 
 /// One inbox row: the unread marker, category label, title, preview/body, and
 /// the received timestamp — the teaser fields Android's inbox row renders.
-private struct NotificationRow: View {
+struct NotificationRow: View {
     let item: AppNotification
 
     var body: some View {
-        VStack(alignment: .leading, spacing: KccSpacing.s1) {
-            HStack(spacing: KccSpacing.s2) {
+        VStack(alignment: .leading, spacing: KccSpacing.s3) {
+            SocialFlow {
                 if !item.isRead {
                     Text("notifications.unreadLabel")
-                        .font(.system(size: KccTypeScale.caption, weight: KccTypeScale.semibold))
+                        .font(.caption.weight(.semibold))
                         .padding(.horizontal, KccSpacing.s2)
                         .padding(.vertical, KccSpacing.s1 / 2)
                         .background(KccPalette.crownGold.opacity(0.2))
                         .clipShape(Capsule())
                 }
                 Text(LocalizedStringKey(item.category.labelKey))
-                    .font(.system(size: KccTypeScale.caption))
+                    .font(.caption)
                     .foregroundStyle(.secondary)
-                Spacer(minLength: KccSpacing.s2)
-                if let received = receivedText {
-                    Text(received)
-                        .font(.system(size: KccTypeScale.caption))
-                        .foregroundStyle(.secondary)
-                }
             }
-            Text(item.title)
-                .font(.system(size: KccTypeScale.bodyMd, weight: item.isRead ? .regular : KccTypeScale.semibold))
+            if let received = receivedText {
+                Text(received)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Text(verbatim: item.title)
+                .font(.headline.weight(item.isRead ? .regular : .semibold))
             if let detail = item.previewText ?? item.body,
                 !detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(detail)
-                    .font(.system(size: KccTypeScale.bodySm))
+                Text(verbatim: detail)
+                    .font(.body)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.vertical, KccSpacing.s1)
+        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+        .kccContentCard(border: item.isRead ? KccTheme.border : KccTheme.driver)
     }
 
     /// "Received %1$@" (notifications.timeReceivedAt) with an abbreviated

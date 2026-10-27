@@ -443,3 +443,41 @@ or a physical-iPhone visual comparison. Native CI must pass before merge; the PR
 records the exact executed run. Production Firebase deploy and signed Android
 release workflows are outside these paths/manual-only respectively. iOS artifact
 uploads stay opt-in; no paid review, production write or Mapbox runtime is needed.
+
+## Private social reading surfaces (2026-10-27)
+
+The iOS DM inbox, private thread/composer, friends, notification inbox and native
+Driver feed/detail now use the generated semantic page/surface/accent roles.
+Inbox cards distinguish unread items with cyan borders and count/status text;
+notification timestamps have their own line. Already-read notifications render
+as readable static content, while unread rows retain the existing single-flight
+mark-read command and server-authoritative styling. No notification destination
+or destructive action is added by this presentation change.
+
+Friend identities, pending requests and actual point balances stay in native
+list sections, retaining sort, nickname ambiguity selection, independent request
+buttons and confirmation-gated swipe removal. Reading text uses native Dynamic
+Type; action groups stack at accessibility sizes. No avatar storage reads or
+per-author queries are added. Unavailable and empty inbox states stay distinct
+and use scrollable reading cards rather than fixed-height centered copy.
+
+The DM composer bounds only the input viewport, retaining the full bound draft,
+UTF-16 send guard, optimistic message ownership, retry client ID and neutral
+terminal errors. Bubbles retain delivery state, optional real timestamps and
+server-built reply previews. Driver posts remain original read-only posts and
+comments with inline source attribution and actual counts, not chat messages.
+Its UID identity, active/scene invalidation lifecycle, access checks and bounded
+pagination are unchanged. Supported image URLs keep their existing validation;
+a failed image now resolves to a neutral placeholder rather than an endless
+loading state. No like/create/report controls or automatic onboarding are added.
+
+SocialDesignTests measure the actual production reading widgets at 288/358 pt,
+SV/EN, light/dark and largest accessibility text, including unread/read cards,
+long identities, friend actions/points, private delivery/reply states, Driver
+counts and the bounded long-draft composer. The full existing native suite also
+covers block filtering, send/retry, authoritative mark-read, Driver access and
+account switching. Layout tests and the config-less UI suite are not physical
+phone visual inspection or production social acceptance. Testing real friend
+requests, notification delivery and Driver roles remains a separate acceptance
+step with isolated accounts. No production backend deploy, signed distribution,
+Mapbox runtime, paid service or artifact-upload opt-in is needed for this PR.

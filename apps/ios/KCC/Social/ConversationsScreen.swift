@@ -25,6 +25,7 @@ struct ConversationsScreen: View {
 
     var body: some View {
         titledContent
+            .kccReadingSurface(pageBackground: true)
             .task { coordinator?.start() }
             .toolbar {
                 // Compose-new-message affordance (Android renders a FAB; the
@@ -93,39 +94,25 @@ struct ConversationsScreen: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .error:
-                VStack(spacing: KccSpacing.s3) {
-                    Text("dm.loadError")
-                        .multilineTextAlignment(.center)
-                    Button {
-                        coordinator.retry()
-                    } label: {
-                        Text("dm.retry")
+                ScrollView {
+                    VStack(alignment: .leading, spacing: KccSpacing.s3) {
+                        Text("dm.loadError").font(.body)
+                        Button { coordinator.retry() } label: {
+                            Text("dm.retry").frame(minHeight: 48)
+                        }.kccPrimaryAction()
                     }
-                    .buttonStyle(.borderedProminent)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .kccContentCard().padding(KccSpacing.s4)
                 }
-                .padding(KccSpacing.s4)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .loaded(let conversations):
                 if conversations.isEmpty {
-                    Text("dm.empty")
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(KccSpacing.s4)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    SocialReadingState(title: "dm.title", message: "dm.empty", symbol: "tray")
                 } else {
                     list(conversations)
                 }
             }
         } else {
-            VStack(spacing: KccSpacing.s2) {
-                Text("dm.title")
-                    .font(.system(size: KccTypeScale.titleMd, weight: KccTypeScale.semibold))
-                Text("common.placeholder")
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-            .padding(KccSpacing.s4)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            SocialReadingState(title: "dm.title", message: "common.placeholder", symbol: "tray")
         }
     }
 
@@ -139,7 +126,11 @@ struct ConversationsScreen: View {
                     )
                 } label: {
                     ConversationRow(conversation: conversation)
+                        .kccContentCard(border: conversation.unreadCount > 0 ? KccTheme.driver : KccTheme.border)
                 }
+                .buttonStyle(.plain)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
                 .disabled(onOpenConversation == nil)
             }
         }
@@ -149,59 +140,32 @@ struct ConversationsScreen: View {
 
 /// One inbox row: counterparty name, last-message preview, time, unread
 /// badge.
-private struct ConversationRow: View {
+struct ConversationRow: View {
     let conversation: DmConversation
 
     var body: some View {
-        HStack(spacing: KccSpacing.s3) {
-            VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                nameText
-                    .font(.system(
-                        size: KccTypeScale.bodyMd,
-                        weight: conversation.unreadCount > 0
-                            ? KccTypeScale.semibold : KccTypeScale.regular
-                    ))
-                    .foregroundStyle(.primary)
-                if let preview = conversation.lastMessage {
-                    Text(verbatim: preview.text)
-                        .font(.system(size: KccTypeScale.bodySm))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+        VStack(alignment: .leading, spacing: KccSpacing.s2) {
+            SocialMemberLabel(name: conversation.otherUser.displayName, fallback: "dm.unknownMember")
+            if let preview = conversation.lastMessage {
+                Text(verbatim: preview.text)
+                    .font(.body).foregroundStyle(KccTheme.secondary)
+                    .lineLimit(3)
             }
-            Spacer()
-            VStack(alignment: .trailing, spacing: KccSpacing.s1) {
+            SocialFlow {
                 if let millis = conversation.lastMessageAtMillis {
-                    Text(
-                        Date(timeIntervalSince1970: Double(millis) / 1000),
-                        format: .dateTime.hour().minute()
-                    )
-                    .font(.system(size: KccTypeScale.caption))
-                    .foregroundStyle(.secondary)
+                    Text(Date(timeIntervalSince1970: Double(millis) / 1000), format: .dateTime.month().day().hour().minute())
+                        .font(.caption).foregroundStyle(KccTheme.secondary)
                 }
                 if conversation.unreadCount > 0 {
-                    Text(unreadBadgeText)
-                        .font(.system(size: KccTypeScale.caption, weight: KccTypeScale.semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, KccSpacing.s2)
-                        .padding(.vertical, KccSpacing.s1 / 2)
-                        .background(KccPalette.errorRed)
-                        .clipShape(Capsule())
+                    Text(unreadBadgeText).font(.caption.weight(.semibold))
+                        .padding(.horizontal, KccSpacing.s2).padding(.vertical, KccSpacing.s1)
+                        .foregroundStyle(KccTheme.onDriver)
+                        .background(KccTheme.driver, in: Capsule())
                         .accessibilityLabel(Text(verbatim: unreadAccessibilityText))
                 }
             }
         }
-        .padding(.vertical, KccSpacing.s1)
-    }
-
-    /// Trimmed-first, so a whitespace-only name never renders as a blank
-    /// (effectively unlabeled) inbox row.
-    private var nameText: Text {
-        if let name = conversation.otherUser.displayName.trimmedNonBlank {
-            Text(verbatim: name)
-        } else {
-            Text("dm.unknownMember")
-        }
+        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
     }
 
     /// Caps the badge at "99+" (Android's `UnreadBadge`).
@@ -228,6 +192,7 @@ struct NewDialogueSheet: View {
     var body: some View {
         NavigationStack {
             content
+                .kccReadingSurface(pageBackground: true)
                 .navigationTitle(Text("dm.newDialogue.title"))
                 .navigationBarTitleDisplayMode(.inline)
                 .task { await coordinator.load() }
@@ -242,25 +207,19 @@ struct NewDialogueSheet: View {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .error:
-            VStack(spacing: KccSpacing.s3) {
-                Text("dm.newDialogue.error")
-                    .multilineTextAlignment(.center)
-                Button {
-                    Task { await coordinator.load() }
-                } label: {
-                    Text("dm.newDialogue.retry")
+            ScrollView {
+                VStack(alignment: .leading, spacing: KccSpacing.s3) {
+                    Text("dm.newDialogue.error").font(.body)
+                    Button { Task { await coordinator.load() } } label: {
+                        Text("dm.newDialogue.retry").frame(minHeight: 48)
+                    }.kccPrimaryAction()
                 }
-                .buttonStyle(.borderedProminent)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .kccContentCard().padding(KccSpacing.s4)
             }
-            .padding(KccSpacing.s4)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .ready(let friends):
             if friends.isEmpty {
-                Text("dm.newDialogue.empty")
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(KccSpacing.s4)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                SocialReadingState(title: "dm.newDialogue.title", message: "dm.newDialogue.empty", symbol: "person.2")
             } else {
                 List {
                     Section {
@@ -268,11 +227,8 @@ struct NewDialogueSheet: View {
                             Button {
                                 onPick(friend)
                             } label: {
-                                if let name = friend.displayName.trimmedNonBlank {
-                                    Text(verbatim: name)
-                                } else {
-                                    Text("dm.newDialogue.unnamedFriend")
-                                }
+                                SocialMemberLabel(name: friend.displayName, fallback: "dm.newDialogue.unnamedFriend")
+                                    .frame(minHeight: 48)
                             }
                             .foregroundStyle(.primary)
                         }
