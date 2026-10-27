@@ -141,7 +141,7 @@ jobs:
             -derivedDataPath "${RUNNER_TEMP}/ios-tests" \
             ENTITLEMENTS_REQUIRED=YES \
             -only-testing:KCCTests/FirebaseEmulatorIntegrationTests build-for-testing
-          node scripts/run-no-cloud.mjs -- firebase emulators:exec \
+          GCLOUD_PROJECT=demo-kcc-ios-ci node scripts/run-no-cloud.mjs -- firebase emulators:exec \
             --project demo-kcc-ios-ci --config "${RUNNER_TEMP}/native-members/firebase.json" \
             --only auth,firestore,functions,database --non-interactive \
             "node scripts/native-member-emulators.mjs seed && python3 apps/ios/scripts/auth-emulator-tests.py run --products '${RUNNER_TEMP}/ios-tests/Build/Products' --destination '${DEST}' --member-tools"
