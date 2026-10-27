@@ -8,6 +8,17 @@ import org.junit.Test
  * tab/back resolution and the live-location-share toggle decision.
  */
 class ShellNavTest {
+    @Test
+    fun `full screen finish feedback pauses the map above every tab and search`() {
+        ShellTab.entries.forEach { tab ->
+            assertEquals(
+                MapCover.Opaque,
+                ShellNavigation.mapCover(tab, null, navigating = false,
+                    navSearchOpen = true, opaqueOverlayOpen = true),
+            )
+        }
+    }
+
 
     // --- system Back resolution ------------------------------------------
 

@@ -179,37 +179,17 @@ sealed interface RecordingState {
 }
 
 /**
- * The end-of-session "Drive saved" confirmation reconciled against the BACKGROUND
- * save, as a PURE function of the recording state so the host's Compose wiring
- * stays unit-testable.
- *
- * The confirmation used to be gated on the background `drives-save` callable
- * COMPLETING — the dialog only appeared on the terminal [RecordingState.Kept],
- * which is reached only after the network round-trip (and any transient retries)
- * finished, so ending a session felt slow. It is now OPTIMISTIC: the moment the
- * drive is committed to keep — [RecordingState.KeptPendingSave], while the save is
- * still in flight — the confirmation is shown, so it appears INSTANTLY. The
- * background save (already process-scoped, so it outlives dismissing the dialog)
- * then reconciles the optimistic UI with the real outcome:
- * - a definitive SUCCESS ([RecordingState.Kept]) keeps the confirmation up (and
- *   the host fills in the now-known ride id for the History deep-link);
- * - a definitive FAILURE ([RecordingState.Failed]) RETRACTS it so the failure
- *   safety-net ([SessionSummaryDialog]) is the only surface — the app never claims
- *   "saved" over a drive that was not persisted, and History (which reads the
- *   real server state) shows nothing for it.
+ * Whether end-of-session feedback may open and whether failure must retract it.
+ * KeptPendingSave may show a saving screen immediately; only Kept is confirmed
+ * success. The host retains that confirmed result after releasing the recorder.
  */
 object DriveSaveConfirmation {
-    /**
-     * Whether the optimistic "Drive saved" confirmation should be shown for
-     * [state]. True the instant the drive is committed to keep —
-     * [RecordingState.KeptPendingSave] (background save still in flight) or the
-     * terminal [RecordingState.Kept] (a fast / config-less save that landed before
-     * the auto-keep) — so the confirmation never waits on the save's network
-     * round-trip. Both map to true so the host can key a one-shot raise on this
-     * predicate: it stays true across the KeptPendingSave → Kept transition, so a
-     * confirmation the user has since dismissed is never re-raised when the save
-     * finally lands.
-     */
+    /** Retract in the stop callback itself, even if StateFlow conflates a fast failure. */
+    fun onStopRejected(state: RecordingState, confirmed: Boolean, onRetract: () -> Unit) {
+        if (state is RecordingState.Recording && !confirmed) onRetract()
+    }
+
+    /** Open feedback without waiting for the network; pending state is not success. */
     fun shouldShow(state: RecordingState): Boolean =
         state is RecordingState.KeptPendingSave || state is RecordingState.Kept
 

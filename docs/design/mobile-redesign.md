@@ -156,6 +156,11 @@ camera policies. S03 appearance choices are Day, Night and System; keep the
 existing traffic/incident/3D/Crown gates and all supported incident-age filters.
 Large text wraps or scrolls controls instead of shrinking reading text.
 
+Android live-session completion uses the centre footer stop entry, truthful
+animated saving/result feedback and a high-contrast gold driven trail. Follow
+[live-session-feedback.md](live-session-feedback.md) for its state, motion and
+map-layer rules.
+
 Driver markers use permitted avatar/vehicle data, a cyan position ring and
 selection emphasis. Only show names when selected or at useful zoom. Do not
 invent positions after updates stop. Driver preview shows permitted name/car,

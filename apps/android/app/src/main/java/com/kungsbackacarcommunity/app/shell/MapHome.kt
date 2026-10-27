@@ -308,7 +308,6 @@ fun MapHome(
     compassModeState: MutableState<MapCompassMode>? = null,
     // Session chrome docks above the persistent footer (catalogue S16).
     liveSessionBar: (@Composable () -> Unit)? = null,
-    onManageLiveSession: (() -> Unit)? = null,
     // Full-width convoy controls join the bottom session dock only while active.
     convoyBar: (@Composable () -> Unit)? = null,
     // Optional convoy awareness layer (member markers + off-screen direction
@@ -849,16 +848,7 @@ fun MapHome(
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                if (liveSessionBar != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Box(Modifier.weight(1f)) { liveSessionBar() }
-                        if (onManageLiveSession != null) {
-                            TextButton(onClick = onManageLiveSession, modifier = Modifier.testTag("map_home_session_manage")) {
-                                Text(stringResource(R.string.liveLocation_stop))
-                            }
-                        }
-                    }
-                }
+                liveSessionBar?.invoke()
                 convoyBar?.invoke()
             }
         } else {

@@ -316,6 +316,7 @@ import com.kungsbackacarcommunity.app.live.defaultStartDrivingVehicleId
 import com.kungsbackacarcommunity.app.live.LiveShareStart
 import com.kungsbackacarcommunity.app.live.LiveShareStop
 import com.kungsbackacarcommunity.app.live.LiveStartAttempt
+import com.kungsbackacarcommunity.app.live.LiveStopAttempt
 import com.kungsbackacarcommunity.app.live.OptimisticLiveStop
 import com.kungsbackacarcommunity.app.live.LiveMapLayers
 import com.kungsbackacarcommunity.app.live.NearbyLiveController
@@ -1021,19 +1022,18 @@ fun AuthenticatedApp(
             // on the auto-keep "Drive saved" dialog (#856), which also switches to the
             // History tab; DrivesRoute pre-selects it and clears it back to null.
             var pendingDriveDetailRideId by rememberSaveable { mutableStateOf<String?>(null) }
-            // Drives the auto-keep "Drive saved" confirmation dialog (#856): the drive
-            // is saved in the BACKGROUND, so this is a purely informational window with
-            // OK (dismiss) and History (open Drives/History) — NOT a Keep/Delete
-            // decision. `visible` is raised OPTIMISTICALLY the instant the drive is
-            // committed to keep (while the save may still be settling); the id (if any)
-            // is which drive the History action deep-links to, filled in once the save
-            // lands. See the reconcile effect below.
+            // Full-screen stop/save feedback: pending work shows Saving, and
+            // only definitive Kept shows the saved result. The ride id is latched
+            // before releasing the recorder so History can deep-link to it.
             var driveSavedDialogVisible by rememberSaveable { mutableStateOf(false) }
             var driveSavedDialogRideId by rememberSaveable { mutableStateOf<String?>(null) }
+            // Kept is the server-confirmed save result; pending feedback must not
+            // say "saved" just because the user chose to stop.
+            var driveSaveConfirmed by rememberSaveable { mutableStateOf(false) }
             // Whether the "Drive saved" confirmation has already been raised for the
             // CURRENT keep-cycle, so the reconcile effect raises it exactly once and
-            // never pops it back up after the user has dismissed it (or tapped
-            // History) while the background save was still settling. Reset when the
+            // never pops it back up after the user has dismissed it
+            // while the background save was still settling. Reset when the
             // cycle resolves (Kept / Failed / Deleted / Discarded). rememberSaveable so
             // an Activity recreation mid-cycle does not re-raise a dismissed dialog.
             var saveConfirmationRaised by rememberSaveable { mutableStateOf(false) }
@@ -3918,36 +3918,12 @@ fun AuthenticatedApp(
                 }
             }
 
-            // Optimistic "Drive saved" confirmation, reconciled with the BACKGROUND
-            // save in ONE effect keyed on the recording state — so the outcome never
-            // depends on the order two separate effects happen to be dispatched in.
-            //
-            // The confirmation used to be gated on the background `drives-save`
-            // callable COMPLETING: the dialog was raised only on the terminal Kept
-            // (reached via onBackgroundSaveSucceeded, i.e. AFTER the network
-            // round-trip + any transient retries), so ending a session felt slow even
-            // though the drive was already persisting in the background. Now it is
-            // OPTIMISTIC — [DriveSaveConfirmation] holds the pure decision and this
-            // applies it plus the host-only side effects:
-            //  - the INSTANT the drive is committed to keep (KeptPendingSave, while
-            //    the save is still in flight) the confirmation is raised, so it never
-            //    waits on the network. Raised ONCE, tracked by [saveConfirmationRaised]
-            //    so a user who dismisses it (or taps History) is never interrupted when
-            //    the save finally lands;
-            //  - Kept (definitive success) fills in the now-known ride id for the
-            //    History deep-link — captured BEFORE clear() releases the coordinator —
-            //    then releases the recording. It also RAISES the dialog for the fast
-            //    path (a config-less / instant save that reached Kept without ever
-            //    passing through KeptPendingSave), deterministically in this same
-            //    branch rather than relying on a second effect having run first;
-            //  - Failed (retries exhausted, or a permanent / unclassified fault)
-            //    RETRACTS the confirmation so the failure safety-net
-            //    (SessionSummaryDialog) is the sole surface — the app never claims
-            //    "saved" over a drive that was not persisted. No clear(): the recording
-            //    is kept so Retry can rebuild the payload, and History (real server
-            //    state) shows nothing for it. The raised flag resets so a successful
-            //    Retry re-raises the confirmation.
-            LaunchedEffect(recordingState) {
+            // Raise feedback once per stop/save cycle. Pending saves show progress;
+            // Kept changes that same screen to confirmed success. Failed retracts
+            // it so the existing retry/refusal safety net remains the sole surface.
+            // Stop-attempt keys also retract progress if the stop fails or expires
+            // while the real session and recorder remain active.
+            LaunchedEffect(recordingState, stopAttempt, isSharing) {
                 val state = recordingState
                 // Subject-less `when`, evaluated top-to-bottom: Kept is checked BEFORE
                 // shouldShow() (which is also true for Kept) because Kept needs the
@@ -3955,6 +3931,7 @@ fun AuthenticatedApp(
                 when {
                     state is RecordingState.Kept -> {
                         val rideId = activeRecording?.savedRideId
+                        driveSaveConfirmed = true
                         if (!saveConfirmationRaised) {
                             // Fast path: KeptPendingSave was skipped, so raise now with
                             // the already-known id — deterministically here, not relying
@@ -3962,7 +3939,7 @@ fun AuthenticatedApp(
                             driveSavedDialogRideId = rideId
                             driveSavedDialogVisible = true
                         } else if (driveSavedDialogVisible) {
-                            // Optimistic dialog still up: fill in the now-known id.
+                            // Feedback still open: fill in the confirmed ride id.
                             driveSavedDialogRideId = rideId
                         }
                         saveConfirmationRaised = false
@@ -3971,10 +3948,11 @@ fun AuthenticatedApp(
                         // effect (flipping recordingState to Idle).
                         SingleSessionRecording.clear()
                     }
-                    // KeptPendingSave: raise the confirmation optimistically, once. The
-                    // ride id is unknown until the save lands (null → the History action
-                    // just opens the list); the Kept branch fills it in once known.
+                    // KeptPendingSave: raise pending save feedback once. The
+                    // ride id is unknown until the save lands; History stays disabled
+                    // until the Kept branch fills it in and confirms success.
                     DriveSaveConfirmation.shouldShow(state) -> {
+                        driveSaveConfirmed = false
                         if (!saveConfirmationRaised) {
                             saveConfirmationRaised = true
                             driveSavedDialogRideId = null
@@ -3983,9 +3961,19 @@ fun AuthenticatedApp(
                     }
                     DriveSaveConfirmation.shouldRetract(state) -> {
                         driveSavedDialogVisible = false
+                        driveSaveConfirmed = false
+                        saveConfirmationRaised = false
+                    }
+                    // A refused, busy or expired stop must reveal the still-live
+                    // session instead of leaving a saving screen over it.
+                    state is RecordingState.Recording && isSharing &&
+                        stopAttempt == LiveStopAttempt.None && !driveSaveConfirmed -> {
+                        driveSavedDialogVisible = false
                         saveConfirmationRaised = false
                     }
                     state is RecordingState.Deleted -> {
+                        driveSavedDialogVisible = false
+                        driveSaveConfirmed = false
                         // Show the confirmation on the composition [scope], NOT this
                         // effect's own coroutine: clear() flips recordingState to Idle,
                         // which re-keys and CANCELS this LaunchedEffect — a suspend
@@ -3996,11 +3984,19 @@ fun AuthenticatedApp(
                         scope.launch { snackbarHostState.showSnackbar(driveDeletedText) }
                     }
                     state is RecordingState.Discarded -> {
+                        driveSavedDialogVisible = false
+                        driveSaveConfirmed = false
                         // Same re-key/cancel hazard as Deleted above: launch on the
                         // composition [scope] so clear() can't cancel the confirmation.
                         saveConfirmationRaised = false
                         SingleSessionRecording.clear()
                         scope.launch { snackbarHostState.showSnackbar(driveDiscardedText) }
+                    }
+                    state == RecordingState.Idle && activeRecording == null && !driveSaveConfirmed -> {
+                        // No recorder can complete a stale pending screen restored
+                        // after teardown. A latched confirmed result stays visible.
+                        driveSavedDialogVisible = false
+                        saveConfirmationRaised = false
                     }
                     else -> Unit
                 }
@@ -4210,12 +4206,21 @@ fun AuthenticatedApp(
              * bottom bar's STOP sign and [toggleLiveShare], so there is exactly
              * one definition of what stopping does.
              *
-             * Does NOT ask anything itself: flipping `isSharing` to false is what
-             * auto-saves the drive and raises the Keep/Delete summary (the
-             * isSharing-bound effect above), and that dialog owns the "keep it or
-             * delete the saved drive" choice.
+             * Does NOT ask anything itself: flipping `isSharing` to false starts
+             * the existing automatic save/keep flow. Pending feedback becomes
+             * confirmed success only after the recorder reaches Kept; failed
+             * saves retain the existing retry surface.
              */
             fun stopLiveShare() {
+                fun retractPendingStopFeedback() {
+                    DriveSaveConfirmation.onStopRejected(
+                        activeRecording?.state?.value ?: RecordingState.Idle,
+                        driveSaveConfirmed,
+                    ) {
+                        driveSavedDialogVisible = false
+                        saveConfirmationRaised = false
+                    }
+                }
                 // The member is ending their own session, so the end-of-session
                 // save prompt stays neutral even on a convoy-auto session — they
                 // know why it stopped (see [savePromptReason]).
@@ -4238,7 +4243,16 @@ fun AuthenticatedApp(
                     // in flight). A genuine stop double-tap already claimed the
                     // overlay on its first tap, so the chrome stays correctly hidden.
                     val initiatedStop = OptimisticLiveStop.claimsStop(c.status.value == LiveActionStatus.Working)
-                    if (initiatedStop) LiveShareStop.request(nowMillis())
+                    if (initiatedStop) {
+                        LiveShareStop.request(nowMillis())
+                        liveManageOpen = false
+                        if (activeRecording != null && recordingState is RecordingState.Recording) {
+                            driveSaveConfirmed = false
+                            driveSavedDialogRideId = null
+                            driveSavedDialogVisible = true
+                            saveConfirmationRaised = true
+                        }
+                    }
                     scope.launch {
                         val result =
                             try {
@@ -4248,7 +4262,10 @@ fun AuthenticatedApp(
                                 // teardown): nothing will resolve this attempt, so
                                 // drop it rather than hide a session on a stop that
                                 // never ran.
-                                if (initiatedStop) LiveShareStop.failed()
+                                if (initiatedStop) {
+                                    LiveShareStop.failed()
+                                    retractPendingStopFeedback()
+                                }
                                 throw cancellation
                             }
                         when (result) {
@@ -4262,6 +4279,7 @@ fun AuthenticatedApp(
                                 // returns rather than hiding a still-live session.
                                 // Only speak up if the attempt was still ours.
                                 if (initiatedStop && LiveShareStop.failed()) {
+                                    retractPendingStopFeedback()
                                     snackbarHostState.showSnackbar(liveErrorText)
                                 }
                             LiveCommandResult.Busy ->
@@ -4272,7 +4290,10 @@ fun AuthenticatedApp(
                                 // c.stop()) let us claim one. When we did not claim
                                 // (initiatedStop == false) there is nothing to
                                 // revert — the first tap's overlay, if any, stands.
-                                if (initiatedStop) LiveShareStop.failed()
+                                if (initiatedStop) {
+                                    LiveShareStop.failed()
+                                    retractPendingStopFeedback()
+                                }
                         }
                     }
                 } else {
@@ -4373,6 +4394,7 @@ fun AuthenticatedApp(
                         route = route,
                         navigating = navDestination != null,
                         navSearchOpen = navSearchOpen,
+                        opaqueOverlayOpen = driveSavedDialogVisible && recordingState !is RecordingState.Failed,
                     )
 
                 // Collapse the location prompt as soon as another page covers the
@@ -6919,7 +6941,6 @@ fun AuthenticatedApp(
                                     // (between the search icon and the avatar) while
                                     // a session runs: elapsed time + distance driven.
                                     liveSessionBar = liveSessionBarSlot,
-                                    onManageLiveSession = { mapSheetHost?.dismissAll(); liveManageOpen = true },
                                     // Convoy status bar in the map's bottom dock,
                                     // directly ABOVE the persistent footer. Every control
                                     // (member count, focus, invite, leave/End) is
@@ -8416,21 +8437,11 @@ fun AuthenticatedApp(
                     )
                 }
 
-                // Informational "Drive saved" confirmation (#856): raised
-                // OPTIMISTICALLY the instant the finished single session's drive is
-                // committed to keep (see the one-shot effect above), while its
-                // background save may still be settling — so it appears instantly. It
-                // only confirms the (background) save — OK dismisses; History jumps to
-                // the Drives/History route (deep-linking to the just-saved drive once
-                // its id is known). Removing an unwanted drive stays in History.
-                //
-                // Gated on NOT being Failed so it can never render on top of the
-                // failure safety-net for even a frame: a background save that gives up
-                // retracts the confirmation (the Failed branch above sets the flag
-                // false), and this guard hides it the same frame the state turns
-                // Failed, leaving the SessionSummaryDialog as the sole surface.
+                // One animated saving/result screen. Never show success before
+                // Kept; failure removes it immediately in favor of the retry UI.
                 if (driveSavedDialogVisible && recordingState !is RecordingState.Failed) {
                     DriveSavedDialog(
+                        isSaved = driveSaveConfirmed,
                         message = driveSavedText,
                         confirmLabel = driveSavedOkText,
                         historyLabel = driveSavedHistoryText,

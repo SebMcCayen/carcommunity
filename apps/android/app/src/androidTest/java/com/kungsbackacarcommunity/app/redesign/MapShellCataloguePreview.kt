@@ -67,6 +67,15 @@ val MAP_SHELL_CATALOGUE_CASES = listOf(
     "map-layers", "map-saved", "map-report", "map-create", "map-perks", "map-session",
 )
 
+internal val LIVE_TRAIL_PREVIEW_POINTS = listOf(
+    com.kungsbackacarcommunity.app.shell.MapPoint(12.0700, 57.4860),
+    com.kungsbackacarcommunity.app.shell.MapPoint(12.0720, 57.4868),
+    com.kungsbackacarcommunity.app.shell.MapPoint(12.0740, 57.4880),
+    com.kungsbackacarcommunity.app.shell.MapPoint(12.0760, 57.4885),
+    com.kungsbackacarcommunity.app.shell.MapPoint(12.0770, 57.4900),
+    com.kungsbackacarcommunity.app.shell.MapPoint(12.0800, 57.4910),
+)
+
 /**
  * Full native shell for S03/S07/S09/S13/S14/S16/S26 capture and interaction QA.
  * Host supplies KccTheme/locale/text scaling. All contents are explicitly local
@@ -113,7 +122,13 @@ fun MapShellCataloguePreview(
             onDispose { surface.setActive(false) }
         }
         // Local visual fixtures, never spawned/claimed through a backend.
-        LaunchedEffect(surface) {
+        LaunchedEffect(surface, live) {
+            if (live) {
+                // Synthetic local path for contrast evidence; never a saved drive
+                // or a production location/session update.
+                surface.setUserMarker(com.kungsbackacarcommunity.app.shell.MapUserMarker("Lokal testförare", true))
+                surface.seedBreadcrumb(LIVE_TRAIL_PREVIEW_POINTS)
+            }
             surface.setCrownMarkers(CrownRarity.entries.mapIndexed { index, rarity ->
                 MapCrownMarker("fixture-crown-$index", 12.071 + index * 0.003, 57.488,
                     CrownMarkerStyle.discColorArgb(rarity), crownGlyphRes(rarity),
@@ -143,9 +158,9 @@ fun MapShellCataloguePreview(
                         onOpenPerks = { panel = "map-perks" },
                         liveSessionBar = if (live) {
                             { LiveSessionBar(sessionStartMillis = 0L, distanceMeters = 12_400.0,
-                                speedSample = null, now = { 754_000L }) }
+                                speedSample = com.kungsbackacarcommunity.app.location.SpeedSample(15.0, 754_000L),
+                                now = { 754_000L }) }
                         } else null,
-                        onManageLiveSession = { panel = "map-session" },
                         convoyBar = if (screen == "map-convoy") {
                             {
                                 ConvoyStatusBar(
