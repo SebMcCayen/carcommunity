@@ -11,6 +11,7 @@ struct CrownHuntMapOverlay: View {
                 // Shared crowns stay on the server for other members. Only this
                 // reader's already-collected marker is hidden by presentation.
                 let markers = coordinator.markers(at: context.date).filter { !$0.collectedByYou }
+                let labels = markerLabels()
                 ZStack {
                     ForEach(markers, id: \.id) { marker in
                         if let point = projection.screenPositionFor(latitude: marker.latitude, longitude: marker.longitude),
@@ -21,7 +22,7 @@ struct CrownHuntMapOverlay: View {
                                     .frame(width: 48, height: 48).contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel(markerLabel(marker))
+                            .accessibilityLabel(labels[marker.id] ?? String(localized: "crownHunt.popupTitle"))
                             .position(x: CGFloat(point.x), y: CGFloat(point.y))
                             .transition(.opacity)
                         }
@@ -32,13 +33,17 @@ struct CrownHuntMapOverlay: View {
         }
     }
 
-    private func markerLabel(_ marker: MapCrownMarker) -> String {
-        if let spawn = coordinator.spawns.first(where: { "spawn:\($0.id)" == marker.id }) {
-            return String(localized: "crownHunt.spawnMarkerLabel") + " " + CrownHuntStrings.rarityName(spawn.rarity)
+    private func markerLabels() -> [String: String] {
+        var labels: [String: String] = [:]
+        for point in coordinator.points {
+            labels["point:\(point.id)"] = String(localized: "crownHunt.pointMarkerLabel") + " " + point.title
         }
-        let title = coordinator.points.first(where: { "point:\($0.id)" == marker.id })?.title ?? ""
-        return String(localized: "crownHunt.pointMarkerLabel") + " " + title
+        for spawn in coordinator.spawns {
+            labels["spawn:\(spawn.id)"] = String(localized: "crownHunt.spawnMarkerLabel") + " " + CrownHuntStrings.rarityName(spawn.rarity)
+        }
+        return labels
     }
+
 }
 
 /// One crisp crown glyph, one outline and 1–4 bars; no idle pulse or blur.

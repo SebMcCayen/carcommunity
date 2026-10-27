@@ -62,8 +62,10 @@ final class CrownHuntMapCoordinator {
 
     func markers(at now: Date) -> [MapCrownMarker] {
         guard isAvailable else { return [] }
+        let freshFix = tracker.latest(now: now)
         let pointMarkers = points.map { point in
-            let style = CrownMarkerStyle.point(inRange: pointIsInRange(point, now: now))
+            let inRange = pointIsInRange(point, fix: freshFix)
+            let style = CrownMarkerStyle.point(inRange: inRange)
             return MapCrownMarker(
                 id: "point:\(point.id)",
                 longitude: point.longitude,
@@ -73,7 +75,7 @@ final class CrownHuntMapCoordinator {
                 glyphColorArgb: style.glyph,
                 glowColorArgb: nil,
                 visualRank: CrownMarkerStyle.rank(forRewardPoints: point.rewardPoints),
-                isInRange: pointIsInRange(point, now: now)
+                isInRange: inRange
             )
         }
         let spawnMarkers: [MapCrownMarker] = spawnEnabled ? spawns.filter { $0.expiresAt.map { $0 > now } ?? true }.map { spawn in
@@ -88,7 +90,7 @@ final class CrownHuntMapCoordinator {
                 glowColorArgb: base.glowColorArgb,
                 collectedByYou: collectedSpawnIds.contains(spawn.id),
                 visualRank: base.visualRank,
-                isInRange: tracker.latest(now: now).map { fix in
+                isInRange: freshFix.map { fix in
                     CrownGeo.distanceMeters(latitude: fix.latitude, longitude: fix.longitude,
                         toLatitude: spawn.latitude, toLongitude: spawn.longitude) <= spawn.collectRadiusMeters
                 } ?? false
@@ -268,8 +270,8 @@ final class CrownHuntMapCoordinator {
         }
     }
 
-    private func pointIsInRange(_ point: CrownMapPoint, now: Date) -> Bool {
-        guard let fix = tracker.latest(now: now) else { return false }
+    private func pointIsInRange(_ point: CrownMapPoint, fix: LocationFix?) -> Bool {
+        guard let fix else { return false }
         return CrownGeo.distanceMeters(
             latitude: fix.latitude,
             longitude: fix.longitude,
