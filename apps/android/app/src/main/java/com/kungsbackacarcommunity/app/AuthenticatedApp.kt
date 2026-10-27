@@ -4584,10 +4584,20 @@ fun AuthenticatedApp(
                     remember(convoyReactionsContext) {
                         FirebaseConvoyFollowMeRepository.createIfAvailable(convoyReactionsContext)
                     }
+                val convoyInviteUsageContext = LocalContext.current.applicationContext
+                val convoyInviteUsage = remember(convoyInviteUsageContext) {
+                    com.kungsbackacarcommunity.app.convoy.LocalConvoyInviteUsageStore(convoyInviteUsageContext)
+                }
+                val convoyUsageUid = rememberUpdatedState(uid)
                 val convoyBarCoordinator =
-                    remember(convoyRepository, convoyDestinationRepository, convoyLiveProfiles) {
+                    remember(convoyRepository, convoyDestinationRepository, convoyLiveProfiles, convoyInviteUsage, uid) {
                         convoyRepository?.let {
-                            ConvoyCoordinator(it, convoyDestinationRepository, convoyLiveProfiles)
+                            ConvoyCoordinator(
+                                com.kungsbackacarcommunity.app.convoy.RankedConvoyCreateRepository(
+                                    it, convoyInviteUsage, uid,
+                                ) { convoyUsageUid.value },
+                                convoyDestinationRepository, convoyLiveProfiles,
+                            )
                         }
                     }
                 LaunchedEffect(convoyBarCoordinator) { convoyBarCoordinator?.load() }
