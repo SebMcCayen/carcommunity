@@ -59,7 +59,8 @@ final class ShellSmokeTests: XCTestCase {
         let close = app.buttons["map.reading.close"]
         XCTAssertTrue(panel.waitForExistence(timeout: 5))
         XCTAssertTrue(close.isHittable)
-        XCTAssertGreaterThanOrEqual(close.frame.height, 48)
+        // CGRect conversion can report 48 as 47.99999999999994.
+        XCTAssertGreaterThanOrEqual(close.frame.height + 0.001, 48)
         XCTAssertLessThanOrEqual(panel.frame.maxY, app.buttons["shell.tab.map"].frame.minY)
         XCTAssertTrue(app.buttons["shell.mapLayers"].isHittable)
         let closeFrame = close.frame
@@ -363,6 +364,13 @@ final class ShellSmokeTests: XCTestCase {
         app.buttons["addressSearch.close"].tap()
         XCTAssertTrue(app.buttons["shell.search"].waitForExistence(timeout: 5))
         XCTAssertFalse(field.exists)
+        // The search launcher returns before UIKit finishes dismissing the
+        // keyboard. Wait for the real keyboard to leave before targeting the
+        // footer at its restored screen position; do not retry a failed tap.
+        let keyboardDismissed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [keyboardDismissed], timeout: 5), .completed)
 
         for _ in 0..<2 {
             app.buttons["shell.tab.chat"].tap()
