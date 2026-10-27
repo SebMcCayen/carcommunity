@@ -1388,6 +1388,9 @@
     <string name="crownHunt_perkDetailRemainingMs">%1$d min %2$d s kvar</string>
     <string name="crownHunt_perkDetailRemainingS">%1$d s kvar</string>
     <string name="crownHunt_perkDetailExpired">Fällan har gått ut</string>
+    <string name="crownHunt_claimHistoryTitle">Insamlingshistorik</string>
+    <string name="crownHunt_claimHistoryEmpty">Du har inte samlat några kronor ännu.</string>
+    <string name="crownHunt_claimHistoryError">Kunde inte hämta din insamlingshistorik. Försök igen.</string>
     <string name="leaderboard_title">Topplista</string>
     <string name="leaderboard_scopeAllTime">Genom tiderna</string>
     <string name="leaderboard_scopeThisMonth">Denna månad</string>

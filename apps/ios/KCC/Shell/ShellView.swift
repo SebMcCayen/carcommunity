@@ -342,6 +342,7 @@ struct ShellView: View {
         .onChange(of: incidentMapCoordinator?.selectedIncident?.id) { _, id in
             if let id {
                 billboardsCoordinator?.dismiss()
+                crownHuntComposition?.mapCoordinator?.dismissSelection()
                 mapReadingSelection = .incident(id)
             }
             else if case .incident = mapReadingSelection { mapReadingSelection = nil }
@@ -349,17 +350,40 @@ struct ShellView: View {
         .onChange(of: incidentMapCoordinator?.selectedPolice?.id) { _, id in
             if let id {
                 billboardsCoordinator?.dismiss()
+                crownHuntComposition?.mapCoordinator?.dismissSelection()
                 mapReadingSelection = .police(id)
             }
             else if case .police = mapReadingSelection { mapReadingSelection = nil }
         }
     }
 
-    private var shellReadingDismissals: some View {
+    private var shellCrownReadingInteractions: some View {
         shellReadingInteractions
         .onChange(of: crownHuntComposition?.mapCoordinator?.selectedTarget) { _, target in
-            if target != nil { dismissMapReading() }
+            if let target {
+                billboardsCoordinator?.dismiss()
+                clearIncidentSelection()
+                mapReadingSelection = .crown(target.id)
+            } else { closeUnavailableCrownReading() }
         }
+        .onChange(of: crownHuntComposition?.mapCoordinator?.claimStatus) { _, _ in
+            closeUnavailableCrownReading()
+        }
+        .onChange(of: crownHuntComposition?.mapCoordinator?.isAvailable) { _, _ in
+            closeUnavailableCrownReading()
+        }
+    }
+
+    private func closeUnavailableCrownReading() {
+        guard case .crown = mapReadingSelection else { return }
+        guard let coordinator = crownHuntComposition?.mapCoordinator,
+              coordinator.isAvailable,
+              coordinator.selectedTarget != nil || CrownCollectPresentation.isAwarded(coordinator.claimStatus)
+        else { dismissMapReading(); return }
+    }
+
+    private var shellReadingDismissals: some View {
+        shellCrownReadingInteractions
         .onChange(of: billboardsCoordinator?.selectedBillboardId) { _, id in
             if id != nil { dismissMapReading() }
         }
@@ -405,6 +429,10 @@ struct ShellView: View {
         // Reuse the existing user-requested center command. Resizing the same
         // map viewport above the measured dock leaves its center unobscured.
         switch selection {
+        case .crown(let id):
+            if let target = crownHuntComposition?.mapCoordinator?.selectedTarget, target.id == id {
+                mapSurface.centerOn(MapPoint(longitude: target.longitude, latitude: target.latitude))
+            }
         case .incident(let id):
             if let item = incidentMapCoordinator?.selectedIncident, item.id == id {
                 mapSurface.centerOn(MapPoint(longitude: item.longitude, latitude: item.latitude))
@@ -444,11 +472,6 @@ struct ShellView: View {
                 IncidentReportSheet(
                     coordinator: incidentMapCoordinator
                 )
-            }
-        }
-        .sheet(isPresented: crownSelectionIsPresented) {
-            if let coordinator = crownHuntComposition?.mapCoordinator {
-                CrownHuntCollectSheet(coordinator: coordinator)
             }
         }
         .sheet(isPresented: crownPerkMenuIsPresented) {
@@ -989,6 +1012,13 @@ struct ShellView: View {
 
     @ViewBuilder private func mapReadingPanel(_ selection: MapReadingSelection) -> some View {
         switch selection {
+        case .crown(let id):
+            if let coordinator = crownHuntComposition?.mapCoordinator, coordinator.isAvailable,
+               coordinator.selectedTarget?.id == id || CrownCollectPresentation.isAwarded(coordinator.claimStatus) {
+                MapReadingPanel(title: "crownHunt.popupTitle", onClose: dismissMapReading) {
+                    CrownHuntCollectContent(coordinator: coordinator)
+                }
+            }
         case .savedPlaces:
             if let coordinator = savedPlacesCoordinator {
                 MapReadingPanel(title: "shell.savedPlacesPickerTitle", onClose: dismissMapReading) {
@@ -1024,6 +1054,7 @@ struct ShellView: View {
 
     private func selectMapReading(_ selection: MapReadingSelection) {
         // The marker coordinator still owns authorization, freshness and actions.
+        if case .crown = mapReadingSelection { crownHuntComposition?.mapCoordinator?.dismissSelection() }
         billboardsCoordinator?.dismiss()
         if case .incident = selection, let pin = incidentMapCoordinator?.selectedPolice {
             mapReadingSelection = .police(pin.id)
@@ -1038,6 +1069,7 @@ struct ShellView: View {
     }
 
     private func dismissMapReading() {
+        if case .crown = mapReadingSelection { crownHuntComposition?.mapCoordinator?.dismissSelection() }
         mapReadingSelection = nil
         clearIncidentSelection()
     }
@@ -2474,13 +2506,6 @@ struct ShellView: View {
             crownMapLifecycleKey,
             camera.map { "\($0.latitude)|\($0.longitude)|\($0.zoom)" } ?? "no-camera"
         ].joined(separator: "|")
-    }
-
-    private var crownSelectionIsPresented: Binding<Bool> {
-        Binding(
-            get: { crownHuntComposition?.mapCoordinator?.selectedTarget != nil },
-            set: { if !$0 { crownHuntComposition?.mapCoordinator?.dismissSelection() } }
-        )
     }
 
     private var crownPerkMenuIsPresented: Binding<Bool> {

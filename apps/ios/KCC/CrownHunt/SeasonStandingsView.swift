@@ -11,8 +11,8 @@ struct SeasonStandingsView: View {
 
     var body: some View {
         CrownHuntCard {
-            Text("crownHunt.leaderboardTitle")
-                .font(.headline)
+            Text("crownHunt.leaderboardTitle").font(.headline)
+            Label(board.seasonId, systemImage: "calendar").font(.subheadline).foregroundStyle(KccTheme.secondary)
             if board.rows.isEmpty {
                 Text("crownHunt.leaderboardEmpty")
                     .font(.subheadline)
@@ -27,25 +27,29 @@ struct SeasonStandingsView: View {
 }
 
 /// One leaderboard line: "#rank  name … N CP", the viewer's own emphasized.
-private struct LeaderboardRowView: View {
+struct LeaderboardRowView: View {
     let row: CrownLeaderboardRow
 
     var body: some View {
-        HStack(spacing: KccSpacing.s2) {
+        HStack(alignment: .top, spacing: KccSpacing.s3) {
             Text(CrownHuntStrings.rankValue(row.rank))
-                .font(.subheadline)
-                .fontWeight(row.isViewer ? .bold : .regular)
-                .foregroundStyle(.secondary)
-            Text(row.displayName)
-                .font(.subheadline)
-                .fontWeight(row.isViewer ? .bold : .regular)
-                .foregroundStyle(row.isViewer ? KccPalette.crownGold : Color.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text(CrownHuntStrings.kpValue(row.points))
-                .font(.subheadline)
-                .fontWeight(row.isViewer ? .bold : .regular)
+                .font(.subheadline.weight(.semibold))
+                .padding(KccSpacing.s2)
+                .foregroundStyle(row.rank <= 3 ? KccTheme.onGold : KccTheme.text)
+                .background(row.rank <= 3 ? KccPalette.crownGold : KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.sm))
+            VStack(alignment: .leading, spacing: KccSpacing.s1) {
+                Text(row.displayName).font(.body.weight(row.isViewer ? .bold : .medium))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(CrownHuntStrings.kpValue(row.points)).font(.subheadline.weight(.semibold))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, KccSpacing.s1)
+        .padding(KccSpacing.s3)
+        .foregroundStyle(KccTheme.text)
+        .background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.sm))
+        .overlay { RoundedRectangle(cornerRadius: KccRadius.sm)
+            .strokeBorder(row.isViewer ? KccPalette.crownGold : KccTheme.border).allowsHitTesting(false) }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -65,6 +69,8 @@ struct SeasonStandingsScreen: View {
             }
             .padding(KccSpacing.s4)
         }
+        .kccReadingSurface(pageBackground: true)
+        .accessibilityIdentifier("crown.standings")
         .navigationTitle(Text("crownHunt.leaderboardTitle"))
         .task { coordinator?.start() }
     }

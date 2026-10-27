@@ -16,11 +16,7 @@ struct CrownHuntCard<Content: View>: View {
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(KccSpacing.s4)
-        .background(
-            RoundedRectangle(cornerRadius: KccRadius.md)
-                .fill(Color(.secondarySystemBackground))
-        )
+        .kccContentCard()
     }
 }
 
@@ -42,8 +38,10 @@ struct CrownHuntMessageState: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             if let retry {
-                Button("crownHunt.retry", action: retry)
-                    .buttonStyle(.bordered)
+                Button(action: retry) {
+                    Text("crownHunt.retry").frame(minHeight: 48).contentShape(Rectangle())
+                }
+                .buttonStyle(.bordered)
             }
         }
         .frame(maxWidth: .infinity)
@@ -144,5 +142,29 @@ enum CrownHuntStrings {
         return String.localizedStringWithFormat(
             NSLocalizedString(key, comment: "Perk effect duration"), hours
         )
+    }
+}
+
+/// Terminal result presentation prevents a second button tap from looking like
+/// a new collection. Refused GPS/range/transient attempts can still be retried.
+enum CrownCollectPresentation {
+    static func isAwarded(_ status: CrownMapClaimStatus) -> Bool {
+        switch status {
+        case .point(let result): result.result == .awarded
+        case .spawn(let result): result.result == .awarded
+        default: false
+        }
+    }
+
+    static func canSubmit(_ state: CrownCollectState, status: CrownMapClaimStatus, collected: Bool) -> Bool {
+        guard state == .ready, !collected else { return false }
+        switch status {
+        case .collecting: return false
+        case .point(let result):
+            return ![.awarded, .alreadyClaimed, .pointInactive].contains(result.result)
+        case .spawn(let result):
+            return ![.awarded, .alreadyCollected, .alreadyTaken, .crownExpired].contains(result.result)
+        default: return true
+        }
     }
 }

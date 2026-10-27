@@ -41,6 +41,7 @@ struct MapReadingPanel<Content: View>: View {
 
 enum MapReadingSelection: Hashable {
     case savedPlaces
+    case crown(String)
     case incident(String)
     case police(String)
     case nearby(String)

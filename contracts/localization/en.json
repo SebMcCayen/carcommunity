@@ -1484,7 +1484,10 @@
     "perkDetailRemainingHms": "%1$dh %2$dm left",
     "perkDetailRemainingMs": "%1$dm %2$ds left",
     "perkDetailRemainingS": "%1$ds left",
-    "perkDetailExpired": "Trap has expired"
+    "perkDetailExpired": "Trap has expired",
+    "claimHistoryTitle": "Claim history",
+    "claimHistoryEmpty": "You have not collected any crowns yet.",
+    "claimHistoryError": "Could not load your claim history. Please try again."
   },
   "leaderboard": {
     "title": "Leaderboard",
