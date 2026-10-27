@@ -55,7 +55,7 @@ This Android integration is one part of a coordinated feature. Before activation
    with multiple legacy memberships explicitly; never silently choose or delete.
 3. Deploy the exact reviewed code/rules/indexes in an owner-approved operation;
    verify index readiness, deployed callable names, App Check and rule behavior.
-4. Activate `config/sharedClubs` only after both app adapters and migration checks
+4. Activate `config/sharedClubs` and seed its public-attendance readiness only after both app adapters and migration checks
    are ready. The flag is false when absent. Old mutation endpoints must fail
    closed rather than allow legacy multi-club joins while disabled.
 5. Verify on two real authenticated accounts across CarCommunity and Driver:

@@ -54,6 +54,7 @@ private class FakeClubRepository(initial: ClubChatState) : ClubRepository {
     var operation: String? = null
     override fun chat(): Flow<ClubChatState> = messages
     override fun observeEnabled() = flowOf(true)
+    override fun observePublicAttendanceReady() = flowOf(true)
     override fun observeAccess(): Flow<ClubAccess> = flowOf(ClubAccess.None)
     override suspend fun directory(cursor: String?): ClubPage<Club> = error("unused")
     override suspend fun state(): ClubState = error("unused")

@@ -50,6 +50,9 @@ class FirebaseClubRepository private constructor(
         .map { it.confirmed && it.snapshot?.getBoolean("enabled") == true }
         .distinctUntilChanged()
 
+    override fun observePublicAttendanceReady(): Flow<Boolean> = document("config/sharedClubs")
+        .map { it.confirmed && it.snapshot?.getBoolean("enabled") == true && it.snapshot.getBoolean("publicAttendanceReady") == true }
+        .distinctUntilChanged()
     override fun observeAccess(): Flow<ClubAccess> = combine(observeEnabled(), document("driverClubAccounts/$uid")) { enabled, account ->
         if (enabled) account else ServerDocument(false, null)
     }.flatMapLatest { account ->
@@ -148,10 +151,13 @@ class FirebaseClubRepository private constructor(
                 (event["endMillis"] as? Number)?.toLong(), event.nullableText("locationName"))
         }, data.nullableText("nextCursor"))
     }
-    override fun eventParticipants(eventId: String): Flow<List<Club>> = callbackFlow {
+    override fun eventParticipants(eventId: String): Flow<List<Club>> = observePublicAttendanceReady().flatMapLatest { ready ->
+        if (ready) participantSnapshots(eventId) else flowOf(emptyList())
+    }
+    private fun participantSnapshots(eventId: String): Flow<List<Club>> = callbackFlow {
         val registration = db.collection("events").document(eventId).collection("clubs").orderBy(FieldPath.documentId()).limit(25)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null || auth.currentUser?.uid != uid) trySend(emptyList())
+            .addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
+                if (error != null || snapshot == null || snapshot.metadata.isFromCache || auth.currentUser?.uid != uid) trySend(emptyList())
                 else trySend(snapshot?.documents?.mapNotNull { doc ->
                     parseClub(doc.data.orEmpty() + mapOf("id" to (doc.getString("clubId") ?: doc.id),
                         "name" to (doc.getString("clubName") ?: doc.getString("name"))))
@@ -160,12 +166,24 @@ class FirebaseClubRepository private constructor(
         awaitClose { registration.remove() }
     }
     override fun eventAttendance(eventId: String, clubId: String): Flow<Boolean?> =
-        document("events/$eventId/clubs/$clubId").map { if (it.confirmed) it.snapshot?.exists() == true else null }
-    override suspend fun moreEventParticipants(eventId: String, afterId: String): List<Club> =
-        db.collection("events").document(eventId).collection("clubs").orderBy(FieldPath.documentId())
+        observePublicAttendanceReady().flatMapLatest { ready ->
+            if (ready) document("events/$eventId/clubs/$clubId").map { if (it.confirmed) it.snapshot?.exists() == true else null }
+            else flowOf(null)
+        }
+    override suspend fun moreEventParticipants(eventId: String, afterId: String): List<Club> {
+        requirePublicAttendance()
+        val result = db.collection("events").document(eventId).collection("clubs").orderBy(FieldPath.documentId())
             .startAfter(afterId).limit(25).get(Source.SERVER).clubAwait().documents.mapNotNull { doc ->
                 parseClub(doc.data.orEmpty() + mapOf("id" to doc.id, "name" to (doc.getString("clubName") ?: doc.getString("name"))))
             }
+        requirePublicAttendance()
+        return result
+    }
+    private suspend fun requirePublicAttendance() {
+        val config = db.document("config/sharedClubs").get(Source.SERVER).clubAwait()
+        if (auth.currentUser?.uid != uid || config.getBoolean("enabled") != true || config.getBoolean("publicAttendanceReady") != true)
+            throw ClubException("permission-denied")
+    }
     override suspend fun setEventAttendance(clubId: String, eventId: String, attending: Boolean, operationId: String) {
         call("clubsEventAttendance", mapOf("clubId" to clubId, "eventId" to eventId, "attending" to attending, "operationId" to operationId))
     }

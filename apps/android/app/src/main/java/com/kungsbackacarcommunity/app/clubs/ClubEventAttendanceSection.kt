@@ -17,7 +17,7 @@ import java.util.UUID
 fun ClubEventAttendanceSection(uid: String, eventId: String, repository: ClubRepository? = null) {
     val context = LocalContext.current
     val repo = remember(uid, repository) { repository ?: FirebaseClubRepository.createIfAvailable(context, uid) }
-    val enabledSource = remember(repo) { repo?.observeEnabled() ?: flowOf(false) }
+    val enabledSource = remember(repo) { repo?.observePublicAttendanceReady() ?: flowOf(false) }
     val enabled by enabledSource.collectAsState(initial = false)
     if (!enabled || repo == null) return
     key(uid, eventId, repo) {

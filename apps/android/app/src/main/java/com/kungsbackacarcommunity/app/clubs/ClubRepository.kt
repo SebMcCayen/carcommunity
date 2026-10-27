@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.Flow
 /** Shared Driver callables own authorization. No client writes to club documents. */
 interface ClubRepository {
     fun observeEnabled(): Flow<Boolean>
+    fun observePublicAttendanceReady(): Flow<Boolean>
     fun observeAccess(): Flow<ClubAccess>
     suspend fun directory(cursor: String? = null): ClubPage<Club>
     suspend fun state(): ClubState
