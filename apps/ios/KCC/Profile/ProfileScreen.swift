@@ -373,13 +373,13 @@ struct AccountWarning: Identifiable, Sendable {
     let id: String
     let reason: String
     let expiresAt: String?
-    let deadline: TimeInterval?
-    func active(at uptime: TimeInterval) -> Bool { deadline.map { uptime < $0 } ?? true }
-    static func decode(_ data: [String: Any], requestStarted: TimeInterval) -> AccountWarning? {
+    let deadline: ContinuousClock.Instant?
+    func active(at uptime: ContinuousClock.Instant) -> Bool { deadline.map { uptime < $0 } ?? true }
+    static func decode(_ data: [String: Any], requestStarted: ContinuousClock.Instant) -> AccountWarning? {
         guard let id = data["id"] as? String, let reason = data["reason"] as? String else { return nil }
         let remaining = data["remainingMillis"] as? NSNumber
         return AccountWarning(id: id, reason: reason, expiresAt: data["expiresAt"] as? String,
-            deadline: remaining.map { requestStarted + max(0, $0.doubleValue) / 1000 })
+            deadline: remaining.map { requestStarted.advanced(by: .milliseconds(max(0, $0.doubleValue))) })
     }
 }
 
@@ -434,7 +434,7 @@ private struct AccountWarningsSection: View {
                 .task(id: "expiry-\(uid)") {
                     while !Task.isCancelled {
                         do { try await Task.sleep(for: .seconds(1)) } catch { return }
-                        warnings.removeAll { !$0.active(at: ProcessInfo.processInfo.systemUptime) }
+                        warnings.removeAll { !$0.active(at: ContinuousClock().now) }
                     }
                 }
             }
@@ -448,7 +448,7 @@ private struct AccountWarningsSection: View {
     @MainActor private func load(append: Bool) async {
         guard let client = KccFunctionsClient.createIfAvailable() else { return }
         loading = true
-        let started = ProcessInfo.processInfo.systemUptime
+        let started = ContinuousClock().now
         do {
             let response = try await client.call("account-listWarnings", payload: ["cursor": append ? (cursor as Any? ?? NSNull()) : NSNull()])
             try Task.checkCancellation()
@@ -457,7 +457,7 @@ private struct AccountWarningsSection: View {
             else { throw CancellationError() }
             var seen = Set<String>()
             warnings = ((append ? warnings : []) + rows.compactMap { AccountWarning.decode($0, requestStarted: started) })
-                .filter { $0.active(at: ProcessInfo.processInfo.systemUptime) && seen.insert($0.id).inserted }
+                .filter { $0.active(at: ContinuousClock().now) && seen.insert($0.id).inserted }
             cursor = meta["nextCursor"] as? String
             failed = false; retryAppend = false
         } catch {

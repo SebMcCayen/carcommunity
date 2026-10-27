@@ -6,7 +6,8 @@ export function pendingOperation(
   const storageKey = `kcc-admin-pending:${scope}`;
   const fingerprint = JSON.stringify(payload);
   // Fail before mutation if storage is unavailable; an uncertain request must
-  // remain recoverable after reload. No secrets are stored in this session.
+  // remain recoverable after reload. Reviewed text (including notes) stays
+  // within this origin/tab session; authentication credentials are never stored.
   const saved = sessionStorage.getItem(storageKey);
   let previous: { fingerprint: string; key: string } | null = null;
   try {

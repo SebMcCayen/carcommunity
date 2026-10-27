@@ -74,7 +74,7 @@ final class FirebaseEmulatorIntegrationTests: XCTestCase {
         ])
         let warningData = try XCTUnwrap(warningResult.data as? [String: Any])
         let warningID = try XCTUnwrap(warningData["actionId"] as? String)
-        let started = ProcessInfo.processInfo.systemUptime
+        let started = ContinuousClock().now
         let ownResult = try await ownFunctions.httpsCallable("account-listWarnings").call([:])
         let own = try XCTUnwrap(ownResult.data as? [String: Any])
         XCTAssertEqual(own["userId"] as? String, "native-member")
@@ -84,7 +84,7 @@ final class FirebaseEmulatorIntegrationTests: XCTestCase {
         XCTAssertNil(row["internalNote"])
         let warning = try XCTUnwrap(AccountWarning.decode(row, requestStarted: started))
         XCTAssertEqual(warning.reason, "Native acceptance warning")
-        XCTAssertTrue(warning.active(at: ProcessInfo.processInfo.systemUptime))
+        XCTAssertTrue(warning.active(at: ContinuousClock().now))
         let signal = try await firestore.collection("accountWarningSignals").document("native-member").getDocument(source: .server)
         XCTAssertTrue(signal.exists)
         do {

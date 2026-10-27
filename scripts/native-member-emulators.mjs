@@ -30,7 +30,7 @@ if (process.argv[2] === 'prepare') {
     resolve(destination, 'firebase.json'),
     JSON.stringify(
       {
-        functions: { source },
+        functions: { source: 'functions' },
         firestore: {
           rules: resolve(root, 'firebase/firestore.rules'),
           indexes: resolve(root, 'firebase/firestore.indexes.json'),

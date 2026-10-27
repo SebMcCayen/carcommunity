@@ -36,7 +36,7 @@ Both Android and iOS own profiles use the same account-listWarnings contract,
 never the public member profile. Pages are bounded and can load older active
 warnings. A safe signal triggers refresh; iOS also refreshes every 30 seconds
 while visible to recover missed updates. Network failure is shown explicitly.
-Server remainingMillis is projected from request-start monotonic uptime, so
+Server remainingMillis is projected from request-start monotonic time (Android elapsed realtime; iOS ContinuousClock, both including device sleep), so
 network delay consumes validity and changing device date/time does not extend
 warnings. Reasons are removed locally when their deadline passes. Server time
 remains authoritative after resuming/reloading. User-ID checks and task/component

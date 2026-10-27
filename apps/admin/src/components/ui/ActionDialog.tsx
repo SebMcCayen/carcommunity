@@ -19,7 +19,10 @@ export function ActionDialog({
     <dialog
       ref={ref}
       aria-label={title}
-      onCancel={onCancel}
+      onCancel={(event) => {
+        event.preventDefault();
+        onCancel();
+      }}
       style={{
         maxWidth: 560,
         padding: 24,

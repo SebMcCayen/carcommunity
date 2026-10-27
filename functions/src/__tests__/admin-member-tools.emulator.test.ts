@@ -32,8 +32,22 @@ const adminAuth = getAdminAuth(adminApp);
 let app: FirebaseApp, auth: Auth, functions: Functions;
 type User = { uid: string; email: string; password: string };
 let actor: User, member: User, other: User;
+interface ToolResponse {
+  user: { pointsBalance: number; actorUid: string; lastLoginAt: string; loginFrequency: null };
+  warnings: Array<{
+    id: string;
+    internalNote?: string;
+    remainingMillis: number | null;
+    status: string;
+  }>;
+  actionId: string;
+  alreadyApplied: boolean;
+  version: number;
+  entryId: string;
+  meta: { nextCursor: string | null };
+}
 const call = async (name: string, data: unknown = {}) =>
-  (await httpsCallable(functions, name)(data)).data as any;
+  (await httpsCallable(functions, name)(data)).data as ToolResponse;
 async function user(prefix: string): Promise<User> {
   const email = `${prefix}-${Date.now()}-${Math.random()}@example.com`,
     password = 'member-tools-12345';
@@ -146,14 +160,14 @@ describe('member tools contracts', () => {
     expect(results[0].actionId).toBe(results[1].actionId);
     const history = await call('admin-listWarnings', { targetUid: member.uid });
     expect(history.warnings).toHaveLength(1);
-    expect(history.warnings[0].internalNote).toBe('PRIVATE-ADMIN-NOTE');
+    expect(history.warnings[0]!.internalNote).toBe('PRIVATE-ADMIN-NOTE');
     await expect(call('admin-warnUser', warning({ reason: 'Changed' }))).rejects.toMatchObject({
       code: 'functions/failed-precondition',
     });
     await login(member);
     const own = await call('account-listWarnings');
     expect(own.warnings).toHaveLength(1);
-    expect(own.warnings[0].remainingMillis).toBeGreaterThan(0);
+    expect(own.warnings[0]!.remainingMillis).toBeGreaterThan(0);
     expect(JSON.stringify(own)).not.toMatch(/PRIVATE-ADMIN-NOTE|actorUserId|requestFingerprint/);
     expect(
       (await getDoc(doc(clientFirestore(app), 'accountWarningSignals', member.uid))).exists(),
@@ -199,7 +213,7 @@ describe('member tools contracts', () => {
     await login(member);
     expect((await call('account-listWarnings')).warnings).toHaveLength(0);
     await login(actor);
-    expect((await call('admin-listWarnings', { targetUid: member.uid })).warnings[0].status).toBe(
+    expect((await call('admin-listWarnings', { targetUid: member.uid })).warnings[0]!.status).toBe(
       'revoked',
     );
   });
@@ -236,7 +250,7 @@ describe('member tools contracts', () => {
     let cursor = null;
     do {
       const page = await call('account-listWarnings', { cursor });
-      ids.push(...page.warnings.map((w: any) => w.id));
+      ids.push(...page.warnings.map((w) => w.id));
       cursor = page.meta.nextCursor;
       if (ids.length > 60) throw Error('Nonterminating cursor');
     } while (cursor);

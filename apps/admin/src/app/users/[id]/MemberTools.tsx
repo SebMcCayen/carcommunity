@@ -28,6 +28,10 @@ export function MemberTools({
     [reason, setReason] = useState(''),
     [note, setNote] = useState(''),
     [days, setDays] = useState('7');
+  const [customDuration, setCustomDuration] = useState(false);
+  const validDuration =
+    days === '' ||
+    (Number.isSafeInteger(Number(days)) && Number(days) >= 1 && Number(days) <= 3650);
   const [error, setError] = useState<string | null>(null),
     [success, setSuccess] = useState<string | null>(null),
     [busy, setBusy] = useState(false);
@@ -169,18 +173,41 @@ export function MemberTools({
       <select
         id="warning-days"
         className={styles.input}
-        value={days}
-        onChange={(e) => setDays(e.target.value)}
+        value={customDuration ? 'custom' : days}
+        onChange={(e) => {
+          const custom = e.target.value === 'custom';
+          setCustomDuration(custom);
+          setDays(custom ? '14' : e.target.value);
+        }}
         disabled={busy}
       >
         <option value="7">7 dagar</option>
         <option value="30">30 dagar</option>
         <option value="90">90 dagar</option>
         <option value="">Tills den återkallas</option>
+        <option value="custom">Annan giltighetstid</option>
       </select>
+      {customDuration && (
+        <>
+          <label className={styles.label} htmlFor="warning-custom-days">
+            Antal dagar (1–3650)
+          </label>
+          <input
+            id="warning-custom-days"
+            className={styles.input}
+            type="number"
+            min={1}
+            max={3650}
+            step={1}
+            value={days}
+            onChange={(e) => setDays(e.target.value)}
+            disabled={busy}
+          />
+        </>
+      )}
       <button
         className={styles.primaryButton}
-        disabled={busy || !member.permissions?.canWarn || !reason.trim()}
+        disabled={busy || !validDuration || !member.permissions?.canWarn || !reason.trim()}
         onClick={() =>
           review('admin-warnUser', 'Utfärda varning', {
             internalNote: note.trim(),

@@ -325,14 +325,16 @@ final class ProfileCoordinatorTests: XCTestCase {
 
 final class AccountWarningTests: XCTestCase {
     func testNetworkDelayCountsAgainstServerValidityAndExpiryIsExclusive() {
-        let warning = AccountWarning.decode(["id": "w1", "reason": "Respect others", "remainingMillis": 1000], requestStarted: 5)!
-        XCTAssertTrue(warning.active(at: 5.999))
-        XCTAssertFalse(warning.active(at: 6))
-        XCTAssertFalse(warning.active(at: 7))
+        let started = ContinuousClock().now
+        let warning = AccountWarning.decode(["id": "w1", "reason": "Respect others", "remainingMillis": 1000], requestStarted: started)!
+        XCTAssertTrue(warning.active(at: started.advanced(by: .milliseconds(999))))
+        XCTAssertFalse(warning.active(at: started.advanced(by: .seconds(1))))
+        XCTAssertFalse(warning.active(at: started.advanced(by: .seconds(2))))
     }
     func testIndefiniteWarningAndMalformedReason() {
-        let warning = AccountWarning.decode(["id": "w1", "reason": "Respect others"], requestStarted: 5)!
-        XCTAssertTrue(warning.active(at: .greatestFiniteMagnitude))
-        XCTAssertNil(AccountWarning.decode(["id": "w1", "internalNote": "private"], requestStarted: 0))
+        let started = ContinuousClock().now
+        let warning = AccountWarning.decode(["id": "w1", "reason": "Respect others"], requestStarted: started)!
+        XCTAssertTrue(warning.active(at: started.advanced(by: .seconds(1000000))))
+        XCTAssertNil(AccountWarning.decode(["id": "w1", "internalNote": "private"], requestStarted: started))
     }
 }
