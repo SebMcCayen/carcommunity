@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.shell
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -140,20 +141,26 @@ fun LiveSessionBar(
         tonalElevation = 3.dp,
         shadowElevation = 3.dp,
     ) {
-        LiveMetricLayout(
-            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
-                .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
-        ) {
-            LiveMetric(elapsedText, "live_session_elapsed") { LiveDot() }
-            LiveMetric(speedText, "live_session_speed") {
-                Icon(painter = painterResource(R.drawable.ic_speedometer),
-                    contentDescription = null, tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp))
-            }
-            LiveMetric(distanceText, "live_session_distance") {
-                Icon(imageVector = Icons.Filled.Straighten,
-                    contentDescription = null, tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp))
+        val scroll = rememberScrollState()
+        BoxWithConstraints(Modifier.fillMaxWidth(), propagateMinConstraints = true) {
+            // Navigation already scrolls the entire top-chrome region. Do not
+            // introduce an unbounded nested scroller inside that parent.
+            val scrolling = if (constraints.hasBoundedHeight) Modifier.verticalScroll(scroll) else Modifier
+            LiveMetricLayout(
+                modifier = Modifier.fillMaxWidth().then(scrolling)
+                    .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
+            ) {
+                LiveMetric(elapsedText, "live_session_elapsed") { LiveDot() }
+                LiveMetric(speedText, "live_session_speed") {
+                    Icon(painter = painterResource(R.drawable.ic_speedometer),
+                        contentDescription = null, tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp))
+                }
+                LiveMetric(distanceText, "live_session_distance") {
+                    Icon(imageVector = Icons.Filled.Straighten,
+                        contentDescription = null, tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp))
+                }
             }
         }
     }

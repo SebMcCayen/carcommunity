@@ -6,12 +6,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -41,11 +41,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,8 +55,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -68,16 +64,10 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntRect
-import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupPositionProvider
-import androidx.compose.ui.window.PopupProperties
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.shell.MapDetailSheet
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalKccMapColors
@@ -91,7 +81,7 @@ const val CONVOY_BAR_TEST_TAG = "convoy_bar"
 /** Test tag on the tappable member-count control (people icon + number). */
 const val CONVOY_BAR_MEMBERS_TAG = "convoy_bar_members"
 
-/** Test tag on the member-list popup opened by tapping the member count. */
+/** Test tag on the member-list panel opened by tapping the member count. */
 const val CONVOY_BAR_MEMBER_LIST_TAG = "convoy_bar_member_list"
 
 /** Test tag on the member-actions sheet raised by tapping a joined member row. */
@@ -145,7 +135,7 @@ const val CONVOY_BAR_DESTINATION_NAVIGATE_TAG = "convoy_bar_destination_navigate
  * whatsoever (no empty bar, no placeholder).
  *
  * ## Every control is inline and live
- * There is no expand/collapse and no popup: the member count, focus toggle, chat,
+ * There is no expand/collapse: the member count, focus toggle, chat,
  * invite and the exit all sit in the one always-visible row. All of the actions
  * are backed by deployed callables (see [ConvoyBar]); each still gates on BOTH an
  * availability flag AND the presence of a handler, so a control never looks live
@@ -186,9 +176,7 @@ const val CONVOY_BAR_DESTINATION_NAVIGATE_TAG = "convoy_bar_destination_navigate
  *   maneuver instructions is at a premium and the navigation SDK owns the camera.
  * @param showDestination whether to render the shared-destination row (and the
  *   "destination changed while navigating" banner) below the control row. The map
- *   home's inline placement sits in a single-line band between the search control
- *   and the avatar, so it passes `false` — a second text row would not fit that
- *   band. Turn-by-turn navigation, which has the vertical room, keeps it `true`.
+ *   home's inline placement sits in the bottom map dock and passes `false` to preserve the viewport. Turn-by-turn navigation, which has the vertical room, keeps it `true`.
  * @param onEndConvoy invoked (after the user confirms) when the LEADER ends the
  *   convoy for everyone. Never invoked for a member who is not the leader.
  * @param onInvite invites people into THIS convoy (by id) — the host opens the
@@ -264,7 +252,7 @@ fun ConvoyStatusBar(
     // captures the id at that point.
     var showExitChoice by remember { mutableStateOf(false) }
 
-    // Whether the member-list popup (opened by tapping the member count) is up.
+    // Whether the member-list panel (opened by tapping the member count) is up.
     //
     // Keyed to the convoy id — UNLIKE the destructive end/leave dialogs above,
     // which deliberately capture their id and stay open under a refresh so a
@@ -279,7 +267,7 @@ fun ConvoyStatusBar(
     // The UID of the JOINED member whose actions sheet ("Profile" / "Go to
     // location") is open, or null. Stored as a uid rather than a captured
     // [ConvoyBarMember] so the open sheet renders from the LIVE roster (name/avatar
-    // resolve while it is open), and — like the member-list popup — keyed to the
+    // resolve while it is open), and — like the member-list panel — keyed to the
     // convoy so a background refresh that swaps the bar to a different convoy
     // dismisses it rather than acting on a member of the old one.
     var memberActionsForUid by remember(state.convoyId) { mutableStateOf<String?>(null) }
@@ -324,27 +312,28 @@ fun ConvoyStatusBar(
                     bottom = if (compact) KccSpacing.s1 else KccSpacing.s0,
                 ),
         ) {
-            Row(
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s1),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
             ) {
                 // Member count: people glyph + the bare NUMBER (no trailing
                 // "in convoy" text — that would only ever truncate to "2 i…" in
                 // the width this bar gets). The full "%d in convoy" phrase is kept
                 // as the control's contentDescription so TalkBack still announces
-                // it in full. Tapping opens the member-list popup below.
+                // it in full. Tapping opens the member-list panel below.
                 //
                 // The whole control merges to ONE node reading that description +
                 // a Button role + the open action: the glyph is decorative and the
                 // number's own semantics are cleared, so nothing double-announces.
                 val membersLabel = stringResource(R.string.convoy_barMembers, state.memberCount)
-                Box(modifier = Modifier.weight(1f)) {
+                Box {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(KccSpacing.s1),
                         modifier =
                             Modifier
+                                .heightIn(min = 48.dp).widthIn(min = 48.dp)
                                 .testTag(CONVOY_BAR_MEMBERS_TAG)
                                 .clickable(role = Role.Button) { showMembers = true }
                                 .semantics(mergeDescendants = true) {
@@ -367,26 +356,6 @@ fun ConvoyStatusBar(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    if (showMembers) {
-                        // Joined members get a per-member actions sheet when the
-                        // host wired at least one action; pending invitees never do
-                        // (they have no live location, and no in-convoy identity to
-                        // act on yet). Passing null disables the row tap entirely.
-                        val onMemberSelected: ((ConvoyBarMember) -> Unit)? =
-                            if (onOpenMemberProfile != null || onGoToMemberLocation != null) {
-                                { member ->
-                                    showMembers = false
-                                    memberActionsForUid = member.uid
-                                }
-                            } else {
-                                null
-                            }
-                        ConvoyMemberListPopup(
-                            entries = state.memberListEntries,
-                            onDismiss = { showMembers = false },
-                            onMemberSelected = onMemberSelected,
-                        )
-                    }
                 }
 
                 // Map focus: follow ME (the default) or keep the WHOLE convoy
@@ -405,7 +374,7 @@ fun ConvoyStatusBar(
                                 if (convoyFocused) ConvoyFocusMode.Me else ConvoyFocusMode.Convoy,
                             )
                         },
-                        modifier = Modifier.testTag(CONVOY_BAR_FOCUS_TAG),
+                        modifier = Modifier.size(48.dp).testTag(CONVOY_BAR_FOCUS_TAG),
                     ) {
                         Icon(
                             imageVector =
@@ -483,7 +452,7 @@ fun ConvoyStatusBar(
                         // count and the map home's chat bubble get.
                         modifier =
                             Modifier
-                                .testTag(CONVOY_BAR_CHAT_TAG)
+                                .size(48.dp).testTag(CONVOY_BAR_CHAT_TAG)
                                 .semantics(mergeDescendants = true) {},
                     ) {
                         IconButton(onClick = { onOpenChat(state.convoyId) }) {
@@ -511,7 +480,7 @@ fun ConvoyStatusBar(
                 IconButton(
                     onClick = { onInvite?.invoke(state.convoyId) },
                     enabled = inviteUsable && !state.busy,
-                    modifier = Modifier.testTag(CONVOY_BAR_INVITE_TAG),
+                    modifier = Modifier.size(48.dp).testTag(CONVOY_BAR_INVITE_TAG),
                 ) {
                     Icon(
                         imageVector = Icons.Filled.PersonAdd,
@@ -551,7 +520,7 @@ fun ConvoyStatusBar(
                         }
                     },
                     enabled = leaveEnabled,
-                    modifier = Modifier.testTag(CONVOY_BAR_LEAVE_TAG),
+                    modifier = Modifier.size(48.dp).testTag(CONVOY_BAR_LEAVE_TAG),
                     // Destructive red, but only while the control can actually do
                     // something. Handing the colour to `iconButtonColors` rather
                     // than hard-tinting the Icon lets Material apply its own
@@ -633,11 +602,18 @@ fun ConvoyStatusBar(
         }
     }
 
+    if (showMembers) {
+        val onMemberSelected: ((ConvoyBarMember) -> Unit)? =
+            if (onOpenMemberProfile != null || onGoToMemberLocation != null) {
+                { member -> showMembers = false; memberActionsForUid = member.uid }
+            } else null
+        ConvoyMemberListSheet(state.memberListEntries, onDismiss = { showMembers = false },
+            onMemberSelected = onMemberSelected)
+    }
+
     // The per-member actions sheet ("Profile" / "Go to location"), raised by
-    // tapping a JOINED member row in the list popup. Hosted here at the bar's top
-    // level — not inside the list Popup — so it is the app's ordinary bottom sheet
-    // (matching the place/message action sheets) rather than a fragile popup nested
-    // in a focusable popup.
+    // tapping a JOINED member row. Both panels share the docked map host, so
+    // reading actions cannot cover the persistent shell footer.
     val memberActionsUid = memberActionsForUid
     if (memberActionsUid != null) {
         // Resolve the member from the LIVE roster every recomposition, so a name or
@@ -885,7 +861,7 @@ fun ConvoyStatusBar(
  * the three affordances around it (start navigation / set-or-change / clear).
  *
  * Rendered in the turn-by-turn navigation variant of the bar, where there is room
- * for a second text row — the map home's single-line band omits it (see
+ * for shared destination controls — the map home's bottom dock omits it (see
  * [ConvoyStatusBar]'s `showDestination`).
  */
 @Composable
@@ -1069,140 +1045,70 @@ private fun ConvoyDestinationNavigationBanner(
     }
 }
 
-/**
- * The list of people in the convoy, shown when the member count is tapped.
- *
- * A [Popup] (not a Dialog) so there is no dimming scrim — the map stays visible,
- * matching the profile menu's idiom on the map home. It anchors just below the
- * member-count control, start-aligned, and dismisses on an outside tap or Back
- * (`focusable = true`). Rows come off [ConvoyBarState.memberListEntries] — the
- * accepted roster the bar already carries, followed by the invited-but-unanswered
- * people shown muted with a "Waiting to join…" status. A person whose display name
- * has not resolved yet falls back to a generic label rather than showing a raw uid.
- * Each member shows their real profile picture where one is set, falling back to a
- * neutral avatar placeholder.
- *
- * [onMemberSelected] — when non-null — makes a JOINED row tappable to raise that
- * member's actions sheet; pending-invitee rows are never tappable (no live
- * location, no in-convoy identity to act on yet).
- */
+/** Joined and invited members, inside the map body's shared reading panel. */
 @Composable
-private fun ConvoyMemberListPopup(
+private fun ConvoyMemberListSheet(
     entries: List<ConvoyMemberListEntry>,
     onDismiss: () -> Unit,
     onMemberSelected: ((ConvoyBarMember) -> Unit)? = null,
 ) {
-    val density = LocalDensity.current
-    val positionProvider =
-        remember(density) {
-            val gapPx = with(density) { KccSpacing.s2.roundToPx() }
-            object : PopupPositionProvider {
-                override fun calculatePosition(
-                    anchorBounds: IntRect,
-                    windowSize: IntSize,
-                    layoutDirection: LayoutDirection,
-                    popupContentSize: IntSize,
-                ): IntOffset {
-                    // Start-align to the count and drop just below it. anchorBounds
-                    // is in physical window coordinates; leading edge is the
-                    // physical left in LTR, the physical right in RTL. Clamped so
-                    // the card never leaves the window on a narrow screen.
-                    val x =
-                        when (layoutDirection) {
-                            LayoutDirection.Ltr -> anchorBounds.left
-                            LayoutDirection.Rtl -> anchorBounds.right - popupContentSize.width
-                        }.coerceIn(0, maxOf(0, windowSize.width - popupContentSize.width))
-                    val y =
-                        (anchorBounds.bottom + gapPx)
-                            .coerceIn(0, maxOf(0, windowSize.height - popupContentSize.height))
-                    return IntOffset(x, y)
-                }
-            }
-        }
-    Popup(
-        popupPositionProvider = positionProvider,
-        onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true),
+    MapDetailSheet(
+        title = stringResource(R.string.convoy_barMemberListTitle),
+        onDismiss = onDismiss,
+        modifier = Modifier.testTag(CONVOY_BAR_MEMBER_LIST_TAG),
     ) {
-        Surface(
-            modifier =
+        val unnamed = stringResource(R.string.convoy_barMemberUnnamed)
+        val waitingLabel = stringResource(R.string.convoy_barMemberWaiting)
+        entries.forEach { entry ->
+            val waiting = entry.presence == ConvoyMemberPresence.WaitingToJoin
+            // A pending invitee reads as muted — the avatar and name step
+            // down to the secondary tone joined members never use — so "who
+            // is actually here" and "who is on the way" are legible apart at
+            // a glance without a second control.
+            val nameTint =
+                if (waiting) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                }
+            // Only joined members open the actions sheet — see the KDoc.
+            val tappable = !waiting && onMemberSelected != null
+            val rowModifier =
                 Modifier
-                    .widthIn(min = 180.dp, max = 280.dp)
-                    .testTag(CONVOY_BAR_MEMBER_LIST_TAG),
-            shape = RoundedCornerShape(KccRadius.lg),
-            color = LocalKccMapColors.current.overlay,
-            border = BorderStroke(1.dp, LocalKccMapColors.current.border),
-            tonalElevation = 6.dp,
-            shadowElevation = 6.dp,
-        ) {
-            Column(
-                modifier =
-                    Modifier
-                        .padding(KccSpacing.s3)
-                        // Long rosters scroll rather than run off the screen.
-                        .heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.65f).dp)
-                        .verticalScroll(rememberScrollState()),
-            ) {
-                Text(
-                    text = stringResource(R.string.convoy_barMemberListTitle),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(modifier = Modifier.height(KccSpacing.s2))
-                val unnamed = stringResource(R.string.convoy_barMemberUnnamed)
-                val waitingLabel = stringResource(R.string.convoy_barMemberWaiting)
-                entries.forEach { entry ->
-                    val waiting = entry.presence == ConvoyMemberPresence.WaitingToJoin
-                    // A pending invitee reads as muted — the avatar and name step
-                    // down to the secondary tone joined members never use — so "who
-                    // is actually here" and "who is on the way" are legible apart at
-                    // a glance without a second control.
-                    val nameTint =
-                        if (waiting) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        }
-                    // Only joined members open the actions sheet — see the KDoc.
-                    val tappable = !waiting && onMemberSelected != null
-                    val rowModifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 56.dp)
-                            .then(
-                                if (tappable) {
-                                    Modifier.clickable(role = Role.Button) {
-                                        onMemberSelected?.invoke(entry.member)
-                                    }
-                                } else {
-                                    Modifier
-                                },
-                            )
-                            .padding(vertical = KccSpacing.s1)
-                    Row(
-                        modifier = rowModifier,
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
-                    ) {
-                        ConvoyMemberAvatar(avatarPath = entry.member.avatarPath, muted = waiting)
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = entry.member.displayName?.takeIf { it.isNotBlank() } ?: unnamed,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = nameTint,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            if (waiting) {
-                                Text(
-                                    text = waitingLabel,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .then(
+                        if (tappable) {
+                            Modifier.clickable(role = Role.Button) {
+                                onMemberSelected?.invoke(entry.member)
                             }
-                        }
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .padding(vertical = KccSpacing.s1)
+            Row(
+                modifier = rowModifier,
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+            ) {
+                ConvoyMemberAvatar(avatarPath = entry.member.avatarPath, muted = waiting)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = entry.member.displayName?.takeIf { it.isNotBlank() } ?: unnamed,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = nameTint,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (waiting) {
+                        Text(
+                            text = waitingLabel,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
             }
@@ -1211,7 +1117,7 @@ private fun ConvoyMemberListPopup(
 }
 
 /**
- * A convoy member's avatar in the list popup: their real profile picture when one
+ * A convoy member's avatar in the list panel: their real profile picture when one
  * is set, resolved through the same [rememberStorageImageUrl] path the rest of the
  * app loads member avatars with.
  *
@@ -1286,8 +1192,8 @@ private const val MUTED_AVATAR_SCRIM_ALPHA = 0.5f
  * The per-member actions raised by tapping a JOINED member in the list: open their
  * profile, or centre the convoy map on their live location.
  *
- * A [ModalBottomSheet] to match the app's other row-action menus (place / message
- * actions) and to avoid nesting a menu inside the member-list's focusable popup.
+ * A shared [MapDetailSheet] keeps these reading actions inside the map body
+ * and leaves the persistent shell footer visible and tappable.
  *
  * "Go to location" is present whenever the host wired [onGoToLocation], but ENABLED
  * only while [hasLocation] — a member not sharing a position right now cannot be
@@ -1304,18 +1210,16 @@ private fun ConvoyMemberActionsSheet(
     onGoToLocation: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState()
     val unnamed = stringResource(R.string.convoy_barMemberUnnamed)
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
+    MapDetailSheet(
+        title = member.displayName?.takeIf { it.isNotBlank() } ?: unnamed,
+        onDismiss = onDismiss,
         modifier = Modifier.testTag(CONVOY_BAR_MEMBER_ACTIONS_TAG),
     ) {
         Column(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .navigationBarsPadding()
                     .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
         ) {
@@ -1325,13 +1229,6 @@ private fun ConvoyMemberActionsSheet(
                 horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
             ) {
                 ConvoyMemberAvatar(avatarPath = member.avatarPath, muted = false)
-                Text(
-                    text = member.displayName?.takeIf { it.isNotBlank() } ?: unnamed,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
             }
 
             if (onOpenProfile != null) {

@@ -773,239 +773,242 @@ fun TurnByTurnNavScreen(
             liveMembersOverlay?.invoke(engine)
         }
 
-        // Top: destination pill (pre-guidance only) + maneuver banner.
-        Column(
-            modifier =
-                Modifier
-                    .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .padding(KccSpacing.s3),
-            verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
-        ) {
-            // The destination pill: the searched-for place name and a back arrow,
-            // in the upper-left corner.
-            //
-            // Gone once guidance starts. It was reported as "you will still see
-            // the search result in the upper left corner… if you have started a
-            // navigation there is no need to see it", and that is exactly right:
-            // once the banner is naming the next turn and the bottom bar is
-            // naming the arrival time, a pill repeating the search result is
-            // covering road for nothing. It is suppressed for the ACTIVE state
-            // only — before the first route-progress tick there is no banner and
-            // no ETA, so this is the sole thing saying where the trip is going,
-            // and it returns if the session ever stops guiding.
-            //
-            // Leaving navigation does not depend on it: the ETA bar's Exit
-            // button, the system back gesture and the screen's own BackHandler
-            // all remain, which is why removing an affordance here is safe.
-            if (destinationBarVisible) {
-                Surface(
-                    shape = RoundedCornerShape(KccRadius.full),
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 3.dp,
-                    shadowElevation = 3.dp,
-                    modifier = Modifier.testTag(TURN_BY_TURN_DESTINATION_BAR_TAG),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        // Tapping it (arrow or label) leaves navigation, same as
-                        // the back gesture and the bottom "Exit" button.
-                        // Role.Button + the exit label make it an announced,
-                        // activatable control for a11y.
-                        modifier = Modifier
-                            .clickable(
-                                onClickLabel = stringResource(R.string.turnByTurn_exit),
-                                role = Role.Button,
-                                onClick = onExit,
-                            )
-                            .padding(horizontal = KccSpacing.s3, vertical = KccSpacing.s2),
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.turnByTurn_exit),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(end = KccSpacing.s2),
-                        )
-                        Text(
-                            text = destinationLabel,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                }
-            }
-            AndroidView(factory = { maneuverView }, modifier = Modifier.fillMaxWidth())
-
-            // Brief "Rerouting…" indicator, shown only while the SDK is fetching a
-            // replacement route after the user deviates; cleared once the new route
-            // is active (reroute state leaves FetchingRoute) or the session ends.
-            if (rerouting) {
-                Surface(
-                    shape = RoundedCornerShape(KccRadius.full),
-                    color = MaterialTheme.colorScheme.tertiaryContainer,
-                    tonalElevation = 3.dp,
-                    shadowElevation = 3.dp,
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
-                        modifier = Modifier.padding(
-                            horizontal = KccSpacing.s3,
-                            vertical = KccSpacing.s2,
-                        ),
-                    ) {
-                        CircularProgressIndicator(
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Text(
-                            text = stringResource(R.string.turnByTurn_rerouting),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer,
-                        )
-                    }
-                }
-            }
-
-            // Ongoing live-session pill (elapsed + distance + speed), kept on
-            // screen while driving so starting navigation does not hide the fact
-            // that a live session is still running. Placed with the convoy bar at
-            // the BOTTOM of the top column — below the maneuver banner, the same
-            // reasoning as [convoyBar]: it reads as top chrome, never shoves the
-            // safety-critical instruction down, and lands inside the region the
-            // navigation camera already reserves as top padding. Above the convoy
-            // bar, matching the map home where the live pill sits in the top search
-            // strip and the convoy bar is the row beneath it. Composed only while a
-            // session is actually sharing (null otherwise).
-            liveSessionBar?.invoke()
-
-            // Convoy status bar, LAST so the maneuver banner keeps its place at
-            // the top of the screen (see the [convoyBar] KDoc). Composed only
-            // while the driver is actually in a convoy.
-            convoyBar?.invoke()
-        }
-
-        // Bottom chrome, stacked as ONE column so nothing can overlap: the speed
-        // readout + control stack sit in a row ABOVE the progress bar rather than
-        // floating over it. (The controls used to be centre-right, which put the
-        // compass in a different place from the map home's — see the KDoc.)
-        Column(
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(KccSpacing.s3),
-                verticalAlignment = Alignment.Bottom,
-            ) {
-                // Bottom-LEFT: current speed, and the posted limit when known.
-                SpeedReadout(speed = speed)
-                Spacer(modifier = Modifier.weight(1f))
-                // Bottom-RIGHT: the map home's control stack, verbatim — same
-                // controls, same order, same glyphs, same colour rules. See the
-                // file KDoc for what this used to be and why each difference was
-                // a bug rather than a deliberate divergence.
+        NavChromeRegions(
+            top = {
+                // Top: destination pill (pre-guidance only) + maneuver banner.
                 Column(
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+                    modifier =
+                        Modifier
+                            .statusBarsPadding()
+                            .padding(KccSpacing.s3),
+                    verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
                 ) {
-                    // The SAME list the map home renders, so "which buttons, in
-                    // what order" has exactly one answer. Exhaustive `when`: a new
-                    // control kind fails to compile here until this screen draws
-                    // it, which is the point.
-                    MapControlSet
-                        .rightSideStack(incidentReportingEnabled, crownHuntPerksEnabled)
-                        .forEach { control ->
-                            when (control) {
-                                // Report incident/roadwork — the map home's
-                                // control, not a navigation-specific one, opening
-                                // the SHARED category picker whose choice goes to
-                                // the host's single reporting path.
-                                MapCircleControlKind.Report ->
-                                    CircleControl(
-                                        icon = Icons.Filled.Warning,
-                                        contentDescription =
-                                            stringResource(R.string.incidents_reportButton),
-                                        onClick = { reportOpen = true },
-                                        modifier = Modifier.testTag(TURN_BY_TURN_REPORT_TAG),
+                    // The destination pill: the searched-for place name and a back arrow,
+                    // in the upper-left corner.
+                    //
+                    // Gone once guidance starts. It was reported as "you will still see
+                    // the search result in the upper left corner… if you have started a
+                    // navigation there is no need to see it", and that is exactly right:
+                    // once the banner is naming the next turn and the bottom bar is
+                    // naming the arrival time, a pill repeating the search result is
+                    // covering road for nothing. It is suppressed for the ACTIVE state
+                    // only — before the first route-progress tick there is no banner and
+                    // no ETA, so this is the sole thing saying where the trip is going,
+                    // and it returns if the session ever stops guiding.
+                    //
+                    // Leaving navigation does not depend on it: the ETA bar's Exit
+                    // button, the system back gesture and the screen's own BackHandler
+                    // all remain, which is why removing an affordance here is safe.
+                    if (destinationBarVisible) {
+                        Surface(
+                            shape = RoundedCornerShape(KccRadius.full),
+                            color = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 3.dp,
+                            shadowElevation = 3.dp,
+                            modifier = Modifier.testTag(TURN_BY_TURN_DESTINATION_BAR_TAG),
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                // Tapping it (arrow or label) leaves navigation, same as
+                                // the back gesture and the bottom "Exit" button.
+                                // Role.Button + the exit label make it an announced,
+                                // activatable control for a11y.
+                                modifier = Modifier
+                                    .clickable(
+                                        onClickLabel = stringResource(R.string.turnByTurn_exit),
+                                        role = Role.Button,
+                                        onClick = onExit,
                                     )
-
-                                // Map layers — the map home's control opening the
-                                // map home's popup. The "active" tint follows the
-                                // same rule: traffic on, OR the user has manually
-                                // DEVIATED from the theme's day/night default, OR
-                                // 3D is off. A system-driven Night (dark theme,
-                                // untouched) must not light it up, which is why
-                                // the night term tests `nightMode != null` first.
-                                MapCircleControlKind.Layers -> {
-                                    val layersActive =
-                                        trafficEnabled ||
-                                            (nightMode != null && nightMode != themeIsDark) ||
-                                            !is3d
-                                    CircleControl(
-                                        icon = Icons.Filled.Layers,
-                                        contentDescription =
-                                            stringResource(R.string.shell_layersButton),
-                                        containerColor =
-                                            if (layersActive) {
-                                                MaterialTheme.colorScheme.primaryContainer
-                                            } else {
-                                                MaterialTheme.colorScheme.surface
-                                            },
-                                        contentColor = MaterialTheme.colorScheme.onSurface,
-                                        onClick = { layersOpen = true },
-                                        modifier = Modifier.testTag(TURN_BY_TURN_LAYERS_TAG),
-                                    )
-                                }
-
-                                // Compass — the map home's two-mode toggle, the
-                                // same composable. NORTH-UP pins the follow
-                                // camera's bearing to 0; COURSE-UP releases it so
-                                // the camera goes back to turning the map into the
-                                // direction of travel. Both also resume following,
-                                // because on this screen an orientation the camera
-                                // is not driving is not an orientation at all.
-                                MapCircleControlKind.Compass ->
-                                    CompassCircleControl(
-                                        compassMode = compassMode,
-                                        bearing = bearing,
-                                        onModeChange = { next ->
-                                            compassMode = next
-                                            // Apply now for immediacy, exactly like
-                                            // the map home's control; the effect
-                                            // above re-syncs a frame later and
-                                            // setCompassMode is idempotent.
-                                            engine.setCompassMode(next)
-                                        },
-                                        modifier = Modifier.testTag(TURN_BY_TURN_COMPASS_TAG),
-                                    )
-
-                                // Saved places — the map home's control, opening
-                                // the host's saved-locations picker. Same button,
-                                // same stack, so navigation is not a different app.
-                                MapCircleControlKind.SavedPlaces ->
-                                    CircleControl(
-                                        icon = Icons.Filled.Place,
-                                        contentDescription =
-                                            stringResource(R.string.shell_savedPlacesButton),
-                                        onClick = onOpenSavedPlaces,
-                                        modifier = Modifier.testTag(TURN_BY_TURN_SAVED_PLACES_TAG),
-                                    )
-
-                                // Kronjakt perk-deploy control — the map home's
-                                // control, on the same shared stack; the host
-                                // raises the same deploy menu popup via onOpenPerks
-                                // (usable while driving). Present only while the
-                                // crownHuntPerks flag is on.
-                                MapCircleControlKind.Perks ->
-                                    PerkDeployCircleControl(onClick = onOpenPerks, active = perkActive)
+                                    .padding(horizontal = KccSpacing.s3, vertical = KccSpacing.s2),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = stringResource(R.string.turnByTurn_exit),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(end = KccSpacing.s2),
+                                )
+                                Text(
+                                    text = destinationLabel,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
                             }
                         }
-                }
-            }
+                    }
+                    AndroidView(factory = { maneuverView }, modifier = Modifier.fillMaxWidth())
 
-            // Bottom: ETA / remaining progress bar with an explicit exit action.
-            NavProgressBar(progress = progress, onExit = onExit)
-        }
+                    // Brief "Rerouting…" indicator, shown only while the SDK is fetching a
+                    // replacement route after the user deviates; cleared once the new route
+                    // is active (reroute state leaves FetchingRoute) or the session ends.
+                    if (rerouting) {
+                        Surface(
+                            shape = RoundedCornerShape(KccRadius.full),
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            tonalElevation = 3.dp,
+                            shadowElevation = 3.dp,
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+                                modifier = Modifier.padding(
+                                    horizontal = KccSpacing.s3,
+                                    vertical = KccSpacing.s2,
+                                ),
+                            ) {
+                                CircularProgressIndicator(
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                                Text(
+                                    text = stringResource(R.string.turnByTurn_rerouting),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                )
+                            }
+                        }
+                    }
+
+                    // Ongoing live-session pill (elapsed + distance + speed), kept on
+                    // screen while driving so starting navigation does not hide the fact
+                    // that a live session is still running. Placed with the convoy bar at
+                    // the BOTTOM of the top column — below the maneuver banner, the same
+                    // reasoning as [convoyBar]: it reads as top chrome, never shoves the
+                    // safety-critical instruction down, and lands inside the region the
+                    // navigation camera already reserves as top padding. Above the convoy
+                    // bar, preserving the map home's statistics-before-convoy reading order. Composed only while a
+                    // session is actually sharing (null otherwise).
+                    liveSessionBar?.invoke()
+
+                    // Convoy status bar, LAST so the maneuver banner keeps its place at
+                    // the top of the screen (see the [convoyBar] KDoc). Composed only
+                    // while the driver is actually in a convoy.
+                    convoyBar?.invoke()
+                }
+            },
+            bottom = {
+                // Bottom chrome, stacked as ONE column so nothing can overlap: the speed
+                // readout + control stack sit in a row ABOVE the progress bar rather than
+                // floating over it. (The controls used to be centre-right, which put the
+                // compass in a different place from the map home's — see the KDoc.)
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(KccSpacing.s3),
+                        verticalAlignment = Alignment.Bottom,
+                    ) {
+                        // Bottom-LEFT: current speed, and the posted limit when known.
+                        SpeedReadout(speed = speed)
+                        Spacer(modifier = Modifier.weight(1f))
+                        // Bottom-RIGHT: the map home's control stack, verbatim — same
+                        // controls, same order, same glyphs, same colour rules. See the
+                        // file KDoc for what this used to be and why each difference was
+                        // a bug rather than a deliberate divergence.
+                        Column(
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+                        ) {
+                            // The SAME list the map home renders, so "which buttons, in
+                            // what order" has exactly one answer. Exhaustive `when`: a new
+                            // control kind fails to compile here until this screen draws
+                            // it, which is the point.
+                            MapControlSet
+                                .rightSideStack(incidentReportingEnabled, crownHuntPerksEnabled)
+                                .forEach { control ->
+                                    when (control) {
+                                        // Report incident/roadwork — the map home's
+                                        // control, not a navigation-specific one, opening
+                                        // the SHARED category picker whose choice goes to
+                                        // the host's single reporting path.
+                                        MapCircleControlKind.Report ->
+                                            CircleControl(
+                                                icon = Icons.Filled.Warning,
+                                                contentDescription =
+                                                    stringResource(R.string.incidents_reportButton),
+                                                onClick = { reportOpen = true },
+                                                modifier = Modifier.testTag(TURN_BY_TURN_REPORT_TAG),
+                                            )
+
+                                        // Map layers — the map home's control opening the
+                                        // map home's popup. The "active" tint follows the
+                                        // same rule: traffic on, OR the user has manually
+                                        // DEVIATED from the theme's day/night default, OR
+                                        // 3D is off. A system-driven Night (dark theme,
+                                        // untouched) must not light it up, which is why
+                                        // the night term tests `nightMode != null` first.
+                                        MapCircleControlKind.Layers -> {
+                                            val layersActive =
+                                                trafficEnabled ||
+                                                    (nightMode != null && nightMode != themeIsDark) ||
+                                                    !is3d
+                                            CircleControl(
+                                                icon = Icons.Filled.Layers,
+                                                contentDescription =
+                                                    stringResource(R.string.shell_layersButton),
+                                                containerColor =
+                                                    if (layersActive) {
+                                                        MaterialTheme.colorScheme.primaryContainer
+                                                    } else {
+                                                        MaterialTheme.colorScheme.surface
+                                                    },
+                                                contentColor = MaterialTheme.colorScheme.onSurface,
+                                                onClick = { layersOpen = true },
+                                                modifier = Modifier.testTag(TURN_BY_TURN_LAYERS_TAG),
+                                            )
+                                        }
+
+                                        // Compass — the map home's two-mode toggle, the
+                                        // same composable. NORTH-UP pins the follow
+                                        // camera's bearing to 0; COURSE-UP releases it so
+                                        // the camera goes back to turning the map into the
+                                        // direction of travel. Both also resume following,
+                                        // because on this screen an orientation the camera
+                                        // is not driving is not an orientation at all.
+                                        MapCircleControlKind.Compass ->
+                                            CompassCircleControl(
+                                                compassMode = compassMode,
+                                                bearing = bearing,
+                                                onModeChange = { next ->
+                                                    compassMode = next
+                                                    // Apply now for immediacy, exactly like
+                                                    // the map home's control; the effect
+                                                    // above re-syncs a frame later and
+                                                    // setCompassMode is idempotent.
+                                                    engine.setCompassMode(next)
+                                                },
+                                                modifier = Modifier.testTag(TURN_BY_TURN_COMPASS_TAG),
+                                            )
+
+                                        // Saved places — the map home's control, opening
+                                        // the host's saved-locations picker. Same button,
+                                        // same stack, so navigation is not a different app.
+                                        MapCircleControlKind.SavedPlaces ->
+                                            CircleControl(
+                                                icon = Icons.Filled.Place,
+                                                contentDescription =
+                                                    stringResource(R.string.shell_savedPlacesButton),
+                                                onClick = onOpenSavedPlaces,
+                                                modifier = Modifier.testTag(TURN_BY_TURN_SAVED_PLACES_TAG),
+                                            )
+
+                                        // Kronjakt perk-deploy control — the map home's
+                                        // control, on the same shared stack; the host
+                                        // raises the same deploy menu popup via onOpenPerks
+                                        // (usable while driving). Present only while the
+                                        // crownHuntPerks flag is on.
+                                        MapCircleControlKind.Perks ->
+                                            PerkDeployCircleControl(onClick = onOpenPerks, active = perkActive)
+                                    }
+                                }
+                        }
+                    }
+
+                    // Bottom: ETA / remaining progress bar with an explicit exit action.
+                    NavProgressBar(progress = progress, onExit = onExit)
+                }
+            },
+        )
 
         // The SHARED map-layers popup from the map home — the same composable,
         // so navigation offers the same rows, in the same order, with the same

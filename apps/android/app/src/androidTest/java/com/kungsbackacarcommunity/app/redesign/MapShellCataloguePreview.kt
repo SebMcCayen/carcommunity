@@ -174,6 +174,8 @@ fun MapShellCataloguePreview(
                                     ),
                                     onEndConvoy = {}, onLeaveConvoy = {},
                                     onInvite = {}, onOpenChat = {},
+                                    onOpenMemberProfile = {}, onGoToMemberLocation = {},
+                                    memberLocations = setOf("local-1", "local-2"),
                                 )
                             }
                         } else null,
