@@ -22,6 +22,10 @@ class RankedConvoyCreateRepositoryTest {
 
     private class Repo : ConvoyRepository {
         var result: CreateConvoyResult = success()
+        var inviteResult: CreateConvoyResult = success()
+        var inviteCalls = 0
+        var lastInviteConvoyId: String? = null
+        var lastInviteUids = emptyList<String>()
         var gate: CompletableDeferred<Unit>? = null
         var thrown: Exception? = null
         var calls = 0
@@ -37,7 +41,14 @@ class RankedConvoyCreateRepositoryTest {
             return result
         }
         override suspend fun respond(convoyId: String, accept: Boolean) = error("unused")
-        override suspend fun invite(convoyId: String, inviteeUids: List<String>) = error("unused")
+        override suspend fun invite(convoyId: String, inviteeUids: List<String>): CreateConvoyResult {
+            inviteCalls++
+            lastInviteConvoyId = convoyId
+            lastInviteUids = inviteeUids
+            gate?.await()
+            thrown?.let { throw it }
+            return inviteResult
+        }
         override suspend fun leave(convoyId: String): LeaveConvoyResult = error("unused")
         override suspend fun start(convoyId: String) = error("unused")
         override suspend fun end(convoyId: String) = error("unused")
@@ -103,8 +114,9 @@ class RankedConvoyCreateRepositoryTest {
 
     @Test fun localStorageFailureDoesNotFailBackendSuccess() = runTest {
         val usage = Usage().apply { broken = true }
-        assertTrue(RankedConvoyCreateRepository(Repo(), usage, "me") { "me" }
-            .create(listOf("a"), null) is CreateConvoyResult.Created)
+        val wrapped = RankedConvoyCreateRepository(Repo(), usage, "me") { "me" }
+        assertTrue(wrapped.create(listOf("a"), null) is CreateConvoyResult.Created)
+        assertTrue(wrapped.invite("new", listOf("a")) is CreateConvoyResult.Created)
     }
 
     @Test fun existingCoordinatorStillGuardsDuplicateAndUncertainMembership() = runTest {
@@ -125,6 +137,96 @@ class RankedConvoyCreateRepositoryTest {
         coordinator.create(listOf("a"), null)
         assertEquals(CreateConvoyState.Error(ConvoyActionError.MembershipUncertain), coordinator.createState.value)
         assertEquals(1, repo.calls)
+    }
+
+    @Test fun createAndInviteMoreEachAccountOnlyOnceForActualRequestedIds() = runTest {
+        val repo = Repo().apply {
+            val invited = success(listOf("a", "a", "unexpected", "me", ""))
+            inviteResult = invited.copy(convoy = invited.convoy.copy(convoyId = "another"))
+        }
+        val usage = Usage()
+        val coordinator = ConvoyCoordinator(RankedConvoyCreateRepository(repo, usage, "me") { "me" })
+        coordinator.load()
+        coordinator.create(listOf("a"), null)
+        assertEquals(listOf("me" to listOf("a")), usage.records)
+        coordinator.invite("another", listOf("a", "skipped"))
+        assertTrue(coordinator.inviteState.value is InviteConvoyState.Done)
+        assertEquals(listOf("me" to listOf("a"), "me" to listOf("a")), usage.records)
+        assertEquals(1, repo.calls)
+        assertEquals(1, repo.inviteCalls)
+        assertEquals("another", repo.lastInviteConvoyId)
+        assertEquals(listOf("a", "skipped"), repo.lastInviteUids)
+    }
+
+    @Test fun failedThrownAndCancelledInviteMoreNeverRecords() = runTest {
+        val repo = Repo()
+        val usage = Usage()
+        val wrapped = RankedConvoyCreateRepository(repo, usage, "me") { "me" }
+        repo.inviteResult = CreateConvoyResult.Failed(ConvoyActionError.Generic)
+        assertEquals(repo.inviteResult, wrapped.invite("new", listOf("a")))
+        repo.thrown = IllegalStateException("offline")
+        try {
+            wrapped.invite("new", listOf("a"))
+            fail("repository exceptions must propagate to the coordinator")
+        } catch (_: IllegalStateException) { }
+        repo.thrown = null
+        repo.inviteResult = success()
+        repo.gate = CompletableDeferred()
+        val job = launch { wrapped.invite("new", listOf("a")) }
+        runCurrent()
+        job.cancel()
+        job.join()
+        assertTrue(usage.records.isEmpty())
+    }
+
+    @Test fun inviteMoreDoesNotRecordAfterAccountSwitchOrWithoutSignedInUid() = runTest {
+        val repo = Repo().apply { gate = CompletableDeferred() }
+        val usage = Usage()
+        var currentUid: String? = "me"
+        val wrapped = RankedConvoyCreateRepository(repo, usage, "me") { currentUid }
+        val job = launch { wrapped.invite("new", listOf("a")) }
+        runCurrent()
+        currentUid = "other"
+        repo.gate!!.complete(Unit)
+        job.join()
+        RankedConvoyCreateRepository(Repo(), usage, null) { null }.invite("new", listOf("a"))
+        currentUid = null
+        wrapped.invite("new", listOf("a"))
+        assertTrue(usage.records.isEmpty())
+    }
+
+    @Test fun overlappingInviteMoreAndAlreadyMemberRetryCannotDoubleCount() = runTest {
+        val repo = Repo().apply { gate = CompletableDeferred() }
+        val usage = Usage()
+        val coordinator = ConvoyCoordinator(RankedConvoyCreateRepository(repo, usage, "me") { "me" })
+        val first = launch { coordinator.invite("new", listOf("a")) }
+        runCurrent()
+        coordinator.resetInvite() // Dismissing/reopening the picker retains Working.
+        coordinator.invite("new", listOf("a"))
+        assertEquals(1, repo.inviteCalls)
+        repo.gate!!.complete(Unit)
+        first.join()
+        assertEquals(listOf("me" to listOf("a")), usage.records)
+
+        // Server idempotence: retry succeeded but added nobody; the roster can
+        // still contain a, so neither it nor the submitted selection is counted.
+        val unchanged = success(emptyList())
+        repo.inviteResult = unchanged.copy(
+            convoy = unchanged.convoy.copy(
+                memberUids = listOf("me", "a"),
+                members = listOf(
+                    ConvoyMember("me", ConvoyRole.Owner, ConvoyInviteStatus.Accepted, null, null, null),
+                    ConvoyMember("a", ConvoyRole.Member, ConvoyInviteStatus.Invited, null, null, null),
+                ),
+            ),
+            skipped = listOf(SkippedInvitee("a", ConvoySkipReason.AlreadyMember)),
+        )
+        coordinator.invite("new", listOf("a"))
+        assertEquals(2, repo.inviteCalls)
+        assertEquals(InviteConvoyState.Done(emptyList(), listOf(
+            SkippedInvitee("a", ConvoySkipReason.AlreadyMember),
+        )), coordinator.inviteState.value)
+        assertEquals(listOf("me" to listOf("a")), usage.records)
     }
 
     private companion object {

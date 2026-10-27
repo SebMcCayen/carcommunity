@@ -27,6 +27,16 @@ class LocalConvoyInviteUsageStoreTest {
         assertEquals(emptyMap<String, Int>(), store.counts(""))
     }
 
+    @Test fun createAndBarStoreInstancesShareTheSameAccountCounts() {
+        val barStore = LocalConvoyInviteUsageStore(prefs)
+        store.record("a", listOf("friend"))
+        barStore.record("a", listOf("friend", "other"))
+        val expected = mapOf("friend" to 2, "other" to 1)
+        assertEquals(expected, store.counts("a"))
+        assertEquals(expected, barStore.counts("a"))
+        assertTrue(barStore.counts("b").isEmpty())
+    }
+
     @Test fun capsFriendsAndAccountsAndDoesNotCreateEmptyAccounts() {
         repeat(6) { batch -> store.record("a", (0 until 50).map { "friend-${batch * 50 + it}" }) }
         assertEquals(200, store.counts("a").size)
