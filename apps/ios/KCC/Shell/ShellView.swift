@@ -310,7 +310,7 @@ struct ShellView: View {
         }
     }
 
-    private var shellInteractions: some View {
+    private var shellBaseInteractions: some View {
         shellBase
         // Drive the surface's liveness from the SAME pure cover value the
         // pages derive from — the iOS counterpart of Android's
@@ -334,25 +334,11 @@ struct ShellView: View {
                 routes = routes.poppingOne()
             }
         }
-        .onChange(of: mapReadingSelection) { _, selection in
-            // Reuse the existing user-requested center command. Resizing the same
-            // map viewport above the measured dock leaves its center unobscured.
-            switch selection {
-            case .incident(let id):
-                if let item = incidentMapCoordinator?.selectedIncident, item.id == id {
-                    mapSurface.centerOn(MapPoint(longitude: item.longitude, latitude: item.latitude))
-                }
-            case .police(let id):
-                if let item = incidentMapCoordinator?.selectedPolice, item.id == id {
-                    mapSurface.centerOn(MapPoint(longitude: item.longitude, latitude: item.latitude))
-                }
-            case .nearby(let uid):
-                if let item = nearbyLive.visibleMarkers().first(where: { $0.uid == uid }) {
-                    mapSurface.centerOn(MapPoint(longitude: item.longitude, latitude: item.latitude))
-                }
-            default: break
-            }
-        }
+    }
+
+    private var shellReadingInteractions: some View {
+        shellBaseInteractions
+        .onChange(of: mapReadingSelection) { _, selection in centerMapReading(selection) }
         .onChange(of: incidentMapCoordinator?.selectedIncident?.id) { _, id in
             if let id {
                 billboardsCoordinator?.dismiss()
@@ -367,6 +353,10 @@ struct ShellView: View {
             }
             else if case .police = mapReadingSelection { mapReadingSelection = nil }
         }
+    }
+
+    private var shellReadingDismissals: some View {
+        shellReadingInteractions
         .onChange(of: crownHuntComposition?.mapCoordinator?.selectedTarget) { _, target in
             if target != nil { dismissMapReading() }
         }
@@ -385,6 +375,10 @@ struct ShellView: View {
         .onChange(of: incidentMapCoordinator?.reportSheetPresented) { _, open in
             if open == true { dismissMapReading() }
         }
+    }
+
+    private var shellInteractions: some View {
+        shellReadingDismissals
         .onChange(of: navSearchOpen) { _, open in
             if open { dismissMapReading() }
             if !open { searchLauncherFocused = true }
@@ -404,6 +398,26 @@ struct ShellView: View {
         }
         .onChange(of: liveLocationCoordinator?.sessionSnapshotRevision, initial: true) { _, _ in
             reconcileDriveRecording()
+        }
+    }
+
+    private func centerMapReading(_ selection: MapReadingSelection?) {
+        // Reuse the existing user-requested center command. Resizing the same
+        // map viewport above the measured dock leaves its center unobscured.
+        switch selection {
+        case .incident(let id):
+            if let item = incidentMapCoordinator?.selectedIncident, item.id == id {
+                mapSurface.centerOn(MapPoint(longitude: item.longitude, latitude: item.latitude))
+            }
+        case .police(let id):
+            if let item = incidentMapCoordinator?.selectedPolice, item.id == id {
+                mapSurface.centerOn(MapPoint(longitude: item.longitude, latitude: item.latitude))
+            }
+        case .nearby(let uid):
+            if let item = nearbyLive.visibleMarkers().first(where: { $0.uid == uid }) {
+                mapSurface.centerOn(MapPoint(longitude: item.longitude, latitude: item.latitude))
+            }
+        default: break
         }
     }
 
