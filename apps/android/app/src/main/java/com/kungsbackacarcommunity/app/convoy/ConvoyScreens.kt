@@ -42,6 +42,7 @@ import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
 import com.kungsbackacarcommunity.app.design.KccOutlinedButton as OutlinedButton
 import androidx.compose.material3.Text
@@ -51,6 +52,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -86,6 +88,7 @@ const val CONVOY_DETAIL_DATE_TAG = "convoy-detail-date"
 /** Test tag on the create-convoy submit button, so a UI test can assert it goes
  *  inert (disabled) during the create + post-create hand-off to the map. */
 const val CONVOY_CREATE_SUBMIT_TAG = "convoy-create-submit"
+const val CONVOY_CREATE_SEARCH_TAG = "convoy-create-search"
 
 /** Test tag on the convoy detail screen's "Leave convoy" button. */
 const val CONVOY_DETAIL_LEAVE_TAG = "convoy-detail-leave"
@@ -431,6 +434,7 @@ fun CreateConvoyScreen(
     onRetryFriends: (() -> Unit)?,
     onSubmit: () -> Unit,
     modifier: Modifier = Modifier,
+    successfulInvites: Map<String, Int> = emptyMap(),
 ) {
     // Inert while the create is in flight (Working) AND once it succeeds (Created):
     // on success this screen no longer swaps to a confirmation page, so without this
@@ -440,6 +444,12 @@ fun CreateConvoyScreen(
     // Blocking both states keeps the surface interaction-proof until it leaves.
     val handingOff =
         createState is CreateConvoyState.Working || createState is CreateConvoyState.Created
+    var query by rememberSaveable { mutableStateOf("") }
+    val friends = (friendsStatus as? FriendsStatus.Loaded)?.friends.orEmpty()
+    val visibleFriends = remember(friends, successfulInvites, query) {
+        rankedConvoyFriends(friends, successfulInvites, query)
+    }
+    val validSelection = createConvoySelection(selectedUids, friends, null)
     AeroLazyPage(modifier = modifier, ownerShortcutEnabled = false) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -448,8 +458,50 @@ fun CreateConvoyScreen(
         ) {
             item(key = "title") { AeroPageTitle(stringResource(R.string.convoy_createTitle)) }
 
+            item(key = "submit") {
+                // Disabled (and showing the spinner) both while Working and once
+                // Created, so no second submit can fire during the hand-off to the
+                // map. The spinner reads as a brief blocking state until navigation.
+                Button(
+                    onClick = onSubmit,
+                    enabled = !handingOff && friendsStatus is FriendsStatus.Loaded &&
+                        validSelection.isNotEmpty() && validSelection.size <= MAX_CREATE_CONVOY_INVITEES,
+                    modifier = Modifier.fillMaxWidth().testTag(CONVOY_CREATE_SUBMIT_TAG),
+                ) {
+                    if (handingOff) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(KccSpacing.s6),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    } else {
+                        Text(stringResource(R.string.convoy_createSubmit))
+                    }
+                }
+            }
+
+            if (createState is CreateConvoyState.Error) {
+                item(key = "create-error") {
+                    Text(
+                        text = stringResource(createState.error.messageRes()),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+
             item(key = "pick-header") {
-                SectionHeader("${stringResource(R.string.convoy_pickFriendsTitle)} (${selectedUids.size})")
+                SectionHeader("${stringResource(R.string.convoy_pickFriendsTitle)} (${validSelection.size}/$MAX_CREATE_CONVOY_INVITEES)")
+            }
+
+            item(key = "friend-search") {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    label = { Text(stringResource(R.string.userSearch_hint)) },
+                    singleLine = true,
+                    enabled = !handingOff && friendsStatus is FriendsStatus.Loaded,
+                    modifier = Modifier.fillMaxWidth().testTag(CONVOY_CREATE_SEARCH_TAG),
+                )
             }
 
             when (friendsStatus) {
@@ -480,46 +532,21 @@ fun CreateConvoyScreen(
                         item(key = "friends-empty") {
                             InfoNoticeCard(text = stringResource(R.string.convoy_noFriends))
                         }
+                    } else if (visibleFriends.isEmpty()) {
+                        item(key = "friends-no-matches") {
+                            InfoNoticeCard(text = stringResource(R.string.userSearch_noMatches))
+                        }
                     } else {
-                        items(friendsStatus.friends, key = { "f-${it.uid}" }) { friend ->
+                        items(visibleFriends, key = { "f-${it.uid}" }) { friend ->
                             SelectableFriendRow(
                                 friend = friend,
-                                selected = friend.uid in selectedUids,
-                                enabled = !handingOff,
+                                selected = friend.uid in validSelection,
+                                enabled = !handingOff && (friend.uid in validSelection ||
+                                    validSelection.size < MAX_CREATE_CONVOY_INVITEES),
                                 onToggle = { onToggleFriend(friend.uid) },
                             )
                         }
                     }
-            }
-
-            if (createState is CreateConvoyState.Error) {
-                item(key = "create-error") {
-                    Text(
-                        text = stringResource(createState.error.messageRes()),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            }
-
-            item(key = "submit") {
-                // Disabled (and showing the spinner) both while Working and once
-                // Created, so no second submit can fire during the hand-off to the
-                // map. The spinner reads as a brief blocking state until navigation.
-                Button(
-                    onClick = onSubmit,
-                    enabled = !handingOff && selectedUids.isNotEmpty(),
-                    modifier = Modifier.fillMaxWidth().testTag(CONVOY_CREATE_SUBMIT_TAG),
-                ) {
-                    if (handingOff) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(KccSpacing.s6),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                        )
-                    } else {
-                        Text(stringResource(R.string.convoy_createSubmit))
-                    }
-                }
             }
         }
     }
