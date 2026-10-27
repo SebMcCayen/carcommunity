@@ -14,7 +14,7 @@
  * export group as `crownHunt-seedPerkCatalog`.
  */
 
-import { onCall } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { logger } from 'firebase-functions';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../firebase';

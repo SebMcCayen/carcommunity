@@ -17,7 +17,8 @@
  *    events.removeChatMessage callable, which also auto-resolves open reports.)
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { FieldValue, type Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
@@ -60,7 +61,12 @@ function toIso(value: unknown): string | null {
 
 export const listChatReports = onCall(
   CALLABLE_OPTS,
-  async (request): Promise<{ reports: AdminChatReportSummary[]; meta: { page: number; pageSize: number; total: number; hasNext: boolean } }> => {
+  async (
+    request,
+  ): Promise<{
+    reports: AdminChatReportSummary[];
+    meta: { page: number; pageSize: number; total: number; hasNext: boolean };
+  }> => {
     await requireAdminActor(request);
 
     const parsed = parseListChatReportsInput(request.data);

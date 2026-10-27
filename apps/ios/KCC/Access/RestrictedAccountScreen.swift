@@ -3,6 +3,7 @@ import SwiftUI
 struct RestrictedAccountScreen: View {
     @Environment(\.openURL) private var openURL
     let access: AccountAccess?
+    var uid: String? = nil
     @Bindable var privacyCoordinator: LiveLocationCoordinator
     let onSignOut: () -> Bool
     let onDeleted: () -> Bool
@@ -14,16 +15,20 @@ struct RestrictedAccountScreen: View {
     @State private var signOutFailed = false
 
     var body: some View {
+        ScrollView {
         VStack(spacing: KccSpacing.s4) {
             Image(systemName: "exclamationmark.shield.fill")
                 .font(.system(size: 48))
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
-            Text("accountStatus.suspendedTitle")
+            Text(access?.blacklisted == true ? "carCommunityAccess.blacklistedTitle" : "carCommunityAccess.suspendedTitle")
                 .font(.system(size: KccTypeScale.headingLg, weight: .semibold))
             Text(bodyKey)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
+
+            if let reason = access?.restrictionReason { Text(reason).textSelection(.enabled) }
+            if let uid { AccountWarningsSection(uid: uid).id(uid) }
 
             Button("accountStatus.supportLink") {
                 openURL(URL(string: "https://github.com/SebMcCayen/carcommunity/issues")!)
@@ -69,6 +74,7 @@ struct RestrictedAccountScreen: View {
             Button("auth.signOut", action: attemptSignOut)
                 .buttonStyle(.bordered)
         }
+        }
         .font(.system(size: KccTypeScale.bodyMd))
         .padding(KccSpacing.s6)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -94,7 +100,7 @@ struct RestrictedAccountScreen: View {
     private var bodyKey: LocalizedStringKey {
         access == nil
             ? "accountStatus.verificationFailedBody"
-            : "accountStatus.suspendedBody"
+            : "carCommunityAccess.body"
     }
 
     private func policyButton(_ title: LocalizedStringKey, urlKey: String) -> some View {

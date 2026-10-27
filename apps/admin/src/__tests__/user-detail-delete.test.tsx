@@ -45,6 +45,8 @@ vi.mock('@/features/users', () => ({
   adminWarnUser: vi.fn(),
 }));
 
+vi.mock('@/app/users/[id]/AccessTools', () => ({ AccessTools: () => null }));
+
 vi.mock('@/app/users/[id]/MemberTools', () => ({ MemberTools: () => null }));
 
 // The points section pulls in Firestore-backed callables; stub it out.

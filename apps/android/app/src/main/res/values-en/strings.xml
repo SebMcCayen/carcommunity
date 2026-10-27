@@ -2012,4 +2012,10 @@
     <string name="accountWarnings_more">Load more warnings</string>
     <string name="accountWarnings_untilRevoked">Valid until revoked</string>
     <string name="accountWarnings_expires">Valid until</string>
+    <string name="carCommunityAccess_checking">Checking access…</string>
+    <string name="carCommunityAccess_error">Access could not be verified. Please retry.</string>
+    <string name="carCommunityAccess_blacklistedTitle">Blacklisted in CarCommunity</string>
+    <string name="carCommunityAccess_suspendedTitle">Access is restricted</string>
+    <string name="carCommunityAccess_body">Your access to CarCommunity is restricted. Contact the administrators if you have questions.</string>
+    <string name="carCommunityAccess_retry">Check again</string>
 </resources>

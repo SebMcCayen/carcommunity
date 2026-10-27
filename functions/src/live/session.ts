@@ -1,3 +1,4 @@
+import { onCall as essentialCall } from 'firebase-functions/v2/https';
 /**
  * live.startSession / updatePosition / stopSession / hideMeNow —
  * live-location callables (contracts/functions/functions.json), Phase 10.
@@ -32,7 +33,8 @@
  *   the session with reason hide_me_now and removes `latest`.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { logger } from 'firebase-functions';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { adminRtdb, db } from '../firebase';
@@ -96,7 +98,10 @@ const sessionGeneration = (session: LiveSession | null | undefined): number =>
  * A delayed older start cannot replace a newer fence because generations are
  * monotonic and compared inside the same transaction as discovery cleanup.
  */
-export async function activateDiscoveryGeneration(uid: string, session: LiveSession): Promise<void> {
+export async function activateDiscoveryGeneration(
+  uid: string,
+  session: LiveSession,
+): Promise<void> {
   const generation = sessionGeneration(session);
   await db.runTransaction(async (tx) => {
     const fenceSnapshot = await tx.get(discoveryFenceRef(uid));
@@ -577,16 +582,19 @@ export async function stopAndClear(uid: string, reason: LiveStopReason): Promise
   return { sessionId: session?.id ?? 'none', status: 'stopped' };
 }
 
-export const stopSession = onCall(CALLABLE_OPTS, async (request): Promise<SessionResponse> => {
-  const actor = await requireActiveActor(request);
-  const parsed = parseStopSessionInput(request.data);
-  if (!parsed.ok) {
-    throw new HttpsError('invalid-argument', parsed.message);
-  }
-  return stopAndClear(actor.uid, parsed.input.reason ?? 'user_stop');
-});
+export const stopSession = essentialCall(
+  CALLABLE_OPTS,
+  async (request): Promise<SessionResponse> => {
+    const actor = await requireActiveActor(request);
+    const parsed = parseStopSessionInput(request.data);
+    if (!parsed.ok) {
+      throw new HttpsError('invalid-argument', parsed.message);
+    }
+    return stopAndClear(actor.uid, parsed.input.reason ?? 'user_stop');
+  },
+);
 
-export const hideMeNow = onCall(CALLABLE_OPTS, async (request): Promise<SessionResponse> => {
+export const hideMeNow = essentialCall(CALLABLE_OPTS, async (request): Promise<SessionResponse> => {
   // Deliberately NOT requireActiveActor: removing your own position must
   // work while suspended (privacy action, like unregisterPushToken).
   const uid = request.auth?.uid;

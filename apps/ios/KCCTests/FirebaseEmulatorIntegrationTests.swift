@@ -115,9 +115,47 @@ final class FirebaseEmulatorIntegrationTests: XCTestCase {
         let afterResult = try await ownFunctions.httpsCallable("account-listWarnings").call([:])
         let after = try XCTUnwrap(afterResult.data as? [String: Any])
         XCTAssertEqual((after["warnings"] as? [[String: Any]])?.count, 0)
+        let accessRepository = FirebaseAccountAccessRepository(firestore: firestore, auth: memberAuth,
+            functions: KccFunctionsClient(functions: ownFunctions))
+        _ = try await waitForAccess(accessRepository, restricted: false)
+        for action in ["suspend", "restore"] {
+            let reviewedResult = try await adminFunctions.httpsCallable("admin-getAccessTarget").call(["targetUid": "native-member"])
+            let reviewed = try XCTUnwrap(reviewedResult.data as? [String: Any])
+            let decisionPayload: [String: Any] = ["targetUid": "native-member", "action": action,
+                "expectedActorUid": "native-admin", "expectedVersion": try XCTUnwrap(reviewed["version"]),
+                "expectedBlacklistIds": try XCTUnwrap(reviewed["blacklistIds"]),
+                "reason": "Native product-only access", "idempotencyKey": UUID().uuidString]
+            _ = try await adminFunctions.httpsCallable("admin-updateAccess").call(decisionPayload)
+            _ = try await adminFunctions.httpsCallable("admin-updateAccess").call(decisionPayload)
+            let access = try await waitForAccess(accessRepository, restricted: action == "suspend")
+            XCTAssertFalse(access.suspended)
+            XCTAssertFalse(access.deleted)
+            XCTAssertFalse(access.blacklisted)
+            XCTAssertEqual(access.carCommunitySuspended, action == "suspend")
+            _ = try await memberAuth.currentUser?.getIDToken(forcingRefresh: true)
+            let canonical = try await firestore.collection("users").document("native-member").getDocument(source: .server)
+            XCTAssertEqual(canonical.get("suspended") as? Bool, false)
+            XCTAssertEqual(canonical.get("deleted") as? Bool, false)
+        }
         try actorAuth.signOut()
     }
 
+    private func waitForAccess(_ repository: FirebaseAccountAccessRepository, restricted: Bool) async throws -> AccountAccess {
+        try await withThrowingTaskGroup(of: AccountAccess.self) { group in
+            group.addTask {
+                for await snapshot in repository.updates(uid: "native-member") {
+                    if case .loaded(let access) = snapshot, let access, access.isRestricted == restricted { return access }
+                }
+                throw CancellationError()
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(30))
+                throw KccFunctionsError(code: .unavailable)
+            }
+            defer { group.cancelAll() }
+            return try await group.next()!
+        }
+    }
 }
 
 /// Avoids external App Check/Installations requests. Applies only to named test apps.

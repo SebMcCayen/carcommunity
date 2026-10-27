@@ -34,7 +34,8 @@
  * already guarantees.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { defineSecret } from 'firebase-functions/params';
@@ -184,77 +185,80 @@ export interface SetPublicSiteResponse {
   publicSiteEnabled: boolean;
 }
 
-export const setPublicSite = onCall(CALLABLE_OPTS, async (request): Promise<SetPublicSiteResponse> => {
-  // Creator-or-admin (mirrors events.complete): an active member may toggle an
-  // event THEY created; an admin may toggle any — including force-unpublishing
-  // someone else's event as the moderation safety valve.
-  // requireMemberOrAdminActor rejects suspended/deleted/non-member callers
-  // before ownership is even considered.
-  const actor = await requireMemberOrAdminActor(request);
+export const setPublicSite = onCall(
+  CALLABLE_OPTS,
+  async (request): Promise<SetPublicSiteResponse> => {
+    // Creator-or-admin (mirrors events.complete): an active member may toggle an
+    // event THEY created; an admin may toggle any — including force-unpublishing
+    // someone else's event as the moderation safety valve.
+    // requireMemberOrAdminActor rejects suspended/deleted/non-member callers
+    // before ownership is even considered.
+    const actor = await requireMemberOrAdminActor(request);
 
-  const parsed = parseSetPublicSiteInput(request.data);
-  if (!parsed.ok) {
-    throw new HttpsError('invalid-argument', parsed.message);
-  }
-  const { eventId, enabled } = parsed.input;
-  const eventRef = db.collection('events').doc(eventId);
-
-  await db.runTransaction(async (tx) => {
-    const snap = await tx.get(eventRef);
-    if (!snap.exists) {
-      throw new HttpsError('not-found', 'Event not found.');
+    const parsed = parseSetPublicSiteInput(request.data);
+    if (!parsed.ok) {
+      throw new HttpsError('invalid-argument', parsed.message);
     }
-    const event = snap.data() as StoredEvent;
+    const { eventId, enabled } = parsed.input;
+    const eventRef = db.collection('events').doc(eventId);
 
-    const actorGuard = guardPublicSiteActor(
-      { uid: actor.uid, isAdmin: actor.isAdmin },
-      { createdByUserId: event.createdByUserId },
-    );
-    if (!actorGuard.ok) {
-      throw new HttpsError(actorGuard.code, actorGuard.message);
-    }
-    const statusGuard = guardPublicSiteTogglable(event.status, enabled);
-    if (!statusGuard.ok) {
-      throw new HttpsError(statusGuard.code, statusGuard.message);
-    }
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(eventRef);
+      if (!snap.exists) {
+        throw new HttpsError('not-found', 'Event not found.');
+      }
+      const event = snap.data() as StoredEvent;
 
-    // Idempotent no-op: the flag already holds the requested value. Skipping
-    // the write keeps a repeated tap from churning updatedAt and firing a
-    // pointless (if harmless) regeneration.
-    if ((event.publicSiteEnabled === true) === enabled) {
-      return;
-    }
-
-    const serverTimestamp = () => FieldValue.serverTimestamp();
-    tx.update(eventRef, {
-      publicSiteEnabled: enabled,
-      publicSiteEnabledAt: enabled ? serverTimestamp() : null,
-      updatedAt: serverTimestamp(),
-    });
-    // adminAuditEvents stays a record of ADMIN actions only (same rule as
-    // events.complete): a creator toggling their own event writes no record —
-    // the flag + publicSiteEnabledAt on the document are the member trace.
-    if (actor.isAdmin) {
-      tx.set(
-        db.collection('adminAuditEvents').doc(),
-        buildAdminAuditEvent(
-          {
-            adminId: actor.uid,
-            action: enabled ? 'event.public_site_enable' : 'event.public_site_disable',
-            targetType: 'event',
-            targetId: eventId,
-            reason: enabled ? 'Public event page enabled.' : 'Public event page disabled.',
-          },
-          serverTimestamp,
-        ),
+      const actorGuard = guardPublicSiteActor(
+        { uid: actor.uid, isAdmin: actor.isAdmin },
+        { createdByUserId: event.createdByUserId },
       );
-    }
-  });
+      if (!actorGuard.ok) {
+        throw new HttpsError(actorGuard.code, actorGuard.message);
+      }
+      const statusGuard = guardPublicSiteTogglable(event.status, enabled);
+      if (!statusGuard.ok) {
+        throw new HttpsError(statusGuard.code, statusGuard.message);
+      }
 
-  // No regeneration here — the flag write (when any) just fired
-  // events-onPublicSiteWrite, which owns the sync (see the file header).
-  return { eventId, publicSiteEnabled: enabled };
-});
+      // Idempotent no-op: the flag already holds the requested value. Skipping
+      // the write keeps a repeated tap from churning updatedAt and firing a
+      // pointless (if harmless) regeneration.
+      if ((event.publicSiteEnabled === true) === enabled) {
+        return;
+      }
+
+      const serverTimestamp = () => FieldValue.serverTimestamp();
+      tx.update(eventRef, {
+        publicSiteEnabled: enabled,
+        publicSiteEnabledAt: enabled ? serverTimestamp() : null,
+        updatedAt: serverTimestamp(),
+      });
+      // adminAuditEvents stays a record of ADMIN actions only (same rule as
+      // events.complete): a creator toggling their own event writes no record —
+      // the flag + publicSiteEnabledAt on the document are the member trace.
+      if (actor.isAdmin) {
+        tx.set(
+          db.collection('adminAuditEvents').doc(),
+          buildAdminAuditEvent(
+            {
+              adminId: actor.uid,
+              action: enabled ? 'event.public_site_enable' : 'event.public_site_disable',
+              targetType: 'event',
+              targetId: eventId,
+              reason: enabled ? 'Public event page enabled.' : 'Public event page disabled.',
+            },
+            serverTimestamp,
+          ),
+        );
+      }
+    });
+
+    // No regeneration here — the flag write (when any) just fired
+    // events-onPublicSiteWrite, which owns the sync (see the file header).
+    return { eventId, publicSiteEnabled: enabled };
+  },
+);
 
 // ---------------------------------------------------------------------------
 // events-onPublicSiteWrite — sync on change

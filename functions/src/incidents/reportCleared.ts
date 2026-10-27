@@ -91,7 +91,8 @@
  * so the client can say WHY rather than showing a generic failure.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { logger } from 'firebase-functions';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
@@ -265,9 +266,7 @@ export const reportCleared = onCall(
       input.longitude,
     );
     const accuracyMeters = input.accuracyMeters ?? null;
-    if (
-      !isWithinGeofence(distanceMeters, INCIDENT_CLEAR_GEOFENCE_RADIUS_METERS, accuracyMeters)
-    ) {
+    if (!isWithinGeofence(distanceMeters, INCIDENT_CLEAR_GEOFENCE_RADIUS_METERS, accuracyMeters)) {
       reject(
         'failed-precondition',
         'out_of_range',
@@ -293,19 +292,16 @@ export const reportCleared = onCall(
     if (risk.isHighRisk) {
       // Backend-only, never returned: naming the signal that tripped tells an
       // abuser exactly what to change. Mirrors eventAttendanceRisk.
-      await db
-        .collection(INCIDENT_CLEAR_RISK_COLLECTION)
-        .doc(`${incidentId}_${actor.uid}`)
-        .set(
-          {
-            incidentId,
-            userId: actor.uid,
-            lastRiskScore: risk.riskScore,
-            lastRiskReasons: risk.riskReasons,
-            updatedAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        );
+      await db.collection(INCIDENT_CLEAR_RISK_COLLECTION).doc(`${incidentId}_${actor.uid}`).set(
+        {
+          incidentId,
+          userId: actor.uid,
+          lastRiskScore: risk.riskScore,
+          lastRiskReasons: risk.riskReasons,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
       reject(
         'permission-denied',
         'vote_not_counted',
@@ -357,11 +353,7 @@ export const reportCleared = onCall(
         !(currentExpiresAt instanceof Timestamp) ||
         !isIncidentLive(data.status, currentExpiresAt.toMillis(), txNow.getTime())
       ) {
-        reject(
-          'failed-precondition',
-          'incident_inactive',
-          'This incident is no longer active.',
-        );
+        reject('failed-precondition', 'incident_inactive', 'This incident is no longer active.');
       }
 
       // FAIL FAST on corrupt counters rather than building a threshold decision
@@ -369,7 +361,10 @@ export const reportCleared = onCall(
       // and the removal decision turns on their difference — a NaN would make
       // `net >= 2` false forever and silently disable removal on that document.
       // (listNearby takes the opposite branch on purpose; see readClearedCount.)
-      if (data.confirmationCount !== undefined && !isValidConfirmationCount(data.confirmationCount)) {
+      if (
+        data.confirmationCount !== undefined &&
+        !isValidConfirmationCount(data.confirmationCount)
+      ) {
         logger.error('incidents.reportCleared: incident has a corrupt confirmationCount', {
           incidentId,
           confirmationCount: String(data.confirmationCount),

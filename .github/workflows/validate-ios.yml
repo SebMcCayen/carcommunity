@@ -140,7 +140,7 @@ jobs:
             -only-testing:KCCTests/FirebaseEmulatorIntegrationTests build-for-testing
           npm exec --yes --package=firebase-tools@15.34.0 -- firebase emulators:exec \
             --project demo-kcc-ios-ci --config "${RUNNER_TEMP}/native-members/firebase.json" \
-            --only auth,firestore,functions --non-interactive \
+            --only auth,firestore,functions,database --non-interactive \
             "node scripts/native-member-emulators.mjs seed && python3 apps/ios/scripts/auth-emulator-tests.py run --products '${RUNNER_TEMP}/ios-tests/Build/Products' --destination '${DEST}' --member-tools"
 
       # TestFlight uses the Release configuration on arm64 hardware. Keep this

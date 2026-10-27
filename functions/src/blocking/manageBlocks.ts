@@ -18,7 +18,8 @@
  * createdAt stay backend-controlled.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
@@ -89,7 +90,10 @@ export const block = onCall(CALLABLE_OPTS, async (request): Promise<BlockUserRes
       tx.set(ref, { displayName }, { merge: true });
       return toBlockedUserSummary(targetUserId, displayName, createdAt);
     }
-    tx.set(ref, buildBlockDocument(targetUserId, displayName, () => Timestamp.fromDate(now)));
+    tx.set(
+      ref,
+      buildBlockDocument(targetUserId, displayName, () => Timestamp.fromDate(now)),
+    );
     return toBlockedUserSummary(targetUserId, displayName, now.toISOString());
   });
 

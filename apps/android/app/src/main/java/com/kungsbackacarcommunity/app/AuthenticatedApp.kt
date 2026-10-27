@@ -1,5 +1,8 @@
 package com.kungsbackacarcommunity.app
 
+import com.kungsbackacarcommunity.app.access.CarCommunityAccessScreen
+import com.kungsbackacarcommunity.app.access.CarCommunityGateState
+import com.kungsbackacarcommunity.app.access.FirebaseCarCommunityAccessRepository
 import android.Manifest
 import android.content.Intent
 import android.graphics.Bitmap
@@ -908,6 +911,31 @@ fun AuthenticatedApp(
     // account sweep. Failures stay inside the coordinator and never block the UI.
     LaunchedEffect(uid, loginRecordCoordinator) {
         loginRecordCoordinator?.recordLogin()
+    }
+
+    val accessContext = LocalContext.current
+    val productAccessRepository = remember(uid) { FirebaseCarCommunityAccessRepository.createIfAvailable(accessContext) }
+    val collectedProductAccess by remember(uid, productAccessRepository) { productAccessRepository?.updates(uid) ?: flowOf(CarCommunityGateState.Ready(com.kungsbackacarcommunity.app.access.CarCommunityStatus(uid, false, false))) }.collectAsState(initial = CarCommunityGateState.Loading)
+    val productAccess = if ((collectedProductAccess as? CarCommunityGateState.Ready)?.status?.uid?.let { it != uid } == true) CarCommunityGateState.Loading else collectedProductAccess
+    // Foreground refresh repairs initialization/provider changes without polling
+    // in the background. Live own-metadata changes remove the shell immediately.
+    val accessLifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(uid, productAccessRepository, accessLifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event -> if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) productAccessRepository?.refresh(uid) }
+        accessLifecycle.addObserver(observer)
+        onDispose { accessLifecycle.removeObserver(observer) }
+    }
+    val productRestricted = productAccess == CarCommunityGateState.Failed || (productAccess as? CarCommunityGateState.Ready)?.status?.restricted == true
+    LaunchedEffect(uid, productRestricted) {
+        if (productRestricted) {
+            SingleSessionRecording.clearIfNotOwnedBy(null)
+            BackgroundLocationController.stop(accessContext)
+            liveLocationCoordinator?.hideMeNow()
+        }
+    }
+    if (productAccessRepository != null && (productAccess !is CarCommunityGateState.Ready || productRestricted)) {
+        CarCommunityAccessScreen(uid, productAccess, onRetry = { productAccessRepository.refresh(uid) }, onSignOut = onSignOut, deletion = accountDeletionCoordinator)
+        return
     }
 
     val profileFlow =

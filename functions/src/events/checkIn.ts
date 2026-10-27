@@ -54,16 +54,13 @@
  * points are credited by the points-onAttendanceVerified trigger.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { adminRtdb, db } from '../firebase';
 import { requirePaidActor } from '../shared/memberActor';
-import {
-  isPlausibleJump,
-  isPositionFresh,
-  isValidCoordinate,
-} from '../crownHunt/crown-hunt-geo';
+import { isPlausibleJump, isPositionFresh, isValidCoordinate } from '../crownHunt/crown-hunt-geo';
 import { evaluateClaimRisk } from '../crownHunt/crown-hunt-risk';
 import {
   ECONOMY_RATE_LIMIT_COLLECTION,
@@ -378,9 +375,7 @@ export const checkIn = onCall(CALLABLE_OPTS, async (request): Promise<CheckInRes
     // always retained because it anchors the dwell span.
     const bounded: AttendanceSample[] =
       samples.length > MAX_ATTENDANCE_SAMPLES
-        ? samples
-            .slice(0, 1)
-            .concat(samples.slice(samples.length - (MAX_ATTENDANCE_SAMPLES - 1)))
+        ? samples.slice(0, 1).concat(samples.slice(samples.length - (MAX_ATTENDANCE_SAMPLES - 1)))
         : samples;
 
     const decision = evaluateAttendance(bounded, location.latitude, location.longitude, {
@@ -424,7 +419,13 @@ export const checkIn = onCall(CALLABLE_OPTS, async (request): Promise<CheckInRes
   const dwellSeconds = Math.floor(outcome.decision.dwellMs / 1000);
   const remaining = Math.max(0, Math.ceil((REQUIRED_DWELL_MS - outcome.decision.dwellMs) / 1000));
   if (outcome.alreadyVerified) {
-    return respond('already_verified', true, dwellSeconds, 0, outcome.decision.qualifyingSampleCount);
+    return respond(
+      'already_verified',
+      true,
+      dwellSeconds,
+      0,
+      outcome.decision.qualifyingSampleCount,
+    );
   }
   if (outcome.decision.attended) {
     return respond('verified', true, dwellSeconds, 0, outcome.decision.qualifyingSampleCount);

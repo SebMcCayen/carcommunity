@@ -78,7 +78,8 @@
  * marker + the client's unread dot still serve the second one for free.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { FieldValue, Timestamp, type DocumentReference } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
@@ -190,9 +191,7 @@ async function resolveMentions(candidates: string[], senderUid: string): Promise
 
   const [profileSnaps, blockSnaps] = await Promise.all([
     db.getAll(...candidates.map((uid) => db.collection('users').doc(uid))),
-    db.getAll(
-      ...candidates.flatMap((uid) => [blockRef(senderUid, uid), blockRef(uid, senderUid)]),
-    ),
+    db.getAll(...candidates.flatMap((uid) => [blockRef(senderUid, uid), blockRef(uid, senderUid)])),
   ]);
 
   return candidates.filter((_uid, index) => {
@@ -328,9 +327,7 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
   // setup: `gcloud firestore fields ttls update expireAt \
   //   --collection-group=messages`; the policy is field-scoped, so it also
   // covers convoy messages, which share the `messages` collection group).
-  const expireAt = Timestamp.fromDate(
-    chatMessageExpiry(new Date(), COMMUNITY_CHAT_RETENTION_DAYS),
-  );
+  const expireAt = Timestamp.fromDate(chatMessageExpiry(new Date(), COMMUNITY_CHAT_RETENTION_DAYS));
 
   // `create()`, NOT `set()`: the write IS the idempotency guard, and it is the
   // only one. A pre-read ("does this id exist yet?") cannot be the guard — two

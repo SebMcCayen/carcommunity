@@ -34,7 +34,8 @@
  * (audit actions `event.create` / `event.update` with changedFields).
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireMemberOrAdminActor } from '../shared/memberActor';
@@ -165,7 +166,10 @@ export const create = onCall(CALLABLE_OPTS, async (request): Promise<EventIdResp
     // folds this write into `rsvpCounts.going` (seeding it here too would
     // double-count), and the creator's own client reflects it via observeMyRsvp.
     if (status === 'published') {
-      tx.set(eventRef.collection('rsvps').doc(actor.uid), buildCreatorRsvpDocument(serverTimestamp));
+      tx.set(
+        eventRef.collection('rsvps').doc(actor.uid),
+        buildCreatorRsvpDocument(serverTimestamp),
+      );
     }
     if (creatorRole === 'admin') {
       tx.set(

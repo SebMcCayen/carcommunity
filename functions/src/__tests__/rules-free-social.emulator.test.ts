@@ -1,3 +1,4 @@
+import { legacyAccessMigration, endLegacyAccessMigration } from './helpers/legacy-access-migration';
 /**
  * Permanent free access under a simulated legacy re-lock. The substitution is
  * applied only to rules loaded into the emulator, never to repository/live
@@ -61,12 +62,14 @@ beforeAll(async () => {
     firestore: { host: 'localhost', port: 8080, rules: relock('firestore.rules') },
     storage: { host: 'localhost', port: 9199, rules: relock('storage.rules') },
   });
+  await legacyAccessMigration(env);
   await env.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
     await setDoc(doc(db, 'communityChat/global'), {});
     await setDoc(doc(db, 'communityChat/global/messages/free-social'), { text: 'free social' });
     for (const subject of subjects) {
       const id = uid(subject);
+      await setDoc(doc(db, `carCommunityAccess/${id}`), {initialized:true,suspended:false,inheritedBlocked:false,explicitBlacklistId:null,version:1});
       await setDoc(doc(db, `users/${id}`), {
         activeMember: false,
         suspended: subject === 'suspended',
@@ -106,6 +109,7 @@ afterAll(async () => {
   // Other suites use the same emulator project. Restore the real rules even
   // when this suite fails, so test-only re-locking cannot spill into them.
   if (env) {
+    await endLegacyAccessMigration(env);
     await env.cleanup();
     const restored = await initializeTestEnvironment({
       projectId: 'demo-test',
@@ -218,7 +222,9 @@ describe('free social rules independent of legacy membership', () => {
     // write alternative; a normal provisioned free account still succeeds.
     await assertFails(upload());
     await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `carCommunityAccess/${id}`), {initialized:true,suspended:false,inheritedBlocked:false,explicitBlacklistId:null,version:1});
       await setDoc(doc(context.firestore(), `users/${id}`), {
+        role: admin ? 'admin' : 'user',
         activeMember: false,
         suspended: false,
         deleted: false,

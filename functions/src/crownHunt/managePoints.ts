@@ -26,7 +26,8 @@
  *   actions preserved as crownHunt.*).
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
@@ -178,10 +179,7 @@ export const updatePoint = onCall(CALLABLE_OPTS, async (request): Promise<PointI
     }
     const existing = snap.data()!;
     if (existing.status !== 'draft' && existing.status !== 'paused') {
-      throw new HttpsError(
-        'failed-precondition',
-        'Only draft or paused points may be edited.',
-      );
+      throw new HttpsError('failed-precondition', 'Only draft or paused points may be edited.');
     }
 
     // Unlimited → limited is only safe BEFORE anyone has collected. Unlimited
@@ -218,15 +216,15 @@ export const updatePoint = onCall(CALLABLE_OPTS, async (request): Promise<PointI
       availableFrom:
         input.availableFrom !== undefined
           ? input.availableFrom
-          : (existing.availableFrom
-              ? (existing.availableFrom as Timestamp).toDate().toISOString()
-              : null),
+          : existing.availableFrom
+            ? (existing.availableFrom as Timestamp).toDate().toISOString()
+            : null,
       availableUntil:
         input.availableUntil !== undefined
           ? input.availableUntil
-          : (existing.availableUntil
-              ? (existing.availableUntil as Timestamp).toDate().toISOString()
-              : null),
+          : existing.availableUntil
+            ? (existing.availableUntil as Timestamp).toDate().toISOString()
+            : null,
     };
     const guard = guardPointFields(merged);
     if (!guard.ok) {
@@ -284,7 +282,10 @@ export const updatePoint = onCall(CALLABLE_OPTS, async (request): Promise<PointI
         serverTimestamp,
       ),
     );
-    return (update.status as CrownHuntPointStatus | undefined) ?? (existing.status as CrownHuntPointStatus);
+    return (
+      (update.status as CrownHuntPointStatus | undefined) ??
+      (existing.status as CrownHuntPointStatus)
+    );
   });
 
   return { pointId: input.pointId, status };

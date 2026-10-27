@@ -1,6 +1,8 @@
+import { adminAccessView } from '../access/adminAccess';
 import { createHash } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { z } from 'zod';
 import { db } from '../firebase';
 import { requireAdminActor } from './actorContext';
@@ -158,6 +160,7 @@ export const getMember = onCall(CALLABLE_OPTS, async (request) => {
       updatedAt: date(data.updatedAt),
       lastLoginAt: date(lifecycle.get('lastLoginAt')),
       loginFrequency: null,
+      carCommunityAccess: await adminAccessView(targetUid),
       pointsBalance: wallet.get('balance') ?? 0,
       permissions: {
         canRename: editOwner,

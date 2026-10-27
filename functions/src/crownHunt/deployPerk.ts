@@ -32,7 +32,8 @@
  * Deployed via the `crownHunt` export group as `crownHunt-deployPerk`.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { logger } from 'firebase-functions';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
@@ -303,11 +304,9 @@ const toMillis = (value: unknown): number | null =>
  * "don't place near an ALREADY-active/imminent event".)
  */
 function throwEventTooClose(): never {
-  throw new HttpsError(
-    'failed-precondition',
-    'Du kan inte placera en fälla så nära ett event.',
-    { reason: PERK_DEPLOY_REASON_EVENT_TOO_CLOSE },
-  );
+  throw new HttpsError('failed-precondition', 'Du kan inte placera en fälla så nära ett event.', {
+    reason: PERK_DEPLOY_REASON_EVENT_TOO_CLOSE,
+  });
 }
 
 /**
@@ -515,9 +514,7 @@ async function deployTrap(args: {
 
     // Race-safe 1-active-trap + 300 m self-spacing, on the in-transaction query
     // result (excluding this deploy's own trap doc, defensively).
-    const liveTrapsTx = armedTxSnap.docs
-      .filter((d) => d.id !== trapRef.id)
-      .map((d) => d.data());
+    const liveTrapsTx = armedTxSnap.docs.filter((d) => d.id !== trapRef.id).map((d) => d.data());
     const txCapRejection = evaluateTrapCaps(liveTrapsTx, latitude, longitude);
     if (txCapRejection) {
       throw txCapRejection;

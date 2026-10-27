@@ -1,5 +1,9 @@
 package com.kungsbackacarcommunity.app.profile
 
+import com.kungsbackacarcommunity.app.access.FirebaseCarCommunityAccessRepository
+import com.kungsbackacarcommunity.app.access.CarCommunityGateState
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
 import android.os.SystemClock
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.firebase.FirebaseApp
@@ -58,6 +62,25 @@ class MemberToolsEmulatorTest {
             admin.getHttpsCallable("admin-revokeWarning").call(mapOf("targetUid" to "native-member", "warningId" to id, "expectedVersion" to 1, "reason" to "Native acceptance complete", "idempotencyKey" to UUID.randomUUID().toString())).await()
             val after = own.getHttpsCallable("account-listWarnings").call(emptyMap<String, Any>()).await().data as Map<*, *>
             assertEquals(0, (after["warnings"] as List<*>).size)
+            val accessRepository = FirebaseCarCommunityAccessRepository(memberAuth, own, firestore)
+            suspend fun awaitAccess(restricted: Boolean) = withTimeout(30000) {
+                accessRepository.updates("native-member").first { it is CarCommunityGateState.Ready && it.status.restricted == restricted }
+            }
+            awaitAccess(false)
+            for (action in listOf("suspend", "restore")) {
+                val reviewed = admin.getHttpsCallable("admin-getAccessTarget").call(mapOf("targetUid" to "native-member")).await().data as Map<*, *>
+                val decisionPayload = mapOf("targetUid" to "native-member", "action" to action, "expectedActorUid" to "native-admin", "expectedVersion" to reviewed["version"], "expectedBlacklistIds" to reviewed["blacklistIds"], "reason" to "Native product-only access", "idempotencyKey" to UUID.randomUUID().toString())
+                admin.getHttpsCallable("admin-updateAccess").call(decisionPayload).await()
+                admin.getHttpsCallable("admin-updateAccess").call(decisionPayload).await()
+                val status = (awaitAccess(action == "suspend") as CarCommunityGateState.Ready).status
+                assertEquals("native-member", status.uid)
+                assertFalse(status.sharedRestricted)
+                assertFalse(status.blacklisted)
+                memberAuth.currentUser!!.getIdToken(true).await()
+                val canonical = firestore.collection("users").document("native-member").get(Source.SERVER).await()
+                assertEquals(false, canonical.getBoolean("suspended"))
+                assertEquals(false, canonical.getBoolean("deleted"))
+            }
             actorAuth.signOut(); memberAuth.signOut()
         } finally { memberApp.delete(); actorApp.delete() }
     }

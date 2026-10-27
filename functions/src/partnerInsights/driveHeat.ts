@@ -18,7 +18,7 @@
  * Admin-gated (requireAdminActor), App Check enforced.
  */
 
-import { onCall } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
 import { MAX_INSTANCES_ADMIN, CPU_ADMIN } from '../shared/instanceLimits';
@@ -88,7 +88,10 @@ export const driveHeat = onCall(
       // Re-apply the privacy floor at read time (defense in depth) and validate
       // the stored shape, failing closed on anything malformed.
       if (!isH3Index(cell.h3Index)) continue;
-      if (!Number.isFinite(contributorCount) || contributorCount < MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD) {
+      if (
+        !Number.isFinite(contributorCount) ||
+        contributorCount < MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD
+      ) {
         continue;
       }
       if (!Number.isFinite(weight) || weight < 0) continue;
@@ -103,7 +106,9 @@ export const driveHeat = onCall(
     return {
       cells,
       resolution:
-        typeof data?.resolution === 'number' ? (data.resolution as number) : DRIVE_HEAT_H3_RESOLUTION,
+        typeof data?.resolution === 'number'
+          ? (data.resolution as number)
+          : DRIVE_HEAT_H3_RESOLUTION,
       windowDays:
         typeof data?.windowDays === 'number' ? (data.windowDays as number) : DRIVE_HEAT_WINDOW_DAYS,
       generatedAt: toIsoOrNull(data?.generatedAt),

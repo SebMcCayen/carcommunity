@@ -24,15 +24,14 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import {
   adminDeleteUser,
   adminGetUser,
-  adminRestoreAccess,
   adminSetAdminRole,
-  adminSuspendUser,
   type AdminUserDetail,
   type ApiError,
 } from '@/features/users';
 import { translate } from '@/i18n';
 import { formatDateOnly } from '@/lib/format';
 
+import { AccessTools } from './AccessTools';
 import { MemberTools } from './MemberTools';
 import { UserPointsSection } from './PointsSection';
 import styles from './page.module.css';
@@ -55,7 +54,7 @@ function formatDate(iso: string | null): string {
 }
 
 /** Actions that require an explicit confirmation step before firing. */
-type ConfirmableAction = 'suspend' | 'grantAdmin' | 'revokeAdmin';
+type ConfirmableAction = 'grantAdmin' | 'revokeAdmin';
 
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -105,7 +104,7 @@ export default function UserDetailPage() {
   }, [id, load]);
 
   const runAction = useCallback(
-    async (action: 'suspend' | 'restore' | 'grantAdmin' | 'revokeAdmin', successKey: string) => {
+    async (action: 'grantAdmin' | 'revokeAdmin', successKey: string) => {
       if (!detail) return;
       const trimmedReason = reason.trim();
       if (!trimmedReason || actingRef.current) return;
@@ -116,12 +115,6 @@ export default function UserDetailPage() {
       setPendingConfirm(null);
       try {
         switch (action) {
-          case 'suspend':
-            await adminSuspendUser(detail.uid, trimmedReason);
-            break;
-          case 'restore':
-            await adminRestoreAccess(detail.uid, trimmedReason);
-            break;
           case 'grantAdmin':
             await adminSetAdminRole(detail.uid, true, trimmedReason);
             break;
@@ -172,10 +165,6 @@ export default function UserDetailPage() {
   }, [detail, deleteReason, navigate]);
 
   const confirmLabels: Record<ConfirmableAction, { message: string; run: () => void }> = {
-    suspend: {
-      message: t('users.detail.confirmSuspend'),
-      run: () => void runAction('suspend', 'users.detail.suspendSuccess'),
-    },
     grantAdmin: {
       message: t('users.detail.confirmGrantAdmin'),
       run: () => void runAction('grantAdmin', 'users.detail.grantAdminSuccess'),
@@ -337,25 +326,6 @@ export default function UserDetailPage() {
             )}
 
             <div className={styles.actions}>
-              {detail.suspended ? (
-                <button
-                  type="button"
-                  className={styles.primaryButton}
-                  onClick={() => void runAction('restore', 'users.detail.restoreSuccess')}
-                  disabled={!hasReason || acting}
-                >
-                  {t('users.detail.restore')}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className={styles.dangerButton}
-                  onClick={() => setPendingConfirm('suspend')}
-                  disabled={!hasReason || acting}
-                >
-                  {t('users.detail.suspend')}
-                </button>
-              )}
               {!isOwner &&
                 (isAdminRole ? (
                   <button
@@ -390,6 +360,7 @@ export default function UserDetailPage() {
             )}
           </section>
 
+          <AccessTools key={detail.uid} uid={detail.uid} />
           <MemberTools
             key={`${detail.uid}:${detail.displayName}`}
             member={detail}

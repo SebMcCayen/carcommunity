@@ -13,7 +13,8 @@
  * suspended/deleted targets.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
@@ -73,11 +74,7 @@ export const awardHelpfulMember = onCall(
       }
       tx.set(
         badgeRef,
-        buildBadgeDocument(
-          'helpful_member',
-          { source: 'admin_manual' },
-          serverTimestamp,
-        ),
+        buildBadgeDocument('helpful_member', { source: 'admin_manual' }, serverTimestamp),
       );
       tx.set(
         db.collection('adminAuditEvents').doc(),

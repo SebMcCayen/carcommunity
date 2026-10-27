@@ -408,7 +408,7 @@ jobs:
           script: >-
             npm exec --yes --package=firebase-tools@15.34.0 -- firebase emulators:exec
             --project demo-kcc-ios-ci --config "${RUNNER_TEMP}/native-members/firebase.json"
-            --only auth,firestore,functions --non-interactive
+            --only auth,firestore,functions,database --non-interactive
             "node scripts/native-member-emulators.mjs seed && cd apps/android && ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.kungsbackacarcommunity.app.profile.MemberToolsEmulatorTest -Pandroid.testInstrumentationRunnerArguments.kccNativeMembers=1"
       - name: Require one actual passed native acceptance test
         run: |
