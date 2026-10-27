@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.chatchannels
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -79,21 +80,31 @@ internal fun ChatChannelStrip(
                         else MaterialTheme.colorScheme.outlineVariant),
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            stringResource(labels[tab.ordinal]),
-                            modifier = Modifier.fillMaxWidth().padding(
-                                start = KccSpacing.s1, end = KccSpacing.s1,
-                                top = KccSpacing.s3, bottom = KccSpacing.s2,
-                            ),
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Center,
-                        )
-                        if (unread[tab.ordinal]) {
-                            Badge(
-                                modifier = Modifier.align(Alignment.TopEnd).padding(KccSpacing.s1)
-                                    .semantics { contentDescription = unreadLabel },
-                                containerColor = MaterialTheme.colorScheme.tertiary,
-                                contentColor = MaterialTheme.colorScheme.onTertiary,
+                        Column(
+                            modifier = Modifier.padding(horizontal = KccSpacing.s1),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            // A shared 8dp lane keeps the 6dp unread dot separate
+                            // from the label without adding 20dp of label padding.
+                            // At 1.5x text, two lines plus this lane stay within the
+                            // existing chat viewport budget; no text is shrunk.
+                            Box(
+                                modifier = Modifier.fillMaxWidth().height(KccSpacing.s2),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (unread[tab.ordinal]) {
+                                    Badge(
+                                        modifier = Modifier.semantics { contentDescription = unreadLabel },
+                                        containerColor = MaterialTheme.colorScheme.tertiary,
+                                        contentColor = MaterialTheme.colorScheme.onTertiary,
+                                    )
+                                }
+                            }
+                            Text(
+                                stringResource(labels[tab.ordinal]),
+                                modifier = Modifier.fillMaxWidth(),
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Center,
                             )
                         }
                     }

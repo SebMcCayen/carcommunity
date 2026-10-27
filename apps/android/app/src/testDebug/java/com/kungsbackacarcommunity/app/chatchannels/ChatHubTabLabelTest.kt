@@ -112,8 +112,8 @@ class ChatHubTabLabelTest {
                     previousRight = bounds.right
                     val layouts = mutableListOf<TextLayoutResult>()
                     val label = resources.getString(labelIds[tab.ordinal])
-                    compose.onNodeWithText(label, useUnmergedTree = true)
-                        .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+                    val labelNode = compose.onNodeWithText(label, useUnmergedTree = true)
+                    labelNode.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
                     assertEquals("$current $tab layout", 1, layouts.size)
                     val layout = layouts.single()
                     assertEquals("$current $tab must not auto-shrink", 14.sp, layout.layoutInput.style.fontSize)
@@ -130,11 +130,19 @@ class ChatHubTabLabelTest {
                     assertFalse("$current $tab vertical clipping", layout.didOverflowHeight)
                     // The unread dot stays a named, visible child of its destination.
                     compose.onNodeWithTag(chatChannelTabTag(tab)).assertIsDisplayed()
-                    compose.onNode(
+                    val badge = compose.onNode(
                         hasContentDescription(resources.getString(R.string.chatHub_tabUnread)) and
                             hasAnyAncestor(hasTestTag(chatChannelTabTag(tab))),
                         useUnmergedTree = true,
-                    ).assertIsDisplayed()
+                    )
+                    badge.assertIsDisplayed()
+                    val badgeBounds = badge.fetchSemanticsNode().boundsInRoot
+                    val labelBounds = labelNode.fetchSemanticsNode().boundsInRoot
+                    assertTrue("$current $tab unread badge must not overlap its label",
+                        badgeBounds.bottom <= labelBounds.top)
+                    assertTrue("$current $tab unread badge inside its target",
+                        badgeBounds.left >= bounds.left && badgeBounds.right <= bounds.right &&
+                            badgeBounds.top >= bounds.top && badgeBounds.bottom <= bounds.bottom)
                 }
             }
         }

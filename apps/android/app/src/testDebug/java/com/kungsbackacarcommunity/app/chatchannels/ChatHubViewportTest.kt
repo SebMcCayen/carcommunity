@@ -90,6 +90,17 @@ class ChatHubViewportTest {
         val viewport = compose.onNodeWithTag("channel_message_viewport").fetchSemanticsNode().boundsInRoot
         val input = compose.onNodeWithTag(CHANNEL_INPUT_TEST_TAG)
         val inputBounds = input.fetchSemanticsNode().boundsInRoot
+        // Check every destination in the real populated host without scrolling;
+        // the full-width strip must also preserve the existing reading budget.
+        for (tab in ChatTab.entries) {
+            val target = compose.onNodeWithTag(chatChannelTabTag(tab))
+            target.assertIsDisplayed()
+            val bounds = target.fetchSemanticsNode().boundsInRoot
+            assertTrue("$tab fully inside strip: $bounds / $strip",
+                bounds.left >= strip.left && bounds.right <= strip.right &&
+                    bounds.top >= strip.top && bounds.bottom <= strip.bottom)
+            assertTrue("$tab minimum hit target: $bounds", bounds.width >= 48f && bounds.height >= 48f)
+        }
         // Budget includes the real status inset. The old title/source/back/icon stack exceeds it.
         assertTrue("Chrome must leave room for messages: $strip / $root", strip.bottom - root.top <= 144f)
         assertTrue("Sources must be a compact row: $sources", sources.height <= 64f)
