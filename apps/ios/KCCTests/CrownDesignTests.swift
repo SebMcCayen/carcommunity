@@ -124,6 +124,10 @@ final class CrownDesignTests: XCTestCase {
 
     func testAllCollectionRecoveryStatesLayOutWithoutNetwork() {
         let states: [CrownCollectState] = [.ready, .noPosition, .tooFar(120), .waitingForSignal, .confirming, .moving, .featureOff]
+        let expired = measure(CrownCollectFeedback(state: .ready, status: .idle, expired: true),
+            width: 288, size: .accessibility5, language: "sv", dark: true)
+        XCTAssertGreaterThan(expired.height, 0)
+        XCTAssertLessThanOrEqual(expired.width, 289)
         for state in states {
             let view = CrownCollectFeedback(state: state, status: .failed(code: "unavailable"))
             let result = measure(view, width: 288, size: .accessibility5, language: "sv", dark: true)

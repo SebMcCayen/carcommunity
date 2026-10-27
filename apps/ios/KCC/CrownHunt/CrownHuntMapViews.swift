@@ -87,10 +87,11 @@ struct CrownHuntCollectContent: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let collected = selectedSpawnWasCollected
+            let expired = selectedSpawnExpired(at: context.date)
             VStack(alignment: .leading, spacing: KccSpacing.s4) {
                 if let target = coordinator.selectedTarget { CrownTargetCard(target: target) }
                 Text("crownHunt.safetyStop").font(.subheadline).foregroundStyle(KccTheme.secondary)
-                CrownCollectFeedback(state: coordinator.collectState(now: context.date), status: coordinator.claimStatus, collected: collected)
+                CrownCollectFeedback(state: coordinator.collectState(now: context.date), status: coordinator.claimStatus, collected: collected, expired: expired)
                 if coordinator.selectedTarget != nil {
                     Button {
                         Task { await coordinator.collect(now: Date()) }
@@ -98,11 +99,18 @@ struct CrownHuntCollectContent: View {
                         Text("crownHunt.collectButton").frame(maxWidth: .infinity, minHeight: 48).contentShape(Rectangle())
                     }
                     .kccPrimaryAction()
-                    .disabled(!CrownCollectPresentation.canSubmit(coordinator.collectState(now: context.date), status: coordinator.claimStatus, collected: collected))
+                    .disabled(expired || !CrownCollectPresentation.canSubmit(coordinator.collectState(now: context.date), status: coordinator.claimStatus, collected: collected))
                     .accessibilityIdentifier("crown.collect")
                 }
             }
         }
+    }
+
+    private func selectedSpawnExpired(at now: Date) -> Bool {
+        if case .spawn(let spawn) = coordinator.selectedTarget {
+            return spawn.expiresAt.map { $0 <= now } ?? false
+        }
+        return false
     }
 
     private var selectedSpawnWasCollected: Bool {
@@ -132,10 +140,13 @@ struct CrownCollectFeedback: View {
     let state: CrownCollectState
     let status: CrownMapClaimStatus
     var collected = false
+    var expired = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s3) {
-            if collected, !CrownCollectPresentation.isAwarded(status) {
+            if expired, !CrownCollectPresentation.isAwarded(status) {
+                Label("crownHunt.spawnResultCrownExpired", systemImage: "clock")
+            } else if collected, !CrownCollectPresentation.isAwarded(status) {
                 Label("crownHunt.spawnResultAlreadyCollected", systemImage: "checkmark.circle")
             } else if showsLocationState { collectState }
             claimResult
