@@ -50,6 +50,8 @@ final class ShellSmokeTests: XCTestCase {
 
     func testSavedPlacesDockKeepsCloseToolsAndPrimaryNavigationReachable() {
         let app = launch(language: "en", largeText: true, theme: "Dark")
+        let mapIdentity = app.staticTexts["shell.mapPlaceholder"].value as? String
+        XCTAssertNotNil(mapIdentity)
         let saved = app.buttons["shell.savedPlaces"]
         XCTAssertTrue(saved.waitForExistence(timeout: 15))
         saved.tap()
@@ -73,6 +75,8 @@ final class ShellSmokeTests: XCTestCase {
         assertSelected(app.buttons["shell.tab.chat"])
         app.buttons["shell.tab.map"].tap()
         XCTAssertFalse(panel.exists, "A reading panel must not reopen after a tab round trip")
+        XCTAssertEqual(app.staticTexts["shell.mapPlaceholder"].value as? String, mapIdentity,
+            "Opening/closing a dock must retain the same map host")
         saved.tap()
         XCTAssertTrue(close.waitForExistence(timeout: 5))
         close.tap()

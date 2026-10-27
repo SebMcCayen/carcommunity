@@ -124,8 +124,14 @@ struct NearbySharerIdentity: View {
                     else { Image(systemName: "car.side.fill").foregroundStyle(KccTheme.driver) }
                 }
                 .frame(width: 64, height: 64).clipShape(Circle())
-                .overlay(Circle().strokeBorder(KccTheme.driver, lineWidth: 2))
+                .overlay(Circle().strokeBorder(KccTheme.driver, lineWidth: 2).allowsHitTesting(false))
                 .accessibilityHidden(true)
+            } else {
+                Image(systemName: "car.side.fill").font(.title2)
+                    .foregroundStyle(KccTheme.driver)
+                    .frame(width: 64, height: 64)
+                    .background(KccTheme.subtle, in: Circle())
+                    .accessibilityHidden(true)
             }
             Text(marker.displayName ?? String(localized: "nearby.unknownSharer"))
                 .font(.title3.weight(.semibold)).fixedSize(horizontal: false, vertical: true)

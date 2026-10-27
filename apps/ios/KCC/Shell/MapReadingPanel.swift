@@ -32,7 +32,7 @@ struct MapReadingPanel<Content: View>: View {
         .foregroundStyle(KccTheme.text)
         .tint(KccTheme.driver)
         .background(KccTheme.surface, in: RoundedRectangle(cornerRadius: KccRadius.lg))
-        .overlay { RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.border) }
+        .overlay { RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.border).allowsHitTesting(false) }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("map.reading.panel")
         .accessibilityAction(.escape, onClose)
@@ -86,7 +86,7 @@ struct MapLiveSessionControls: View {
         .padding(KccSpacing.s3)
         .foregroundStyle(KccTheme.text)
         .background(KccTheme.overlay, in: RoundedRectangle(cornerRadius: KccRadius.lg))
-        .overlay { RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.border) }
+        .overlay { RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.border).allowsHitTesting(false) }
     }
 
     private func action(_ title: LocalizedStringKey, icon: String, id: String, action: @escaping () -> Void) -> some View {

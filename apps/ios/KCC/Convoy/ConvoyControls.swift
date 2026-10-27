@@ -109,7 +109,7 @@ struct ConvoyStatusBar: View {
         .padding(.vertical, KccSpacing.s3)
         .foregroundStyle(KccTheme.text)
         .background(KccTheme.overlay, in: RoundedRectangle(cornerRadius: KccRadius.lg))
-        .overlay { RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.border) }
+        .overlay { RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.border).allowsHitTesting(false) }
         .shadow(color: .black.opacity(0.14), radius: 8, y: 3)
         .sheet(item: $memberTarget) { target in
             LiveConvoyMembersSheet(
