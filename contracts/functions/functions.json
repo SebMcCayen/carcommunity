@@ -1484,6 +1484,15 @@
       "appCheck": true,
       "status": "implemented",
       "source": "docs/admin/carcommunity-access.md"
+    },
+    {
+      "name": "admin.listMemberHistory",
+      "domain": "admin",
+      "description": "Paged safe member audit summary with actor display name; raw evidence and details never returned.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin/member-card.md"
     }
   ]
 }

@@ -152,6 +152,7 @@ export interface AdminUserDetail {
   actorUid?: string;
   lastLoginAt?: string | null;
   pointsBalance?: number;
+  carCommunityAccess?: {suspended:boolean;blacklisted:boolean;ready:boolean};
   permissions?: {
     canRename: boolean;
     canWarn: boolean;

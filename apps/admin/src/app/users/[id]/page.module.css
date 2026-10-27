@@ -281,3 +281,326 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Member card follows the approved two-column overview; controls stay in their task tab. */
+.page {
+  max-width: 1440px;
+  width: 100%;
+}
+.memberHero {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 0 20px;
+  flex-wrap: wrap;
+}
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+  font-size: 32px;
+  font-weight: 600;
+}
+.memberIdentity {
+  flex: 1;
+  min-width: 230px;
+}
+.memberIdentity p {
+  margin: 6px 0;
+}
+.identityLine {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.identityLine h2 {
+  font-size: 32px;
+  line-height: 1.2;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 5px 12px;
+  color: var(--status-success);
+  background: var(--success-bg);
+  font-size: 14px;
+  white-space: nowrap;
+}
+.restrictedBadge {
+  color: var(--status-warning);
+  background: var(--warning-bg);
+}
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.memberTabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-color);
+  overflow-x: auto;
+}
+.memberTabs button {
+  padding: 12px 16px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.memberTabs button[aria-selected='true'] {
+  color: var(--accent-text);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.overviewGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(300px, 1fr);
+  align-items: start;
+  gap: 20px;
+}
+.overviewMain {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+.overviewGrid .card {
+  padding: 24px;
+  gap: 20px;
+}
+.overviewGrid .cardTitle {
+  font-size: 20px;
+}
+.overviewDetails {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(120px, 1fr) auto;
+  gap: 20px 14px;
+  margin: 0;
+  font-size: 14px;
+  align-items: start;
+}
+.overviewDetails dt,
+.warningDetails dt {
+  color: var(--text-secondary);
+}
+.overviewDetails dd,
+.warningDetails dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.textAction {
+  background: transparent;
+  border: 0;
+  color: var(--accent-text);
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.textAction:hover {
+  color: var(--text-primary);
+}
+.cardHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.activeWarning {
+  border: 1px solid var(--border-color);
+  border-left: 4px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent-bg);
+  padding: 22px;
+}
+.activeWarning h3 {
+  margin: 0;
+  color: var(--accent-text);
+  font-size: 18px;
+}
+.warningDetails {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 12px 18px;
+  margin: 20px 0;
+  font-size: 14px;
+}
+.pointsOverview {
+  min-height: 580px;
+}
+.pointsBalance {
+  font-size: 56px;
+  line-height: 1.1;
+  font-weight: 700;
+  margin: 4px 0 0;
+  letter-spacing: -1px;
+  overflow-wrap: anywhere;
+}
+.pointsOverview h3 {
+  font-size: 16px;
+  margin: 24px 0 0;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-color);
+}
+.pointsOverview > button {
+  align-self: flex-start;
+}
+.pointPreview {
+  display: grid;
+  grid-template-columns: 1.2fr auto 1fr;
+  align-items: start;
+  gap: 14px;
+  padding: 18px 0;
+  border-top: 1px solid var(--border-color);
+  font-size: 14px;
+}
+.pointPreview time {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.pointPreview p {
+  margin: 4px 0;
+}
+.positiveAmount {
+  color: var(--status-success);
+}
+.negativeAmount {
+  color: var(--status-error);
+}
+.tableScroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.auditTable {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 14px;
+}
+.auditTable th {
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-surface-hover);
+}
+.auditTable th,
+.auditTable td {
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--border-color);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.auditTable td p {
+  margin: 6px 0;
+  color: var(--text-secondary);
+}
+.auditTable td:first-child {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+@media (max-width: 1100px) {
+  .overviewGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pointsOverview {
+    min-height: 0;
+  }
+  .overviewDetails {
+    grid-template-columns: minmax(160px, 1fr) 1fr auto;
+  }
+}
+@media (max-width: 600px) {
+  .memberHero {
+    gap: 16px;
+  }
+  .avatar {
+    flex-basis: 64px;
+    height: 64px;
+    font-size: 24px;
+  }
+  .identityLine h2 {
+    font-size: 26px;
+  }
+  .heroActions {
+    width: 100%;
+  }
+  .heroActions button {
+    flex: 1;
+  }
+  .overviewGrid .card {
+    padding: 18px;
+  }
+  .overviewDetails {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .overviewDetails dd:nth-child(3n) {
+    grid-column: 2;
+  }
+  .memberTabs {
+    gap: 0;
+  }
+  .memberTabs button {
+    padding: 12px;
+  }
+  .pointPreview {
+    grid-template-columns: 1fr auto 1fr;
+  }
+  .warningDetails {
+    grid-template-columns: 80px 1fr;
+  }
+}
+
+.advancedDetails {
+  margin: 20px 0;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--bg-surface);
+}
+.advancedDetails > summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-weight: 500;
+  min-height: 28px;
+}
+.advancedDetails[open] > summary {
+  margin-bottom: 16px;
+}
+.advancedDetails[open] > section + section {
+  margin-top: 16px;
+}
+
+.heroActions button,
+.textAction,
+.pointsOverview > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.statusBadge {
+  gap: 8px;
+}
+.activeWarning h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+.activeWarning h3 svg {
+  flex-shrink: 0;
+}

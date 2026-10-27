@@ -25,6 +25,8 @@ export function ActionDialog({
       }}
       style={{
         maxWidth: 560,
+        maxHeight: '90dvh',
+        overflowY: 'auto',
         padding: 24,
         borderRadius: 12,
         border: '1px solid var(--border-color)',

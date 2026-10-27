@@ -18,6 +18,7 @@
  *  - A re-entry guard (useRef) plus disabled buttons prevent double-submits.
  */
 
+import { AlertTriangle, Settings, Circle } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 
@@ -31,6 +32,9 @@ import {
 import { translate } from '@/i18n';
 import { formatDateOnly } from '@/lib/format';
 
+import { ActionDialog } from '@/components/ui/ActionDialog';
+import { MemberOverview } from './MemberOverview';
+import { MemberHistory } from './MemberHistory';
 import { AccessTools } from './AccessTools';
 import { MemberTools } from './MemberTools';
 import { UserPointsSection } from './PointsSection';
@@ -56,6 +60,22 @@ function formatDate(iso: string | null): string {
 /** Actions that require an explicit confirmation step before firing. */
 type ConfirmableAction = 'grantAdmin' | 'revokeAdmin';
 
+function initials(name: string) {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const capitals = name.match(/\p{Lu}/gu) ?? [];
+  return (
+    (words.length > 1
+      ? words
+          .slice(0, 2)
+          .map((word) => Array.from(word)[0])
+          .join('')
+      : capitals.length > 1
+        ? capitals.slice(0, 2).join('')
+        : Array.from(name.trim()).slice(0, 2).join('')
+    ).toLocaleUpperCase('sv-SE') || '?'
+  );
+}
+
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -70,6 +90,25 @@ export default function UserDetailPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<ConfirmableAction | null>(null);
 
+  const sections = ['overview', 'profile', 'warnings', 'points', 'history'] as const;
+  type Section = (typeof sections)[number];
+  const [section, setSection] = useState<Section>(() => {
+    const value = new URLSearchParams(window.location.search).get('section');
+    return sections.includes(value as Section) ? (value as Section) : 'overview';
+  });
+  const [showAccess, setShowAccess] = useState(false);
+  function selectSection(value: string) {
+    if (!sections.includes(value as Section)) return;
+    setSection(value as Section);
+  }
+  const sectionLabels: Record<Section, string> = {
+    overview: 'Översikt',
+    profile: 'Profil',
+    warnings: 'Varningar',
+    points: 'Poäng',
+    history: 'Historik',
+  };
+  const requestSequence = useRef(0);
   const actingRef = useRef(false);
 
   // Danger zone: irreversible full deletion. Kept in its own state so it never
@@ -84,18 +123,20 @@ export default function UserDetailPage() {
   const deletingRef = useRef(false);
 
   const load = useCallback(async (uid: string) => {
+    const sequence = ++requestSequence.current;
     setLoading(true);
     setError(null);
     setSuccessMessage(null);
     setActionError(null);
     try {
       const result = await adminGetUser(uid);
-      setDetail(result);
+      if (sequence === requestSequence.current) setDetail(result);
     } catch (err) {
+      if (sequence !== requestSequence.current) return;
       setDetail(null);
       setError((err as ApiError)?.message ?? t('users.detail.loadError'));
     } finally {
-      setLoading(false);
+      if (sequence === requestSequence.current) setLoading(false);
     }
   }, []);
 
@@ -206,13 +247,100 @@ export default function UserDetailPage() {
         <Link className={styles.backLink} to="/users">
           {t('users.detail.back')}
         </Link>
-        <h1 className={styles.title}>
-          {detail?.displayName || (loading ? id : t('users.unnamed'))}
-        </h1>
+        <h1 className={styles.title}>Medlemskort</h1>
         <p className={styles.uid}>{id}</p>
       </header>
 
-      {loading ? (
+      {detail && detail.uid === id && !loading && !error && (
+        <>
+          <div className={styles.memberHero}>
+            <div className={styles.avatar} aria-hidden="true">
+              {initials(detail.displayName)}
+            </div>
+            <div className={styles.memberIdentity}>
+              <div className={styles.identityLine}>
+                <h2>{detail.displayName || t('users.unnamed')}</h2>
+                <span
+                  className={`${styles.statusBadge} ${detail.suspended || detail.deleted || detail.carCommunityAccess?.suspended || detail.carCommunityAccess?.blacklisted ? styles.restrictedBadge : ''}`}
+                >
+                  <Circle size={10} fill="currentColor" strokeWidth={0} aria-hidden="true" />
+                  {detail.deleted
+                    ? 'Borttaget konto'
+                    : detail.suspended || detail.carCommunityAccess?.suspended
+                      ? 'Avstängd'
+                      : detail.carCommunityAccess?.blacklisted
+                        ? 'Svartlistad'
+                        : detail.carCommunityAccess?.ready
+                          ? 'Aktiv'
+                          : 'Åtkomst ej verifierad'}
+                </span>
+              </div>
+              <p>
+                Avstängning: <strong>{detail.carCommunityAccess?.suspended ? 'Ja' : 'Nej'}</strong>{' '}
+                · Svartlistning:{' '}
+                <strong>{detail.carCommunityAccess?.blacklisted ? 'Ja' : 'Nej'}</strong>
+              </p>
+              <p className={styles.meta}>
+                Två separata statusar som hanteras oberoende av varandra.
+              </p>
+            </div>
+            <div className={styles.heroActions}>
+              <button
+                type="button"
+                className={styles.primaryButton}
+                disabled={!detail.permissions?.canWarn}
+                onClick={() => selectSection('warnings')}
+              >
+                <AlertTriangle size={18} aria-hidden="true" /> Utfärda varning
+              </button>
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                onClick={() => setShowAccess(true)}
+              >
+                <Settings size={18} aria-hidden="true" /> Hantera åtkomst
+              </button>
+            </div>
+          </div>
+          <div className={styles.memberTabs} role="tablist" aria-label="Medlemskort">
+            {sections.map((value, index) => (
+              <button
+                key={value}
+                id={`member-tab-${value}`}
+                type="button"
+                role="tab"
+                aria-selected={section === value}
+                aria-controls="member-panel"
+                tabIndex={section === value ? 0 : -1}
+                onClick={() => selectSection(value)}
+                onKeyDown={(event) => {
+                  const next =
+                    event.key === 'ArrowRight'
+                      ? (index + 1) % sections.length
+                      : event.key === 'ArrowLeft'
+                        ? (index + sections.length - 1) % sections.length
+                        : event.key === 'Home'
+                          ? 0
+                          : event.key === 'End'
+                            ? sections.length - 1
+                            : null;
+                  if (next !== null) {
+                    event.preventDefault();
+                    selectSection(sections[next]!);
+                    (
+                      event.currentTarget.parentElement?.querySelectorAll('button')[next] as
+                        HTMLButtonElement | undefined
+                    )?.focus();
+                  }
+                }}
+              >
+                {sectionLabels[value]}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {loading || (detail && detail.uid !== id) ? (
         <p className={styles.meta} aria-live="polite" aria-busy="true">
           {t('users.detail.loading')}
         </p>
@@ -223,7 +351,7 @@ export default function UserDetailPage() {
       ) : !detail ? (
         <p className={styles.meta}>{t('users.detail.notFound')}</p>
       ) : (
-        <>
+        <div id="member-panel" role="tabpanel" aria-labelledby={`member-tab-${section}`}>
           {detail.suspended && (
             <p className={styles.warning} role="alert">
               {t('users.detail.suspendedBanner')}
@@ -235,226 +363,272 @@ export default function UserDetailPage() {
             </p>
           )}
 
-          <section className={styles.card}>
-            <h2 className={styles.cardTitle}>{t('users.detail.profileTitle')}</h2>
-            <dl className={styles.detailGrid}>
-              <dt>{t('users.detail.roleLabel')}</dt>
-              <dd>{roleLabel(detail.role)}</dd>
-              <dt>{t('users.detail.memberLabel')}</dt>
-              <dd>{detail.activeMember ? t('users.member.yes') : t('users.member.no')}</dd>
-              <dt>{t('users.detail.statusLabel')}</dt>
-              <dd>
-                {detail.deleted
-                  ? t('users.status.deleted')
-                  : detail.suspended
-                    ? t('users.status.suspended')
-                    : t('users.status.active')}
-              </dd>
-              <dt>{t('users.detail.bioLabel')}</dt>
-              <dd>{detail.bio || '–'}</dd>
-              <dt>{t('users.detail.createdLabel')}</dt>
-              <dd>{formatDate(detail.createdAt)}</dd>
-              <dt>Senast registrerade inloggning</dt>
-              <dd>
-                {detail.lastLoginAt
-                  ? new Date(detail.lastLoginAt).toLocaleString('sv-SE')
-                  : 'Historik saknas'}
-              </dd>
-              <dt>Inloggningsfrekvens</dt>
-              <dd>Historik saknas</dd>
-              <dt>{t('users.detail.updatedLabel')}</dt>
-              <dd>{formatDate(detail.updatedAt)}</dd>
-            </dl>
-            <p className={styles.meta}>
-              <Link
-                className={styles.link}
-                to={`/subscription?uid=${encodeURIComponent(detail.uid)}`}
-              >
-                {t('users.detail.subscriptionLink')}
-              </Link>
-            </p>
-          </section>
-
-          <section className={styles.card}>
-            <h2 className={styles.cardTitle}>{t('users.detail.actionTitle')}</h2>
-            {isOwner && <p className={styles.meta}>{t('users.detail.ownerNote')}</p>}
-
-            <label className={styles.label} htmlFor="user-reason">
-              {t('users.detail.reasonLabel')} <span aria-hidden="true">*</span>
-            </label>
-            <input
-              id="user-reason"
-              className={styles.input}
-              type="text"
-              required
-              autoComplete="off"
-              maxLength={500}
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder={t('users.detail.reasonPlaceholder')}
+          {(section === 'profile' || section === 'warnings') && (
+            <MemberTools
+              key={`${detail.uid}:${section}:${detail.displayName}`}
+              section={section}
+              member={detail}
+              onChanged={() => void load(detail.uid)}
             />
-
-            {pendingConfirm && (
-              <div
-                className={styles.confirm}
-                role="alertdialog"
-                aria-modal="true"
-                aria-labelledby="user-confirm-title"
-              >
-                <p id="user-confirm-title" className={styles.confirmText}>
-                  {confirmLabels[pendingConfirm].message}
+          )}
+          {section === 'profile' && (
+            <details className={styles.advancedDetails}>
+              <summary>Kontoinformation och administratörsroll</summary>
+              <section className={styles.card}>
+                <h2 className={styles.cardTitle}>{t('users.detail.profileTitle')}</h2>
+                <dl className={styles.detailGrid}>
+                  <dt>{t('users.detail.roleLabel')}</dt>
+                  <dd>{roleLabel(detail.role)}</dd>
+                  <dt>{t('users.detail.memberLabel')}</dt>
+                  <dd>{detail.activeMember ? t('users.member.yes') : t('users.member.no')}</dd>
+                  <dt>{t('users.detail.statusLabel')}</dt>
+                  <dd>
+                    {detail.deleted
+                      ? t('users.status.deleted')
+                      : detail.suspended
+                        ? t('users.status.suspended')
+                        : t('users.status.active')}
+                  </dd>
+                  <dt>{t('users.detail.bioLabel')}</dt>
+                  <dd>{detail.bio || '–'}</dd>
+                  <dt>{t('users.detail.createdLabel')}</dt>
+                  <dd>{formatDate(detail.createdAt)}</dd>
+                  <dt>Senast registrerade inloggning</dt>
+                  <dd>
+                    {detail.lastLoginAt
+                      ? new Date(detail.lastLoginAt).toLocaleString('sv-SE')
+                      : 'Historik saknas'}
+                  </dd>
+                  <dt>Inloggningsfrekvens</dt>
+                  <dd>Historik saknas</dd>
+                  <dt>{t('users.detail.updatedLabel')}</dt>
+                  <dd>{formatDate(detail.updatedAt)}</dd>
+                </dl>
+                <p className={styles.meta}>
+                  <Link
+                    className={styles.link}
+                    to={`/subscription?uid=${encodeURIComponent(detail.uid)}`}
+                  >
+                    {t('users.detail.subscriptionLink')}
+                  </Link>
                 </p>
-                <div className={styles.actions}>
-                  <button
-                    type="button"
-                    className={styles.dangerButton}
-                    onClick={confirmLabels[pendingConfirm].run}
-                    disabled={acting}
-                  >
-                    {t('users.detail.confirm')}
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.secondaryButton}
-                    onClick={() => setPendingConfirm(null)}
-                    disabled={acting}
-                  >
-                    {t('users.detail.cancel')}
-                  </button>
-                </div>
-              </div>
-            )}
+              </section>
 
-            <div className={styles.actions}>
-              {!isOwner &&
-                (isAdminRole ? (
-                  <button
-                    type="button"
-                    className={styles.dangerButton}
-                    onClick={() => setPendingConfirm('revokeAdmin')}
-                    disabled={!hasReason || acting}
-                  >
-                    {t('users.detail.revokeAdmin')}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className={styles.secondaryButton}
-                    onClick={() => setPendingConfirm('grantAdmin')}
-                    disabled={!hasReason || acting}
-                  >
-                    {t('users.detail.grantAdmin')}
-                  </button>
-                ))}
-            </div>
+              <section className={styles.card}>
+                <h2 className={styles.cardTitle}>{t('users.detail.actionTitle')}</h2>
+                {isOwner && <p className={styles.meta}>{t('users.detail.ownerNote')}</p>}
 
-            {actionError && (
-              <p className={styles.error} role="alert">
-                {actionError}
-              </p>
-            )}
-            {successMessage && (
-              <p className={styles.success} role="status">
-                {successMessage}
-              </p>
-            )}
-          </section>
-
-          <AccessTools key={detail.uid} uid={detail.uid} />
-          <MemberTools
-            key={`${detail.uid}:${detail.displayName}`}
-            member={detail}
-            onChanged={() => void load(detail.uid)}
-          />
-          <UserPointsSection
-            key={detail.uid}
-            userId={detail.uid}
-            actorUid={detail.actorUid}
-            canAdjust={detail.permissions?.canAdjustPoints}
-          />
-
-          <section className={styles.dangerCard} aria-labelledby="user-danger-title">
-            <h2 id="user-danger-title" className={styles.dangerCardTitle}>
-              {t('users.detail.dangerTitle')}
-            </h2>
-            <p className={styles.meta}>{t('users.detail.deleteDescription')}</p>
-
-            {showDeleteDialog ? (
-              <div
-                className={styles.dangerConfirm}
-                role="alertdialog"
-                aria-modal="true"
-                aria-labelledby="user-delete-title"
-              >
-                <p id="user-delete-title" className={styles.confirmText}>
-                  {t('users.detail.deleteConfirmBody')
-                    .replace('{name}', detail.displayName.trim() || t('users.unnamed'))
-                    .replace('{uid}', detail.uid)}
-                </p>
-
-                <label className={styles.label} htmlFor="user-delete-reason">
+                <label className={styles.label} htmlFor="user-reason">
                   {t('users.detail.reasonLabel')} <span aria-hidden="true">*</span>
                 </label>
                 <input
-                  id="user-delete-reason"
+                  id="user-reason"
                   className={styles.input}
                   type="text"
                   required
                   autoComplete="off"
                   maxLength={500}
-                  value={deleteReason}
-                  onChange={(e) => setDeleteReason(e.target.value)}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
                   placeholder={t('users.detail.reasonPlaceholder')}
                 />
 
-                <label className={styles.label} htmlFor="user-delete-confirm">
-                  {t('users.detail.deleteTypeToConfirm').replace('{phrase}', deleteConfirmPhrase)}
-                </label>
-                <input
-                  id="user-delete-confirm"
-                  className={styles.input}
-                  type="text"
-                  autoComplete="off"
-                  autoCapitalize="none"
-                  value={deleteConfirmText}
-                  onChange={(e) => setDeleteConfirmText(e.target.value)}
-                  placeholder={deleteConfirmPhrase}
-                />
+                {pendingConfirm && (
+                  <div
+                    className={styles.confirm}
+                    role="alertdialog"
+                    aria-modal="true"
+                    aria-labelledby="user-confirm-title"
+                  >
+                    <p id="user-confirm-title" className={styles.confirmText}>
+                      {confirmLabels[pendingConfirm].message}
+                    </p>
+                    <div className={styles.actions}>
+                      <button
+                        type="button"
+                        className={styles.dangerButton}
+                        onClick={confirmLabels[pendingConfirm].run}
+                        disabled={acting}
+                      >
+                        {t('users.detail.confirm')}
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.secondaryButton}
+                        onClick={() => setPendingConfirm(null)}
+                        disabled={acting}
+                      >
+                        {t('users.detail.cancel')}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div className={styles.actions}>
-                  <button
-                    type="button"
-                    className={styles.solidDangerButton}
-                    onClick={() => void runDelete()}
-                    disabled={!deleteReady || deleting}
-                  >
-                    {deleting ? t('users.detail.deleting') : t('users.detail.deleteConfirm')}
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.secondaryButton}
-                    onClick={closeDeleteDialog}
-                    disabled={deleting}
-                  >
-                    {t('users.detail.cancel')}
-                  </button>
+                  {!isOwner &&
+                    (isAdminRole ? (
+                      <button
+                        type="button"
+                        className={styles.dangerButton}
+                        onClick={() => setPendingConfirm('revokeAdmin')}
+                        disabled={!hasReason || acting}
+                      >
+                        {t('users.detail.revokeAdmin')}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className={styles.secondaryButton}
+                        onClick={() => setPendingConfirm('grantAdmin')}
+                        disabled={!hasReason || acting}
+                      >
+                        {t('users.detail.grantAdmin')}
+                      </button>
+                    ))}
                 </div>
 
-                {deleteError && (
+                {actionError && (
                   <p className={styles.error} role="alert">
-                    {deleteError}
+                    {actionError}
                   </p>
                 )}
-              </div>
-            ) : (
-              <div className={styles.actions}>
-                <button type="button" className={styles.dangerButton} onClick={openDeleteDialog}>
-                  {t('users.detail.deleteUser')}
-                </button>
-              </div>
-            )}
-          </section>
-        </>
+                {successMessage && (
+                  <p className={styles.success} role="status">
+                    {successMessage}
+                  </p>
+                )}
+              </section>
+            </details>
+          )}
+
+          {section === 'overview' && (
+            <MemberOverview
+              key={detail.uid}
+              member={detail}
+              onSection={selectSection}
+              onRefresh={() => void load(detail.uid)}
+            />
+          )}
+
+          {section === 'points' && (
+            <UserPointsSection
+              key={detail.uid}
+              userId={detail.uid}
+              actorUid={detail.actorUid}
+              canAdjust={detail.permissions?.canAdjustPoints}
+            />
+          )}
+          {section === 'history' && <MemberHistory key={detail.uid} uid={detail.uid} />}
+          {showAccess && (
+            <ActionDialog
+              title="Hantera åtkomst till CarCommunity"
+              onCancel={() => setShowAccess(false)}
+            >
+              <AccessTools
+                key={detail.uid}
+                uid={detail.uid}
+                onChanged={() => void load(detail.uid)}
+              />
+            </ActionDialog>
+          )}
+
+          {section === 'profile' && (
+            <>
+              <section className={styles.dangerCard} aria-labelledby="user-danger-title">
+                <h2 id="user-danger-title" className={styles.dangerCardTitle}>
+                  {t('users.detail.dangerTitle')}
+                </h2>
+                <p className={styles.meta}>{t('users.detail.deleteDescription')}</p>
+                <p className={styles.meta}>
+                  Kontoborttagning gäller det gemensamma Firebase-kontot och kan påverka Driver.
+                  Beslut för enbart CarCommunity finns under Hantera åtkomst.
+                </p>
+
+                {showDeleteDialog ? (
+                  <div
+                    className={styles.dangerConfirm}
+                    role="alertdialog"
+                    aria-modal="true"
+                    aria-labelledby="user-delete-title"
+                  >
+                    <p id="user-delete-title" className={styles.confirmText}>
+                      {t('users.detail.deleteConfirmBody')
+                        .replace('{name}', detail.displayName.trim() || t('users.unnamed'))
+                        .replace('{uid}', detail.uid)}
+                    </p>
+
+                    <label className={styles.label} htmlFor="user-delete-reason">
+                      {t('users.detail.reasonLabel')} <span aria-hidden="true">*</span>
+                    </label>
+                    <input
+                      id="user-delete-reason"
+                      className={styles.input}
+                      type="text"
+                      required
+                      autoComplete="off"
+                      maxLength={500}
+                      value={deleteReason}
+                      onChange={(e) => setDeleteReason(e.target.value)}
+                      placeholder={t('users.detail.reasonPlaceholder')}
+                    />
+
+                    <label className={styles.label} htmlFor="user-delete-confirm">
+                      {t('users.detail.deleteTypeToConfirm').replace(
+                        '{phrase}',
+                        deleteConfirmPhrase,
+                      )}
+                    </label>
+                    <input
+                      id="user-delete-confirm"
+                      className={styles.input}
+                      type="text"
+                      autoComplete="off"
+                      autoCapitalize="none"
+                      value={deleteConfirmText}
+                      onChange={(e) => setDeleteConfirmText(e.target.value)}
+                      placeholder={deleteConfirmPhrase}
+                    />
+
+                    <div className={styles.actions}>
+                      <button
+                        type="button"
+                        className={styles.solidDangerButton}
+                        onClick={() => void runDelete()}
+                        disabled={!deleteReady || deleting}
+                      >
+                        {deleting ? t('users.detail.deleting') : t('users.detail.deleteConfirm')}
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.secondaryButton}
+                        onClick={closeDeleteDialog}
+                        disabled={deleting}
+                      >
+                        {t('users.detail.cancel')}
+                      </button>
+                    </div>
+
+                    {deleteError && (
+                      <p className={styles.error} role="alert">
+                        {deleteError}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className={styles.actions}>
+                    <button
+                      type="button"
+                      className={styles.dangerButton}
+                      onClick={openDeleteDialog}
+                    >
+                      {t('users.detail.deleteUser')}
+                    </button>
+                  </div>
+                )}
+              </section>{' '}
+            </>
+          )}
+        </div>
       )}
     </div>
   );

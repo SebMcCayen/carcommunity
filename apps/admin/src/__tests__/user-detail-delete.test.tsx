@@ -47,6 +47,9 @@ vi.mock('@/features/users', () => ({
 
 vi.mock('@/app/users/[id]/AccessTools', () => ({ AccessTools: () => null }));
 
+vi.mock('@/app/users/[id]/MemberOverview', () => ({ MemberOverview: () => null }));
+vi.mock('@/app/users/[id]/MemberHistory', () => ({ MemberHistory: () => null }));
+
 vi.mock('@/app/users/[id]/MemberTools', () => ({ MemberTools: () => null }));
 
 // The points section pulls in Firestore-backed callables; stub it out.
@@ -105,6 +108,8 @@ async function render() {
   await act(async () => {
     root.render(<UserDetailPage />);
   });
+  await flush();
+  act(() => button('Profil').click());
   await flush();
 }
 

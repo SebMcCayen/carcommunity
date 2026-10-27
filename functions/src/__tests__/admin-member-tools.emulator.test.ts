@@ -44,7 +44,8 @@ interface ToolResponse {
   alreadyApplied: boolean;
   version: number;
   entryId: string;
-  meta: { nextCursor: string | null };
+  items: Array<{ id: string; action: string; reason: string; actorName: string }>;
+  meta: { nextCursor: string | null; total: number };
 }
 const call = async (name: string, data: unknown = {}) =>
   (await httpsCallable(functions, name)(data)).data as ToolResponse;
@@ -309,5 +310,71 @@ describe('member tools contracts', () => {
       ).rejects.toMatchObject({ code: 'functions/invalid-argument' });
     const entries = await db.collection('pointsLedger').doc(member.uid).collection('entries').get();
     expect(entries.size).toBe(1);
+  });
+});
+
+describe('safe member history', () => {
+  it('pages exact timestamp ties without leaking raw audit details and binds the cursor to the member', async () => {
+    const previous = await db
+      .collection('adminAuditEvents')
+      .where('targetId', '==', member.uid)
+      .get();
+    for (const row of previous.docs) await row.ref.delete();
+    const batch = db.batch();
+    for (let i = 0; i < 45; i++)
+      batch.set(
+        db
+          .collection('adminAuditEvents')
+          .doc(`member-history-${member.uid}-${String(i).padStart(3, '0')}`),
+        {
+          targetId: member.uid,
+          targetType: 'user',
+          adminId: actor.uid,
+          action: 'user.updateDisplayName',
+          reason: 'Reviewed member decision',
+          createdAt: new Timestamp(1700000000, i),
+          details: { originalMessage: 'NEVER-IN-CARD', internalNote: 'PRIVATE-DETAIL' },
+        },
+      );
+    await batch.commit();
+    const first = await call('admin-listMemberHistory', { targetUid: member.uid, pageSize: 20 });
+    expect(first.meta.total).toBe(45);
+    expect(first.items).toHaveLength(20);
+    expect(JSON.stringify(first)).not.toContain('NEVER-IN-CARD');
+    expect(JSON.stringify(first)).not.toContain('PRIVATE-DETAIL');
+    expect(first.items[0]).toMatchObject({
+      action: 'user.updateDisplayName',
+      actorName: 'Other',
+      reason: 'Reviewed member decision',
+    });
+    await expect(
+      call('admin-listMemberHistory', {
+        targetUid: other.uid,
+        pageSize: 20,
+        cursor: first.meta.nextCursor,
+      }),
+    ).rejects.toMatchObject({ code: 'functions/invalid-argument' });
+    const all = [...first.items];
+    let cursor = first.meta.nextCursor;
+    while (cursor) {
+      const page = await call('admin-listMemberHistory', {
+        targetUid: member.uid,
+        pageSize: 20,
+        cursor,
+      });
+      all.push(...page.items);
+      cursor = page.meta.nextCursor;
+      expect(all.length).toBeLessThanOrEqual(45);
+    }
+    expect(all.map((row) => row.id)).toEqual(
+      Array.from(
+        { length: 45 },
+        (_, i) => `member-history-${member.uid}-${String(44 - i).padStart(3, '0')}`,
+      ),
+    );
+    await login(member);
+    await expect(call('admin-listMemberHistory', { targetUid: member.uid })).rejects.toMatchObject({
+      code: 'functions/permission-denied',
+    });
   });
 });

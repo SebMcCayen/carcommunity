@@ -621,6 +621,7 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   'feedback.interactWithIssue': 'variable-member',
   'errors.reportClientError': 'variable-member',
   'account.getAccess': 'uncosted', // Startup, foreground and server invalidation; estimate from telemetry.
+  'admin.listMemberHistory': 'admin-rare',
   'admin.getAccessTarget': 'admin-rare',
   'admin.updateAccess': 'admin-rare',
   'admin.listAccessBlocks': 'admin-rare',
