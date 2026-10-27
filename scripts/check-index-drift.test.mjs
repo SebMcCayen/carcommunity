@@ -172,3 +172,25 @@ test('the real firestore.indexes.json parses and every entry keys cleanly', () =
     keys.add(key);
   }
 });
+
+// Emulator queries are automatically indexed. Guard the production-only index
+// needed by events-listChatReports: collectionGroup(messageReports), newest first.
+test('event chat reports declare their collection-group date index without removing collection indexes', () => {
+  const config = JSON.parse(
+    readFileSync(resolve(REPO_ROOT, 'firebase/firestore.indexes.json'), 'utf8'),
+  );
+  const field = config.fieldOverrides.find(
+    (entry) => entry.collectionGroup === 'messageReports' && entry.fieldPath === 'createdAt',
+  );
+  assert.ok(field, 'missing messageReports.createdAt override');
+  for (const [queryScope, order] of [
+    ['COLLECTION_GROUP', 'DESCENDING'],
+    ['COLLECTION', 'ASCENDING'],
+    ['COLLECTION', 'DESCENDING'],
+  ]) {
+    assert.ok(
+      field.indexes.some((index) => index.queryScope === queryScope && index.order === order),
+      `missing ${queryScope} ${order}`,
+    );
+  }
+});

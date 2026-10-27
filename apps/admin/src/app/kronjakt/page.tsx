@@ -89,7 +89,7 @@ function statusLabel(status: string): string {
 // gamification spec's CROWN_RARITY_TABLE (docs/gamification-system.md).
 // ---------------------------------------------------------------------------
 
-type CrownTier = 'common' | 'rare' | 'epic' | 'legendary';
+type CrownTier = 'common' | 'uncommon' | 'rare' | 'legendary';
 
 interface CrownTierSpec {
   /** Kronpoäng reward the tier resolves to. */
@@ -105,16 +105,14 @@ interface CrownTierSpec {
   color: string;
 }
 
-const CROWN_TIER_ORDER: readonly CrownTier[] = ['common', 'rare', 'epic', 'legendary'];
+const CROWN_TIER_ORDER: readonly CrownTier[] = ['common', 'uncommon', 'rare', 'legendary'];
 
-// NOTE: these frontend tier NAMES do not match the backend rarities. This table's
-// 'rare' = backend 'uncommon', 'epic' = backend 'rare' (the backend has no 'epic').
-// points + ttlHours mirror CROWN_RARITY_TABLE (functions/src/crownHunt/crown-spawn-core.ts):
-// common 6h, 'rare'/uncommon 12h, 'epic'/rare 24h, legendary 2h (deliberately short). Keep in sync.
+// Preset names and rewards match the backend rarities (crown-spawn-core.ts).
+// Hand-placed points persist rewardPoints, not a rarity or automatic-spawn TTL.
 const CROWN_TIER_TABLE: Record<CrownTier, CrownTierSpec> = {
   common: { points: 10, ttlHours: 6, color: '#9aa0a6' },
-  rare: { points: 25, ttlHours: 12, color: '#3b82f6' },
-  epic: { points: 100, ttlHours: 24, color: '#a855f7' },
+  uncommon: { points: 25, ttlHours: 12, color: '#3b82f6' },
+  rare: { points: 100, ttlHours: 24, color: '#a855f7' },
   legendary: { points: 500, ttlHours: 2, color: '#f5b301' },
 };
 
@@ -276,6 +274,7 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
 
       <fieldset className={styles.tierFieldset}>
         <legend className={styles.label}>{t('crownHunt.formTierLabel')}</legend>
+        <p className={styles.introText}>{t('crownHunt.formTierHint')}</p>
         {/* Toggle-button group: the <fieldset>/<legend> labels the set and each
             button reports its state via aria-pressed. This deliberately avoids
             role="radiogroup"/"radio", which would also require roving-tabindex

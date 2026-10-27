@@ -126,8 +126,8 @@ export default function EventChatModerationPage() {
     try {
       const res = await loadAdminChatReports();
       setReports(res.data.reports);
-    } catch (err) {
-      setReportsError((err as ApiError)?.message ?? 'Kunde inte ladda rapporter. Försök igen.');
+    } catch {
+      setReportsError('Kunde inte ladda eventchattens anmälningar. Försök igen.');
     } finally {
       setReportsLoading(false);
     }
@@ -211,7 +211,12 @@ export default function EventChatModerationPage() {
         {reportsLoading ? (
           <p className={styles.statusText}>Laddar rapporter…</p>
         ) : reportsError ? (
-          <p className={styles.errorText}>{reportsError}</p>
+          <div role="alert">
+            <p className={styles.errorText}>{reportsError}</p>
+            <button type="button" className={styles.actionButton} onClick={() => void fetchReports()}>
+              Försök igen
+            </button>
+          </div>
         ) : reports.length === 0 ? (
           <p className={styles.statusText}>Inga rapporter hittades.</p>
         ) : (
