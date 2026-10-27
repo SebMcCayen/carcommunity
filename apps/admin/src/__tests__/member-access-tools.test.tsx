@@ -67,7 +67,7 @@ it('reviews independent unlisting and reuses the same actor-bound intent after u
   await act(async () => button('Bekräfta beslut').click());
   const calls = api.mock.calls.filter((row) => row[0] === 'admin-updateAccess');
   expect(calls).toHaveLength(2);
-  expect(calls[1][1]).toEqual(first);
+  expect(calls[1]![1]).toEqual(first);
   expect(host.querySelector('dialog')).toBeNull();
 });
 it('keeps mutations disabled until the migration is ready and capabilities permit them', async () => {

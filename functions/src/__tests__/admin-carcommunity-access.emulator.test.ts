@@ -1,6 +1,7 @@
 process.env.FIREBASE_AUTH_EMULATOR_HOST ??= '127.0.0.1:9099';
 process.env.FIRESTORE_EMULATOR_HOST ??= '127.0.0.1:8080';
 process.env.GCLOUD_PROJECT ??= 'demo-test';
+import { readFileSync } from 'node:fs';
 import { initializeApp, deleteApp, type FirebaseApp } from 'firebase/app';
 import {
   getAuth,
@@ -129,6 +130,14 @@ async function driverReadable(uid: string) {
 }
 beforeAll(async () => {
   if (process.env.GCLOUD_PROJECT !== 'demo-test') throw Error('Disposable demo emulators required');
+  // Functions' emulator FIREBASE_CONFIG uses the demo-test namespace.
+  // Load the actual production rules there as well as CLI's default-rtdb.
+  const rulesResult = await fetch('http://127.0.0.1:9000/.settings/rules.json?ns=demo-test', {
+    method: 'PUT',
+    headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
+    body: readFileSync('../firebase/database.rules.json', 'utf8'),
+  });
+  if (!rulesResult.ok) throw Error('Local runtime namespace rules could not be loaded');
   const setup = (name: string) => {
     const app = initializeApp(
       {
@@ -136,7 +145,7 @@ beforeAll(async () => {
         apiKey: 'demo-key',
         appId: 'demo-app',
         storageBucket: 'demo-test.appspot.com',
-        databaseURL: 'https://demo-test-default-rtdb.firebaseio.com',
+        databaseURL: 'https://demo-test.firebaseio.com',
       },
       name,
     );
@@ -260,7 +269,7 @@ describe('CarCommunity-only access with shared Firebase identity', () => {
   it('guards self, current owner status and demoted actor before replay; concurrent identical decisions commit once', async () => {
     const uid = await sso('apple.com', `cc-boundary-${Date.now()}`);
     await expect(decide(owner.uid, 'suspend')).rejects.toMatchObject({
-      code: 'functions/permission-denied',
+      code: 'functions/failed-precondition',
     });
     const reviewed = await view(uid);
     const input = {

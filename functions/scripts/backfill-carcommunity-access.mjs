@@ -3,10 +3,21 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const args = process.argv.slice(2),
   project = args.find((v) => v.startsWith('--project='))?.slice(10);
+const databaseURL = args.find((v) => v.startsWith('--database-url='))?.slice(15);
 const apply = args.includes('--apply'),
   verify = args.includes('--verify');
-if (!project || args.some((v) => !['--apply', '--verify', `--project=${project}`].includes(v)))
-  throw Error('Expected --project=<explicit-id> [--apply | --verify]');
+if (
+  !project ||
+  !databaseURL ||
+  !/^https:\/\/[a-z0-9.-]+\.(?:firebaseio\.com|firebasedatabase\.app)$/.test(databaseURL) ||
+  args.some(
+    (v) =>
+      !['--apply', '--verify', `--project=${project}`, `--database-url=${databaseURL}`].includes(v),
+  )
+)
+  throw Error(
+    'Expected --project=<explicit-id> --database-url=<deployed-database-url> [--apply | --verify]',
+  );
 if (apply && (verify || process.env.KCC_ALLOW_ACCESS_BACKFILL !== project))
   throw Error('Apply requires explicit KCC_ALLOW_ACCESS_BACKFILL matching the project');
 const emulatorKeys = [
@@ -24,7 +35,7 @@ if (
 const { initializeApp } = require('firebase-admin/app');
 initializeApp({
   projectId: project,
-  databaseURL: `https://${project}-default-rtdb.firebaseio.com`,
+  databaseURL,
 });
 const { getFirestore, FieldPath } = require('firebase-admin/firestore');
 const { getDatabase } = require('firebase-admin/database');
