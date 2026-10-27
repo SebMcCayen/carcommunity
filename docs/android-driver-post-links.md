@@ -62,3 +62,11 @@ parent integration to regenerate its catalog separately; iOS files are outside
 this task's explicitly authorized scope. Root npm lint/typecheck/test/build were
 attempted but cannot run in this clean worktree without the absent
 `eslint`/`tsc`/`vitest`/`vite` workspace dependencies; no dependencies were changed.
+
+Local validation: Android string regeneration is deterministic and
+`git diff --check` passes. The targeted Driver `testDebugUnitTest` invocation
+used the required toolchain, two workers, and 3 GB Kotlin daemon setting, but
+was cancelled during `compileDebugKotlin` after diagnosing multiple concurrent
+compilations in the shared daemon with its old-generation heap at 99.99%.
+No Android test result is claimed. The parent must coordinate a rerun of the
+seven new tests and existing Driver suite before integration.
