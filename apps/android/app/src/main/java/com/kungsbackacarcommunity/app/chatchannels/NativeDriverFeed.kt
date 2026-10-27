@@ -34,6 +34,9 @@ fun driverFeedStrings(): DriverFeedStrings {
         "restricted" to R.string.driver_feed_restricted,
         "image" to R.string.driver_feed_image,
         "likes" to R.string.driver_feed_likes,
+        "openApp" to R.string.driver_feed_openApp,
+        "appLinkHint" to R.string.driver_feed_appLinkHint,
+        "appOpenError" to R.string.driver_feed_appOpenError,
     )
     return DriverFeedStrings { key ->
             localizedResources.getString(resources.getValue(key.removePrefix("driver.feed.")))

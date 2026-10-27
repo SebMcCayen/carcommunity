@@ -2001,6 +2001,9 @@
     <string name="driver_feed_restricted">Driver är inte tillgängligt för ditt konto.</string>
     <string name="driver_feed_image">Bild i inlägget</string>
     <string name="driver_feed_likes">Gilla-markeringar</string>
+    <string name="driver_feed_openApp">Öppna Driver-appen</string>
+    <string name="driver_feed_appLinkHint">Driver kan ännu inte öppna ett specifikt inlägg via länk.</string>
+    <string name="driver_feed_appOpenError">Driver kunde inte öppnas. Ingen publicerad nedladdningslänk finns tillgänglig ännu.</string>
     <string name="moderation_messageActionsTitle">Meddelande från %1$s</string>
     <string name="moderation_reply">Svara</string>
     <string name="moderation_blockMember">Blockera %1$s</string>

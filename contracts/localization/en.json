@@ -2146,7 +2146,10 @@
       "canonicalOnboarding": "Complete your CarCommunity profile to read Driver posts.",
       "restricted": "Driver is unavailable for your account.",
       "image": "Post image",
-      "likes": "Likes"
+      "likes": "Likes",
+      "openApp": "Open the Driver app",
+      "appLinkHint": "Driver does not yet support links to a specific post.",
+      "appOpenError": "Driver could not be opened. No published download link is available yet."
     }
   },
   "moderation": {

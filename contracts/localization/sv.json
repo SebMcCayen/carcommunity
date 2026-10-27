@@ -2146,7 +2146,10 @@
       "canonicalOnboarding": "Slutför din profil i CarCommunity för att läsa Driver-inlägg.",
       "restricted": "Driver är inte tillgängligt för ditt konto.",
       "image": "Bild i inlägget",
-      "likes": "Gilla-markeringar"
+      "likes": "Gilla-markeringar",
+      "openApp": "Öppna Driver-appen",
+      "appLinkHint": "Driver kan ännu inte öppna ett specifikt inlägg via länk.",
+      "appOpenError": "Driver kunde inte öppnas. Ingen publicerad nedladdningslänk finns tillgänglig ännu."
     }
   },
   "moderation": {
