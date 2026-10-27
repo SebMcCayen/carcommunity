@@ -26963,6 +26963,23 @@
         }
       }
     },
+    "savedDrives.driveReplay.exactRouteEmpty": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inga fullständiga inspelade GPS-punkter finns att visa för den här körningen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No full recorded GPS points are available for this drive."
+          }
+        }
+      }
+    },
     "savedDrives.driveReplay.missing": {
       "extractionState": "manual",
       "localizations": {
@@ -27037,13 +27054,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sparad, förenklad ruttöversikt. Den fullständiga ruttkartan kunde inte visas."
+            "value": "Förenklad sparad rutt. Exakta GPS-detaljer saknas."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Saved, simplified route overview. The full route map could not be displayed."
+            "value": "Simplified saved route. Exact GPS detail is unavailable."
           }
         }
       }

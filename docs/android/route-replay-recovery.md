@@ -56,10 +56,18 @@ or written for this patch.
 - Full valid fixes still drive the interactive map and timestamp-based summary.
 - A missing file is distinct from auth/access denial, missing/not-owned drive,
   temporary callable/signing failure, download failure and corrupt bytes.
-- A visible drive's stored thumbnail may provide a clearly labeled, simplified
-  overview when the full map cannot display. It never becomes a fabricated
-  timestamped route or supplies speed/distance statistics.
-- Fresh auth/access/not-found denial suppresses the thumbnail as well.
+- A visible drive's stored simplified polyline renders on the real, full-width
+  240 dp Mapbox preview and expands into the zoomable full-screen map. Both
+  views label it simplified, including their accessibility descriptions. A
+  token-less build can still display the small saved shape and configuration note.
+- `DriveRouteGeometry.Simplified` contains coordinates only; recorded fixes keep
+  their separate type. Fallback never becomes `RouteReplayState.Ready`, receives
+  invented timestamps, supplies speed/distance statistics, or draws kilometre/
+  top-speed markers. The saved drive's server facts remain unchanged.
+- Fresh auth/access/not-found denial suppresses both the fallback geometry and
+  the map-open action, including an already-open popup. Retry/loading also
+  cancels the old presentation; a successful retry replaces the simplified
+  geometry with the actual recorded fixes and recreates the native map view.
 - Retryable failures expose Try again. Every retry obtains a new signed URL,
   including after an expired/403 download; missing files can be retried while
   a newly saved drive's background upload is still in progress.
@@ -83,6 +91,12 @@ fresh signed URLs, corrupt payloads, cancellation and bounded loopback HTTP.
 Shared Robolectric/native Compose tests exercise the actual S54 screen: missing full route
 with/without a thumbnail, corrupt thumbnail, denial, retry/loading, distinguishable
 errors, owner/drive/reader replacement, navigation cancellation and re-entry.
+The map follow-up adds pure geometry/provenance/statistics tests plus real
+map-open control tests through an injected renderer. They assert 240 dp map
+height, exact fallback coordinates passed to preview/fullscreen, unchanged
+server facts, successful retry to full fixes, and all three denial suppressions.
+This isolates native GL while exercising the actual screen action and data;
+it does not establish native Mapbox pixel/render correctness.
 
 The local Gradle run was interrupted (SIGINT, exit 130) at the parent's request
 because concurrent builds exhausted the shared 16 GB host. Compilation had not
@@ -108,7 +122,8 @@ worktree; attempts fail with missing executables. No dependency files changed.
 ## Remaining limitations
 
 - Old missing GPS cannot be regenerated. A thumbnail is only the simplified
-  geometry already returned by authorized History reads.
+  geometry already returned by authorized History reads. Drawing it on a real
+  map does not recover the missing exact old GPS track.
 - Uploads are still best-effort and process-scoped, with bounded retries. A
   process kill after save or an exhausted upload can leave a drive document and
   thumbnail without `route.bin`; this patch does not invent a durable upload

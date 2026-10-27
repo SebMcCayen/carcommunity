@@ -965,14 +965,15 @@
     "routeUnavailable": "The route map isn't available for this drive.",
     "routeEmpty": "This drive has no recorded route to show.",
     "driveReplay": {
-      "simplifiedOverview": "Saved, simplified route overview. The full route map could not be displayed.",
+      "simplifiedOverview": "Simplified saved route. Exact GPS detail is unavailable.",
       "missing": "No full route is stored for this drive. If this drive was just saved, try again after the upload finishes. Missing older GPS data cannot be recovered.",
       "signInRequired": "Sign in to the drive's account to view its route.",
       "accessDenied": "You do not have access to this route. Check your account and your plan's history access.",
       "notFound": "This drive is no longer available to this account.",
       "serviceUnavailable": "The route service is temporarily unavailable. Please try again.",
       "downloadFailed": "Could not download the full route. Check your connection and try again.",
-      "corrupt": "The saved route file could not be read."
+      "corrupt": "The saved route file could not be read.",
+      "exactRouteEmpty": "No full recorded GPS points are available for this drive."
     },
     "routeExpand": "Open full-screen map",
     "routeMapThumbnailLabel": "Drive route map, tap to expand",
