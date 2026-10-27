@@ -29972,6 +29972,74 @@
         }
       }
     },
+    "settingsMenu.themeScheduled": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatiskt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatic"
+          }
+        }
+      }
+    },
+    "settingsMenu.themeScheduledDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ljust 07:00–19:00, annars mörkt. Lokal tid, oavsett telefonens tema."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Light 07:00–19:00, dark otherwise. Local time, independent of your phone’s theme."
+          }
+        }
+      }
+    },
+    "settingsMenu.themeSystem": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System"
+          }
+        }
+      }
+    },
+    "settingsMenu.themeSystemDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Följer telefonens ljusa eller mörka tema"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Follows your phone’s light or dark theme"
+          }
+        }
+      }
+    },
     "settingsMenu.title": {
       "extractionState": "manual",
       "localizations": {
