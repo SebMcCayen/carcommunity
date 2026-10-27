@@ -106,8 +106,9 @@ class ChatFeedSelectorTest {
 
                 val label = localized.getString(labelId)
                 val layouts = mutableListOf<TextLayoutResult>()
-                compose.onNodeWithText(label, useUnmergedTree = true)
-                    .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+                val labelNode = compose.onNodeWithText(label, useUnmergedTree = true)
+                labelNode.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+                val labelBounds = labelNode.fetchSemanticsNode().boundsInRoot
                 val layout = layouts.single()
                 assertEquals("No font shrinking", 14.sp, layout.layoutInput.style.fontSize)
                 assertEquals(scale, layout.layoutInput.density.fontScale, 0.001f)
@@ -115,8 +116,16 @@ class ChatFeedSelectorTest {
                     layout.layoutInput.style.textDecoration)
                 assertEquals(label.length, layout.getLineEnd(layout.lineCount - 1, visibleEnd = true))
                 assertFalse("No vertical clipping", layout.didOverflowHeight)
-                assertFalse("No horizontal clipping", layout.didOverflowWidth)
-                for (line in 0 until layout.lineCount) assertFalse("No ellipsis", layout.isLineEllipsized(line))
+                assertFalse("No horizontal clipping: $label at scale=$scale, " +
+                    "labelWidth=${layout.size.width}, paragraphWidth=${layout.multiParagraph.width}",
+                    layout.didOverflowWidth)
+                for (line in 0 until layout.lineCount) {
+                    assertFalse("No ellipsis", layout.isLineEllipsized(line))
+                    assertTrue("Line $line stays within its label",
+                        layout.getLineLeft(line) >= -1f && layout.getLineRight(line) <= layout.size.width + 1f)
+                    val center = labelBounds.left + (layout.getLineLeft(line) + layout.getLineRight(line)) / 2f
+                    assertEquals("Line $line centered in its touch target", bounds.center.x, center, 1f)
+                }
             }
         }
         compose.runOnIdle { assertEquals(listOf(true, false), callbacks) }

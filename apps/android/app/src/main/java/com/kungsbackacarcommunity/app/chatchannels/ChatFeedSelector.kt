@@ -55,6 +55,7 @@ fun ChatFeedSelector(driverSelected: Boolean, onSelect: (Boolean) -> Unit, modif
             ) {
                 Text(
                     stringResource(label),
+                    modifier = Modifier.fillMaxWidth(),
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (selected) MaterialTheme.colorScheme.onSurface
                         else MaterialTheme.colorScheme.onSurfaceVariant,
