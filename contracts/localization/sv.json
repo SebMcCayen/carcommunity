@@ -2161,7 +2161,10 @@
       "canonicalOnboarding": "Slutför din profil i CarCommunity för att läsa Driver-inlägg.",
       "restricted": "Driver är inte tillgängligt för ditt konto.",
       "image": "Bild i inlägget",
-      "likes": "Gilla-markeringar"
+      "likes": "Gilla-markeringar",
+      "openPost": "Öppna inlägget i Driver",
+      "postLinkHint": "Om Driver saknas eller behöver uppdateras öppnas webbplatsen.",
+      "postOpenError": "Varken Driver eller webbplatsen kunde öppnas. Försök igen."
     }
   },
   "moderation": {

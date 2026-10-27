@@ -12445,6 +12445,57 @@
         }
       }
     },
+    "driver.feed.openPost": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öppna inlägget i Driver"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open this post in Driver"
+          }
+        }
+      }
+    },
+    "driver.feed.postLinkHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Om Driver saknas eller behöver uppdateras öppnas webbplatsen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If Driver is missing or needs an update, the website opens instead."
+          }
+        }
+      }
+    },
+    "driver.feed.postOpenError": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Varken Driver eller webbplatsen kunde öppnas. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neither Driver nor the website could be opened. Try again."
+          }
+        }
+      }
+    },
     "driver.feed.refresh": {
       "extractionState": "manual",
       "localizations": {

@@ -2161,7 +2161,10 @@
       "canonicalOnboarding": "Complete your CarCommunity profile to read Driver posts.",
       "restricted": "Driver is unavailable for your account.",
       "image": "Post image",
-      "likes": "Likes"
+      "likes": "Likes",
+      "openPost": "Open this post in Driver",
+      "postLinkHint": "If Driver is missing or needs an update, the website opens instead.",
+      "postOpenError": "Neither Driver nor the website could be opened. Try again."
     }
   },
   "moderation": {

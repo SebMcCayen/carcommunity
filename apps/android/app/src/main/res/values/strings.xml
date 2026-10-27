@@ -2014,6 +2014,9 @@
     <string name="driver_feed_restricted">Driver är inte tillgängligt för ditt konto.</string>
     <string name="driver_feed_image">Bild i inlägget</string>
     <string name="driver_feed_likes">Gilla-markeringar</string>
+    <string name="driver_feed_openPost">Öppna inlägget i Driver</string>
+    <string name="driver_feed_postLinkHint">Om Driver saknas eller behöver uppdateras öppnas webbplatsen.</string>
+    <string name="driver_feed_postOpenError">Varken Driver eller webbplatsen kunde öppnas. Försök igen.</string>
     <string name="moderation_messageActionsTitle">Meddelande från %1$s</string>
     <string name="moderation_reply">Svara</string>
     <string name="moderation_blockMember">Blockera %1$s</string>
