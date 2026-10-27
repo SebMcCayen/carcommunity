@@ -24,7 +24,7 @@ class ClubBadgeTest {
             fields() + ("clubId" to 1), fields() + ("clubName" to false),
             fields(logo = 1), fields() + ("role" to "owner"),
         ).forEach { assertNull("Accepted $it", ClubBadge.fromField(it)) }
-        listOf("", "short", "a".repeat(129), "club/a123", "club%2Fa1", "club id1").forEach {
+        listOf("", "a".repeat(129), "club/a123", "club%2Fa1", "club id1").forEach {
             assertNull(ClubBadge.fromField(fields(id = it)))
         }
         listOf("", "ab", " ", " club", "club ", "a".repeat(61), "club\nname").forEach {
@@ -32,13 +32,16 @@ class ClubBadgeTest {
         }
     }
 
-    @Test fun identifierAndUnicodeNameBoundsAreCodePointAware() {
-        for (id in listOf("a".repeat(8), "a".repeat(128))) {
-            for (name in listOf("abc", "a".repeat(60), "😀".repeat(60))) {
+    @Test fun identifierAndUnicodeNameBoundsMatchSharedBackend() {
+        for (id in listOf("a", "club", "a".repeat(128))) {
+            for (name in listOf("abc", "a".repeat(60), "😀".repeat(30))) {
                 assertNotNull(ClubBadge.fromField(fields(id, name)))
             }
         }
-        assertNull(ClubBadge.fromField(fields(name = "😀".repeat(61))))
+        assertNotNull(ClubBadge.fromField(fields(name = "🚗x")))
+        assertNotNull(ClubBadge.fromField(fields(id = "club", logo =
+            logo.replace("club_12345678", "club").replace("owner_12345678", "user"))))
+        assertNull(ClubBadge.fromField(fields(name = "😀".repeat(31))))
         assertEquals("ÖK", ClubBadge.fromField(fields(name = "Östra   Klubben"))!!.initials)
     }
 

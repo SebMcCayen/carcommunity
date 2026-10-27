@@ -13,15 +13,15 @@ import com.kungsbackacarcommunity.app.garage.Vehicle
 import com.kungsbackacarcommunity.app.garage.VehiclePowertrain
 import com.kungsbackacarcommunity.app.navigation.runCatchingCancellable
 import com.kungsbackacarcommunity.app.profile.SocialHandles
-import com.kungsbackacarcommunity.app.profile.SupporterBadge
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.map
 
 /**
  * [MemberProfileRepository] backed by one-shot Firestore reads of another
  * member's publicly-readable docs, Guarded ([createIfAvailable]).
  *
- * Detail reads (one-shot); observeSupporterBadge additionally listens to the
+ * Detail reads (one-shot); observeAvatarBadges additionally listens to the
  * public users/{uid} document while the profile is visible.
  *  - users/{targetUid} — public profile (rules: any authenticated user).
  *  - vehicles where userId == targetUid — the member's garage (rules: any
@@ -45,13 +45,13 @@ class FirebaseMemberProfileRepository private constructor(
     private val firestore: FirebaseFirestore,
 ) : MemberProfileRepository {
 
-    override fun observeSupporterBadge(uid: String) = callbackFlow {
+    override fun observeSupporterBadge(uid: String) = observeAvatarBadges(uid).map { it.supporterBadge }
+
+    override fun observeAvatarBadges(uid: String) = callbackFlow {
         val listener = firestore.collection(USERS).document(uid).addSnapshotListener { snapshot, error ->
-            trySend(
-                if (error == null && snapshot?.exists() == true) {
-                    SupporterBadge.fromFields(snapshot.get("supporterBadgeEligible"), snapshot.get("showSupporterBadge"))
-                } else SupporterBadge(),
-            )
+            trySend(MemberAvatarBadges.fromFields(
+                snapshot?.data.takeIf { error == null && snapshot?.exists() == true },
+            ))
         }
         awaitClose { listener.remove() }
     }

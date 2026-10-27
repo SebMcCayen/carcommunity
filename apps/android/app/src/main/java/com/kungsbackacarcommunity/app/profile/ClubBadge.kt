@@ -18,7 +18,7 @@ data class ClubBadge private constructor(
         }
 
     companion object {
-        private val id = Regex("^[A-Za-z0-9_-]{8,128}$")
+        private val id = Regex("^[A-Za-z0-9_-]{1,128}$")
 
         /** Invalid affiliation is absent; an unsafe/missing image uses the club initials. */
         fun fromField(value: Any?): ClubBadge? {
@@ -26,7 +26,7 @@ data class ClubBadge private constructor(
             if (fields.keys.any { it !in setOf("clubId", "clubName", "logoUrl") }) return null
             val clubId = fields["clubId"] as? String ?: return null
             val name = fields["clubName"] as? String ?: return null
-            if (!id.matches(clubId) || name != name.trim() || name.codePointCount(0, name.length) !in 3..60 ||
+            if (!id.matches(clubId) || name != name.trim() || name.length !in 3..60 ||
                 name.any { Character.isISOControl(it) } || name.isBlank()) return null
             val logo = fields["logoUrl"]
             if (logo != null && logo !is String) return null

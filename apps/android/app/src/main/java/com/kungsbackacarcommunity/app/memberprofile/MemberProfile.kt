@@ -131,3 +131,21 @@ sealed interface MemberProfileState {
         val pointsBalance: Long? = null,
     ) : MemberProfileState
 }
+
+/** Live, fail-closed cosmetics from the existing canonical user listener. */
+data class MemberAvatarBadges(
+    val supporterBadge: com.kungsbackacarcommunity.app.profile.SupporterBadge,
+    val clubBadge: com.kungsbackacarcommunity.app.profile.ClubBadge?,
+) {
+    fun applyTo(profile: MemberProfile): MemberProfile =
+        profile.copy(supporterBadge = supporterBadge, clubBadge = clubBadge)
+
+    companion object {
+        fun fromFields(fields: Map<String, Any?>?): MemberAvatarBadges = MemberAvatarBadges(
+            com.kungsbackacarcommunity.app.profile.SupporterBadge.fromFields(
+                fields?.get("supporterBadgeEligible"), fields?.get("showSupporterBadge"),
+            ),
+            com.kungsbackacarcommunity.app.profile.ClubBadge.fromField(fields?.get("clubBadge")),
+        )
+    }
+}
