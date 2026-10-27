@@ -333,6 +333,12 @@ service cloud.firestore {
       return config != null && config.data.get('enabled', false) == true;
     }
 
+    function sharedClubAttendanceReady() {
+      let config = get(/databases/$(database)/documents/config/sharedClubs);
+      return config != null && config.data.get('enabled', false) == true
+        && config.data.get('publicAttendanceReady', false) == true;
+    }
+
     function sharedClubIsActive(clubId) {
       let club = get(/databases/$(database)/documents/driverClubs/$(clubId));
       return sharedClubsEnabled() && club != null && club.data.get('schemaVersion', 0) == 2
@@ -426,14 +432,16 @@ service cloud.firestore {
     // Unfiltered document-ID pages cannot prove per-result fields/club status.
     // List authorization uses three fixed lookups (user/config/event), so 25
     // distinct clubs fit the query budget. The backend strictly projects only
-    // clubId/name/logoUrl and withdraws archived summaries asynchronously.
-    // Point gets retain extra shape/current-club checks. Private membership
-    // revocation above remains immediate; public presence may briefly be stale.
+    // clubId/name/logoUrl. Archive transactions set publicAttendanceReady=false
+    // before async withdrawal; completion restores true only after all pending
+    // cleanup passes the backend CAS. Missing/false gates deny all attendance.
+    // Point gets retain extra shape/current-club checks.
     match /events/{eventId}/clubs/{clubId} {
-      allow get: if hasSharedClubAccount() && sharedClubIsActive(clubId)
+      allow get: if hasSharedClubAccount() && sharedClubAttendanceReady()
+        && sharedClubIsActive(clubId)
         && validSharedClubSummary(clubId)
         && get(/databases/$(database)/documents/events/$(eventId)).data.status == 'published';
-      allow list: if hasSharedClubAccount() && sharedClubsEnabled()
+      allow list: if hasSharedClubAccount() && sharedClubAttendanceReady()
         && boundedSharedClubQuery(25)
         && get(/databases/$(database)/documents/events/$(eventId)).data.status == 'published';
     }

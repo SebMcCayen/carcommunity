@@ -29,6 +29,7 @@ import {
   type QuerySnapshot,
   updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 import { deleteObject, getBytes, listAll, ref, uploadBytes } from 'firebase/storage';
 import { readFileSync } from 'node:fs';
@@ -65,6 +66,11 @@ const activeUser = {
   suspended: false,
   deleted: false,
 };
+const enabledConfig = {
+  enabled: true,
+  publicAttendanceReady: true,
+  statsSince: Timestamp.fromMillis(1),
+};
 
 beforeAll(async () => {
   env = await initializeTestEnvironment({
@@ -83,10 +89,7 @@ beforeAll(async () => {
   await env.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
     previousConfig = (await getDocFromServer(doc(db, 'config/sharedClubs'))).data();
-    await setDoc(doc(db, 'config/sharedClubs'), {
-      enabled: true,
-      statsSince: Timestamp.fromMillis(1),
-    });
+    await setDoc(doc(db, 'config/sharedClubs'), enabledConfig);
     for (const name of [...members, 'outsider', 'recipient', 'admin']) {
       if (name !== 'driver-only') {
         await setDoc(doc(db, `users/${uid(name)}`), {
@@ -204,6 +207,12 @@ describe('shared clubs canonical identity and public scope', () => {
     await assertSucceeds(read('outsider', 'config/sharedClubs'));
     await assertFails(getDocs(query(collection(db, 'config'), limit(25))));
     await assertFails(setDoc(doc(db, 'config/sharedClubs'), { enabled: true }));
+    await assertFails(updateDoc(doc(db, 'config/sharedClubs'), { publicAttendanceReady: true }));
+    await assertFails(
+      updateDoc(doc(dbFor('admin', { admin: true }), 'config/sharedClubs'), {
+        publicAttendanceReady: true,
+      }),
+    );
     await assertFails(read('suspended', 'config/sharedClubs'));
     await assertFails(read('driver-only', 'config/sharedClubs'));
     try {
@@ -211,7 +220,8 @@ describe('shared clubs canonical identity and public scope', () => {
         await env.withSecurityRulesDisabled(async (context) => {
           const config = doc(context.firestore(), 'config/sharedClubs');
           if (mode === 'absent') await deleteDoc(config);
-          else await setDoc(config, { enabled: false, statsSince: null });
+          else
+            await setDoc(config, { enabled: false, publicAttendanceReady: true, statsSince: null });
         });
         await assertFails(
           getDocsFromServer(
@@ -240,10 +250,7 @@ describe('shared clubs canonical identity and public scope', () => {
       }
     } finally {
       await env.withSecurityRulesDisabled(async (context) => {
-        await setDoc(doc(context.firestore(), 'config/sharedClubs'), {
-          enabled: true,
-          statsSince: Timestamp.fromMillis(1),
-        });
+        await setDoc(doc(context.firestore(), 'config/sharedClubs'), enabledConfig);
       });
     }
   });
@@ -290,6 +297,119 @@ describe('shared clubs canonical identity and public scope', () => {
     await assertFails(read('outsider', 'driverClubs/rules-archived'));
     await assertFails(read('outsider', 'driverClubs/rules-legacy'));
   });
+  it.each([undefined, false, null, 'true', 1])(
+    'fails closed on public attendance readiness %s without denying private membership',
+    async (ready) => {
+      try {
+        await env.withSecurityRulesDisabled(async (context) => {
+          const config: Record<string, unknown> = {
+            enabled: true,
+            statsSince: Timestamp.fromMillis(1),
+          };
+          if (ready !== undefined) config.publicAttendanceReady = ready;
+          await setDoc(doc(context.firestore(), 'config/sharedClubs'), config);
+        });
+        await assertSucceeds(read('outsider', 'config/sharedClubs'));
+        await assertFails(read('outsider', `events/rules-club-event/clubs/${clubId}`));
+        await assertFails(
+          getDocsFromServer(
+            query(
+              collection(dbFor('outsider'), 'events/rules-club-page-event/clubs'),
+              orderBy(documentId()),
+              limit(25),
+            ),
+          ),
+        );
+        await assertSucceeds(read('member', `${clubPath}/messages/m1`));
+        await assertSucceeds(read('member', `${clubPath}/events/e1`));
+      } finally {
+        await env.withSecurityRulesDisabled(async (context) => {
+          await setDoc(doc(context.firestore(), 'config/sharedClubs'), enabledConfig);
+        });
+      }
+      await assertSucceeds(read('outsider', `events/rules-club-event/clubs/${clubId}`));
+    },
+  );
+
+  it('revokes the public listener atomically with archival until projection cleanup is ready', async () => {
+    const db = dbFor('outsider');
+    const page = query(
+      collection(db, 'events/rules-club-page-event/clubs'),
+      orderBy(documentId()),
+      limit(25),
+    );
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    let markDenied!: (code: string) => void;
+    const denied = new Promise<string>((resolve) => {
+      markDenied = resolve;
+    });
+    let unsubscribe = () => {};
+    const timer = setTimeout(() => markDenied('timeout'), 10000);
+    unsubscribe = onSnapshot(
+      page,
+      (snapshot) => {
+        if (!snapshot.metadata.fromCache && snapshot.size === 25) markStarted();
+      },
+      (error) => {
+        markDenied(error.code);
+      },
+    );
+    try {
+      // Race the first server page against permission failure/timeout so a
+      // broken initial subscription cannot leave the test awaiting forever.
+      const first = await Promise.race([started.then(() => 'started'), denied]);
+      expect(first).toBe('started');
+      await env.withSecurityRulesDisabled(async (context) => {
+        const admin = context.firestore();
+        const batch = writeBatch(admin);
+        batch.update(doc(admin, clubPath), { status: 'archived' });
+        batch.update(doc(admin, 'config/sharedClubs'), { publicAttendanceReady: false });
+        await batch.commit();
+      });
+      expect(await denied).toBe('permission-denied');
+      await assertFails(getDocsFromServer(page));
+      await assertFails(read('outsider', `events/rules-club-event/clubs/${clubId}`));
+      await assertFails(read('member', `${clubPath}/messages/m1`));
+      // Simulate the server withdrawing the stale row before its completion
+      // CAS reopens the shared readiness marker. The listener above stays dead.
+      await env.withSecurityRulesDisabled(async (context) => {
+        const admin = context.firestore();
+        await deleteDoc(doc(admin, `events/rules-club-event/clubs/${clubId}`));
+        await updateDoc(doc(admin, 'config/sharedClubs'), { publicAttendanceReady: true });
+      });
+      expect((await assertSucceeds(getDocsFromServer(page))).size).toBe(25);
+      expect(
+        (
+          await assertSucceeds(
+            getDocsFromServer(
+              query(
+                collection(db, 'events/rules-club-event/clubs'),
+                where(documentId(), '==', clubId),
+                limit(25),
+              ),
+            ),
+          )
+        ).empty,
+      ).toBe(true);
+      await assertFails(read('member', `${clubPath}/messages/m1`));
+    } finally {
+      clearTimeout(timer);
+      unsubscribe();
+      await env.withSecurityRulesDisabled(async (context) => {
+        await updateDoc(doc(context.firestore(), clubPath), { status: 'active' });
+        await setDoc(doc(context.firestore(), `events/rules-club-event/clubs/${clubId}`), {
+          clubId,
+          name: 'Shared club',
+          logoUrl: null,
+        });
+        await setDoc(doc(context.firestore(), 'config/sharedClubs'), enabledConfig);
+      });
+    }
+  });
+
   it('supports a server-confirmed 25-summary listener and document-ID cursor pages', async () => {
     const summaries = collection(dbFor('outsider'), 'events/rules-club-page-event/clubs');
     const firstQuery = query(summaries, orderBy(documentId()), limit(25));
