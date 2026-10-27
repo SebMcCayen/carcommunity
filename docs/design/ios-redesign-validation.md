@@ -604,8 +604,12 @@ sizes use a single grid column. Progress rows stack their title and next tier at
 large text sizes. An unknown counter still has no invented progress bar. The
 existing earned/locked/date VoiceOver label is retained.
 
-The owner ledger shows an unknown balance as loading rather than an invented
-zero, preserves signed Int64 credits/debits (including zero corrections), and
+The owner ledger keeps the initial balance in loading until its independent
+balance listener emits. A successful snapshot with a missing ledger/balance
+settles to the backend starting balance of zero; transient errors/reload retain
+the last known value. Coordinator regression tests cover the independent-listener
+ordering, a first empty ledger and retry followed by a missing-ledger result.
+The ledger preserves signed Int64 credits/debits (including zero corrections), and
 shows the optional actual post-entry balance and date/time. All/Credits/Debits
 are local filters over the existing newest-100 snapshot, preserving server
 order; they do not promise complete historical access or add reads/pagination.
