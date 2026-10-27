@@ -35,6 +35,7 @@ data class MemberProfile(
     val createdAtMillis: Long? = null,
     val supporterBadge: com.kungsbackacarcommunity.app.profile.SupporterBadge =
         com.kungsbackacarcommunity.app.profile.SupporterBadge(),
+    val clubBadge: com.kungsbackacarcommunity.app.profile.ClubBadge? = null,
 )
 
 /**

@@ -492,7 +492,7 @@ private fun ProfileHeader(profile: MemberProfile, pointsBalance: Long?, coverIma
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
             ProfileVehicleHero(coverImagePath) {
-                com.kungsbackacarcommunity.app.profile.SupporterAvatarFrame(profile.supporterBadge.visible) {
+                com.kungsbackacarcommunity.app.profile.SupporterAvatarFrame(profile.supporterBadge.visible, profile.clubBadge) {
                     Avatar(profile.avatarPath)
                 }
             }

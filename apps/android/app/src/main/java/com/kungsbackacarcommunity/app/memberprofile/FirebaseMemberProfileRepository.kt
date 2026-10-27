@@ -146,6 +146,7 @@ private fun DocumentSnapshot.toMemberProfile(): MemberProfile? {
         displayName = getString("displayName"),
         bio = getString("bio"),
         avatarPath = getString("avatarPath"),
+        clubBadge = com.kungsbackacarcommunity.app.profile.ClubBadge.fromField(get("clubBadge")),
         supporterBadge = com.kungsbackacarcommunity.app.profile.SupporterBadge.fromFields(
             get("supporterBadgeEligible"), get("showSupporterBadge"),
         ),
