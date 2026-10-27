@@ -329,6 +329,12 @@ service cloud.firestore {
     // users – public profile
     // Document ID == Firebase UID.
     // -------------------------------------------------------------------------
+    // Safe invalidation signal only. Warning text is projected by account-listWarnings
+    // using server time; private lifecycle/notes never receive client read grants.
+    match /accountWarningSignals/{userId} {
+      allow get: if isOwner(userId);
+    }
+
     match /users/{userId} {
       // Any authenticated user may read the public profile.
       allow read: if isAuthenticated();

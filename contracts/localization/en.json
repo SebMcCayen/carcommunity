@@ -2153,5 +2153,15 @@
     "reportMessage": "Report message",
     "reportUser": "Report user",
     "close": "Close"
+  },
+  "accountWarnings": {
+    "title": "Warnings from an administrator",
+    "loading": "Loading warnings…",
+    "error": "Warnings could not be loaded. Please retry.",
+    "empty": "No active warnings.",
+    "retry": "Retry",
+    "more": "Load more warnings",
+    "untilRevoked": "Valid until revoked",
+    "expires": "Valid until"
   }
 }

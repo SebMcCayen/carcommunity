@@ -91,6 +91,9 @@ export function parseDeleteAccountInput(data: unknown): ParseResult<DeleteAccoun
  * - Storage prefixes are removed wholesale.
  */
 export const PURGE_DOC_TREES = [
+  'userWarnings',
+  'accountWarningSignals',
+  'adminMemberOperations',
   'users',
   'userPrivate',
   // Backend-only last-login + inactivity state (auth.recordLogin /

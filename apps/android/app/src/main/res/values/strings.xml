@@ -2004,4 +2004,12 @@
     <string name="moderation_reportMessage">Rapportera meddelande</string>
     <string name="moderation_reportUser">Rapportera användare</string>
     <string name="moderation_close">Stäng</string>
+    <string name="accountWarnings_title">Varningar från administratör</string>
+    <string name="accountWarnings_loading">Hämtar varningar…</string>
+    <string name="accountWarnings_error">Varningar kunde inte hämtas. Försök igen.</string>
+    <string name="accountWarnings_empty">Inga aktiva varningar.</string>
+    <string name="accountWarnings_retry">Försök igen</string>
+    <string name="accountWarnings_more">Visa fler varningar</string>
+    <string name="accountWarnings_untilRevoked">Gäller tills den återkallas</string>
+    <string name="accountWarnings_expires">Giltig till</string>
 </resources>

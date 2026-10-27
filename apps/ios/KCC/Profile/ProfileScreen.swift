@@ -1,3 +1,4 @@
+import FirebaseFirestore
 import ImageIO
 import PhotosUI
 import SwiftUI
@@ -138,6 +139,7 @@ struct ProfileScreen: View {
                             .buttonStyle(.plain)
                             .accessibilityIdentifier("profile.myDrives")
                         }
+                        if let uid { AccountWarningsSection(uid: uid).id(uid) }
                         ProfilePointsSection(
                             balance: pointsCoordinator.balance,
                             recentEarnings: pointsCoordinator.recentEarnings,
@@ -363,4 +365,111 @@ enum AvatarImageProcessor {
         }
         return nil
     }
+}
+
+// The warning reason is never read from the public profile or Firestore directly.
+// Server remaining time is measured against uptime, independent of device clock.
+struct AccountWarning: Identifiable, Sendable {
+    let id: String
+    let reason: String
+    let expiresAt: String?
+    let deadline: TimeInterval?
+    func active(at uptime: TimeInterval) -> Bool { deadline.map { uptime < $0 } ?? true }
+    static func decode(_ data: [String: Any], requestStarted: TimeInterval) -> AccountWarning? {
+        guard let id = data["id"] as? String, let reason = data["reason"] as? String else { return nil }
+        let remaining = data["remainingMillis"] as? NSNumber
+        return AccountWarning(id: id, reason: reason, expiresAt: data["expiresAt"] as? String,
+            deadline: remaining.map { requestStarted + max(0, $0.doubleValue) / 1000 })
+    }
+}
+
+private struct AccountWarningsSection: View {
+    let uid: String
+    @State private var warnings: [AccountWarning] = []
+    @State private var cursor: String?
+    @State private var loading = true
+    @State private var failed = false
+    @State private var retryAppend = false
+    @State private var refreshID = UUID()
+    var body: some View {
+        Group {
+            if KccFunctionsClient.createIfAvailable() != nil {
+                VStack(alignment: .leading, spacing: KccSpacing.s2) {
+                    Text("accountWarnings.title").font(.headline)
+                    if loading { Text("accountWarnings.loading") }
+                    if failed { Text("accountWarnings.error") }
+                    if !loading && !failed && warnings.isEmpty { Text("accountWarnings.empty") }
+                    ForEach(warnings) { warning in
+                        Text(warning.reason)
+                        if let expiry = warning.expiresAt, let date = Self.expiryDate(expiry) {
+                            Text("accountWarnings.expires") + Text(" ") + Text(date, style: .date) + Text(" ") + Text(date, style: .time)
+                        } else { Text("accountWarnings.untilRevoked") }
+                    }
+                    if failed { Button("accountWarnings.retry") { refreshID = UUID() }.disabled(loading) }
+                    if cursor != nil && !failed { Button("accountWarnings.more") { retryAppend = true; refreshID = UUID() }.disabled(loading) }
+                }
+                .kccContentCard()
+                .task(id: refreshID) { await load(append: retryAppend) }
+                .task(id: uid) {
+                    // Refresh while visible even if a signal was missed offline.
+                    while !Task.isCancelled {
+                        do { try await Task.sleep(for: .seconds(30)) } catch { return }
+                        retryAppend = false; refreshID = UUID()
+                    }
+                }
+                .task(id: "signal-\(uid)") {
+                    let stream = AsyncStream<Void> { continuation in
+                        let registration = Firestore.firestore().collection("accountWarningSignals").document(uid)
+                            .addSnapshotListener { snapshot, error in
+                                if error == nil && snapshot?.metadata.isFromCache == false { continuation.yield(()) }
+                            }
+                        let box = WarningSignalListener(registration)
+                        continuation.onTermination = { _ in box.registration.remove() }
+                    }
+                    for await _ in stream {
+                        if Task.isCancelled { return }
+                        retryAppend = false; refreshID = UUID()
+                    }
+                }
+                .task(id: "expiry-\(uid)") {
+                    while !Task.isCancelled {
+                        do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                        warnings.removeAll { !$0.active(at: ProcessInfo.processInfo.systemUptime) }
+                    }
+                }
+            }
+        }
+    }
+    private static func expiryDate(_ value: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: value)
+    }
+    @MainActor private func load(append: Bool) async {
+        guard let client = KccFunctionsClient.createIfAvailable() else { return }
+        loading = true
+        let started = ProcessInfo.processInfo.systemUptime
+        do {
+            let response = try await client.call("account-listWarnings", payload: ["cursor": append ? (cursor as Any? ?? NSNull()) : NSNull()])
+            try Task.checkCancellation()
+            guard let page = response as? [String: Any], page["userId"] as? String == uid,
+                let rows = page["warnings"] as? [[String: Any]], let meta = page["meta"] as? [String: Any]
+            else { throw CancellationError() }
+            var seen = Set<String>()
+            warnings = ((append ? warnings : []) + rows.compactMap { AccountWarning.decode($0, requestStarted: started) })
+                .filter { $0.active(at: ProcessInfo.processInfo.systemUptime) && seen.insert($0.id).inserted }
+            cursor = meta["nextCursor"] as? String
+            failed = false; retryAppend = false
+        } catch {
+            if Task.isCancelled { return }
+            if !append { warnings = [] }
+            failed = true; retryAppend = append
+        }
+        loading = false
+    }
+}
+
+private final class WarningSignalListener: @unchecked Sendable {
+    let registration: ListenerRegistration
+    init(_ registration: ListenerRegistration) { self.registration = registration }
 }

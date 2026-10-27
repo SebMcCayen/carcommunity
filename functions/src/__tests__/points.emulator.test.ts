@@ -195,7 +195,7 @@ describe('points-adminAdjust', () => {
         call('points-adminAdjust', {
           targetUid: member.uid,
           type: 'adjustment_debit',
-          amount: 1_000_000,
+          amount: 100_000,
           reason: 'För stort',
         }),
       ),

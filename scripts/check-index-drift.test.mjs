@@ -215,3 +215,22 @@ for (const [collectionGroup, equality, date] of [
     );
   });
 }
+
+for (const fields of [
+  [asc('revokedAt'), asc('expiresAt'), desc('createdAt')],
+  [asc('revokedAt'), asc('expiresAt')],
+]) {
+  test(`own active warning index exists: ${fields.map((f) => f.fieldPath).join(',')}`, () => {
+    const config = JSON.parse(
+      readFileSync(resolve(REPO_ROOT, 'firebase/firestore.indexes.json'), 'utf8'),
+    );
+    assert.ok(
+      config.indexes.some(
+        (index) =>
+          index.collectionGroup === 'warnings' &&
+          index.queryScope === 'COLLECTION' &&
+          JSON.stringify(index.fields) === JSON.stringify(fields),
+      ),
+    );
+  });
+}

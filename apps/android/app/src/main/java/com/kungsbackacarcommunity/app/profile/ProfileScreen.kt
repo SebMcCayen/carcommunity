@@ -105,6 +105,7 @@ fun ProfileScreen(
     onOpenDrives: (() -> Unit)? = null,
     // Optional already-authorized owner main-car path. Host owns lazy garage observation.
     coverImagePath: String? = null,
+    ownWarningUid: String? = null,
 ) {
     var editing by remember { mutableStateOf(false) }
     var nameField by remember { mutableStateOf("") }
@@ -225,6 +226,7 @@ fun ProfileScreen(
                     Text(stringResource(R.string.profile_editButton))
                 }
 
+                ownWarningUid?.let { AccountWarningsSection(it) }
                 ProfilePointsSection(
                     balance = pointsBalance,
                     recentEarnings = recentPointsEarnings,

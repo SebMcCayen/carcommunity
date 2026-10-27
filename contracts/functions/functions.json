@@ -570,7 +570,7 @@
     {
       "name": "points.adminAdjust",
       "domain": "points",
-      "description": "Admin Kronpoäng adjustment (credit or debit): positive integer amount, mandatory reason (<=500), debits never overdraft, only an owner may adjust another owner. Runs through the internal transaction primitives and writes an adminAuditEvents record. Deployed via grouped export as points-adminAdjust (functions/src/points/adminPoints.ts).",
+      "description": "Admin Kronpoäng adjustment (credit or debit): positive integer amount, mandatory reason (<=500), debits never overdraft, only an owner may adjust another owner. Runs through the internal transaction primitives and writes an adminAuditEvents record. Deployed via grouped export as points-adminAdjust (functions/src/points/adminPoints.ts). Optional actor-bound idempotency key and request fingerprint prevent duplicated or conflicting retries. New web requests bind the expected actor UID. Amounts are positive integers no greater than 100000.",
       "access": "admin",
       "appCheck": true,
       "status": "implemented",
@@ -912,7 +912,7 @@
     {
       "name": "admin.warnUser",
       "domain": "admin",
-      "description": "Issues a formal warning: immutable moderationActions record (type warning) + user.warn adminAuditEvents record committed atomically, and a best-effort essential account_warning in-app notification attempted via the notifications writer (non-blocking — a delivery failure never fails the callable; delivered even to suspended users). Not idempotent across retries: each call writes a fresh moderation action + notice. Deliberate deviation from legacy: no users/{uid} status change — the target model has no warned access state and a warning never restricts access. Owner accounts can only be moderated by owners. Deployed via grouped export as admin-warnUser (functions/src/admin/warnUser.ts).",
+      "description": "Audited private warning lifecycle plus existing immutable moderation decision and essential idempotent notice. Optional expiry/duration/internal note/request key; legacy targetUid/reason requests remain indefinite. Owner/self guards apply. The own-account projection never exposes internal notes.",
       "access": "admin",
       "appCheck": true,
       "status": "implemented",
@@ -1394,6 +1394,60 @@
       "appCheck": true,
       "status": "implemented",
       "source": "docs/admin/history-pagination.md"
+    },
+    {
+      "name": "admin.getMember",
+      "domain": "admin",
+      "description": "Fresh-admin-checked member overview with safe public profile fields, available last-login metadata, the shared points balance and target-specific action capabilities.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin/member-tools.md"
+    },
+    {
+      "name": "admin.updateDisplayName",
+      "domain": "admin",
+      "description": "Audited optimistic display-name change bound to actor/target, previous name and operation key. Preserves historical chat-name snapshots.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin/member-tools.md"
+    },
+    {
+      "name": "admin.listWarnings",
+      "domain": "admin",
+      "description": "Fresh-admin-checked paged private warning lifecycle and notes for one target. Status uses server time; no direct client grants.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin/member-tools.md"
+    },
+    {
+      "name": "admin.revokeWarning",
+      "domain": "admin",
+      "description": "Audited idempotent warning revocation with owner/self guards and version checks. Updates the private own-account invalidation signal.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin/member-tools.md"
+    },
+    {
+      "name": "admin.setWarningExpiry",
+      "domain": "admin",
+      "description": "Audited idempotent expiry change using a future UTC deadline, relative days or until revoked. Cannot reactivate a revoked warning.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin/member-tools.md"
+    },
+    {
+      "name": "account.listWarnings",
+      "domain": "account",
+      "description": "Essential signed-in own-account active-warning projection using server time. Ignores client identity selectors; excludes expired/revoked text, actor IDs and internal notes; bounded cursor pages.",
+      "access": "signedIn",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin/member-tools.md"
     }
   ]
 }

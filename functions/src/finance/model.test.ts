@@ -390,8 +390,8 @@ describe('uncosted / unknown function surfacing', () => {
   // These are intentionally visible gaps: existing per-member assumptions
   // have no Driver page-frequency input. Keep the exact list guarded so any
   // further uncosted addition still requires an explicit decision.
-  const pendingDriverEstimates = ['driverFeed.detail', 'driverFeed.list'];
-  it('only the explicitly reviewed Driver page estimates remain uncosted', () => {
+  const pendingDriverEstimates = ['account.listWarnings', 'driverFeed.detail', 'driverFeed.list'];
+  it('only explicitly reviewed pending estimates remain uncosted', () => {
     expect(uncostedCallables()).toEqual(pendingDriverEstimates);
   });
 

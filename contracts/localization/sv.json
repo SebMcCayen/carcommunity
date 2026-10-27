@@ -2153,5 +2153,15 @@
     "reportMessage": "Rapportera meddelande",
     "reportUser": "Rapportera användare",
     "close": "Stäng"
+  },
+  "accountWarnings": {
+    "title": "Varningar från administratör",
+    "loading": "Hämtar varningar…",
+    "error": "Varningar kunde inte hämtas. Försök igen.",
+    "empty": "Inga aktiva varningar.",
+    "retry": "Försök igen",
+    "more": "Visa fler varningar",
+    "untilRevoked": "Gäller tills den återkallas",
+    "expires": "Giltig till"
   }
 }

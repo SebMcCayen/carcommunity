@@ -23,6 +23,8 @@ import { setAdminRole } from './admin/setAdminRole';
 import { suspendUser } from './admin/suspendUser';
 import { deleteUser as adminDeleteUser } from './admin/deleteUser';
 import { warnUser } from './admin/warnUser';
+import { listWarnings, revokeWarning, setWarningExpiry, listOwnWarnings } from './admin/warnings';
+import { getMember, updateDisplayName } from './admin/memberTools';
 import { listCrownClaims, listCrownPoints, listPointsLedger } from './admin/listHistory';
 import { purgeNeverOnboarded } from './admin/purgeNeverOnboarded';
 import { cancel, complete, publish } from './events/eventLifecycle';
@@ -305,6 +307,11 @@ export const auth = {
  * here via the Admin SDK — clients can never set or modify them.
  */
 export const admin = {
+  listWarnings,
+  revokeWarning,
+  setWarningExpiry,
+  getMember,
+  updateDisplayName,
   listCrownClaims,
   listCrownPoints,
   listPointsLedger,
@@ -1076,6 +1083,7 @@ export const police = {
  * functions/src/account/deletion-core.ts.
  */
 export const account = {
+  listWarnings: listOwnWarnings,
   deleteAccount,
   purgeDeleted,
   // Daily inactive-account sweep (account lifecycle): warns accounts inactive
