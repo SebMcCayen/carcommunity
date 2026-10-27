@@ -275,8 +275,10 @@ object ShellNavigation {
         route: ShellRoute?,
         navigating: Boolean,
         navSearchOpen: Boolean,
+        opaqueOverlayOpen: Boolean = false,
     ): MapCover =
         when {
+            opaqueOverlayOpen -> MapCover.Opaque
             navigating -> MapCover.Opaque
             navSearchOpen -> MapCover.Transparent
             route != null -> MapCover.Opaque

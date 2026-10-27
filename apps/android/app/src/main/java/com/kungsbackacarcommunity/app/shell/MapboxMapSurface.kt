@@ -2093,8 +2093,8 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
                             registeredBillboardImages.clear()
                             applyBillboardMarkersIfChanged(billboardMarkersFlow.value)
                         }
-                        // Private breadcrumb tail: a GeoJSON line source + a
-                        // line-gradient layer (both hidden until there is a tail to
+                        // Private breadcrumb tail: a GeoJSON line source + gold
+                        // core/dark casing (both hidden until there is a tail to
                         // draw), created once the style is ready. Idempotent. If a
                         // live-sharing session is already running (e.g. the MapView
                         // was recreated on a tab round-trip mid-session), redraw the
@@ -3281,7 +3281,12 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
         // layers) so the tail can never fight them for a source/layer.
         const val BREADCRUMB_SOURCE_ID = "kcc-breadcrumb-source"
         const val BREADCRUMB_LAYER_ID = "kcc-breadcrumb-layer"
-        const val BREADCRUMB_LINE_WIDTH = 5.0
+        const val BREADCRUMB_CASING_LAYER_ID = "kcc-breadcrumb-casing-layer"
+        const val BREADCRUMB_LINE_WIDTH = 6.0
+        // Two logical pixels of separation on each side without a wide halo
+        // covering neighbouring roads. Both layers remain below map labels.
+        const val BREADCRUMB_CASING_LINE_WIDTH = 10.0
+        val BREADCRUMB_CASING_COLOR: Int = KccPalette.inkBlack.toArgb()
 
         /**
          * The breadcrumb tail's base colour: the brand yellow (the crownGold
@@ -3305,34 +3310,39 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
         private val BREADCRUMB_R: Double = ((BREADCRUMB_COLOR shr 16) and 0xFF).toDouble()
         private val BREADCRUMB_G: Double = ((BREADCRUMB_COLOR shr 8) and 0xFF).toDouble()
         private val BREADCRUMB_B: Double = (BREADCRUMB_COLOR and 0xFF).toDouble()
-        // Alpha at the NEWEST end; the oldest end fades to fully transparent.
-        private const val BREADCRUMB_HEAD_ALPHA = 0.85
+        // Keep the entire retained kilometre readable, with a subtle increase
+        // toward the puck rather than fading most of the route into the map.
+        const val BREADCRUMB_TAIL_ALPHA = 0.72
+        const val BREADCRUMB_HEAD_ALPHA = 1.0
 
         /**
-         * A line-progress gradient fading the tail from fully transparent at the
-         * OLDEST end (line-progress 0) to [BREADCRUMB_HEAD_ALPHA] at the NEWEST
-         * end (line-progress 1) — "older = more transparent". Requires the source
+         * A line-progress gradient from [BREADCRUMB_TAIL_ALPHA] at the OLDEST
+         * end (line-progress 0) to [BREADCRUMB_HEAD_ALPHA] at the NEWEST end
+         * (line-progress 1). The older portion stays visible. Requires the source
          * to carry line metrics (see [addBreadcrumbLayer]).
          */
         fun breadcrumbGradientExpression(): Expression =
             Expression.interpolate {
                 linear()
                 lineProgress()
-                stop(0.0) { rgba(BREADCRUMB_R, BREADCRUMB_G, BREADCRUMB_B, 0.0) }
+                stop(0.0) { rgba(BREADCRUMB_R, BREADCRUMB_G, BREADCRUMB_B, BREADCRUMB_TAIL_ALPHA) }
                 stop(1.0) { rgba(BREADCRUMB_R, BREADCRUMB_G, BREADCRUMB_B, BREADCRUMB_HEAD_ALPHA) }
             }
 
         /**
          * Adds the breadcrumb GeoJSON source (line metrics ON, so the gradient
-         * can be computed) + a hidden, round-capped line layer, in the "middle"
-         * slot so the tail sits under labels and under the route line.
+         * can be computed) + hidden, round-capped core/casing layers, in the
+         * "middle" slot so the tail stays under labels and the route line.
+         * Ink-black casing separates gold from light roads/traffic; the gold core
+         * stands off the night map. Full emissive strength keeps that core from
+         * being dimmed by Standard's night lighting, so both presets use the same
+         * palette without waiting for a mode-change callback.
          *
-         * Idempotent on the source AND the layer INDEPENDENTLY: the source is
-         * added only if missing, the layer only if missing. This matters because
+         * Idempotent on the source AND each layer INDEPENDENTLY. This matters because
          * the caller wraps this in `runCatching`, so a failure after
          * [addSource] but before/while [addLayer] would otherwise leave the
-         * source present and the layer missing — and a source-only early return
-         * would then never create the layer, so the tail could never render
+         * source present and a layer missing — and a source-only early return
+         * would then never create that layer, so the tail could never render
          * until a full style reload. Guarding each half separately lets the next
          * call finish the job.
          *
@@ -3351,6 +3361,23 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
                     },
                 )
             }
+            if (!style.styleLayerExists(BREADCRUMB_CASING_LAYER_ID)) {
+                val casing = lineLayer(BREADCRUMB_CASING_LAYER_ID, BREADCRUMB_SOURCE_ID) {
+                    slot("middle")
+                    lineCap(LineCap.ROUND)
+                    lineJoin(LineJoin.ROUND)
+                    lineWidth(BREADCRUMB_CASING_LINE_WIDTH)
+                    lineColor(BREADCRUMB_CASING_COLOR)
+                    visibility(Visibility.NONE)
+                }
+                // Also repair a partially-created style where the core exists
+                // already: the casing must never be appended above the gold.
+                if (style.styleLayerExists(BREADCRUMB_LAYER_ID)) {
+                    style.addLayerBelow(casing, BREADCRUMB_LAYER_ID)
+                } else {
+                    style.addLayer(casing)
+                }
+            }
             if (!style.styleLayerExists(BREADCRUMB_LAYER_ID)) {
                 style.addLayer(
                     lineLayer(BREADCRUMB_LAYER_ID, BREADCRUMB_SOURCE_ID) {
@@ -3364,15 +3391,22 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
                 )
             }
             runCatching {
+                style.getLayerAs<LineLayer>(BREADCRUMB_LAYER_ID)?.lineEmissiveStrength(1.0)
+            }
+            runCatching {
                 style.getLayerAs<LineLayer>(BREADCRUMB_LAYER_ID)
                     ?.lineGradient(breadcrumbGradientExpression())
             }
         }
 
-        /** Show/hide the breadcrumb layer; a no-op until it is added. */
+        /** Show/hide BOTH layers, including when only one survived style setup. */
         fun setBreadcrumbVisible(style: Style, visible: Boolean) {
-            val layer = style.getLayerAs<LineLayer>(BREADCRUMB_LAYER_ID) ?: return
-            layer.visibility(if (visible) Visibility.VISIBLE else Visibility.NONE)
+            for (layerId in listOf(BREADCRUMB_CASING_LAYER_ID, BREADCRUMB_LAYER_ID)) {
+                runCatching {
+                    style.getLayerAs<LineLayer>(layerId)
+                        ?.visibility(if (visible) Visibility.VISIBLE else Visibility.NONE)
+                }
+            }
         }
 
         // ---- Shared convoy follow-me leader trail -----------------------

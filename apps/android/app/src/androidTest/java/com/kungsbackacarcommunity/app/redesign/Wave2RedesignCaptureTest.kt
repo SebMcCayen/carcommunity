@@ -9,6 +9,9 @@ import android.view.View
 import android.view.ViewGroup
 import com.mapbox.maps.MapView
 import com.mapbox.maps.RenderModeType
+import com.mapbox.maps.extension.style.layers.getLayerAs
+import com.mapbox.maps.extension.style.layers.generated.LineLayer
+import com.mapbox.maps.extension.style.layers.properties.generated.Visibility
 import com.kungsbackacarcommunity.app.shell.MapPoint
 import com.kungsbackacarcommunity.app.shell.MapMode
 import java.util.concurrent.atomic.AtomicBoolean
@@ -129,6 +132,14 @@ class Wave2RedesignCaptureTest {
                             Box(Modifier.weight(1f).testTag("wave2-case-$selected")) {
                                 key(selected) {
                                     when (selected) {
+                                        "drive-finish-saving", "drive-finish-saved" ->
+                                            com.kungsbackacarcommunity.app.drives.DriveSavedDialog(
+                                                message = androidx.compose.ui.res.stringResource(com.kungsbackacarcommunity.app.R.string.savedDrives_savedDialogMessage),
+                                                confirmLabel = androidx.compose.ui.res.stringResource(com.kungsbackacarcommunity.app.R.string.savedDrives_savedDialogOk),
+                                                historyLabel = androidx.compose.ui.res.stringResource(com.kungsbackacarcommunity.app.R.string.savedDrives_savedDialogHistory),
+                                                onDismiss = {}, onHistory = {},
+                                                isSaved = selected == "drive-finish-saved",
+                                            )
                                         "map-place", "map-live" -> Wave2MapPreview(selected)
                                         "chat", "driver", "driver-detail" -> Wave2ChatPreview(selected)
                                         "events", "event-detail", "event-detail-paid", "event-detail-creator",
@@ -160,7 +171,11 @@ class Wave2RedesignCaptureTest {
                                                 check(surface == null || surface is MapboxMapSurface) { "Configured map capture requires a runtime Mapbox token; a stub is not map evidence." }
                                                 SideEffect { configuredSurface = surface }
                                                 MapShellCataloguePreview(selected, mapSurface = surface, zoomController = zoom,
-                                                    initialMapMode = if (args.getString("redesignMapAppearance") == "day") MapMode.Day else null)
+                                                    initialMapMode = when (args.getString("redesignMapAppearance")) {
+                                                        "day" -> MapMode.Day
+                                                        "night" -> MapMode.Night
+                                                        else -> null
+                                                    })
                                             }
                                         }
                                         else -> error("Unknown redesign capture case: $selected")
@@ -212,6 +227,17 @@ class Wave2RedesignCaptureTest {
                         // Stable local fixture camera; cold-start preference
                         // restoration is tested independently, before this move.
                         configuredSurface?.centerOn(MapPoint(12.0755, 57.488))
+                        if (screen == "map-session" || screen == "map-convoy") {
+                            // Seed after the configured style and real sharing marker
+                            // have settled, not during the fixture's first frame.
+                            configuredSurface?.setUserMarker(com.kungsbackacarcommunity.app.shell.MapUserMarker("Lokal testförare", true))
+                            configuredSurface?.seedBreadcrumb(LIVE_TRAIL_PREVIEW_POINTS)
+                            listOf(MapboxMapSurface.BREADCRUMB_LAYER_ID, MapboxMapSurface.BREADCRUMB_CASING_LAYER_ID).forEach { id ->
+                                check(map.style?.getLayerAs<LineLayer>(id)?.visibility == Visibility.VISIBLE) {
+                                    "A configured live-trail capture requires a visible layer: $id"
+                                }
+                            }
+                        }
                         if (args.getString("redesignMapAppearance") == "day") {
                             configuredSurface?.setMapMode(MapMode.Day)
                         }
@@ -236,7 +262,31 @@ class Wave2RedesignCaptureTest {
                 ?.findAccessibilityNodeInfosByViewId("android:id/aerr_close")?.isNotEmpty() != true) {
                 "An OS ANR overlay invalidates the screenshot. Recover the emulator before retry."
             }
-            val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+            var bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+            if (args.getString("redesignMap") == "configured" && screen in setOf("map-session", "map-convoy")) {
+                // Ignore footer/statistics gold: require actual trail-coloured
+                // pixels in the map's centre, where the synthetic path crosses.
+                val deadline = SystemClock.uptimeMillis() + 10_000
+                while (true) {
+                    var trailPixels = 0
+                    for (y in bitmap.height / 4 until bitmap.height * 3 / 4) {
+                        for (x in bitmap.width / 4 until bitmap.width * 3 / 4) {
+                            val pixel = bitmap.getPixel(x, y)
+                            val r = android.graphics.Color.red(pixel)
+                            val g = android.graphics.Color.green(pixel)
+                            val b = android.graphics.Color.blue(pixel)
+                            if (r in 170..255 && g in 125..215 && b in 35..105 && r > g + 20) trailPixels++
+                        }
+                    }
+                    if (trailPixels > 50) break
+                    check(SystemClock.uptimeMillis() < deadline) { "No visible gold trail in the actual map frame ($trailPixels pixels)" }
+                    // GeoJSON uploads/rendering run outside Compose's test clock.
+                    bitmap.recycle()
+                    SystemClock.sleep(250)
+                    instrumentation.waitForIdleSync()
+                    bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+                }
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val resolver = instrumentation.targetContext.contentResolver
                 val uri = checkNotNull(resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
