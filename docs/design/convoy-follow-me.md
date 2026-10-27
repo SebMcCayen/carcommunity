@@ -41,11 +41,28 @@ captures that id when publishing and uses a Firestore transaction to compare it
 again before writing. A takeover, off or same-UID reactivation invalidates an old
 queued write, including across a transaction retry.
 
-Deploy the updated callable **and** Firestore rules before rolling out this
-Android change. Rules allow the optional id but prohibit changing it from the
+**Pre-merge gate:** the repository automatically deploys Functions after merging
+backend changes, but that workflow does not deploy Firestore rules. Deploy and
+independently verify the compatible rules **before merging this callable change**;
+waiting until Android rollout is insufficient. The old three-field rule rejects
+all partial updates to a newly created document containing `activationId`,
+including updates from existing clients. After rules are verified, merge/deploy
+the callable, then roll out Android. Rules allow the optional id but prohibit changing it from the
 client. Legacy documents without an id and old clients that partially update
 only points/timestamp remain compatible. Those old clients do not acquire the
 new generation guard automatically; the protection applies to updated Android.
+Keep the compatible rules if rolling the callable back after four-field documents
+have been created; reverting to the old allowlist would reject those documents.
+No automatic rules deployment is introduced by this patch.
+
+One activation-scoped producer feeds every observed fix into the rolling buffer.
+A single writer consumes conflated **full** snapshots sequentially, so a slow
+request does not cancel/reorder older and newer writes or lose intervening corners.
+Changing activation cancels that producer/writer; the generation check still
+protects any Firestore task that outlives cancellation. Map assertions wait for
+observed route propagation with a bounded deadline rather than equating Compose
+idle with completed flow delivery.
+
 The transaction adds a document read per trail flush; the existing write throttle
 and write count are unchanged. No extra callable is used per position update.
 
@@ -63,14 +80,15 @@ Separately test real callable transactions and Firestore rules in the local
 Firebase emulator, including competing activations, ended/removed members and
 generation-aware transaction retries. This separation must be explicit: local
 protocol fixtures are not evidence of a three-phone Firebase end-to-end run.
-No iOS changes or production deployment are part of this patch.
+No iOS changes are part of this patch. The owner approved a Firestore-rules-only
+production deployment before merge; see the verified rollout record below.
 
 ### Executed checks (2026-10-27)
 
 | Layer | Result |
 | --- | --- |
-| Android focused JVM | 35 passed: six binding scenarios, ten button scenarios, ten trail tests, nine reaction tests. |
-| Native Android emulator | The same 16 binding/button scenarios passed on API 34 (`OK (16 tests)`). |
+| Android focused JVM | 37 passed: eight binding scenarios, ten button scenarios, ten trail tests, nine reaction tests. |
+| Native Android emulator | 18 shared binding/button scenarios plus the physical-tap live-dock regression passed on API 34 (`OK (19 tests)`). |
 | Backend core | 25 focused Follow-me tests passed. |
 | Local Firebase emulator | 27 callable/rules/race tests passed, including simultaneous takeovers, lifecycle races, deletion propagation, optional/immutable generations and retry after same-UID reclaim. |
 | Emulator CI grouping | 18 runner/grouping tests passed; the new race suite is included once through the `convoy*` group. |
@@ -81,13 +99,27 @@ Android UI tests are in `src/sharedDebugTest/java`, compiled into both
 `testDebugUnitTest` and `androidTest`. Run the focused Gradle tests with
 `--tests '*ConvoyFollowMeBindingTest' --tests '*ConvoyFollowMeButtonTest'
 --tests '*FollowMeTrailTest' --tests '*ConvoyReactionTest'`. Native execution uses
-`AndroidJUnitRunner` with the two `ConvoyFollowMe*Test` classes. Backend suites
+`AndroidJUnitRunner` with the two `ConvoyFollowMe*Test` classes and
+`DockedMapShellInteractionTest.liveSessionDockSitsAtTheBottomAndOpensTheProductionManageSheet`. Backend suites
 are `convoy/followMe-core.test.ts`, `__tests__/convoy-followme.emulator.test.ts`
 and `__tests__/convoy-followme-races.emulator.test.ts`. The race suite explicitly
 requires loopback Firestore and a `demo-*` project; local runs blocked production
 ADC lookup and shut emulators down afterwards.
 
 These results establish the patched Android/shared-state behaviour and local
-backend transactions. They do not establish production deployment, a configured
-Mapbox rendering test, an active Navigation SDK route, or a physical multi-phone
-GPS drive. No production account or live convoy was used.
+backend transactions. They do not establish a configured Mapbox rendering test, an active Navigation
+SDK route, or a physical multi-phone GPS drive. No production account or live
+convoy was used for runtime tests.
+
+### Rules-first production rollout record
+
+On 2026-10-27, following explicit owner approval, only `firestore:rules` was
+deployed to `kungsbacka-car-community`. The dry run and deployment both compiled
+successfully. An independent Firebase Rules API read verified the active source
+SHA-256 as `42e0ed3666d60888993ba4b80625a3bc5ab184154bbadd4204cdf40715a1b742`,
+matching the reviewed file exactly. The active ruleset is
+`c06e0667-96c1-4f30-911c-848a75cbe409` (release updated
+2026-10-27T15:57:52.732764Z); both reads of the release pointer agreed. No user
+data, indexes, other rules, Functions, Play settings or iOS settings were changed
+by that deployment. The existing Functions workflow runs separately after merge;
+the rules verification alone does not prove its deployment has completed.

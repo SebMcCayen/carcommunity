@@ -8,12 +8,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import com.kungsbackacarcommunity.app.map.ConvoyMemberPosition
 import com.kungsbackacarcommunity.app.shell.MapPoint
 import com.kungsbackacarcommunity.app.shell.MapSurface
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 
 /**
  * Production bridge from one convoy's shared document to the button, publisher
@@ -40,7 +46,8 @@ fun rememberConvoyFollowMeBinding(
     }
     val selfLeading = selfUid in memberUids && FollowMeTrail.isSelfLeading(state?.leaderUid, selfUid)
     val decoded = remember(state?.polyline) { FollowMeTrail.decode(state?.polyline) }
-    val publisher = remember(repository, convoyId, selfUid, selfLeading, state?.activationId) { FollowMeTrailPublisher() }
+    val latestPosition by rememberUpdatedState(ownPosition)
+    val latestNow by rememberUpdatedState(now)
     var staleTick by remember(repository, convoyId, selfUid) { mutableIntStateOf(0) }
     LaunchedEffect(repository, convoyId, state?.leaderUid) {
         if (state?.leaderUid != null) {
@@ -66,10 +73,31 @@ fun rememberConvoyFollowMeBinding(
         )
         mapSurface.setFollowMeTrail(if (draw) decoded else null)
     }
-    LaunchedEffect(repository, convoyId, publisher, ownPosition, selfLeading, state?.activationId) {
-        if (selfLeading && repository != null && convoyId != null && ownPosition != null) {
-            val encoded = publisher.onFix(MapPoint(ownPosition.longitude, ownPosition.latitude), now())
-            if (encoded != null) repository.writeTrail(convoyId, encoded, state?.activationId)
+    LaunchedEffect(repository, convoyId, selfUid, selfLeading, state?.activationId) {
+        if (selfLeading && repository != null && convoyId != null) {
+            val activationId = state?.activationId
+            val publisher = FollowMeTrailPublisher()
+            coroutineScope {
+                val snapshots = Channel<String>(Channel.CONFLATED)
+                // Only this writer waits on IO. Movement keeps feeding the
+                // buffer, so replacing a queued full snapshot drops an old
+                // payload without dropping intermediate corners from the trail.
+                launch {
+                    for (encoded in snapshots) repository.writeTrail(convoyId, encoded, activationId)
+                }
+                try {
+                    snapshotFlow { latestPosition }.collect { position ->
+                        if (position != null) {
+                            val encoded = publisher.onFix(MapPoint(position.longitude, position.latitude), latestNow())
+                            if (encoded != null) snapshots.trySend(encoded)
+                        }
+                    }
+                } finally {
+                    // An activation change cancels the producer and writer;
+                    // the captured id guards any old Firestore task that survives.
+                    snapshots.close()
+                }
+            }
         }
     }
     return selfLeading
