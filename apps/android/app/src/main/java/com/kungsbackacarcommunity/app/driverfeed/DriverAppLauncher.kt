@@ -19,16 +19,16 @@ internal fun driverPostUri(postId: String): Uri? =
         Uri.Builder().scheme("kcc-driver").authority("post").appendPath(it).build()
     }
 
-/** Trusted build configuration only; never use post/server content as a download URL. */
-internal fun driverDownloadUri(value: String): Uri? = runCatching {
+/** Trusted public website configuration only; never derive it from post/server content. */
+internal fun driverFallbackUri(value: String): Uri? = runCatching {
     val uri = URI(value)
     if (uri.scheme != "https" || uri.host.isNullOrBlank() || uri.rawUserInfo != null ||
         uri.rawFragment != null) null else Uri.parse(uri.toASCIIString())
 }.getOrNull()
 
-/** Only the verified Driver package receives the ID; install/update carries no post data. */
+/** Only the verified Driver package receives the ID; the website carries no post data. */
 internal fun openDriverPost(
-    context: Context, postId: String, downloadUrl: String = BuildConfig.DRIVER_DOWNLOAD_URL,
+    context: Context, postId: String, fallbackUrl: String = BuildConfig.DRIVER_DOWNLOAD_URL,
 ): Boolean {
     val uri = driverPostUri(postId) ?: return false
     val postIntent = Intent(Intent.ACTION_VIEW, uri).apply {
@@ -37,9 +37,9 @@ internal fun openDriverPost(
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
     }
     if (tryStartDriverIntent(context, postIntent)) return true
-    // Blank by default until the owner supplies a verified download/update page.
-    val download = driverDownloadUri(downloadUrl) ?: return false
-    return tryStartDriverIntent(context, Intent(Intent.ACTION_VIEW, download).apply {
+    // The default is the owner-approved community website, not a Driver download listing.
+    val website = driverFallbackUri(fallbackUrl) ?: return false
+    return tryStartDriverIntent(context, Intent(Intent.ACTION_VIEW, website).apply {
         addCategory(Intent.CATEGORY_BROWSABLE)
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     })

@@ -46,33 +46,35 @@ loads cannot open a route. Deleted, blocked, inaccessible, or mismatched targets
 show a generic error with explicit retry. No Firebase backend changes or
 permission bypass are introduced.
 
-## Install/update fallback: gated pending owner URL
+## Owner-approved temporary website fallback
 
-There is still **no verified download/update destination**. The prior Play
-listing check returned HTTP 404, and private expiring Actions artifacts are not
-public download pages. No such destination is shipped as a default.
+The human approved `https://kungsbackacarcommunity.se/` while Driver remains
+unpublished. Verified on 2026-10-27: HTTP 200 at the same effective HTTPS URL,
+TLS certificate verification successful, and community homepage content. This
+is a temporary website destination, **not a public Driver download listing**.
+The UI explains in Swedish/English that a missing/older Driver handler opens
+the website instead. It does not claim Driver is publicly available.
 
-`BuildConfig.DRIVER_DOWNLOAD_URL` is generated from the Gradle property of the
-same name and defaults to an empty string. Configure it only after the owner
-supplies an actual verified public HTTPS install/update page. Runtime validation
-rejects malformed/non-HTTPS URLs, missing hosts, credentials, and fragments.
-When the Driver handler is missing (including older Driver installations), the
-helper can open that configured page through Android's browser/store handler.
-It never appends the post ID, token, or identity to that public URL. Missing
-browser/store or security rejection produces a localized recoverable error.
-A blank/invalid setting also shows that error; it never sends the post URI to
-an unrestricted resolver or opens the generic Driver home screen.
+`BuildConfig.DRIVER_DOWNLOAD_URL` is generated from the trusted Gradle property
+of the same name and now defaults to that approved website. The property remains
+overridable for an owner-approved future destination. Runtime validation rejects
+malformed/non-HTTPS URLs, missing hosts, credentials, and fragments. When the
+Driver handler is missing (including older installations), Android opens the
+website with no appended post ID, token, or identity. Missing browser/store or
+security rejection produces a localized recoverable error. An explicitly blank
+or invalid override also fails safely; the helper never sends the post URI to
+an unrestricted resolver or opens Driver's generic home screen.
 
-This fallback remains a release/integration gate until a verified URL is
-provided. Installing/updating does not automatically resume the original link;
-the user taps the post action again. The companion Driver handler must be
-available in an installed Android version before exact-post navigation works.
+The known HTTP-404 Play listing and private expiring Actions artifacts are not
+working fallbacks. A compatible installed Driver Android version is still
+needed to open exact posts; this temporary homepage does not install/update
+Driver or automatically resume the original post after a later installation.
 
 ## Validation and scope
 
 CarCommunity tests cover exact per-card IDs, detail, internal navigation,
 Swedish/English strings, production button-to-intent wiring, ID boundaries,
-package restriction, gated fallback, unsafe URLs, and missing handlers.
+package restriction, default/overridden website fallback, unsafe URLs, and missing handlers.
 Driver adds native parser tests plus headless Flutter inbox/session tests.
 Gradle tests and native cold/warm launch validation await the parent's compile
 slot; no emulator changes, Android app builds, deployments, releases, or merges
@@ -86,9 +88,13 @@ because workspace dependencies were absent; no root dependencies are changed.
 
 Validation results for the paired receiver: `flutter analyze --no-pub` reports
 no issues; the targeted six link tests and complete 66-test headless Flutter
-suite pass. Both repositories pass `git diff --check`. CarCommunity's 11 new
+suite pass. Both repositories pass `git diff --check`. CarCommunity's 12 new
 JVM/Robolectric tests and Driver's native parser tests have not been rerun in
 this iteration because the parent has not yet granted a Gradle slot. Static
 checks verify matching URI/ID grammar, manifest registration, ID projection,
 and disabled automatic Android routing. Android and approved iOS locale
-regeneration are deterministic; the iOS diff adds only the two Driver keys.
+regeneration are deterministic; the iOS diff mechanically syncs only the Driver action, website hint, and error keys.
+
+The final website-fallback patch was checked with deterministic Android/iOS
+locale regeneration and `git diff --check`. Its new default-fallback test has
+not run locally: the parent retains the Gradle/emulator slot.

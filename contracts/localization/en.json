@@ -2148,7 +2148,8 @@
       "image": "Post image",
       "likes": "Likes",
       "openPost": "Open this post in Driver",
-      "postOpenError": "The post could not be opened in Driver. Install or update Driver and try again."
+      "postLinkHint": "If Driver is missing or needs an update, the website opens instead.",
+      "postOpenError": "Neither Driver nor the website could be opened. Try again."
     }
   },
   "moderation": {

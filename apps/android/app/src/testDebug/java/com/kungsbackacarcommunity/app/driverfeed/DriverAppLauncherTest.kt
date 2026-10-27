@@ -43,14 +43,35 @@ class DriverAppLauncherTest {
         }
     }
 
-    @Test fun missingOrOlderHandlerWithNoConfiguredDownloadReturnsFailure() {
+    @Test fun explicitlyDisabledWebsiteReturnsFailureWithoutAnUnrestrictedPostLaunch() {
         var attempts = 0
         assertFalse(openDriverPost(launchContext { attempts++; throw ActivityNotFoundException() },
             "thread_12345678", ""))
         assertEquals(1, attempts)
     }
 
-    @Test fun configuredDownloadReceivesNoPostIdOrAccountData() {
+    @Test fun missingOrOlderHandlerUsesTheApprovedWebsiteByDefaultWithoutPostData() {
+        val intents = mutableListOf<Intent>()
+        val context = launchContext {
+            intents += it
+            if (intents.size == 1) throw ActivityNotFoundException()
+        }
+        assertTrue(openDriverPost(context, "thread_12345678"))
+        assertEquals(2, intents.size)
+        assertEquals(DRIVER_ANDROID_PACKAGE, intents.first().`package`)
+        assertEquals("kcc-driver://post/thread_12345678", intents.first().dataString)
+        val website = intents.last()
+        assertEquals("https://kungsbackacarcommunity.se/", website.dataString)
+        assertEquals(Intent.ACTION_VIEW, website.action)
+        assertEquals(setOf(Intent.CATEGORY_BROWSABLE), website.categories)
+        assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK, website.flags)
+        assertNull(website.`package`)
+        assertNull(website.extras)
+        assertNull(website.clipData)
+        assertNull(website.selector)
+    }
+
+    @Test fun configuredWebsiteReceivesNoPostIdOrAccountData() {
         val intents = mutableListOf<Intent>()
         val context = launchContext {
             intents += it
@@ -66,10 +87,10 @@ class DriverAppLauncherTest {
         assertNull(intents.last().clipData)
     }
 
-    @Test fun unsafeDownloadConfigurationsAreRejected() {
+    @Test fun unsafeWebsiteConfigurationsAreRejected() {
         for (url in listOf("", "http://example.test", "javascript:alert(1)", "intent://driver",
             "https://user:pass@example.test/driver", "https://example.test/driver#fragment", "https:///missing")) {
-            assertNull(driverDownloadUri(url))
+            assertNull(driverFallbackUri(url))
         }
     }
 

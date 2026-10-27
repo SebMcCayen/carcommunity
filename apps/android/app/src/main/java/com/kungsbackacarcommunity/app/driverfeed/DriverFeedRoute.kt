@@ -244,6 +244,8 @@ private fun DriverPostBody(post: DriverPost, strings: DriverFeedStrings, onOpenD
         Text("${strings["likes"]}: ${post.likes} · ${strings["comments"]}: ${post.replies}",
             style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         TextButton(onClick = { appOpenFailed = !onOpenDriver(post.id) }) { Text(strings["openPost"]) }
+        Text(strings["postLinkHint"], style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (appOpenFailed) Text(strings["postOpenError"],
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             style = MaterialTheme.typography.bodySmall,

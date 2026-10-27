@@ -2148,7 +2148,8 @@
       "image": "Bild i inlägget",
       "likes": "Gilla-markeringar",
       "openPost": "Öppna inlägget i Driver",
-      "postOpenError": "Inlägget kunde inte öppnas i Driver. Installera eller uppdatera Driver och försök igen."
+      "postLinkHint": "Om Driver saknas eller behöver uppdateras öppnas webbplatsen.",
+      "postOpenError": "Varken Driver eller webbplatsen kunde öppnas. Försök igen."
     }
   },
   "moderation": {

@@ -2002,7 +2002,8 @@
     <string name="driver_feed_image">Post image</string>
     <string name="driver_feed_likes">Likes</string>
     <string name="driver_feed_openPost">Open this post in Driver</string>
-    <string name="driver_feed_postOpenError">The post could not be opened in Driver. Install or update Driver and try again.</string>
+    <string name="driver_feed_postLinkHint">If Driver is missing or needs an update, the website opens instead.</string>
+    <string name="driver_feed_postOpenError">Neither Driver nor the website could be opened. Try again.</string>
     <string name="moderation_messageActionsTitle">Message from %1$s</string>
     <string name="moderation_reply">Reply</string>
     <string name="moderation_blockMember">Block %1$s</string>

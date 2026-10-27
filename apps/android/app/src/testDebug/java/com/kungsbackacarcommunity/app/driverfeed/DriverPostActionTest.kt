@@ -57,10 +57,12 @@ class DriverPostActionTest {
         show(DriverFeedState(selectedId = post.id, post = post),
             onOpenDriver = { ++appOpens > 1 })
 
+        compose.onNodeWithText("Om Driver saknas eller behöver uppdateras öppnas webbplatsen.")
+            .performScrollTo().assertIsDisplayed()
         val action = compose.onNodeWithText("Öppna inlägget i Driver")
         action.performScrollTo().performClick()
         val error = compose.onNodeWithText(
-            "Inlägget kunde inte öppnas i Driver. Installera eller uppdatera Driver och försök igen.")
+            "Varken Driver eller webbplatsen kunde öppnas. Försök igen.")
         error.performScrollTo().assertIsDisplayed()
         action.performScrollTo().performClick()
         error.assertDoesNotExist()
@@ -71,8 +73,10 @@ class DriverPostActionTest {
     @Config(qualifiers = "en-rUS-w411dp-h1200dp-mdpi")
     fun englishCopyResolvesThroughTheProductionStringAdapter() {
         show(DriverFeedState(selectedId = post.id, post = post), onOpenDriver = { false })
+        compose.onNodeWithText("If Driver is missing or needs an update, the website opens instead.")
+            .performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Open this post in Driver").performScrollTo().performClick()
-        compose.onNodeWithText("The post could not be opened in Driver. Install or update Driver and try again.")
+        compose.onNodeWithText("Neither Driver nor the website could be opened. Try again.")
             .performScrollTo().assertIsDisplayed()
     }
 
@@ -95,7 +99,7 @@ class DriverPostActionTest {
         compose.runOnIdle { assertEquals(0, launched.size) }
         compose.onNodeWithText("Öppna inlägget i Driver").performScrollTo().performClick()
         compose.onNodeWithText(
-            "Inlägget kunde inte öppnas i Driver. Installera eller uppdatera Driver och försök igen.")
+            "Varken Driver eller webbplatsen kunde öppnas. Försök igen.")
             .performScrollTo().assertIsDisplayed()
         compose.runOnIdle {
             assertEquals(DRIVER_ANDROID_PACKAGE, launched.first().`package`)

@@ -12462,19 +12462,36 @@
         }
       }
     },
+    "driver.feed.postLinkHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Om Driver saknas eller behöver uppdateras öppnas webbplatsen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If Driver is missing or needs an update, the website opens instead."
+          }
+        }
+      }
+    },
     "driver.feed.postOpenError": {
       "extractionState": "manual",
       "localizations": {
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Inlägget kunde inte öppnas i Driver. Installera eller uppdatera Driver och försök igen."
+            "value": "Varken Driver eller webbplatsen kunde öppnas. Försök igen."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The post could not be opened in Driver. Install or update Driver and try again."
+            "value": "Neither Driver nor the website could be opened. Try again."
           }
         }
       }

@@ -208,11 +208,14 @@ android {
         // token-less build (which compiles the noNav stub) never advertises a
         // feature that can only reach the "navigation unavailable" stub.
         buildConfigField("boolean", "NAV_SDK_ENABLED", navSdkEnabled.toString())
-        // Empty until an owner-approved, verified Driver install/update page exists.
+        // Owner-approved temporary website while Driver remains unpublished.
         // This is public configuration, never a post-derived URL or credential.
         buildConfigField(
             "String", "DRIVER_DOWNLOAD_URL",
-            javaStringLiteral(providers.gradleProperty("DRIVER_DOWNLOAD_URL").orElse("").get()),
+            javaStringLiteral(
+                providers.gradleProperty("DRIVER_DOWNLOAD_URL")
+                    .orElse("https://kungsbackacarcommunity.se/").get(),
+            ),
         )
 
         // The pinned Mapbox Maps SDK version, sourced from the version catalog so
