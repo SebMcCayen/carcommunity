@@ -44,12 +44,31 @@ It does not change the position or Firestore write cadence.
 - Debug app and instrumentation APK assembly passed.
 - 23 native API 34 emulator cases passed: publisher binding (5), Follow-me
   binding (8) and button state (10).
-- Configured day/night/cleared trail rendering checks remain pending. The
-  emulator GLES implementation rejects Standard label shaders with
-  `GL_MAX_VERTEX_UNIFORM_VECTORS (256)`. The optional test-only
-  `redesignNativeLabels=hidden` fixture disables Standard labels; production
-  configuration is unchanged. A rendered trail is still required by pixel and
-  layer assertions, so a blank frame cannot pass.
+- Combined Android regression snapshot `263821f`: 3,881 JVM cases, zero failures
+  or errors, one pre-existing skipped case; lintDebug, debug APK and
+  instrumentation APK assembly passed. This local integration includes the
+  chat/age controls, invite picker, convoy end, automatic theme, Driver links
+  and saved-route recovery PR heads; it is not a separate product branch.
+- Three configured Mapbox Standard captures passed on API 34 with the emulator's
+  `-gpu lavapipe` backend: shared trail visible in night and day, then cleared.
+  Labels/icons remained enabled. Both native core/casing visibility and actual
+  gold/violet pixels are asserted; clearing preserves gold and removes violet.
+  The old emulator backend rejected symbol shaders with
+  `GL_MAX_VERTEX_UNIFORM_VECTORS (256)` and could not produce valid evidence.
+  No production map setting or pixel assertion was weakened to work around it.
+
+### Native map evidence (local synthetic data)
+
+| Case | Capture | Native result |
+| --- | --- | --- |
+| Night, Follow me visible | [Night](evidence/2026-10-27-convoy/convoy-follow-night.png) | Passed, 24.526 s |
+| Day, Follow me visible | [Day](evidence/2026-10-27-convoy/convoy-follow-day.png) | Passed, 12.264 s |
+| Follow me cleared | [Cleared](evidence/2026-10-27-convoy/convoy-follow-cleared.png) | Passed, 8.269 s |
+
+Reproduce with `Wave2RedesignCaptureTest`, `wave2Screen=map-convoy`,
+`redesignMap=configured`, `redesignFollowMe=visible|cleared`, and
+`redesignTheme=dark|light`; the light case also uses `redesignMapAppearance=day`.
+The test APK needs the normal public Mapbox configuration, not Firebase access.
 
 The tests use local session/position fixtures. They do not establish a physical
 multi-phone GPS drive or all OEM permission/background behavior.

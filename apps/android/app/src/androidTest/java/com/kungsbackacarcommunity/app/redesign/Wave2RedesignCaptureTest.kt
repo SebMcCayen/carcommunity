@@ -238,26 +238,6 @@ class Wave2RedesignCaptureTest {
                     var frameSubscription: com.mapbox.common.Cancelable? = null
                     rule.runOnIdle {
                         val map = checkNotNull(findMapView(rule.activity.window.decorView)).mapboxMap
-                        if (args.getString("redesignNativeLabels") == "hidden") {
-                            // Opt-in emulator evidence only: its GLES label shader
-                            // exceeds GL_MAX_VERTEX_UNIFORM_VECTORS. Keep Standard
-                            // roads/lighting and the actual production trail layers.
-                            listOf("showRoadLabels", "showPlaceLabels",
-                                "showPointOfInterestLabels", "showTransitLabels").forEach { key ->
-                                map.style?.setStyleImportConfigProperty(
-                                    "basemap", key, com.mapbox.bindgen.Value(false),
-                                )
-                            }
-                            // Annotation icons use the same unsupported symbol
-                            // shader. This fixture verifies the two LINE sources,
-                            // not icons; retain their production implementation.
-                            map.style?.let { style ->
-                                style.styleLayers.forEach { layer ->
-                                    style.getLayerAs<com.mapbox.maps.extension.style.layers.generated.SymbolLayer>(layer.id)
-                                        ?.visibility(Visibility.NONE)
-                                }
-                            }
-                        }
                         frameSubscription = map.subscribeRenderFrameFinished {
                             if (it.renderMode == RenderModeType.FULL) rendered.set(true)
                         }
@@ -350,11 +330,6 @@ class Wave2RedesignCaptureTest {
                         else -> true
                     }
                     if (trailPixels > 50 && followMeVerified) break
-                    if (SystemClock.uptimeMillis() >= deadline) {
-                        File(instrumentation.targetContext.cacheDir, "trail-diagnostic.png").outputStream().use {
-                            bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
-                        }
-                    }
                     check(SystemClock.uptimeMillis() < deadline) {
                         "Native trail frame mismatch: gold=$trailPixels, violet=$violetPixels, followMe=${args.getString("redesignFollowMe")}"
                     }
