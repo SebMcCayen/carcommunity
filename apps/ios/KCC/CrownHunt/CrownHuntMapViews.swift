@@ -89,6 +89,7 @@ struct CrownHuntCollectContent: View {
             let collected = selectedSpawnWasCollected
             VStack(alignment: .leading, spacing: KccSpacing.s4) {
                 if let target = coordinator.selectedTarget { CrownTargetCard(target: target) }
+                Text("crownHunt.safetyStop").font(.subheadline).foregroundStyle(KccTheme.secondary)
                 CrownCollectFeedback(state: coordinator.collectState(now: context.date), status: coordinator.claimStatus, collected: collected)
                 if coordinator.selectedTarget != nil {
                     Button {
@@ -100,7 +101,6 @@ struct CrownHuntCollectContent: View {
                     .disabled(!CrownCollectPresentation.canSubmit(coordinator.collectState(now: context.date), status: coordinator.claimStatus, collected: collected))
                     .accessibilityIdentifier("crown.collect")
                 }
-                Text("crownHunt.safetyStop").font(.subheadline).foregroundStyle(KccTheme.secondary)
             }
         }
     }
@@ -137,11 +137,20 @@ struct CrownCollectFeedback: View {
         VStack(alignment: .leading, spacing: KccSpacing.s3) {
             if collected, !CrownCollectPresentation.isAwarded(status) {
                 Label("crownHunt.spawnResultAlreadyCollected", systemImage: "checkmark.circle")
-            } else if !CrownCollectPresentation.isAwarded(status) { collectState }
+            } else if showsLocationState { collectState }
             claimResult
         }
         .font(.body).frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("crown.collect.feedback")
+    }
+
+    // Once the server has answered, show that decision instead of a local
+    // proximity hint which could contradict already-taken/expired/refused.
+    private var showsLocationState: Bool {
+        switch status {
+        case .idle, .collecting, .failed: true
+        case .point, .spawn: false
+        }
     }
 
     @ViewBuilder private var collectState: some View {
