@@ -355,6 +355,7 @@ final class ShellSmokeTests: XCTestCase {
             "S01 rail must start just below top chrome, not at map center")
         attach(app, name: "\(prefix)-S01-map-collapsed-search")
 
+        let chatFrameBeforeSearch = app.buttons["shell.tab.chat"].frame
         app.buttons["shell.search"].tap()
         let field = app.textFields["addressSearch.query"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
@@ -371,6 +372,15 @@ final class ShellSmokeTests: XCTestCase {
             predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch
         )
         XCTAssertEqual(XCTWaiter.wait(for: [keyboardDismissed], timeout: 5), .completed)
+        let footerRestored = XCTNSPredicateExpectation(
+            predicate: NSPredicate { object, _ in
+                guard let button = object as? XCUIElement else { return false }
+                return button.isHittable
+                    && abs(button.frame.minY - chatFrameBeforeSearch.minY) < 1
+                    && abs(button.frame.height - chatFrameBeforeSearch.height) < 1
+            }, object: app.buttons["shell.tab.chat"]
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [footerRestored], timeout: 5), .completed)
 
         for _ in 0..<2 {
             app.buttons["shell.tab.chat"].tap()
