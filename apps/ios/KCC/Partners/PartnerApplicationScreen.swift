@@ -16,6 +16,8 @@ struct PartnerApplicationScreen: View {
                 applicationForm
             }
         }
+        .kccReadingSurface(pageBackground: true)
+        .tint(KccTheme.driver)
         .navigationTitle("partners.applicationTitle")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
@@ -27,14 +29,18 @@ struct PartnerApplicationScreen: View {
     private var applicationForm: some View {
         Form {
             Section {
-                Text("partners.applicationSubtitle")
-                Text("partners.privacyNotice")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: KccSpacing.s3) {
+                    Label("partners.applicationSubtitle", systemImage: "briefcase").font(.headline)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("partners.privacyNotice").font(.body).foregroundStyle(KccTheme.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }.kccContentCard()
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
             }
 
             Section {
-                TextField("partners.companyNameLabel", text: $form.companyName)
+                PartnerApplicationTextField(title: "partners.companyNameLabel", text: $form.companyName)
                     .textContentType(.organizationName)
                 Picker("partners.categoryLabel", selection: $form.category) {
                     Text("partners.categoryLabel").tag(PartnerCategory?.none)
@@ -42,35 +48,38 @@ struct PartnerApplicationScreen: View {
                         Text(LocalizedStringKey(category.localizationKey)).tag(Optional(category))
                     }
                 }
-                TextField("partners.contactNameLabel", text: $form.contactName)
+                PartnerApplicationTextField(title: "partners.contactNameLabel", text: $form.contactName)
                     .textContentType(.name)
-                TextField("partners.contactEmailLabel", text: $form.contactEmail)
+                PartnerApplicationTextField(title: "partners.contactEmailLabel", text: $form.contactEmail)
                     .textContentType(.emailAddress)
                     .keyboardType(.emailAddress)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                TextField("partners.contactPhoneLabel", text: $form.contactPhone)
+                PartnerApplicationTextField(title: "partners.contactPhoneLabel", text: $form.contactPhone)
                     .textContentType(.telephoneNumber)
                     .keyboardType(.phonePad)
-                TextField("partners.websiteLabel", text: $form.websiteURL)
+                PartnerApplicationTextField(title: "partners.websiteLabel", text: $form.websiteURL)
                     .textContentType(.URL)
                     .keyboardType(.URL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                TextField("partners.messageLabel", text: $form.message, axis: .vertical)
-                    .lineLimit(3...8)
+                PartnerApplicationTextField(title: "partners.messageLabel", text: $form.message, multiline: true)
             }
+            .disabled(coordinator.submission == .submitting)
+            .listRowBackground(KccTheme.surface)
 
             if showValidationError, PartnerApplications.validate(form) != nil {
                 Text(validationMessage)
                     .foregroundStyle(KccPalette.errorRed)
-                    .font(.footnote)
+                    .font(.footnote).fixedSize(horizontal: false, vertical: true)
+                    .listRowBackground(KccTheme.surface)
                     .accessibilityIdentifier("partnerApplication.validationError")
             }
             if case .failed(let failure) = coordinator.submission {
                 Text(failureMessage(failure))
                     .foregroundStyle(KccPalette.errorRed)
-                    .font(.footnote)
+                    .font(.footnote).fixedSize(horizontal: false, vertical: true)
+                    .listRowBackground(KccTheme.surface)
                     .accessibilityIdentifier("partnerApplication.submitError")
             }
 
@@ -82,31 +91,20 @@ struct PartnerApplicationScreen: View {
                 showValidationError = false
                 Task { await coordinator.submit(input) }
             } label: {
-                HStack {
-                    Spacer()
-                    if coordinator.submission == .submitting {
-                        ProgressView().padding(.trailing, KccSpacing.s2)
-                        Text("partners.submitting")
-                    } else {
-                        Text("partners.submitButton")
-                    }
-                    Spacer()
-                }
+                PartnerApplicationSubmitLabel(submitting: coordinator.submission == .submitting)
             }
+            .kccPrimaryAction()
             .disabled(coordinator.submission == .submitting)
             .accessibilityIdentifier("partnerApplication.submit")
+            .listRowBackground(Color.clear)
         }
         .scrollDismissesKeyboard(.interactively)
     }
 
     private var successContent: some View {
-        ContentUnavailableView {
-            Label("partners.submitSuccess", systemImage: "checkmark.circle.fill")
-        } description: {
-            Text("partners.privacyNotice")
-        } actions: {
-            Button("partners.close", action: onClose)
-                .buttonStyle(.borderedProminent)
+        ScrollView {
+            SettingsStateCard(title: "partners.submitSuccess", message: "partners.privacyNotice", symbol: "checkmark.circle.fill",
+                retryTitle: "partners.close", onRetry: onClose).padding(KccSpacing.s4)
         }
     }
 

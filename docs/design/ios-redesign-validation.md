@@ -529,3 +529,49 @@ These checks do not establish real-account privacy writes, OS permission-return
 acceptance, production unblock behavior or physical-iPhone visual comparison.
 No backend, rules, workflow, token, localization or paid-service changes are
 required; native PR CI must pass before merge and records the executed result.
+
+## Partner directory, offers and application (2026-10-27)
+
+Partners now uses the shared semantic page/card roles for the directory, saved
+list, company information, public offer previews, member detail and code box.
+Directory/Saved navigation remains a local presentation choice with the same
+company/offer destination IDs. Its pinned horizontal tabs keep full Dynamic Type
+labels and 48 pt targets rather than shrinking a segmented control. Native Back
+and the existing navigation stack remain outside the reading scroller.
+
+The existing coordinator still decides paid/admin access, active-offer visibility,
+subscription revocation, expansion, private details, code reveal and saved state.
+Public previews never receive private instructions, terms or codes. Code reveal
+is still an explicit button command; shown codes retain their offer-ID guard and
+manual text selection. No automatic reveal, redemption, clipboard write, new
+listener or analytics/consent behavior is introduced. Existing validated HTTPS,
+phone and Apple Maps destinations are retained with larger native Link labels.
+Partner imagery is a local system fallback, without new logo/avatar fetches.
+
+Company/offer paging and all existing limited-dataset warnings stay intact.
+Directory offer counts remain absent until the existing exhaustive-data guard
+allows an actual count; nil is not replaced by zero. Saved-offer navigation still
+resolves its original company and focused offer. Error/retry, loading, membership,
+empty and unavailable states now use readable surfaces rather than introducing
+new destinations or unauthenticated test access.
+
+The application keeps the same form state, category choices, keyboard/content
+types, UTF-16 validation, normalization, optional-field omission, command payload,
+single-flight submission and once-per-presentation preparation guard. Fields use
+persistent visual labels and their native accessible labels; the message bounds
+only its input viewport and keeps the full bound draft. Pending fields lock while
+the immutable submitted input is in flight. Validation/duplicate/generic errors
+and the success Close callback retain their original meaning; success copy can
+scroll at large text sizes. No application is submitted by the layout tests.
+
+PartnerDesignTests measure actual public/saved/locked/member-control widgets,
+all offer-type labels, synthetic revealed-code wrapping, tabs, field viewport and
+submission labels at narrow SV/EN light/dark and largest accessibility text. The
+member-control layout fixture has no repository, signed-in UID or running session;
+it is not a runtime authorization shortcut. Existing coordinator/model/application
+tests cover access revocation, stale code results, pagination, external URL policy,
+validation and duplicate submission. The config-less shell still hides Partners
+and application routes without their configured services. These checks are not
+live paid-account/redemption/consent acceptance, real application submission or
+physical-iPhone visual comparison. No backend, rules, token, workflow, localization,
+production deploy or paid-service/artifact-upload opt-in changes are required.
