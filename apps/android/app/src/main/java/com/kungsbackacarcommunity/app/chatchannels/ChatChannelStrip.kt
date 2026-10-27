@@ -62,7 +62,7 @@ internal fun ChatChannelStrip(
         val textWidth = with(density) {
             measurer.measure(label, labelStyle, softWrap = false).size.width.toDp()
         }
-        (textWidth + KccSpacing.s2).coerceAtLeast(48.dp)
+        textWidth.coerceAtLeast(48.dp)
     }
     val unreadLabel = stringResource(R.string.chatHub_tabUnread)
     BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -112,7 +112,7 @@ internal fun ChatChannelStrip(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Column(
-                                modifier = Modifier.padding(horizontal = KccSpacing.s1),
+                                modifier = Modifier,
                                 horizontalAlignment = Alignment.CenterHorizontally,
                             ) {
                                 // Reserve the same compact badge lane for every tab,

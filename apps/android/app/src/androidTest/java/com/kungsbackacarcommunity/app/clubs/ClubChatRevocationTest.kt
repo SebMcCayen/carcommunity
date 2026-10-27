@@ -60,6 +60,25 @@ class ClubChatRevocationTest {
         compose.onNodeWithText("Private unsent text").assertDoesNotExist()
         compose.runOnIdle { assertTrue(repo.chatCalls >= 2) }
     }
+    @Test fun createClubThenLeaveReturnsToDirectoryWithCooldown() {
+        val repo = FakeClubRepository(ClubChatState.Unavailable)
+        compose.setContent { KccTheme { SharedClubRoute("me", repository = repo) } }
+        compose.onNodeWithText(str(R.string.clubs_create)).performScrollTo().performClick()
+        compose.onNodeWithText(str(R.string.clubs_name)).performTextInput("Västkustklubben")
+        compose.onNodeWithText(str(R.string.clubs_description)).performTextInput("En klubb för alla bilintresserade")
+        compose.onNodeWithText(str(R.string.clubs_location)).performTextInput("Kungsbacka")
+        compose.onNodeWithText(str(R.string.clubs_save)).performClick()
+        compose.onNodeWithText("Västkustklubben").assertExists()
+        compose.onNodeWithText(str(R.string.clubs_manage)).assertExists()
+        compose.runOnIdle {
+            assertEquals("open", repo.createdPayload?.get("visibility"))
+            assertEquals("Västkustklubben", repo.createdPayload?.get("name"))
+        }
+        compose.onNodeWithText(str(R.string.clubs_leave)).performScrollTo().performClick()
+        compose.onNodeWithText(str(R.string.clubs_confirm)).performClick()
+        compose.onNodeWithText(str(R.string.clubs_create)).performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithText("Västkustklubben").assertDoesNotExist()
+    }
     @Test fun textAndEmojiAreSentWithoutTransformation() {
         val repo = FakeClubRepository(ClubChatState.Ready(member, emptyList()))
         compose.setContent { KccTheme { ClubChatRoute("me", repo) } }
@@ -83,18 +102,37 @@ private class FakeClubRepository(initial: ClubChatState) : ClubRepository {
     val historical = MutableStateFlow<List<ClubMessage>>(emptyList())
     var pageResults: List<ClubMessagePage> = emptyList()
     val cursorRequests = mutableListOf<ClubMessageCursor>()
+    val access = MutableStateFlow<ClubAccess>(ClubAccess.None)
+    var account = ClubState()
+    var createdPayload: Map<String, Any?>? = null
     var sent: String? = null
     var operation: String? = null
     var chatCalls = 0
     override fun chat(): Flow<ClubChatState> { chatCalls++; return messages }
     override fun observeEnabled() = flowOf(true)
     override fun observePublicAttendanceReady() = flowOf(true)
-    override fun observeAccess(): Flow<ClubAccess> = flowOf(ClubAccess.None)
-    override suspend fun directory(cursor: String?): ClubPage<Club> = error("unused")
-    override suspend fun state(): ClubState = error("unused")
+    override fun observeAccess(): Flow<ClubAccess> = access
+    override suspend fun directory(cursor: String?): ClubPage<Club> = ClubPage(emptyList(), null)
+    override suspend fun state(): ClubState = account
     override suspend fun get(clubId: String): Club = error("unused")
-    override suspend fun members(clubId: String, cursor: String?): ClubPage<ClubMember> = error("unused")
-    override suspend fun manage(action: String, fields: Map<String, Any?>, operationId: String): Map<String, Any?> = error("unused")
+    override suspend fun members(clubId: String, cursor: String?): ClubPage<ClubMember> = ClubPage(emptyList(), null)
+    override suspend fun manage(action: String, fields: Map<String, Any?>, operationId: String): Map<String, Any?> {
+        when (action) {
+            "create" -> {
+                createdPayload = fields
+                val club = Club("new-club", fields["name"] as String, fields["description"] as String,
+                    fields["location"] as String, fields["visibility"] as String, "me", null, 1, 0, ClubStats())
+                val membership = ClubMembership(club.id, ClubRole.Owner, "2026-10-27T10:00:00Z")
+                account = ClubState(club, membership)
+                access.value = ClubAccess.Member(membership)
+            }
+            "leave" -> {
+                account = ClubState(joinAllowedAt = java.time.Instant.now().plusSeconds(86400).toString())
+                access.value = ClubAccess.None
+            }
+        }
+        return mapOf("clubId" to "new-club")
+    }
     override suspend fun uploadLogo(clubId: String, bytes: ByteArray): String = error("unused")
     override suspend fun olderMessages(clubId: String, before: ClubMessageCursor): ClubMessagePage {
         cursorRequests.add(before)
@@ -102,7 +140,7 @@ private class FakeClubRepository(initial: ClubChatState) : ClubRepository {
     }
     override fun observeMessageRows(clubId: String, messageIds: List<String>): Flow<List<ClubMessage>> = historical.map { rows -> rows.filter { it.id in messageIds } }
     override suspend fun send(clubId: String, text: String, operationId: String) { sent = text; operation = operationId }
-    override suspend fun events(clubId: String, cursor: String?): ClubPage<ClubEvent> = error("unused")
+    override suspend fun events(clubId: String, cursor: String?): ClubPage<ClubEvent> = ClubPage(emptyList(), null)
     override fun eventParticipants(eventId: String): Flow<List<Club>> = flowOf(emptyList())
     override fun observeEventParticipants(eventId: String, clubIds: List<String>): Flow<List<Club>> = flowOf(emptyList())
     override fun eventAttendance(eventId: String, clubId: String): Flow<Boolean?> = flowOf(false)

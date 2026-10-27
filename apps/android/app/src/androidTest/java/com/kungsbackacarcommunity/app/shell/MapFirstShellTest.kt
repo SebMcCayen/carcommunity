@@ -1072,7 +1072,7 @@ class MapFirstShellTest {
                 stripBounds.top >= hubBounds.top && stripBounds.bottom <= hubBounds.bottom)
         val minimumTargetPx = with(composeTestRule.density) { 48.dp.roundToPx().toFloat() }
         val labelIds = listOf(R.string.chatHub_tabCommunity, R.string.chatHub_tabConvoys,
-            R.string.chatHub_tabFriends, R.string.chatHub_tabNotifications)
+            R.string.chatHub_tabFriends, R.string.chatHub_tabNotifications, R.string.clubs_chatTab)
         var previousRight = stripBounds.left
         for (tab in ChatTab.entries) {
             val target = composeTestRule.onNodeWithTag(chatChannelTabTag(tab))

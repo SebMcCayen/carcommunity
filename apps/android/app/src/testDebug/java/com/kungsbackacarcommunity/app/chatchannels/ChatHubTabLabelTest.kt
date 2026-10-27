@@ -72,7 +72,7 @@ class ChatHubTabLabelTest {
             ) {
                 KccTheme(darkTheme = current.dark) {
                     Box(Modifier.requiredWidth(current.width.dp)) {
-                        ChatChannelStrip(selected.value, List(4) { true },
+                        ChatChannelStrip(selected.value, List(ChatTab.entries.size) { true },
                             onSelect = { selectedCallback = it; selected.value = it }, onBack = if (current.back) ({}) else null)
                     }
                 }
@@ -91,7 +91,7 @@ class ChatHubTabLabelTest {
                     applyOverrideConfiguration(config)
                 }.resources
                 val labelIds = listOf(R.string.chatHub_tabCommunity, R.string.chatHub_tabConvoys,
-                    R.string.chatHub_tabFriends, R.string.chatHub_tabNotifications)
+                    R.string.chatHub_tabFriends, R.string.chatHub_tabNotifications, R.string.clubs_chatTab)
                 val stripNode = compose.onNodeWithTag(CHAT_CHANNEL_STRIP_TEST_TAG).fetchSemanticsNode()
                 val stripBounds = stripNode.boundsInRoot
                 assertEquals("$current fills the available width", (width - if (back) 48 else 0).toFloat(), stripBounds.width, 0.01f)
