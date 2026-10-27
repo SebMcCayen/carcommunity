@@ -48,6 +48,60 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Map layers"].waitForExistence(timeout: 5))
     }
 
+    func testMapLayersAppearanceChoicesAndFocusControl() {
+        let app = launch(language: "en")
+        app.buttons["shell.mapLayers"].tap()
+        XCTAssertTrue(app.navigationBars["Map layers"].waitForExistence(timeout: 5))
+        let scroll = app.scrollViews["shell.layers.content"]
+        for id in ["night", "day", "system"] {
+            let choice = app.buttons["shell.layersAppearance.\(id)"]
+            reveal(choice, in: scroll, minimumHeight: 48)
+            XCTAssertTrue(choice.isHittable)
+            choice.tap()
+            assertSelected(choice)
+        }
+        let expand = app.buttons["Show map focus distance"]
+        reveal(expand, in: scroll, minimumHeight: 48)
+        XCTAssertTrue(expand.isHittable)
+        expand.tap()
+        XCTAssertTrue(app.buttons["Hide map focus distance"].waitForExistence(timeout: 5))
+        // Expansion increases the scrollable content; the slider can be below
+        // the medium detent and absent from the accessibility snapshot until scrolled.
+        let zoom = app.sliders["shell.layersZoom"]
+        reveal(zoom, in: scroll, minimumHeight: 0)
+        XCTAssertTrue(zoom.waitForExistence(timeout: 5), "Expanded slider tree: \(app.sliders.debugDescription)")
+        XCTAssertTrue(zoom.isHittable)
+        app.buttons["Close map layers"].tap()
+        app.buttons["shell.mapLayers"].tap()
+        let system = app.buttons["shell.layersAppearance.system"]
+        reveal(system, in: app.scrollViews["shell.layers.content"], minimumHeight: 48)
+        assertSelected(system)
+    }
+
+    func testSwedishMapLayersWithAccessibilityText() {
+        let app = launch(language: "sv", largeText: true, theme: "Dark")
+        app.buttons["shell.mapLayers"].tap()
+        XCTAssertTrue(app.navigationBars["Kartlager"].waitForExistence(timeout: 5))
+        let scroll = app.scrollViews["shell.layers.content"]
+        for (id, label) in [("day", "Dag"), ("night", "Natt"), ("system", "System")] {
+            let choice = app.buttons["shell.layersAppearance.\(id)"]
+            reveal(choice, in: scroll, minimumHeight: 48)
+            XCTAssertTrue(choice.isHittable)
+            XCTAssertEqual(choice.label, label)
+            XCTAssertGreaterThanOrEqual(choice.frame.height, 48,
+                "Choice \(id) frame=\(choice.frame), viewport=\(scroll.frame)")
+            choice.tap()
+            assertSelected(choice)
+        }
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "map-layers-sv-dark-accessibility"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        XCTAssertTrue(app.buttons["Stäng kartlager"].isHittable)
+        app.buttons["Stäng kartlager"].tap()
+        XCTAssertTrue(app.buttons["shell.mapLayers"].waitForExistence(timeout: 5))
+    }
+
     func testSwedishShellNavigation() {
         checkShell(language: "sv", labels: ["Karta", "Chatt", "Social", "Garage"])
     }
@@ -117,6 +171,11 @@ final class ShellSmokeTests: XCTestCase {
         for id in ["social", "garage", "map", "chat"] {
             let tab = app.buttons["shell.tab.\(id)"]
             tab.tap()
+            if id == "chat" {
+                // The first cold chat render can outlive XCUITest's idle wait.
+                // Wait for the actual destination, without retrying the tap.
+                XCTAssertTrue(element("chatHub.opaqueScreen", in: app).waitForExistence(timeout: 15))
+            }
             assertSelected(tab)
         }
         for id in ["driver", "chats"] {
@@ -295,18 +354,26 @@ final class ShellSmokeTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
         app.launchArguments += ["-KCCUITestTheme", theme]
-        // UIKit can retain a previous launch's preferred category. Reset it
-        // explicitly so the Swedish scenario does not inherit the large-text one.
-        app.launchArguments += [
-            "-UIPreferredContentSizeCategoryName",
-            largeText ? "UICTContentSizeCategoryAccessibilityXXXL" : "UICTContentSizeCategoryL"
-        ]
+        // Resolve the SwiftUI fixture before the first frame. UIKit's launch
+        // default can retain/transition the preceding test's category.
+        app.launchArguments += ["-KCCUITestTextSize", largeText ? "AccessibilityXXXL" : "Large"]
         app.launch()
         XCTAssertTrue(
             app.buttons["shell.menu"].waitForExistence(timeout: 15),
             "Build without GoogleService-Info.plist to test the config-less shell"
         )
         XCTAssertEqual(app.buttons["shell.menu"].label, language == "sv" ? "Inställningar" : "Settings")
+        // The top menu can be exposed before the safe-area footer finishes its
+        // first layout (especially after changing language/text size). Readiness
+        // means actual interactive controls, not just an existing title/menu.
+        for id in ["map", "chat", "create", "social", "garage"] {
+            let button = app.buttons["shell.tab.\(id)"]
+            let ready = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "exists == true AND hittable == true"), object: button
+            )
+            XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 15), .completed,
+                "Primary action \(id) was not interactive after launch")
+        }
         return app
     }
 
@@ -317,7 +384,36 @@ final class ShellSmokeTests: XCTestCase {
             predicate: NSPredicate(format: "selected == true"),
             object: tab
         )
-        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
+        let result = XCTWaiter.wait(for: [selected], timeout: 5)
+        if result != .completed { diagnosePrimaryControls(XCUIApplication()) }
+        XCTAssertEqual(result, .completed, "Selection did not settle for \(tab.identifier)")
+    }
+
+    private func reveal(_ target: XCUIElement, in scroll: XCUIElement, minimumHeight: CGFloat) {
+        // Hittable can mean only a clipped sliver is visible. Inspect the full
+        // control before measuring/tapping, in this sheet's actual scroll view.
+        for _ in 0..<12 {
+            let viewport = scroll.frame
+            let frame = target.exists ? target.frame : .zero
+            if target.exists && target.isHittable && frame.height >= minimumHeight
+                && viewport.insetBy(dx: 0, dy: 1).contains(frame) { return }
+            let above = !frame.isEmpty && frame.midY < viewport.midY
+            // A press-and-drag can grab a switch/slider instead of scrolling.
+            // Use the native scroll gesture, which also negotiates sheet detents.
+            if above { scroll.swipeDown(velocity: .slow) }
+            else { scroll.swipeUp(velocity: .slow) }
+        }
+    }
+
+    private func diagnosePrimaryControls(_ app: XCUIApplication) {
+        // Fixed control IDs, geometry and booleans only: never user content.
+        for id in ["map", "chat", "create", "social", "garage"] {
+            let button = app.buttons["shell.tab.\(id)"]
+            if button.exists {
+                print("Shell diagnostic \(id): selected=\(button.isSelected) hittable=\(button.isHittable) frame=\(button.frame)")
+            } else { print("Shell diagnostic \(id): absent") }
+        }
+        print("Shell diagnostic alertCount=\(app.alerts.count)")
     }
 
     private func element(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
