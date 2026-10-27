@@ -231,24 +231,119 @@ describe('Firestore – stale admin profile restriction bypass', () => {
     },
   );
 
-  it('an existing unrestricted admin can still create, update and delete profiles', async () => {
-    const uid = 'profile-admin-healthy-control';
-    await testEnv.withSecurityRulesDisabled(async (bypass) => {
-      await setDoc(doc(bypass.firestore(), 'users', uid), {
-        role: 'admin',
+  it.each(['admin', 'owner', 'user'])(
+    'a client with an admin claim and stored %s role cannot create or delete profiles',
+    async (role) => {
+      const uid = `profile-authority-crud-${role}`;
+      const peerUid = `${uid}-owner`;
+      await testEnv.withSecurityRulesDisabled(async (bypass) => {
+        await setDoc(doc(bypass.firestore(), 'users', uid), {
+          role,
+          suspended: false,
+          deleted: false,
+        });
+        await setDoc(doc(bypass.firestore(), 'users', peerUid), {
+          role: 'owner',
+          suspended: false,
+          deleted: false,
+        });
+      });
+      const fs = testEnv.authenticatedContext(uid, { admin: true, suspended: false }).firestore();
+      await assertFails(setDoc(doc(fs, 'users', `${uid}-created`), { role: 'owner' }));
+      await assertFails(deleteDoc(doc(fs, 'users', uid)));
+      await assertFails(deleteDoc(doc(fs, 'users', peerUid)));
+      // A full replacement must not strip the server-owned access fields.
+      await assertFails(setDoc(doc(fs, 'users', uid), { displayName: 'Replacement' }));
+      await assertFails(setDoc(doc(fs, 'users', peerUid), { role: 'user' }));
+    },
+  );
+
+  it.each(['admin', 'owner', 'user'])(
+    'a client with an admin claim and stored %s role cannot rewrite authority',
+    async (role) => {
+      const uid = `profile-authority-fields-${role}`;
+      const peerUid = `${uid}-owner`;
+      await testEnv.withSecurityRulesDisabled(async (bypass) => {
+        await setDoc(doc(bypass.firestore(), 'users', uid), {
+          role,
+          activeMember: false,
+          suspended: false,
+          deleted: false,
+        });
+        await setDoc(doc(bypass.firestore(), 'users', peerUid), {
+          role: 'owner',
+          activeMember: false,
+          suspended: true,
+          deleted: true,
+        });
+      });
+      const fs = testEnv.authenticatedContext(uid, { admin: true, suspended: false }).firestore();
+      const own = doc(fs, 'users', uid);
+      const peer = doc(fs, 'users', peerUid);
+      await assertFails(updateDoc(own, { role: role === 'owner' ? 'admin' : 'owner' }));
+      await assertFails(updateDoc(own, { role: deleteField() }));
+      await assertFails(updateDoc(own, { activeMember: true }));
+      await assertFails(updateDoc(own, { admin: true }));
+      await assertFails(updateDoc(own, { suspended: true, deleted: true }));
+      await assertFails(updateDoc(own, { onboardingCompletedAt: serverTimestamp() }));
+      await assertFails(setDoc(own, { role: 'owner', activeMember: true }, { merge: true }));
+      await assertFails(updateDoc(peer, { role: 'user' }));
+      await assertFails(updateDoc(peer, { suspended: false, deleted: false }));
+      await assertFails(updateDoc(peer, { displayName: 'Unreviewed moderation' }));
+      expect((await getDoc(own)).data()?.role).toBe(role);
+      expect((await getDoc(peer)).data()?.role).toBe('owner');
+    },
+  );
+
+  it.each(['admin', 'owner'])(
+    'an unrestricted %s can still edit their own Android/iOS profile fields',
+    async (role) => {
+      const uid = `profile-admin-healthy-control-${role}`;
+      await testEnv.withSecurityRulesDisabled(async (bypass) => {
+        await setDoc(doc(bypass.firestore(), 'users', uid), {
+          role,
+          activeMember: false,
+          suspended: false,
+          deleted: false,
+          facebook: 'oldname',
+          instagram: 'oldname',
+          youtube: 'OldName',
+        });
+      });
+      const fs = testEnv.authenticatedContext(uid, { admin: true, suspended: false }).firestore();
+      const own = doc(fs, 'users', uid);
+      await assertSucceeds(
+        updateDoc(own, {
+          displayName: 'Updated Name',
+          bio: 'Updated bio',
+          facebook: deleteField(),
+          instagram: deleteField(),
+          youtube: deleteField(),
+          updatedAt: serverTimestamp(),
+        }),
+      );
+      await assertSucceeds(
+        updateDoc(own, {
+          avatarPath: `profileImages/${uid}/avatar.jpg`,
+          updatedAt: serverTimestamp(),
+        }),
+      );
+      await assertSucceeds(
+        updateDoc(own, { showSupporterBadge: true, updatedAt: serverTimestamp() }),
+      );
+      expect((await getDoc(own)).data()).toMatchObject({
+        role,
         activeMember: false,
         suspended: false,
         deleted: false,
+        displayName: 'Updated Name',
+        bio: 'Updated bio',
+        showSupporterBadge: true,
       });
-    });
-    const fs = testEnv.authenticatedContext(uid, { admin: true, suspended: false }).firestore();
-    const peer = doc(fs, 'users', `${uid}-peer`);
-    await assertSucceeds(setDoc(peer, { role: 'user', suspended: true, deleted: true }));
-    await assertSucceeds(updateDoc(peer, { suspended: false, deleted: false }));
-    expect((await getDoc(peer)).data()).toMatchObject({ suspended: false, deleted: false });
-    await assertSucceeds(deleteDoc(peer));
-    expect((await getDoc(peer)).exists()).toBe(false);
-  });
+      await assertFails(updateDoc(own, { displayName: '' }));
+      await assertFails(updateDoc(own, { avatarPath: 'profileImages/someone-else/avatar.jpg' }));
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------
