@@ -2,86 +2,68 @@ package com.kungsbackacarcommunity.app.drives
 
 import android.content.Context
 import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.functions.FirebaseFunctions
-import com.kungsbackacarcommunity.app.navigation.runCatchingCancellable
+import com.google.firebase.functions.FirebaseFunctionsException
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.resume
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 
 /**
- * [RouteReplayRepository] that fetches a saved drive's route via the deployed
- * `drives-routeUrl` callable (europe-west1, App Check) instead of reading Cloud
- * Storage directly.
+ * Fetches owner-authorized, short-lived URLs from `drives-routeUrl` (europe-west1,
+ * App Check), then downloads bounded CCRB bytes on IO. Never falls back to direct
+ * Storage reads: missing files and signing errors must not bypass backend gates.
  *
- * The callable — given only `{ rideId }` — derives the owner from auth and
- * re-checks subscription-tier visibility SERVER-side, then returns a SHORT-LIVED
- * (≈5 min) V4 signed download URL `{ url, expiresAtMillis }`. This repository
- * then HTTP-GETs the bytes from that URL (no OkHttp in the app — a plain
- * [HttpURLConnection] on an IO dispatcher, capped at [MAX_ROUTE_BYTES]) and
- * decodes them with [RouteCodec]. Migrating the fetch here is what lets a later
- * PR lock down the direct-read `storage.rules` grant; that lockdown is NOT part
- * of this change.
- *
- * Guarded construction ([createIfAvailable] returns null with no Firebase), so
- * the config-less / CI build carries no reader and the detail screen degrades to
- * a placeholder.
- *
- * ## Every failure collapses to [RouteReplayState.Unavailable]
- * A callable error (`not-found` = missing/not-owned, `permission-denied` =
- * tier-hidden, `failed-precondition` = no file / signing unavailable), a network
- * fault, an HTTP non-200, an oversize download, or a decode failure ALL surface
- * as [RouteReplayState.Unavailable] — the reader never crashes to the UI. The
- * `uid`/`rideId` cache key and the public [RouteReplayRepository] contract are
- * unchanged, so the drive-detail screen and its tests are unaffected.
- *
- * ## Caching
- * A successful decode is cached IN MEMORY, keyed by uid+rideId, so re-opening a
- * drive during the session redraws instantly without a second callable +
- * download. Memory-only by design (no disk cache); failures are NOT cached, so a
- * transient error — or an expired signed URL — retries on the next open.
+ * Successful points are deliberately not cached across loads: an account restriction,
+ * tier downgrade or deleted drive must be checked by the server on every reopen.
+ * The UI holds points only for the lifetime of its keyed detail composition.
  */
 class FirebaseRouteReplayRepository private constructor(
     private val fetchSignedUrl: suspend (rideId: String) -> String,
     private val downloadBytes: suspend (url: String) -> ByteArray,
+    private val authenticatedUid: () -> String?,
 ) : RouteReplayRepository {
-
-    private val cache = ConcurrentHashMap<String, List<RoutePoint>>()
-
-    /**
-     * Safe to call from the Main dispatcher (DrivesScreen invokes this from a
-     * `LaunchedEffect`): the blocking network read and the CPU-bound
-     * [RouteCodec.decode] run on [Dispatchers.IO], never on the caller's thread.
-     */
-    override suspend fun loadRoute(uid: String, rideId: String): RouteReplayState {
-        val key = "$uid/$rideId"
-        cache[key]?.let { return RouteReplayState.Ready(it) }
-
-        // One pipeline, one failure state: fetch the signed URL, download the
-        // bytes, decode. Any throw (callable error, network, HTTP non-200,
-        // oversize) OR a null decode collapses to Unavailable. The whole pipeline
-        // runs on IO so the blocking HttpURLConnection read and the gzip/varint
-        // decode never touch Main (NetworkOnMainThreadException / jank).
-        // runCatchingCancellable (NOT plain runCatching) so a cancelled
-        // LaunchedEffect / navigation propagates its CancellationException instead
-        // of being swallowed into a spurious Unavailable.
-        val points =
-            withContext(Dispatchers.IO) {
-                runCatchingCancellable {
-                    val url = fetchSignedUrl(rideId)
-                    val bytes = downloadBytes(url)
-                    RouteCodec.decode(bytes)
-                }.getOrNull()
-            } ?: return RouteReplayState.Unavailable
-
-        cache[key] = points
-        return RouteReplayState.Ready(points)
-    }
+    override suspend fun loadRoute(uid: String, rideId: String): RouteReplayState =
+        withContext(Dispatchers.IO) {
+            if (uid.isBlank() || authenticatedUid() != uid) {
+                return@withContext RouteReplayState.Unavailable(RouteReplayFailure.SIGN_IN_REQUIRED)
+            }
+            try {
+                val url = fetchSignedUrl(rideId)
+                if (authenticatedUid() != uid) {
+                    return@withContext RouteReplayState.Unavailable(RouteReplayFailure.SIGN_IN_REQUIRED)
+                }
+                val bytes = try {
+                    downloadBytes(url)
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (_: Exception) {
+                    return@withContext RouteReplayState.Unavailable(RouteReplayFailure.DOWNLOAD_FAILED)
+                }
+                // Auth can change while a signed-URL download is in flight.
+                if (authenticatedUid() != uid) {
+                    return@withContext RouteReplayState.Unavailable(RouteReplayFailure.SIGN_IN_REQUIRED)
+                }
+                val points = RouteCodec.decode(bytes)
+                    ?: return@withContext RouteReplayState.Unavailable(RouteReplayFailure.CORRUPT)
+                RouteReplayState.Ready(points)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (failure: Exception) {
+                val reason = when (failure) {
+                    is RouteReplayCallableException -> routeReplayCallableFailure(failure.code, failure.publicMessage)
+                    is IOException -> RouteReplayFailure.SERVICE_UNAVAILABLE
+                    else -> RouteReplayFailure.UNAVAILABLE
+                }
+                RouteReplayState.Unavailable(reason)
+            }
+        }
 
     companion object {
         private const val REGION = "europe-west1"
@@ -109,6 +91,7 @@ class FirebaseRouteReplayRepository private constructor(
             return FirebaseRouteReplayRepository(
                 fetchSignedUrl = { rideId -> callRouteUrl(functions, rideId) },
                 downloadBytes = { url -> httpDownload(url) },
+                authenticatedUid = { FirebaseAuth.getInstance().currentUser?.uid },
             )
         }
 
@@ -120,15 +103,16 @@ class FirebaseRouteReplayRepository private constructor(
         internal fun createForTest(
             fetchSignedUrl: suspend (rideId: String) -> String,
             downloadBytes: suspend (url: String) -> ByteArray,
+            authenticatedUid: () -> String?,
         ): FirebaseRouteReplayRepository =
-            FirebaseRouteReplayRepository(fetchSignedUrl, downloadBytes)
+            FirebaseRouteReplayRepository(fetchSignedUrl, downloadBytes, authenticatedUid)
 
         /**
          * Calls `drives-routeUrl` with `{ rideId }` and returns the signed `url`.
          * Mirrors the callable-invocation convention of the other Firebase repos
          * (FirebaseFunctions region instance + `getHttpsCallable`): a failed task
          * — any `FirebaseFunctionsException` code, App Check, or transport — throws
-         * and is caught by [loadRoute] as Unavailable. A success with no usable url
+         * and is categorized by [loadRoute]. A success with no usable url
          * is treated as a failure too (never returns a blank URL to download).
          */
         private suspend fun callRouteUrl(functions: FirebaseFunctions, rideId: String): String =
@@ -141,7 +125,7 @@ class FirebaseRouteReplayRepository private constructor(
                         if (task.isSuccessful) {
                             val data = task.result?.data as? Map<*, *>
                             val url = data?.get(URL_KEY) as? String
-                            if (url.isNullOrEmpty()) {
+                            if (url.isNullOrBlank()) {
                                 continuation.resumeWith(
                                     Result.failure(IOException("routeUrl returned no url")),
                                 )
@@ -149,9 +133,11 @@ class FirebaseRouteReplayRepository private constructor(
                                 continuation.resume(url)
                             }
                         } else {
+                            val error = task.exception as? FirebaseFunctionsException
                             continuation.resumeWith(
                                 Result.failure(
-                                    task.exception ?: IOException("routeUrl call failed"),
+                                    if (error != null) RouteReplayCallableException(error.code.name, error.message)
+                                    else IOException("routeUrl call failed"),
                                 ),
                             )
                         }

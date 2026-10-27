@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android replay recovery copy. Separate from generated shared strings. -->
+<resources>
+    <string name="driveReplay_simplifiedOverview">Sparad, förenklad ruttöversikt. Den fullständiga ruttkartan kunde inte visas.</string>
+    <string name="driveReplay_missing">Ingen fullständig rutt finns lagrad för den här körningen. Om körningen nyss sparades kan du försöka igen när uppladdningen är klar. Äldre GPS-data som saknas kan inte återskapas.</string>
+    <string name="driveReplay_signInRequired">Logga in på körningens konto för att visa rutten.</string>
+    <string name="driveReplay_accessDenied">Du har inte åtkomst till rutten. Kontrollera ditt konto och historiken som ingår i din prenumeration.</string>
+    <string name="driveReplay_notFound">Körningen är inte längre tillgänglig för det här kontot.</string>
+    <string name="driveReplay_serviceUnavailable">Rutttjänsten är tillfälligt otillgänglig. Försök igen.</string>
+    <string name="driveReplay_downloadFailed">Den fullständiga rutten kunde inte hämtas. Kontrollera anslutningen och försök igen.</string>
+    <string name="driveReplay_corrupt">Den sparade ruttfilen kunde inte läsas.</string>
+</resources>
