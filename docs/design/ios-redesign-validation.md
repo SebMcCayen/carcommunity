@@ -352,3 +352,44 @@ then returns through the native Back/tab routes. Config-less mode intentionally
 has no owner-profile shortcut; no authentication bypass was added for testing.
 PR CI is the source of executed native test results. Final physical-device and
 real-data visual acceptance still remains separate from these checks.
+
+## Map reading dock and session chrome follow-up (2026-10-27)
+
+Road/police incident details, the saved-place picker and nearby-driver identity
+now use one native reading panel inside the shell body, above primary navigation.
+Its Close action and accessibility escape stay outside the content scroller.
+Selection is dismissed on tab/route/search changes and before other map modals;
+incident disappearance follows the authoritative coordinator. Report/remove/
+verify/ownership/imported-source/busy rules and saved-place storage stay in their
+existing coordinators. Feedback remains on the shell's existing alert surface.
+This is not a new long-press place-actions implementation or a replacement for
+external navigation. Report/editor, Crown, sponsored and convoy member/invite
+modals remain separate deliveries/surfaces.
+
+Convoy status moves from the top tool stack into a measured bottom dock. Active
+live sharing supplies management, the existing single-session Stop confirmation
+when applicable, and Hide me now; this active escape hatch is not gated by the
+start-sharing flag. Convoy exit still uses its role-specific confirmation.
+The rail and reaction controls reserve the measured dock height. The same retained
+map host and projected marker layers receive the bottom clearance, keeping their
+coordinate spaces together; selecting an authorized marker reuses centerOn.
+Configured Mapbox camera/projection and short-screen behavior still need a real
+rendered check. No new map instance, GPS provider, listener or backend command is
+introduced. A native scroll rail replaces alternative duplicated rail layouts.
+
+Nearby detail selection stores a uid, never a retained marker snapshot. It
+re-resolves the current permitted/fresh marker and image URL on every update/tick;
+an absent marker clears the panel. Markers use the shared driver accent and
+respect Reduce Motion. No new avatar lookup, profile permission or read is added.
+The full live-management route also uses semantic reading colors, Dynamic Type
+and pinned Back; its permission/start/stop/hide logic is unchanged. Only compact
+map-management chrome limits its navigation label size; reading content and
+error text retain accessibility text sizes.
+
+Native layout tests exercise actual session chrome at narrow widths and normal/
+accessibility text plus a long permitted driver name without network images.
+The config-less UI case uses the real empty saved-place dock, measures Close and
+footer separation, scrolls content and taps the primary Chat tab while the dock
+is open. These require native CI, and do not establish real GPS/Mapbox/session
+or VoiceOver acceptance. No live Firebase or Mapbox runtime call, Apple service,
+purchase, paid review or production deploy is needed for these tests.

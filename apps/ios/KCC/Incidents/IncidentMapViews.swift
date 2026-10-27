@@ -4,6 +4,7 @@ import UIKit
 struct IncidentMapOverlay: View {
     @Bindable var coordinator: IncidentMapCoordinator
     let projection: any MapProjection
+    var onSelect: ((String) -> Void)? = nil
 
     var body: some View {
         GeometryReader { geometry in
@@ -35,6 +36,7 @@ struct IncidentMapOverlay: View {
                        point.y <= Double(geometry.size.height + 30) {
                         Button {
                             coordinator.selectMarker(id: marker.id)
+                            onSelect?(marker.id)
                         } label: {
                             ZStack {
                                 Circle()
@@ -181,152 +183,110 @@ struct IncidentLocationPickerControls: View {
     }
 }
 
-struct IncidentDetailsSheet: View {
-    @Environment(\.dismiss) private var dismiss
+struct IncidentDetailsContent: View {
     @Bindable var coordinator: IncidentMapCoordinator
 
     var body: some View {
-        NavigationStack {
-            if let incident = coordinator.selectedIncident {
-                List {
-                    Section {
-                        Label(
-                            LocalizedStringKey(incident.type.titleKey),
-                            systemImage: incident.type.symbolName
-                        )
-                        .font(.headline)
-                        if let note = incident.note, !note.isEmpty { Text(note) }
-                        Text(incident.isImported ? "incidents.sourceImported" : "incidents.sourceMember")
-                            .foregroundStyle(.secondary)
-                        Text(IncidentAge.localizedDescription(for: incident))
-                            .foregroundStyle(.secondary)
-                        if incident.confirmationCount > 0 {
-                            Text(String.localizedStringWithFormat(
-                                NSLocalizedString("incidents.confirmedBy", comment: ""),
-                                incident.confirmationCount
-                            ))
-                        }
-                        if incident.clearedCount > 0 {
-                            Text(String.localizedStringWithFormat(
-                                NSLocalizedString("incidents.clearedBy", comment: ""),
-                                incident.clearedCount
-                            ))
-                        }
-                        if incident.reportedCleared {
-                            Label("incidents.clearedMarkerHint", systemImage: "exclamationmark.triangle")
-                                .foregroundStyle(.orange)
-                        }
+        if let incident = coordinator.selectedIncident {
+            VStack(alignment: .leading, spacing: KccSpacing.s3) {
+                Group {
+                    Label(
+                        LocalizedStringKey(incident.type.titleKey),
+                        systemImage: incident.type.symbolName
+                    )
+                    .font(.headline)
+                    if let note = incident.note, !note.isEmpty { Text(note) }
+                    Text(incident.isImported ? "incidents.sourceImported" : "incidents.sourceMember")
+                        .foregroundStyle(.secondary)
+                    Text(IncidentAge.localizedDescription(for: incident))
+                        .foregroundStyle(.secondary)
+                    if incident.confirmationCount > 0 {
+                        Text(String.localizedStringWithFormat(
+                            NSLocalizedString("incidents.confirmedBy", comment: ""),
+                            incident.confirmationCount
+                        ))
                     }
-                    Section {
-                        if coordinator.selectedIncidentOwned {
-                            Button("incidents.removeAction", role: .destructive) {
-                                Task { await coordinator.removeSelectedIncident() }
-                            }
-                        } else if incident.isImported {
-                            Text("incidents.removeImportedExplanation")
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Button("incidents.stillHereYes") {
-                                Task { await coordinator.confirmSelectedIncident() }
-                            }
-                            Button("incidents.stillHereNo") {
-                                Task { await coordinator.clearSelectedIncident() }
-                            }
-                        }
-                    } header: {
-                        Text("incidents.stillHereQuestion")
+                    if incident.clearedCount > 0 {
+                        Text(String.localizedStringWithFormat(
+                            NSLocalizedString("incidents.clearedBy", comment: ""),
+                            incident.clearedCount
+                        ))
+                    }
+                    if incident.reportedCleared {
+                        Label("incidents.clearedMarkerHint", systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
                     }
                 }
-                .disabled(coordinator.busy)
-                .navigationTitle("incidents.markerLabel")
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("incidents.close") { dismiss() }
+                Text("incidents.stillHereQuestion").font(.headline)
+                Group {
+                    if coordinator.selectedIncidentOwned {
+                        Button("incidents.removeAction", role: .destructive) {
+                            Task { await coordinator.removeSelectedIncident() }
+                        }
+                    } else if incident.isImported {
+                        Text("incidents.removeImportedExplanation")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Button("incidents.stillHereYes") {
+                            Task { await coordinator.confirmSelectedIncident() }
+                        }
+                        Button("incidents.stillHereNo") {
+                            Task { await coordinator.clearSelectedIncident() }
+                        }
                     }
                 }
             }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .font(.body)
+            .disabled(coordinator.busy)
         }
-        .presentationDetents([.medium])
-        .alert(
-            LocalizedStringKey(coordinator.feedbackKey ?? "incidents.verifyError"),
-            isPresented: feedbackPresented
-        ) {
-            Button("notifications.errorDismiss", role: .cancel) { coordinator.clearFeedback() }
-        }
-    }
-
-    private var feedbackPresented: Binding<Bool> {
-        Binding(
-            get: { coordinator.feedback != nil },
-            set: { if !$0 { coordinator.clearFeedback() } }
-        )
     }
 }
 
-struct PoliceDetailsSheet: View {
-    @Environment(\.dismiss) private var dismiss
+struct PoliceDetailsContent: View {
     @Bindable var coordinator: IncidentMapCoordinator
 
     var body: some View {
-        NavigationStack {
-            if let pin = coordinator.selectedPolice {
-                List {
-                    Section {
-                        Label("police.reportedByMember", systemImage: "shield.fill")
-                        if pin.confirmationCount > 0 {
-                            Text(String.localizedStringWithFormat(
-                                NSLocalizedString("police.confirmedBy", comment: ""),
-                                pin.confirmationCount
-                            ))
-                        }
-                        if pin.disputeCount > 0 {
-                            Text(String.localizedStringWithFormat(
-                                NSLocalizedString("police.disputedBy", comment: ""),
-                                pin.disputeCount
-                            ))
-                        }
-                        if pin.mine { Text("police.ownPinHint").foregroundStyle(.secondary) }
+        if let pin = coordinator.selectedPolice {
+            VStack(alignment: .leading, spacing: KccSpacing.s3) {
+                Group {
+                    Label("police.reportedByMember", systemImage: "shield.fill")
+                    if pin.confirmationCount > 0 {
+                        Text(String.localizedStringWithFormat(
+                            NSLocalizedString("police.confirmedBy", comment: ""),
+                            pin.confirmationCount
+                        ))
                     }
-                    Section {
-                        if pin.mine {
-                            Button("police.removeAction", role: .destructive) {
-                                Task { await coordinator.removeSelectedPolice() }
-                            }
-                        } else {
-                            Button("police.stillHereYes") {
-                                Task { await coordinator.verifySelectedPolice(confirm: true) }
-                            }
-                            Button("police.stillHereNo") {
-                                Task { await coordinator.verifySelectedPolice(confirm: false) }
-                            }
-                        }
-                    } header: {
-                        Text("police.stillHereQuestion")
+                    if pin.disputeCount > 0 {
+                        Text(String.localizedStringWithFormat(
+                            NSLocalizedString("police.disputedBy", comment: ""),
+                            pin.disputeCount
+                        ))
                     }
+                    if pin.mine { Text("police.ownPinHint").foregroundStyle(.secondary) }
                 }
-                .disabled(coordinator.busy)
-                .navigationTitle("police.sheetTitle")
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("incidents.close") { dismiss() }
+                Text("police.stillHereQuestion").font(.headline)
+                Group {
+                    if pin.mine {
+                        Button("police.removeAction", role: .destructive) {
+                            Task { await coordinator.removeSelectedPolice() }
+                        }
+                    } else {
+                        Button("police.stillHereYes") {
+                            Task { await coordinator.verifySelectedPolice(confirm: true) }
+                        }
+                        Button("police.stillHereNo") {
+                            Task { await coordinator.verifySelectedPolice(confirm: false) }
+                        }
                     }
                 }
             }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .font(.body)
+            .disabled(coordinator.busy)
         }
-        .presentationDetents([.medium])
-        .alert(
-            LocalizedStringKey(coordinator.feedbackKey ?? "police.verifyError"),
-            isPresented: feedbackPresented
-        ) {
-            Button("notifications.errorDismiss", role: .cancel) { coordinator.clearFeedback() }
-        }
-    }
-
-    private var feedbackPresented: Binding<Bool> {
-        Binding(
-            get: { coordinator.feedback != nil },
-            set: { if !$0 { coordinator.clearFeedback() } }
-        )
     }
 }
 

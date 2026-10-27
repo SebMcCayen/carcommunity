@@ -49,111 +49,115 @@ struct LiveLocationScreen: View {
         let sharing = coordinator.isSharing
         let busy = coordinator.actionStatus == .working
 
-        ScrollView {
-            VStack(alignment: .leading, spacing: KccSpacing.s4) {
-                if let onBack {
+        VStack(spacing: 0) {
+            if let onBack {
+                HStack {
                     Button(action: onBack) {
                         Label("shell.back", systemImage: "chevron.backward")
-                            .font(.system(size: KccTypeScale.bodyMd))
+                            .frame(minHeight: 48).contentShape(Rectangle())
                     }
-                }
-
-                Text("liveLocation.screenTitle")
-                    .font(.system(size: KccTypeScale.headingLg, weight: .semibold))
-                    .padding(.top, KccSpacing.s2)
-
-                // Current sharing status. The ternary picks the KEY (typed
-                // explicitly): a bare string ternary would infer String and
-                // bypass localization.
-                Text(
-                    sharing
-                        ? LocalizedStringKey("liveLocation.statusSharing")
-                        : LocalizedStringKey("liveLocation.statusNotSharing")
-                )
-                .font(.system(size: KccTypeScale.titleMd, weight: .medium))
-                if sharing {
-                    Text("liveLocation.sessionAutoExpires")
-                        .font(.system(size: KccTypeScale.bodySm))
-                        .foregroundStyle(.secondary)
-                }
-
-                if sharing {
-                    // Stopping an active session is authenticated-gated (not
-                    // member/flag-gated) on the backend, so ALWAYS offer Stop
-                    // while sharing — even if the flag state has lapsed since
-                    // the session started. The flag only gates STARTING.
-                    Button {
-                        Task { await coordinator.stopSharing() }
-                    } label: {
-                        Text("liveLocation.stop")
-                            .font(.system(size: KccTypeScale.bodyMd, weight: .semibold))
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(busy)
-                } else if coordinator.canShare && coordinator.wired {
-                    // Starting is IMMEDIATE — no time/duration is chosen. The
-                    // fixed 6h default window auto-stops with no prompt to
-                    // prolong; the user can Stop anytime.
-                    Button {
-                        requestStart()
-                    } label: {
-                        Text("liveLocation.start")
-                            .font(.system(size: KccTypeScale.bodyMd, weight: .semibold))
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(busy || permissionCoordinator.state == .requesting)
-                } else {
-                    // Start is blocked: the LIVE_LOCATION flag is off, or
-                    // this is a config-less/signed-out build. Explain instead
-                    // of offering a dead button; "Hide me now" below stays.
-                    Text("liveLocation.shareUnavailable")
-                        .font(.system(size: KccTypeScale.bodyMd))
-                        .foregroundStyle(.secondary)
-                        .padding(KccSpacing.s4)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: KccRadius.md)
-                                .fill(Color(.secondarySystemBackground))
-                        )
-                }
-
-                // Privacy action — never gated, always offered.
-                Button {
-                    Task { await coordinator.hideMeNow() }
-                } label: {
-                    Text("liveLocation.hideNow")
-                        .font(.system(size: KccTypeScale.bodyMd, weight: .semibold))
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                }
-                .buttonStyle(.bordered)
-                .disabled(busy)
-
-                if coordinator.actionStatus == .failed {
-                    Text("liveLocation.error")
-                        .font(.system(size: KccTypeScale.bodyMd))
-                        .foregroundStyle(KccPalette.errorRed)
-                }
-
-                // Audience — informational, per Android's screen: the
-                // backend decides who can see live locations.
-                infoCard(
-                    title: "liveLocation.whoCanSeeTitle",
-                    body: "liveLocation.whoCanSeeBody"
-                )
-                VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                    privacyLine("liveLocation.privacyOptional")
-                    privacyLine("liveLocation.privacyTimeLimited")
-                    privacyLine("liveLocation.privacyStopAnytime")
-                }
+                    Spacer()
+                }.padding(.horizontal, KccSpacing.s4)
             }
-            .padding(KccSpacing.s6)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            ScrollView {
+                VStack(alignment: .leading, spacing: KccSpacing.s4) {
+                    Text("liveLocation.screenTitle")
+                        .font(.title2.weight(.semibold))
+                        .padding(.top, KccSpacing.s2)
+
+                    // Current sharing status. The ternary picks the KEY (typed
+                    // explicitly): a bare string ternary would infer String and
+                    // bypass localization.
+                    Text(
+                        sharing
+                            ? LocalizedStringKey("liveLocation.statusSharing")
+                            : LocalizedStringKey("liveLocation.statusNotSharing")
+                    )
+                    .font(.headline)
+                    if sharing {
+                        Text("liveLocation.sessionAutoExpires")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if sharing {
+                        // Stopping an active session is authenticated-gated (not
+                        // member/flag-gated) on the backend, so ALWAYS offer Stop
+                        // while sharing — even if the flag state has lapsed since
+                        // the session started. The flag only gates STARTING.
+                        Button {
+                            Task { await coordinator.stopSharing() }
+                        } label: {
+                            Text("liveLocation.stop")
+                                .font(.body.weight(.semibold))
+                                .frame(maxWidth: .infinity, minHeight: 48)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(KccPalette.errorRed)
+                        .disabled(busy)
+                    } else if coordinator.canShare && coordinator.wired {
+                        // Starting is IMMEDIATE — no time/duration is chosen. The
+                        // fixed 6h default window auto-stops with no prompt to
+                        // prolong; the user can Stop anytime.
+                        Button {
+                            requestStart()
+                        } label: {
+                            Text("liveLocation.start")
+                                .font(.body.weight(.semibold))
+                                .frame(maxWidth: .infinity, minHeight: 48)
+                        }
+                        .kccPrimaryAction()
+                        .disabled(busy || permissionCoordinator.state == .requesting)
+                    } else {
+                        // Start is blocked: the LIVE_LOCATION flag is off, or
+                        // this is a config-less/signed-out build. Explain instead
+                        // of offering a dead button; "Hide me now" below stays.
+                        Text("liveLocation.shareUnavailable")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                            .padding(KccSpacing.s4)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: KccRadius.md)
+                                    .fill(Color(.secondarySystemBackground))
+                            )
+                    }
+
+                    // Privacy action — never gated, always offered.
+                    Button {
+                        Task { await coordinator.hideMeNow() }
+                    } label: {
+                        Text("liveLocation.hideNow")
+                            .font(.body.weight(.semibold))
+                            .frame(maxWidth: .infinity, minHeight: 48)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(busy)
+
+                    if coordinator.actionStatus == .failed {
+                        Text("liveLocation.error")
+                            .font(.body)
+                            .foregroundStyle(KccPalette.errorRed)
+                    }
+
+                    // Audience — informational, per Android's screen: the
+                    // backend decides who can see live locations.
+                    infoCard(
+                        title: "liveLocation.whoCanSeeTitle",
+                        body: "liveLocation.whoCanSeeBody"
+                    )
+                    VStack(alignment: .leading, spacing: KccSpacing.s1) {
+                        privacyLine("liveLocation.privacyOptional")
+                        privacyLine("liveLocation.privacyTimeLimited")
+                        privacyLine("liveLocation.privacyStopAnytime")
+                    }
+                }
+                .padding(KccSpacing.s4)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
         }
-        // Renders as a full-screen route above the tab shell, so it paints
-        // an opaque, scheme-aware background of its own.
-        .background(.background, ignoresSafeAreaEdges: .all)
+        // Full-screen routes paint their own opaque reading surface.
+        .kccReadingSurface(pageBackground: true)
         .task {
             coordinator.start()
             permissionCoordinator.start()
@@ -225,9 +229,9 @@ struct LiveLocationScreen: View {
     private func infoCard(title: LocalizedStringKey, body: LocalizedStringKey) -> some View {
         VStack(alignment: .leading, spacing: KccSpacing.s1) {
             Text(title)
-                .font(.system(size: KccTypeScale.bodyMd, weight: .semibold))
+                .font(.body.weight(.semibold))
             Text(body)
-                .font(.system(size: KccTypeScale.bodyMd))
+                .font(.body)
                 .foregroundStyle(.secondary)
         }
         .padding(KccSpacing.s4)
@@ -240,7 +244,7 @@ struct LiveLocationScreen: View {
 
     private func privacyLine(_ key: LocalizedStringKey) -> some View {
         Text(key)
-            .font(.system(size: KccTypeScale.bodySm))
+            .font(.subheadline)
             .foregroundStyle(.secondary)
     }
 }

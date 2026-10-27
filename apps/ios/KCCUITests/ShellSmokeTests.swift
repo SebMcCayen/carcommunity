@@ -48,6 +48,38 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Map layers"].waitForExistence(timeout: 5))
     }
 
+    func testSavedPlacesDockKeepsCloseToolsAndPrimaryNavigationReachable() {
+        let app = launch(language: "en", largeText: true, theme: "Dark")
+        let saved = app.buttons["shell.savedPlaces"]
+        XCTAssertTrue(saved.waitForExistence(timeout: 15))
+        saved.tap()
+        let panel = element("map.reading.panel", in: app)
+        let close = app.buttons["map.reading.close"]
+        XCTAssertTrue(panel.waitForExistence(timeout: 5))
+        XCTAssertTrue(close.isHittable)
+        XCTAssertGreaterThanOrEqual(close.frame.height, 48)
+        XCTAssertLessThanOrEqual(panel.frame.maxY, app.buttons["shell.tab.map"].frame.minY)
+        XCTAssertTrue(app.buttons["shell.mapLayers"].isHittable)
+        let closeFrame = close.frame
+        app.scrollViews["map.reading.content"].swipeUp()
+        XCTAssertTrue(close.isHittable)
+        XCTAssertEqual(close.frame.minY, closeFrame.minY, accuracy: 1,
+            "Close must stay pinned when the reading content scrolls")
+        attach(app, name: "map-saved-places-dock-en-dark-accessibility")
+        // Real OS-injected navigation tap while the panel is open, without
+        // dismissing it first: a modal sheet would intercept this tap.
+        app.buttons["shell.tab.chat"].tap()
+        XCTAssertTrue(element("chatHub.opaqueScreen", in: app).waitForExistence(timeout: 15))
+        assertSelected(app.buttons["shell.tab.chat"])
+        app.buttons["shell.tab.map"].tap()
+        XCTAssertFalse(panel.exists, "A reading panel must not reopen after a tab round trip")
+        saved.tap()
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        close.tap()
+        XCTAssertFalse(panel.exists)
+        XCTAssertTrue(app.buttons["shell.mapLayers"].isHittable)
+    }
+
     func testMapLayersAppearanceChoicesAndFocusControl() {
         let app = launch(language: "en")
         app.buttons["shell.mapLayers"].tap()
