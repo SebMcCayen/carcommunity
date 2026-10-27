@@ -4,13 +4,16 @@ import SwiftUI
 struct ConvoyReactionControls: View {
     @Bindable var coordinator: ConvoyReactionCoordinator
     let followMeCoordinator: ConvoyFollowMeCoordinator?
+    let bottomClearance: CGFloat
 
     init(
         coordinator: ConvoyReactionCoordinator,
-        followMeCoordinator: ConvoyFollowMeCoordinator? = nil
+        followMeCoordinator: ConvoyFollowMeCoordinator? = nil,
+        bottomClearance: CGFloat = 0
     ) {
         self.coordinator = coordinator
         self.followMeCoordinator = followMeCoordinator
+        self.bottomClearance = bottomClearance
     }
 
     var body: some View {
@@ -31,7 +34,7 @@ struct ConvoyReactionControls: View {
                         }
                     }
                 }
-                .padding(.bottom, KccSpacing.s12 + KccSpacing.s10)
+                .padding(.bottom, bottomClearance + KccSpacing.s3)
             }
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: coordinator.incomingReaction?.id)

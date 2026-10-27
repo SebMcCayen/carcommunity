@@ -1,12 +1,13 @@
 import SwiftUI
 
 /// On-screen-only public live sharers. Convoy members use the separate green
-/// awareness layer (including edge arrows); nearby strangers use a purple ring
+/// awareness layer (including edge arrows); nearby sharers use a cyan ring
 /// and disappear outside the viewport to keep the map quiet and privacy-minded.
 struct NearbyLiveOverlay: View {
     @Bindable var coordinator: NearbyLiveCoordinator
     let projection: any MapProjection
-    @State private var selection: SelectedNearbySharer?
+    let onSelect: (String) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { geometry in
@@ -14,7 +15,7 @@ struct NearbyLiveOverlay: View {
                 ZStack {
                     ForEach(visible(size: geometry.size, now: context.date)) { item in
                         Button {
-                            selection = SelectedNearbySharer(marker: item.marker)
+                            onSelect(item.marker.uid)
                         } label: {
                             markerChip(item.marker)
                         }
@@ -28,17 +29,10 @@ struct NearbyLiveOverlay: View {
                         .position(x: item.point.x, y: item.point.y)
                     }
                 }
-                .animation(.linear(duration: 1.2), value: coordinator.positions)
+                .animation(reduceMotion ? nil : .linear(duration: 1.2), value: coordinator.positions)
             }
         }
         .accessibilityElement(children: .contain)
-        .sheet(item: $selection) { selected in
-            NearbySharerCallout(
-                marker: selected.marker,
-                imageURL: selected.marker.imagePath.flatMap { coordinator.imageURLs[$0] }
-            )
-            .presentationDetents([.height(220)])
-        }
     }
 
     private func visible(size: CGSize, now: Date) -> [NearbyLivePlacement] {
@@ -63,21 +57,21 @@ struct NearbyLiveOverlay: View {
     private func markerChip(_ marker: LiveMarker) -> some View {
         let url = marker.imagePath.flatMap { coordinator.imageURLs[$0] }
         return ZStack {
-            Circle().fill(Color.purple)
+            Circle().fill(KccTheme.driver)
             if let url {
                 AsyncImage(url: url) { image in
                     image.resizable().scaledToFill()
                 } placeholder: {
-                    Image(systemName: "car.side.fill").foregroundStyle(.white)
+                    Image(systemName: "car.side.fill").foregroundStyle(KccTheme.onDriver)
                 }
             } else {
-                Image(systemName: "car.side.fill").foregroundStyle(.white)
+                Image(systemName: "car.side.fill").foregroundStyle(KccTheme.onDriver)
             }
         }
         .font(.system(size: 18, weight: .semibold))
         .frame(width: 40, height: 40)
         .clipShape(Circle())
-        .overlay(Circle().stroke(.white, lineWidth: 2))
+        .overlay(Circle().stroke(KccTheme.driver, lineWidth: 2))
         .shadow(radius: 2, y: 1)
     }
 
@@ -92,49 +86,60 @@ private struct NearbyLivePlacement: Identifiable {
     var id: String { marker.uid }
 }
 
-private struct SelectedNearbySharer: Identifiable {
-    let marker: LiveMarker
-    var id: String { marker.uid }
+/// Re-resolve from the authorized, freshness-filtered roster every render/tick.
+/// Keeping only the uid in shell selection cannot retain a stopped/blocked user's
+/// old snapshot while their marker has already disappeared from the map.
+struct NearbySharerDetail: View {
+    @Bindable var coordinator: NearbyLiveCoordinator
+    let uid: String
+    let onUnavailable: () -> Void
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let marker = coordinator.visibleMarkers(at: context.date).first { $0.uid == uid }
+            Group {
+                if let marker {
+                    NearbySharerIdentity(
+                        marker: marker,
+                        imageURL: marker.imagePath.flatMap { coordinator.imageURLs[$0] }
+                    )
+                }
+            }
+            .onChange(of: marker == nil, initial: true) { _, unavailable in
+                if unavailable { onUnavailable() }
+            }
+        }
+    }
 }
 
-private struct NearbySharerCallout: View {
-    @Environment(\.dismiss) private var dismiss
+struct NearbySharerIdentity: View {
     let marker: LiveMarker
     let imageURL: URL?
 
     var body: some View {
-        VStack(spacing: KccSpacing.s3) {
-            HStack(spacing: KccSpacing.s3) {
-                ZStack {
-                    Circle().fill(Color.purple)
-                    if let imageURL {
-                        AsyncImage(url: imageURL) { image in
-                            image.resizable().scaledToFill()
-                        } placeholder: {
-                            Image(systemName: "car.side.fill").foregroundStyle(.white)
-                        }
-                    } else {
-                        Image(systemName: "car.side.fill").foregroundStyle(.white)
-                    }
+        VStack(alignment: .leading, spacing: KccSpacing.s3) {
+            if let imageURL {
+                AsyncImage(url: imageURL) { phase in
+                    if let image = phase.image { image.resizable().scaledToFill() }
+                    else { Image(systemName: "car.side.fill").foregroundStyle(KccTheme.driver) }
                 }
-                .frame(width: 52, height: 52)
-                .clipShape(Circle())
-                VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                    Text(marker.displayName ?? String(localized: "nearby.unknownSharer"))
-                        .font(.headline)
-                    if let recordedAt = marker.recordedAt {
-                        Text("\(String(localized: "liveLocation.lastUpdated")): \(recordedAt.formatted(.relative(presentation: .named)))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                Spacer()
+                .frame(width: 64, height: 64).clipShape(Circle())
+                .overlay(Circle().strokeBorder(KccTheme.driver, lineWidth: 2).allowsHitTesting(false))
+                .accessibilityHidden(true)
+            } else {
+                Image(systemName: "car.side.fill").font(.title2)
+                    .foregroundStyle(KccTheme.driver)
+                    .frame(width: 64, height: 64)
+                    .background(KccTheme.subtle, in: Circle())
+                    .accessibilityHidden(true)
             }
-            Button("nearby.sharerPopupClose") { dismiss() }
-                .buttonStyle(.borderedProminent)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+            Text(marker.displayName ?? String(localized: "nearby.unknownSharer"))
+                .font(.title3.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
+            if let recordedAt = marker.recordedAt {
+                Text("\(String(localized: "liveLocation.lastUpdated")): \(recordedAt.formatted(.relative(presentation: .named)))")
+                    .font(.subheadline).foregroundStyle(KccTheme.secondary)
+            }
         }
-        .padding(KccSpacing.s5)
         .accessibilityElement(children: .contain)
     }
 }

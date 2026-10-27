@@ -69,7 +69,9 @@ struct ShellView: View {
     @State private var showMapLayers = false
     @State private var navSearchOpen = false
     @AccessibilityFocusState private var searchLauncherFocused: Bool
-    @State private var showSavedPlacesPicker = false
+    @State private var mapReadingSelection: MapReadingSelection?
+    @State private var mapDockHeight: CGFloat = 0
+    @State private var mapSessionHeight: CGFloat = 0
     @State private var savedPlacesCoordinator: SavedPlacesCoordinator?
     @State private var savedPlacesProximity: MapPoint?
 
@@ -193,6 +195,7 @@ struct ShellView: View {
             }
             .onChange(of: featureFlags.isEnabled(.liveLocation)) { _, enabled in
                 liveLocationCoordinator?.canShare = enabled && !access.isRestricted
+                if !enabled, case .nearby = mapReadingSelection { dismissMapReading() }
             }
             .onChange(of: chatFeatureWiringKey) { _, _ in
                 applyChatFeatureGate()
@@ -207,7 +210,7 @@ struct ShellView: View {
                 }
             }
             .onChange(of: routes.current) { _, route in
-                if route != nil { closeAddressSearch() }
+                if route != nil { closeAddressSearch(); dismissMapReading() }
                 if route != .events { eventPath = [] }
             }
             .onChange(of: featureFlags.isEnabled(.partners)) { _, enabled in
@@ -255,6 +258,7 @@ struct ShellView: View {
                     uid: signedInUid
                 )
             )
+            .padding(.bottom, mapHomeChromeVisible ? mapDockHeight : 0)
             .accessibilityHidden(mapCover == .opaque)
 
             // PR #1165 (codex/ios-map-visibility): remove the opaque TabView
@@ -275,6 +279,9 @@ struct ShellView: View {
             if selectedTab != .map && selectedTab != .chat {
                 content(for: selectedTab)
             }
+        }
+        .overlay(alignment: .bottom) {
+            if mapHomeChromeVisible && mapBottomDockVisible { mapBottomDock }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             primaryNavigation
@@ -303,7 +310,7 @@ struct ShellView: View {
         }
     }
 
-    private var shellInteractions: some View {
+    private var shellBaseInteractions: some View {
         shellBase
         // Drive the surface's liveness from the SAME pure cover value the
         // pages derive from — the iOS counterpart of Android's
@@ -322,12 +329,58 @@ struct ShellView: View {
         }
         .onChange(of: selectedTab) { _, tab in
             if tab == .chat { chatHasOpened = true }
-            if tab != .map { closeAddressSearch() }
+            if tab != .map { closeAddressSearch(); dismissMapReading() }
             if tab != .map, routes.current == .chatHub {
                 routes = routes.poppingOne()
             }
         }
+    }
+
+    private var shellReadingInteractions: some View {
+        shellBaseInteractions
+        .onChange(of: mapReadingSelection) { _, selection in centerMapReading(selection) }
+        .onChange(of: incidentMapCoordinator?.selectedIncident?.id) { _, id in
+            if let id {
+                billboardsCoordinator?.dismiss()
+                mapReadingSelection = .incident(id)
+            }
+            else if case .incident = mapReadingSelection { mapReadingSelection = nil }
+        }
+        .onChange(of: incidentMapCoordinator?.selectedPolice?.id) { _, id in
+            if let id {
+                billboardsCoordinator?.dismiss()
+                mapReadingSelection = .police(id)
+            }
+            else if case .police = mapReadingSelection { mapReadingSelection = nil }
+        }
+    }
+
+    private var shellReadingDismissals: some View {
+        shellReadingInteractions
+        .onChange(of: crownHuntComposition?.mapCoordinator?.selectedTarget) { _, target in
+            if target != nil { dismissMapReading() }
+        }
+        .onChange(of: billboardsCoordinator?.selectedBillboardId) { _, id in
+            if id != nil { dismissMapReading() }
+        }
+        .onChange(of: showStartDriving) { _, open in
+            if open { dismissMapReading() }
+        }
+        .onChange(of: crownHuntComposition?.perkMapCoordinator?.menuPresented) { _, open in
+            if open == true { dismissMapReading() }
+        }
+        .onChange(of: showMapLayers) { _, open in
+            if open { dismissMapReading() }
+        }
+        .onChange(of: incidentMapCoordinator?.reportSheetPresented) { _, open in
+            if open == true { dismissMapReading() }
+        }
+    }
+
+    private var shellInteractions: some View {
+        shellReadingDismissals
         .onChange(of: navSearchOpen) { _, open in
+            if open { dismissMapReading() }
             if !open { searchLauncherFocused = true }
         }
         .onChange(of: locationPermissionCoordinator?.state) { _, state in
@@ -345,6 +398,26 @@ struct ShellView: View {
         }
         .onChange(of: liveLocationCoordinator?.sessionSnapshotRevision, initial: true) { _, _ in
             reconcileDriveRecording()
+        }
+    }
+
+    private func centerMapReading(_ selection: MapReadingSelection?) {
+        // Reuse the existing user-requested center command. Resizing the same
+        // map viewport above the measured dock leaves its center unobscured.
+        switch selection {
+        case .incident(let id):
+            if let item = incidentMapCoordinator?.selectedIncident, item.id == id {
+                mapSurface.centerOn(MapPoint(longitude: item.longitude, latitude: item.latitude))
+            }
+        case .police(let id):
+            if let item = incidentMapCoordinator?.selectedPolice, item.id == id {
+                mapSurface.centerOn(MapPoint(longitude: item.longitude, latitude: item.latitude))
+            }
+        case .nearby(let uid):
+            if let item = nearbyLive.visibleMarkers().first(where: { $0.uid == uid }) {
+                mapSurface.centerOn(MapPoint(longitude: item.longitude, latitude: item.latitude))
+            }
+        default: break
         }
     }
 
@@ -373,16 +446,6 @@ struct ShellView: View {
                 )
             }
         }
-        .sheet(isPresented: incidentDetailsIsPresented) {
-            if let incidentMapCoordinator {
-                IncidentDetailsSheet(coordinator: incidentMapCoordinator)
-            }
-        }
-        .sheet(isPresented: policeDetailsIsPresented) {
-            if let incidentMapCoordinator {
-                PoliceDetailsSheet(coordinator: incidentMapCoordinator)
-            }
-        }
         .sheet(isPresented: crownSelectionIsPresented) {
             if let coordinator = crownHuntComposition?.mapCoordinator {
                 CrownHuntCollectSheet(coordinator: coordinator)
@@ -406,21 +469,6 @@ struct ShellView: View {
                 on3DChanged: mapSurface.set3DEnabled,
                 onBrowsingZoomChanged: mapSurface.setBrowsingZoom
             )
-        }
-        .sheet(isPresented: $showSavedPlacesPicker) {
-            if let savedPlacesCoordinator {
-                SavedPlacesPickerSheet(
-                    places: savedPlacesCoordinator.places,
-                    onSelect: { saved in
-                        showSavedPlacesPicker = false
-                        showPlaceOnMap(saved.place)
-                    },
-                    onManage: {
-                        showSavedPlacesPicker = false
-                        routes = routes.opening(.savedPlaces)
-                    }
-                )
-            }
         }
         .sheet(isPresented: whatsNewAnnouncementIsPresented) {
             if let announcement = whatsNewCoordinator.announcement {
@@ -525,21 +573,6 @@ struct ShellView: View {
                         mapSearchButton.padding(KccSpacing.s4)
                     }
                 }
-                .overlay(alignment: .bottomLeading) {
-                    if mapHomeChromeVisible,
-                       let recordingState = driveRecordingCoordinator?.state,
-                       case .kept = recordingState {
-                        Button {
-                            routes = routes.opening(.myDrives)
-                        } label: {
-                            Label("shell.moreDrives", systemImage: "chart.bar.xaxis")
-                                .padding(KccSpacing.s3)
-                                .background(KccTheme.overlay, in: Capsule())
-                        }
-                        .accessibilityIdentifier("shell.postDriveHistory")
-                        .padding(KccSpacing.s4)
-                    }
-                }
                 .overlay(alignment: .top) {
                     if !groupDriveMapUids.isEmpty, mapHomeChromeVisible {
                         HStack(spacing: KccSpacing.s2) {
@@ -559,42 +592,47 @@ struct ShellView: View {
                     }
                 }
                 .overlay {
-                    if let crownMapCoordinator = crownHuntComposition?.mapCoordinator {
-                        CrownHuntMapOverlay(
-                            coordinator: crownMapCoordinator,
-                            projection: mapSurface
-                        )
+                    ZStack {
+                        if let crownMapCoordinator = crownHuntComposition?.mapCoordinator {
+                            CrownHuntMapOverlay(
+                                coordinator: crownMapCoordinator,
+                                projection: mapSurface
+                            )
+                        }
+                        if let perkMapCoordinator = crownHuntComposition?.perkMapCoordinator {
+                            CrownPerkMapOverlay(
+                                coordinator: perkMapCoordinator,
+                                projection: mapSurface,
+                                ownFix: crownHuntComposition?.mapCoordinator?.latestFix
+                            )
+                        }
+                        if let incidentMapCoordinator {
+                            IncidentMapOverlay(
+                                coordinator: incidentMapCoordinator,
+                                projection: mapSurface,
+                                onSelect: { id in selectMapReading(.incident(id)) }
+                            )
+                        }
+                        if let billboardsCoordinator {
+                            BillboardMapOverlay(
+                                coordinator: billboardsCoordinator,
+                                projection: mapSurface
+                            )
+                        }
+                        if liveLocationFeatureEnabled {
+                            ConvoyMapAwarenessOverlay(
+                                members: convoyAwareness.visibleMembers,
+                                imageURLs: convoyAwareness.imageURLs,
+                                projection: mapSurface
+                            )
+                            NearbyLiveOverlay(
+                                coordinator: nearbyLive,
+                                projection: mapSurface,
+                                onSelect: { uid in selectMapReading(.nearby(uid)) }
+                            )
+                        }
                     }
-                    if let perkMapCoordinator = crownHuntComposition?.perkMapCoordinator {
-                        CrownPerkMapOverlay(
-                            coordinator: perkMapCoordinator,
-                            projection: mapSurface,
-                            ownFix: crownHuntComposition?.mapCoordinator?.latestFix
-                        )
-                    }
-                    if let incidentMapCoordinator {
-                        IncidentMapOverlay(
-                            coordinator: incidentMapCoordinator,
-                            projection: mapSurface
-                        )
-                    }
-                    if let billboardsCoordinator {
-                        BillboardMapOverlay(
-                            coordinator: billboardsCoordinator,
-                            projection: mapSurface
-                        )
-                    }
-                    if liveLocationFeatureEnabled {
-                        ConvoyMapAwarenessOverlay(
-                            members: convoyAwareness.visibleMembers,
-                            imageURLs: convoyAwareness.imageURLs,
-                            projection: mapSurface
-                        )
-                        NearbyLiveOverlay(
-                            coordinator: nearbyLive,
-                            projection: mapSurface
-                        )
-                    }
+                    .padding(.bottom, mapHomeChromeVisible ? mapDockHeight : 0)
                 }
                 .overlay {
                     if mapHomeChromeVisible,
@@ -602,7 +640,8 @@ struct ShellView: View {
                        let convoyReactionCoordinator {
                         ConvoyReactionControls(
                             coordinator: convoyReactionCoordinator,
-                            followMeCoordinator: convoyFollowMeCoordinator
+                            followMeCoordinator: convoyFollowMeCoordinator,
+                            bottomClearance: mapDockHeight
                         )
                     }
                 }
@@ -864,39 +903,143 @@ struct ShellView: View {
         .padding(KccSpacing.s4)
     }
 
-    /// S01: tools start below the avatar, never centered over the map. Keeping
-    /// the convoy strip in this stack reserves its actual rendered height,
-    /// including action errors, rather than guessing a fixed rail offset.
+    /// S01 rail stays below the avatar and above the measured bottom dock.
     private var mapTopTools: some View {
         VStack(spacing: KccSpacing.s3) {
-            if let coordinator = convoyManagementCoordinator,
-               let convoy = coordinator.activeConvoy {
-                ConvoyStatusBar(
-                    coordinator: coordinator,
-                    convoy: convoy,
-                    friendsCoordinator: friendsCoordinator,
-                    awareness: convoyAwareness,
-                    mapSurface: mapSurface,
-                    liveLocationEnabled: liveLocationFeatureEnabled,
-                    viewerUid: signedInUid,
-                    onOpenMemberProfile: openMemberProfile
-                )
-                .padding(.horizontal, KccSpacing.s4)
-            }
             HStack(alignment: .top, spacing: 0) {
                 Spacer(minLength: 0)
-                ViewThatFits(in: .vertical) {
-                    mapCommunicationControls
-                    ScrollView(.vertical) {
-                        mapCommunicationControls
-                    }
+                ScrollView(.vertical) { mapCommunicationControls }
                     .scrollBounceBehavior(.basedOnSize)
-                }
                 .frame(width: 48 + KccSpacing.s4 * 2)
             }
         }
         .padding(.top, KccSpacing.s4 + 48 + KccSpacing.s3)
+        .padding(.bottom, mapDockHeight)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+    }
+
+    private var mapBottomDockVisible: Bool {
+        if mapReadingSelection != nil || convoyManagementCoordinator?.activeConvoy != nil
+            || liveLocationCoordinator?.isSharing == true { return true }
+        if let state = driveRecordingCoordinator?.state, case .kept = state { return true }
+        return false
+    }
+
+    /// The dock and the rail use the same measured clearance. The persistent
+    /// primary navigation is outside this body and cannot be covered by it.
+    private var mapBottomDock: some View {
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                VStack(spacing: KccSpacing.s2) {
+                    if let selection = mapReadingSelection {
+                        mapReadingPanel(selection)
+                            .id(selection)
+                            .frame(height: max(96, min(320, geometry.size.height * 0.55 - mapSessionHeight)))
+                    }
+                    VStack(spacing: KccSpacing.s2) { mapSessionControls }
+                        .background { GeometryReader { proxy in
+                            Color.clear.preference(key: MapSessionHeightKey.self, value: proxy.size.height)
+                        } }
+                }
+                .padding(.horizontal, KccSpacing.s4)
+                .padding(.bottom, KccSpacing.s2)
+                .background { GeometryReader { proxy in
+                    Color.clear.preference(key: MapDockHeightKey.self, value: proxy.size.height)
+                } }
+            }
+            .onPreferenceChange(MapSessionHeightKey.self) { mapSessionHeight = $0 }
+        }
+        .onPreferenceChange(MapDockHeightKey.self) { mapDockHeight = $0 }
+        .onDisappear { mapDockHeight = 0; mapSessionHeight = 0 }
+    }
+
+    @ViewBuilder private var mapSessionControls: some View {
+        if let coordinator = convoyManagementCoordinator,
+           let convoy = coordinator.activeConvoy {
+            ConvoyStatusBar(
+                coordinator: coordinator,
+                convoy: convoy,
+                friendsCoordinator: friendsCoordinator,
+                awareness: convoyAwareness,
+                mapSurface: mapSurface,
+                liveLocationEnabled: liveLocationFeatureEnabled,
+                viewerUid: signedInUid,
+                onOpenMemberProfile: openMemberProfile
+            )
+        }
+        if let coordinator = liveLocationCoordinator, coordinator.isSharing {
+            MapLiveSessionControls(
+                busy: coordinator.actionStatus == .working || pendingSessionCommand != nil,
+                failed: coordinator.actionStatus == .failed,
+                onManage: { routes = routes.opening(.liveLocation) },
+                onStop: convoyManagementCoordinator?.activeConvoy == nil ? { showStopConfirmation = true } : nil,
+                onHide: { Task { await coordinator.hideMeNow() } }
+            )
+        }
+        if let state = driveRecordingCoordinator?.state, case .kept = state {
+            Button { routes = routes.opening(.myDrives) } label: {
+                Label("shell.moreDrives", systemImage: "chart.bar.xaxis")
+                    .font(.subheadline).frame(maxWidth: .infinity, minHeight: 48)
+                    .background(KccTheme.overlay, in: Capsule())
+            }
+            .accessibilityIdentifier("shell.postDriveHistory")
+        }
+    }
+
+    @ViewBuilder private func mapReadingPanel(_ selection: MapReadingSelection) -> some View {
+        switch selection {
+        case .savedPlaces:
+            if let coordinator = savedPlacesCoordinator {
+                MapReadingPanel(title: "shell.savedPlacesPickerTitle", onClose: dismissMapReading) {
+                    SavedPlacesPickerContent(places: coordinator.places, onSelect: { saved in
+                        dismissMapReading()
+                        showPlaceOnMap(saved.place)
+                    }, onManage: {
+                        dismissMapReading()
+                        routes = routes.opening(.savedPlaces)
+                    })
+                }
+            }
+        case .incident(let id):
+            if let coordinator = incidentMapCoordinator, coordinator.selectedIncident?.id == id {
+                MapReadingPanel(title: "incidents.markerLabel", onClose: dismissMapReading) {
+                    IncidentDetailsContent(coordinator: coordinator)
+                }
+            }
+        case .police(let id):
+            if let coordinator = incidentMapCoordinator, coordinator.selectedPolice?.id == id {
+                MapReadingPanel(title: "police.sheetTitle", onClose: dismissMapReading) {
+                    PoliceDetailsContent(coordinator: coordinator)
+                }
+            }
+        case .nearby(let uid):
+            if liveLocationFeatureEnabled {
+                MapReadingPanel(title: "liveLocation.screenTitle", onClose: dismissMapReading) {
+                    NearbySharerDetail(coordinator: nearbyLive, uid: uid, onUnavailable: dismissMapReading)
+                }
+            }
+        }
+    }
+
+    private func selectMapReading(_ selection: MapReadingSelection) {
+        // The marker coordinator still owns authorization, freshness and actions.
+        billboardsCoordinator?.dismiss()
+        if case .incident = selection, let pin = incidentMapCoordinator?.selectedPolice {
+            mapReadingSelection = .police(pin.id)
+        } else { mapReadingSelection = selection }
+        if case .savedPlaces = selection { clearIncidentSelection() }
+        if case .nearby = selection { clearIncidentSelection() }
+    }
+
+    private func clearIncidentSelection() {
+        incidentMapCoordinator?.selectedIncident = nil
+        incidentMapCoordinator?.selectedPolice = nil
+    }
+
+    private func dismissMapReading() {
+        mapReadingSelection = nil
+        clearIncidentSelection()
     }
 
     private var mapCommunicationControls: some View {
@@ -930,13 +1073,14 @@ struct ShellView: View {
 
             if savedPlacesCoordinator != nil {
                 Button {
-                    showSavedPlacesPicker = true
+                    selectMapReading(.savedPlaces)
                 } label: {
                     Image(systemName: "bookmark.fill")
                         .frame(width: 48, height: 48)
                         .kccMapControl()
                 }
                 .accessibilityLabel(Text("shell.savedPlacesButton"))
+                .accessibilityIdentifier("shell.savedPlaces")
             }
 
             if let coordinator = crownHuntComposition?.perkMapCoordinator, coordinator.isAvailable {
@@ -1962,7 +2106,7 @@ struct ShellView: View {
         partnersCoordinator = nil
         savedPlacesCoordinator = nil
         navSearchOpen = false
-        showSavedPlacesPicker = false
+        dismissMapReading()
         openTicketsCoordinator?.stop()
         feedbackCoordinator = nil
         openTicketsCoordinator = nil
@@ -2353,26 +2497,10 @@ struct ShellView: View {
         )
     }
 
-    private var incidentDetailsIsPresented: Binding<Bool> {
-        Binding(
-            get: { incidentMapCoordinator?.selectedIncident != nil },
-            set: { if !$0 { incidentMapCoordinator?.selectedIncident = nil } }
-        )
-    }
-
-    private var policeDetailsIsPresented: Binding<Bool> {
-        Binding(
-            get: { incidentMapCoordinator?.selectedPolice != nil },
-            set: { if !$0 { incidentMapCoordinator?.selectedPolice = nil } }
-        )
-    }
-
     private var incidentFeedbackIsPresented: Binding<Bool> {
         Binding(
             get: {
                 incidentMapCoordinator?.feedback != nil
-                    && incidentMapCoordinator?.selectedIncident == nil
-                    && incidentMapCoordinator?.selectedPolice == nil
             },
             set: { if !$0 { incidentMapCoordinator?.clearFeedback() } }
         )

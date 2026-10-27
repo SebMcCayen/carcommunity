@@ -299,37 +299,35 @@ private extension View {
     }
 }
 
-struct SavedPlacesPickerSheet: View {
+struct SavedPlacesPickerContent: View {
     let places: [SavedPlace]
     let onSelect: (SavedPlace) -> Void
     let onManage: () -> Void
 
     var body: some View {
-        NavigationStack {
-            List {
+        VStack(alignment: .leading, spacing: KccSpacing.s3) {
                 if places.isEmpty {
-                    ContentUnavailableView(
-                        "shell.savedPlacesPickerEmpty",
-                        systemImage: "bookmark"
-                    )
+                ContentUnavailableView(
+                    "shell.savedPlacesPickerEmpty",
+                    systemImage: "bookmark"
+                )
                 } else {
-                    ForEach(places) { saved in
-                        Button { onSelect(saved) } label: {
-                            PlaceRow(
-                                title: saved.displayLabel,
-                                subtitle: saved.place.secondaryText,
-                                systemImage: saved.kind.systemImage
-                            )
-                        }
+                ForEach(places) { saved in
+                    Button { onSelect(saved) } label: {
+                        PlaceRow(
+                            title: saved.displayLabel,
+                            subtitle: saved.place.secondaryText,
+                            systemImage: saved.kind.systemImage
+                        )
                     }
                 }
-                Button(action: onManage) {
-                    Label("settingsMenu.savedPlaces", systemImage: "gearshape")
                 }
-            }
-            .navigationTitle("shell.savedPlacesPickerTitle")
+                Button(action: onManage) {
+                Label("settingsMenu.savedPlaces", systemImage: "gearshape")
+                }
         }
-        .presentationDetents([.medium, .large])
+        .buttonStyle(.bordered)
+        .controlSize(.large)
     }
 }
 

@@ -48,6 +48,43 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Map layers"].waitForExistence(timeout: 5))
     }
 
+    func testSavedPlacesDockKeepsCloseToolsAndPrimaryNavigationReachable() {
+        let app = launch(language: "en", largeText: true, theme: "Dark")
+        let mapIdentity = app.staticTexts["shell.mapPlaceholder"].value as? String
+        XCTAssertNotNil(mapIdentity)
+        let saved = app.buttons["shell.savedPlaces"]
+        XCTAssertTrue(saved.waitForExistence(timeout: 15))
+        saved.tap()
+        let panel = element("map.reading.panel", in: app)
+        let close = app.buttons["map.reading.close"]
+        XCTAssertTrue(panel.waitForExistence(timeout: 5))
+        XCTAssertTrue(close.isHittable)
+        // CGRect conversion can report 48 as 47.99999999999994.
+        XCTAssertGreaterThanOrEqual(close.frame.height + 0.001, 48)
+        XCTAssertLessThanOrEqual(panel.frame.maxY, app.buttons["shell.tab.map"].frame.minY)
+        XCTAssertTrue(app.buttons["shell.mapLayers"].isHittable)
+        let closeFrame = close.frame
+        app.scrollViews["map.reading.content"].swipeUp()
+        XCTAssertTrue(close.isHittable)
+        XCTAssertEqual(close.frame.minY, closeFrame.minY, accuracy: 1,
+            "Close must stay pinned when the reading content scrolls")
+        attach(app, name: "map-saved-places-dock-en-dark-accessibility")
+        // Real OS-injected navigation tap while the panel is open, without
+        // dismissing it first: a modal sheet would intercept this tap.
+        app.buttons["shell.tab.chat"].tap()
+        XCTAssertTrue(element("chatHub.opaqueScreen", in: app).waitForExistence(timeout: 15))
+        assertSelected(app.buttons["shell.tab.chat"])
+        app.buttons["shell.tab.map"].tap()
+        XCTAssertFalse(panel.exists, "A reading panel must not reopen after a tab round trip")
+        XCTAssertEqual(app.staticTexts["shell.mapPlaceholder"].value as? String, mapIdentity,
+            "Opening/closing a dock must retain the same map host")
+        saved.tap()
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        close.tap()
+        XCTAssertFalse(panel.exists)
+        XCTAssertTrue(app.buttons["shell.mapLayers"].isHittable)
+    }
+
     func testMapLayersAppearanceChoicesAndFocusControl() {
         let app = launch(language: "en")
         app.buttons["shell.mapLayers"].tap()
@@ -318,6 +355,7 @@ final class ShellSmokeTests: XCTestCase {
             "S01 rail must start just below top chrome, not at map center")
         attach(app, name: "\(prefix)-S01-map-collapsed-search")
 
+        let chatFrameBeforeSearch = app.buttons["shell.tab.chat"].frame
         app.buttons["shell.search"].tap()
         let field = app.textFields["addressSearch.query"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
@@ -327,6 +365,22 @@ final class ShellSmokeTests: XCTestCase {
         app.buttons["addressSearch.close"].tap()
         XCTAssertTrue(app.buttons["shell.search"].waitForExistence(timeout: 5))
         XCTAssertFalse(field.exists)
+        // The search launcher returns before UIKit finishes dismissing the
+        // keyboard. Wait for the real keyboard to leave before targeting the
+        // footer at its restored screen position; do not retry a failed tap.
+        let keyboardDismissed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [keyboardDismissed], timeout: 5), .completed)
+        let footerRestored = XCTNSPredicateExpectation(
+            predicate: NSPredicate { object, _ in
+                guard let button = object as? XCUIElement else { return false }
+                return button.isHittable
+                    && abs(button.frame.minY - chatFrameBeforeSearch.minY) < 1
+                    && abs(button.frame.height - chatFrameBeforeSearch.height) < 1
+            }, object: app.buttons["shell.tab.chat"]
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [footerRestored], timeout: 5), .completed)
 
         for _ in 0..<2 {
             app.buttons["shell.tab.chat"].tap()

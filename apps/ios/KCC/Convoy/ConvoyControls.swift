@@ -23,6 +23,7 @@ private struct ConvoySheetTarget: Identifiable {
 
 struct ConvoyStatusBar: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Bindable var coordinator: ConvoyManagementCoordinator
     let convoy: ConvoyItem
     let friendsCoordinator: FriendsCoordinator?
@@ -44,10 +45,14 @@ struct ConvoyStatusBar: View {
         VStack(alignment: .leading, spacing: KccSpacing.s2) {
             HStack(spacing: KccSpacing.s2) {
                 Button { memberTarget = ConvoySheetTarget(convoy) } label: {
-                    Label(memberCount, systemImage: "person.3.fill")
-                        .lineLimit(1)
+                    Group {
+                        if dynamicTypeSize.isAccessibilitySize { Image(systemName: "person.3.fill") }
+                        else { Label(memberCount, systemImage: "person.3.fill").lineLimit(1) }
+                    }
+                    .frame(minWidth: 48, minHeight: 48).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(memberCount)
 
                 Spacer(minLength: KccSpacing.s2)
 
@@ -56,6 +61,7 @@ struct ConvoyStatusBar: View {
                         awareness.focusMode = awareness.focusMode == .me ? .convoy : .me
                     } label: {
                         Image(systemName: awareness.focusMode == .convoy ? "person.3.fill" : "person.3")
+                            .frame(width: 48, height: 48).contentShape(Rectangle())
                     }
                     .accessibilityLabel(Text(
                         awareness.focusMode == .convoy ? "convoy.barFocusConvoy" : "convoy.barFocusMe"
@@ -64,6 +70,7 @@ struct ConvoyStatusBar: View {
 
                 Button { inviteTarget = ConvoySheetTarget(convoy) } label: {
                     Image(systemName: "person.badge.plus")
+                        .frame(width: 48, height: 48).contentShape(Rectangle())
                 }
                 .disabled(working || friendsCoordinator == nil)
                 .accessibilityLabel(Text("convoy.barInvite"))
@@ -71,11 +78,11 @@ struct ConvoyStatusBar: View {
                 Button {
                     exitTarget = ConvoyExitTarget(convoyId: convoy.convoyId, choice: exitChoice)
                 } label: {
-                    if working {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Image(systemName: convoy.viewerIsOwner ? "stop.circle" : "rectangle.portrait.and.arrow.right")
+                    Group {
+                        if working { ProgressView().controlSize(.small) }
+                        else { Image(systemName: convoy.viewerIsOwner ? "stop.circle" : "rectangle.portrait.and.arrow.right") }
                     }
+                    .frame(width: 48, height: 48).contentShape(Rectangle())
                 }
                 .disabled(working)
                 .accessibilityLabel(Text(exitLabel))
@@ -84,9 +91,8 @@ struct ConvoyStatusBar: View {
             if let error = coordinator.actionError(for: convoy.convoyId) {
                 HStack {
                     Text(ConvoyManagementStrings.errorKey(error))
-                        .font(.system(size: KccTypeScale.caption))
+                        .font(.subheadline)
                         .foregroundStyle(KccPalette.errorRed)
-                        .lineLimit(2)
                     Spacer(minLength: KccSpacing.s2)
                     Button {
                         coordinator.clearActionError()
@@ -101,7 +107,9 @@ struct ConvoyStatusBar: View {
         .font(.system(size: KccTypeScale.bodySm, weight: .semibold))
         .padding(.horizontal, KccSpacing.s4)
         .padding(.vertical, KccSpacing.s3)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: KccRadius.md))
+        .foregroundStyle(KccTheme.text)
+        .background(KccTheme.overlay, in: RoundedRectangle(cornerRadius: KccRadius.lg))
+        .overlay { RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.border).allowsHitTesting(false) }
         .shadow(color: .black.opacity(0.14), radius: 8, y: 3)
         .sheet(item: $memberTarget) { target in
             LiveConvoyMembersSheet(
@@ -226,6 +234,7 @@ struct ConvoyMembersSheet: View {
                     }
                 }
             }
+            .kccReadingSurface()
             .navigationTitle("convoy.barMemberListTitle")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
