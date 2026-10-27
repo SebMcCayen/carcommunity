@@ -91,6 +91,8 @@ struct CrownHubTabs: View {
             .padding(.vertical, KccSpacing.s2)
         }
         .scrollIndicators(.hidden)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("crown.tabs")
     }
 
