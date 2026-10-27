@@ -71,88 +71,94 @@ struct SettingsScreen: View {
 
     var body: some View {
         List {
-            if !actions.availableDestinations.isDisjoint(with: accountDestinations) {
-                Section("settingsMenu.accountSection") {
-                    destinationRow(
-                        destination: .subscription,
-                        key: "settingsMenu.manageSubscription",
-                        icon: "creditcard",
-                        identifier: "settings.subscription"
+            Group {
+                if !actions.availableDestinations.isDisjoint(with: accountDestinations) {
+                    Section("settingsMenu.accountSection") {
+                        destinationRow(
+                            destination: .subscription,
+                            key: "settingsMenu.manageSubscription",
+                            icon: "creditcard",
+                            identifier: "settings.subscription"
+                        )
+                        destinationRow(
+                            destination: .savedPlaces,
+                            key: "settingsMenu.savedPlaces",
+                            icon: "bookmark",
+                            identifier: "settings.savedPlaces"
+                        )
+                        destinationRow(
+                            destination: .notificationSettings,
+                            key: "settingsMenu.notificationSettings",
+                            icon: "bell.badge",
+                            identifier: "settings.notificationSettings"
+                        )
+                        destinationRow(
+                            destination: .blockedUsers,
+                            key: "settings.blockedUsers",
+                            icon: "person.crop.circle.badge.xmark",
+                            identifier: "settings.blockedUsers"
+                        )
+                        destinationRow(
+                            destination: .partnerStats,
+                            key: "settingsMenu.partnerStats",
+                            icon: "chart.bar",
+                            identifier: "settings.partnerStats"
+                        )
+                        destinationRow(
+                            destination: .feedback,
+                            key: "settingsMenu.feedback",
+                            icon: "exclamationmark.bubble",
+                            identifier: "settings.feedback"
+                        )
+                        destinationRow(
+                            destination: .accountDeletion,
+                            key: "settingsMenu.deleteAccount",
+                            icon: "trash",
+                            identifier: "settings.accountDeletion",
+                            role: .destructive
+                        )
+                    }
+                }
+
+                if actions.availableDestinations.contains(.whatsNew) {
+                    Section("settingsMenu.aboutSection") {
+                        destinationRow(
+                            destination: .whatsNew,
+                            key: "settingsMenu.whatsNew",
+                            icon: "sparkles",
+                            identifier: "settings.whatsNew"
+                        )
+                    }
+                }
+
+                Section {
+                    legalLink(
+                        title: "settingsMenu.privacy",
+                        urlKey: "url.privacy",
+                        expectedPath: "/privacy",
+                        icon: "lock.shield",
+                        identifier: "settings.privacyPolicy"
                     )
-                    destinationRow(
-                        destination: .savedPlaces,
-                        key: "settingsMenu.savedPlaces",
-                        icon: "bookmark",
-                        identifier: "settings.savedPlaces"
+                    legalLink(
+                        title: "settingsMenu.terms",
+                        urlKey: "url.terms",
+                        expectedPath: "/terms",
+                        icon: "doc.text",
+                        identifier: "settings.terms"
                     )
-                    destinationRow(
-                        destination: .notificationSettings,
-                        key: "settingsMenu.notificationSettings",
-                        icon: "bell.badge",
-                        identifier: "settings.notificationSettings"
-                    )
-                    destinationRow(
-                        destination: .blockedUsers,
-                        key: "settings.blockedUsers",
-                        icon: "person.crop.circle.badge.xmark",
-                        identifier: "settings.blockedUsers"
-                    )
-                    destinationRow(
-                        destination: .partnerStats,
-                        key: "settingsMenu.partnerStats",
-                        icon: "chart.bar",
-                        identifier: "settings.partnerStats"
-                    )
-                    destinationRow(
-                        destination: .feedback,
-                        key: "settingsMenu.feedback",
-                        icon: "exclamationmark.bubble",
-                        identifier: "settings.feedback"
-                    )
-                    destinationRow(
-                        destination: .accountDeletion,
-                        key: "settingsMenu.deleteAccount",
-                        icon: "trash",
-                        identifier: "settings.accountDeletion",
-                        role: .destructive
-                    )
+                } header: {
+                    Text("settingsMenu.legalSection")
+                } footer: {
+                    Text(versionText)
+                        .frame(maxWidth: .infinity)
+                        .accessibilityIdentifier("settings.version")
                 }
             }
-
-            if actions.availableDestinations.contains(.whatsNew) {
-                Section("settingsMenu.aboutSection") {
-                    destinationRow(
-                        destination: .whatsNew,
-                        key: "settingsMenu.whatsNew",
-                        icon: "sparkles",
-                        identifier: "settings.whatsNew"
-                    )
-                }
-            }
-
-            Section {
-                legalLink(
-                    title: "settingsMenu.privacy",
-                    urlKey: "url.privacy",
-                    expectedPath: "/privacy",
-                    icon: "lock.shield",
-                    identifier: "settings.privacyPolicy"
-                )
-                legalLink(
-                    title: "settingsMenu.terms",
-                    urlKey: "url.terms",
-                    expectedPath: "/terms",
-                    icon: "doc.text",
-                    identifier: "settings.terms"
-                )
-            } header: {
-                Text("settingsMenu.legalSection")
-            } footer: {
-                Text(versionText)
-                    .frame(maxWidth: .infinity)
-                    .accessibilityIdentifier("settings.version")
-            }
+            .listRowBackground(KccTheme.surface)
         }
+        .listStyle(.insetGrouped)
+        .kccReadingSurface(pageBackground: true)
+        .tint(KccTheme.driver)
         .navigationTitle("settingsMenu.title")
         .accessibilityIdentifier("settings.screen")
     }
@@ -172,8 +178,9 @@ struct SettingsScreen: View {
     ) -> some View {
         if let action = actions.action(for: destination) {
             Button(role: role, action: action) {
-                settingsLabel(key, icon: icon)
+                SettingsRowLabel(title: key, symbol: icon, destructive: role == .destructive)
             }
+            .buttonStyle(.plain)
             .accessibilityIdentifier(identifier)
         }
     }
@@ -191,20 +198,10 @@ struct SettingsScreen: View {
             expectedPath: expectedPath
         ) {
             Link(destination: url) {
-                settingsLabel(title, icon: icon)
+                SettingsRowLabel(title: title, symbol: icon, external: true)
             }
             .accessibilityIdentifier(identifier)
         }
-    }
-
-    private func settingsLabel(_ key: LocalizedStringKey, icon: String) -> some View {
-        Label {
-            Text(key)
-        } icon: {
-            Image(systemName: icon)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
     }
 
     private var versionText: String {

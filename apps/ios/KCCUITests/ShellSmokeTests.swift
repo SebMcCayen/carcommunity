@@ -220,6 +220,8 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(privacy.waitForExistence(timeout: 5))
         XCTAssertEqual(privacy.label, "Privacy Policy")
         XCTAssertEqual(terms.label, "Terms of Service")
+        XCTAssertGreaterThanOrEqual(privacy.frame.height + 0.001, 48)
+        XCTAssertGreaterThanOrEqual(terms.frame.height + 0.001, 48)
         // Backend-only account actions must stay absent in this config-less build.
         XCTAssertFalse(app.buttons["settings.accountDeletion"].exists)
         XCTAssertFalse(app.buttons["settings.notificationSettings"].exists)

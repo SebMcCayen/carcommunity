@@ -96,6 +96,7 @@
 		36162ECF083352070B3E5A44 /* WelcomeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 108B79C2BE8800B8E9C501BF /* WelcomeScreen.swift */; };
 		363729A04343E8E2EFC13A19 /* BadgeStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAC7716DBC57A9D08EED193 /* BadgeStrings.swift */; };
 		36E11671C66BBA3F46FA5313 /* CrownHuntHomeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E779154B4369CD7688C5153 /* CrownHuntHomeScreen.swift */; };
+		36EC862F33F6E46DC1E02839 /* SettingsDesignTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86A6375BFA826C51446494E2 /* SettingsDesignTests.swift */; };
 		3760AFE7B232E88B4BBC75EA /* FirebaseEmulatorIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C88730F65A1C33A53F8172B /* FirebaseEmulatorIntegrationTests.swift */; };
 		3778D179CE502693EE396C55 /* FirebaseBillboardsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A45B80623D588BB3DC63A44 /* FirebaseBillboardsRepository.swift */; };
 		3778F0AC327B471569306EC9 /* EventChatCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 438E6C3C71A7985E04DEACC0 /* EventChatCoordinatorTests.swift */; };
@@ -336,6 +337,7 @@
 		D2A0823D21A0A264FBF2DCB5 /* FeatureFlagsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BFA82E78E8D9398E6214520 /* FeatureFlagsTests.swift */; };
 		D2EFC0F4DF5661A75C3D46BF /* ChannelChatCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4EA9223DC573C164B3CA268 /* ChannelChatCoordinatorTests.swift */; };
 		D316EE007B410D96AA4F0DC3 /* FirebaseUserProfileRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC183FCE8F1C3FAFC61A5784 /* FirebaseUserProfileRepository.swift */; };
+		D466626B510C9EB9775AA226 /* SettingsDesignViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 410A701D10E041DD5EA809D4 /* SettingsDesignViews.swift */; };
 		D5EC10EC42AE496D9A3EFDAF /* CrownHuntBoardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8A14E33FEF8557066A6A12 /* CrownHuntBoardTests.swift */; };
 		D659C88AFC97CAF9AB1DCB5A /* PerkShopModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44885EC0E783DC6F01B6A2FE /* PerkShopModels.swift */; };
 		D7B09A124B1BED21F2359EC6 /* UserProfileRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70940A5568FF91A6A171D3CF /* UserProfileRepository.swift */; };
@@ -511,6 +513,7 @@
 		3FA17CDE68C688BB3DF03B54 /* MembershipScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembershipScreen.swift; sourceTree = "<group>"; };
 		3FF7E3BFE7F8C80149FC411F /* ChatHubScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHubScreen.swift; sourceTree = "<group>"; };
 		4107009CDC9C1A6EB3679B91 /* FirebaseCrownHuntStatsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseCrownHuntStatsRepository.swift; sourceTree = "<group>"; };
+		410A701D10E041DD5EA809D4 /* SettingsDesignViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsDesignViews.swift; sourceTree = "<group>"; };
 		419C5007972800C82AA1851B /* StoreKitSubscriptionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreKitSubscriptionStore.swift; sourceTree = "<group>"; };
 		41CE2F8F631ED4927075CCE9 /* CrownHuntFirestoreSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrownHuntFirestoreSupport.swift; sourceTree = "<group>"; };
 		423EC4EF57AC5FB396769091 /* BadgesModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BadgesModels.swift; sourceTree = "<group>"; };
@@ -616,6 +619,7 @@
 		854FB21EDEEB7685F8FE5C8D /* ConvoyControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyControls.swift; sourceTree = "<group>"; };
 		85FC1D99E841C7073F927B19 /* CrownHuntMapCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrownHuntMapCoordinator.swift; sourceTree = "<group>"; };
 		8631E9E248B1F4C97D80F1AD /* FollowMeTrailTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowMeTrailTests.swift; sourceTree = "<group>"; };
+		86A6375BFA826C51446494E2 /* SettingsDesignTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsDesignTests.swift; sourceTree = "<group>"; };
 		86B8BFD68C018AC836A606A7 /* ShellHubs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellHubs.swift; sourceTree = "<group>"; };
 		8762FA4089D8E6940ABB67D4 /* CrownHuntFeatureFlagsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrownHuntFeatureFlagsTests.swift; sourceTree = "<group>"; };
 		89131FBFD5E695DB2E892F11 /* PerkShopScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerkShopScreen.swift; sourceTree = "<group>"; };
@@ -972,6 +976,7 @@
 		302931D52817C2F9D2C31146 /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				410A701D10E041DD5EA809D4 /* SettingsDesignViews.swift */,
 				9DBBB1856DCE04D9FD4E51DA /* SettingsScreen.swift */,
 			);
 			path = Settings;
@@ -1548,6 +1553,7 @@
 				ECDEC616EC444307EE8CA283 /* ProfileEditingTests.swift */,
 				BF33E52A64ECBDCE46A94683 /* PushNotificationsTests.swift */,
 				02D47DC5F4210E2337814CE4 /* SavedPlacesTests.swift */,
+				86A6375BFA826C51446494E2 /* SettingsDesignTests.swift */,
 				C17EBBBC67C8A0774DC392C7 /* SettingsScreenTests.swift */,
 				99BCF885BCAC95E5A84E495A /* ShellMapHostTests.swift */,
 				FF7A1C3128BDBD3E00E2A30D /* ShellNavTests.swift */,
@@ -2020,6 +2026,7 @@
 				9B989DCAA0FB755CD4E147B6 /* SavedPlacesStore.swift in Sources */,
 				29E52C450B9CF78955D088E2 /* SavedPlacesViews.swift in Sources */,
 				70E429E8ABCEBCB05652747E /* SeasonStandingsView.swift in Sources */,
+				D466626B510C9EB9775AA226 /* SettingsDesignViews.swift in Sources */,
 				16110FC826E2D1D5D7DC7677 /* SettingsScreen.swift in Sources */,
 				062AE7034B90A9707143E724 /* ShellHubs.swift in Sources */,
 				F8A62804AA5A01BE636510FB /* ShellMapHost.swift in Sources */,
@@ -2134,6 +2141,7 @@
 				F3CA5AE27861A7A11265C91C /* ProfileEditingTests.swift in Sources */,
 				C693DB409D1309779768D0BD /* PushNotificationsTests.swift in Sources */,
 				1ED18C0DD0C842274AFC90A9 /* SavedPlacesTests.swift in Sources */,
+				36EC862F33F6E46DC1E02839 /* SettingsDesignTests.swift in Sources */,
 				44CBF35B24705F6DF9A9152F /* SettingsScreenTests.swift in Sources */,
 				1E50D3893A5C34E20441F632 /* ShellMapHostTests.swift in Sources */,
 				71CDB8557B99F7B612E30134 /* ShellNavTests.swift in Sources */,
