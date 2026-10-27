@@ -67,7 +67,15 @@ final class FirebaseEmulatorIntegrationTests: XCTestCase {
         adminFunctions.useEmulator(withHost: "localhost", port: 15001)
         ownFunctions.useEmulator(withHost: "localhost", port: 15001)
         let firestore = Firestore.firestore(app: app)
-        firestore.useEmulator(withHost: "localhost", port: 18088)
+        // gRPC uses an explicit plaintext loopback transport. Auth/Functions
+        // use localhost for ATS; Firestore's native gRPC channel uses IPv4.
+        let firestoreSettings = firestore.settings
+        firestoreSettings.host = "127.0.0.1:18088"
+        firestoreSettings.isSSLEnabled = false
+        firestoreSettings.cacheSettings = MemoryCacheSettings()
+        firestore.settings = firestoreSettings
+        XCTAssertEqual(firestore.settings.host, "127.0.0.1:18088")
+        XCTAssertFalse(firestore.settings.isSSLEnabled)
         let key = UUID().uuidString
         let warningResult = try await adminFunctions.httpsCallable("admin-warnUser").call([
             "targetUid": "native-member", "reason": "Native acceptance warning", "internalNote": "PRIVATE-NOTE", "durationDays": 7, "idempotencyKey": key
