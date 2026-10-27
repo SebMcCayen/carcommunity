@@ -393,3 +393,53 @@ footer separation, scrolls content and taps the primary Chat tab while the dock
 is open. These require native CI, and do not establish real GPS/Mapbox/session
 or VoiceOver acceptance. No live Firebase or Mapbox runtime call, Apple service,
 purchase, paid review or production deploy is needed for these tests.
+
+## Crown Hunt design follow-up (2026-10-27)
+
+The native hub now has a pinned horizontal Overview / Statistics / gated Shop
+strip inside one NavigationStack. Full tab labels scroll at accessibility text
+sizes, rather than shrink or truncate. Overview uses actual season aggregates;
+Statistics retains lifetime counters and the season board. Earned points are
+never relabelled as spendable balance. The shop alone uses its existing ledger
+balance. Owner claim history and canonical instructions remain native push
+routes. Three previously missing claim-history strings are now in the shared
+SV/EN contract and generated into both native platforms; no Android behavior or
+release configuration changes.
+
+Stats, standings, history, shop and inventory use the shared semantic reading
+cards and page surfaces. Long names, costs and result labels wrap/stack at large
+text sizes. Native Back and map-panel Close stay outside reading scrollers.
+Shop/activation availability, affordability, in-flight guards and command payloads
+remain authoritative in the original coordinators. No purchase or deployment is
+performed by the design tests, and no new automatic backend read is introduced.
+
+Map crowns use one crisp system crown glyph on a small opaque navy tile, one
+accent border and 1–4 rank bars, using generated common/uncommon/rare/gold tokens.
+Spawn rank comes from its real rarity; curated points use visual bands of their
+actual reward without acquiring a new rarity. Metadata crosses the existing
+renderer seam as primitives. Proximity uses the existing fresh-fix tracker and
+updates once per second; it is not a promise of collection eligibility. No glow,
+perpetual pulse or raster image generation is added. Reduced Motion disables the
+short opacity transition. Shared spawns already collected by this reader are
+hidden locally; an older in-flight refresh cannot erase a just-confirmed award; shared server data and the original collector read are retained.
+Curated-point cooldown/suppression policy is unchanged; full Android UTC-day
+suppression and 320 ms shrink animation parity are not claimed by this patch.
+
+Collection uses the shared map reading dock above the footer. An exclusive
+spawn's existing removal still occurs in its coordinator, while an awarded
+result can keep the reading panel open until dismissed. The result shows actual
+server pointsAwarded (including a clipped amount), never the advertised reward
+as an invented award. Refusal/retry, source-specific results and safety copy are
+retained; terminal results disable the presentation's Collect action. Switching
+routes/tabs, selecting other map content or revoking availability closes it.
+No claim radius, dwell/speed requirement, budget, flag default or server API is
+changed.
+
+New native tests exercise real SwiftUI reading widgets at narrow SV/EN light/dark
+and accessibility sizes, the config-less hub's tabs/history/instructions/back
+navigation, fresh/stale/expired marker metadata and a fake-repository exclusive
+award with a clipped reward. These are not real GPS/Mapbox/purchase acceptance
+or a physical-iPhone visual comparison. Native CI must pass before merge; the PR
+records the exact executed run. Production Firebase deploy and signed Android
+release workflows are outside these paths/manual-only respectively. iOS artifact
+uploads stay opt-in; no paid review, production write or Mapbox runtime is needed.

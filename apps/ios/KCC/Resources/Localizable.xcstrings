@@ -8331,6 +8331,57 @@
         }
       }
     },
+    "crownHunt.claimHistoryEmpty": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du har inte samlat några kronor ännu."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You have not collected any crowns yet."
+          }
+        }
+      }
+    },
+    "crownHunt.claimHistoryError": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kunde inte hämta din insamlingshistorik. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not load your claim history. Please try again."
+          }
+        }
+      }
+    },
+    "crownHunt.claimHistoryTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Insamlingshistorik"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claim history"
+          }
+        }
+      }
+    },
     "crownHunt.claiming": {
       "extractionState": "manual",
       "localizations": {

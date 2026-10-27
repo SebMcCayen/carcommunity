@@ -85,6 +85,50 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(app.buttons["shell.mapLayers"].isHittable)
     }
 
+    func testCrownHubTabsHistoryAndInstructionsWithLargeSwedishText() {
+        let app = launch(language: "sv", largeText: true, theme: "Dark")
+        app.buttons["shell.tab.social"].tap()
+        let social = element("shell.socialHub", in: app)
+        XCTAssertTrue(social.waitForExistence(timeout: 5))
+        social.buttons["Kronjakt"].tap()
+        let overview = app.buttons["crown.tab.overview"]
+        let statistics = app.buttons["crown.tab.statistics"]
+        XCTAssertTrue(overview.waitForExistence(timeout: 15))
+        assertSelected(overview)
+        XCTAssertFalse(app.buttons["crown.tab.shop"].exists, "Config-less tests cannot enable the shop")
+        let tabs = app.scrollViews["crown.tabs"]
+        for _ in 0..<4 {
+            if statistics.isHittable { break }
+            tabs.swipeLeft()
+        }
+        statistics.tap()
+        assertSelected(statistics)
+        XCTAssertTrue(element("crown.statistics", in: app).exists)
+        app.buttons["crown.history.open"].tap()
+        XCTAssertTrue(element("crown.history", in: app).waitForExistence(timeout: 5))
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(statistics.waitForExistence(timeout: 5))
+        for _ in 0..<4 {
+            if overview.isHittable { break }
+            tabs.swipeRight()
+        }
+        overview.tap()
+        assertSelected(overview)
+        let instructions = app.buttons["crown.instructions.open"]
+        for _ in 0..<6 {
+            if instructions.exists && instructions.isHittable { break }
+            app.scrollViews["crown.overview"].swipeUp()
+        }
+        XCTAssertTrue(instructions.isHittable)
+        instructions.tap()
+        XCTAssertTrue(element("crown.instructions", in: app).waitForExistence(timeout: 5))
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(overview.waitForExistence(timeout: 5))
+        attach(app, name: "crown-hub-sv-dark-accessibility-configless")
+        app.buttons["crown.back"].tap()
+        XCTAssertTrue(social.waitForExistence(timeout: 5))
+    }
+
     func testMapLayersAppearanceChoicesAndFocusControl() {
         let app = launch(language: "en")
         app.buttons["shell.mapLayers"].tap()

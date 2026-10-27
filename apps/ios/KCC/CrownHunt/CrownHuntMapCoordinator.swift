@@ -58,10 +58,12 @@ final class CrownHuntMapCoordinator {
         repository != nil && crownHuntEnabled && passesMemberGate
     }
 
-    var markers: [MapCrownMarker] {
+    var markers: [MapCrownMarker] { markers(at: Date()) }
+
+    func markers(at now: Date) -> [MapCrownMarker] {
         guard isAvailable else { return [] }
         let pointMarkers = points.map { point in
-            let style = CrownMarkerStyle.point(inRange: pointIsInRange(point))
+            let style = CrownMarkerStyle.point(inRange: pointIsInRange(point, now: now))
             return MapCrownMarker(
                 id: "point:\(point.id)",
                 longitude: point.longitude,
@@ -69,10 +71,12 @@ final class CrownHuntMapCoordinator {
                 discColorArgb: style.disc,
                 iconName: "crown.fill",
                 glyphColorArgb: style.glyph,
-                glowColorArgb: nil
+                glowColorArgb: nil,
+                visualRank: CrownMarkerStyle.rank(forRewardPoints: point.rewardPoints),
+                isInRange: pointIsInRange(point, now: now)
             )
         }
-        let spawnMarkers: [MapCrownMarker] = spawnEnabled ? spawns.map { spawn in
+        let spawnMarkers: [MapCrownMarker] = spawnEnabled ? spawns.filter { $0.expiresAt.map { $0 > now } ?? true }.map { spawn in
             let base = spawn.marker
             return MapCrownMarker(
                 id: base.id,
@@ -82,7 +86,12 @@ final class CrownHuntMapCoordinator {
                 iconName: base.iconName,
                 glyphColorArgb: base.glyphColorArgb,
                 glowColorArgb: base.glowColorArgb,
-                collectedByYou: collectedSpawnIds.contains(spawn.id)
+                collectedByYou: collectedSpawnIds.contains(spawn.id),
+                visualRank: base.visualRank,
+                isInRange: tracker.latest(now: now).map { fix in
+                    CrownGeo.distanceMeters(latitude: fix.latitude, longitude: fix.longitude,
+                        toLatitude: spawn.latitude, toLongitude: spawn.longitude) <= spawn.collectRadiusMeters
+                } ?? false
             )
         } : []
         return pointMarkers + spawnMarkers
@@ -142,7 +151,9 @@ final class CrownHuntMapCoordinator {
                 points = newPoints
                 pointsLoaded = true
                 spawns = newSpawns
-                collectedSpawnIds = collected
+                // A refresh begun before an award must not resurrect the
+                // reader's just-collected crown when its older read completes.
+                collectedSpawnIds.formUnion(collected)
                 lastCellKeys = keys
             } else {
                 let newPoints = try await pointRead
@@ -257,8 +268,8 @@ final class CrownHuntMapCoordinator {
         }
     }
 
-    private func pointIsInRange(_ point: CrownMapPoint) -> Bool {
-        guard let fix = latestFix else { return false }
+    private func pointIsInRange(_ point: CrownMapPoint, now: Date) -> Bool {
+        guard let fix = tracker.latest(now: now) else { return false }
         return CrownGeo.distanceMeters(
             latitude: fix.latitude,
             longitude: fix.longitude,

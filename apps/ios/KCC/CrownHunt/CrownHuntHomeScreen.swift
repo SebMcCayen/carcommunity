@@ -11,15 +11,25 @@ import SwiftUI
 /// crashing — the seam every Firebase-backed surface honors.
 struct CrownHuntHomeScreen: View {
     let coordinator: CrownHuntStatsCoordinator?
+    var showsFullStatistics = false
 
     var body: some View {
         ScrollView {
             VStack(spacing: KccSpacing.s4) {
                 content
+                if !showsFullStatistics {
+                    NavigationLink { CrownInstructionsScreen() } label: {
+                        Label("crownHunt.instrButton", systemImage: "info.circle")
+                            .frame(maxWidth: .infinity, minHeight: 48).contentShape(Rectangle())
+                    }.buttonStyle(.bordered)
+                    .accessibilityIdentifier("crown.instructions.open")
+                }
             }
             .padding(KccSpacing.s4)
         }
-        .navigationTitle(Text("crownHunt.screenTitle"))
+        .kccReadingSurface(pageBackground: true)
+        .accessibilityIdentifier(showsFullStatistics ? "crown.statistics" : "crown.overview")
+        .navigationTitle(Text(showsFullStatistics ? LocalizedStringKey("crownHunt.statisticsTab") : LocalizedStringKey("crownHunt.screenTitle")))
         .task { coordinator?.start() }
     }
 
@@ -39,7 +49,8 @@ struct CrownHuntHomeScreen: View {
                 .buttonStyle(.plain)
             case .loaded(let data):
                 if let personal = data.personal {
-                    PersonalStatsCard(stats: personal)
+                    if showsFullStatistics { PersonalStatsCard(stats: personal) }
+                    else { CrownSeasonSummary(stats: personal, seasonId: data.board.seasonId) }
                 } else {
                     NoStatsYetCard()
                 }
@@ -69,7 +80,7 @@ struct CrownHuntHomeScreen: View {
 }
 
 /// The member's own Crown-Hunt statistics — Android's `PersonalStatsCard`.
-private struct PersonalStatsCard: View {
+struct PersonalStatsCard: View {
     let stats: CrownPersonalStats
 
     var body: some View {
@@ -98,7 +109,7 @@ private struct PersonalStatsCard: View {
 }
 
 /// The "collect your first crown" prompt — Android's `NoStatsYetCard`.
-private struct NoStatsYetCard: View {
+struct NoStatsYetCard: View {
     var body: some View {
         CrownHuntCard {
             Text("crownHunt.myStatsTitle")
@@ -112,15 +123,19 @@ private struct NoStatsYetCard: View {
 
 /// One "label … value" line inside a stats card.
 private struct StatRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let label: LocalizedStringKey
     let value: String
 
     var body: some View {
-        HStack {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: KccSpacing.s1))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: KccSpacing.s3))
+        layout {
             Text(label)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Spacer()
+            if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: KccSpacing.s2) }
             Text(value)
                 .font(.subheadline)
                 .fontWeight(.semibold)
@@ -137,6 +152,24 @@ private struct StatRow: View {
                 )
             }
             .padding()
+        }
+    }
+}
+
+/// Season aggregates are earned points, never the spendable shop balance.
+struct CrownSeasonSummary: View {
+    let stats: CrownPersonalStats
+    let seasonId: String
+
+    var body: some View {
+        CrownHuntCard {
+            Label(seasonId, systemImage: "calendar").font(.headline)
+            Text("crownHunt.seasonPoints").font(.subheadline).foregroundStyle(KccTheme.secondary)
+            Text(CrownHuntStrings.kpValue(stats.seasonPoints))
+                .font(.largeTitle.weight(.bold)).fixedSize(horizontal: false, vertical: true)
+            StatRow(label: "crownHunt.statSeasonRank", value: stats.seasonRank.map(CrownHuntStrings.rankValue)
+                ?? String(localized: "crownHunt.rankNone"))
+            StatRow(label: "crownHunt.statCrowns", value: String(stats.seasonCrowns))
         }
     }
 }
