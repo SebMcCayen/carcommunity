@@ -51,7 +51,7 @@ internal fun ChatChannelStrip(
     val labels = listOf(R.string.chatHub_tabCommunity, R.string.chatHub_tabConvoys,
         R.string.chatHub_tabFriends, R.string.chatHub_tabNotifications)
     val unreadLabel = stringResource(R.string.chatHub_tabUnread)
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         if (onBack != null) {
             IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.chatHub_back))

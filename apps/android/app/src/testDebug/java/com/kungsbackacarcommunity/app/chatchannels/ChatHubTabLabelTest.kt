@@ -94,6 +94,7 @@ class ChatHubTabLabelTest {
                     R.string.chatHub_tabFriends, R.string.chatHub_tabNotifications)
                 val stripNode = compose.onNodeWithTag(CHAT_CHANNEL_STRIP_TEST_TAG).fetchSemanticsNode()
                 val stripBounds = stripNode.boundsInRoot
+                assertEquals("$current fills the available width", (width - if (back) 48 else 0).toFloat(), stripBounds.width, 0.01f)
                 assertFalse("$current no horizontal scrolling", stripNode.config.contains(SemanticsProperties.HorizontalScrollAxisRange))
                 var previousRight = stripBounds.left
                 for (tab in ChatTab.entries) {
