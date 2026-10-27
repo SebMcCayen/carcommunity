@@ -19,6 +19,12 @@ denial never starts location publishing. A session must actually be observed as
 sharing before its service is started. Existing stop, hide, expiry, account and
 foreground-service protections still apply.
 
+With fine permission already granted, a disabled device location switch does not
+prevent registering the service's fused request. It can therefore receive fixes
+when Quick Settings enables location without a new permission result, provider
+state emission or activity resume. `SERVICES_OFF` is permission-granted by the
+classifier's permission-first contract; `PERMISSION_DENIED` remains blocked.
+
 Android 14 may reject a background location-service start with `SecurityException`
 despite a while-in-use permission reading as granted. That narrow granted,
 background-only case joins the existing foreground retry. A foreground or missing

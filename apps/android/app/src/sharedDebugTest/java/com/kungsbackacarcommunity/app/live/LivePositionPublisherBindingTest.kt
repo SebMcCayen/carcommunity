@@ -64,18 +64,36 @@ class LivePositionPublisherBindingTest {
             BindLivePositionPublisher(sharing.value, "member", session.value, access.value, recovery.value) { starts++ }
         }
         compose.runOnIdle {
-            assertEquals(0, starts)
+            assertEquals(1, starts)
             access.value = LocationAccess.GRANTED
         }
         compose.runOnIdle {
-            assertEquals(1, starts)
+            assertEquals(2, starts)
             sharing.value = false
             recovery.value++
         }
         compose.runOnIdle {
-            assertEquals(1, starts)
+            assertEquals(2, starts)
             sharing.value = true
             session.value = null
+        }
+        compose.runOnIdle { assertEquals(2, starts) }
+    }
+
+    @Test
+    fun finePermissionWithServicesOffRegistersWithoutAProviderOrResumeEmission() {
+        // Quick Settings may leave the Activity resumed and locationAccess
+        // cached as SERVICES_OFF. The location service must already be running
+        // with a fused request waiting for the switch to become enabled.
+        val unrelatedUiTick = mutableStateOf(0)
+        var starts = 0
+        compose.setContent {
+            unrelatedUiTick.value
+            BindLivePositionPublisher(true, "member", "convoy-session", LocationAccess.SERVICES_OFF, 0) { starts++ }
+        }
+        compose.runOnIdle {
+            assertEquals(1, starts)
+            unrelatedUiTick.value++
         }
         compose.runOnIdle { assertEquals(1, starts) }
     }
