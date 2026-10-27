@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.convoy
 
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -132,12 +133,31 @@ class CreateConvoyScreenTest {
                 )
             }
         }
+        // The full name is intentionally also the query: hasText matches both
+        // EditableText on the enabled search field and Text on the friend row.
+        // Target the toggleable row so the cap assertion cannot hit the editor.
+        fun friendRow(name: String) = composeTestRule.onNode(
+            hasText(name) and SemanticsMatcher.keyIsDefined(SemanticsProperties.ToggleableState),
+        )
+
         composeTestRule.onNodeWithTag(CONVOY_CREATE_SEARCH_TAG).performTextReplacement("Friend 51")
-        composeTestRule.onNodeWithText("Friend 51").assertIsNotEnabled()
+        composeTestRule.onNodeWithTag(CONVOY_CREATE_SEARCH_TAG).assertIsEnabled().assertTextContains("Friend 51")
+        friendRow("Friend 51").assertIsOff().assertIsNotEnabled()
+        composeTestRule.onNodeWithTag(CONVOY_CREATE_SUBMIT_TAG).assertIsEnabled()
+
         composeTestRule.onNodeWithTag(CONVOY_CREATE_SEARCH_TAG).performTextReplacement("Friend 50")
-        composeTestRule.onNodeWithText("Friend 50").assertIsEnabled().performClick()
+        friendRow("Friend 50").assertIsOn().assertIsEnabled().performClick()
+        friendRow("Friend 50").assertIsOff()
+
         composeTestRule.onNodeWithTag(CONVOY_CREATE_SEARCH_TAG).performTextReplacement("Friend 51")
-        composeTestRule.onNodeWithText("Friend 51").assertIsEnabled()
+        friendRow("Friend 51").assertIsOff().assertIsEnabled().performClick()
+        friendRow("Friend 51").assertIsOn()
+
+        // Selecting the replacement restores the cap; the deselected friend is
+        // disabled again, while the hidden selections still enable submission.
+        composeTestRule.onNodeWithTag(CONVOY_CREATE_SEARCH_TAG).performTextReplacement("Friend 50")
+        friendRow("Friend 50").assertIsOff().assertIsNotEnabled()
+        composeTestRule.onNodeWithTag(CONVOY_CREATE_SUBMIT_TAG).assertIsEnabled()
     }
 
     @Test
