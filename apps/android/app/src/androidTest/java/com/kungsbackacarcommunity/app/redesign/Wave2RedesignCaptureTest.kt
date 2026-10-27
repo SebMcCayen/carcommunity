@@ -248,6 +248,15 @@ class Wave2RedesignCaptureTest {
                                     "basemap", key, com.mapbox.bindgen.Value(false),
                                 )
                             }
+                            // Annotation icons use the same unsupported symbol
+                            // shader. This fixture verifies the two LINE sources,
+                            // not icons; retain their production implementation.
+                            map.style?.let { style ->
+                                style.styleLayers.forEach { layer ->
+                                    style.getLayerAs<com.mapbox.maps.extension.style.layers.generated.SymbolLayer>(layer.id)
+                                        ?.visibility(Visibility.NONE)
+                                }
+                            }
                         }
                         frameSubscription = map.subscribeRenderFrameFinished {
                             if (it.renderMode == RenderModeType.FULL) rendered.set(true)
