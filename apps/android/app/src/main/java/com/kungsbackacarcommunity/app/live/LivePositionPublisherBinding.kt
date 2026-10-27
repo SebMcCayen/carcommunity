@@ -23,12 +23,7 @@ fun BindLivePositionPublisher(
 ) {
     val latestStart by rememberUpdatedState(startPublisher)
     LaunchedEffect(sharing, uid, sessionId, locationAccess, recoveryKey) {
-        // SERVICES_OFF also means fine permission is granted (permission is
-        // classified first). Register the fused request now: it can receive
-        // fixes when Quick Settings enables location, even if the cached UI
-        // access value never refreshes or the activity never resumes again.
-        val permissionGranted = locationAccess == LocationAccess.GRANTED || locationAccess == LocationAccess.SERVICES_OFF
-        if (sharing && uid.isNotBlank() && !sessionId.isNullOrBlank() && permissionGranted) {
+        if (sharing && uid.isNotBlank() && !sessionId.isNullOrBlank() && locationAccess == LocationAccess.GRANTED) {
             latestStart(uid)
         }
     }

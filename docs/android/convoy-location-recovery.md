@@ -19,11 +19,14 @@ denial never starts location publishing. A session must actually be observed as
 sharing before its service is started. Existing stop, hide, expiry, account and
 foreground-service protections still apply.
 
-With fine permission already granted, a disabled device location switch does not
-prevent registering the service's fused request. It can therefore receive fixes
-when Quick Settings enables location without a new permission result, provider
-state emission or activity resume. `SERVICES_OFF` is permission-granted by the
-classifier's permission-first contract; `PERMISSION_DENIED` remains blocked.
+The publisher starts only with `LocationAccess.GRANTED`: fine permission AND
+location services enabled. A lifecycle-STARTED-scoped, non-exported receiver
+observes the protected `MODE_CHANGED` and `PROVIDERS_CHANGED` system broadcasts.
+It refreshes the existing access probe after registration and provider changes,
+including Quick Settings changes while the Activity stays RESUMED. It unregisters
+on stop/disposal and refreshes again on the next start to cover missed changes.
+Permission answers and the existing resume recovery remain in place. No service
+is pre-started while `SERVICES_OFF` or `PERMISSION_DENIED`.
 
 Android 14 may reject a background location-service start with `SecurityException`
 despite a while-in-use permission reading as granted. That narrow granted,
@@ -78,3 +81,15 @@ The test APK needs the normal public Mapbox configuration, not Firebase access.
 
 The tests use local session/position fixtures. They do not establish a physical
 multi-phone GPS drive or all OEM permission/background behavior.
+
+### Provider-recovery helper validation (pending parent execution)
+
+The provider observer adds Robolectric registration/lifecycle/callback-freshness
+and provider-to-publisher coverage. `LocationProviderRecoveryNativeTest` grants
+coarse/fine permission and toggles the actual emulator location switch through
+UiAutomation, restoring its original setting in `finally`. It asserts OFF blocks
+the fake publisher, ON starts it while the Activity stays RESUMED, and neither
+an ON_RESUME event nor a changed publisher recovery key is required. It creates
+no Firebase repository, GPS request or foreground service. The native switch test
+is emulator-only and must not be run concurrently with other location tests.
+These new tests have not been run in the helper branch.

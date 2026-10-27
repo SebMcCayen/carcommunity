@@ -328,6 +328,7 @@ import com.kungsbackacarcommunity.app.location.LocationAccessPrompt
 import com.kungsbackacarcommunity.app.location.LocationShare
 import com.kungsbackacarcommunity.app.location.ShareableLocation
 import com.kungsbackacarcommunity.app.location.LocationPermissionRemedy
+import com.kungsbackacarcommunity.app.location.ObserveLocationProviderChanges
 import com.kungsbackacarcommunity.app.location.foregroundLocationPermissions
 import com.kungsbackacarcommunity.app.live.BindLivePositionPublisher
 import com.kungsbackacarcommunity.app.location.currentLocationAccess
@@ -1790,9 +1791,8 @@ fun AuthenticatedApp(
             // saveable guard) so returning to the Map tab does not re-nag after a
             // denial; the stub (config-less / CI) no-ops refreshLocationComponent.
             // Bumped whenever the runtime location state may have changed (a
-            // permission answer, or coming back from Settings). The platform
-            // exposes no observable for either, so the state is re-read on this
-            // key rather than polled.
+            // permission answer, provider broadcast, or coming back from Settings).
+            // Re-read on this key instead of polling or trusting broadcast extras.
             var locationAccessProbe by remember { mutableIntStateOf(0) }
             val locationPermissionLauncher =
                 rememberLauncherForActivityResult(
@@ -1804,6 +1804,13 @@ fun AuthenticatedApp(
                     locationAccessProbe++
                 }
             var mapLocationPermissionRequested by rememberSaveable { mutableStateOf(false) }
+
+            // Quick Settings can toggle location while this Activity remains
+            // RESUMED. Observe protected provider broadcasts while STARTED so
+            // access and the session-bound publisher recover without ON_RESUME.
+            if (hasMapboxToken) {
+                ObserveLocationProviderChanges { locationAccessProbe++ }
+            }
 
             // Re-read on every resume so returning from the system settings page
             // — the one place a permanent denial or the device location switch
