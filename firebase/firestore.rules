@@ -356,9 +356,10 @@ service cloud.firestore {
     }
 
     function validSharedClubSummary(clubId) {
-      return resource.data.keys().hasOnly(['clubId', 'clubName', 'logoUrl'])
-        && resource.data.clubId == clubId
-        && resource.data.clubName is string && resource.data.clubName.size() <= 60
+      let name = resource.data.get('name', resource.data.get('clubName', null));
+      return resource.data.keys().hasOnly(['clubId', 'name', 'clubName', 'logoUrl'])
+        && resource.data.keys().size() == 3 && resource.data.clubId == clubId
+        && name is string && name.size() <= 60
         && (resource.data.logoUrl == null
           || (resource.data.logoUrl is string && resource.data.logoUrl.size() <= 2048));
     }
@@ -421,16 +422,19 @@ service cloud.firestore {
       }
     }
 
-    // Public attendance is a club summary, never the private calendar/roster.
-    // Per-club reads enforce immediate archival. A small page keeps the user,
-    // event and per-result club checks inside Firestore's 10-access-call budget.
+    // Public attendance is a server-owned summary, never a roster or calendar.
+    // Unfiltered document-ID pages cannot prove per-result fields/club status.
+    // List authorization uses three fixed lookups (user/config/event), so 25
+    // distinct clubs fit the query budget. The backend strictly projects only
+    // clubId/name/logoUrl and withdraws archived summaries asynchronously.
+    // Point gets retain extra shape/current-club checks. Private membership
+    // revocation above remains immediate; public presence may briefly be stale.
     match /events/{eventId}/clubs/{clubId} {
       allow get: if hasSharedClubAccount() && sharedClubIsActive(clubId)
         && validSharedClubSummary(clubId)
         && get(/databases/$(database)/documents/events/$(eventId)).data.status == 'published';
-      allow list: if hasSharedClubAccount() && boundedSharedClubQuery(5)
-        && sharedClubIsActive(clubId)
-        && validSharedClubSummary(clubId)
+      allow list: if hasSharedClubAccount() && sharedClubsEnabled()
+        && boundedSharedClubQuery(25)
         && get(/databases/$(database)/documents/events/$(eventId)).data.status == 'published';
     }
 

@@ -16,7 +16,13 @@ Invitation reads require the recipient (document UID and `recipientUid` agree), 
 
 Club writes, locks, history, chat/moderation, invitations, summaries and badges remain server-only. Existing canonical profile allowlists reject badge assignment, nested edits and deletion. KCC edits profiles directly through Firestore; there is no KCC profile callable. The Driver owner must separately regression-test its existing strict profile callable against `clubBadge` payloads.
 
-Public `events/{eventId}/clubs/{clubId}` has a rule-enforced field/type allowlist and contains exactly `{clubId,clubName,logoUrl}` (no identities). Reads require a published event and active club. Page limit5 bounds per-result club lookups plus user/config/event checks within the rules call budget. Stale archived summaries fail closed until backend cleanup; callers must handle denial. Private calendar freshness/cancellation is enforced by the backend projection/callable; rules still enforce membership. No new read grant applies to a root private/draft event.
+Public `events/{eventId}/clubs/{clubId}` is a server-only projection of exactly `{clubId,name,logoUrl}` (no identities). Android also accepts the transitional `clubName` spelling. Direct document-ID-ordered list pages require an active canonical account, enabled config, a published event and limit<=25. This uses only three distinct shared authority documents, independent of the number of returned clubs. Both initial listeners and server-confirmed cursor pagination use that query; document-ID ordering needs no additional composite index.
+
+An unfiltered query cannot prove per-result key/type predicates or read 25 distinct parent clubs within the 10-document rules budget. The list therefore trusts this dedicated server-owned public projection, whose strict three-field shape must be enforced and tested by the backend. Single-document GET retains a field/type allowlist (canonical `name` or transitional `clubName`, exactly three keys) and active-club checks as defense in depth. The backend withdraws archived summaries asynchronously: **public list presence may be temporarily stale**, while private membership/chat/calendar archival denial remains immediate. Parent review must accept this public-rendering consistency before rollout; do not claim immediate public-list archival revocation.
+
+Published-event/config/account checks remain immediate on every list request. Missing, draft, cancelled or completed events do not grant attendance reads. Private calendar freshness/cancellation is enforced by backend projections/callables in addition to the rules' membership gate. No read grant applies to a root private/draft event.
+
+Statistics are only aggregate totals from explicitly saved canonical drives whose complete start/end interval falls within membership. No individual rides, routes, live location or source contributions are exposed by these rules. The human approval for saved-during-membership statistics does not widen any read grant.
 
 All other sidecar collections remain denied, including operations, cleanup, event jobs/revocations and ride contributions. No existing staff queue policy is broadened for club-message reports.
 
@@ -35,6 +41,7 @@ Storage uses two Firestore documents, its cross-service maximum: canonical accou
 | Backend invitation collection group: recipientUid/status pending/expiresAt>now             | Composite recipient/status/expiry, max25                               |
 | Backend message export/erasure: kind sharedClub + authorUid                                | Collection-group composite; no cross-app broadening                    |
 | Roster ID ASC                                                                              | Automatic, max25                                                       |
+| Public attendance document ID ASC, cursor + limit25                                        | Automatic; initial listener and server-only Load more                  |
 | Chat createdAt DESC                                                                        | Automatic, max50                                                       |
 | Private calendar startMillis>now, startMillis ASC + ID ASC                                 | Automatic, direct max25; Admin SDK callable may fetch26 for pagination |
 | Event maintenance collection group: projectionType shared-club-event-v1 + startMillis<=now | Collection-group composite, limit100                                   |
@@ -54,7 +61,7 @@ pnpm --dir functions test:emulator src/__tests__/rules-shared-clubs.emulator.tes
 pnpm --dir functions test:emulator src/__tests__/security-rules.emulator.test.ts src/__tests__/rules-social-graph.emulator.test.ts src/__tests__/rules-free-social.emulator.test.ts
 ```
 
-Focused cases cover canonical-only eligibility/restrictions, activation, bounded directory/private queries, public/private scope, global-role spoofing, all direct writes, live self-removal observation, former-member chat get/query/send, lock revocation, deletion tombstone, archive revocation, badge forgery, owner-only immutable logos and exact size/type bounds. Existing suites verify established platform policies.
+Focused cases cover canonical-only eligibility/restrictions, activation, bounded directory/private queries and 25-item attendance listener/server cursor pagination, public/private scope, global-role spoofing, all direct writes, live self-removal observation, former-member chat get/query/send, lock revocation, deletion tombstone, archive revocation, badge forgery, owner-only immutable logos and exact size/type bounds. Existing suites verify established platform policies.
 
 Emulator success does not prove deployed composite index readiness or backend projection correctness. Parent review must verify strict public DTOs, deletion/ownership cleanup, legacy migration, activation metadata and backend schema tests before any separately approved deployment. No merge/deploy is authorized here.
 

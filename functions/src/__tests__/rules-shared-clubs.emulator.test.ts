@@ -17,12 +17,16 @@ import {
   documentId,
   getDocFromServer,
   getDocs,
+  getDocsFromServer,
   limit,
   onSnapshot,
   orderBy,
   query,
   setDoc,
+  startAfter,
   Timestamp,
+  type DocumentData,
+  type QuerySnapshot,
   updateDoc,
   where,
 } from 'firebase/firestore';
@@ -159,14 +163,28 @@ beforeAll(async () => {
     await setDoc(doc(db, 'events/rules-club-event'), { status: 'published' });
     await setDoc(doc(db, `events/rules-club-event/clubs/${clubId}`), {
       clubId,
-      clubName: 'Shared club',
+      name: 'Shared club',
       logoUrl: null,
     });
     await setDoc(doc(db, 'events/rules-club-event/clubs/rules-archived'), {
       clubId: 'rules-archived',
-      clubName: 'Archived',
+      name: 'Archived',
       logoUrl: null,
     });
+    await setDoc(doc(db, 'events/rules-club-page-event'), { status: 'published' });
+    for (let index = 0; index < 30; index++) {
+      const id = `rules-page-club-${index.toString().padStart(3, '0')}`;
+      await setDoc(doc(db, `driverClubs/${id}`), {
+        schemaVersion: 2,
+        status: 'active',
+        ownerUid: uid('owner'),
+      });
+      await setDoc(doc(db, `events/rules-club-page-event/clubs/${id}`), {
+        clubId: id,
+        name: `Club ${index}`,
+        logoUrl: null,
+      });
+    }
   });
 });
 afterAll(async () => {
@@ -195,6 +213,15 @@ describe('shared clubs canonical identity and public scope', () => {
           if (mode === 'absent') await deleteDoc(config);
           else await setDoc(config, { enabled: false, statsSince: null });
         });
+        await assertFails(
+          getDocsFromServer(
+            query(
+              collection(dbFor('outsider'), 'events/rules-club-page-event/clubs'),
+              orderBy(documentId()),
+              limit(25),
+            ),
+          ),
+        );
         const config = await assertSucceeds(read('outsider', 'config/sharedClubs'));
         expect(config.exists()).toBe(mode !== 'absent');
         for (const path of [
@@ -263,6 +290,80 @@ describe('shared clubs canonical identity and public scope', () => {
     await assertFails(read('outsider', 'driverClubs/rules-archived'));
     await assertFails(read('outsider', 'driverClubs/rules-legacy'));
   });
+  it('supports a server-confirmed 25-summary listener and document-ID cursor pages', async () => {
+    const summaries = collection(dbFor('outsider'), 'events/rules-club-page-event/clubs');
+    const firstQuery = query(summaries, orderBy(documentId()), limit(25));
+    const first = await new Promise<QuerySnapshot<DocumentData>>((resolvePage, reject) => {
+      const timer = setTimeout(() => {
+        unsubscribe();
+        reject(new Error('No server-confirmed attendance page'));
+      }, 10000);
+      const unsubscribe = onSnapshot(
+        firstQuery,
+        (snapshot) => {
+          if (!snapshot.metadata.fromCache) {
+            clearTimeout(timer);
+            unsubscribe();
+            resolvePage(snapshot);
+          }
+        },
+        (error) => {
+          clearTimeout(timer);
+          unsubscribe();
+          reject(error);
+        },
+      );
+    });
+    expect(first.size).toBe(25);
+    expect(first.docs[0]?.id).toBe('rules-page-club-000');
+    expect(first.docs[24]?.id).toBe('rules-page-club-024');
+    const firstEnd = first.docs[24];
+    if (!firstEnd) throw new Error('Missing end of the full 25-summary page');
+    for (const entry of first.docs)
+      expect(Object.keys(entry.data()).sort()).toEqual(['clubId', 'logoUrl', 'name']);
+    const second = await assertSucceeds(
+      getDocsFromServer(query(summaries, orderBy(documentId()), startAfter(firstEnd), limit(25))),
+    );
+    expect(second.docs.map((entry) => entry.id)).toEqual(
+      Array.from(
+        { length: 5 },
+        (_, index) => `rules-page-club-${(index + 25).toString().padStart(3, '0')}`,
+      ),
+    );
+    const secondEnd = second.docs[4];
+    if (!secondEnd) throw new Error('Missing end of the five-summary next page');
+    const end = await assertSucceeds(
+      getDocsFromServer(query(summaries, orderBy(documentId()), startAfter(secondEnd), limit(25))),
+    );
+    expect(end.empty).toBe(true);
+    await assertFails(getDocsFromServer(query(summaries, orderBy(documentId()), limit(26))));
+    await assertFails(getDocsFromServer(query(summaries, orderBy(documentId()))));
+  });
+  it('denies public attendance pages for restricted/anonymous readers and unpublished/missing events', async () => {
+    const page = (db: ReturnType<typeof dbFor>) =>
+      query(collection(db, 'events/rules-club-page-event/clubs'), orderBy(documentId()), limit(25));
+    for (const name of ['suspended', 'deleted', 'unfinished', 'driver-only', 'missing']) {
+      await assertFails(getDocsFromServer(page(dbFor(name, { admin: true }))));
+    }
+    await assertFails(getDocsFromServer(page(dbFor('member', { suspended: true }))));
+    await assertFails(getDocsFromServer(page(env.unauthenticatedContext().firestore())));
+    try {
+      for (const status of ['draft', 'cancelled', 'completed', 'missing']) {
+        await env.withSecurityRulesDisabled(async (context) => {
+          const event = doc(context.firestore(), 'events/rules-club-page-event');
+          if (status === 'missing') await deleteDoc(event);
+          else await setDoc(event, { status });
+        });
+        await assertFails(getDocsFromServer(page(dbFor('outsider'))));
+      }
+    } finally {
+      await env.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), 'events/rules-club-page-event'), {
+          status: 'published',
+        });
+      });
+    }
+  });
   it.each(['suspended', 'deleted', 'unfinished', 'driver-only', 'missing', 'claim-suspended'])(
     'denies %s identities even with elevated claims',
     async (name) => {
@@ -300,7 +401,24 @@ describe('shared clubs canonical identity and public scope', () => {
     const snapshot = await assertSucceeds(
       read('outsider', `events/rules-club-event/clubs/${clubId}`),
     );
-    expect(Object.keys(snapshot.data()!).sort()).toEqual(['clubId', 'clubName', 'logoUrl']);
+    expect(Object.keys(snapshot.data()!).sort()).toEqual(['clubId', 'logoUrl', 'name']);
+    // Transitional projections may use clubName; canonical new writes use name.
+    try {
+      await env.withSecurityRulesDisabled(async (context) => {
+        await updateDoc(doc(context.firestore(), `events/rules-club-event/clubs/${clubId}`), {
+          name: deleteField(),
+          clubName: 'Shared club',
+        });
+      });
+      await assertSucceeds(read('outsider', `events/rules-club-event/clubs/${clubId}`));
+    } finally {
+      await env.withSecurityRulesDisabled(async (context) => {
+        await updateDoc(doc(context.firestore(), `events/rules-club-event/clubs/${clubId}`), {
+          clubName: deleteField(),
+          name: 'Shared club',
+        });
+      });
+    }
     await assertFails(read('outsider', `${clubPath}/events/e1`));
     await assertFails(read('outsider', `${clubPath}/members/${uid('member')}`));
     await assertFails(read('outsider', `events/rules-club-event/clubs/rules-archived`));
@@ -330,7 +448,7 @@ describe('shared clubs canonical identity and public scope', () => {
     );
 
     await assertFails(
-      getDocs(query(collection(dbFor('outsider'), 'events/rules-club-event/clubs'), limit(6))),
+      getDocs(query(collection(dbFor('outsider'), 'events/rules-club-event/clubs'), limit(26))),
     );
   });
 });
