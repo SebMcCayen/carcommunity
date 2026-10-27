@@ -12,37 +12,71 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class DriverAppLauncherTest {
-    @Test fun launcherTargetsOnlyDriverAndCarriesNoMemberOrPostData() {
+    @Test fun exactPostGoesOnlyToTheVerifiedDriverPackage() {
         var launched: Intent? = null
-        val context = launchContext { launched = it }
-
-        assertTrue(openDriverApp(context))
-
+        assertTrue(openDriverPost(launchContext { launched = it }, "thread_12345678", ""))
         val intent = requireNotNull(launched)
-        assertEquals("com.kungsbackacarcommunity.driver", intent.`package`)
-        assertEquals(Intent.ACTION_MAIN, intent.action)
-        assertEquals(setOf(Intent.CATEGORY_LAUNCHER), intent.categories)
-        assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK, intent.flags)
-        assertNull(intent.data)
+        assertEquals(DRIVER_ANDROID_PACKAGE, intent.`package`)
+        assertEquals(Intent.ACTION_VIEW, intent.action)
+        assertEquals("kcc-driver://post/thread_12345678", intent.dataString)
+        assertEquals(setOf(Intent.CATEGORY_BROWSABLE), intent.categories)
+        assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP, intent.flags)
         assertNull(intent.extras)
         assertNull(intent.clipData)
         assertNull(intent.selector)
         assertNull(intent.component)
     }
 
-    @Test fun missingOrDisabledAppReturnsFailureWithoutOpeningAnotherTarget() {
-        var attempts = 0
-        val context = launchContext {
-            attempts++
-            throw ActivityNotFoundException()
+    @Test fun supportedBoundaryIdsRoundTripAsExactlyOnePathComponent() {
+        for (id in listOf("Abcd_123", "a".repeat(128), "carcommunity_event_12345678")) {
+            assertEquals(id, requireNotNull(driverPostUri(id)).pathSegments.single())
         }
-        assertFalse(openDriverApp(context))
+    }
+
+    @Test fun invalidIdsNeverLaunchOrFallBack() {
+        val invalid = listOf("", "short", "a".repeat(129), "../users", "thread/a", "thread?a", "thread#a",
+            "thread%2Fother", "thread\n1", "thread å", "thread:1")
+        for (id in invalid) {
+            assertNull(driverPostUri(id))
+            assertFalse(openDriverPost(launchContext { fail("Invalid ID launched") }, id,
+                "https://downloads.example.test/driver"))
+        }
+    }
+
+    @Test fun missingOrOlderHandlerWithNoConfiguredDownloadReturnsFailure() {
+        var attempts = 0
+        assertFalse(openDriverPost(launchContext { attempts++; throw ActivityNotFoundException() },
+            "thread_12345678", ""))
         assertEquals(1, attempts)
     }
 
-    @Test fun blockedActivityReturnsFailureWithoutCrashing() {
-        val context = launchContext { throw SecurityException() }
-        assertFalse(openDriverApp(context))
+    @Test fun configuredDownloadReceivesNoPostIdOrAccountData() {
+        val intents = mutableListOf<Intent>()
+        val context = launchContext {
+            intents += it
+            if (intents.size == 1) throw ActivityNotFoundException()
+        }
+        // Reserved example domain is a test fixture, not a configured production destination.
+        val download = "https://downloads.example.test/driver?platform=android"
+        assertTrue(openDriverPost(context, "thread_12345678", download))
+        assertEquals(2, intents.size)
+        assertEquals(download, intents.last().dataString)
+        assertNull(intents.last().`package`)
+        assertNull(intents.last().extras)
+        assertNull(intents.last().clipData)
+    }
+
+    @Test fun unsafeDownloadConfigurationsAreRejected() {
+        for (url in listOf("", "http://example.test", "javascript:alert(1)", "intent://driver",
+            "https://user:pass@example.test/driver", "https://example.test/driver#fragment", "https:///missing")) {
+            assertNull(driverDownloadUri(url))
+        }
+    }
+
+    @Test fun missingBrowserOrStoreAndSecurityRejectionDoNotCrash() {
+        assertFalse(openDriverPost(launchContext { throw ActivityNotFoundException() }, "thread_12345678",
+            "https://downloads.example.test/driver"))
+        assertFalse(openDriverPost(launchContext { throw SecurityException() }, "thread_12345678", ""))
     }
 
     private fun launchContext(launch: (Intent) -> Unit): Context =

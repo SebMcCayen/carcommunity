@@ -2147,9 +2147,8 @@
       "restricted": "Driver is unavailable for your account.",
       "image": "Post image",
       "likes": "Likes",
-      "openApp": "Open the Driver app",
-      "appLinkHint": "Driver does not yet support links to a specific post.",
-      "appOpenError": "Driver could not be opened. No published download link is available yet."
+      "openPost": "Open this post in Driver",
+      "postOpenError": "The post could not be opened in Driver. Install or update Driver and try again."
     }
   },
   "moderation": {

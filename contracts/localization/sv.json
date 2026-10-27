@@ -2147,9 +2147,8 @@
       "restricted": "Driver är inte tillgängligt för ditt konto.",
       "image": "Bild i inlägget",
       "likes": "Gilla-markeringar",
-      "openApp": "Öppna Driver-appen",
-      "appLinkHint": "Driver kan ännu inte öppna ett specifikt inlägg via länk.",
-      "appOpenError": "Driver kunde inte öppnas. Ingen publicerad nedladdningslänk finns tillgänglig ännu."
+      "openPost": "Öppna inlägget i Driver",
+      "postOpenError": "Inlägget kunde inte öppnas i Driver. Installera eller uppdatera Driver och försök igen."
     }
   },
   "moderation": {

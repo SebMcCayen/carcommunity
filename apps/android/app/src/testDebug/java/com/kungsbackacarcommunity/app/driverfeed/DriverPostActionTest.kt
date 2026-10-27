@@ -27,40 +27,40 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34], qualifiers = "sv-rSE-w411dp-h1200dp-mdpi")
 class DriverPostActionTest {
     @get:Rule val compose = createComposeRule()
-    private val post = DriverPost("post-a", "author", "Author", "member", "Post A", null, emptyList(), 0, 0)
+    private val post = DriverPost("post_0001", "author", "Author", "member", "Post A", null, emptyList(), 0, 0)
 
     @Test fun everyFeedPostHasAnAppActionAndTheCardStillOpensItsExactNativeDetail() {
         var appOpens = 0
         var selected: String? = null
-        show(DriverFeedState(posts = listOf(post, post.copy(id = "post-b", text = "Post B"))),
-            onOpen = { selected = it }, onOpenDriver = { appOpens++; true })
+        val externalIds = mutableListOf<String>()
+        show(DriverFeedState(posts = listOf(post, post.copy(id = "post_0002", text = "Post B"))),
+            onOpen = { selected = it }, onOpenDriver = { externalIds += it; appOpens++; true })
 
-        compose.onAllNodesWithText("Öppna Driver-appen").assertCountEquals(2)
+        compose.onAllNodesWithText("Öppna inlägget i Driver").assertCountEquals(2)
         compose.runOnIdle { assertEquals(0, appOpens) }
-        compose.onAllNodesWithText("Öppna Driver-appen")[0].performScrollTo().performClick()
+        compose.onAllNodesWithText("Öppna inlägget i Driver")[0].performScrollTo().performClick()
         compose.runOnIdle {
             assertEquals(1, appOpens)
             assertEquals(null, selected) // The nested action must not also trigger the card.
         }
-        compose.onAllNodesWithText("Öppna Driver-appen")[1].performScrollTo().performClick()
+        compose.onAllNodesWithText("Öppna inlägget i Driver")[1].performScrollTo().performClick()
         compose.onNodeWithText("Post B").performScrollTo().performClick()
         compose.runOnIdle {
             assertEquals(2, appOpens)
-            assertEquals("post-b", selected)
+            assertEquals(listOf("post_0001", "post_0002"), externalIds)
+            assertEquals("post_0002", selected)
         }
     }
 
-    @Test fun detailExplainsTheLinkLimitAndHandlesFailedLaunchWithRetry() {
+    @Test fun detailHandlesFailedLaunchWithRetry() {
         var appOpens = 0
         show(DriverFeedState(selectedId = post.id, post = post),
             onOpenDriver = { ++appOpens > 1 })
 
-        compose.onNodeWithText("Driver kan ännu inte öppna ett specifikt inlägg via länk.")
-            .performScrollTo().assertIsDisplayed()
-        val action = compose.onNodeWithText("Öppna Driver-appen")
+        val action = compose.onNodeWithText("Öppna inlägget i Driver")
         action.performScrollTo().performClick()
         val error = compose.onNodeWithText(
-            "Driver kunde inte öppnas. Ingen publicerad nedladdningslänk finns tillgänglig ännu.")
+            "Inlägget kunde inte öppnas i Driver. Installera eller uppdatera Driver och försök igen.")
         error.performScrollTo().assertIsDisplayed()
         action.performScrollTo().performClick()
         error.assertDoesNotExist()
@@ -71,18 +71,16 @@ class DriverPostActionTest {
     @Config(qualifiers = "en-rUS-w411dp-h1200dp-mdpi")
     fun englishCopyResolvesThroughTheProductionStringAdapter() {
         show(DriverFeedState(selectedId = post.id, post = post), onOpenDriver = { false })
-        compose.onNodeWithText("Open the Driver app").performScrollTo().performClick()
-        compose.onNodeWithText("Driver does not yet support links to a specific post.")
-            .performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Driver could not be opened. No published download link is available yet.")
+        compose.onNodeWithText("Open this post in Driver").performScrollTo().performClick()
+        compose.onNodeWithText("The post could not be opened in Driver. Install or update Driver and try again.")
             .performScrollTo().assertIsDisplayed()
     }
 
     @Test fun defaultProductionActionHandlesTheAndroidMissingHandler() {
-        var launched: Intent? = null
+        val launched = mutableListOf<Intent>()
         val context = object : ContextWrapper(ApplicationProvider.getApplicationContext<Context>()) {
             override fun startActivity(intent: Intent) {
-                launched = intent
+                launched += intent
                 throw ActivityNotFoundException()
             }
         }
@@ -94,15 +92,18 @@ class DriverPostActionTest {
                 }
             }
         }
-        compose.runOnIdle { assertEquals(null, launched) }
-        compose.onNodeWithText("Öppna Driver-appen").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(0, launched.size) }
+        compose.onNodeWithText("Öppna inlägget i Driver").performScrollTo().performClick()
         compose.onNodeWithText(
-            "Driver kunde inte öppnas. Ingen publicerad nedladdningslänk finns tillgänglig ännu.")
+            "Inlägget kunde inte öppnas i Driver. Installera eller uppdatera Driver och försök igen.")
             .performScrollTo().assertIsDisplayed()
-        compose.runOnIdle { assertEquals(DRIVER_ANDROID_PACKAGE, requireNotNull(launched).`package`) }
+        compose.runOnIdle {
+            assertEquals(DRIVER_ANDROID_PACKAGE, launched.first().`package`)
+            assertEquals("kcc-driver://post/post_0001", launched.first().dataString)
+        }
     }
 
-    private fun show(state: DriverFeedState, onOpen: (String) -> Unit = {}, onOpenDriver: () -> Boolean) {
+    private fun show(state: DriverFeedState, onOpen: (String) -> Unit = {}, onOpenDriver: (String) -> Boolean) {
         compose.setContent {
             KccTheme {
                 // Production string adapter must resolve every new canonical key.

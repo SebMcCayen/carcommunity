@@ -2001,9 +2001,8 @@
     <string name="driver_feed_restricted">Driver is unavailable for your account.</string>
     <string name="driver_feed_image">Post image</string>
     <string name="driver_feed_likes">Likes</string>
-    <string name="driver_feed_openApp">Open the Driver app</string>
-    <string name="driver_feed_appLinkHint">Driver does not yet support links to a specific post.</string>
-    <string name="driver_feed_appOpenError">Driver could not be opened. No published download link is available yet.</string>
+    <string name="driver_feed_openPost">Open this post in Driver</string>
+    <string name="driver_feed_postOpenError">The post could not be opened in Driver. Install or update Driver and try again.</string>
     <string name="moderation_messageActionsTitle">Message from %1$s</string>
     <string name="moderation_reply">Reply</string>
     <string name="moderation_blockMember">Block %1$s</string>

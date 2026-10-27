@@ -1,72 +1,94 @@
-# Android Driver post actions
+# Android Driver exact-post links (contract v1)
 
-## Verified external contract (2026-10-27)
+Companion receiver: [Driver PR #34](https://github.com/SebMcCayen/driver/pull/34).
 
-Read-only inspection of `SebMcCayen/driver` main at
-`2d64d3e1d059965cee8bd49014b86fb3824fac5e` found:
+## Matching applications and ID mapping
 
-- `android/app/build.gradle.kts` declares application ID
-  `com.kungsbackacarcommunity.driver`.
-- `android/app/src/main/AndroidManifest.xml` exports `MainActivity` with only
-  `MAIN` / `LAUNCHER`. No external `VIEW` / `BROWSABLE` post URI is registered.
-- `MainActivity.kt` is an uncustomized `FlutterActivity`;
-  `lib/app/driver_app.dart` uses `MaterialApp(home: AuthGate(...))` with no
-  external post route. Notification handling in `app_shell.dart` is internal
-  Firebase Messaging handling, not an exported post-link contract.
-- README, tracked client sources and documentation contain no published Driver
-  download URL. The GitHub repository is private, has no homepage, and its
-  releases API returns no releases. The Android workflows upload expiring
-  Actions artifacts, not public downloads.
-- Checking Google Play for the verified application ID returned HTTP 404:
-  `https://play.google.com/store/apps/details?id=com.kungsbackacarcommunity.driver&hl=sv&gl=SE`.
-  This URL is evidence of the check, **not a working download fallback**.
+- Driver Android application ID: `com.kungsbackacarcommunity.driver`, verified
+  in Driver `android/app/build.gradle.kts`.
+- URI: `kcc-driver://post/{threadId}`. This is a new, jointly implemented
+  contract, not a previously supported Driver route.
+- `threadId` matches `^[A-Za-z0-9_-]{8,128}$`. It is the original Firestore
+  `driverThreads/{threadId}` document ID, never an author UID, reply ID, local
+  index, or CarCommunity event ID. Event mirrors use their full
+  `carcommunity_event_{eventId}` thread ID without stripping the prefix.
+- Mapping evidence: CarCommunity `functions/src/driverFeed/reader.ts` returns
+  `id: doc.id`; `FirebaseDriverFeedRepository.feed` decodes that exact `id`.
+  Detail verifies the returned ID equals its requested `threadId`.
+  Driver `getNotificationThread` in `functions/src/index.ts` reads
+  `driverThreads/{input.threadId}` and returns `id: thread.id`; its Flutter
+  repository uses that ID unchanged.
+- Example (synthetic ID): `kcc-driver://post/thread_12345678`.
 
-## Compatible behavior in this PR
+## Sender and receiver
 
-Every readable feed post and native post detail has an **Open the Driver app**
-action. The adjacent localized copy explains that Driver cannot yet open a
-specific post by link. The action sends a package-restricted launcher intent;
-it sends no URI, post ID/text, account UID, token, extras, or permission grants.
-It does not bypass either app's sign-in or backend authorization.
+Each feed card and native detail sends its own `post.id` to `openDriverPost`.
+The helper validates the ID and encodes it as one path component using
+`Uri.Builder.appendPath`. `ACTION_VIEW` is explicitly restricted to the
+verified Driver package, with no token, author identity, text, other extras,
+ClipData, or permission grants. No package visibility permission is needed.
 
-Missing, disabled, or inaccessible Driver activities show a localized inline
-error and allow retry. There is no package-query permission or new backend
-read/write. Native card-to-detail navigation remains unchanged.
+The companion Driver Android PR registers VIEW/DEFAULT/BROWSABLE for
+`kcc-driver://post/`. `PostLinkContract` rejects other schemes/authorities,
+queries, fragments, credentials, ports, additional segments, encoded path
+separators, and invalid IDs. Flutter's automatic Android deep-link routing is
+disabled so it cannot bypass the custom auth-gated handler.
 
-## Blocked acceptance criteria
+The native activity retains only the latest ID during bootstrap/login/onboarding
+and handles both cold starts and `onNewIntent`. The private MethodChannel
+`com.kungsbackacarcommunity.driver/post_links` exposes `takePendingPost` and
+signals `postAvailable`. No ID is logged. The Flutter inbox is mounted only
+inside the existing successful auth/onboarding branch. Every external target
+is reauthorized via the existing `getNotificationThread` callable, even when
+cached in the feed. The returned ID must match. Linked details use a
+session-owned Navigator, removed on logout/account switch; late or superseded
+loads cannot open a route. Deleted, blocked, inaccessible, or mismatched targets
+show a generic error with explicit retry. No Firebase backend changes or
+permission bypass are introduced.
 
-Opening the **exact external post** and redirecting missing installations to a
-**real download page** remain blocked on Driver's external contract. Neither
-behavior is claimed by this PR. Do not fabricate a scheme, notification extra,
-Play listing, or public download from private CI artifacts.
+## Install/update fallback: gated pending owner URL
 
-Follow-up requires an owner-approved Driver post URI handler that reauthorizes
-the requested thread and a published download destination. Once available,
-validate IDs and encode each post ID as one URI component, restrict launches
-to the verified Driver package, and handle missing app, store/browser fallback,
-and no-handler failures. Device validation must cover cold/warm starts,
-signed-out/onboarding, deleted/restricted posts, missing app, and missing browser.
-This PR does not modify Driver, iOS, Firebase, Play, versions, or release builds.
+There is still **no verified download/update destination**. The prior Play
+listing check returned HTTP 404, and private expiring Actions artifacts are not
+public download pages. No such destination is shipped as a default.
 
-## Regression coverage
+`BuildConfig.DRIVER_DOWNLOAD_URL` is generated from the Gradle property of the
+same name and defaults to an empty string. Configure it only after the owner
+supplies an actual verified public HTTPS install/update page. Runtime validation
+rejects malformed/non-HTTPS URLs, missing hosts, credentials, and fragments.
+When the Driver handler is missing (including older Driver installations), the
+helper can open that configured page through Android's browser/store handler.
+It never appends the post ID, token, or identity to that public URL. Missing
+browser/store or security rejection produces a localized recoverable error.
+A blank/invalid setting also shows that error; it never sends the post URI to
+an unrestricted resolver or opens the generic Driver home screen.
 
-`DriverAppLauncherTest` checks the exact package, launcher semantics, absence of
-transferred data/grants, missing handler, and security rejection.
-`DriverPostActionTest` checks both feed cards, native exact-post navigation,
-detail rendering, production Swedish string resolution, failed launch, and retry.
-English copy is also exercised through the production string adapter.
+This fallback remains a release/integration gate until a verified URL is
+provided. Installing/updating does not automatically resume the original link;
+the user taps the post action again. The companion Driver handler must be
+available in an installed Android version before exact-post navigation works.
 
-Android strings are generated from the canonical Swedish/English contracts.
-The iOS codegen CI check also consumes those contracts and will require the
-parent integration to regenerate its catalog separately; iOS files are outside
-this task's explicitly authorized scope. Root npm lint/typecheck/test/build were
-attempted but cannot run in this clean worktree without the absent
-`eslint`/`tsc`/`vitest`/`vite` workspace dependencies; no dependencies were changed.
+## Validation and scope
 
-Local validation: Android string regeneration is deterministic and
-`git diff --check` passes. The targeted Driver `testDebugUnitTest` invocation
-used the required toolchain, two workers, and 3 GB Kotlin daemon setting, but
-was cancelled during `compileDebugKotlin` after diagnosing multiple concurrent
-compilations in the shared daemon with its old-generation heap at 99.99%.
-No Android test result is claimed. The parent must coordinate a rerun of the
-seven new tests and existing Driver suite before integration.
+CarCommunity tests cover exact per-card IDs, detail, internal navigation,
+Swedish/English strings, production button-to-intent wiring, ID boundaries,
+package restriction, gated fallback, unsafe URLs, and missing handlers.
+Driver adds native parser tests plus headless Flutter inbox/session tests.
+Gradle tests and native cold/warm launch validation await the parent's compile
+slot; no emulator changes, Android app builds, deployments, releases, or merges
+are authorized here.
+
+The feature is Android-only. The owner separately approved mechanical
+regeneration of `apps/ios/KCC/Resources/Localizable.xcstrings` from the canonical
+sv/en contracts to keep localization CI consistent. No iOS feature/design code
+is changed. Root npm checks previously could not run in this clean worktree
+because workspace dependencies were absent; no root dependencies are changed.
+
+Validation results for the paired receiver: `flutter analyze --no-pub` reports
+no issues; the targeted six link tests and complete 66-test headless Flutter
+suite pass. Both repositories pass `git diff --check`. CarCommunity's 11 new
+JVM/Robolectric tests and Driver's native parser tests have not been rerun in
+this iteration because the parent has not yet granted a Gradle slot. Static
+checks verify matching URI/ID grammar, manifest registration, ID projection,
+and disabled automatic Android routing. Android and approved iOS locale
+regeneration are deterministic; the iOS diff adds only the two Driver keys.

@@ -144,7 +144,7 @@ fun DriverFeedContent(
     state: DriverFeedState, strings: DriverFeedStrings, modifier: Modifier = Modifier,
     onBack: () -> Unit, onRefresh: () -> Unit, onMore: () -> Unit, onOpen: (String) -> Unit,
     listState: LazyListState = rememberLazyListState(),
-    onOpenDriver: () -> Boolean = driverAppLauncher(),
+    onOpenDriver: (String) -> Boolean = driverPostLauncher(),
 ) {
     Surface(modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column {
@@ -224,7 +224,7 @@ fun DriverFeedContent(
 }
 
 @Composable
-private fun DriverPostBody(post: DriverPost, strings: DriverFeedStrings, onOpenDriver: () -> Boolean) {
+private fun DriverPostBody(post: DriverPost, strings: DriverFeedStrings, onOpenDriver: (String) -> Boolean) {
     var appOpenFailed by remember(post.id) { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(KccSpacing.s4), verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
         Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3), verticalAlignment = Alignment.CenterVertically) {
@@ -243,10 +243,8 @@ private fun DriverPostBody(post: DriverPost, strings: DriverFeedStrings, onOpenD
         }
         Text("${strings["likes"]}: ${post.likes} · ${strings["comments"]}: ${post.replies}",
             style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = { appOpenFailed = !onOpenDriver() }) { Text(strings["openApp"]) }
-        Text(strings["appLinkHint"], style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (appOpenFailed) Text(strings["appOpenError"],
+        TextButton(onClick = { appOpenFailed = !onOpenDriver(post.id) }) { Text(strings["openPost"]) }
+        if (appOpenFailed) Text(strings["postOpenError"],
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error)
