@@ -494,7 +494,11 @@ automatic-theme scheduling feature is outside this iOS presentation pass.
 Notification preferences use semantic permission/category cards and native
 labelled switches. Essential account notices remain enabled and disabled for
 editing; their view bindings also reject edits before invoking the existing
-coordinator. Every existing category/channel, save-error state, permission
+coordinator. Saving/failure feedback stays in a measured bottom safe-area inset,
+above the shell navigation, so an edit near the bottom of the category scroller
+cannot hide the aggregate result. Category controls disable during the existing
+single-flight write, so extra taps are visibly unavailable instead of dropped. Error dismissal uses the existing reset guard
+without a new write or optimistic preference change. Every existing category/channel, save-error state, permission
 request guard and OS-settings destination is retained. Permission is refreshed
 on entry as before; no authorization prompt is requested automatically by
 rendering a card or running its layout tests.

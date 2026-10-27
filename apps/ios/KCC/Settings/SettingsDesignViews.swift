@@ -157,3 +157,36 @@ struct BlockedUserCard: View {
         .accessibilityElement(children: .contain)
     }
 }
+
+/// Aggregate write feedback stays visible when editing a category far down the list.
+struct NotificationSaveFeedback: View {
+    let status: NotificationSettingsSaveStatus
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: KccSpacing.s3) {
+            switch status {
+            case .saving:
+                ProgressView().accessibilityHidden(true)
+                Text("notifications.settingsSaving")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            case .failed:
+                Text("privacySettings.error").foregroundStyle(KccPalette.errorRed)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark").font(.system(size: 16, weight: .semibold))
+                        .frame(minWidth: 48, minHeight: 48).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("common.dismiss"))
+            case .idle, .saved:
+                EmptyView()
+            }
+        }
+        .font(.footnote)
+        .fixedSize(horizontal: false, vertical: true)
+        .kccContentCard()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("notificationSettings.saveFeedback")
+    }
+}

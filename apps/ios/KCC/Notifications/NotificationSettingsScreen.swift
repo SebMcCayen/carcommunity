@@ -83,11 +83,6 @@ struct NotificationSettingsScreen: View {
                     requesting: pushNotifications.isRequestingPermission,
                     onRequest: { Task { await pushNotifications.requestPermission() } },
                     onOpenSettings: openSystemSettings)
-                if case .failed = coordinator.saveStatus {
-                    Text("privacySettings.error").font(.body).foregroundStyle(KccPalette.errorRed)
-                } else if coordinator.saveStatus == .saving {
-                    ProgressView("notifications.settingsSaving").font(.body)
-                }
                 Text("notifications.settingsCategoriesTitle").font(.title3.bold()).accessibilityAddTraits(.isHeader)
                 ForEach(NotificationCategories.active, id: \.self) { category in
                     NotificationPreferenceRow(category: category, preference: preferences.effective(category),
@@ -95,9 +90,21 @@ struct NotificationSettingsScreen: View {
                         onToggle: { channel, enabled in
                             Task { await coordinator.toggle(category, channel: channel, enabled: enabled) }
                         })
+                        .disabled(coordinator.saveStatus == .saving)
                         .kccContentCard()
                 }
             }.padding(KccSpacing.s4)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            switch coordinator.saveStatus {
+            case .saving, .failed:
+                NotificationSaveFeedback(status: coordinator.saveStatus, onDismiss: coordinator.resetSaveStatus)
+                    .padding(.horizontal, KccSpacing.s4)
+                    .padding(.vertical, KccSpacing.s2)
+                    .background(KccTheme.page)
+            case .idle, .saved:
+                EmptyView()
+            }
         }
     }
 

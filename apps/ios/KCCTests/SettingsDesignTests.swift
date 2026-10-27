@@ -26,6 +26,9 @@ final class SettingsDesignTests: XCTestCase {
         for state: PushPermissionState in [.notDetermined, .denied, .enabled] {
             assertWrapping(NotificationPermissionCard(state: state, requesting: false, onRequest: {}, onOpenSettings: {}))
         }
+        for status: NotificationSettingsSaveStatus in [.saving, .failed(code: nil)] {
+            assertWrapping(NotificationSaveFeedback(status: status, onDismiss: {}))
+        }
         for category in NotificationCategories.active {
             assertWrapping(NotificationPreferenceRow(category: category, preference: .init(),
                 isEssential: NotificationCategories.isEssential(category), onToggle: { _, _ in }).kccContentCard())
