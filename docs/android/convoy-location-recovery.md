@@ -82,7 +82,7 @@ The test APK needs the normal public Mapbox configuration, not Firebase access.
 The tests use local session/position fixtures. They do not establish a physical
 multi-phone GPS drive or all OEM permission/background behavior.
 
-### Provider-recovery helper validation (pending parent execution)
+### Provider-recovery validation contract
 
 The provider observer adds Robolectric registration/lifecycle/callback-freshness
 and provider-to-publisher coverage. `LocationProviderRecoveryNativeTest` grants
@@ -92,4 +92,5 @@ the fake publisher, ON starts it while the Activity stays RESUMED, and neither
 an ON_RESUME event nor a changed publisher recovery key is required. It creates
 no Firebase repository, GPS request or foreground service. The native switch test
 is emulator-only and must not be run concurrently with other location tests.
-These new tests have not been run in the helper branch.
+Execution results and the verified head are recorded in PR #1219's validation
+summary. This test contract is separate from physical multi-phone GPS validation.
