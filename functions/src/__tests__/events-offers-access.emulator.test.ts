@@ -3,6 +3,7 @@
  * authoritative subscription documents. Run against local Firestore/RTDB only.
  * Handler .run bypasses transport/App Check, not the production access guards.
  */
+import { localProductAccount } from './helpers/local-product-account';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -78,6 +79,19 @@ beforeAll(async () => {
       deleted: uid === 'deleted',
     });
   }
+  await Promise.all(
+    [
+      'free',
+      'plus',
+      'supporter',
+      'expired',
+      'admin',
+      'suspended',
+      'deleted',
+      'optout',
+      'creator',
+    ].map((uid) => localProductAccount(uid)),
+  );
   await sub('plus');
   await sub('supporter', 'supporter');
   await sub('expired', 'plus', 'expired');

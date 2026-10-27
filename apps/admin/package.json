@@ -8,7 +8,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
-    "test": "vitest run"
+    "test": "node ../../scripts/run-no-cloud.mjs -- vitest run"
   },
   "dependencies": {
     "@carcommunity/shared": "^0.1.0",

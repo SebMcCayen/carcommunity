@@ -1,5 +1,6 @@
 /** Runs only in the parent's integrated emulator suite. No production access. */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { localProductAccount } from './helpers/local-product-account';
 import { randomUUID } from 'node:crypto';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { dailyTotalDocId, stockholmDayKey } from '../points/points-economy-core';
@@ -59,6 +60,7 @@ async function user(earned = 0) {
   await db
     .doc(`users/${uid}`)
     .set({ role: 'user', activeMember: true, suspended: false, deleted: false });
+  await localProductAccount(uid);
   await counter(uid).set({ earned });
   return uid;
 }

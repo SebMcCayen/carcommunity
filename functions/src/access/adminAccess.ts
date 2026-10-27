@@ -4,7 +4,11 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 import { db, adminAuth, adminRtdb } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
-import { buildAdminAuditEvent, guardModerationTarget } from '../admin/claims-core';
+import {
+  buildAdminAuditEvent,
+  guardModerationTarget,
+  guardActorIsActiveAdmin,
+} from '../admin/claims-core';
 import { stopAndClear } from '../live/session';
 import { toUserAccessState } from '../shared/access';
 import { CPU_ADMIN, MAX_INSTANCES_ADMIN } from '../shared/instanceLimits';
@@ -15,7 +19,7 @@ import {
   documentPosition,
   nextHistoryCursor,
 } from '../admin/history-pagination';
-import { identityKeys, providerIdentityKeys } from './carCommunity-core';
+import { identityKeys, providerIdentityKeys, isCarCommunityRestricted } from './carCommunity-core';
 import {
   mirrorAccess,
   mirrorIdentity,
@@ -153,17 +157,34 @@ export const updateAccess = onCall(CALLABLE_OPTS, async (request) => {
     throw new HttpsError('resource-exhausted', 'Too many identity records.');
   const keys = [...relevantKeys].sort();
   const result = await db.runTransaction(async (tx) => {
-    const [profile, access, oldOperation, latestPolicy] = await Promise.all([
-      tx.get(db.collection('users').doc(input.targetUid)),
-      tx.get(accessRef(input.targetUid)),
-      tx.get(receipt),
-      tx.get(db.collection('carCommunityPolicy').doc('access')),
-    ]);
+    const [profile, access, oldOperation, latestPolicy, actorProfile, actorAccess] =
+      await Promise.all([
+        tx.get(db.collection('users').doc(input.targetUid)),
+        tx.get(accessRef(input.targetUid)),
+        tx.get(receipt),
+        tx.get(db.collection('carCommunityPolicy').doc('access')),
+        tx.get(db.collection('users').doc(actor.uid)),
+        tx.get(accessRef(actor.uid)),
+      ]);
     if (
       latestPolicy.get('enforceInitialized') !== true ||
       latestPolicy.get('rolloutState') !== 'ready'
     )
       throw new HttpsError('failed-precondition', 'Access administration is unavailable.');
+    // Serialize admission with canonical role/product revocation, including
+    // transaction retries and receipt replay. No admitted request is grandfathered.
+    const freshActorState = toUserAccessState(actorProfile.data());
+    const actorGuard = guardActorIsActiveAdmin(freshActorState);
+    if (!actorGuard.ok) throw new HttpsError(actorGuard.code, actorGuard.message);
+    const actorKeys = identityKeys(actorAccess.data());
+    const actorIdentities = actorKeys.length ? await tx.getAll(...actorKeys.map(identityRef)) : [];
+    if (
+      isCarCommunityRestricted(
+        actorAccess.data(),
+        actorIdentities.map((s) => s.data() ?? {}),
+      )
+    )
+      throw new HttpsError('permission-denied', 'CarCommunity administrator access is restricted.');
     const identities = keys.length ? await tx.getAll(...keys.map(identityRef)) : [];
     const active = identities.filter((s) => s.get('blocked') === true);
     const originUids = [
@@ -189,7 +210,7 @@ export const updateAccess = onCall(CALLABLE_OPTS, async (request) => {
       targetRole === 'owner' || active.some((s) => s.get('protectedRole') === 'owner');
     const guard = guardModerationTarget({
       actorUid: actor.uid,
-      actorRole: actor.state.role,
+      actorRole: freshActorState.role,
       targetUid: input.targetUid,
       targetRole: protectedOwner ? 'owner' : targetRole,
     });

@@ -28,7 +28,10 @@ test('native fixture setup rejects cloud or mixed emulator destinations before S
       encoding: 'utf8',
     });
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /Exact disposable native emulators required/);
+    assert.match(
+      result.stderr,
+      /Exact disposable native emulators required|No-cloud tests require an explicit disposable demo project/,
+    );
   }
 });
 test('prepared Firebase config resolves a real relative functions source and stays loopback', () => {

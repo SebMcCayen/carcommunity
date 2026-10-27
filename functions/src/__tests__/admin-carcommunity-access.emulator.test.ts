@@ -40,6 +40,16 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { beforeAll, beforeEach, afterAll, describe, it, expect } from 'vitest';
 const adminApp =
   getApps()[0] ?? initializeAdminApp({ projectId: 'demo-test' }, 'access-test-admin');
+const port = (name: string, fallback: number) => {
+  const host = process.env[name] ?? `127.0.0.1:${fallback}`;
+  if (!/^127\.0\.0\.1:\d+$/.test(host)) throw Error('Loopback access-test emulator required');
+  return Number(host.split(':').at(-1));
+};
+const authPort = port('FIREBASE_AUTH_EMULATOR_HOST', 9099),
+  firestorePort = port('FIRESTORE_EMULATOR_HOST', 8080),
+  databasePort = port('FIREBASE_DATABASE_EMULATOR_HOST', 9000),
+  storagePort = port('FIREBASE_STORAGE_EMULATOR_HOST', 9199),
+  functionsPort = port('KCC_ACCESS_FUNCTIONS_EMULATOR_HOST', 5001);
 const db = getFirestore(adminApp),
   adminAuth = getAdminAuth(adminApp);
 let ownerApp: FirebaseApp,
@@ -132,11 +142,14 @@ beforeAll(async () => {
   if (process.env.GCLOUD_PROJECT !== 'demo-test') throw Error('Disposable demo emulators required');
   // Functions' emulator FIREBASE_CONFIG uses the demo-test namespace.
   // Load the actual production rules there as well as CLI's default-rtdb.
-  const rulesResult = await fetch('http://127.0.0.1:9000/.settings/rules.json?ns=demo-test', {
-    method: 'PUT',
-    headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
-    body: readFileSync('../firebase/database.rules.json', 'utf8'),
-  });
+  const rulesResult = await fetch(
+    `http://127.0.0.1:${databasePort}/.settings/rules.json?ns=demo-test`,
+    {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
+      body: readFileSync('../firebase/database.rules.json', 'utf8'),
+    },
+  );
   if (!rulesResult.ok) throw Error('Local runtime namespace rules could not be loaded');
   const setup = (name: string) => {
     const app = initializeApp(
@@ -150,12 +163,12 @@ beforeAll(async () => {
       name,
     );
     const auth = getAuth(app);
-    connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+    connectAuthEmulator(auth, `http://127.0.0.1:${authPort}`, { disableWarnings: true });
     const fn = getFunctions(app, 'europe-west1');
-    connectFunctionsEmulator(fn, '127.0.0.1', 5001);
-    connectFirestoreEmulator(clientFirestore(app), '127.0.0.1', 8080);
-    connectDatabaseEmulator(getDatabase(app), '127.0.0.1', 9000);
-    connectStorageEmulator(getStorage(app), '127.0.0.1', 9199);
+    connectFunctionsEmulator(fn, '127.0.0.1', functionsPort);
+    connectFirestoreEmulator(clientFirestore(app), '127.0.0.1', firestorePort);
+    connectDatabaseEmulator(getDatabase(app), '127.0.0.1', databasePort);
+    connectStorageEmulator(getStorage(app), '127.0.0.1', storagePort);
     return { app, auth, fn };
   };
   const a = setup('cc-access-owner'),
