@@ -1367,6 +1367,33 @@
       "appCheck": true,
       "status": "implemented",
       "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "admin.listCrownPoints",
+      "domain": "admin",
+      "description": "Cursor-paged hand-placed crown points. Filters status before limit, timestamp plus ID ordering, fixed date cutoff. Fresh active-admin check on every page.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin/history-pagination.md"
+    },
+    {
+      "name": "admin.listCrownClaims",
+      "domain": "admin",
+      "description": "Cursor-paged merged hand-placed/automatic claim summaries. Filters result/source before limit; never returns coordinates, raw risk signals or thresholds. Fresh active-admin check on every page.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin/history-pagination.md"
+    },
+    {
+      "name": "admin.listPointsLedger",
+      "domain": "admin",
+      "description": "Cursor-paged member ledger entries with current authoritative wallet balance. Cursor bound to target UID, stable timestamp/ID ordering. Fresh active-admin check on every page.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin/history-pagination.md"
     }
   ]
 }

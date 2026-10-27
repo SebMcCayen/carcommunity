@@ -1,11 +1,8 @@
 /**
  * Crown Hunt (Kronjakt) feature module for the admin portal (Phase 13 vertical).
  *
- * Reads come straight from Firestore (admin rules-gated: this PR adds the
- * `|| isAdmin()` grant on crownHuntPoints and crownHuntClaims so admins see
- * all statuses / every claim, not just active/own records). Mutations go
- * through the safety-gated crownHunt.* admin callables. Exported signatures
- * and shared response-envelope types are unchanged.
+ * Paged history reads use fresh-admin-checked backend callables. Point detail
+ * reads remain rules-gated; mutations use the safety-gated crownHunt callables.
  *
  * Security notes:
  *  - Backend is the sole authority for eligibility, claims, and Kronpoäng awards.
@@ -17,18 +14,7 @@
  *  - Do not hard-delete active or previously claimed points; prefer pause/end.
  */
 
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  limit as fsLimit,
-  orderBy,
-  query,
-  type DocumentData,
-  type Firestore,
-  type Timestamp,
-} from 'firebase/firestore';
+import { doc, getDoc, type DocumentData, type Timestamp } from 'firebase/firestore';
 import {
   type AdminCreateCrownHuntPointRequest,
   type AdminUpdateCrownHuntPointRequest,
@@ -179,8 +165,6 @@ export {
 } from './live-map';
 export type { LiveCrownSpawn, LiveTrap } from './live-map';
 
-const DEFAULT_PAGE_SIZE = 20;
-
 /** Firestore Timestamp | Date | null → ISO string (or null). */
 function toIso(value: unknown): string | null {
   if (value == null) return null;
@@ -224,126 +208,29 @@ function toAdminPointSummary(id: string, data: DocumentData): AdminCrownHuntPoin
   };
 }
 
-/** Resolves a point title from crownHuntPoints/{id}.title, cached per call. */
-async function resolvePointTitle(
-  db: Firestore,
-  pointId: string,
-  cache: Map<string, string>,
-): Promise<string> {
-  const cached = cache.get(pointId);
-  if (cached !== undefined) return cached;
-  let title = pointId;
-  try {
-    const snap = await getDoc(doc(db, 'crownHuntPoints', pointId));
-    const stored = snap.data()?.title as string | undefined;
-    if (stored) title = stored;
-  } catch {
-    // Point unreadable/missing — fall back to the id.
-  }
-  cache.set(pointId, title);
-  return title;
-}
-
-/** Maps a crownHuntClaims/{id} document to the admin claim summary. */
-function toAdminClaimSummary(
-  id: string,
-  data: DocumentData,
-  pointTitle: string,
-): AdminCrownHuntClaimSummary {
-  return {
-    claimId: id,
-    pointId: (data.pointId as string | undefined) ?? '',
-    pointTitle,
-    userId: (data.userId as string | undefined) ?? '',
-    result: data.result as CrownHuntClaimResult,
-    distanceMeters: (data.distanceMeters as number | null | undefined) ?? null,
-    // Anti-fraud risk reasons live in the backend-only crownHuntClaimRisk
-    // collection, which is intentionally NOT admin-readable — so no reason
-    // categories reach the client. The `result` field (incl. 'risk_review')
-    // still lets admins triage; see the PR note.
-    riskReasonCategories: [],
-    claimedAt: toIsoRequired(data.claimedAt),
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Reads (direct Firestore, admin rules-gated)
-// ---------------------------------------------------------------------------
-
-/**
- * Lists all Kronjakt points (all statuses) for the admin view, newest
- * first (first page — deeper pagination deferred, per the 13a precedent).
- */
+/** All reads are reauthorized server-side; cursors are bound to filters and date cutoffs. */
 export async function adminListCrownHuntPoints(
   _page = 1,
   _token?: string,
+  cursor?: string | null,
 ): Promise<PaginatedAdminCrownHuntPointsResponse> {
-  const snapshot = await getDocs(
-    query(
-      collection(getAdminFirestore(), 'crownHuntPoints'),
-      orderBy('createdAt', 'desc'),
-      fsLimit(DEFAULT_PAGE_SIZE),
-    ),
-  );
-  const points = snapshot.docs.map((d) => toAdminPointSummary(d.id, d.data()));
-  return {
-    ok: true,
-    data: { points },
-    meta: {
-      page: 1,
-      pageSize: DEFAULT_PAGE_SIZE,
-      total: points.length,
-      hasNext: points.length === DEFAULT_PAGE_SIZE,
-    },
-  };
+  return callAdmin<PaginatedAdminCrownHuntPointsResponse>('admin-listCrownPoints', {
+    cursor: cursor ?? null,
+  });
 }
 
-/**
- * Lists Kronjakt claims for admin review, newest first. The optional result
- * filter (e.g. risk_review) is applied over the fetched page to avoid a
- * composite-index requirement. No exact user coordinates are included.
- */
 export async function adminListCrownHuntClaims(
   _page = 1,
   filterResult?: CrownHuntClaimResult,
   _token?: string,
+  cursor?: string | null,
+  source: 'all' | 'hand_placed' | 'automatic' = 'all',
 ): Promise<PaginatedAdminCrownHuntClaimsResponse> {
-  const db = getAdminFirestore();
-  const snapshot = await getDocs(
-    query(
-      collection(db, 'crownHuntClaims'),
-      orderBy('claimedAt', 'desc'),
-      fsLimit(DEFAULT_PAGE_SIZE),
-    ),
-  );
-
-  // Filter the fetched page BEFORE resolving point titles, so we don't issue
-  // title reads for claims that are discarded. hasNext is based on the
-  // unfiltered fetch size — otherwise a result filter could wrongly report
-  // no further pages (e.g. 20 fetched, 2 match).
-  const pageDocs = filterResult
-    ? snapshot.docs.filter((d) => (d.data().result as CrownHuntClaimResult) === filterResult)
-    : snapshot.docs;
-
-  const cache = new Map<string, string>();
-  const claims = await Promise.all(
-    pageDocs.map(async (d) => {
-      const data = d.data();
-      const title = await resolvePointTitle(db, (data.pointId as string | undefined) ?? '', cache);
-      return toAdminClaimSummary(d.id, data, title);
-    }),
-  );
-
-  return {
-    ok: true,
-    data: { claims },
-    meta: {
-      page: 1,
-      pageSize: DEFAULT_PAGE_SIZE,
-      total: claims.length,
-      hasNext: snapshot.docs.length === DEFAULT_PAGE_SIZE,
-    },
-  };
+  return callAdmin<PaginatedAdminCrownHuntClaimsResponse>('admin-listCrownClaims', {
+    cursor: cursor ?? null,
+    source,
+    ...(filterResult ? { result: filterResult } : {}),
+  });
 }
 
 // ---------------------------------------------------------------------------
