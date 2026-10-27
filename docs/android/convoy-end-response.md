@@ -53,8 +53,16 @@ Static `git diff --check` passes. Local Gradle compile and targeted unit-test
 clients were gracefully interrupted with exit 130 at the parent's host-memory
 coordination request. The compile reached `compileDebugKotlin`; neither command
 produced a completed build/test result. No emulator was used. Tests below are
-**added but not yet executed**; compile, JVM regression results, and native checks
-remain required before merge.
+**added but not yet executed**; JVM regression results and native checks remain
+required before merge.
+
+CI run `40556002491`, job `122372101824`, compiled both production variants but
+failed `compileDebugUnitTestKotlin`: the parser fixture directly called the
+package-private `DataSnapshot` constructor. The fixture now uses the SDK's public
+`InternalHelpers.createDataSnapshot` factory with the same reference and actual
+node. The pinned Firebase 22.0.1 runtime's signatures were verified with `javap`;
+assertions and production lifecycle/cancellation/ownership code are unchanged.
+The correction requires a fresh CI run; no local Gradle was started.
 
 Parent sequential JVM command (existing JDK/SDK/Gradle-home environment):
 

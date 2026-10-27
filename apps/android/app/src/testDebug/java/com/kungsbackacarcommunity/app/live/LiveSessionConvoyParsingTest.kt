@@ -4,7 +4,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
-import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.InternalHelpers
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.snapshot.IndexedNode
 import com.google.firebase.database.snapshot.NodeUtilities
@@ -27,7 +27,9 @@ class LiveSessionConvoyParsingTest {
 
     private fun parse(extra: Map<String, Any?>): LiveSessionInfo? {
         val fields = mapOf("id" to "session", "status" to "active", "duration" to "6h") + extra
-        return DataSnapshot(reference, IndexedNode.from(NodeUtilities.NodeFromJSON(fields))).toSessionInfo()
+        return InternalHelpers.createDataSnapshot(
+            reference, IndexedNode.from(NodeUtilities.NodeFromJSON(fields)),
+        ).toSessionInfo()
     }
 
     @Test fun retainsBackendStampedOwningConvoy() {
