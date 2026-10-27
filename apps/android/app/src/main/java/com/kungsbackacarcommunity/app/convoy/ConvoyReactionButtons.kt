@@ -33,6 +33,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -41,6 +43,7 @@ import com.kungsbackacarcommunity.app.design.KccPalette
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.ReactionOverlay
 import com.kungsbackacarcommunity.app.design.ReactionOverlayEvent
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -84,7 +87,8 @@ fun convoyReactionButtonTag(kind: ConvoyReactionKind): String = "convoy_reaction
  *   own trail off). Null keeps the pure broadcast behaviour (no persistent trail).
  *   When non-null, tapping FollowMe toggles the trail AND — only when ACTIVATING —
  *   still fires the transient "Follow me" animation; turning the trail off fires
- *   no animation.
+ *   no animation. Only FollowMe is disabled while this callback is outstanding;
+ *   selection always reflects [followMeLeading], including on failure.
  */
 @Composable
 fun ConvoyReactionsHost(
@@ -97,6 +101,7 @@ fun ConvoyReactionsHost(
 ) {
     val scope = rememberCoroutineScope()
     var cooldown by remember(convoyId) { mutableStateOf(ConvoyReactionCooldownState()) }
+    var followMeTogglePending by remember(convoyId) { mutableStateOf(false) }
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     // A slow tick just to keep the cooldown countdown live; 500ms is plenty for a
     // per-second display and costs nothing.
@@ -139,6 +144,8 @@ fun ConvoyReactionsHost(
             cooldown = cooldown,
             nowMs = nowMs,
             followMeLeading = followMeLeading,
+            followMeToggleEnabled = onFollowMeToggle != null,
+            followMeTogglePending = followMeTogglePending,
             onReact = { kind ->
                 val now = System.currentTimeMillis()
                 // FOLLOW-ME is a TOGGLE of the persistent leader trail when a
@@ -146,8 +153,21 @@ fun ConvoyReactionsHost(
                 // the reaction cooldown, and fires the transient animation only
                 // when ACTIVATING (turning the trail OFF announces nothing).
                 if (kind == ConvoyReactionKind.FollowMe && onFollowMeToggle != null) {
+                    if (followMeTogglePending) return@ConvoyReactionButtons
                     val activate = !followMeLeading
-                    scope.launch { onFollowMeToggle(activate) }
+                    followMeTogglePending = true
+                    scope.launch {
+                        try {
+                            onFollowMeToggle(activate)
+                        } catch (cancellation: CancellationException) {
+                            throw cancellation
+                        } catch (_: Exception) {
+                            // Keep the observed leadership state on failure; the
+                            // Unit callback cannot confirm a successful toggle.
+                        } finally {
+                            followMeTogglePending = false
+                        }
+                    }
                     if (activate && cooldown.isReady(kind, now)) {
                         cooldown = cooldown.recordSent(kind, now)
                         val clientId = UUID.randomUUID().toString().replace("-", "").take(32)
@@ -205,8 +225,9 @@ fun ConvoyReactionsHost(
 /**
  * The three reaction buttons, bottom-centre. Each is a car/game-styled coloured
  * disc with a label; while its cooldown is running it greys and shows the seconds
- * left (the client mirror of the server's anti-spam window). Pure UI — the tap
- * decision and the send live in [ConvoyReactionsHost].
+ * left (the client mirror of the server's anti-spam window). Persistent FollowMe
+ * toggles bypass that cooldown in either state, but wait for any pending toggle.
+ * Pure UI — the tap decision and the send live in [ConvoyReactionsHost].
  */
 @Composable
 fun ConvoyReactionButtons(
@@ -215,6 +236,8 @@ fun ConvoyReactionButtons(
     onReact: (ConvoyReactionKind) -> Unit,
     modifier: Modifier = Modifier,
     followMeLeading: Boolean = false,
+    followMeToggleEnabled: Boolean = false,
+    followMeTogglePending: Boolean = false,
 ) {
     Row(
         modifier = modifier.testTag(CONVOY_REACTIONS_TAG),
@@ -222,14 +245,15 @@ fun ConvoyReactionButtons(
         verticalAlignment = Alignment.Top,
     ) {
         for (kind in ConvoyReactionKind.entries) {
-            // The FollowMe button shows its ACTIVE/toggled state while the local
-            // user owns the shared leader trail — and stays tappable (to turn off),
-            // so it is never disabled by its own cooldown while active.
+            // Both starting/taking over and stopping a persistent trail bypass
+            // the transient reaction cooldown. Broadcast-only FollowMe does not.
+            val persistentToggle = kind == ConvoyReactionKind.FollowMe && followMeToggleEnabled
             val active = kind == ConvoyReactionKind.FollowMe && followMeLeading
             ReactionButton(
                 kind = kind,
-                remainingMs = if (active) 0L else cooldown.remainingMs(kind, nowMs),
+                remainingMs = if (persistentToggle) 0L else cooldown.remainingMs(kind, nowMs),
                 active = active,
+                pending = persistentToggle && followMeTogglePending,
                 onClick = { onReact(kind) },
             )
         }
@@ -242,8 +266,9 @@ private fun ReactionButton(
     remainingMs: Long,
     onClick: () -> Unit,
     active: Boolean = false,
+    pending: Boolean = false,
 ) {
-    val ready = remainingMs <= 0L
+    val ready = remainingMs <= 0L && !pending
     // Active (leading the trail) overrides the label with "Following" and marks the
     // disc with a ring, so a leader can see their trail is on at a glance.
     val label =
@@ -270,7 +295,10 @@ private fun ReactionButton(
             modifier =
                 Modifier
                     .size(60.dp)
-                    .testTag(convoyReactionButtonTag(kind)),
+                    .testTag(convoyReactionButtonTag(kind))
+                    .semantics {
+                        if (kind == ConvoyReactionKind.FollowMe) selected = active
+                    },
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
@@ -281,7 +309,7 @@ private fun ReactionButton(
                         else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(28.dp).graphicsLayer { alpha = if (ready) 1f else 0.5f },
                 )
-                if (!ready) {
+                if (remainingMs > 0L) {
                     // Seconds remaining, so the member sees WHY the button is greyed
                     // rather than a dead control.
                     Text(

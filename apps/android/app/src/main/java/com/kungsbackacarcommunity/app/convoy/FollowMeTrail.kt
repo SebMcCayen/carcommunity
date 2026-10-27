@@ -39,9 +39,10 @@ object FollowMeTrail {
      * stop drawing the line rather than leave a stale ghost. Mirrors the backend
      * `FOLLOW_ME_STALE_MS`. Deliberately generous (the owner did not want an
      * inactivity timeout) — it only hides a genuinely silent leader's line, and
-     * the instant they write again it reappears.
+     * the instant a fresh signal arrives it reappears. Use the existing convoy
+     * marker window so a healthy three-minute stationary heartbeat is tolerated.
      */
-    const val STALE_MS: Long = 90_000L
+    const val STALE_MS: Long = com.kungsbackacarcommunity.app.map.ConvoyArrowPlanner.STALE_AFTER_MS
 
     /**
      * How often the member-side render gate re-evaluates staleness on a TIMER,
@@ -106,22 +107,21 @@ object FollowMeTrail {
 
     /**
      * Whether THIS member should DRAW the shared trail — the member-side render
-     * gate, mirrored from the backend `shouldDrawFollowMeTrail`. Draws when a
-     * leader is set, it is not the viewer themselves (the leader keeps their own
-     * private self-trail), the leader is still an accepted member, and the trail
+     * gate, using the existing membership/freshness gates. Android also draws it for
+     * the leader, so every participant sees the shared route. Draws when a
+     * leader is set, the leader is still an accepted member, and the trail
      * is fresh. So a vanished/removed leader's line stops drawing even without the
      * server cleanup and without any inactivity timer.
      */
     fun shouldDraw(
         leaderUid: String?,
-        selfUid: String?,
+        @Suppress("UNUSED_PARAMETER") selfUid: String?,
         leaderIsMember: Boolean,
         lastFreshMs: Long?,
         nowMs: Long,
         windowMs: Long = STALE_MS,
     ): Boolean {
         if (leaderUid == null) return false
-        if (selfUid != null && leaderUid == selfUid) return false
         if (!leaderIsMember) return false
         return isFresh(lastFreshMs, nowMs, windowMs)
     }

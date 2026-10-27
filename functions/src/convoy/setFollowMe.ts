@@ -10,7 +10,7 @@
  * ~3-5s trail updates never pay a function invocation.
  *
  * Behaviour (the exclusivity + takeover + toggle rules), all inside ONE
- * transaction on the followMe doc so concurrent presses serialise:
+ * transaction reading both the parent convoy and followMe doc:
  *  - active=true  → SET leaderUid = caller and RESET the polyline. This is a
  *                   TAKEOVER: it overwrites whoever was leader before, so there is
  *                   ever only ONE trail per convoy and the newest presser wins.
@@ -18,8 +18,8 @@
  *                   leader (decideSetFollowMe → 'clear'); a non-leader toggling
  *                   off is a no-op, so one member can never wipe another's trail.
  *
- * Membership is re-checked exactly like convoy.sendReaction (the SAME
- * requireAcceptedConvoyMember gate): a missing convoy or a total outsider is
+ * Membership and active status are checked INSIDE that transaction, so a
+ * concurrent leave/end invalidates its reads. A missing convoy or an outsider is
  * not-found so a convoy can't be probed; a still-invited/declined member is
  * failed-precondition. An ENDED convoy is rejected — there is no live trail to
  * toggle on a finished drive.
@@ -29,11 +29,16 @@
  * while the rule denies any client from changing leaderUid directly.
  */
 
+import { randomUUID } from 'node:crypto';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
-import { requireAcceptedConvoyMember } from '../chatchannels/convoyMembership';
+import {
+  CONVOY_NOT_FOUND_MESSAGE,
+  NOT_CONVOY_MEMBER_MESSAGE,
+  isAcceptedConvoyMember,
+} from '../chatchannels/chat-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 import { CONVOY_ENDED_MESSAGE } from './convoy-core';
 import {
@@ -72,17 +77,27 @@ export const setFollowMe = onCall(
     }
     const { convoyId, active } = parsed.input;
 
-    // Accepted-member gate (loads the convoy doc): not-found for a missing convoy
-    // or an outsider (a convoy can't be probed); failed-precondition for a
-    // still-invited/declined member — identical to convoy.sendReaction.
-    const convoy = await requireAcceptedConvoyMember(convoyId, actor.uid);
-    if (convoy.status === 'ended') {
-      throw new HttpsError('failed-precondition', CONVOY_ENDED_MESSAGE);
-    }
-
+    const convoyRef = db.collection('convoys').doc(convoyId);
     const ref = followMeRef(convoyId);
 
     const result = await db.runTransaction(async (tx): Promise<SetFollowMeResponse> => {
+      // These reads must share the leadership transaction: checking membership
+      // before it would let an in-flight activation recreate a cleared trail
+      // after the caller leaves or the convoy ends.
+      const convoySnap = await tx.get(convoyRef);
+      const convoy = convoySnap.data();
+      if (!convoySnap.exists || !isAcceptedConvoyMember(convoy, actor.uid)) {
+        if (Array.isArray(convoy?.memberUids) && convoy.memberUids.includes(actor.uid)) {
+          throw new HttpsError('failed-precondition', NOT_CONVOY_MEMBER_MESSAGE);
+        }
+        throw new HttpsError('not-found', CONVOY_NOT_FOUND_MESSAGE);
+      }
+      if (convoy?.status !== 'active') {
+        throw new HttpsError(
+          'failed-precondition',
+          convoy?.status === 'ended' ? CONVOY_ENDED_MESSAGE : 'This convoy is not active.',
+        );
+      }
       const snap = await tx.get(ref);
       const currentLeaderUid =
         snap.exists && typeof snap.data()?.leaderUid === 'string'
@@ -96,6 +111,9 @@ export const setFollowMe = onCall(
           // polyline is discarded and the new leader starts from an empty trail.
           tx.set(ref, {
             leaderUid: action.leaderUid,
+            // Only a real activation/takeover gets a new generation. A current
+            // leader's retry below preserves both this id and their polyline.
+            activationId: randomUUID(),
             polyline: '',
             updatedAt: FieldValue.serverTimestamp(),
           });

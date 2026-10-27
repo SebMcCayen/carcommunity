@@ -24,6 +24,12 @@
  * Fields on `convoys/{convoyId}/followMe/current`:
  *  - `leaderUid: string`   — the ONE current leader (exclusivity: a takeover
  *                            overwrites it under the callable's admin transaction)
+ *  - `activationId?: string` — fresh on activation/takeover, stable on a current
+ *                            leader's retry. Absent on legacy docs. Updated
+ *                            clients compare the captured id in their trail-write
+ *                            transaction to reject a previous activation's data.
+ *                            Legacy partial writes stay compatible but do not
+ *                            gain this generation protection automatically.
  *  - `polyline: string`    — base64 of the CCRB-encoded rolling ~15 km trail,
  *                            written DIRECTLY by the leader's client on a throttle
  *  - `updatedAt: Timestamp`— last write instant (server clock); the member-side
@@ -69,19 +75,19 @@ export const FOLLOW_ME_DOC_ID = 'current';
 export const FOLLOW_ME_TRAIL_WINDOW_METERS = 15_000;
 
 /**
- * Member-side freshness window, in milliseconds. If the leader's trail has not
- * been refreshed within this window (their app crashed, lost signal, or the
- * background process was killed), members STOP drawing the line rather than
- * leave a stale ghost trail pointing at where the leader was minutes ago.
+ * Member-side freshness window, in milliseconds. If the leader's freshness
+ * signal (trail update or live heartbeat) falls outside this window, members
+ * STOP drawing the line rather than leave a stale ghost trail pointing at
+ * where a crashed/disconnected leader was minutes ago.
  *
  * The owner explicitly did NOT want an inactivity TIMEOUT that turns the feature
- * off for an active leader — so this is deliberately generous (90s, comfortably
- * longer than the ~3-5s write throttle plus slack for a red light or a tunnel):
- * it only hides a trail whose owner has genuinely gone quiet, and the instant the
- * leader writes again the line reappears. It never CLEARS the shared doc; it is
- * purely a render-time gate each member applies to what they read.
+ * off for an active leader. Match the live marker's four-minute policy: the
+ * stationary heartbeat is three minutes, so a parked, healthy leader's unchanged
+ * trail stays visible between heartbeats without extra trail writes. A fresh
+ * signal makes the line reappear. This never CLEARS the shared doc; it is purely
+ * a render-time gate each member applies to what they read.
  */
-export const FOLLOW_ME_STALE_MS = 90_000;
+export const FOLLOW_ME_STALE_MS = 240_000;
 
 /**
  * Upper bound on the stored polyline string length (base64 chars). A ~15 km trail
@@ -163,8 +169,7 @@ export function isFollowMeTrailFresh(
 /**
  * The full member-side render gate: whether THIS member should draw the shared
  * trail. It draws when
- *  - a leader is set AND it is not the viewer themselves (the leader keeps their
- *    OWN private self-trail; the shared line is for the OTHERS), AND
+ *  - a leader is set (the author also sees the full shared ~15 km trail), AND
  *  - the leader is still an accepted member of the convoy (a vanished/removed
  *    leader's line stops drawing even if server cleanup lagged), AND
  *  - the trail is fresh (isFollowMeTrailFresh).
@@ -180,9 +185,8 @@ export function shouldDrawFollowMeTrail(params: {
   nowMs: number;
   windowMs?: number;
 }): boolean {
-  const { leaderUid, selfUid, leaderIsMember, lastFreshMs, nowMs, windowMs } = params;
+  const { leaderUid, leaderIsMember, lastFreshMs, nowMs, windowMs } = params;
   if (!leaderUid) return false;
-  if (leaderUid === selfUid) return false;
   if (!leaderIsMember) return false;
   return isFollowMeTrailFresh(lastFreshMs, nowMs, windowMs);
 }

@@ -21,6 +21,7 @@ data class FollowMeState(
     val leaderUid: String?,
     val polyline: String?,
     val updatedAtMillis: Long?,
+    val activationId: String? = null,
 )
 
 /**
@@ -49,9 +50,11 @@ interface ConvoyFollowMeRepository {
      * Writes the leader's rolling [polyline] to the followMe doc. Only the current
      * leader passes the Firestore write rule; any other caller is silently denied
      * (this is a best-effort ~4s trail flush, not a user action). Returns whether
-     * the write was accepted.
+     * the write was accepted. [activationId] binds a queued fix to its activation;
+     * the transaction rejects it after takeover or same-user reactivation. Null
+     * supports existing documents until the backend creates generation IDs.
      */
-    suspend fun writeTrail(convoyId: String, polyline: String): Boolean
+    suspend fun writeTrail(convoyId: String, polyline: String, activationId: String? = null): Boolean
 
     /** Live [FollowMeState] for [convoyId], or null while there is no trail / on error. */
     fun observeFollowMe(convoyId: String): Flow<FollowMeState?>
@@ -91,21 +94,25 @@ class FirebaseConvoyFollowMeRepository private constructor(
                 }
         }
 
-    override suspend fun writeTrail(convoyId: String, polyline: String): Boolean =
+    override suspend fun writeTrail(convoyId: String, polyline: String, activationId: String?): Boolean =
         suspendCancellableCoroutine { continuation ->
-            followMeDoc(convoyId)
-                .update(
-                    mapOf(
+            val doc = followMeDoc(convoyId)
+            firestore.runTransaction { transaction ->
+                val snapshot = transaction.get(doc)
+                // Captured when the fix was produced. A transaction retry must
+                // re-check it, including when the same UID has since reactivated.
+                if (!snapshot.exists() || snapshot.getString("activationId") != activationId) {
+                    false
+                } else {
+                    transaction.update(doc, mapOf(
                         "polyline" to polyline,
                         "updatedAt" to FieldValue.serverTimestamp(),
-                    ),
-                )
-                .addOnCompleteListener { task ->
-                    if (!continuation.isActive) return@addOnCompleteListener
-                    // Denied (not the leader any more) or offline is a non-event —
-                    // the next flush retries, and the shared doc self-corrects.
-                    continuation.resume(task.isSuccessful)
+                    ))
+                    true
                 }
+            }.addOnCompleteListener { task ->
+                if (continuation.isActive) continuation.resume(task.isSuccessful && task.result == true)
+            }
         }
 
     override fun observeFollowMe(convoyId: String): Flow<FollowMeState?> =
@@ -125,6 +132,7 @@ class FirebaseConvoyFollowMeRepository private constructor(
                             leaderUid = snapshot.getString("leaderUid"),
                             polyline = snapshot.getString("polyline"),
                             updatedAtMillis = snapshot.getTimestamp("updatedAt")?.toDate()?.time,
+                            activationId = snapshot.getString("activationId"),
                         ),
                     )
                 }

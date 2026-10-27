@@ -27,6 +27,10 @@ describe('constants', () => {
   it('rolls the trail over ~15 km (far longer than the ~1 km self-trail)', () => {
     expect(FOLLOW_ME_TRAIL_WINDOW_METERS).toBe(15_000);
   });
+
+  it('matches the four-minute live marker freshness policy', () => {
+    expect(FOLLOW_ME_STALE_MS).toBe(240_000);
+  });
 });
 
 describe('decideSetFollowMe — exclusivity / takeover / toggle', () => {
@@ -61,6 +65,16 @@ describe('isFollowMeTrailFresh', () => {
 
   it('a just-written trail is fresh', () => {
     expect(isFollowMeTrailFresh(now - 1_000, now)).toBe(true);
+  });
+
+  it('keeps a stationary leader fresh across 90s and the three-minute heartbeat gap', () => {
+    expect(isFollowMeTrailFresh(now, now + 90_000)).toBe(true);
+    expect(isFollowMeTrailFresh(now, now + 179_999)).toBe(true);
+    expect(isFollowMeTrailFresh(now, now + 180_000)).toBe(true);
+    expect(isFollowMeTrailFresh(now, now + 239_999)).toBe(true);
+    expect(isFollowMeTrailFresh(now, now + 240_000)).toBe(false);
+    // A healthy live heartbeat refreshes the signal; no trail write is needed.
+    expect(isFollowMeTrailFresh(now + 180_000, now + 240_000)).toBe(true);
   });
 
   it('is fresh right up to (but not at) the window boundary', () => {
@@ -103,8 +117,13 @@ describe('shouldDrawFollowMeTrail — member render gate', () => {
     expect(shouldDrawFollowMeTrail({ ...base, leaderUid: null })).toBe(false);
   });
 
-  it('does NOT draw the viewer their OWN shared trail (they keep the self-trail)', () => {
-    expect(shouldDrawFollowMeTrail({ ...base, leaderUid: 'alice' })).toBe(false);
+  it('draws the author their OWN full shared trail too', () => {
+    expect(shouldDrawFollowMeTrail({ ...base, leaderUid: 'alice' })).toBe(true);
+  });
+
+  it('still requires author membership and freshness', () => {
+    expect(shouldDrawFollowMeTrail({ ...base, leaderUid: 'alice', leaderIsMember: false })).toBe(false);
+    expect(shouldDrawFollowMeTrail({ ...base, leaderUid: 'alice', lastFreshMs: null })).toBe(false);
   });
 
   it('does NOT draw a trail whose leader left the convoy', () => {

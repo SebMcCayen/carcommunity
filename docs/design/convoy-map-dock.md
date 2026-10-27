@@ -3,7 +3,9 @@
 Scope: S16 map convoy controls and shared compact controls during Android
 navigation. Preserve existing member/leader actions, invitations, chat, shared
 destination, member profile/location actions and confirmation rules. No iOS,
-backend or production-configuration change is included.
+backend or production-configuration change is included in the dock redesign.
+The separate [Follow-me contract](convoy-follow-me.md) covers shared trail
+leadership and its later functional verification.
 
 ## Map browsing
 

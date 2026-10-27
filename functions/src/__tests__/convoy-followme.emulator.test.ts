@@ -56,6 +56,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
 const REGION = 'europe-west1';
+const AUTH_PORT = Number(process.env.FIREBASE_AUTH_EMULATOR_HOST?.split(':').at(-1) ?? 9099);
+const FIRESTORE_PORT = Number(process.env.FIRESTORE_EMULATOR_HOST?.split(':').at(-1) ?? 8080);
+const FUNCTIONS_PORT = Number(process.env.FOLLOW_ME_FUNCTIONS_EMULATOR_PORT ?? 5001);
 
 const adminApp =
   getAdminApps()[0] ??
@@ -171,11 +174,11 @@ beforeAll(async () => {
     'convoy-followme-emulator-client',
   );
   auth = getAuth(app);
-  connectAuthEmulator(auth, `http://${EMULATOR_HOST}:9099`, { disableWarnings: true });
+  connectAuthEmulator(auth, `http://${EMULATOR_HOST}:${AUTH_PORT}`, { disableWarnings: true });
   functions = getFunctions(app, REGION);
-  connectFunctionsEmulator(functions, EMULATOR_HOST, 5001);
+  connectFunctionsEmulator(functions, EMULATOR_HOST, FUNCTIONS_PORT);
   firestore = getFirestore(app);
-  connectFirestoreEmulator(firestore, EMULATOR_HOST, 8080);
+  connectFirestoreEmulator(firestore, EMULATOR_HOST, FIRESTORE_PORT);
 }, 120_000);
 
 afterAll(async () => {
@@ -244,6 +247,7 @@ describe('convoy-setFollowMe exclusivity / takeover / toggle', () => {
 
     const doc0 = await readFollowMe(convoyId);
     expect(doc0?.leaderUid).toBe(owner.uid);
+    expect(doc0?.activationId).toEqual(expect.any(String));
     expect(doc0?.polyline).toBe('');
     expect(doc0?.updatedAt).toBeDefined();
   });
@@ -260,6 +264,7 @@ describe('convoy-setFollowMe exclusivity / takeover / toggle', () => {
       polyline: 'SEED',
       updatedAt: serverTimestamp(),
     });
+    const previousActivationId = (await readFollowMe(convoyId))?.activationId;
 
     await signInAs(friend);
     const res = (await call('convoy-setFollowMe', { convoyId, active: true })).data as {
@@ -268,6 +273,8 @@ describe('convoy-setFollowMe exclusivity / takeover / toggle', () => {
     expect(res.leaderUid).toBe(friend.uid);
     const doc0 = await readFollowMe(convoyId);
     expect(doc0?.leaderUid).toBe(friend.uid);
+    expect(doc0?.activationId).toEqual(expect.any(String));
+    expect(doc0?.activationId).not.toBe(previousActivationId);
     expect(doc0?.polyline).toBe(''); // reset on takeover
   });
 
