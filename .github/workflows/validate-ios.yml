@@ -37,7 +37,10 @@ jobs:
     name: validate-ios
     # macOS minutes bill at a 10x multiplier on private repos — this job is
     # paths-filtered above so it runs for iOS, its contracts, and admin/backend configuration changes.
-    runs-on: macos-latest
+    # Use the standard Intel pool while macos-latest ARM64 capacity is constrained.
+    # Simulator tests still run in Xcode; the device build below targets arm64.
+    # https://docs.github.com/en/actions/reference/runners/github-hosted-runners
+    runs-on: macos-26-intel
     timeout-minutes: 60
 
     steps:
