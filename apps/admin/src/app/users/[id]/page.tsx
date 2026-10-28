@@ -245,10 +245,10 @@ export default function UserDetailPage() {
     <div className={styles.page}>
       <header className={styles.header}>
         <Link className={styles.backLink} to="/users">
-          {t('users.detail.back')}
+          Medlemmar
         </Link>
-        <h1 className={styles.title}>Medlemskort</h1>
-        <p className={styles.uid}>{id}</p>
+        <span aria-hidden="true">/</span>
+        <span>{detail?.uid === id ? detail.displayName || t('users.unnamed') : 'Medlemskort'}</span>
       </header>
 
       {detail && detail.uid === id && !loading && !error && (
@@ -259,7 +259,7 @@ export default function UserDetailPage() {
             </div>
             <div className={styles.memberIdentity}>
               <div className={styles.identityLine}>
-                <h2>{detail.displayName || t('users.unnamed')}</h2>
+                <h1>{detail.displayName || t('users.unnamed')}</h1>
                 <span
                   className={`${styles.statusBadge} ${detail.suspended || detail.deleted || detail.carCommunityAccess?.suspended || detail.carCommunityAccess?.blacklisted ? styles.restrictedBadge : ''}`}
                 >
@@ -377,6 +377,8 @@ export default function UserDetailPage() {
               <section className={styles.card}>
                 <h2 className={styles.cardTitle}>{t('users.detail.profileTitle')}</h2>
                 <dl className={styles.detailGrid}>
+                  <dt>Konto-ID</dt>
+                  <dd className={styles.uid}>{detail.uid}</dd>
                   <dt>{t('users.detail.roleLabel')}</dt>
                   <dd>{roleLabel(detail.role)}</dd>
                   <dt>{t('users.detail.memberLabel')}</dt>

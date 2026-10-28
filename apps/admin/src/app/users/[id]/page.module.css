@@ -2,13 +2,19 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
-  max-width: 720px;
+  max-width: 1440px;
+  width: 100%;
 }
 
 .header {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 8px;
+  color: var(--text-secondary);
+  font-size: 14px;
 }
 
 .backLink {
@@ -283,10 +289,6 @@
 }
 
 /* Member card follows the approved two-column overview; controls stay in their task tab. */
-.page {
-  max-width: 1440px;
-  width: 100%;
-}
 .memberHero {
   display: flex;
   align-items: center;
@@ -319,7 +321,7 @@
   gap: 18px;
   flex-wrap: wrap;
 }
-.identityLine h2 {
+.identityLine h1 {
   font-size: 32px;
   line-height: 1.2;
   margin: 0;
@@ -344,6 +346,11 @@
   flex-wrap: wrap;
   gap: 12px;
 }
+.heroActions button {
+  min-height: 46px;
+  padding: 10px 18px;
+  font-size: 16px;
+}
 .memberTabs {
   display: flex;
   gap: 8px;
@@ -351,6 +358,7 @@
   overflow-x: auto;
 }
 .memberTabs button {
+  font-size: 16px;
   padding: 12px 16px;
   border: 0;
   border-bottom: 3px solid transparent;
@@ -387,9 +395,9 @@
 .overviewDetails {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) minmax(120px, 1fr) auto;
-  gap: 20px 14px;
+  gap: 16px 14px;
   margin: 0;
-  font-size: 14px;
+  font-size: 16px;
   align-items: start;
 }
 .overviewDetails dt,
@@ -426,7 +434,7 @@
   border: 1px solid var(--border-color);
   border-left: 4px solid var(--accent);
   border-radius: 6px;
-  background: var(--accent-bg);
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg-surface));
   padding: 22px;
 }
 .activeWarning h3 {
@@ -439,7 +447,7 @@
   grid-template-columns: 100px 1fr;
   gap: 12px 18px;
   margin: 20px 0;
-  font-size: 14px;
+  font-size: 16px;
 }
 .pointsOverview {
   min-height: 580px;
@@ -460,6 +468,13 @@
 }
 .pointsOverview > button {
   align-self: flex-start;
+}
+.pointsOverview > .secondaryButton {
+  color: var(--accent-text);
+  border-color: var(--accent);
+  min-height: 46px;
+  padding: 10px 18px;
+  font-size: 16px;
 }
 .pointPreview {
   display: grid;
@@ -533,7 +548,7 @@
     height: 64px;
     font-size: 24px;
   }
-  .identityLine h2 {
+  .identityLine h1 {
     font-size: 26px;
   }
   .heroActions {

@@ -116,11 +116,13 @@ export function MemberOverview({
   return (
     <div className={styles.overviewGrid}>
       <div className={styles.overviewMain}>
-        <button type="button" className={styles.textAction} onClick={onRefresh}>
-          Uppdatera översikten
-        </button>
         <section className={styles.card}>
-          <h2 className={styles.cardTitle}>Profil</h2>
+          <div className={styles.cardHeading}>
+            <h2 className={styles.cardTitle}>Profil</h2>
+            <button type="button" className={styles.textAction} onClick={onRefresh}>
+              Uppdatera översikten
+            </button>
+          </div>
           <dl className={styles.overviewDetails}>
             <dt>Visningsnamn</dt>
             <dd>{member.displayName || 'Namn saknas'}</dd>
@@ -283,19 +285,21 @@ export function MemberOverview({
         {ledger?.transactions.length === 0 && (
           <p className={styles.meta}>Inga poänghändelser har registrerats.</p>
         )}
-        {ledger?.transactions.map((row) => (
-          <article key={row.transactionId} className={styles.pointPreview}>
-            <time dateTime={row.createdAt}>{formatDateTimeStockholm(row.createdAt)}</time>
-            <strong className={row.amount < 0 ? styles.negativeAmount : styles.positiveAmount}>
-              {row.amount > 0 ? '+' : ''}
-              {row.amount}
-            </strong>
-            <div>
-              {row.description || 'Poänghändelse'}
-              <p className={styles.meta}>Kronpoäng</p>
-            </div>
-          </article>
-        ))}
+        <div>
+          {ledger?.transactions.map((row) => (
+            <article key={row.transactionId} className={styles.pointPreview}>
+              <time dateTime={row.createdAt}>{formatDateTimeStockholm(row.createdAt)}</time>
+              <strong className={row.amount < 0 ? styles.negativeAmount : styles.positiveAmount}>
+                {row.amount > 0 ? '+' : ''}
+                {row.amount}
+              </strong>
+              <div>
+                {row.description || 'Poänghändelse'}
+                <p className={styles.meta}>Kronpoäng</p>
+              </div>
+            </article>
+          ))}
+        </div>
         <button type="button" className={styles.textAction} onClick={() => onSection('points')}>
           Visa alla poänghändelser <ArrowRight size={16} aria-hidden="true" />
         </button>
