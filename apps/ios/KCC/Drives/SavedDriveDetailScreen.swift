@@ -13,33 +13,31 @@ struct SavedDriveDetailScreen: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: KccSpacing.s4) {
-                    Text(DriveDisplay.title(for: drive))
-                        .font(.system(size: KccTypeScale.headingLg, weight: KccTypeScale.semibold))
-                    Text(DriveDisplay.statsLine(for: drive)).foregroundStyle(.secondary)
-                    if let date = drive.startedAt ?? drive.createdAt {
-                        LabeledContent("savedDrives.date", value: date.formatted(date: .long, time: .shortened))
-                    }
+                    DriveDetailSummary(drive: drive)
                     route
                     if sharingEnabled {
                         ShareLink(item: DriveShareText.summary(for: drive)) {
                             Label("savedDrives.shareAction", systemImage: "square.and.arrow.up")
-                                .frame(maxWidth: .infinity, minHeight: 44)
-                        }.buttonStyle(.borderedProminent)
+                                .frame(maxWidth: .infinity, minHeight: 48)
+                        }.kccPrimaryAction()
                     }
                     Text("savedDrives.promptPrivacyNote")
-                        .font(.system(size: KccTypeScale.bodySm)).foregroundStyle(.secondary)
+                        .font(.footnote).foregroundStyle(KccTheme.secondary)
                     Button(role: .destructive, action: onDelete) {
                         Label("savedDrives.deleteAction", systemImage: "trash")
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                    }.buttonStyle(.bordered)
+                            .frame(maxWidth: .infinity, minHeight: 48)
+                    }.buttonStyle(.bordered).tint(KccPalette.errorRed)
+                    .disabled(coordinator.deletingRideId != nil)
                     if coordinator.deleteFailed {
                         Text("savedDrives.deleteError").foregroundStyle(KccPalette.errorRed)
                     }
-                }.padding(KccSpacing.s6)
+                }.padding(KccSpacing.s4)
             }
+            .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .navigationTitle("savedDrives.detailTitle")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) {
-                Button("savedDrives.closeButton") { dismiss() }
+                Button { dismiss() } label: { Text("savedDrives.closeButton").frame(minHeight: 48) }
             }}
         }
         .task(id: drive.id) { await coordinator.loadRoute(for: drive) }
@@ -49,13 +47,12 @@ struct SavedDriveDetailScreen: View {
     @ViewBuilder private var route: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s2) {
             Text("savedDrives.routeOverview")
-                .font(.system(size: KccTypeScale.titleMd, weight: KccTypeScale.semibold))
+                .font(.title3.bold()).accessibilityAddTraits(.isHeader)
             switch coordinator.routeState {
             case .idle, .loading:
                 ProgressView("savedDrives.routeLoading").frame(maxWidth: .infinity, minHeight: 220)
             case .unavailable:
-                ContentUnavailableView("savedDrives.routeUnavailable", systemImage: "map")
-                    .frame(maxWidth: .infinity, minHeight: 220)
+                SettingsStateCard(title: "savedDrives.routeOverview", message: "savedDrives.routeUnavailable", symbol: "map")
             case .ready(let points):
                 if let token = MapboxConfiguration.accessToken() {
                     DriveReplayMap(accessToken: token, points: points)
@@ -63,7 +60,7 @@ struct SavedDriveDetailScreen: View {
                         .accessibilityLabel("savedDrives.routeMapFullscreenLabel")
                 } else {
                     Text("savedDrives.routeOverviewPlaceholder")
-                        .frame(maxWidth: .infinity, minHeight: 220).background(Color(.secondarySystemBackground))
+                        .frame(maxWidth: .infinity, minHeight: 220).background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.md))
                 }
                 let markers = DriveRouteDistanceMarkers.markers(for: points)
                 if !markers.isEmpty {
@@ -71,8 +68,8 @@ struct SavedDriveDetailScreen: View {
                         HStack {
                             ForEach(markers, id: \.kilometer) { marker in
                                 Text(String(format: String(localized: "savedDrives.routeKmMarkerLabel"), marker.kilometer))
-                                    .font(.caption).padding(.horizontal, 8).padding(.vertical, 4)
-                                    .background(Color(.secondarySystemBackground), in: Capsule())
+                                    .font(.footnote).padding(KccSpacing.s2)
+                                    .background(KccTheme.subtle, in: Capsule())
                             }
                         }
                     }
@@ -137,43 +134,38 @@ struct DriveStatsScreen: View {
         NavigationStack {
             Group {
                 switch coordinator.statsState {
-                case .idle, .loading: ProgressView("savedDrives.statsLoading")
+                case .idle, .loading:
+                    if case .unavailable = coordinator.state {
+                        ScrollView {
+                            SettingsStateCard(title: "savedDrives.statsTitle", message: "savedDrives.error", symbol: "chart.bar")
+                                .accessibilityElement(children: .contain).accessibilityIdentifier("myDrives.stats.unavailable")
+                                .padding(KccSpacing.s4)
+                        }
+                    } else { ProgressView("savedDrives.statsLoading") }
                 case .failed:
-                    ContentUnavailableView {
-                        Label("savedDrives.statsError", systemImage: "exclamationmark.triangle")
-                    } actions: { Button("savedDrives.retry") { Task { await coordinator.loadStats() } } }
+                    ScrollView {
+                        SettingsStateCard(title: "savedDrives.statsTitle", message: "savedDrives.statsError", symbol: "exclamationmark.circle",
+                            retryTitle: "savedDrives.retry", onRetry: { Task { await coordinator.loadStats() } }).padding(KccSpacing.s4)
+                    }
                 case .loaded(let stats): statsContent(stats)
                 }
             }
+            .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .navigationTitle("savedDrives.statsTitle")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) {
-                Button("savedDrives.closeButton") { dismiss() }
+                Button { dismiss() } label: { Text("savedDrives.closeButton").frame(minHeight: 48) }.accessibilityIdentifier("myDrives.stats.close")
             }}
         }.task { await coordinator.loadStats() }
     }
 
     private func statsContent(_ stats: DriveStatsSnapshot) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: KccSpacing.s4) {
-                if stats.totalDrives == 0 { ContentUnavailableView("savedDrives.statsEmpty", systemImage: "car") }
-                else {
-                    Text("savedDrives.statsAllTime").font(.headline)
-                    stat("savedDrives.statsTotalDrives", "\(stats.totalDrives)")
-                    stat("savedDrives.statsTotalDistance", DriveFormatters.formatDistance(stats.totalDistanceMeters))
-                    stat("savedDrives.statsTotalTime", DriveFormatters.formatDuration(stats.totalDurationSeconds))
-                    stat("savedDrives.statsLongest", DriveFormatters.formatDistance(stats.longestDriveMeters))
-                    stat("savedDrives.statsAverage", DriveFormatters.formatDistance(stats.averageDriveMeters))
-                    stat("savedDrives.statsFastest", DriveFormatters.formatSpeed(stats.fastestAverageSpeedMetersPerSecond))
-                    Text("savedDrives.statsThisMonth").font(.headline).padding(.top, KccSpacing.s2)
-                    stat("savedDrives.statsTotalDrives", "\(stats.thisMonthDrives)")
-                    stat("savedDrives.statsTotalDistance", DriveFormatters.formatDistance(stats.thisMonthDistanceMeters))
-                }
-            }.padding(KccSpacing.s6)
+            Group {
+                if stats.totalDrives == 0 {
+                    SettingsStateCard(title: "savedDrives.statsTitle", message: "savedDrives.statsEmpty", symbol: "car")
+                } else { DriveStatisticsContent(stats: stats) }
+            }.padding(KccSpacing.s4)
         }
-    }
-
-    private func stat(_ title: LocalizedStringKey, _ value: String) -> some View {
-        LabeledContent { Text(value).fontWeight(.semibold) } label: { Text(title) }
-            .padding(KccSpacing.s3).background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: KccRadius.sm))
     }
 }

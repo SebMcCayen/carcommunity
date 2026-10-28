@@ -703,3 +703,73 @@ not establish real account invitations, live membership/GPS transitions, physica
 iPhone visual comparison or car safety acceptance. No backend, rules, workflow,
 token, localization, production deploy or paid-service/artifact-upload opt-in
 change is included. Full native PR checks must pass before merge.
+
+## My drives, Garage editors and Event forms (2026-10-28)
+
+This phase refines S53-S56 history/detail/statistics/save-failure reading, S57-S59
+Garage metadata and vehicle editors/selectors, and S43 event create/edit/location
+selection. It retains the existing Mapbox replay/picker camera and coordinate
+callbacks, token gates and attribution. No map/GPS acceptance or configured map
+request is performed by layout tests.
+
+My drives uses readable history cards, optional existing car-photo URLs with a
+local fallback, wrapping title/metrics/convoy names and full-size controls. Filter
+menus keep the original query/date/distance/sort bindings and native checked
+choices, with wrapping selected labels. The local filters and clear action do
+not change history loading. Load-more/retry remains outside the match/no-match
+branch, so an empty local match on one page never prevents reaching another page.
+Tier/hidden-count notices, route IDs, cached image resolution and reload/delete
+flows remain with the original coordinator.
+
+Private detail now shares semantic summary/stat rows. Unknown distance/speed stays
+the existing dash, never a manufactured zero. Maximum speed remains a neutral
+fact with the same weight as other metrics. Route-generation cancellation,
+load/unavailable/placeholder states, kilometer markers, the existing renderer
+and privacy-safe statistics-only share payload are retained. Delete still calls
+the original parent confirmation. Statistics uses real loaded totals and the
+existing month/all-time data, empty/error/retry cases; no-repository builds show
+an unavailable state rather than an idle loader forever. The config-less shell
+UI capture flow now opens this state and taps its real Close control before
+returning to history. Save-failure retry/discard and its non-dismissible protected
+route-journal flow stay unchanged; the summary just uses scalable stat cards.
+
+Garage retains the authoritative catalogue IDs, make-to-model reset, pinned
+Other bucket, common-make grouping, query handling, descending model years and
+retired-powertrain policy. Selection labels wrap instead of compressing make,
+model, year or powertrain. An explicit nil powertrain prompt reflects the actual
+empty draft until the member chooses a supported value. Vehicle validation,
+normalization, optional-field omission and immutable save input remain intact.
+Pending forms lock fields/cancel/gesture dismissal while that input is in flight;
+success still dismisses through the original observed save status. Photo gallery,
+processing/storage/caps/cover/removal confirmations and vehicle/main-car actions
+retain their commands with scalable reading text and 48 pt action labels. No
+image lookup, upload or photo mutation is added by presentation.
+
+Shared editor fields have persistent visual captions and keep native accessible
+input labels. Multiline input bounds only its viewport (smaller at accessibility
+sizes); the complete bound draft remains available to the original validators.
+Keyboard/capitalization behavior is retained. Vehicle/event submit buttons move
+to a bottom safe-area inset above the system keyboard, leaving form content
+scrollable and native Cancel reachable when idle. Pending commands retain the
+original serial guards and outcomes, without automatic resubmission.
+
+Event forms preserve create/edit distinction, publication notice, date/time,
+existing description/address, optional public pin, validation/error mapping and
+create-only public-site toggle. Edit still retains the initial public-site flag.
+Pin summaries now use the existing public-visibility disclosure with actual
+coordinates; an absent pin remains absent. The picker retains authorized-fix
+seeding, the three-second wait, default/existing camera, explicit Confirm and
+Cancel, and tokenless disabled confirmation. Its long instruction has a bounded
+scrolling reading area beside the full-size confirmation action; no new permission
+request or automatic coordinate commit is introduced.
+
+DriveEditorDesignTests cover actual history/detail/statistics/retry-summary,
+filter labels/bindings, optional values, long convoy names, full draft retention,
+input viewport bounds, catalogue Other/selection labels, powertrain nil/options,
+idle/pending submit labels/footer bounds and present/absent event pins at narrow
+SV/EN, light/dark and normal/largest accessibility text. Existing history paging,
+route cancellation/share privacy, recording persistence, catalogue/vehicle
+validation and event mutation tests remain in native CI. Configured account
+writes/photos, keyboard/device visual comparison and real Mapbox/GPS/private-route
+acceptance remain device checks. No backend/rules/workflow/token/localization,
+production deploy or paid-service/artifact-upload opt-in change is included.
