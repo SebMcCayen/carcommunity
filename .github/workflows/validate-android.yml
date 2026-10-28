@@ -6,6 +6,8 @@ on:
     paths:
       - 'apps/android/**'
       - 'firebase/firestore.rules'
+      - 'apps/admin/**'
+      - 'firebase/firestore.indexes.json'
       - 'contracts/localization/**'
       - 'contracts/design-tokens/**'
       - '.github/workflows/validate-android.yml'
@@ -17,6 +19,8 @@ on:
     paths:
       - 'apps/android/**'
       - 'firebase/firestore.rules'
+      - 'apps/admin/**'
+      - 'firebase/firestore.indexes.json'
       - 'contracts/localization/**'
       - 'contracts/design-tokens/**'
       - '.github/workflows/validate-android.yml'

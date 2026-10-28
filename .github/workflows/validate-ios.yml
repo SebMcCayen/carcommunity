@@ -6,6 +6,8 @@ on:
     paths:
       - 'apps/ios/**'
       - 'firebase/firestore.rules'
+      - 'apps/admin/**'
+      - 'firebase/firestore.indexes.json'
       - 'contracts/localization/**'
       - 'contracts/design-tokens/**'
       - '.github/workflows/validate-ios.yml'
@@ -17,6 +19,8 @@ on:
     paths:
       - 'apps/ios/**'
       - 'firebase/firestore.rules'
+      - 'apps/admin/**'
+      - 'firebase/firestore.indexes.json'
       - 'contracts/localization/**'
       - 'contracts/design-tokens/**'
       - '.github/workflows/validate-ios.yml'
@@ -32,7 +36,7 @@ jobs:
   validate-ios:
     name: validate-ios
     # macOS minutes bill at a 10x multiplier on private repos — this job is
-    # paths-filtered above so it only runs when iOS or its contracts change.
+    # paths-filtered above so it runs for iOS, its contracts, and admin/backend configuration changes.
     runs-on: macos-latest
     timeout-minutes: 45
 

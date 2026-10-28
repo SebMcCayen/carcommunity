@@ -3417,17 +3417,20 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
         // greens/reds and the route-line blue.
         const val FOLLOW_ME_TRAIL_SOURCE_ID = "kcc-followme-trail-source"
         const val FOLLOW_ME_TRAIL_LAYER_ID = "kcc-followme-trail-layer"
+        const val FOLLOW_ME_TRAIL_CASING_LAYER_ID = "kcc-followme-trail-casing"
         const val FOLLOW_ME_TRAIL_LINE_WIDTH = 6.0
+        const val FOLLOW_ME_TRAIL_CASING_LINE_WIDTH = 10.0
+        const val FOLLOW_ME_TRAIL_TAIL_ALPHA = 0.85
 
         // 0xFF7C4DFF — a vivid violet (Material "deep purple A200"), distinct from
         // every other line on the map.
         private const val FOLLOW_ME_TRAIL_R = 124.0
         private const val FOLLOW_ME_TRAIL_G = 77.0
         private const val FOLLOW_ME_TRAIL_B = 255.0
-        private const val FOLLOW_ME_TRAIL_HEAD_ALPHA = 0.9
+        private const val FOLLOW_ME_TRAIL_HEAD_ALPHA = 1.0
 
         /**
-         * The leader-trail fade: transparent at the OLDEST end (line-progress 0) to
+         * The leader-trail fade: visible at the OLDEST end (line-progress 0) to
          * [FOLLOW_ME_TRAIL_HEAD_ALPHA] at the newest — the head is the leader's
          * current position, so it reads brightest.
          */
@@ -3435,7 +3438,7 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
             Expression.interpolate {
                 linear()
                 lineProgress()
-                stop(0.0) { rgba(FOLLOW_ME_TRAIL_R, FOLLOW_ME_TRAIL_G, FOLLOW_ME_TRAIL_B, 0.0) }
+                stop(0.0) { rgba(FOLLOW_ME_TRAIL_R, FOLLOW_ME_TRAIL_G, FOLLOW_ME_TRAIL_B, FOLLOW_ME_TRAIL_TAIL_ALPHA) }
                 stop(1.0) {
                     rgba(
                         FOLLOW_ME_TRAIL_R,
@@ -3462,6 +3465,21 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
                     },
                 )
             }
+            if (!style.styleLayerExists(FOLLOW_ME_TRAIL_CASING_LAYER_ID)) {
+                val casing = lineLayer(FOLLOW_ME_TRAIL_CASING_LAYER_ID, FOLLOW_ME_TRAIL_SOURCE_ID) {
+                    slot("middle")
+                    lineCap(LineCap.ROUND)
+                    lineJoin(LineJoin.ROUND)
+                    lineWidth(FOLLOW_ME_TRAIL_CASING_LINE_WIDTH)
+                    lineColor(BREADCRUMB_CASING_COLOR)
+                    visibility(Visibility.NONE)
+                }
+                if (style.styleLayerExists(FOLLOW_ME_TRAIL_LAYER_ID)) {
+                    style.addLayerBelow(casing, FOLLOW_ME_TRAIL_LAYER_ID)
+                } else {
+                    style.addLayer(casing)
+                }
+            }
             if (!style.styleLayerExists(FOLLOW_ME_TRAIL_LAYER_ID)) {
                 style.addLayer(
                     lineLayer(FOLLOW_ME_TRAIL_LAYER_ID, FOLLOW_ME_TRAIL_SOURCE_ID) {
@@ -3482,6 +3500,9 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
                 )
             }
             runCatching {
+                style.getLayerAs<LineLayer>(FOLLOW_ME_TRAIL_LAYER_ID)?.lineEmissiveStrength(1.0)
+            }
+            runCatching {
                 style.getLayerAs<LineLayer>(FOLLOW_ME_TRAIL_LAYER_ID)
                     ?.lineGradient(followMeTrailGradientExpression())
             }
@@ -3489,8 +3510,11 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
 
         /** Show/hide the follow-me trail layer; a no-op until it is added. */
         fun setFollowMeTrailVisible(style: Style, visible: Boolean) {
-            val layer = style.getLayerAs<LineLayer>(FOLLOW_ME_TRAIL_LAYER_ID) ?: return
-            layer.visibility(if (visible) Visibility.VISIBLE else Visibility.NONE)
+            for (id in listOf(FOLLOW_ME_TRAIL_CASING_LAYER_ID, FOLLOW_ME_TRAIL_LAYER_ID)) {
+                runCatching {
+                    style.getLayerAs<LineLayer>(id)?.visibility(if (visible) Visibility.VISIBLE else Visibility.NONE)
+                }
+            }
         }
     }
 }

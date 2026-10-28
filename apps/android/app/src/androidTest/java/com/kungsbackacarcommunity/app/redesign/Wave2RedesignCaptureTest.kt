@@ -260,6 +260,33 @@ class Wave2RedesignCaptureTest {
                         }
                         map.triggerRepaint()
                     }
+                    val followMeMode = args.getString("redesignFollowMe")
+                    if (followMeMode == "visible" || followMeMode == "cleared") {
+                        rule.runOnIdle {
+                            // Offset the synthetic shared trail so the native
+                            // frame can independently prove gold AND violet.
+                            configuredSurface?.setFollowMeTrail(
+                                LIVE_TRAIL_PREVIEW_POINTS.map { it.copy(latitude = it.latitude + 0.0015) },
+                            )
+                        }
+                        fun hasVisibility(expected: Visibility): Boolean {
+                            var visible = false
+                            instrumentation.runOnMainSync {
+                                visible = findMapView(rule.activity.window.decorView)?.mapboxMap?.style?.let { style ->
+                                    listOf(MapboxMapSurface.FOLLOW_ME_TRAIL_LAYER_ID,
+                                        MapboxMapSurface.FOLLOW_ME_TRAIL_CASING_LAYER_ID).all { id ->
+                                        style.getLayerAs<LineLayer>(id)?.visibility == expected
+                                    }
+                                } == true
+                            }
+                            return visible
+                        }
+                        rule.waitUntil(20_000) { hasVisibility(Visibility.VISIBLE) }
+                        if (followMeMode == "cleared") {
+                            rule.runOnIdle { configuredSurface?.setFollowMeTrail(null) }
+                            rule.waitUntil(20_000) { hasVisibility(Visibility.NONE) }
+                        }
+                    }
                     rule.waitUntil(20_000) { rendered.get() }
                     rule.runOnIdle { frameSubscription?.cancel() }
                     SystemClock.sleep(1_000) // Native camera/marker animations use uptime.
@@ -286,6 +313,7 @@ class Wave2RedesignCaptureTest {
                 val deadline = SystemClock.uptimeMillis() + 10_000
                 while (true) {
                     var trailPixels = 0
+                    var violetPixels = 0
                     for (y in bitmap.height / 4 until bitmap.height * 3 / 4) {
                         for (x in bitmap.width / 4 until bitmap.width * 3 / 4) {
                             val pixel = bitmap.getPixel(x, y)
@@ -293,10 +321,18 @@ class Wave2RedesignCaptureTest {
                             val g = android.graphics.Color.green(pixel)
                             val b = android.graphics.Color.blue(pixel)
                             if (r in 170..255 && g in 125..215 && b in 35..105 && r > g + 20) trailPixels++
+                            if (r in 90..175 && g in 35..125 && b in 180..255 && b > r + 50) violetPixels++
                         }
                     }
-                    if (trailPixels > 50) break
-                    check(SystemClock.uptimeMillis() < deadline) { "No visible gold trail in the actual map frame ($trailPixels pixels)" }
+                    val followMeVerified = when (args.getString("redesignFollowMe")) {
+                        "visible" -> violetPixels > 50
+                        "cleared" -> violetPixels < 50
+                        else -> true
+                    }
+                    if (trailPixels > 50 && followMeVerified) break
+                    check(SystemClock.uptimeMillis() < deadline) {
+                        "Native trail frame mismatch: gold=$trailPixels, violet=$violetPixels, followMe=${args.getString("redesignFollowMe")}"
+                    }
                     // GeoJSON uploads/rendering run outside Compose's test clock.
                     bitmap.recycle()
                     SystemClock.sleep(250)

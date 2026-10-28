@@ -33,6 +33,7 @@ import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.profile.SupporterAvatarFrame
+import com.kungsbackacarcommunity.app.profile.ClubBadge
 
 /**
  * Already-resolved owner presentation, supplied by the authenticated shell.
@@ -46,7 +47,13 @@ data class AeroOwnerHeader(
     val avatarUrl: String?,
     val showSupporterBadge: Boolean,
     val onOpenProfile: () -> Unit,
-)
+    /** Canonical users/{uid} projection, supplied by the existing shell profile snapshot. */
+    val clubBadge: ClubBadge? = null,
+) {
+    // Preserve existing positional and trailing-lambda call sites.
+    constructor(avatarUrl: String?, showSupporterBadge: Boolean, onOpenProfile: () -> Unit) :
+        this(avatarUrl, showSupporterBadge, onOpenProfile, null)
+}
 
 /**
  * Opt-in shared owner shortcut. Null preserves the original page geometry and
@@ -101,7 +108,7 @@ private fun AeroOwnerAvatar(owner: AeroOwnerHeader) {
             .semantics(mergeDescendants = true) { contentDescription = description }
             .clickable(role = Role.Button, onClick = owner.onOpenProfile),
     ) {
-        SupporterAvatarFrame(visible = owner.showSupporterBadge) {
+        SupporterAvatarFrame(visible = owner.showSupporterBadge, clubBadge = owner.clubBadge) {
             Box(
                 modifier = Modifier.size(48.dp).clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceVariant),

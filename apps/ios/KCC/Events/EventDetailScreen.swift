@@ -259,7 +259,8 @@ struct EventDetailScreen: View {
                         if let groupDrive = coordinator.makeGroupDriveCoordinator() {
                             GroupDriveScreen(
                                 coordinator: groupDrive,
-                                onShowOnMap: onShowGroupDriveOnMap
+                                onShowOnMap: onShowGroupDriveOnMap,
+                                event: event
                             )
                         } else {
                             Text("groupDrive.error").foregroundStyle(.secondary)

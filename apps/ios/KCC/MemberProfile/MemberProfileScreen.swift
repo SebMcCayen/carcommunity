@@ -32,6 +32,8 @@ struct MemberProfileScreen: View {
 
     var body: some View {
         content
+            .kccReadingSurface(pageBackground: true)
+            .tint(KccTheme.driver)
             .navigationTitle("memberProfile.title")
             .navigationBarTitleDisplayMode(.inline)
             .task { await coordinator.load() }
@@ -75,8 +77,9 @@ struct MemberProfileScreen: View {
         case .blocked:
             notice("memberProfile.blocked") {
                 if coordinator.canModerate {
-                    Button("blocking.unblock") { confirmUnblock = true }
-                        .buttonStyle(.borderedProminent)
+                    Button { confirmUnblock = true } label: {
+                        Text("blocking.unblock").frame(minHeight: 48)
+                    }.kccPrimaryAction()
                         .disabled(coordinator.action != nil)
                 }
             }
@@ -84,8 +87,9 @@ struct MemberProfileScreen: View {
             notice("memberProfile.unavailable") { EmptyView() }
         case .failed:
             notice("memberProfile.error") {
-                Button("memberProfile.retry") { Task { await coordinator.load() } }
-                    .buttonStyle(.borderedProminent)
+                Button { Task { await coordinator.load() } } label: {
+                    Text("memberProfile.retry").frame(minHeight: 48)
+                }.kccPrimaryAction()
             }
         case .loaded(let content):
             profile(content)
@@ -113,27 +117,28 @@ struct MemberProfileScreen: View {
         _ key: LocalizedStringKey,
         @ViewBuilder actions: () -> Actions
     ) -> some View {
-        VStack(spacing: KccSpacing.s3) {
-            Image(systemName: "person.crop.circle.badge.exclamationmark")
-                .font(.system(size: 44)).foregroundStyle(.secondary)
-            Text(key).multilineTextAlignment(.center).foregroundStyle(.secondary)
-            actions()
-            if coordinator.moderationFailed {
-                Text("blocking.errorGeneric").foregroundStyle(KccPalette.errorRed)
+        ScrollView {
+            VStack(alignment: .leading, spacing: KccSpacing.s3) {
+                Image(systemName: "person.crop.circle.badge.exclamationmark")
+                    .font(.largeTitle).foregroundStyle(KccTheme.driver).accessibilityHidden(true)
+                Text(key).font(.body).foregroundStyle(KccTheme.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                actions()
+                if coordinator.moderationFailed {
+                    Text("blocking.errorGeneric").foregroundStyle(KccPalette.errorRed)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .kccContentCard()
+            .padding(KccSpacing.s4)
         }
-        .padding(KccSpacing.s6)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func profile(_ content: MemberProfileContent) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: KccSpacing.s5) {
-                header(content)
+            LazyVStack(alignment: .leading, spacing: KccSpacing.s4) {
+                MemberProfileHeader(profile: content.profile, pointsBalance: content.pointsBalance, avatarURL: coordinator.avatarURL)
                 relationshipActions(content.profile)
-                if let bio = content.profile.bio.trimmedNonBlank {
-                    Text(verbatim: bio).font(.system(size: KccTypeScale.bodyMd))
-                }
                 socialLinks(content.profile)
                 if let joined = content.profile.createdAt {
                     statistics(joined: joined)
@@ -143,7 +148,9 @@ struct MemberProfileScreen: View {
                 if coordinator.canModerate {
                     Button(role: .destructive) { confirmBlock = true } label: {
                         Label("blocking.blockUser", systemImage: "person.crop.circle.badge.xmark")
+                            .frame(minHeight: 48)
                     }
+                    .buttonStyle(.bordered)
                     .disabled(coordinator.action != nil)
                 }
                 if let error = coordinator.actionError {
@@ -154,70 +161,50 @@ struct MemberProfileScreen: View {
                     Text("blocking.errorGeneric").foregroundStyle(KccPalette.errorRed)
                 }
             }
-            .padding(KccSpacing.s5)
+            .padding(KccSpacing.s4)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .refreshable { await coordinator.load() }
     }
 
-    private func header(_ content: MemberProfileContent) -> some View {
-        VStack(spacing: KccSpacing.s2) {
-            Group {
-                if let url = coordinator.avatarURL {
-                    AsyncImage(url: url) { image in image.resizable().scaledToFill() }
-                        placeholder: { Image(systemName: "person.crop.circle.fill") }
-                } else {
-                    Image(systemName: "person.crop.circle.fill")
-                        .resizable().foregroundStyle(.secondary)
-                }
-            }
-            .frame(width: 92, height: 92).clipShape(Circle())
-            Text(verbatim: content.profile.displayName.trimmedNonBlank
-                 ?? String(localized: "memberProfile.unknownMember"))
-                .font(.system(size: KccTypeScale.headingLg, weight: .semibold))
-            HStack(spacing: KccSpacing.s1) {
-                Image(systemName: "crown.fill").foregroundStyle(KccPalette.crownGold)
-                Text(verbatim: FriendPointsFormat.grouped(content.pointsBalance))
-                    .fontWeight(.semibold)
-                Text("profile.pointsTitle").foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity)
-    }
-
     @ViewBuilder
     private func relationshipActions(_ profile: MemberProfile) -> some View {
         let disabled = coordinator.action != nil
-        HStack(spacing: KccSpacing.s2) {
+        SocialFlow {
             switch coordinator.relationship {
             case .unknown:
                 EmptyView()
             case .none:
-                Button("memberProfile.addFriend") { Task { await coordinator.addFriend() } }
-                    .buttonStyle(.borderedProminent).disabled(disabled)
+                Button { Task { await coordinator.addFriend() } } label: {
+                    Text("memberProfile.addFriend").frame(minHeight: 48)
+                }.kccPrimaryAction().disabled(disabled)
             case .outgoingPending:
-                Button("memberProfile.cancelRequest") { Task { await coordinator.cancelRequest() } }
-                    .buttonStyle(.bordered).disabled(disabled)
-            case .incomingPending:
-                Button("friends.accept") { Task { await coordinator.respond(accept: true) } }
-                    .buttonStyle(.borderedProminent).disabled(disabled)
-                Button("friends.decline", role: .destructive) {
-                    Task { await coordinator.respond(accept: false) }
+                Button { Task { await coordinator.cancelRequest() } } label: {
+                    Text("memberProfile.cancelRequest").frame(minHeight: 48)
                 }.buttonStyle(.bordered).disabled(disabled)
+            case .incomingPending:
+                Button { Task { await coordinator.respond(accept: true) } } label: {
+                    Text("friends.accept").frame(minHeight: 48)
+                }.kccPrimaryAction().disabled(disabled)
+                Button(role: .destructive) {
+                    Task { await coordinator.respond(accept: false) }
+                } label: { Text("friends.decline").frame(minHeight: 48) }.buttonStyle(.bordered).disabled(disabled)
             case .friends:
                 if let onMessage {
-                    Button("friends.message") { onMessage(profile.uid, profile.displayName) }
-                        .buttonStyle(.borderedProminent)
+                    Button { onMessage(profile.uid, profile.displayName) } label: {
+                        Text("friends.message").frame(minHeight: 48)
+                    }.kccPrimaryAction()
                         .disabled(disabled)
                 }
-                Button("friends.remove", role: .destructive) { confirmUnfriend = true }
-                    .buttonStyle(.bordered).disabled(disabled)
+                Button(role: .destructive) { confirmUnfriend = true } label: {
+                    Text("friends.remove").frame(minHeight: 48)
+                }.buttonStyle(.bordered).disabled(disabled)
             }
         }
         if case .outgoingPending = coordinator.relationship {
-            Text("memberProfile.requestPending").font(.caption).foregroundStyle(.secondary)
+            Text("memberProfile.requestPending").font(.footnote).foregroundStyle(KccTheme.secondary)
         } else if case .incomingPending = coordinator.relationship {
-            Text("memberProfile.wantsToBeFriends").font(.caption).foregroundStyle(.secondary)
+            Text("memberProfile.wantsToBeFriends").font(.footnote).foregroundStyle(KccTheme.secondary)
         }
     }
 
@@ -225,83 +212,57 @@ struct MemberProfileScreen: View {
     private func socialLinks(_ profile: MemberProfile) -> some View {
         let links = MemberSocialLinks.links(profile)
         if !links.isEmpty {
-            HStack(spacing: KccSpacing.s3) {
+            SocialFlow {
                 ForEach(links, id: \.label) { link in
-                    Button(link.label) { openURL(link.url) }.buttonStyle(.bordered)
+                    Button { openURL(link.url) } label: {
+                        Text(verbatim: link.label).frame(minHeight: 48)
+                    }.buttonStyle(.bordered)
                 }
             }
         }
     }
 
     private func statistics(joined: Date) -> some View {
-        VStack(alignment: .leading, spacing: KccSpacing.s2) {
-            Text("memberProfile.statsTitle")
-                .font(.system(size: KccTypeScale.titleMd, weight: .semibold))
-            HStack {
-                Text("memberProfile.statsMemberSince")
-                Spacer()
+        VStack(alignment: .leading, spacing: KccSpacing.s3) {
+            Text("memberProfile.statsTitle").font(.title3.bold()).accessibilityAddTraits(.isHeader)
+            SocialFlow {
+                Text("memberProfile.statsMemberSince").foregroundStyle(KccTheme.secondary)
+                SocialFlowSpacer()
                 Text(joined, format: .dateTime.month(.wide).year())
-            }
+            }.font(.body)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .kccContentCard()
     }
 
     private func vehicles(_ vehicles: [Vehicle]) -> some View {
-        VStack(alignment: .leading, spacing: KccSpacing.s2) {
-            Text("memberProfile.carsTitle")
-                .font(.system(size: KccTypeScale.titleMd, weight: .semibold))
+        VStack(alignment: .leading, spacing: KccSpacing.s3) {
+            Text("memberProfile.carsTitle").font(.title3.bold()).accessibilityAddTraits(.isHeader)
             if vehicles.isEmpty {
-                Text("memberProfile.carsEmpty").foregroundStyle(.secondary)
+                Text("memberProfile.carsEmpty").foregroundStyle(KccTheme.secondary)
             } else {
-                ForEach(vehicles) { vehicle in
-                    VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                        HStack {
-                            Text(verbatim: VehicleDisplay.headline(
-                                vehicle,
-                                otherLabel: String(localized: "garage.otherNotListed")
-                            )).fontWeight(.semibold)
-                            if vehicle.isMainCar {
-                                Text("memberProfile.mainCar").font(.caption)
-                                    .padding(.horizontal, KccSpacing.s2)
-                                    .background(KccPalette.crownGold.opacity(0.2), in: Capsule())
-                            }
-                        }
-                        Text(LocalizedStringKey(vehicle.powertrain.localizationKey))
-                            .foregroundStyle(.secondary)
-                        if let plate = vehicle.registrationPlate.trimmedNonBlank {
-                            Text(verbatim: String.localizedStringWithFormat(
-                                NSLocalizedString("memberProfile.registrationPlate", comment: "Public plate"), plate
-                            )).font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(KccSpacing.s3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: KccRadius.md))
-                }
+                ForEach(vehicles) { vehicle in MemberVehicleSummary(vehicle: vehicle) }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .kccContentCard()
     }
 
     private func badges(_ badges: PublicBadges) -> some View {
-        VStack(alignment: .leading, spacing: KccSpacing.s2) {
-            Text("memberProfile.badgesTitle")
-                .font(.system(size: KccTypeScale.titleMd, weight: .semibold))
+        VStack(alignment: .leading, spacing: KccSpacing.s3) {
+            Text("memberProfile.badgesTitle").font(.title3.bold()).accessibilityAddTraits(.isHeader)
             switch badges {
-            case .unavailable: Text("memberProfile.badgesUnavailable").foregroundStyle(.secondary)
-            case .failed: Text("memberProfile.badgesLoadError").foregroundStyle(.secondary)
+            case .unavailable: Text("memberProfile.badgesUnavailable").foregroundStyle(KccTheme.secondary)
+            case .failed: Text("memberProfile.badgesLoadError").foregroundStyle(KccTheme.secondary)
             case .available(let values):
-                if values.isEmpty { Text("memberProfile.badgesEmpty").foregroundStyle(.secondary) }
-                else {
-                    ForEach(values, id: \.key) { badge in
-                        Label {
-                            if let key = BadgeStrings.badgeNameKey(for: badge.key) {
-                                Text(LocalizedStringKey(key))
-                            } else { Text(verbatim: badge.fallbackName ?? badge.key) }
-                        } icon: { Image(systemName: "medal.fill").foregroundStyle(KccPalette.crownGold) }
-                    }
-                }
+                if values.isEmpty { Text("memberProfile.badgesEmpty").foregroundStyle(KccTheme.secondary) }
+                else { ForEach(values, id: \.key) { badge in MemberBadgeSummary(badge: badge) } }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .kccContentCard()
     }
+
 }
 
 struct MemberSocialLink: Equatable, Sendable {

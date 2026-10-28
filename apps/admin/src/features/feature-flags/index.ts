@@ -13,7 +13,7 @@
  * the audited `admin-setFeatureFlag` callable (closed key namespace).
  */
 
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { getAdminFirestore } from '../../lib/firestore';
 import { callAdmin } from '../../lib/callables';
 import { buildFeatureFlagRows, type FeatureFlagKey, type FeatureFlagRow } from './contract';
@@ -42,6 +42,23 @@ export type FeatureFlags = Record<FeatureFlagKey, boolean>;
 export async function loadFeatureFlagRows(): Promise<FeatureFlagRow[]> {
   const snapshot = await getDoc(doc(getAdminFirestore(), 'config', 'featureFlags'));
   return buildFeatureFlagRows((snapshot.data() ?? {}) as Record<string, unknown>);
+}
+
+/** Keeps status displays in sync with the same effective values as the backend. */
+export function subscribeFeatureFlagRows(
+  onRows: (rows: FeatureFlagRow[], fromCache: boolean) => void,
+  onError: (error: Error) => void,
+): () => void {
+  return onSnapshot(
+    doc(getAdminFirestore(), 'config', 'featureFlags'),
+    { includeMetadataChanges: true },
+    (snapshot) =>
+      onRows(
+        buildFeatureFlagRows((snapshot.data() ?? {}) as Record<string, unknown>),
+        snapshot.metadata.fromCache,
+      ),
+    onError,
+  );
 }
 
 export interface SetFeatureFlagResult {

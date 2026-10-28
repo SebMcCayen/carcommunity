@@ -18,16 +18,16 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCursorHistory } from '@/hooks/useCursorHistory';
+import { HistoryPager } from '@/components/ui/HistoryPager';
 import {
   getAdminUserPointsBalance,
   getAdminUserPointsLedger,
   applyAdminPointsAdjustment,
   type PointsBalanceResponse,
-  type PaginatedPointsLedgerResponse,
   type ApiError,
 } from '@/features/points';
 import { translate } from '@/i18n';
-import { formatDateOnly } from '@/lib/format';
 import styles from './PointsSection.module.css';
 
 const t = (key: string) => translate('sv', key);
@@ -37,7 +37,7 @@ const t = (key: string) => translate('sv', key);
 // ---------------------------------------------------------------------------
 
 function formatDate(iso: string): string {
-  return formatDateOnly(iso);
+  return new Date(iso).toLocaleString('sv-SE');
 }
 
 // ---------------------------------------------------------------------------
@@ -59,9 +59,17 @@ export function UserPointsSection({ userId }: UserPointsSectionProps) {
   // ---------------------------------------------------------------------------
   // Ledger state
   // ---------------------------------------------------------------------------
-  const [ledger, setLedger] = useState<PaginatedPointsLedgerResponse | null>(null);
-  const [ledgerLoading, setLedgerLoading] = useState(true);
-  const [ledgerError, setLedgerError] = useState<string | null>(null);
+  const readLedger = useCallback(
+    async (cursor: string | null) => {
+      const result = await getAdminUserPointsLedger(userId, undefined, undefined, cursor);
+      return { items: result.data.transactions, meta: result.meta };
+    },
+    [userId],
+  );
+  const ledgerHistory = useCursorHistory(readLedger, 'transactionId');
+  const ledgerLoading = ledgerHistory.loading && ledgerHistory.items.length === 0;
+  const ledgerError = ledgerHistory.items.length === 0 ? ledgerHistory.error : null;
+  const fetchLedger = ledgerHistory.refresh;
 
   // ---------------------------------------------------------------------------
   // Adjustment form state
@@ -92,26 +100,9 @@ export function UserPointsSection({ userId }: UserPointsSectionProps) {
     }
   }, [userId]);
 
-  // ---------------------------------------------------------------------------
-  // Fetch ledger
-  // ---------------------------------------------------------------------------
-  const fetchLedger = useCallback(async () => {
-    setLedgerLoading(true);
-    setLedgerError(null);
-    try {
-      const result = await getAdminUserPointsLedger(userId);
-      setLedger(result);
-    } catch (err) {
-      setLedgerError((err as ApiError).message ?? t('points.error'));
-    } finally {
-      setLedgerLoading(false);
-    }
-  }, [userId]);
-
   useEffect(() => {
     void fetchBalance();
-    void fetchLedger();
-  }, [fetchBalance, fetchLedger]);
+  }, [fetchBalance]);
 
   // ---------------------------------------------------------------------------
   // Derived expected balance for UI guidance only
@@ -219,14 +210,14 @@ export function UserPointsSection({ userId }: UserPointsSectionProps) {
                 </tr>
               </thead>
               <tbody>
-                {ledger?.data.transactions.length === 0 ? (
+                {ledgerHistory.items.length === 0 ? (
                   <tr>
                     <td colSpan={6} className={styles.emptyRow}>
                       {t('points.empty')}
                     </td>
                   </tr>
                 ) : (
-                  ledger?.data.transactions.map((tx) => (
+                  ledgerHistory.items.map((tx) => (
                     <tr key={tx.transactionId}>
                       <td>{formatDate(tx.createdAt)}</td>
                       <td>
@@ -235,9 +226,7 @@ export function UserPointsSection({ userId }: UserPointsSectionProps) {
                       <td>
                         <code className={styles.code}>{tx.source}</code>
                       </td>
-                      <td
-                        className={tx.amount >= 0 ? styles.amountCredit : styles.amountDebit}
-                      >
+                      <td className={tx.amount >= 0 ? styles.amountCredit : styles.amountDebit}>
                         {tx.amount >= 0 ? `+${tx.amount}` : String(tx.amount)}
                       </td>
                       <td>{tx.balanceAfter}</td>
@@ -250,6 +239,18 @@ export function UserPointsSection({ userId }: UserPointsSectionProps) {
           </div>
         )}
       </div>
+
+      {((!ledgerHistory.loading && !ledgerHistory.error) || ledgerHistory.items.length > 0) && (
+        <HistoryPager
+          shown={ledgerHistory.items.length}
+          total={ledgerHistory.total}
+          hasNext={!!ledgerHistory.nextCursor}
+          loading={ledgerHistory.loading}
+          error={ledgerHistory.error}
+          onMore={() => void ledgerHistory.loadMore()}
+          onRefresh={() => void fetchLedger()}
+        />
+      )}
 
       {/* Adjustment form */}
       <div className={styles.subsection}>
@@ -269,7 +270,12 @@ export function UserPointsSection({ userId }: UserPointsSectionProps) {
 
         {/* Confirmation dialog */}
         {showConfirm && (
-          <div className={styles.confirmDialog} role="alertdialog" aria-modal="true" aria-labelledby="confirm-title">
+          <div
+            className={styles.confirmDialog}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="confirm-title"
+          >
             <p id="confirm-title" className={styles.confirmTitle}>
               {t('points.adjust.confirmTitle')}
             </p>

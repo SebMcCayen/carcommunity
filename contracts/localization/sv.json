@@ -1,4 +1,7 @@
 {
+  "clubBadge": {
+    "accessibility": "Klubb: %1$s"
+  },
   "supporterBadge": {
     "accessibility": "Supporter-krona",
     "settingTitle": "Visa Supporter-krona",

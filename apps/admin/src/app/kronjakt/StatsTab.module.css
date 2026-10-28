@@ -6,10 +6,10 @@
 }
 
 .card {
-  border: 1px solid var(--color-border, #d0d5dd);
+  border: 1px solid var(--border-color);
   border-radius: 10px;
   padding: 16px;
-  background: var(--color-surface, #fff);
+  background: var(--bg-surface);
 }
 
 .cardTitle {
@@ -18,7 +18,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--color-text-muted, #667085);
+  color: var(--text-secondary);
 }
 
 .statRow {
@@ -30,26 +30,26 @@
 
 .statLabel {
   font-size: 0.875rem;
-  color: var(--color-text-muted, #667085);
+  color: var(--text-secondary);
 }
 
 .statValue {
   font-size: 1.25rem;
   font-weight: 700;
-  color: var(--color-text, #101828);
+  color: var(--text-primary);
 }
 
 .statValueSmall {
   font-size: 1rem;
   font-weight: 600;
-  color: var(--color-text, #101828);
+  color: var(--text-primary);
 }
 
 .sectionTitle {
   margin: 24px 0 8px;
   font-size: 1rem;
   font-weight: 600;
-  color: var(--color-text, #101828);
+  color: var(--text-primary);
 }
 
 .toggleRow {
@@ -70,7 +70,7 @@
 }
 
 .podium {
-  border: 1px solid var(--color-border, #d0d5dd);
+  border: 1px solid var(--border-color);
   border-radius: 10px;
   padding: 12px 16px;
   margin-bottom: 12px;
@@ -85,12 +85,12 @@
 
 .podiumSeason {
   font-weight: 700;
-  color: var(--color-text, #101828);
+  color: var(--text-primary);
 }
 
 .podiumMeta {
   font-size: 0.8125rem;
-  color: var(--color-text-muted, #667085);
+  color: var(--text-secondary);
 }
 
 .podiumList {
@@ -112,7 +112,7 @@
 .perkName {
   font-size: 0.9375rem;
   font-weight: 700;
-  color: var(--color-text, #101828);
+  color: var(--text-primary);
 }
 
 .legendRow {
@@ -127,7 +127,7 @@
   align-items: center;
   gap: 6px;
   font-size: 0.8125rem;
-  color: var(--color-text-muted, #667085);
+  color: var(--text-secondary);
 }
 
 .legendDot {

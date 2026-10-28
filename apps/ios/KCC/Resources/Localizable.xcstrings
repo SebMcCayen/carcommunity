@@ -5441,6 +5441,23 @@
         }
       }
     },
+    "clubBadge.accessibility": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klubb: %1$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Club: %1$@"
+          }
+        }
+      }
+    },
     "coachMark.a11yTour": {
       "extractionState": "manual",
       "localizations": {

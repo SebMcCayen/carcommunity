@@ -72,7 +72,7 @@ export type CrownHuntClaimResult = (typeof CROWN_HUNT_CLAIM_RESULTS)[number];
  *
  * A Crown is a map COLLECTABLE (Pokémon GO–style), not a titled document, so
  * it carries no title or description — `rewardPoints` is chosen from a rarity
- * tier (Common/Rare/Epic/Legendary) in the admin UI.
+ * tier (Common/Uncommon/Rare/Legendary) in the admin UI.
  */
 export interface AdminCreateCrownHuntPointRequest {
   latitude: number;
@@ -193,6 +193,8 @@ export interface PaginatedAdminCrownHuntPointsResponse {
     pageSize: number;
     total: number;
     hasNext: boolean;
+    nextCursor?: string | null;
+    asOf?: string;
   };
 }
 
@@ -218,7 +220,10 @@ export interface AdminCrownHuntClaimSummary {
   pointTitle: string;
   /** Safe reference to the user (opaque user ID). Never expose display names in risk view. */
   userId: string;
-  result: CrownHuntClaimResult;
+  result: CrownHuntClaimResult | CrownSpawnClaimResult;
+  source?: 'hand_placed' | 'automatic';
+  pointsAwarded?: number | null;
+  rarity?: string | null;
   /** Coarse distance bucket, not exact coordinates. */
   distanceMeters: number | null;
   /** Safe category labels for risk reasons. Not raw signal values. */
@@ -236,6 +241,8 @@ export interface PaginatedAdminCrownHuntClaimsResponse {
     pageSize: number;
     total: number;
     hasNext: boolean;
+    nextCursor?: string | null;
+    asOf?: string;
   };
 }
 
