@@ -1,6 +1,6 @@
 name: Build Android Release
 
-# Produces the Android release App Bundle (AAB), wiring the real Firebase
+# Produces the Android release App Bundle (AAB) and APK, wiring the real Firebase
 # project via google-services.json pulled from the production environment
 # secret (never committed to the repo — see apps/android/README.md).
 #
@@ -14,7 +14,7 @@ name: Build Android Release
 #  - Least-privilege GITHUB_TOKEN (contents: read only); no checkout credential
 #    persistence; every decoded secret file is removed after the build.
 #
-# This produces a SIGNED release AAB, ready to upload to Google Play. The upload
+# This produces a SIGNED release AAB for Google Play and APK for installation. The upload
 # keystore (base64) + its passwords and the Mapbox runtime token are all
 # `production` environment secrets, materialized on disk only for the build and
 # removed afterwards. If the Mapbox secret is unset the build still succeeds with
@@ -107,7 +107,7 @@ jobs:
           } > apps/android/app/keystore.properties
           echo "upload keystore + keystore.properties materialized."
 
-      - name: Build release bundle (AAB)
+      - name: Build release bundle (AAB) and APK
         working-directory: apps/android
         # ORG_GRADLE_PROJECT_* exposes each token to Gradle as a project property.
         #
@@ -133,7 +133,7 @@ jobs:
         env:
           ORG_GRADLE_PROJECT_MAPBOX_ACCESS_TOKEN: ${{ secrets.MAPBOX_ACCESS_TOKEN }}
           ORG_GRADLE_PROJECT_MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
-        run: ./gradlew --no-daemon bundleRelease
+        run: ./gradlew --no-daemon bundleRelease assembleRelease
 
       - name: Verify 16 KB native-library alignment
         working-directory: apps/android
@@ -195,6 +195,39 @@ jobs:
             exit 1
           fi
 
+      - name: Verify APK signature and 16 KB ZIP alignment
+        run: |
+          set -euo pipefail
+          APK=apps/android/app/build/outputs/apk/release/app-release.apk
+          if [ ! -f "$APK" ]; then
+            echo "::error::Release APK not found at $APK."
+            exit 1
+          fi
+          # Gradle may install a newer build-tools version than the runner default.
+          # Use the newest installed pair, checking both standard SDK locations.
+          shopt -s nullglob
+          build_tools=''
+          for sdk_root in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}"; do
+            [ -n "$sdk_root" ] || continue
+            candidates=("$sdk_root"/build-tools/*)
+            [ "${#candidates[@]}" -gt 0 ] || continue
+            while IFS= read -r -d '' candidate; do
+              if [ -x "$candidate/apksigner" ] && [ -x "$candidate/zipalign" ]; then
+                build_tools="$candidate"
+                break
+              fi
+            done < <(printf '%s\0' "${candidates[@]}" | sort -z -V -r)
+            [ -z "$build_tools" ] || break
+          done
+          if [ -z "$build_tools" ]; then
+            echo "::error::No installed Android build-tools with apksigner and zipalign found."
+            exit 1
+          fi
+          "$build_tools/apksigner" verify --verbose "$APK"
+          # Modern build-tools used by this API 36 project support -P 16.
+          # Check ZIP alignment separately from native ELF segment alignment.
+          "$build_tools/zipalign" -c -P 16 -v 4 "$APK"
+
       - name: Remove decoded secrets from disk
         if: always()
         run: |
@@ -207,5 +240,13 @@ jobs:
         with:
           name: app-release-aab
           path: apps/android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Upload release APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-release-apk
+          path: apps/android/app/build/outputs/apk/release/app-release.apk
           retention-days: 14
           if-no-files-found: error
