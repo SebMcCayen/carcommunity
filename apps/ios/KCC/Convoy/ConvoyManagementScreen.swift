@@ -9,6 +9,8 @@ struct ConvoyManagementScreen: View {
     var body: some View {
         content
             .navigationTitle("convoy.title")
+            .kccReadingSurface(pageBackground: true)
+            .tint(KccTheme.driver)
             .task { await coordinator.load() }
             .refreshable { await coordinator.load() }
     }
@@ -19,173 +21,77 @@ struct ConvoyManagementScreen: View {
         case .loading:
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         case .unavailable:
-            message("convoy.errorGeneric")
+            SocialReadingState(title: "convoy.title", message: "convoy.errorGeneric", symbol: "car.2")
         case .failed(let error):
-            VStack(spacing: KccSpacing.s3) {
-                Text(ConvoyManagementStrings.errorKey(error))
-                    .multilineTextAlignment(.center)
-                Button("convoy.friendsRetry") { Task { await coordinator.load() } }
-                    .buttonStyle(.borderedProminent)
+            ScrollView {
+                SettingsStateCard(title: "convoy.title", message: ConvoyManagementStrings.errorKey(error), symbol: "exclamationmark.circle",
+                    retryTitle: "convoy.friendsRetry", onRetry: { Task { await coordinator.load() } }).padding(KccSpacing.s4)
             }
-            .padding(KccSpacing.s4)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .loaded(let snapshot):
-            list(snapshot)
+        case .loaded(let snapshot): list(snapshot)
         }
     }
 
     private func list(_ snapshot: ConvoyManagementSnapshot) -> some View {
-        List {
-            Section {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: KccSpacing.s4) {
                 Button(action: onCreate) {
-                    Label("convoy.createAction", systemImage: "plus.circle.fill")
-                }
-                .disabled(!snapshot.canJoinAnotherConvoy)
+                    ConvoyCommandLabel(title: "convoy.createAction")
+                }.kccPrimaryAction().disabled(!snapshot.canJoinAnotherConvoy)
                 if snapshot.hasActiveConvoy {
-                    Text("convoy.alreadyInConvoyCreateHint").foregroundStyle(.secondary)
+                    Text("convoy.alreadyInConvoyCreateHint").font(.body).foregroundStyle(KccTheme.secondary)
                 } else if !snapshot.isExhaustive {
-                    Text("convoy.membershipUncertainHint").foregroundStyle(.secondary)
-                    Button("convoy.friendsRetry") { Task { await coordinator.load() } }
+                    Text("convoy.membershipUncertainHint").font(.body).foregroundStyle(KccTheme.secondary)
+                    Button { Task { await coordinator.load() } } label: {
+                        Text("convoy.friendsRetry").frame(minHeight: 48)
+                    }.buttonStyle(.bordered)
                 }
-            }
-
-            if let error = coordinator.actionError {
-                Section {
-                    HStack(alignment: .top) {
-                        Text(ConvoyManagementStrings.errorKey(error))
-                            .foregroundStyle(KccPalette.errorRed)
-                        Spacer()
-                        Button {
-                            coordinator.clearActionError()
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(Text("notifications.errorDismiss"))
-                    }
+                if let error = coordinator.actionError {
+                    ConvoyActionFeedback(error: error, onDismiss: coordinator.clearActionError)
                 }
-            }
-
-            if !snapshot.pendingInvites.isEmpty {
-                Section("convoy.invitesTitle") {
-                    ForEach(snapshot.pendingInvites) { invite in
-                        pendingInvite(invite, snapshot: snapshot)
-                    }
+                if !snapshot.pendingInvites.isEmpty {
+                    Text("convoy.invitesTitle").font(.title3.bold()).accessibilityAddTraits(.isHeader)
+                    ForEach(snapshot.pendingInvites) { pendingInvite($0, snapshot: snapshot) }
                 }
-            }
-
-            Section("convoy.myConvoysTitle") {
+                Text("convoy.myConvoysTitle").font(.title3.bold()).accessibilityAddTraits(.isHeader)
                 if snapshot.myConvoys.isEmpty {
-                    Text("convoy.emptyMine").foregroundStyle(.secondary)
+                    Text("convoy.emptyMine").font(.body).foregroundStyle(KccTheme.secondary)
                 } else {
                     ForEach(snapshot.myConvoys) { convoy in
-                        Button { onOpen(convoy) } label: { convoyRow(convoy) }
-                            .buttonStyle(.plain)
+                        Button { onOpen(convoy) } label: {
+                            ConvoySummaryContent(convoy: convoy, showsDisclosure: true).kccContentCard().contentShape(Rectangle())
+                        }.buttonStyle(.plain)
                     }
                 }
-            }
+            }.padding(KccSpacing.s4)
         }
-        .listStyle(.insetGrouped)
     }
 
-    private func pendingInvite(
-        _ convoy: ConvoyItem,
-        snapshot: ConvoyManagementSnapshot
-    ) -> some View {
+    private func pendingInvite(_ convoy: ConvoyItem, snapshot: ConvoyManagementSnapshot) -> some View {
         let busy = coordinator.busyConvoyIds.contains(convoy.convoyId)
         return VStack(alignment: .leading, spacing: KccSpacing.s3) {
-            convoyHeader(convoy)
-            Text(invitedBy(convoy))
-                .font(.system(size: KccTypeScale.bodySm))
-                .foregroundStyle(.secondary)
-            HStack(spacing: KccSpacing.s3) {
-                Button("convoy.accept") {
+            ConvoySummaryContent(convoy: convoy)
+            Text(verbatim: String.localizedStringWithFormat(
+                NSLocalizedString("convoy.invitedByLabel", comment: "Convoy inviter"),
+                convoy.ownerName ?? String(localized: "convoy.unknownMember")
+            )).font(.body).foregroundStyle(KccTheme.secondary)
+            SocialFlow {
+                Button {
                     Task {
-                        if let joined = await coordinator.respond(
-                            convoyId: convoy.convoyId,
-                            action: .accept
-                        ) {
-                            onJoined(joined)
-                        }
+                        if let joined = await coordinator.respond(convoyId: convoy.convoyId, action: .accept) { onJoined(joined) }
                     }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(busy || !snapshot.canJoinAnotherConvoy)
-
-                Button("convoy.decline", role: .destructive) {
-                    Task {
-                        await coordinator.respond(convoyId: convoy.convoyId, action: .decline)
-                    }
-                }
-                .buttonStyle(.bordered)
-                .disabled(busy)
-
+                } label: { Text("convoy.accept").frame(minHeight: 48) }
+                    .kccPrimaryAction().disabled(busy || !snapshot.canJoinAnotherConvoy)
+                Button(role: .destructive) {
+                    Task { await coordinator.respond(convoyId: convoy.convoyId, action: .decline) }
+                } label: { Text("convoy.decline").frame(minHeight: 48) }
+                    .buttonStyle(.bordered).tint(KccPalette.errorRed).disabled(busy)
                 if busy { ProgressView() }
             }
             if snapshot.hasActiveConvoy {
-                Text("convoy.alreadyInConvoyAcceptHint")
-                    .font(.system(size: KccTypeScale.bodySm))
-                    .foregroundStyle(.secondary)
+                Text("convoy.alreadyInConvoyAcceptHint").font(.footnote).foregroundStyle(KccTheme.secondary)
             } else if !snapshot.isExhaustive {
-                Text("convoy.membershipUncertainHint")
-                    .font(.system(size: KccTypeScale.bodySm))
-                    .foregroundStyle(.secondary)
+                Text("convoy.membershipUncertainHint").font(.footnote).foregroundStyle(KccTheme.secondary)
             }
-        }
-        .padding(.vertical, KccSpacing.s1)
-    }
-
-    private func convoyRow(_ convoy: ConvoyItem) -> some View {
-        VStack(alignment: .leading, spacing: KccSpacing.s2) {
-            convoyHeader(convoy)
-            Text(memberCount(convoy))
-                .font(.system(size: KccTypeScale.bodySm))
-                .foregroundStyle(.secondary)
-        }
-        .padding(.vertical, KccSpacing.s1)
-    }
-
-    private func convoyHeader(_ convoy: ConvoyItem) -> some View {
-        HStack {
-            Text(convoy.title ?? String(localized: "convoy.untitled"))
-                .font(.system(size: KccTypeScale.bodyMd, weight: .semibold))
-                .lineLimit(1)
-            Spacer()
-            Text(statusKey(convoy.status))
-                .font(.system(size: KccTypeScale.caption))
-                .padding(.horizontal, KccSpacing.s2)
-                .padding(.vertical, KccSpacing.s1 / 2)
-                .background(KccPalette.softSand.opacity(0.6), in: Capsule())
-        }
-    }
-
-    private func invitedBy(_ convoy: ConvoyItem) -> String {
-        String.localizedStringWithFormat(
-            NSLocalizedString("convoy.invitedByLabel", comment: "Convoy inviter"),
-            convoy.ownerName ?? String(localized: "convoy.unknownMember")
-        )
-    }
-
-    private func memberCount(_ convoy: ConvoyItem) -> String {
-        String.localizedStringWithFormat(
-            NSLocalizedString("convoy.barMembers", comment: "Accepted convoy member count"),
-            convoy.acceptedMemberCount
-        )
-    }
-
-    private func statusKey(_ status: ConvoyStatus) -> LocalizedStringKey {
-        switch status {
-        case .forming: "convoy.statusForming"
-        case .active: "convoy.statusActive"
-        case .ended: "convoy.statusEnded"
-        }
-    }
-
-    private func message(_ key: LocalizedStringKey) -> some View {
-        Text(key)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .padding(KccSpacing.s4)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }.kccContentCard()
     }
 }

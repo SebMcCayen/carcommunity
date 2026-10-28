@@ -639,3 +639,67 @@ Physical-iPhone visual comparison, live friend/block transitions and real-accoun
 leaderboard/privacy/progress acceptance remain configured-device checks. No
 backend, rules, workflow, token, localization, production deploy, paid-service or
 artifact-upload opt-in change is included.
+
+## Convoy and event group-drive reading flows (2026-10-28)
+
+This phase refines S49-S52 (convoy management/create/detail/ended recap), the
+S31 chat-eligible convoy list, S46 event group driving and S16's existing member
+and invitation sheets. It adopts the shared adaptive reading page/cards, cyan
+selection/status, gold primary actions, red destructive controls and Dynamic Type.
+It does not change the map instance, compact session dock, GPS publication,
+awareness arrows, convoy trail, destinations, subscription or account policy.
+
+Convoy management retains the original loaded snapshot, pending/own grouping,
+accepted-member count, active-membership and exhaustive-read warnings, retries,
+per-convoy busy state and accept/decline/handoff callbacks. Titles now wrap and
+runtime strings render verbatim. The chat-eligible list keeps its accepted-member
+projection, ongoing/history grouping, original route IDs, member-name fallback
+and real shared channel chat destination. No chat entitlement is inferred from
+an invitation, and no image/profile lookup is added by the cards.
+
+Creation and in-session invitation use real friend selection cards with selected
+traits and native buttons. The original selection sets, 50-invitee creation cap,
+capacity calculation, already-present-member exclusion, selection trimming,
+validation, command payloads and server result counts stay intact. The submit
+buttons move to a full-width bottom safe-area inset, leaving the list scrollable
+and native Back/Cancel outside it. Pending creation and completed handoff both
+remain disabled; invitations keep cancellation/interactive-dismiss blocking while
+working, and close only through their existing explicit result flow. No test
+fixture injects authorization or sends a real invitation.
+
+Detail actions now precede the long member roster. Existing accepted-viewer,
+owner, forming/ended, minimum-member and leave-versus-end guards still choose
+which commands are available. Destructive confirmations and mutation targets
+remain unchanged. Ended recaps show the real duration, participant count/list
+and optional distance; missing distance is not replaced with zero. Member rows
+show only actual names, roles and invitation states, with local neutral fallbacks.
+
+The live member sheet keeps its existing periodic freshness check, accepted and
+pending groups, outgoing callbacks and self/pending profile restrictions. Its
+reading cards have 48 pt profile/map actions; unavailable locations stay disabled
+and retain their explanation. The original live wrapper supplies updates from
+the same convoy and awareness coordinators. Close remains native and reachable
+above the scrolling list. This phase retains the existing native iOS sheets and
+does not claim Android's window/map docking implementation was ported.
+
+Event group driving now shares the already-loaded parent event teaser for its
+name/schedule/place context, without starting another event subscription. The
+roster contains the existing active-participant projection and status only, with
+no invented car, avatar, position or live-sharing state. Native status buttons
+show the coordinator's actual own-status selection and forward existing commands;
+they do not update selection optimistically. RSVP/publication gates, serial
+pending actions, join/leave, errors, active-UID map callback and location-sharing
+opt-in are retained. Explicit existing live-sharing and safe-stopping copy stays
+visible. The underlying coordinator/repositories/models are unchanged.
+
+ConvoyDesignTests measure the actual summary/chat/friend/command/member/error/
+recap/status/roster/event-context widgets at 288/358 pt, SV/EN, light/dark and
+normal/largest accessibility text. They include owner/member, invited/accepted/
+declined, missing location/date/place/distance, selected/unselected, pending
+commands and pinned-footer bounds. Existing convoy creation/management/model,
+chat, group-drive eligibility/command and navigation tests remain in full native
+CI. These layout tests use synthetic local values and inert callbacks; they do
+not establish real account invitations, live membership/GPS transitions, physical
+iPhone visual comparison or car safety acceptance. No backend, rules, workflow,
+token, localization, production deploy or paid-service/artifact-upload opt-in
+change is included. Full native PR checks must pass before merge.
