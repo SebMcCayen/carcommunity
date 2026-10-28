@@ -106,7 +106,12 @@ struct StoreCatalogEntry: Sendable {
 
 enum StoreCatalogPolicy {
     static func permits(_ entries: [StoreCatalogEntry]) -> Bool {
-        entries.allSatisfy {
+        // Both known plans are required to verify their shared group, even if
+        // one SKU temporarily disappears from the store response. Otherwise an
+        // existing subscriber could buy the remaining SKU in a separate group.
+        guard entries.count == subscriptionProductIDs.count,
+              Set(entries.map(\.id)) == Set(subscriptionProductIDs) else { return false }
+        return entries.allSatisfy {
             subscriptionProductIDs.contains($0.id) && $0.isAutoRenewable
                 && $0.monthlyPeriod == 1 && $0.groupID?.isEmpty == false
         } && Set(entries.compactMap(\.groupID)).count <= 1
