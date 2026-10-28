@@ -308,3 +308,35 @@ describe('billboards-recordInteraction → insights bridge', () => {
     }
   });
 });
+
+it('reports a visible advertisement privately and rejects a draft', async () => {
+  const reporter = await createProvisionedUser('bb-private-report');
+  const ref = adminDb.collection('billboards').doc(`report_ad_${Date.now()}`);
+  await ref.set({
+    status: 'active',
+    mapVisible: true,
+    headline: 'Selected advertisement',
+    message: 'Selected public message',
+    partnerCompanyId: activePartnerId,
+    createdAt: Timestamp.now(),
+  });
+  await signInAs(reporter);
+  const request = {
+    surface: 'billboard',
+    billboardId: ref.id,
+    expectedUid: reporter.uid,
+    reason: 'other',
+  };
+  expect((await call('moderation-reportPublicContent', request)).data).toEqual({ reported: true });
+  const cases = await adminDb
+    .collection('moderationReports')
+    .where('reportedBy', '==', reporter.uid)
+    .get();
+  expect(cases.size).toBe(1);
+  expect(cases.docs[0]!.data().snapshot.text).toContain('Selected advertisement');
+  expect(cases.docs[0]!.data().surface).toBe('billboard');
+  await ref.update({ status: 'draft', mapVisible: false });
+  expect(await callableErrorCode(call('moderation-reportPublicContent', request))).toBe(
+    'functions/not-found',
+  );
+});

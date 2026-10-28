@@ -90,6 +90,7 @@
 		2DC0460E003F97750680CC4D /* LocationPermissionCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D564C07DEB7807D86E0DBE40 /* LocationPermissionCoordinatorTests.swift */; };
 		2DDCF36B2D653E2803F48541 /* StatsReadingTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87A26B3F2ECF837A304C1DF4 /* StatsReadingTabs.swift */; };
 		2DE84CDBF1D7FCFFF8AE2925 /* MembershipScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA17CDE68C688BB3DF03B54 /* MembershipScreen.swift */; };
+		2E0B84011EAD087064F1C3FA /* ContentSafety.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 9E1FC51BD62B99213AD6AD17 /* ContentSafety.xcstrings */; };
 		2E2CE7745CDC1502CD28A236 /* EventDetailCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44A7962A316651E6D91C1FA7 /* EventDetailCoordinatorTests.swift */; };
 		2E911B92E47EEB688F41199D /* BillboardMapViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DA09A64C641526057397819 /* BillboardMapViews.swift */; };
 		2EC5800FD4E02C0186D0E3E2 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = B688C912C571A1CC3752D0B8 /* FirebaseFirestore */; };
@@ -310,6 +311,7 @@
 		BE7A53EDDDECCAA2879B72FF /* NotificationsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6479876FDA143E0BF6381263 /* NotificationsRepository.swift */; };
 		BF3D130F03E3B77E710907E7 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = FD0E994263AEF5E23FE59538 /* FirebaseFunctions */; };
 		BFF9E7945CD9B4EC45B4F2EB /* DriveRecordingCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BF11E8C5262CD4939A52684 /* DriveRecordingCoordinatorTests.swift */; };
+		C04A0DE8186BB61151E9E1DA /* PublicContentReportButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0AF900367B9ADF4E225F67B /* PublicContentReportButton.swift */; };
 		C086004A49CCB0078CDA5DCB /* FirebaseCrownHuntClaimsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAE444D801E18A1F91EB93CA /* FirebaseCrownHuntClaimsRepository.swift */; };
 		C22BB49BC4B6B00C38968ADE /* LiveLocationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC89EA11EF153690B64A279F /* LiveLocationCoordinator.swift */; };
 		C3593AD7B0FBBFFA8593C8E4 /* ConvoyManagementCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 908A55C9B91BFD5F81706548 /* ConvoyManagementCoordinator.swift */; };
@@ -687,10 +689,12 @@
 		9DBBB1856DCE04D9FD4E51DA /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
 		9E00DF3B5AA069BE90D841A5 /* NotificationsInboxCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsInboxCoordinatorTests.swift; sourceTree = "<group>"; };
 		9E064C56B97C0A8CD1FDB584 /* EventChatModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventChatModels.swift; sourceTree = "<group>"; };
+		9E1FC51BD62B99213AD6AD17 /* ContentSafety.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = ContentSafety.xcstrings; sourceTree = "<group>"; };
 		9E378AF9E856A5FB134D281C /* BadgesWall.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BadgesWall.swift; sourceTree = "<group>"; };
 		9E8F13F96C74449D94518C88 /* MemberProfileRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberProfileRepository.swift; sourceTree = "<group>"; };
 		9F5DE2B10D9ED38CCCE770A3 /* CrownPerkMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrownPerkMap.swift; sourceTree = "<group>"; };
 		9FA464C88E6F022D1EAA83D9 /* DriveRecordingSummarySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveRecordingSummarySheet.swift; sourceTree = "<group>"; };
+		A0AF900367B9ADF4E225F67B /* PublicContentReportButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicContentReportButton.swift; sourceTree = "<group>"; };
 		A247E852482EE7E2457E9857 /* DriverFeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriverFeedTests.swift; sourceTree = "<group>"; };
 		A3E1C6462E869AFDD18B4796 /* NotificationsModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsModelTests.swift; sourceTree = "<group>"; };
 		A4383BC0C5C249A195B5E166 /* EventFormScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventFormScreen.swift; sourceTree = "<group>"; };
@@ -866,6 +870,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		05EA078FDEF7AF5AACA94B26 /* Moderation */ = {
+			isa = PBXGroup;
+			children = (
+				A0AF900367B9ADF4E225F67B /* PublicContentReportButton.swift */,
+			);
+			path = Moderation;
+			sourceTree = "<group>";
+		};
 		07E79EF0F21135E662C9816C /* App */ = {
 			isa = PBXGroup;
 			children = (
@@ -1081,6 +1093,7 @@
 		3C9357116487CACE984AFAEC /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				9E1FC51BD62B99213AD6AD17 /* ContentSafety.xcstrings */,
 				24ACA4339607DCEEA56FA0CC /* InfoPlist.xcstrings */,
 				AB4411241111CAD26506FD14 /* Localizable.xcstrings */,
 				A7167A1118C17AD86A75C54E /* PrivacyInfo.xcprivacy */,
@@ -1118,6 +1131,7 @@
 				4554980288C2C9BE3F0D598E /* Live */,
 				143F2CF86C655534726481A4 /* Location */,
 				218F0AE7D33BEBB3CF0AB290 /* MemberProfile */,
+				05EA078FDEF7AF5AACA94B26 /* Moderation */,
 				0F2FD2600CC24E4F341B6292 /* Notifications */,
 				91A7F6C1FB1A795E500EC81D /* Onboarding */,
 				676B4A23AA9DE996C08A533A /* Partners */,
@@ -1742,6 +1756,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2E0B84011EAD087064F1C3FA /* ContentSafety.xcstrings in Resources */,
 				D82FBCB9FF439B2E1275434C /* InfoPlist.xcstrings in Resources */,
 				E89DC7EC35F16BB97D6E2B60 /* Localizable.xcstrings in Resources */,
 				93C55D774DE8ADB3773B041B /* PrivacyInfo.xcprivacy in Resources */,
@@ -2067,6 +2082,7 @@
 				35990F79DE9E99B749245576 /* ProfileEditing.swift in Sources */,
 				0E1F7AF8A642C7BC765062BF /* ProfilePointsSection.swift in Sources */,
 				5BE03CCD4750CF212C0B4BAD /* ProfileScreen.swift in Sources */,
+				C04A0DE8186BB61151E9E1DA /* PublicContentReportButton.swift in Sources */,
 				4E79C8F6CC66EC188BD6864F /* PushNotifications.swift in Sources */,
 				845130ECA692142DA1324839 /* RestrictedAccountScreen.swift in Sources */,
 				54F2359A2474231CD9D08DB4 /* RootView.swift in Sources */,
