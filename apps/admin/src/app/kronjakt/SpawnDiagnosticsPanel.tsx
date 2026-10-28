@@ -62,12 +62,14 @@ interface SpawnDiagnosticsPanelProps {
   areaId: string;
   areaName: string;
   onClose: () => void;
+  hideClose?: boolean;
 }
 
 export function SpawnDiagnosticsPanel({
   areaId,
   areaName,
   onClose,
+  hideClose = false,
 }: SpawnDiagnosticsPanelProps): React.ReactElement {
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -363,9 +365,11 @@ export function SpawnDiagnosticsPanel({
           <button className={styles.btnSecondary} onClick={() => void load()} disabled={isLoading}>
             {t('crownHunt.diagRefresh')}
           </button>
-          <button className={styles.btnPrimary} onClick={onClose}>
-            {t('crownHunt.diagClose')}
-          </button>
+          {!hideClose && (
+            <button className={styles.btnPrimary} onClick={onClose}>
+              {t('crownHunt.diagClose')}
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -23,7 +23,7 @@ import kotlinx.coroutines.flow.callbackFlow
  * so a config-less build (CI, previews) simply has no crown layer rather than
  * crashing on first draw.
  */
-class FirebaseCrownSpawnRepository private constructor(
+class FirebaseCrownSpawnRepository internal constructor(
     private val firestore: FirebaseFirestore,
     private val functions: FirebaseFunctions,
 ) : CrownSpawnRepository {

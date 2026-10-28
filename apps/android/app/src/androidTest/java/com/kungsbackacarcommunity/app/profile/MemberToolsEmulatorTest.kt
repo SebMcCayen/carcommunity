@@ -1,5 +1,9 @@
 package com.kungsbackacarcommunity.app.profile
 
+import com.kungsbackacarcommunity.app.crownhunt.FirebaseCrownHuntRepository
+import com.kungsbackacarcommunity.app.crownhunt.FirebaseCrownSpawnRepository
+import com.kungsbackacarcommunity.app.crownhunt.CrownHuntPointsState
+import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnQuery
 import com.kungsbackacarcommunity.app.access.FirebaseCarCommunityAccessRepository
 import com.kungsbackacarcommunity.app.access.CarCommunityGateState
 import kotlinx.coroutines.flow.first
@@ -105,6 +109,17 @@ class MemberToolsEmulatorTest {
             val preservedReply = firestore.document("communityChat/global/messages/native-public-reply").get(Source.SERVER).await()
             assertEquals("Reply preserved", preservedReply.getString("text"))
             assertNull(preservedReply.get("replyTo"))
+            val handplaced = FirebaseCrownHuntRepository(firestore, own)
+            val automatic = FirebaseCrownSpawnRepository(firestore, own)
+            val keys = listOf(CrownSpawnQuery.cellKey(57.4874, 12.0761))
+            withTimeout(30000) { handplaced.observeActivePoints().first { it is CrownHuntPointsState.Loaded && it.points.any { point -> point.id == "native-handplaced" } } }
+            assertTrue(automatic.listNearby(keys, System.currentTimeMillis()).any { it.id == "native-automatic" })
+            val handplacedRemoval = async(start = CoroutineStart.UNDISPATCHED) { withTimeout(30000) { handplaced.observeActivePoints().first { it is CrownHuntPointsState.Loaded && it.points.none { point -> point.id == "native-handplaced" } } } }
+            admin.getHttpsCallable("crownHunt-pausePoint").call(mapOf("pointId" to "native-handplaced")).await()
+            admin.getHttpsCallable("crownHunt-updateSpawnArea").call(mapOf("areaId" to "native-area", "active" to false)).await()
+            handplacedRemoval.await()
+            assertFalse(automatic.listNearby(keys, System.currentTimeMillis()).any { it.id == "native-automatic" })
+            assertEquals(117L, firestore.collection("pointsLedger").document("native-member").get(Source.SERVER).await().getLong("balance"))
             actorAuth.signOut(); memberAuth.signOut()
         } finally { memberApp.delete(); actorApp.delete() }
     }
