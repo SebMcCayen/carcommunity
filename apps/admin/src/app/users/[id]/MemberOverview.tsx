@@ -294,7 +294,12 @@ export function MemberOverview({
                 {row.amount}
               </strong>
               <div>
-                {row.description || 'Poänghändelse'}
+                <span
+                  className={styles.pointDescription}
+                  title={row.description || 'Poänghändelse'}
+                >
+                  {row.description || 'Poänghändelse'}
+                </span>
                 <p className={styles.meta}>Kronpoäng</p>
               </div>
             </article>

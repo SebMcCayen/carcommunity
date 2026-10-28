@@ -492,6 +492,16 @@
 .pointPreview p {
   margin: 4px 0;
 }
+.pointPreview > div {
+  min-width: 0;
+}
+.pointDescription {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
 .positiveAmount {
   color: var(--status-success);
 }
