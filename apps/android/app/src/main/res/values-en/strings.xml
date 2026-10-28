@@ -2118,4 +2118,12 @@
     <string name="clubs_logoError">Could not prepare this image. Choose another image.</string>
     <string name="clubs_reportConfirm">Send a report about this message to the administrators?</string>
     <string name="clubs_noAttending">No clubs registered yet.</string>
+    <string name="accountWarnings_title">Warnings from an administrator</string>
+    <string name="accountWarnings_loading">Loading warnings…</string>
+    <string name="accountWarnings_error">Warnings could not be loaded. Please retry.</string>
+    <string name="accountWarnings_empty">No active warnings.</string>
+    <string name="accountWarnings_retry">Retry</string>
+    <string name="accountWarnings_more">Load more warnings</string>
+    <string name="accountWarnings_untilRevoked">Valid until revoked</string>
+    <string name="accountWarnings_expires">Valid until</string>
 </resources>

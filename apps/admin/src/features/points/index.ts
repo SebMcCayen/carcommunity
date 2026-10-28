@@ -86,6 +86,8 @@ export async function applyAdminPointsAdjustment(
     type: request.type,
     amount: request.amount,
     reason: request.reason,
+    ...(request.expectedActorUid ? { expectedActorUid: request.expectedActorUid } : {}),
+    ...(request.idempotencyKey ? { idempotencyKey: request.idempotencyKey } : {}),
   });
   return {
     ok: true,

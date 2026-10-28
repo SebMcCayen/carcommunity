@@ -27,6 +27,8 @@ import {
   type PointsBalanceResponse,
   type ApiError,
 } from '@/features/points';
+import { pendingOperation } from '@/lib/pendingOperation';
+import { ActionDialog } from '@/components/ui/ActionDialog';
 import { translate } from '@/i18n';
 import styles from './PointsSection.module.css';
 
@@ -46,9 +48,11 @@ function formatDate(iso: string): string {
 
 interface UserPointsSectionProps {
   userId: string;
+  actorUid?: string;
+  canAdjust?: boolean;
 }
 
-export function UserPointsSection({ userId }: UserPointsSectionProps) {
+export function UserPointsSection({ userId, actorUid, canAdjust = true }: UserPointsSectionProps) {
   // ---------------------------------------------------------------------------
   // Balance state
   // ---------------------------------------------------------------------------
@@ -108,8 +112,9 @@ export function UserPointsSection({ userId }: UserPointsSectionProps) {
   // Derived expected balance for UI guidance only
   // ---------------------------------------------------------------------------
   const currentBalance = balance?.data.balance ?? null;
-  const parsedAmount = parseInt(adjustAmount, 10);
-  const validAmount = Number.isInteger(parsedAmount) && parsedAmount > 0 && parsedAmount <= 100_000;
+  const parsedAmount = Number(adjustAmount);
+  const validAmount =
+    Number.isSafeInteger(parsedAmount) && parsedAmount > 0 && parsedAmount <= 100_000;
   const expectedBalance =
     currentBalance !== null && validAmount
       ? adjustDirection === 'credit'
@@ -131,11 +136,26 @@ export function UserPointsSection({ userId }: UserPointsSectionProps) {
     setShowConfirm(false);
 
     try {
+      if (!actorUid)
+        throw new Error('Läs medlemskortet igen för att bekräfta administratörens session.');
+      const payload = {
+        type:
+          adjustDirection === 'credit'
+            ? ('adjustment_credit' as const)
+            : ('adjustment_debit' as const),
+        amount: parsedAmount,
+        reason: adjustReason.trim(),
+        expectedActorUid: actorUid,
+      };
+      const receipt = pendingOperation(`${actorUid}:${userId}:points-adjust`, payload);
       await applyAdminPointsAdjustment(userId, {
         type: adjustDirection === 'credit' ? 'adjustment_credit' : 'adjustment_debit',
         amount: parsedAmount,
         reason: adjustReason.trim(),
+        expectedActorUid: actorUid,
+        idempotencyKey: receipt.key,
       });
+      receipt.clear();
       setAdjustSuccess(t('points.adjust.success'));
       setAdjustAmount('');
       setAdjustReason('');
@@ -143,11 +163,7 @@ export function UserPointsSection({ userId }: UserPointsSectionProps) {
       await fetchLedger();
     } catch (err) {
       const apiErr = err as ApiError;
-      if (apiErr.statusCode === 400) {
-        setAdjustError(t('points.adjust.insufficientBalance'));
-      } else {
-        setAdjustError(apiErr.message ?? t('points.adjust.error'));
-      }
+      setAdjustError(apiErr.message ?? t('points.adjust.error'));
     } finally {
       setAdjustLoading(false);
       adjustingRef.current = false;
@@ -160,7 +176,7 @@ export function UserPointsSection({ userId }: UserPointsSectionProps) {
   return (
     <section className={styles.section} aria-labelledby="points-heading">
       <h2 id="points-heading" className={styles.sectionTitle}>
-        {t('points.pageTitle')}
+        Kronpoäng (KP) / XP
       </h2>
 
       {/* Balance */}
@@ -179,7 +195,7 @@ export function UserPointsSection({ userId }: UserPointsSectionProps) {
             {balance?.data.balance ?? 0} {t('points.shortForm')}
           </span>
         )}
-        <span className={styles.balanceLabel}>{t('points.balanceLabel')}</span>
+        <span className={styles.balanceLabel}>Gemensamt saldo för XP och Kronpoäng</span>
       </div>
 
       {/* Ledger */}
@@ -270,12 +286,13 @@ export function UserPointsSection({ userId }: UserPointsSectionProps) {
 
         {/* Confirmation dialog */}
         {showConfirm && (
-          <div
-            className={styles.confirmDialog}
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="confirm-title"
+          <ActionDialog
+            title={t('points.adjust.confirmTitle')}
+            onCancel={() => setShowConfirm(false)}
           >
+            <p>
+              {userId}: {currentBalance} → {expectedBalance} KP
+            </p>
             <p id="confirm-title" className={styles.confirmTitle}>
               {t('points.adjust.confirmTitle')}
             </p>
@@ -297,7 +314,7 @@ export function UserPointsSection({ userId }: UserPointsSectionProps) {
                 {t('points.adjust.cancel')}
               </button>
             </div>
-          </div>
+          </ActionDialog>
         )}
 
         <form
@@ -371,6 +388,7 @@ export function UserPointsSection({ userId }: UserPointsSectionProps) {
             <textarea
               id="adjust-reason"
               className={styles.textarea}
+              maxLength={500}
               value={adjustReason}
               onChange={(e) => setAdjustReason(e.target.value)}
               placeholder={t('points.adjust.reasonPlaceholder')}
@@ -382,7 +400,9 @@ export function UserPointsSection({ userId }: UserPointsSectionProps) {
           <button
             type="submit"
             className={styles.submitButton}
-            disabled={adjustLoading || !validAmount || !adjustReason.trim() || showConfirm}
+            disabled={
+              !canAdjust || adjustLoading || !validAmount || !adjustReason.trim() || showConfirm
+            }
             aria-busy={adjustLoading}
           >
             {t('points.adjust.submit')}

@@ -85,7 +85,12 @@ const adminAdjustInputSchema = z
   .object({
     targetUid: z.string().trim().min(1).max(128),
     type: z.enum(['adjustment_credit', 'adjustment_debit']),
-    amount: z.number().int().positive(),
+    amount: z.number().int().positive().max(100_000),
+    expectedActorUid: z.string().min(1).max(128).optional(),
+    idempotencyKey: z
+      .string()
+      .regex(/^[A-Za-z0-9._-]{16,128}$/)
+      .optional(),
     reason: z.string().trim().min(1).max(POINTS_REASON_MAX_LENGTH),
   })
   .strict();
@@ -148,9 +153,7 @@ export function isFirestoreSafeId(value: string): boolean {
   );
 }
 
-export type BalanceCheck =
-  | { ok: true; balanceAfter: number }
-  | { ok: false; message: string };
+export type BalanceCheck = { ok: true; balanceAfter: number } | { ok: false; message: string };
 
 /**
  * The exact message a debit that would overdraw the balance rejects with. A
@@ -184,6 +187,7 @@ export interface LedgerEntryInput {
   balanceAfter: number;
   description: string;
   idempotencyKey?: string | null;
+  requestFingerprint?: string;
   relatedEntityType?: string | null;
   relatedEntityId?: string | null;
   createdByUserId?: string | null;
@@ -201,6 +205,7 @@ export function buildLedgerEntry(
     balanceAfter: input.balanceAfter,
     description: input.description.slice(0, POINTS_DESCRIPTION_MAX_LENGTH),
     idempotencyKey: input.idempotencyKey ?? null,
+    ...(input.requestFingerprint ? { requestFingerprint: input.requestFingerprint } : {}),
     relatedEntityType: input.relatedEntityType ?? null,
     relatedEntityId: input.relatedEntityId ?? null,
     createdByUserId: input.createdByUserId ?? null,

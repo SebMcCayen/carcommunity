@@ -22,7 +22,7 @@
  *    against USER_ROLES with a safe `'user'` fallback) before use.
  */
 
-import { collection, doc, getDoc, getDocs, limit as fsLimit, query } from 'firebase/firestore';
+import { collection, getDocs, limit as fsLimit, query } from 'firebase/firestore';
 import { DEFAULT_DISPLAY_NAME, USER_ROLES, type UserRole } from '@carcommunity/shared/users';
 
 import { callAdmin } from '../../lib/callables';
@@ -149,6 +149,17 @@ export interface AdminUserDetail {
   bio: string | null;
   createdAt: string | null;
   updatedAt: string | null;
+  actorUid?: string;
+  lastLoginAt?: string | null;
+  pointsBalance?: number;
+  permissions?: {
+    canRename: boolean;
+    canWarn: boolean;
+    canAdjustPoints: boolean;
+    canReversePoints: boolean;
+    canSuspend: boolean;
+    canRestore: boolean;
+  };
 }
 
 /** Response of admin-warnUser. */
@@ -282,20 +293,8 @@ export async function adminListUsers(): Promise<AdminUserListResult> {
  * missing document resolves to null (the page renders a not-found state).
  */
 export async function adminGetUser(uid: string): Promise<AdminUserDetail | null> {
-  const snap = await getDoc(doc(getAdminFirestore(), 'users', uid));
-  const data = snap.data() as Record<string, unknown> | undefined;
-  if (!data) return null;
-  return {
-    uid,
-    displayName: coerceString(data.displayName),
-    role: coerceRole(data.role),
-    activeMember: data.activeMember === true,
-    suspended: data.suspended === true,
-    deleted: data.deleted === true,
-    bio: coerceOptionalString(data.bio),
-    createdAt: toIso(data.createdAt),
-    updatedAt: toIso(data.updatedAt),
-  };
+  return (await callAdmin<{ user: AdminUserDetail | null }>('admin-getMember', { targetUid: uid }))
+    .user;
 }
 
 // ---------------------------------------------------------------------------

@@ -27,13 +27,13 @@ import {
   adminRestoreAccess,
   adminSetAdminRole,
   adminSuspendUser,
-  adminWarnUser,
   type AdminUserDetail,
   type ApiError,
 } from '@/features/users';
 import { translate } from '@/i18n';
 import { formatDateOnly } from '@/lib/format';
 
+import { MemberTools } from './MemberTools';
 import { UserPointsSection } from './PointsSection';
 import styles from './page.module.css';
 
@@ -105,10 +105,7 @@ export default function UserDetailPage() {
   }, [id, load]);
 
   const runAction = useCallback(
-    async (
-      action: 'warn' | 'suspend' | 'restore' | 'grantAdmin' | 'revokeAdmin',
-      successKey: string,
-    ) => {
+    async (action: 'suspend' | 'restore' | 'grantAdmin' | 'revokeAdmin', successKey: string) => {
       if (!detail) return;
       const trimmedReason = reason.trim();
       if (!trimmedReason || actingRef.current) return;
@@ -119,9 +116,6 @@ export default function UserDetailPage() {
       setPendingConfirm(null);
       try {
         switch (action) {
-          case 'warn':
-            await adminWarnUser(detail.uid, trimmedReason);
-            break;
           case 'suspend':
             await adminSuspendUser(detail.uid, trimmedReason);
             break;
@@ -271,6 +265,14 @@ export default function UserDetailPage() {
               <dd>{detail.bio || '–'}</dd>
               <dt>{t('users.detail.createdLabel')}</dt>
               <dd>{formatDate(detail.createdAt)}</dd>
+              <dt>Senast registrerade inloggning</dt>
+              <dd>
+                {detail.lastLoginAt
+                  ? new Date(detail.lastLoginAt).toLocaleString('sv-SE')
+                  : 'Historik saknas'}
+              </dd>
+              <dt>Inloggningsfrekvens</dt>
+              <dd>Historik saknas</dd>
               <dt>{t('users.detail.updatedLabel')}</dt>
               <dd>{formatDate(detail.updatedAt)}</dd>
             </dl>
@@ -335,14 +337,6 @@ export default function UserDetailPage() {
             )}
 
             <div className={styles.actions}>
-              <button
-                type="button"
-                className={styles.primaryButton}
-                onClick={() => void runAction('warn', 'users.detail.warnSuccess')}
-                disabled={!hasReason || acting}
-              >
-                {t('users.detail.warn')}
-              </button>
               {detail.suspended ? (
                 <button
                   type="button"
@@ -396,7 +390,17 @@ export default function UserDetailPage() {
             )}
           </section>
 
-          <UserPointsSection userId={id} />
+          <MemberTools
+            key={`${detail.uid}:${detail.displayName}`}
+            member={detail}
+            onChanged={() => void load(detail.uid)}
+          />
+          <UserPointsSection
+            key={detail.uid}
+            userId={detail.uid}
+            actorUid={detail.actorUid}
+            canAdjust={detail.permissions?.canAdjustPoints}
+          />
 
           <section className={styles.dangerCard} aria-labelledby="user-danger-title">
             <h2 id="user-danger-title" className={styles.dangerCardTitle}>

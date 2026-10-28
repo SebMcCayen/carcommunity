@@ -164,6 +164,9 @@ export interface AdminPointsAdjustmentRequest {
    * Written to the audit log. Min 1 char, max 500 chars.
    */
   reason: string;
+  /** Keep the same key for uncertain retries of this unchanged operation. */
+  idempotencyKey?: string;
+  expectedActorUid?: string;
 }
 
 /**

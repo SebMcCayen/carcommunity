@@ -16,6 +16,7 @@
  *   transaction path.
  */
 
+import { createHash } from 'node:crypto';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../firebase';
@@ -60,7 +61,12 @@ export const adminAdjust = onCall(CALLABLE_OPTS, async (request): Promise<Points
   if (!parsed.ok) {
     throw new HttpsError('invalid-argument', parsed.message);
   }
-  const { targetUid, type, amount, reason } = parsed.input;
+  const { targetUid, type, amount, reason, idempotencyKey } = parsed.input;
+  if (parsed.input.expectedActorUid && parsed.input.expectedActorUid !== actor.uid)
+    throw new HttpsError(
+      'permission-denied',
+      'The administrator session changed; reload the member card.',
+    );
 
   // Owner protection (legacy): only an owner may adjust another owner.
   const targetSnap = await db.collection('users').doc(targetUid).get();
@@ -70,6 +76,38 @@ export const adminAdjust = onCall(CALLABLE_OPTS, async (request): Promise<Points
   const targetState = toUserAccessState(targetSnap.data());
   if (isOwnerRole(targetState.role) && targetUid !== actor.uid && !isOwnerRole(actor.state.role)) {
     throw new HttpsError('permission-denied', 'Only an owner may adjust points for another owner.');
+  }
+
+  // The opaque key names one operation; the fingerprint binds its immutable intent.
+  const requestFingerprint = createHash('sha256')
+    .update(JSON.stringify({ actorUid: actor.uid, targetUid, type, amount, reason }))
+    .digest('hex');
+  const entryKey = idempotencyKey
+    ? 'admin-adjust-' +
+      createHash('sha256')
+        .update(JSON.stringify([actor.uid, targetUid, idempotencyKey]))
+        .digest('hex')
+    : undefined;
+  const receipt = entryKey
+    ? db.collection('pointsLedger').doc(targetUid).collection('entries').doc(entryKey)
+    : null;
+  const checkReceipt = (data: FirebaseFirestore.DocumentData | undefined) => {
+    if (!data || data.requestFingerprint !== requestFingerprint)
+      throw new HttpsError(
+        'failed-precondition',
+        'This adjustment key was already used for a different request.',
+      );
+    return {
+      targetUid,
+      entryId: entryKey!,
+      amount: data.amount as number,
+      balanceAfter: data.balanceAfter as number,
+      alreadyApplied: true,
+    };
+  };
+  if (receipt) {
+    const existing = await receipt.get();
+    if (existing.exists) return checkReceipt(existing.data());
   }
 
   const isCredit = type === 'adjustment_credit';
@@ -87,6 +125,8 @@ export const adminAdjust = onCall(CALLABLE_OPTS, async (request): Promise<Points
       source: 'admin_adjustment',
       description,
       createdByUserId: actor.uid,
+      idempotencyKey: entryKey,
+      requestFingerprint: entryKey ? requestFingerprint : undefined,
     },
     (tx, mutation) => {
       tx.set(
@@ -111,6 +151,7 @@ export const adminAdjust = onCall(CALLABLE_OPTS, async (request): Promise<Points
     },
   );
 
+  if (result.alreadyApplied && receipt) return checkReceipt((await receipt.get()).data());
   return { targetUid, ...result };
 });
 
