@@ -9156,6 +9156,7 @@ private fun RouteHost(
                 )
             } else {
                 ProfileScreen(
+                    ownWarningUid = uid,
                     profile = profile,
                     saveStatus = saveStatus,
                     onSave = { name, bio, social ->

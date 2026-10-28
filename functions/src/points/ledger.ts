@@ -43,6 +43,7 @@ export interface PointsMutationParams {
   source: PointsTransactionSource;
   description: string;
   idempotencyKey?: string | null;
+  requestFingerprint?: string;
   relatedEntityType?: string | null;
   relatedEntityId?: string | null;
   createdByUserId?: string | null;
@@ -202,6 +203,7 @@ async function mutatePoints(
           balanceAfter: check.balanceAfter,
           description,
           idempotencyKey: params.idempotencyKey ?? null,
+          requestFingerprint: params.requestFingerprint,
           relatedEntityType: params.relatedEntityType ?? null,
           relatedEntityId: params.relatedEntityId ?? null,
           createdByUserId: params.createdByUserId ?? null,

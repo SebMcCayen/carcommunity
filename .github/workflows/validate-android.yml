@@ -372,3 +372,55 @@ jobs:
           name: connected-test-reports
           path: apps/android/app/build/reports/androidTests/
           retention-days: 14
+
+  native-member-acceptance:
+    name: Native member tools (Firebase SDK)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6.4.0
+      - name: Prepare real backend handlers for disposable native acceptance
+        run: |
+          npm ci --prefix functions --ignore-scripts
+          npm --prefix functions run build
+          node scripts/native-member-emulators.mjs prepare "${RUNNER_TEMP}/native-members"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify Android SDK against real member callables
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: >-
+            npm exec --yes --package=firebase-tools@15.34.0 -- firebase emulators:exec
+            --project demo-kcc-ios-ci --config "${RUNNER_TEMP}/native-members/firebase.json"
+            --only auth,firestore,functions --non-interactive
+            "node scripts/native-member-emulators.mjs seed && cd apps/android && ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.kungsbackacarcommunity.app.profile.MemberToolsEmulatorTest -Pandroid.testInstrumentationRunnerArguments.kccNativeMembers=1"
+      - name: Require one actual passed native acceptance test
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          cases = [case for path in Path('apps/android/app/build/outputs/androidTest-results').rglob('*.xml') for case in ET.parse(path).getroot().iter('testcase') if case.get('classname', '').endswith('MemberToolsEmulatorTest')]
+          assert len(cases) == 1 and not any(case.find(tag) is not None for case in cases for tag in ['failure', 'error', 'skipped']), 'Expected one passed, non-skipped member SDK test'
+          PY
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: android-native-member-acceptance
+          path: apps/android/app/build/outputs/androidTest-results
+          retention-days: 7

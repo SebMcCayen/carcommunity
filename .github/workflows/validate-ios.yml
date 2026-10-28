@@ -38,7 +38,7 @@ jobs:
     # macOS minutes bill at a 10x multiplier on private repos — this job is
     # paths-filtered above so it runs for iOS, its contracts, and admin/backend configuration changes.
     runs-on: macos-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -114,7 +114,19 @@ jobs:
           python3 apps/ios/scripts/simulator-package.py \
             "${RUNNER_TEMP}/ios-tests/Build/Products/Debug-iphonesimulator/KCC.app"
 
-      - name: Native Firebase Auth emulator acceptance (no cloud credentials)
+      - name: Setup JDK for native member emulators
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Build backend handlers for native SDK acceptance
+        run: |
+          npm ci --prefix functions --ignore-scripts
+          npm --prefix functions run build
+          node scripts/native-member-emulators.mjs prepare "${RUNNER_TEMP}/native-members"
+
+      - name: Native Firebase Auth and member-tools acceptance (no cloud credentials)
         run: |
           DEST=$(xcrun simctl list devices booted --json | python3 -c '
           import json, sys
@@ -126,11 +138,10 @@ jobs:
             -derivedDataPath "${RUNNER_TEMP}/ios-tests" \
             ENTITLEMENTS_REQUIRED=YES \
             -only-testing:KCCTests/FirebaseEmulatorIntegrationTests build-for-testing
-          python3 apps/ios/scripts/auth-emulator-tests.py config "${RUNNER_TEMP}/ios-auth-emulator.json"
           npm exec --yes --package=firebase-tools@15.34.0 -- firebase emulators:exec \
-            --project demo-kcc-ios-ci --config "${RUNNER_TEMP}/ios-auth-emulator.json" \
-            --only auth --non-interactive \
-            "python3 apps/ios/scripts/auth-emulator-tests.py run --products '${RUNNER_TEMP}/ios-tests/Build/Products' --destination '${DEST}'"
+            --project demo-kcc-ios-ci --config "${RUNNER_TEMP}/native-members/firebase.json" \
+            --only auth,firestore,functions --non-interactive \
+            "node scripts/native-member-emulators.mjs seed && python3 apps/ios/scripts/auth-emulator-tests.py run --products '${RUNNER_TEMP}/ios-tests/Build/Products' --destination '${DEST}' --member-tools"
 
       # TestFlight uses the Release configuration on arm64 hardware. Keep this
       # unsigned and config-less so PRs catch device-only compile/link failures

@@ -2111,4 +2111,12 @@
     <string name="clubs_logoError">Bilden kunde inte förberedas. Välj en annan bild.</string>
     <string name="clubs_reportConfirm">Skicka en rapport om detta meddelande till administratörerna?</string>
     <string name="clubs_noAttending">Inga klubbar anmälda ännu.</string>
+    <string name="accountWarnings_title">Varningar från administratör</string>
+    <string name="accountWarnings_loading">Hämtar varningar…</string>
+    <string name="accountWarnings_error">Varningar kunde inte hämtas. Försök igen.</string>
+    <string name="accountWarnings_empty">Inga aktiva varningar.</string>
+    <string name="accountWarnings_retry">Försök igen</string>
+    <string name="accountWarnings_more">Visa fler varningar</string>
+    <string name="accountWarnings_untilRevoked">Gäller tills den återkallas</string>
+    <string name="accountWarnings_expires">Giltig till</string>
 </resources>

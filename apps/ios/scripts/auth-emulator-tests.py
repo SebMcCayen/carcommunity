@@ -20,7 +20,7 @@ def config():
     }}
 
 
-def enable_test(data):
+def enable_test(data, member_tools=False):
     if "TestConfigurations" in data:
         targets = [target for configuration in data["TestConfigurations"]
                    for target in configuration.get("TestTargets", [])]
@@ -35,6 +35,8 @@ def enable_test(data):
         target = data["KCCTests"]
     for field in ("EnvironmentVariables", "TestingEnvironmentVariables"):
         target.setdefault(field, {})["KCC_RUN_AUTH_EMULATOR_TESTS"] = "1"
+        if member_tools:
+            target[field]["KCC_RUN_MEMBER_EMULATOR_TESTS"] = "1"
     return data
 
 
@@ -52,6 +54,7 @@ def main():
     run = sub.add_parser("run")
     run.add_argument("--products", type=Path, required=True)
     run.add_argument("--destination", required=True)
+    run.add_argument("--member-tools", action="store_true")
     args = parser.parse_args()
     if args.command == "config":
         args.output.write_text(json.dumps(config(), indent=2) + "\n")
@@ -60,7 +63,7 @@ def main():
     sources = [source for source in args.products.glob("*.xctestrun") if source != path]
     if len(sources) != 1:
         parser.error("Expected one build-for-testing xctestrun file")
-    data = enable_test(plistlib.loads(sources[0].read_bytes()))
+    data = enable_test(plistlib.loads(sources[0].read_bytes()), member_tools=args.member_tools)
     path.write_bytes(plistlib.dumps(data))
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith(("GOOGLE_", "GCLOUD_", "CLOUDSDK_", "FIREBASE_", "SIMCTL_CHILD_FIREBASE_"))}

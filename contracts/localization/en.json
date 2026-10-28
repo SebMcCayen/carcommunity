@@ -2266,5 +2266,15 @@
     "logoError": "Could not prepare this image. Choose another image.",
     "reportConfirm": "Send a report about this message to the administrators?",
     "noAttending": "No clubs registered yet."
+  },
+  "accountWarnings": {
+    "title": "Warnings from an administrator",
+    "loading": "Loading warnings…",
+    "error": "Warnings could not be loaded. Please retry.",
+    "empty": "No active warnings.",
+    "retry": "Retry",
+    "more": "Load more warnings",
+    "untilRevoked": "Valid until revoked",
+    "expires": "Valid until"
   }
 }

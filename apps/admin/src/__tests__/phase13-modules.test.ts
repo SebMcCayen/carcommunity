@@ -1234,21 +1234,8 @@ describe('users module', () => {
     expect(u4?.lastLoginAt).toBeNull();
   });
 
-  it('maps the user detail (users/{uid} only) with the safe fields', async () => {
-    getDocMock.mockResolvedValue({
-      data: () => ({
-        displayName: 'Bertil',
-        role: 'user',
-        activeMember: false,
-        suspended: true,
-        deleted: false,
-        bio: 'Bilentusiast',
-        createdAt: ts('2026-06-01T10:00:00Z'),
-        updatedAt: ts('2026-07-02T10:00:00Z'),
-      }),
-    });
-    const detail = await adminGetUser('u3');
-    expect(detail).toEqual({
+  it('loads the member through the freshly authorized safe backend contract', async () => {
+    const user = {
       uid: 'u3',
       displayName: 'Bertil',
       role: 'user',
@@ -1256,13 +1243,19 @@ describe('users module', () => {
       suspended: true,
       deleted: false,
       bio: 'Bilentusiast',
-      createdAt: '2026-06-01T10:00:00.000Z',
-      updatedAt: '2026-07-02T10:00:00.000Z',
-    });
+      createdAt: null,
+      updatedAt: null,
+      actorUid: 'admin-1',
+      lastLoginAt: null,
+      pointsBalance: 500,
+    };
+    callAdminMock.mockResolvedValue({ user });
+    expect(await adminGetUser('u3')).toEqual(user);
+    expect(callAdminMock).toHaveBeenCalledWith('admin-getMember', { targetUid: 'u3' });
+    expect(getDocMock).not.toHaveBeenCalled();
   });
-
-  it('resolves a missing user document to null', async () => {
-    getDocMock.mockResolvedValue({ data: () => undefined });
+  it('resolves a missing member to null', async () => {
+    callAdminMock.mockResolvedValue({ user: null });
     expect(await adminGetUser('missing')).toBeNull();
   });
 

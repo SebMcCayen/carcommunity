@@ -2266,5 +2266,15 @@
     "logoError": "Bilden kunde inte förberedas. Välj en annan bild.",
     "reportConfirm": "Skicka en rapport om detta meddelande till administratörerna?",
     "noAttending": "Inga klubbar anmälda ännu."
+  },
+  "accountWarnings": {
+    "title": "Varningar från administratör",
+    "loading": "Hämtar varningar…",
+    "error": "Varningar kunde inte hämtas. Försök igen.",
+    "empty": "Inga aktiva varningar.",
+    "retry": "Försök igen",
+    "more": "Visa fler varningar",
+    "untilRevoked": "Gäller tills den återkallas",
+    "expires": "Giltig till"
   }
 }

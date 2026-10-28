@@ -1,6 +1,8 @@
 import FirebaseAppCheck
 import FirebaseAuth
 import FirebaseCore
+import FirebaseFirestore
+import FirebaseFunctions
 import XCTest
 
 @testable import KCC
@@ -36,6 +38,9 @@ final class FirebaseEmulatorIntegrationTests: XCTestCase {
             let token = try await result.user.getIDToken(forcingRefresh: true)
             XCTAssertFalse(token.isEmpty) // Never include credentials in assertion messages.
             try await result.user.reload()
+            if ProcessInfo.processInfo.environment["KCC_RUN_MEMBER_EMULATOR_TESTS"] == "1" {
+                try await verifyMemberTools(app: app, options: options)
+            }
             try auth.signOut()
             XCTAssertNil(auth.currentUser)
         } catch {
@@ -44,6 +49,75 @@ final class FirebaseEmulatorIntegrationTests: XCTestCase {
             XCTFail("Native local Auth acceptance failed (code \((error as NSError).code))")
         }
     }
+    @MainActor private func verifyMemberTools(app: FirebaseApp, options: FirebaseOptions) async throws {
+        XCTAssertEqual(ProcessInfo.processInfo.environment["KCC_RUN_MEMBER_EMULATOR_TESTS"], "1")
+        // Independent named SDK sessions, all hardwired to local demo endpoints.
+        let memberAuth = Auth.auth(app: app)
+        try memberAuth.signOut()
+        _ = try await memberAuth.signIn(withEmail: "native-member@example.com", password: "Native-local-only-12345")
+        let actorName = "KCC-CI-Emulator-Actor-" + UUID().uuidString
+        FirebaseApp.configure(name: actorName, options: options)
+        let actorApp = try XCTUnwrap(FirebaseApp.app(name: actorName))
+        defer { actorApp.delete { _ in } }
+        let actorAuth = Auth.auth(app: actorApp)
+        actorAuth.useEmulator(withHost: "localhost", port: 19098)
+        _ = try await actorAuth.signIn(withEmail: "native-admin@example.com", password: "Native-local-only-12345")
+        let adminFunctions = Functions.functions(app: actorApp, region: "europe-west1")
+        let ownFunctions = Functions.functions(app: app, region: "europe-west1")
+        adminFunctions.useEmulator(withHost: "localhost", port: 15001)
+        ownFunctions.useEmulator(withHost: "localhost", port: 15001)
+        let firestore = Firestore.firestore(app: app)
+        // gRPC uses an explicit plaintext loopback transport. Auth/Functions
+        // use localhost for ATS; Firestore's native gRPC channel uses IPv4.
+        let firestoreSettings = firestore.settings
+        firestoreSettings.host = "127.0.0.1:18088"
+        firestoreSettings.isSSLEnabled = false
+        firestoreSettings.cacheSettings = MemoryCacheSettings()
+        firestore.settings = firestoreSettings
+        XCTAssertEqual(firestore.settings.host, "127.0.0.1:18088")
+        XCTAssertFalse(firestore.settings.isSSLEnabled)
+        let key = UUID().uuidString
+        let warningResult = try await adminFunctions.httpsCallable("admin-warnUser").call([
+            "targetUid": "native-member", "reason": "Native acceptance warning", "internalNote": "PRIVATE-NOTE", "durationDays": 7, "idempotencyKey": key
+        ])
+        let warningData = try XCTUnwrap(warningResult.data as? [String: Any])
+        let warningID = try XCTUnwrap(warningData["actionId"] as? String)
+        let started = ContinuousClock().now
+        let ownResult = try await ownFunctions.httpsCallable("account-listWarnings").call([:])
+        let own = try XCTUnwrap(ownResult.data as? [String: Any])
+        XCTAssertEqual(own["userId"] as? String, "native-member")
+        let rows = try XCTUnwrap(own["warnings"] as? [[String: Any]])
+        XCTAssertEqual(rows.count, 1)
+        let row = try XCTUnwrap(rows.first)
+        XCTAssertNil(row["internalNote"])
+        let warning = try XCTUnwrap(AccountWarning.decode(row, requestStarted: started))
+        XCTAssertEqual(warning.reason, "Native acceptance warning")
+        XCTAssertTrue(warning.active(at: ContinuousClock().now))
+        let signal = try await firestore.collection("accountWarningSignals").document("native-member").getDocument(source: .server)
+        XCTAssertTrue(signal.exists)
+        do {
+            _ = try await firestore.collection("userWarnings").document("native-member").collection("warnings").document(warningID).getDocument(source: .server)
+            XCTFail("Private warning lifecycle must be denied to the member")
+        } catch { XCTAssertEqual((error as NSError).code, FirestoreErrorCode.Code.permissionDenied.rawValue) }
+        let adjustment: [String: Any] = ["targetUid": "native-member", "amount": 17, "type": "adjustment_credit", "reason": "Native acceptance", "idempotencyKey": UUID().uuidString]
+        _ = try await adminFunctions.httpsCallable("points-adminAdjust").call(adjustment)
+        _ = try await adminFunctions.httpsCallable("points-adminAdjust").call(adjustment)
+        let wallet = try await firestore.collection("pointsLedger").document("native-member").getDocument(source: .server)
+        XCTAssertEqual((wallet.get("balance") as? NSNumber)?.intValue, 117)
+        _ = try await adminFunctions.httpsCallable("admin-updateDisplayName").call([
+            "targetUid": "native-member", "displayName": "Native renamed", "previousDisplayName": "native-member", "expectedActorUid": "native-admin", "reason": "Native acceptance", "idempotencyKey": UUID().uuidString
+        ])
+        let profile = try await firestore.collection("users").document("native-member").getDocument(source: .server)
+        XCTAssertEqual(profile.get("displayName") as? String, "Native renamed")
+        _ = try await adminFunctions.httpsCallable("admin-revokeWarning").call([
+            "targetUid": "native-member", "warningId": warningID, "expectedVersion": 1, "reason": "Native acceptance complete", "idempotencyKey": UUID().uuidString
+        ])
+        let afterResult = try await ownFunctions.httpsCallable("account-listWarnings").call([:])
+        let after = try XCTUnwrap(afterResult.data as? [String: Any])
+        XCTAssertEqual((after["warnings"] as? [[String: Any]])?.count, 0)
+        try actorAuth.signOut()
+    }
+
 }
 
 /// Avoids external App Check/Installations requests. Applies only to named test apps.
