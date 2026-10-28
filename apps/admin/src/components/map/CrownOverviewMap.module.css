@@ -24,7 +24,7 @@
 .local {
   position: absolute;
   bottom: 4px;
-  left: 12px;
+  right: 12px;
   font-size: 11px;
   color: #e7e2f8;
   background: #111b2d;

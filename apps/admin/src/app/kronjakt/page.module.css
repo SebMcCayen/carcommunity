@@ -674,6 +674,7 @@
 }
 .diagTableWrap {
   overflow-x: auto;
+  overflow-y: hidden;
 }
 .diagMuted {
   color: var(--text-secondary);
@@ -693,6 +694,7 @@
 }
 .tabs {
   overflow-x: auto;
+  overflow-y: hidden;
 }
 .tabs > button {
   white-space: nowrap;
