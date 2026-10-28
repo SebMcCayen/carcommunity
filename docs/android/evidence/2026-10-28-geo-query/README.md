@@ -8,9 +8,13 @@
 | Debug app and instrumentation APKs | Build successful |
 | `:app:lintDebug`, including final instrumentation helper | Successful |
 | Receiving flow before adding the capability metadata | 7/7 native tests successful |
-| Final native run with actual Driver handoff | 13/13 successful: 8 `GeoQueryHandoffTest` + 5 existing `NavigationSearchScreenTest` |
+| Initial native run with actual Driver handoff | 13/13 successful: 8 `GeoQueryHandoffTest` + 5 existing `NavigationSearchScreenTest` |
+| Save-editor follow-up and actual Driver handoff | 2/2 targeted native tests successful; the new regression is the ninth `GeoQueryHandoffTest` |
 
-The final native output is preserved in [native-tests.txt](native-tests.txt).
+The initial native output is preserved in [native-tests.txt](native-tests.txt).
+The save-editor follow-up output is in [save-editor-follow-up.txt](save-editor-follow-up.txt).
+The added regression verifies that a new external query dismisses the previous
+save/edit dialog and that opening the editor again acts on the newly chosen place.
 The application capability was added only after the receiving flow passed the
 seven tests without that metadata. The final run also reads the installed
 application metadata and requires the boolean to be true.
@@ -72,6 +76,6 @@ adb -s "$SERIAL" shell am instrument -w \
   com.kungsbackacarcommunity.app.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
-Require `OK (13 tests)`; an `am instrument` shell exit code alone is insufficient.
+Require `OK (14 tests)`; an `am instrument` shell exit code alone is insufficient.
 Normal CI omits `verifyDriverHandoff`: the receiver test then sends an Android
 `ACTION_VIEW` directly, while still testing the metadata in a separate case.

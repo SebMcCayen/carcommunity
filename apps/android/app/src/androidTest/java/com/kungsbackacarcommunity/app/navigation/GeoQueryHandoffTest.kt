@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -188,6 +189,25 @@ class GeoQueryHandoffTest {
         compose.onNodeWithText(results[1].name).assertIsDisplayed()
         compose.onNodeWithTag(NAV_ROUTE_SHEET_TEST_TAG).assertDoesNotExist()
         assertNull(surface.routeOverlay.value)
+    }
+
+    @Test fun warmQuery_dismissesThePreviousSaveEditor_andEditsOnlyTheNewSelection() {
+        launch("geo:0,0?q=Kungsbacka%20torg")
+        assertQuery("Kungsbacka torg")
+        compose.onNodeWithText(results[0].name).performClick()
+        compose.onNodeWithTag(NAV_SAVE_TEST_TAG).performClick()
+        compose.onNodeWithTag(NAV_SAVE_EDITOR_TEST_TAG).assertIsDisplayed()
+
+        context.startActivity(link("geo:0,0?q=" + Uri.encode("Åsa torg")))
+        assertQuery("Åsa torg")
+        compose.onNodeWithTag(NAV_SAVE_EDITOR_TEST_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(NAV_ROUTE_SHEET_TEST_TAG).assertDoesNotExist()
+        assertNull(surface.routeOverlay.value)
+
+        compose.onNodeWithText(results[1].name).performClick()
+        compose.onNodeWithTag(NAV_SAVE_TEST_TAG).performClick()
+        compose.onNodeWithTag(NAV_SAVE_EDITOR_TEST_TAG).assertIsDisplayed()
+        compose.onNodeWithTag(NAV_SAVE_NAME_TEST_TAG).assertTextContains(results[1].name)
     }
 
     @Test fun noMatches_keepsTheIncomingTextEditable() {

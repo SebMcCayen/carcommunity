@@ -287,6 +287,9 @@ fun NavigationSearchScreen(
     // name so a new gesture re-previews.
     val droppedPinLabel = stringResource(R.string.addressSearch_droppedPin)
     LaunchedEffect(controller, initialTarget, initialTargetName, initialQuery, initialRequestId) {
+        // The host can replace this overlay in the same composition. A save/edit
+        // dialog must never keep acting on the previous link's destination.
+        saveTarget = null
         if (initialTarget != null) {
             controller.selectPoint(
                 point = initialTarget,

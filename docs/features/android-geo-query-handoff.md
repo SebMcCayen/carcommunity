@@ -22,7 +22,8 @@ launch is introduced by receiving a link.
   later launcher/notification Intents. The original launch
   intent is not replayed after its target has been consumed.
 - The search uses an explicit request ID, so opening the same text link again
-  replaces an existing preview and shows choices again. Old navigation, saved-place
+  replaces an existing preview, dismisses the previous save/edit dialog, and shows
+  choices again. Old navigation, saved-place
   edit and convoy-destination context cannot silently select the incoming place.
 
 ## Empty results and errors
