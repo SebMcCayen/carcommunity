@@ -38,7 +38,10 @@ jobs:
     # macOS minutes bill at a 10x multiplier on private repos — this job is
     # paths-filtered above so it runs for iOS, its contracts, and admin/backend configuration changes.
     runs-on: macos-latest
-    timeout-minutes: 60
+    # Unit/UI tests, native Firebase-emulator acceptance and the unsigned
+    # Release build can exceed one hour on the standard shared macOS runner.
+    # Keep every check and the standard runner; allow the complete job to finish.
+    timeout-minutes: 90
 
     steps:
       - name: Checkout

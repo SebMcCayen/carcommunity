@@ -164,9 +164,11 @@
 		5B77DD32105D8566FA6D7295 /* FirebaseBadgesRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F35987BC9FD30A65AF082E /* FirebaseBadgesRepository.swift */; };
 		5BE03CCD4750CF212C0B4BAD /* ProfileScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC9DE0933201A46D20EE2ED8 /* ProfileScreen.swift */; };
 		5CC720527FEC531C686CC9AF /* BillboardsCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4F47E666EA4CAAEF7906D3B /* BillboardsCoordinator.swift */; };
+		5D52528DBD475FAC372ABBA0 /* AppStore.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 515D01DDB9677DC69CCD108E /* AppStore.xcstrings */; };
 		5D5497CB236ECCDC0A9A985D /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 35ECF01C5EE3E57259D5C48F /* FirebaseStorage */; };
 		5E9122EC48616CC93350D027 /* StartDrivingSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D89EE517172EB9F0D769763 /* StartDrivingSelection.swift */; };
 		5EC79B2D0DA19E6286386B48 /* ChatLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C7744768F4983F116A875D8 /* ChatLogic.swift */; };
+		5FA58398E128DF16EFBBCEBF /* AppStoreCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C74337FF89D1F20ED590396E /* AppStoreCatalogTests.swift */; };
 		613B8194B7824CF9011547F0 /* FirebaseInstallations in Frameworks */ = {isa = PBXBuildFile; productRef = 11665018CFAB00488053E085 /* FirebaseInstallations */; };
 		61E605201BA06F0EBE8A6C4F /* FirebaseAccountDeletionRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFCC08B9374438D59BC02CDE /* FirebaseAccountDeletionRepository.swift */; };
 		61FFAA632018E681C2907949 /* EventManagementCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1B767D588EF498CE27F69CD /* EventManagementCoordinator.swift */; };
@@ -355,6 +357,7 @@
 		D659C88AFC97CAF9AB1DCB5A /* PerkShopModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44885EC0E783DC6F01B6A2FE /* PerkShopModels.swift */; };
 		D7B09A124B1BED21F2359EC6 /* UserProfileRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70940A5568FF91A6A171D3CF /* UserProfileRepository.swift */; };
 		D82FBCB9FF439B2E1275434C /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 24ACA4339607DCEEA56FA0CC /* InfoPlist.xcstrings */; };
+		D8BF05C62ECB34F2AA5C4ADA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DBB0E5063B829CE367B7EB40 /* Assets.xcassets */; };
 		DA04F6E3D0F1737A1F3C045D /* EventsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF465D5E8668C38571889BC0 /* EventsModels.swift */; };
 		DA178F599AACBD13B6174E99 /* PartnersModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB67D4C9FF1BC7325C26244A /* PartnersModels.swift */; };
 		DABBF1880D145268486DF781 /* NotificationSettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19B57EE605EF799F982EBDDA /* NotificationSettingsScreen.swift */; };
@@ -394,6 +397,7 @@
 		F47E0904430636FCE851BF7A /* FirebasePartnerApplicationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 846F570710B4634050890322 /* FirebasePartnerApplicationRepository.swift */; };
 		F4BF63CE5C300410BCF083C9 /* NotificationsInboxScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 712EFE4AB97878EBB434C49C /* NotificationsInboxScreen.swift */; };
 		F4E1F5B47FE7D5EFAB3F4282 /* DriverFeedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2EEEA338960785397EF24B3 /* DriverFeedModels.swift */; };
+		F50C51C9DA613385B365F014 /* AppStoreLegalLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76F4A24D08CF097711E5FA5B /* AppStoreLegalLinks.swift */; };
 		F5234A74B81696D38F8EB871 /* FirebaseAccountAccessRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61A6E26ABD7BF3933594AAB0 /* FirebaseAccountAccessRepository.swift */; };
 		F6A91B404F8D01C380E5F28A /* PartnersCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E840D1554DADFB7C1F1FCBB6 /* PartnersCoordinatorTests.swift */; };
 		F79AAA35390591F13791A82C /* BadgesModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E175F7C3177C9045EA47D7FE /* BadgesModelTests.swift */; };
@@ -558,6 +562,7 @@
 		5067A6E44861FDA5AB19A8EC /* LocationPermissionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPermissionCoordinator.swift; sourceTree = "<group>"; };
 		50D5F8349418CFC684C68B94 /* FirebaseOnboardingRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseOnboardingRepository.swift; sourceTree = "<group>"; };
 		510F5153D904493D729FC62E /* GroupDriveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupDriveTests.swift; sourceTree = "<group>"; };
+		515D01DDB9677DC69CCD108E /* AppStore.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = AppStore.xcstrings; sourceTree = "<group>"; };
 		51CD341A4027796948864A5C /* KccFunctionsError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KccFunctionsError.swift; sourceTree = "<group>"; };
 		521D540F62266B46D5999388 /* CrownHuntMapRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrownHuntMapRepository.swift; sourceTree = "<group>"; };
 		527A41B611F57B935E1FDCAB /* BlockingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockingCoordinator.swift; sourceTree = "<group>"; };
@@ -611,6 +616,7 @@
 		765D3804D2135FCCADBA942F /* ChatScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatScreen.swift; sourceTree = "<group>"; };
 		766FD0B723163B3B95BBB96A /* PerkShopModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerkShopModelTests.swift; sourceTree = "<group>"; };
 		76DF6530C2C3AA39EF2D0495 /* ChannelChatCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelChatCoordinator.swift; sourceTree = "<group>"; };
+		76F4A24D08CF097711E5FA5B /* AppStoreLegalLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreLegalLinks.swift; sourceTree = "<group>"; };
 		774E7D6FC1CC0748E23ACF61 /* ChatCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatCoordinator.swift; sourceTree = "<group>"; };
 		7774A44523D01A40506D3F0A /* IncidentRepositories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncidentRepositories.swift; sourceTree = "<group>"; };
 		77E3150819F0BFB45C914129 /* AccountAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountAccess.swift; sourceTree = "<group>"; };
@@ -744,6 +750,7 @@
 		C5F6FBBFC2D0767100DF9FB7 /* DriveRecordingJournalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveRecordingJournalTests.swift; sourceTree = "<group>"; };
 		C723CECAC346226F99FA9C76 /* LiveLocationModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveLocationModelsTests.swift; sourceTree = "<group>"; };
 		C741C27727AD13F508F2F932 /* ConvoyManagementRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyManagementRepository.swift; sourceTree = "<group>"; };
+		C74337FF89D1F20ED590396E /* AppStoreCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreCatalogTests.swift; sourceTree = "<group>"; };
 		C793162FE093DA11AA4F879A /* FirebaseCrownHuntFeatureFlagsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseCrownHuntFeatureFlagsRepository.swift; sourceTree = "<group>"; };
 		C7F055519C63479C7F45F914 /* MapLayersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapLayersView.swift; sourceTree = "<group>"; };
 		C80A81EA9949BF434E7C246D /* AuthState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthState.swift; sourceTree = "<group>"; };
@@ -787,6 +794,7 @@
 		D93D195913ADF60FB8F6EDD4 /* FeedbackFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackFeatureTests.swift; sourceTree = "<group>"; };
 		DAAC7716DBC57A9D08EED193 /* BadgeStrings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BadgeStrings.swift; sourceTree = "<group>"; };
 		DB62262FD1AEE1241B1630D7 /* ConvoyDesignViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyDesignViews.swift; sourceTree = "<group>"; };
+		DBB0E5063B829CE367B7EB40 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DC183FCE8F1C3FAFC61A5784 /* FirebaseUserProfileRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseUserProfileRepository.swift; sourceTree = "<group>"; };
 		DC1B03B152F0EF9C1349297A /* SavedPlacesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedPlacesStore.swift; sourceTree = "<group>"; };
 		DCF1CA6EB265BC42ECBD011A /* CrownHuntComposition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrownHuntComposition.swift; sourceTree = "<group>"; };
@@ -1081,6 +1089,7 @@
 		3C9357116487CACE984AFAEC /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				515D01DDB9677DC69CCD108E /* AppStore.xcstrings */,
 				24ACA4339607DCEEA56FA0CC /* InfoPlist.xcstrings */,
 				AB4411241111CAD26506FD14 /* Localizable.xcstrings */,
 				A7167A1118C17AD86A75C54E /* PrivacyInfo.xcprivacy */,
@@ -1091,6 +1100,7 @@
 		4354374B4D732A7906C4993A /* KCC */ = {
 			isa = PBXGroup;
 			children = (
+				DBB0E5063B829CE367B7EB40 /* Assets.xcassets */,
 				690A7983868C88E10091C89A /* Info.plist */,
 				1B4532D3799C9910574152D2 /* KCC.entitlements */,
 				5351C73ED96E7C164CF4F6EC /* Access */,
@@ -1458,6 +1468,7 @@
 		E9923769F6FA8D54DEE7519E /* Subscription */ = {
 			isa = PBXGroup;
 			children = (
+				76F4A24D08CF097711E5FA5B /* AppStoreLegalLinks.swift */,
 				EBE4A059282D791332AD1F7F /* FirebaseAppleSubscriptionVerifier.swift */,
 				3FA17CDE68C688BB3DF03B54 /* MembershipScreen.swift */,
 				419C5007972800C82AA1851B /* StoreKitSubscriptionStore.swift */,
@@ -1510,6 +1521,7 @@
 			children = (
 				C28CE13BEF75D9EF55AF614C /* AccountAccessTests.swift */,
 				D763F1BD23666E2332D73FB3 /* AccountDeletionTests.swift */,
+				C74337FF89D1F20ED590396E /* AppStoreCatalogTests.swift */,
 				AA62E8B4731D8E53A6453DC3 /* AppUpdateTests.swift */,
 				7AE97383874F5AE97471652A /* BadgesCoordinatorTests.swift */,
 				E175F7C3177C9045EA47D7FE /* BadgesModelTests.swift */,
@@ -1742,6 +1754,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5D52528DBD475FAC372ABBA0 /* AppStore.xcstrings in Resources */,
+				D8BF05C62ECB34F2AA5C4ADA /* Assets.xcassets in Resources */,
 				D82FBCB9FF439B2E1275434C /* InfoPlist.xcstrings in Resources */,
 				E89DC7EC35F16BB97D6E2B60 /* Localizable.xcstrings in Resources */,
 				93C55D774DE8ADB3773B041B /* PrivacyInfo.xcprivacy in Resources */,
@@ -1819,6 +1833,7 @@
 				4FC6C91B000C9F9E32A6FB81 /* AccountDeletionScreen.swift in Sources */,
 				59E731FFEFD4CD2126B7C1E5 /* AddressSearchClient.swift in Sources */,
 				2EF6D76E76BA6D95F7F70503 /* AppAccessSession.swift in Sources */,
+				F50C51C9DA613385B365F014 /* AppStoreLegalLinks.swift in Sources */,
 				807D8F1D13CC58678B400510 /* AppUpdate.swift in Sources */,
 				7C14EF2819D1D418929F4C63 /* AppleSignInProvider.swift in Sources */,
 				6C25F552799AC5E993EA18E2 /* AuthRepository.swift in Sources */,
@@ -2112,6 +2127,7 @@
 			files = (
 				9B07DF2A2216686205CE0EE5 /* AccountAccessTests.swift in Sources */,
 				1FF6ACAA1D6E4A22FC0044C5 /* AccountDeletionTests.swift in Sources */,
+				5FA58398E128DF16EFBBCEBF /* AppStoreCatalogTests.swift in Sources */,
 				59BD19FC2AD93A2432DAA82F /* AppUpdateTests.swift in Sources */,
 				081E588B1977CBBAE9AEAFD9 /* BadgesCoordinatorTests.swift in Sources */,
 				F79AAA35390591F13791A82C /* BadgesModelTests.swift in Sources */,
