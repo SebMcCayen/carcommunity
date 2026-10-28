@@ -12,7 +12,7 @@ import org.junit.Test
  * `postedAt`, its source, `now`, and the selected option, is it drawn?
  *
  * This is the whole behaviour of the feature — the SharedPreferences store and the
- * layers-popup slider are thin shells over it — so the scope rules (Trafikverket
+ * layers-popup choices are thin shells over it — so the scope rules (Trafikverket
  * only, member reports always shown, missing posted-time shown, "All" = no limit)
  * and the inclusive age boundary are pinned here, off-device.
  */
@@ -51,65 +51,64 @@ class IncidentAgeFilterTest {
     @Test
     fun `a fresh Trafikverket alert is shown under a strict limit`() {
         val fresh = incident(postedAtIso = postedAgo(60 * 60 * 1000)) // 1h old
-        assertTrue(IncidentAgeFilter.isVisible(fresh, nowMillis, IncidentAgeOption.HOURS_6))
+        assertTrue(IncidentAgeFilter.isVisible(fresh, nowMillis, IncidentAgeOption.DAYS_3))
     }
 
     @Test
     fun `a Trafikverket alert older than the limit is hidden`() {
-        val old = incident(postedAtIso = postedAgo(2L * 24 * 60 * 60 * 1000)) // 2 days
-        assertFalse(IncidentAgeFilter.isVisible(old, nowMillis, IncidentAgeOption.DAY_1))
+        val old = incident(postedAtIso = postedAgo(4L * 24 * 60 * 60 * 1000)) // 4 days
+        assertFalse(IncidentAgeFilter.isVisible(old, nowMillis, IncidentAgeOption.DAYS_3))
     }
 
     @Test
     fun `the age boundary is inclusive - exactly at the limit is still shown`() {
-        val limit = IncidentAgeOption.DAY_1.maxAgeMillis!!
-        val exactly = incident(postedAtIso = postedAgo(limit))
-        assertTrue(IncidentAgeFilter.isVisible(exactly, nowMillis, IncidentAgeOption.DAY_1))
-        // One millisecond past the limit flips to hidden.
-        val justOver = incident(postedAtIso = postedAgo(limit + 1))
-        assertFalse(IncidentAgeFilter.isVisible(justOver, nowMillis, IncidentAgeOption.DAY_1))
+        for (option in IncidentAgeOption.entries.filter { it.maxAgeMillis != null }) {
+            val limit = option.maxAgeMillis!!
+            assertTrue(option.name, IncidentAgeFilter.isVisible(incident(postedAtIso = postedAgo(limit)), nowMillis, option))
+            assertFalse(option.name, IncidentAgeFilter.isVisible(incident(postedAtIso = postedAgo(limit + 1)), nowMillis, option))
+        }
     }
 
     @Test
     fun `a member report is never age-filtered`() {
         // Even with no posted-time and a strict limit, a user's own report shows.
         val member = incident(source = "user", postedAtIso = null)
-        assertTrue(IncidentAgeFilter.isVisible(member, nowMillis, IncidentAgeOption.HOURS_6))
+        assertTrue(IncidentAgeFilter.isVisible(member, nowMillis, IncidentAgeOption.DAYS_3))
         // And an OLD member report (aged by createdAt in the sheet) is still not
         // hidden by this filter, which only aims at Trafikverket's backlog.
         val oldMember = incident(source = "user", postedAtIso = postedAgo(365L * 24 * 60 * 60 * 1000))
-        assertTrue(IncidentAgeFilter.isVisible(oldMember, nowMillis, IncidentAgeOption.HOURS_6))
+        assertTrue(IncidentAgeFilter.isVisible(oldMember, nowMillis, IncidentAgeOption.DAYS_3))
     }
 
     @Test
     fun `a Trafikverket alert with missing posted-time is shown`() {
         val noTime = incident(postedAtIso = null)
-        assertTrue(IncidentAgeFilter.isVisible(noTime, nowMillis, IncidentAgeOption.HOURS_6))
+        assertTrue(IncidentAgeFilter.isVisible(noTime, nowMillis, IncidentAgeOption.DAYS_3))
     }
 
     @Test
     fun `a Trafikverket alert with an unparseable posted-time is shown`() {
         val garbage = incident(postedAtIso = "not-a-timestamp")
-        assertTrue(IncidentAgeFilter.isVisible(garbage, nowMillis, IncidentAgeOption.HOURS_6))
+        assertTrue(IncidentAgeFilter.isVisible(garbage, nowMillis, IncidentAgeOption.DAYS_3))
     }
 
     @Test
     fun `a future posted-time (clock skew) is treated as brand new`() {
         val future = incident(postedAtIso = now.plusMillis(60 * 60 * 1000).toString())
-        assertTrue(IncidentAgeFilter.isVisible(future, nowMillis, IncidentAgeOption.HOURS_6))
+        assertTrue(IncidentAgeFilter.isVisible(future, nowMillis, IncidentAgeOption.DAYS_3))
     }
 
     @Test
     fun `visible() drops only the aged-out Trafikverket rows`() {
         val fresh = incident(postedAtIso = postedAgo(60 * 60 * 1000)) // 1h
-        val stale = incident(postedAtIso = postedAgo(3L * 24 * 60 * 60 * 1000)) // 3 days
+        val stale = incident(postedAtIso = postedAgo(4L * 24 * 60 * 60 * 1000)) // 4 days
         val noTime = incident(postedAtIso = null)
         val member = incident(source = "user")
         val result =
             IncidentAgeFilter.visible(
                 listOf(fresh, stale, noTime, member),
                 nowMillis,
-                IncidentAgeOption.DAY_1,
+                IncidentAgeOption.DAYS_3,
             )
         assertEquals(listOf(fresh, noTime, member), result)
     }
@@ -137,33 +136,27 @@ class IncidentAgeFilterTest {
     }
 
     @Test
-    fun `slider step count is the ticks between the option endpoints`() {
-        assertEquals(IncidentAgeOption.entries.size - 2, IncidentAgeFilter.sliderSteps)
-        assertEquals(IncidentAgeOption.entries.toList(), IncidentAgeFilter.orderedOptions)
+    fun `only the four supported options are exposed in ascending order`() {
+        assertEquals(
+            listOf(IncidentAgeOption.DAYS_3, IncidentAgeOption.WEEK_1, IncidentAgeOption.DAYS_30, IncidentAgeOption.ALL),
+            IncidentAgeFilter.orderedOptions,
+        )
+        assertEquals(listOf(3L, 7L, 30L, null), IncidentAgeFilter.orderedOptions.map { it.maxAgeMillis?.div(86_400_000L) })
     }
 
     @Test
-    fun `optionForSliderIndex resolves each whole notch to its option`() {
-        val options = IncidentAgeFilter.orderedOptions
-        for (i in options.indices) {
-            assertEquals(options[i], IncidentAgeFilter.optionForSliderIndex(i.toFloat()))
+    fun `retired stored limits widen to the nearest supported age`() {
+        for (name in listOf("HOURS_6", "HOURS_12", "DAY_1")) {
+            assertEquals(IncidentAgeOption.DAYS_3, IncidentAgeFilter.fromStoredName(name))
         }
     }
 
     @Test
-    fun `optionForSliderIndex rounds a mid-drag fractional value to the nearest notch`() {
-        // The whole point of issue #871: a partial drag must resolve to a real option
-        // so the live label can move as the thumb does. Rounds to nearest.
-        val options = IncidentAgeFilter.orderedOptions
-        assertEquals(options[0], IncidentAgeFilter.optionForSliderIndex(0.49f))
-        assertEquals(options[1], IncidentAgeFilter.optionForSliderIndex(0.5f))
-        assertEquals(options[2], IncidentAgeFilter.optionForSliderIndex(1.8f))
-    }
-
-    @Test
-    fun `optionForSliderIndex clamps an out-of-range value to the ends`() {
-        val options = IncidentAgeFilter.orderedOptions
-        assertEquals(options.first(), IncidentAgeFilter.optionForSliderIndex(-3f))
-        assertEquals(options.last(), IncidentAgeFilter.optionForSliderIndex(999f))
+    fun `original posting time wins over a fresh import timestamp`() {
+        val stale = incident(postedAtIso = postedAgo(31L * 86_400_000)).copy(createdAtIso = now.toString())
+        for (option in IncidentAgeOption.entries.filter { it.maxAgeMillis != null }) {
+            assertFalse(option.name, IncidentAgeFilter.isVisible(stale, nowMillis, option))
+        }
+        assertTrue(IncidentAgeFilter.isVisible(stale, nowMillis, IncidentAgeOption.ALL))
     }
 }

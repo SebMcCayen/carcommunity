@@ -330,6 +330,10 @@ struct MapCrownMarker: Equatable, Sendable {
     let glyphColorArgb: UInt32
     let glowColorArgb: UInt32?
     let collectedByYou: Bool
+    /// Presentation hierarchy (0–3), not a new rarity or reward policy.
+    let visualRank: Int
+    /// Geographic proximity only; stillness/GPS/account/server gates still apply.
+    let isInRange: Bool
 
     init(
         id: String,
@@ -339,7 +343,9 @@ struct MapCrownMarker: Equatable, Sendable {
         iconName: String,
         glyphColorArgb: UInt32,
         glowColorArgb: UInt32?,
-        collectedByYou: Bool = false
+        collectedByYou: Bool = false,
+        visualRank: Int = 0,
+        isInRange: Bool = false
     ) {
         self.id = id
         self.longitude = longitude
@@ -349,6 +355,8 @@ struct MapCrownMarker: Equatable, Sendable {
         self.glyphColorArgb = glyphColorArgb
         self.glowColorArgb = glowColorArgb
         self.collectedByYou = collectedByYou
+        self.visualRank = min(max(visualRank, 0), 3)
+        self.isInRange = isInRange
     }
 }
 

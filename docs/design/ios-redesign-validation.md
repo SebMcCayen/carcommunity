@@ -393,3 +393,440 @@ footer separation, scrolls content and taps the primary Chat tab while the dock
 is open. These require native CI, and do not establish real GPS/Mapbox/session
 or VoiceOver acceptance. No live Firebase or Mapbox runtime call, Apple service,
 purchase, paid review or production deploy is needed for these tests.
+
+## Crown Hunt design follow-up (2026-10-27)
+
+The native hub now has a pinned horizontal Overview / Statistics / gated Shop
+strip inside one NavigationStack. Full tab labels scroll at accessibility text
+sizes, rather than shrink or truncate. Overview uses actual season aggregates;
+Statistics retains lifetime counters and the season board. Earned points are
+never relabelled as spendable balance. The shop alone uses its existing ledger
+balance. Owner claim history and canonical instructions remain native push
+routes. Three previously missing claim-history strings are now in the shared
+SV/EN contract and generated into both native platforms; no Android behavior or
+release configuration changes.
+
+Stats, standings, history, shop and inventory use the shared semantic reading
+cards and page surfaces. Long names, costs and result labels wrap/stack at large
+text sizes. Native Back and map-panel Close stay outside reading scrollers.
+Shop/activation availability, affordability, in-flight guards and command payloads
+remain authoritative in the original coordinators. No purchase or deployment is
+performed by the design tests, and no new automatic backend read is introduced.
+
+Map crowns use one crisp system crown glyph on a small opaque navy tile, one
+accent border and 1–4 rank bars, using generated common/uncommon/rare/gold tokens.
+Spawn rank comes from its real rarity; curated points use visual bands of their
+actual reward without acquiring a new rarity. Metadata crosses the existing
+renderer seam as primitives. Proximity uses the existing fresh-fix tracker and
+updates once per second; it is not a promise of collection eligibility. No glow,
+perpetual pulse or raster image generation is added. Reduced Motion disables the
+short opacity transition. Shared spawns already collected by this reader are
+hidden locally; an older in-flight refresh cannot erase a just-confirmed award; shared server data and the original collector read are retained.
+Curated-point cooldown/suppression policy is unchanged; full Android UTC-day
+suppression and 320 ms shrink animation parity are not claimed by this patch.
+
+Collection uses the shared map reading dock above the footer. An exclusive
+spawn's existing removal still occurs in its coordinator, while an awarded
+result can keep the reading panel open until dismissed. The result shows actual
+server pointsAwarded (including a clipped amount), never the advertised reward
+as an invented award. Refusal/retry, source-specific results and safety copy are
+retained; terminal results disable the presentation's Collect action. Switching
+routes/tabs, selecting other map content or revoking availability closes it.
+No claim radius, dwell/speed requirement, budget, flag default or server API is
+changed.
+
+New native tests exercise real SwiftUI reading widgets at narrow SV/EN light/dark
+and accessibility sizes, the config-less hub's tabs/history/instructions/back
+navigation, fresh/stale/expired marker metadata and a fake-repository exclusive
+award with a clipped reward. These are not real GPS/Mapbox/purchase acceptance
+or a physical-iPhone visual comparison. Native CI must pass before merge; the PR
+records the exact executed run. Production Firebase deploy and signed Android
+release workflows are outside these paths/manual-only respectively. iOS artifact
+uploads stay opt-in; no paid review, production write or Mapbox runtime is needed.
+
+## Private social reading surfaces (2026-10-27)
+
+The iOS DM inbox, private thread/composer, friends, notification inbox and native
+Driver feed/detail now use the generated semantic page/surface/accent roles.
+Inbox cards distinguish unread items with cyan borders and count/status text;
+notification timestamps have their own line. Already-read notifications render
+as readable static content, while unread rows retain the existing single-flight
+mark-read command and server-authoritative styling. No notification destination
+or destructive action is added by this presentation change.
+
+Friend identities, pending requests and actual point balances stay in native
+list sections, retaining sort, nickname ambiguity selection, independent request
+buttons and confirmation-gated swipe removal. Reading text uses native Dynamic
+Type; action groups stack at accessibility sizes. No avatar storage reads or
+per-author queries are added. Unavailable and empty inbox states stay distinct
+and use scrollable reading cards rather than fixed-height centered copy.
+
+The DM composer bounds only the input viewport, retaining the full bound draft,
+UTF-16 send guard, optimistic message ownership, retry client ID and neutral
+terminal errors. Bubbles retain delivery state, optional real timestamps and
+server-built reply previews. Driver posts remain original read-only posts and
+comments with inline source attribution and actual counts, not chat messages.
+Its UID identity, active/scene invalidation lifecycle, access checks and bounded
+pagination are unchanged. Supported image URLs keep their existing validation;
+a failed image now resolves to a neutral placeholder rather than an endless
+loading state. No like/create/report controls or automatic onboarding are added.
+
+SocialDesignTests measure the actual production reading widgets at 288/358 pt,
+SV/EN, light/dark and largest accessibility text, including unread/read cards,
+long identities, friend actions/points, private delivery/reply states, Driver
+counts and the bounded long-draft composer. The full existing native suite also
+covers block filtering, send/retry, authoritative mark-read, Driver access and
+account switching. Layout tests and the config-less UI suite are not physical
+phone visual inspection or production social acceptance. Testing real friend
+requests, notification delivery and Driver roles remains a separate acceptance
+step with isolated accounts. No production backend deploy, signed distribution,
+Mapbox runtime, paid service or artifact-upload opt-in is needed for this PR.
+
+## Settings, notification preferences, privacy and block management (2026-10-27)
+
+Settings destinations retain their existing callback availability and canonical
+HTTPS legal-link policy. Navigation rows use semantic surface/icon roles,
+uncapped body text, 48 pt labels and distinct external/destructive affordances.
+The account-only destinations stay absent in config-less builds; this change
+adds no authentication bypass or new settings destination. Android's separate
+automatic-theme scheduling feature is outside this iOS presentation pass.
+
+Notification preferences use semantic permission/category cards and native
+labelled switches. Essential account notices remain enabled and disabled for
+editing; their view bindings also reject edits before invoking the existing
+coordinator. Saving/failure feedback stays in a measured bottom safe-area inset,
+above the shell navigation, so an edit near the bottom of the category scroller
+cannot hide the aggregate result. Category controls disable during the existing
+single-flight write, so extra taps are visibly unavailable instead of dropped. Error dismissal uses the existing reset guard
+without a new write or optimistic preference change. Every existing category/channel, save-error state, permission
+request guard and OS-settings destination is retained. Permission is refreshed
+on entry as before; no authorization prompt is requested automatically by
+rendering a card or running its layout tests.
+
+Privacy explanations, switches and independent Save/status controls now share
+two reading cards. Both bind to the existing pending draft, require an
+authoritative loaded snapshot, and retain independent single-flight commands.
+Leaderboard opt-out inversion, defaults, dirty drafts and subscription teardown
+remain in the unchanged coordinator/repository. Rendering is not consent and
+never automatically saves a preference.
+
+Blocked users retain the caller-owned outgoing list, actual optional dates,
+neutral missing-name fallback and confirmation-gated unblock request. The
+structured task, global working guard and errors stay with the original screen
+and coordinator. Only Back stays outside the reading scroller so long names,
+empty/unavailable/retry cards and action errors cannot displace it. No symmetric
+hidden-set data, avatar lookup or private user lookup is introduced.
+
+Shared reading-card border strokes explicitly ignore hit testing; interactive
+content keeps its native targets. SettingsDesignTests measure the actual row,
+permission/category, privacy/status, blocked-user and recovery widgets at
+288/358 pt, SV/EN, light/dark and normal/largest accessibility text. A binding
+regression test verifies essential switches reject writes while the independent
+social channels still forward the selected edit. Existing config-less Settings
+navigation tests retain real News/Back taps and now check 48 pt legal targets;
+existing coordinator and legal URL tests remain part of the full native suite.
+These checks do not establish real-account privacy writes, OS permission-return
+acceptance, production unblock behavior or physical-iPhone visual comparison.
+No backend, rules, workflow, token, localization or paid-service changes are
+required; native PR CI must pass before merge and records the executed result.
+
+## Partner directory, offers and application (2026-10-27)
+
+Partners now uses the shared semantic page/card roles for the directory, saved
+list, company information, public offer previews, member detail and code box.
+Directory/Saved navigation remains a local presentation choice with the same
+company/offer destination IDs. Its pinned horizontal tabs keep full Dynamic Type
+labels and 48 pt targets rather than shrinking a segmented control. Native Back
+and the existing navigation stack remain outside the reading scroller.
+
+The existing coordinator still decides paid/admin access, active-offer visibility,
+subscription revocation, expansion, private details, code reveal and saved state.
+Public previews never receive private instructions, terms or codes. Code reveal
+is still an explicit button command; shown codes retain their offer-ID guard and
+manual text selection. No automatic reveal, redemption, clipboard write, new
+listener or analytics/consent behavior is introduced. Existing validated HTTPS,
+phone and Apple Maps destinations are retained with larger native Link labels.
+Partner imagery is a local system fallback, without new logo/avatar fetches.
+
+Company/offer paging and all existing limited-dataset warnings stay intact.
+Directory offer counts remain absent until the existing exhaustive-data guard
+allows an actual count; nil is not replaced by zero. Saved-offer navigation still
+resolves its original company and focused offer. Error/retry, loading, membership,
+empty and unavailable states now use readable surfaces rather than introducing
+new destinations or unauthenticated test access.
+
+The application keeps the same form state, category choices, keyboard/content
+types, UTF-16 validation, normalization, optional-field omission, command payload,
+single-flight submission and once-per-presentation preparation guard. Fields use
+persistent visual labels and their native accessible labels; the message bounds
+only its input viewport and keeps the full bound draft. Pending fields lock while
+the immutable submitted input is in flight. Validation/duplicate/generic errors
+and the success Close callback retain their original meaning; success copy can
+scroll at large text sizes. No application is submitted by the layout tests.
+
+PartnerDesignTests measure actual public/saved/locked/member-control widgets,
+all offer-type labels, synthetic revealed-code wrapping, tabs, field viewport and
+submission labels at narrow SV/EN light/dark and largest accessibility text. The
+member-control layout fixture has no repository, signed-in UID or running session;
+it is not a runtime authorization shortcut. Existing coordinator/model/application
+tests cover access revocation, stale code results, pagination, external URL policy,
+validation and duplicate submission. The config-less shell still hides Partners
+and application routes without their configured services. These checks are not
+live paid-account/redemption/consent acceptance, real application submission or
+physical-iPhone visual comparison. No backend, rules, token, workflow, localization,
+production deploy or paid-service/artifact-upload opt-in changes are required.
+
+## Member profiles, badge wall, points history and social rankings (2026-10-27)
+
+This phase refines S63-S64 and the owner points-ledger/social-ranking routes
+associated with S28/S24. It does not replace Crown Hunt's separate season board.
+The shared semantic page/card roles, cyan selection, gold primary actions and
+Dynamic Type now apply to the public member profile, held awards, own badge
+wall, owner ledger and independent social leaderboard. Native navigation/Back
+stays outside the scrolling content. The owner's embedded wall relies on its
+parent's single scroller and no longer adds another set of side margins.
+
+Member profiles receive only the existing public projection and already-resolved
+avatar URL. Missing/failed images have a local system fallback. The permitted
+name, bio, balance, member-since date, public vehicle details and held badges
+remain the original data; no additional profile/image lookup or cosmetic,
+club/membership or unearned-award assertion is introduced. Public badge dates
+and tier medallions come from the held document and existing catalog. Unlike the
+owner wall, public awards never request private progress or display locked goals.
+Friend/request/DM actions retain the original relationship switch, request IDs,
+single-flight guards and callbacks; block/unblock/remove still require their
+existing native confirmations. Validated social-link hosts are unchanged.
+
+The own wall keeps every catalog ladder and only actually held milestones. Its
+existing fold still decides earned/locked tiers, dates, unknown counters, next
+rung and progress fractions. Labels and dates now scale and wrap; accessibility
+sizes use a single grid column. Progress rows stack their title and next tier at
+large text sizes. An unknown counter still has no invented progress bar. The
+existing earned/locked/date VoiceOver label is retained.
+
+The owner ledger keeps the initial balance in loading until its independent
+balance listener emits. A successful snapshot with a missing ledger/balance
+settles to the backend starting balance of zero; transient errors/reload retain
+the last known value. Coordinator regression tests cover the independent-listener
+ordering, a first empty ledger and retry followed by a missing-ledger result.
+The ledger preserves signed Int64 credits/debits (including zero corrections), and
+shows the optional actual post-entry balance and date/time. All/Credits/Debits
+are local filters over the existing newest-100 snapshot, preserving server
+order; they do not promise complete historical access or add reads/pagination.
+Zero corrections remain in All only. The non-transfer disclaimer, empty/error
+states and existing explicit reload remain. No point write/transfer is added.
+
+Social ranking scopes are full-sized horizontal tabs; the category remains a
+native menu limited by the existing coordinator. Long names and values wrap;
+podium tiles stack at accessibility sizes. Published rank/order/value formats,
+viewer markers, Stockholm month selection, all-time-only streak fallback and
+single-document scope subscriptions stay authoritative. Avatar resolution keeps
+the existing coordinator cache and task cancellation. Empty/unavailable/loading
+states use readable surfaces and failure adds a visible button to the existing
+reload alongside pull-to-refresh. Rank tiles are read-only, without invented
+profile navigation or privacy controls.
+
+MemberStatsDesignTests cover actual public identity/vehicle/award widgets,
+earned/locked/undated tiles, known/unknown progress counters, the full own wall,
+signed ledger rows and optional balances, all ranking value formats, podium/list
+layout, category menu and scope/filter tab geometry at 288/358 pt, SV/EN,
+light/dark, normal and largest accessibility text. Filter regression checks
+verify stable IDs/order and signed extremes/zero. Existing profile/block/social
+URL, badge-fold/coordinator, points/coordinator and ranking/model/coordinator
+tests remain in the full native CI suite. Layout fixtures are synthetic and
+have no avatar URL/path, configured repository, account writes or auth bypass.
+Physical-iPhone visual comparison, live friend/block transitions and real-account
+leaderboard/privacy/progress acceptance remain configured-device checks. No
+backend, rules, workflow, token, localization, production deploy, paid-service or
+artifact-upload opt-in change is included.
+
+## Convoy and event group-drive reading flows (2026-10-28)
+
+This phase refines S49-S52 (convoy management/create/detail/ended recap), the
+S31 chat-eligible convoy list, S46 event group driving and S16's existing member
+and invitation sheets. It adopts the shared adaptive reading page/cards, cyan
+selection/status, gold primary actions, red destructive controls and Dynamic Type.
+It does not change the map instance, compact session dock, GPS publication,
+awareness arrows, convoy trail, destinations, subscription or account policy.
+
+Convoy management retains the original loaded snapshot, pending/own grouping,
+accepted-member count, active-membership and exhaustive-read warnings, retries,
+per-convoy busy state and accept/decline/handoff callbacks. Titles now wrap and
+runtime strings render verbatim. The chat-eligible list keeps its accepted-member
+projection, ongoing/history grouping, original route IDs, member-name fallback
+and real shared channel chat destination. No chat entitlement is inferred from
+an invitation, and no image/profile lookup is added by the cards.
+
+Creation and in-session invitation use real friend selection cards with selected
+traits and native buttons. The original selection sets, 50-invitee creation cap,
+capacity calculation, already-present-member exclusion, selection trimming,
+validation, command payloads and server result counts stay intact. The submit
+buttons move to a full-width bottom safe-area inset, leaving the list scrollable
+and native Back/Cancel outside it. Pending creation and completed handoff both
+remain disabled; invitations keep cancellation/interactive-dismiss blocking while
+working, and close only through their existing explicit result flow. No test
+fixture injects authorization or sends a real invitation.
+
+Detail actions now precede the long member roster. Existing accepted-viewer,
+owner, forming/ended, minimum-member and leave-versus-end guards still choose
+which commands are available. Destructive confirmations and mutation targets
+remain unchanged. Ended recaps show the real duration, participant count/list
+and optional distance; missing distance is not replaced with zero. Member rows
+show only actual names, roles and invitation states, with local neutral fallbacks.
+
+The live member sheet keeps its existing periodic freshness check, accepted and
+pending groups, outgoing callbacks and self/pending profile restrictions. Its
+reading cards have 48 pt profile/map actions; unavailable locations stay disabled
+and retain their explanation. The original live wrapper supplies updates from
+the same convoy and awareness coordinators. Close remains native and reachable
+above the scrolling list. This phase retains the existing native iOS sheets and
+does not claim Android's window/map docking implementation was ported.
+
+Event group driving now shares the already-loaded parent event teaser for its
+name/schedule/place context, without starting another event subscription. The
+roster contains the existing active-participant projection and status only, with
+no invented car, avatar, position or live-sharing state. Native status buttons
+show the coordinator's actual own-status selection and forward existing commands;
+they do not update selection optimistically. RSVP/publication gates, serial
+pending actions, join/leave, errors, active-UID map callback and location-sharing
+opt-in are retained. Explicit existing live-sharing and safe-stopping copy stays
+visible. The underlying coordinator/repositories/models are unchanged.
+
+ConvoyDesignTests measure the actual summary/chat/friend/command/member/error/
+recap/status/roster/event-context widgets at 288/358 pt, SV/EN, light/dark and
+normal/largest accessibility text. They include owner/member, invited/accepted/
+declined, missing location/date/place/distance, selected/unselected, pending
+commands and pinned-footer bounds. Existing convoy creation/management/model,
+chat, group-drive eligibility/command and navigation tests remain in full native
+CI. These layout tests use synthetic local values and inert callbacks; they do
+not establish real account invitations, live membership/GPS transitions, physical
+iPhone visual comparison or car safety acceptance. No backend, rules, workflow,
+token, localization, production deploy or paid-service/artifact-upload opt-in
+change is included. Full native PR checks must pass before merge.
+
+## My drives, Garage editors and Event forms (2026-10-28)
+
+This phase refines S53-S56 history/detail/statistics/save-failure reading, S57-S59
+Garage metadata and vehicle editors/selectors, and S43 event create/edit/location
+selection. It retains the existing Mapbox replay/picker camera and coordinate
+callbacks, token gates and attribution. No map/GPS acceptance or configured map
+request is performed by layout tests.
+
+My drives uses readable history cards, optional existing car-photo URLs with a
+local fallback, wrapping title/metrics/convoy names and full-size controls. Filter
+menus keep the original query/date/distance/sort bindings and native checked
+choices, with wrapping selected labels. The local filters and clear action do
+not change history loading. Load-more/retry remains outside the match/no-match
+branch, so an empty local match on one page never prevents reaching another page.
+Tier/hidden-count notices, route IDs, cached image resolution and reload/delete
+flows remain with the original coordinator.
+
+Private detail now shares semantic summary/stat rows. Unknown distance/speed stays
+the existing dash, never a manufactured zero. Maximum speed remains a neutral
+fact with the same weight as other metrics. Route-generation cancellation,
+load/unavailable/placeholder states, kilometer markers, the existing renderer
+and privacy-safe statistics-only share payload are retained. Delete still calls
+the original parent confirmation. Statistics uses real loaded totals and the
+existing month/all-time data, empty/error/retry cases; no-repository builds show
+an unavailable state rather than an idle loader forever. The config-less shell
+UI capture flow now opens this state and taps its real Close control before
+returning to history. Save-failure retry/discard and its non-dismissible protected
+route-journal flow stay unchanged; the summary just uses scalable stat cards.
+
+Garage retains the authoritative catalogue IDs, make-to-model reset, pinned
+Other bucket, common-make grouping, query handling, descending model years and
+retired-powertrain policy. Selection labels wrap instead of compressing make,
+model, year or powertrain. An explicit nil powertrain prompt reflects the actual
+empty draft until the member chooses a supported value. Vehicle validation,
+normalization, optional-field omission and immutable save input remain intact.
+Pending forms lock fields/cancel/gesture dismissal while that input is in flight;
+success still dismisses through the original observed save status. Photo gallery,
+processing/storage/caps/cover/removal confirmations and vehicle/main-car actions
+retain their commands with scalable reading text and 48 pt action labels. No
+image lookup, upload or photo mutation is added by presentation.
+
+Shared editor fields have persistent visual captions and keep native accessible
+input labels. Multiline input bounds only its viewport (smaller at accessibility
+sizes); the complete bound draft remains available to the original validators.
+Keyboard/capitalization behavior is retained. Vehicle/event submit buttons move
+to a bottom safe-area inset above the system keyboard, leaving form content
+scrollable and native Cancel reachable when idle. Pending commands retain the
+original serial guards and outcomes, without automatic resubmission.
+
+Event forms preserve create/edit distinction, publication notice, date/time,
+existing description/address, optional public pin, validation/error mapping and
+create-only public-site toggle. Edit still retains the initial public-site flag.
+Pin summaries now use the existing public-visibility disclosure with actual
+coordinates; an absent pin remains absent. The picker retains authorized-fix
+seeding, the three-second wait, default/existing camera, explicit Confirm and
+Cancel, and tokenless disabled confirmation. Its long instruction has a bounded
+scrolling reading area beside the full-size confirmation action; no new permission
+request or automatic coordinate commit is introduced.
+
+DriveEditorDesignTests cover actual history/detail/statistics/retry-summary,
+filter labels/bindings, optional values, long convoy names, full draft retention,
+input viewport bounds, catalogue Other/selection labels, powertrain nil/options,
+idle/pending submit labels/footer bounds and present/absent event pins at narrow
+SV/EN, light/dark and normal/largest accessibility text. Existing history paging,
+route cancellation/share privacy, recording persistence, catalogue/vehicle
+validation and event mutation tests remain in native CI. Configured account
+writes/photos, keyboard/device visual comparison and real Mapbox/GPS/private-route
+acceptance remain device checks. No backend/rules/workflow/token/localization,
+production deploy or paid-service/artifact-upload opt-in change is included.
+
+## Remaining iOS flows and native visual proof (2026-10-28)
+
+This phase adopts the existing semantic page/card surfaces and native scalable
+fonts for event chat, saved-place management/editor/search rows, incident report
+selection and location controls, sign-in/welcome/onboarding, membership,
+restricted accounts, account deletion, feedback/tickets and What's new. It also
+finishes reading text in profile editing, Create chooser, event actions and chat
+metadata. Deliberate compact shell/convoy navigation typography remains bounded
+by its existing geometry tests.
+
+Existing account, member, RSVP/moderation, feature and location permission gates
+remain authoritative. Public support/incident notices, saved-place device-local
+persistence and no-coordinate-sharing policy, report commands and confirmation
+flows remain intact. Deletion still requires both explicit confirmations.
+StoreKit restore/purchase/verification remains with the original coordinator;
+no real purchase or production call is part of the visual test. Event chat uses
+the existing bounded native composer and clears a successfully sent draft only
+if it has not been edited while the send was pending.
+
+Support cards wrap full titles/summary and stack actions at accessibility sizes.
+The ticket introduction scrolls with its content instead of consuming a pinned
+portion of a short screen. Saved-place submit sits above the keyboard, and the
+What's new dialog keeps Close in the native navigation bar. Profile editor
+fields/actions lock while saving/uploading; existing validation and URL
+normalization remain intact. Welcome steps are independently renderable without
+changing the default first step or completion commands.
+
+FinalDesignVisualTests render production screens/components in UIWindow-backed
+UIHostingControllers with inert, synthetic fixtures. They exercise 320/390 pt,
+SV/EN, light/dark, normal/largest accessibility text and upper/lower scroll
+positions. Native component regressions check wrapping width/growth and bounded
+composer viewport without truncating its bound draft. Contact sheets are attached
+to the native result and exported as bounded JPEG chunks in the public CI log;
+only the explicit fixtures are captured, never an authenticated app window.
+This avoids opting into artifact storage or adding a runtime authentication
+bypass. Fake subscription/auth/deletion adapters fail if a command is attempted.
+
+The PR records the executed CI run and subsequent manual screenshot review.
+Generating a screenshot is not visual acceptance: each exported sheet must be
+saved and opened, blank/wrong-state captures rejected and collisions repaired
+before merge. This proof covers native fixture presentation and the config-less
+shell tests; it does not establish physical-device Mapbox/GPS, real account/photo
+writes, Apple authorization, StoreKit purchase or full VoiceOver compliance.
+No backend/rules/workflow/token/localization change or production deploy is
+included. Optional CI artifact uploads stay disabled.
+
+First native contact sheets exposed clipped Apple glyphs in iOS 26's default
+capsule buttons at accessibility sizes, a dark disabled primary label, large
+warning/Create icons compressing long text, and insufficient marker clearance
+above the incident picker commands. The follow-up fixes medium rectangular
+button corners, honors the disabled foreground, uses stable decorative icons
+and stacked labels, and compacts map commands to labelled 48 pt icons at
+accessibility sizes. Supporting copy uses the canonical secondary role; error
+reading uses the canonical light red and platform bright dark-mode red. Capture
+settling/scroll discovery is strengthened and short 320x480 sheet viewports are
+added. Fresh final-head renders must confirm these repairs before acceptance.

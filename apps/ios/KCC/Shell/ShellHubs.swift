@@ -93,7 +93,7 @@ struct SocialHubPanel: View {
                     .font(.body)
                 Spacer()
                 Image(systemName: "chevron.forward")
-                    .font(.system(size: KccTypeScale.bodySm))
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
             .contentShape(Rectangle())
@@ -131,9 +131,9 @@ struct ComingSoonPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s4) {
             Text(title)
-                .font(.system(size: KccTypeScale.headingLg, weight: KccTypeScale.semibold))
+                .font(.title2.bold())
             Text("shell.comingSoon")
-                .font(.system(size: KccTypeScale.bodyMd))
+                .font(.body)
                 .foregroundStyle(.secondary)
             Spacer()
         }

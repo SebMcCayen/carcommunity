@@ -223,22 +223,23 @@ struct ConvoyMembersSheet: View {
                 from: .now,
                 by: ConvoyArrowPlanner.staleAfter / 4
             )) { context in
-                List {
-                    Section("convoy.membersTitle") {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: KccSpacing.s3) {
+                        Text("convoy.membersTitle").font(.title3.bold()).accessibilityAddTraits(.isHeader)
                         ForEach(convoy.acceptedMembers) { member in
                             memberRow(member, waiting: false, now: context.date)
                         }
                         ForEach(convoy.pendingMembers) { member in
                             memberRow(member, waiting: true, now: context.date)
                         }
-                    }
+                    }.padding(KccSpacing.s4)
                 }
             }
-            .kccReadingSurface()
+            .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .navigationTitle("convoy.barMemberListTitle")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("convoy.close") { dismiss() }
+                    Button { dismiss() } label: { Text("convoy.close").frame(minHeight: 48) }
                 }
             }
         }
@@ -248,59 +249,21 @@ struct ConvoyMembersSheet: View {
         let availablePosition = positions[member.uid].flatMap {
             $0.isFresh(at: now) ? $0 : nil
         }
-        return HStack(spacing: KccSpacing.s3) {
-            Image(systemName: member.role == .owner ? "crown.fill" : "person.crop.circle.fill")
-                .foregroundStyle(member.role == .owner ? KccPalette.crownGold : .secondary)
-            VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                Text(member.displayName ?? String(localized: "convoy.barMemberUnnamed"))
-                if waiting {
-                    Text("convoy.barMemberWaiting")
-                        .font(.system(size: KccTypeScale.caption))
-                        .foregroundStyle(.secondary)
-                } else if member.role == .owner {
-                    Text("convoy.roleOwner")
-                        .font(.system(size: KccTypeScale.caption))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            Spacer()
-            if ConvoyBarLogic.canOpenMemberProfile(
-                memberUid: member.uid,
-                viewerUid: viewerUid,
-                waiting: waiting
-            ), let onOpenMemberProfile {
-                Button {
-                    dismiss()
-                    onOpenMemberProfile(member.uid, member.displayName)
-                } label: {
-                    Image(systemName: "person.crop.circle")
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel(Text("memberProfile.title"))
-            }
-            if !waiting, let onCenter {
-                VStack(alignment: .trailing, spacing: KccSpacing.s1) {
-                    Button {
-                        guard let availablePosition else { return }
-                        onCenter(MapPoint(
-                            longitude: availablePosition.longitude,
-                            latitude: availablePosition.latitude
-                        ))
-                        dismiss()
-                    } label: {
-                        Image(systemName: "scope")
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(availablePosition == nil)
-                    .accessibilityLabel(Text("convoy.barMemberMenuGoToLocation"))
-                    if availablePosition == nil {
-                        Text("convoy.barMemberLocationUnavailable")
-                            .font(.system(size: KccTypeScale.caption))
-                            .foregroundStyle(.secondary)
-                    }
-                }
+        let canOpenProfile = ConvoyBarLogic.canOpenMemberProfile(
+            memberUid: member.uid, viewerUid: viewerUid, waiting: waiting
+        )
+        let profileAction: (() -> Void)? = canOpenProfile ? onOpenMemberProfile.map { openProfile in
+            { dismiss(); openProfile(member.uid, member.displayName) }
+        } : nil
+        let centerAction: (() -> Void)? = waiting ? nil : onCenter.map { center in
+            {
+                guard let availablePosition else { return }
+                center(MapPoint(longitude: availablePosition.longitude, latitude: availablePosition.latitude))
+                dismiss()
             }
         }
+        return ConvoyMemberActionCard(member: member, waiting: waiting, locationAvailable: availablePosition != nil,
+            onProfile: profileAction, onCenter: centerAction)
     }
 }
 
@@ -491,86 +454,84 @@ struct ConvoyInviteSheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                switch friendsCoordinator.status {
-                case .loading:
-                    ProgressView().frame(maxWidth: .infinity)
-                case .error(let error):
-                    VStack(spacing: KccSpacing.s3) {
-                        Text(FriendsScreenStrings.statusErrorKey(error)).foregroundStyle(.secondary)
-                        Button("convoy.friendsRetry") {
-                            Task { await friendsCoordinator.load() }
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: KccSpacing.s3) {
+                    switch friendsCoordinator.status {
+                    case .loading:
+                        ProgressView().frame(maxWidth: .infinity)
+                    case .error(let error):
+                        VStack(spacing: KccSpacing.s3) {
+                            Text(FriendsScreenStrings.statusErrorKey(error)).foregroundStyle(KccTheme.secondary)
+                            Button { Task { await friendsCoordinator.load() } } label: {
+                                Text("convoy.friendsRetry").frame(minHeight: 48)
+                            }.buttonStyle(.bordered)
                         }
-                    }
-                    .frame(maxWidth: .infinity)
-                case .loaded(let friends, _, _, _):
-                    let available = friends.filter { !memberIds.contains($0.uid) }
-                    if friends.isEmpty {
-                        Text("convoy.noFriends").foregroundStyle(.secondary)
-                    } else if selectionLimit == 0 {
-                        Text("convoy.inviteFull").foregroundStyle(.secondary)
-                    } else if available.isEmpty {
-                        Text("convoy.inviteNoInvitable").foregroundStyle(.secondary)
-                    } else {
-                        ForEach(available) { friend in
-                            let isSelected = selected.contains(friend.uid)
-                            Button {
-                                if isSelected {
-                                    selected.remove(friend.uid)
-                                } else if selected.count < selectionLimit {
-                                    selected.insert(friend.uid)
-                                }
-                            } label: {
-                                HStack {
-                                    Text(friend.displayName ?? String(localized: "convoy.unknownMember"))
-                                    Spacer()
+                        .frame(maxWidth: .infinity)
+                    case .loaded(let friends, _, _, _):
+                        let available = friends.filter { !memberIds.contains($0.uid) }
+                        if friends.isEmpty {
+                            Text("convoy.noFriends").foregroundStyle(KccTheme.secondary)
+                        } else if selectionLimit == 0 {
+                            Text("convoy.inviteFull").foregroundStyle(KccTheme.secondary)
+                        } else if available.isEmpty {
+                            Text("convoy.inviteNoInvitable").foregroundStyle(KccTheme.secondary)
+                        } else {
+                            ForEach(available) { friend in
+                                let isSelected = selected.contains(friend.uid)
+                                Button {
                                     if isSelected {
-                                        Image(systemName: "checkmark.circle.fill")
+                                        selected.remove(friend.uid)
+                                    } else if selected.count < selectionLimit {
+                                        selected.insert(friend.uid)
                                     }
+                                } label: {
+                                    ConvoyFriendChoiceLabel(friend: friend, selected: isSelected)
                                 }
+                                .buttonStyle(.plain)
+                                .disabled(
+                                    working || (!isSelected
+                                        && selected.count >= selectionLimit)
+                                )
+                                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
                             }
-                            .buttonStyle(.plain)
-                            .disabled(
-                                working || (!isSelected
-                                    && selected.count >= selectionLimit)
-                            )
-                            .accessibilityAddTraits(isSelected ? [.isSelected] : [])
                         }
                     }
-                }
 
-                if let error = coordinator.actionError(for: convoy.convoyId) {
-                    Section {
+                    if let error = coordinator.actionError(for: convoy.convoyId) {
                         Text(ConvoyManagementStrings.errorKey(error))
-                            .foregroundStyle(KccPalette.errorRed)
+                            .foregroundStyle(KccPalette.errorRed).kccContentCard()
                     }
                 }
+                .padding(KccSpacing.s4)
             }
+            .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .navigationTitle("convoy.inviteTitle")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("convoy.inviteCancel") { dismiss() }
+                    Button { dismiss() } label: { Text("convoy.inviteCancel").frame(minHeight: 48) }
                         .disabled(working)
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("convoy.inviteSubmit") {
-                        guard !validSelection.isEmpty,
-                              validSelection.count == selected.count,
-                              selected.count <= selectionLimit
-                        else { return }
-                        let inviteeUids = Array(validSelection)
-                        Task {
-                            if await coordinator.invite(
-                                convoyId: convoy.convoyId,
-                                inviteeUids: inviteeUids
-                            ) {
-                                showInviteResult = true
-                            }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                Button {
+                    guard !validSelection.isEmpty,
+                          validSelection.count == selected.count,
+                          selected.count <= selectionLimit
+                    else { return }
+                    let inviteeUids = Array(validSelection)
+                    Task {
+                        if await coordinator.invite(
+                            convoyId: convoy.convoyId,
+                            inviteeUids: inviteeUids
+                        ) {
+                            showInviteResult = true
                         }
                     }
-                    .disabled(validSelection.isEmpty || validSelection.count != selected.count
-                              || selected.count > selectionLimit || working)
-                }
+                } label: { ConvoyCommandLabel(title: "convoy.inviteSubmit", working: working) }
+                .kccPrimaryAction()
+                .disabled(validSelection.isEmpty || validSelection.count != selected.count
+                          || selected.count > selectionLimit || working)
+                .padding(KccSpacing.s4).background(KccTheme.surface)
             }
             .task {
                 coordinator.clearActionError()
@@ -628,94 +589,40 @@ struct ConvoyDetailScreen: View {
     private var working: Bool { coordinator.busyConvoyIds.contains(convoy.convoyId) }
 
     var body: some View {
-        List {
-            Section {
-                HStack {
-                    Text(convoy.title ?? String(localized: "convoy.untitled"))
-                        .font(.headline)
-                    Spacer()
-                    Text(statusKey)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: KccSpacing.s4) {
+                ConvoySummaryContent(convoy: convoy).kccContentCard()
+                if let error = coordinator.actionError(for: convoy.convoyId) {
+                    ConvoyActionFeedback(error: error, onDismiss: coordinator.clearActionError)
                 }
-            }
-
-            if let error = coordinator.actionError(for: convoy.convoyId) {
-                Section {
-                    HStack {
-                        Text(ConvoyManagementStrings.errorKey(error))
-                            .foregroundStyle(KccPalette.errorRed)
-                        Spacer()
-                        Button {
-                            coordinator.clearActionError()
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
+                if let recap = convoy.recap { ConvoyRecapCard(recap: recap) }
+                if convoy.status != .ended, convoy.viewer?.inviteStatus == .accepted {
+                    VStack(spacing: KccSpacing.s3) {
+                        Button { inviteTarget = ConvoySheetTarget(convoy) } label: { ConvoyCommandLabel(title: "convoy.barInvite") }
+                            .buttonStyle(.bordered).disabled(working || friendsCoordinator == nil)
+                        if convoy.viewerIsOwner && convoy.status == .forming {
+                            Button { confirm(.start) } label: { ConvoyCommandLabel(title: "convoy.start") }
+                                .kccPrimaryAction().disabled(working)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(Text("convoy.close"))
-                    }
+                        if canLeave {
+                            Button(role: .destructive) { confirm(.leave) } label: { ConvoyCommandLabel(title: leaveLabel) }
+                                .buttonStyle(.bordered).tint(KccPalette.errorRed).disabled(working)
+                        }
+                        if convoy.viewerIsOwner {
+                            Button(role: .destructive) { confirm(.end) } label: { ConvoyCommandLabel(title: "convoy.end") }
+                                .buttonStyle(.bordered).tint(KccPalette.errorRed).disabled(working)
+                        }
+                        if working { ProgressView() }
+                    }.kccContentCard()
                 }
-            }
-
-            Section("convoy.membersTitle") {
+                Text("convoy.membersTitle").font(.title3.bold()).accessibilityAddTraits(.isHeader)
                 ForEach(convoy.members) { member in
-                    HStack {
-                        Image(systemName: member.role == .owner ? "crown.fill" : "person.crop.circle")
-                        Text(member.displayName ?? String(localized: "convoy.unknownMember"))
-                        Spacer()
-                        Text(inviteKey(member.inviteStatus)).foregroundStyle(.secondary)
-                    }
+                    ConvoyMemberSummary(member: member).kccContentCard()
                 }
-            }
-
-            if let recap = convoy.recap {
-                Section("convoy.summaryTitle") {
-                    LabeledContent(
-                        "convoy.summaryDuration",
-                        value: DriveFormatters.formatDuration(recap.durationSeconds)
-                    )
-                    LabeledContent(
-                        "convoy.summaryParticipants",
-                        value: String(recap.participantCount)
-                    )
-                    LabeledContent(
-                        "convoy.summaryDistance",
-                        value: recap.distanceMeters.map { DriveFormatters.formatDistance($0) }
-                            ?? String(localized: "convoy.summaryDistanceUnavailable")
-                    )
-                    if !recap.participants.isEmpty {
-                        Text("convoy.summaryWho")
-                            .font(.headline)
-                        ForEach(recap.participants) { member in
-                            Label(
-                                member.displayName ?? String(localized: "convoy.unknownMember"),
-                                systemImage: "person.crop.circle.fill"
-                            )
-                        }
-                    }
-                }
-            }
-
-            if convoy.status != .ended, convoy.viewer?.inviteStatus == .accepted {
-                Section {
-                    Button("convoy.barInvite") { inviteTarget = ConvoySheetTarget(convoy) }
-                        .disabled(working || friendsCoordinator == nil)
-                    if convoy.viewerIsOwner && convoy.status == .forming {
-                        Button("convoy.start") { confirm(.start) }
-                            .disabled(working)
-                    }
-                    if canLeave {
-                        Button(leaveLabel, role: .destructive) { confirm(.leave) }
-                            .disabled(working)
-                    }
-                    if convoy.viewerIsOwner {
-                        Button("convoy.end", role: .destructive) { confirm(.end) }
-                            .disabled(working)
-                    }
-                }
-            }
+            }.padding(KccSpacing.s4)
         }
         .navigationTitle("convoy.title")
+        .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
         .sheet(item: $inviteTarget) { target in
             if let friendsCoordinator {
                 LiveConvoyInviteSheet(
@@ -762,20 +669,6 @@ struct ConvoyDetailScreen: View {
     private var canLeave: Bool { exitChoice != .endOnly }
     private var leaveLabel: LocalizedStringKey {
         exitChoice == .leaveEndsConvoy ? "convoy.barLeaveEnds" : "convoy.leave"
-    }
-    private var statusKey: LocalizedStringKey {
-        switch convoy.status {
-        case .forming: "convoy.statusForming"
-        case .active: "convoy.statusActive"
-        case .ended: "convoy.statusEnded"
-        }
-    }
-    private func inviteKey(_ status: ConvoyInviteStatus) -> LocalizedStringKey {
-        switch status {
-        case .invited: "convoy.inviteInvited"
-        case .accepted: "convoy.inviteAccepted"
-        case .declined: "convoy.inviteDeclined"
-        }
     }
     private var confirmationTitle: LocalizedStringKey {
         switch confirmation?.action {

@@ -23,21 +23,21 @@ struct MembershipScreen: View {
 
                 statusView
 
-                Button("subscription.restoreAction") {
-                    Task { await coordinator.restore() }
+                Button { Task { await coordinator.restore() } } label: {
+                    Text("subscription.restoreAction").frame(maxWidth: .infinity, minHeight: 48)
                 }
                 .buttonStyle(.bordered)
                 .disabled(coordinator.status.isBusy)
 
                 if access.activeMember || coordinator.currentTier != nil {
-                    Button("subscription.manageAction") {
+                    Button {
                         guard let url = URL(string: "https://apps.apple.com/account/subscriptions") else { return }
                         openURL(url)
-                    }
+                    } label: { Text("subscription.manageAction").frame(maxWidth: .infinity, minHeight: 48) }
                     .buttonStyle(.bordered)
                     Text("subscription.manageBody")
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(KccTheme.secondary)
                 }
 
                 if access.isRestricted {
@@ -48,7 +48,9 @@ struct MembershipScreen: View {
             }
             .padding(KccSpacing.s4)
         }
+        .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
         .navigationTitle("subscription.screenTitle")
+        .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("membership.screen")
         .task { await coordinator.start() }
         .onChange(of: access.activeMember) { _, _ in
@@ -60,14 +62,13 @@ struct MembershipScreen: View {
         VStack(alignment: .leading, spacing: KccSpacing.s2) {
             Text("subscription.currentPlanTitle").font(.headline)
             Text(currentEntitlementKey)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(KccTheme.secondary)
             Text("subscription.memberRequiredBody")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(KccTheme.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(KccSpacing.s4)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: KccRadius.lg))
+        .kccContentCard()
     }
 
     private var currentEntitlementKey: LocalizedStringKey {
@@ -94,14 +95,14 @@ struct MembershipScreen: View {
             Text(title).font(.headline)
             Text(body)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(KccTheme.secondary)
             if let product {
                 Text(product.displayPrice)
                     .font(.subheadline.weight(.semibold))
-                Button(isCurrent ? "subscription.currentPlanAction" : actionKey(for: productID)) {
-                    Task { await coordinator.purchase(productID) }
+                Button { Task { await coordinator.purchase(productID) } } label: {
+                    EditorSubmitLabel(title: isCurrent ? "subscription.currentPlanAction" : actionKey(for: productID))
                 }
-                .buttonStyle(.borderedProminent)
+                .kccPrimaryAction()
                 .disabled(isCurrent || !coordinator.canPurchase || access.isRestricted)
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else if coordinator.status == .loading {
@@ -109,8 +110,7 @@ struct MembershipScreen: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(KccSpacing.s4)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: KccRadius.lg))
+        .kccContentCard()
     }
 
     private func actionKey(for productID: String) -> LocalizedStringKey {
@@ -134,9 +134,7 @@ struct MembershipScreen: View {
                 .multilineTextAlignment(.center)
         }
         if case .failed = coordinator.status {
-            Button("notifications.retry") {
-                Task { await coordinator.reloadAndReconcile() }
-            }
+            Button { Task { await coordinator.reloadAndReconcile() } } label: { Text("notifications.retry").frame(minHeight: 48) }
             .buttonStyle(.bordered)
         }
     }

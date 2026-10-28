@@ -56,6 +56,8 @@ data class UserProfile(
      */
     val social: SocialHandles = SocialHandles.EMPTY,
     val supporterBadge: SupporterBadge = SupporterBadge(),
+    /** Server-managed public affiliation; never part of a profile edit. */
+    val clubBadge: ClubBadge? = null,
 )
 
 /** Observed state of the profile document. */

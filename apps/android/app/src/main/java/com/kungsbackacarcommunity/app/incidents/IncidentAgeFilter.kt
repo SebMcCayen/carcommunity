@@ -36,7 +36,7 @@ import kotlinx.coroutines.flow.asStateFlow
  *    hides the age LINE rather than guessing an age.
  *
  * ## Purity
- * [DEFAULT], [fromStoredOrdinal], [isVisible] and [visible] are pure Kotlin — no
+ * [DEFAULT], [fromStoredName], [isVisible] and [visible] are pure Kotlin — no
  * Android or Mapbox types touch them — so the decision is JVM-unit-testable off
  * device. The [IncidentAgeFilterPreferenceStore] and [IncidentAgeFilterController]
  * below ARE Android-bound (a `SharedPreferences` and a Compose `CompositionLocal`),
@@ -44,9 +44,6 @@ import kotlinx.coroutines.flow.asStateFlow
  * store.
  */
 enum class IncidentAgeOption(val maxAgeMillis: Long?) {
-    HOURS_6(6L * 60 * 60 * 1000),
-    HOURS_12(12L * 60 * 60 * 1000),
-    DAY_1(24L * 60 * 60 * 1000),
     DAYS_3(3L * 24 * 60 * 60 * 1000),
     WEEK_1(7L * 24 * 60 * 60 * 1000),
     DAYS_30(30L * 24 * 60 * 60 * 1000),
@@ -67,31 +64,8 @@ object IncidentAgeFilter {
      */
     val DEFAULT: IncidentAgeOption = IncidentAgeOption.ALL
 
-    /** The options in slider order, strictest ([HOURS_6]) first, [ALL] last. */
+    /** The choices in ascending age order, strictest ([IncidentAgeOption.DAYS_3]) first, [IncidentAgeOption.ALL] last. */
     val orderedOptions: List<IncidentAgeOption> = IncidentAgeOption.entries.toList()
-
-    /**
-     * Ticks BETWEEN the two ends for a Compose `Slider` whose value is an option
-     * index (`Slider`'s `steps` excludes the endpoints). With 7 options this is 5.
-     */
-    val sliderSteps: Int = (orderedOptions.size - 2).coerceAtLeast(0)
-
-    /**
-     * Maps a raw Compose `Slider` value (an OPTION INDEX, possibly mid-drag and so
-     * fractional or out of range) to the [IncidentAgeOption] it lands on. Rounds to
-     * the nearest notch and clamps into [orderedOptions], so a partial drag resolves
-     * to a real option and an over-drag never indexes past the ends.
-     *
-     * Kept here, pure, so the layers-popup slider can render its LIVE label from the
-     * finger position while dragging (not only the committed value) and commit the
-     * SAME resolved option on release — both through this one function — and so the
-     * rounding is unit-testable off device.
-     */
-    fun optionForSliderIndex(value: Float): IncidentAgeOption {
-        if (orderedOptions.isEmpty()) return DEFAULT
-        val idx = Math.round(value).coerceIn(0, orderedOptions.lastIndex)
-        return orderedOptions[idx]
-    }
 
     /**
      * Decodes a persisted enum NAME into an option. A null (nothing stored yet) or
@@ -99,11 +73,17 @@ object IncidentAgeFilter {
      * in a later build) falls back to [DEFAULT] rather than throwing. Names, not
      * ordinals, so reordering or inserting options never silently reinterprets a
      * stored choice — the same robust scheme `ThemePreference.fromStoredName` uses.
+     * The retired 6h, 12h and 1d choices widen to 3d, the nearest remaining limit.
      * This is the ONE place "unset means show everything" lives, kept pure so it is
      * unit-testable without a `SharedPreferences`.
      */
     fun fromStoredName(name: String?): IncidentAgeOption =
-        IncidentAgeOption.entries.find { it.name == name } ?: DEFAULT
+        when (name) {
+            // Retired limits migrate to the nearest remaining, less restrictive
+            // choice. An upgrade must never hide more safety alerts than before.
+            "HOURS_6", "HOURS_12", "DAY_1" -> IncidentAgeOption.DAYS_3
+            else -> IncidentAgeOption.entries.find { it.name == name } ?: DEFAULT
+        }
 
     /**
      * Whether [incident] should be DRAWN given the selected [option] and the current
@@ -187,8 +167,14 @@ class IncidentAgeFilterPreferenceStore(context: Context) {
         state.value = option
     }
 
-    private fun readStored(): IncidentAgeOption =
-        IncidentAgeFilter.fromStoredName(prefs.getString(KEY_MAX_AGE, null))
+    private fun readStored(): IncidentAgeOption {
+        val stored = prefs.getString(KEY_MAX_AGE, null)
+        val option = IncidentAgeFilter.fromStoredName(stored)
+        if (stored != null && stored != option.name) {
+            prefs.edit().putString(KEY_MAX_AGE, option.name).apply()
+        }
+        return option
+    }
 
     private companion object {
         const val PREFS_NAME = "app_incident_age_filter"

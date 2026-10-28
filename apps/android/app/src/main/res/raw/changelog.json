@@ -2,6 +2,27 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 58,
+      "versionName": "1.1.3",
+      "releaseDate": "2026-10-27",
+      "highlights": [
+        "Mer plats för meddelanden i chatten",
+        "Tydligare live- och konvojkontroller på kartan",
+        "Tillbaka till eventlistan direkt efter sparande"
+      ],
+      "changes": [
+        "Chatt: kompaktare kontroller ger mer plats åt meddelandena",
+        "Social: den extra profilbilden i menyn har tagits bort",
+        "Live: körstatistiken anpassas efter skärmens bredd för bättre plats åt text och siffror",
+        "Live: stoppknappen i den nedersta menyn används för att avsluta delningen och övergången till körresultatet är tydligare",
+        "Karta: tydligare körspår med bättre kontrast i mörkt läge",
+        "Konvoj: uppdaterade kontroller och paneler med plats ovanför den nedersta menyn",
+        "Konvoj: Följ mig visar aktiv förare och delar samma spår med alla deltagare, även föraren själv",
+        "Konvoj: spåret rensas när Följ mig stängs av eller en annan deltagare tar över",
+        "Event: listan öppnas direkt när sparandet är bekräftat, utan att vänta på att bekräftelsemeddelandet försvinner"
+      ]
+    },
+    {
       "versionCode": 57,
       "versionName": "1.1.2",
       "releaseDate": "2026-10-26",

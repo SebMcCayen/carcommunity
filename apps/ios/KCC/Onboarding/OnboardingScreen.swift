@@ -22,8 +22,8 @@ struct OnboardingScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: KccSpacing.s4) {
                 Text("onboarding.title")
-                    .font(.system(size: KccTypeScale.headingLg, weight: .semibold))
-                Text("onboarding.subtitle").foregroundStyle(.secondary)
+                    .font(.title2.bold())
+                Text("onboarding.subtitle").foregroundStyle(KccTheme.secondary)
 
                 Toggle("onboarding.licenceConfirm", isOn: $licenceConfirmed)
                     .accessibilityIdentifier("onboarding.licence")
@@ -34,13 +34,13 @@ struct OnboardingScreen: View {
                     .accessibilityIdentifier("onboarding.privacy")
                 documentLink("onboarding.privacyLink", key: "url.privacy")
 
-                TextField("onboarding.displayNamePlaceholder", text: $displayName)
+                EditorTextField(title: "onboarding.displayNameLabel", text: $displayName)
                     .textFieldStyle(.roundedBorder)
                     .textContentType(.nickname)
                     .autocorrectionDisabled()
                     .accessibilityLabel(Text("onboarding.displayNameLabel"))
                 Text("onboarding.displayNameDescription")
-                    .font(.system(size: KccTypeScale.bodySm)).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(KccTheme.secondary)
                 if displayName.trimmingCharacters(in: .whitespacesAndNewlines).count
                     > OnboardingForm.displayNameMaxLength
                 {
@@ -49,11 +49,11 @@ struct OnboardingScreen: View {
 
                 Divider()
                 Text("privacySettings.partnerStatsTitle")
-                    .font(.system(size: KccTypeScale.titleMd, weight: .semibold))
-                Text("privacySettings.partnerStatsExplainer").foregroundStyle(.secondary)
+                    .font(.headline)
+                Text("privacySettings.partnerStatsExplainer").foregroundStyle(KccTheme.secondary)
                 Toggle("onboarding.partnerStatsOptIn", isOn: $partnerStatsOptIn)
                 Text("onboarding.partnerStatsNote")
-                    .font(.system(size: KccTypeScale.bodySm)).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(KccTheme.secondary)
 
                 if coordinator.status == .failed {
                     Text("onboarding.error").foregroundStyle(.red)
@@ -67,19 +67,14 @@ struct OnboardingScreen: View {
                         )
                     }
                 } label: {
-                    if coordinator.status == .submitting {
-                        ProgressView().frame(maxWidth: .infinity, minHeight: 44)
-                    } else {
-                        Text("onboarding.continueButton")
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                    }
+                    EditorSubmitLabel(title: "onboarding.continueButton", saving: coordinator.status == .submitting)
                 }
-                .buttonStyle(.borderedProminent)
+                .kccPrimaryAction()
                 .disabled(!canSubmit)
             }
-            .padding(KccSpacing.s6)
+            .padding(KccSpacing.s4)
         }
-        .background(.background)
+        .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
         .onChange(of: displayName) { _, _ in coordinator.resetFailure() }
     }
 

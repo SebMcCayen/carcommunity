@@ -38,6 +38,7 @@ struct ChatScreen: View {
         content
             .navigationTitle(titleText)
             .navigationBarTitleDisplayMode(.inline)
+            .kccReadingSurface(pageBackground: true)
             .task { await coordinator?.start() }
             .toolbar {
                 if let onViewProfile {
@@ -69,15 +70,7 @@ struct ChatScreen: View {
                 composer(coordinator)
             }
         } else {
-            VStack(spacing: KccSpacing.s2) {
-                Text("dm.title")
-                    .font(.system(size: KccTypeScale.titleMd, weight: KccTypeScale.semibold))
-                Text("common.placeholder")
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-            .padding(KccSpacing.s4)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            SocialReadingState(title: "dm.title", message: "common.placeholder", symbol: "bubble.left.and.bubble.right")
         }
     }
 
@@ -137,7 +130,8 @@ struct ChatScreen: View {
                 Task { await coordinator.loadOlder() }
             } label: {
                 Text("dm.loadOlder")
-                    .font(.system(size: KccTypeScale.bodySm))
+                    .font(.subheadline)
+                    .frame(minHeight: 48)
             }
             .buttonStyle(.bordered)
         }
@@ -146,46 +140,28 @@ struct ChatScreen: View {
     // MARK: - Composer
 
     private func composer(_ coordinator: ChatCoordinator) -> some View {
-        HStack(spacing: KccSpacing.s2) {
-            TextField(text: $draft, axis: .vertical) {
-                Text("dm.inputPlaceholder")
-            }
-            .lineLimit(1...4)
-            .textFieldStyle(.roundedBorder)
-            Button {
-                let text = draft
-                // Clear the draft immediately — the optimistic bubble is the
-                // feedback, not a blocked composer.
-                draft = ""
-                Task { await coordinator.send(text: text) }
-            } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: KccTypeScale.headingLg))
-            }
-            .accessibilityLabel(Text("dm.send"))
-            .disabled(!DmThreadLogic.isSendable(draft))
+        DmComposer(draft: $draft) { text in
+            Task { await coordinator.send(text: text) }
         }
-        .padding(KccSpacing.s3)
-        .background(.bar)
     }
 }
 
-/// One message bubble: own messages right-aligned in brand gold, incoming
+/// One message bubble: own messages right-aligned in driver cyan, incoming
 /// left-aligned on the subtle surface; an optimistic bubble carries its
 /// sending/failed status underneath.
-private struct MessageBubble: View {
+struct MessageBubble: View {
     let message: DmMessage
     let isOwn: Bool
     let onRetry: (String) -> Void
 
     var body: some View {
         HStack {
-            if isOwn { Spacer(minLength: KccSpacing.s10) }
+            if isOwn { Spacer(minLength: KccSpacing.s4) }
             VStack(alignment: isOwn ? .trailing : .leading, spacing: KccSpacing.s1) {
                 bubble
                 status
             }
-            if !isOwn { Spacer(minLength: KccSpacing.s10) }
+            if !isOwn { Spacer(minLength: KccSpacing.s4) }
         }
     }
 
@@ -195,7 +171,8 @@ private struct MessageBubble: View {
                 quoteHeader(replyTo)
             }
             Text(verbatim: message.text)
-                .font(.system(size: KccTypeScale.bodyMd))
+                .font(.body)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, KccSpacing.s3)
         .padding(.vertical, KccSpacing.s2)
@@ -210,10 +187,10 @@ private struct MessageBubble: View {
         VStack(alignment: .leading, spacing: KccSpacing.s1 / 2) {
             if let name = replyTo.senderDisplayName.trimmedNonBlank {
                 Text(verbatim: name)
-                    .font(.system(size: KccTypeScale.caption, weight: KccTypeScale.semibold))
+                    .font(.caption.weight(.semibold))
             }
             Text(verbatim: replyTo.textPreview)
-                .font(.system(size: KccTypeScale.caption))
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
         }
@@ -228,12 +205,12 @@ private struct MessageBubble: View {
         switch message.deliveryState {
         case .sending:
             Text("dm.statusSending")
-                .font(.system(size: KccTypeScale.caption))
+                .font(.caption)
                 .foregroundStyle(.secondary)
         case .failed:
             VStack(alignment: .trailing, spacing: KccSpacing.s1 / 2) {
                 Text(ChatScreenStrings.sendErrorKey(message.sendError ?? .generic))
-                    .font(.system(size: KccTypeScale.caption))
+                    .font(.caption)
                     .foregroundStyle(KccPalette.errorRed)
                 // A retry is offered only when re-sending the SAME message
                 // could plausibly succeed; terminal failures (signed out, not
@@ -244,7 +221,8 @@ private struct MessageBubble: View {
                         onRetry(clientId)
                     } label: {
                         Text("dm.statusFailedRetry")
-                            .font(.system(size: KccTypeScale.caption, weight: KccTypeScale.semibold))
+                            .font(.caption.weight(.semibold))
+                            .frame(minHeight: 48)
                     }
                     .buttonStyle(.borderless)
                 }
@@ -255,7 +233,7 @@ private struct MessageBubble: View {
                     Date(timeIntervalSince1970: Double(millis) / 1000),
                     format: .dateTime.hour().minute()
                 )
-                .font(.system(size: KccTypeScale.caption))
+                .font(.caption)
                 .foregroundStyle(.secondary)
             }
         }

@@ -19,6 +19,8 @@ struct PerkShopScreen: View {
             }
             .padding(KccSpacing.s4)
         }
+        .kccReadingSurface(pageBackground: true)
+        .accessibilityIdentifier("crown.shop")
         .navigationTitle(Text("crownHunt.tabShop"))
         .task { coordinator?.start() }
     }
@@ -70,20 +72,15 @@ struct PerkShopScreen: View {
 }
 
 /// The member's current Crown-Point balance — Android's `PerkBalanceCard`.
-private struct BalanceCard: View {
+struct BalanceCard: View {
     let balanceKp: Int
 
     var body: some View {
         CrownHuntCard {
-            HStack {
-                Text("crownHunt.shopBalanceLabel")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(CrownHuntStrings.kpValue(balanceKp))
-                    .font(.title3)
-                    .fontWeight(.bold)
-            }
+            Label("crownHunt.shopBalanceLabel", systemImage: "crown.fill")
+                .font(.headline)
+            Text(CrownHuntStrings.kpValue(balanceKp)).font(.largeTitle.weight(.bold))
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -92,7 +89,8 @@ private struct BalanceCard: View {
 /// and the Buy button — Android's `PerkCard`. The button spins and disables
 /// while ITS buy is in flight, and is disabled for every row while ANY buy is
 /// in flight (the coordinator's in-flight guard backs this up server-safely).
-private struct PerkCard: View {
+struct PerkCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let item: PerkShopItem
     let buyStatus: PerkBuyStatus
     let onBuy: (PerkShopItem) -> Void
@@ -109,7 +107,7 @@ private struct PerkCard: View {
 
     var body: some View {
         CrownHuntCard {
-            HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: KccSpacing.s1) {
                 Text(
                     CrownHuntPerkNames.displayName(
                         perkId: item.entry.perkId,
@@ -121,15 +119,18 @@ private struct PerkCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Text(CrownHuntPerkNames.kindLabelKey(item.entry.kind))
                     .font(.caption)
-                    .foregroundStyle(KccPalette.crownGold)
+                    .foregroundStyle(KccTheme.secondary)
             }
             Text(CrownHuntPerkNames.blurb(perkId: item.entry.perkId, blurbSv: item.entry.blurb))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             Text(verbatim: CrownHuntStrings.durationLabel(hours: CrownHuntPerkNames.durationHours(item.entry.kind)))
                 .font(.caption)
-                .foregroundStyle(KccPalette.crownGold)
-            HStack(alignment: .bottom) {
+                .foregroundStyle(KccTheme.secondary)
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: KccSpacing.s3))
+                : AnyLayout(HStackLayout(alignment: .bottom, spacing: KccSpacing.s3))
+            layout {
                 VStack(alignment: .leading, spacing: KccSpacing.s1) {
                     Text(CrownHuntStrings.kpValue(item.entry.costKp))
                         .font(.headline)
@@ -137,20 +138,21 @@ private struct PerkCard: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Spacer()
+                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: KccSpacing.s2) }
                 Button {
                     onBuy(item)
                 } label: {
-                    if buyingThis {
-                        HStack(spacing: KccSpacing.s2) {
-                            ProgressView()
-                            Text("crownHunt.shopBuying")
-                        }
-                    } else {
-                        Text("crownHunt.shopBuyButton")
+                    Group {
+                        if buyingThis {
+                            HStack(spacing: KccSpacing.s2) {
+                                ProgressView()
+                                Text("crownHunt.shopBuying")
+                            }
+                        } else { Text("crownHunt.shopBuyButton") }
                     }
+                    .frame(minHeight: 48).contentShape(Rectangle())
                 }
-                .buttonStyle(.borderedProminent)
+                .kccPrimaryAction()
                 .disabled(anyBuying || !item.affordable)
             }
         }

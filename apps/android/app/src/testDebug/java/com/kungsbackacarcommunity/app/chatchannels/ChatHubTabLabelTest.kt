@@ -21,8 +21,9 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
@@ -40,15 +41,15 @@ import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import java.util.Locale
 
-/** Measure the rendered strip, including scroll reachability, instead of an obsolete auto-shrink model. */
+/** Every label, unread badge and hit target must fit simultaneously, without scrolling or shrinking. */
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h900dp-mdpi")
 class ChatHubTabLabelTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
-    private data class Variant(val width: Int, val scale: Float, val language: String, val dark: Boolean)
+    private data class Variant(val width: Int, val scale: Float, val language: String, val dark: Boolean, val back: Boolean = false)
 
-    @Test fun scaledLabelsStayReadableAndEveryChannelAndUnreadLabelIsReachable() {
+    @Test fun allChannelsFitAtOnceWithScaledLabelsAndUnreadBadges() {
         val variant = mutableStateOf(Variant(320, 1f, "sv", true))
         val selected = mutableStateOf(ChatTab.Community)
         var selectedCallback: ChatTab? = null
@@ -71,16 +72,16 @@ class ChatHubTabLabelTest {
             ) {
                 KccTheme(darkTheme = current.dark) {
                     Box(Modifier.requiredWidth(current.width.dp)) {
-                        ChatChannelStrip(selected.value, List(4) { true },
-                            onSelect = { selectedCallback = it; selected.value = it }, onBack = null)
+                        ChatChannelStrip(selected.value, List(ChatTab.entries.size) { true },
+                            onSelect = { selectedCallback = it; selected.value = it }, onBack = if (current.back) ({}) else null)
                     }
                 }
             }
         }
 
-        for (width in listOf(320, 390)) for (scale in listOf(1f, 1.5f)) {
-            for (language in listOf("sv", "en")) for (dark in listOf(true, false)) {
-                val current = Variant(width, scale, language, dark)
+        for (width in listOf(320, 360, 390)) for (scale in listOf(1f, 1.5f, 2f)) {
+            for (language in listOf("sv", "en")) for (dark in listOf(true, false)) for (back in listOf(false, true)) {
+                val current = Variant(width, scale, language, dark, back)
                 compose.runOnIdle { variant.value = current }
                 compose.waitForIdle()
                 val config = Configuration(compose.activity.resources.configuration).apply {
@@ -90,43 +91,64 @@ class ChatHubTabLabelTest {
                     applyOverrideConfiguration(config)
                 }.resources
                 val labelIds = listOf(R.string.chatHub_tabCommunity, R.string.chatHub_tabConvoys,
-                    R.string.chatHub_tabFriends, R.string.chatHub_tabNotifications)
+                    R.string.chatHub_tabFriends, R.string.chatHub_tabNotifications, R.string.clubs_chatTab)
+                val stripNode = compose.onNodeWithTag(CHAT_CHANNEL_STRIP_TEST_TAG).fetchSemanticsNode()
+                val stripBounds = stripNode.boundsInRoot
+                assertEquals("$current fills the available width", (width - if (back) 48 else 0).toFloat(), stripBounds.width, 0.01f)
+                if (width >= 360 && scale == 1f) {
+                    assertEquals("$current compact strip height", 48f, stripBounds.height, 0.01f)
+                }
+                assertFalse("$current no horizontal scrolling", stripNode.config.contains(SemanticsProperties.HorizontalScrollAxisRange))
+                var previousRight = stripBounds.left
                 for (tab in ChatTab.entries) {
                     val item = compose.onNodeWithTag(chatChannelTabTag(tab))
-                    item.performScrollTo().assertIsDisplayed().performClick().assertIsSelected()
+                    item.assertIsDisplayed().performTouchInput { click() }
+                    item.assertIsSelected()
                     compose.runOnIdle { assertEquals("$current callback", tab, selectedCallback) }
                     val bounds = item.fetchSemanticsNode().boundsInRoot
                     assertTrue("$current $tab hit height=$bounds", bounds.height >= 48f)
                     assertTrue("$current $tab hit width=$bounds", bounds.width >= 48f)
+                    assertTrue("$current $tab fully inside strip: $bounds / $stripBounds",
+                        bounds.left >= stripBounds.left && bounds.right <= stripBounds.right &&
+                            bounds.top >= stripBounds.top && bounds.bottom <= stripBounds.bottom)
+                    assertTrue("$current $tab does not overlap previous target", bounds.left >= previousRight)
+                    previousRight = bounds.right
                     val layouts = mutableListOf<TextLayoutResult>()
                     val label = resources.getString(labelIds[tab.ordinal])
-                    compose.onNodeWithText(label, useUnmergedTree = true)
-                        .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+                    val labelNode = compose.onNodeWithText(label, useUnmergedTree = true)
+                    labelNode.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
                     assertEquals("$current $tab layout", 1, layouts.size)
                     val layout = layouts.single()
-                    assertEquals("$current $tab must not auto-shrink", 14.sp, layout.layoutInput.style.fontSize)
+                    assertEquals("$current $tab must not auto-shrink", 12.sp, layout.layoutInput.style.fontSize)
                     assertEquals(scale, layout.layoutInput.density.fontScale, 0.001f)
-                    // With softWrap=false Robolectric can expose an unbounded
-                    // paragraph width (Int.MAX_VALUE) even when the actual line
-                    // fits. Check the rendered line and every visible character.
+                    if (width >= 360 && scale == 1f) {
+                        assertEquals("$current $tab complete single-line label at normal width", 1, layout.lineCount)
+                    }
                     assertEquals("$current $tab source text", label, layout.layoutInput.text.text)
-                    assertEquals("$current $tab must stay on one line", 1, layout.lineCount)
-                    assertFalse("$current $tab ellipsized", layout.isLineEllipsized(0))
                     assertEquals("$current $tab first visible character", 0, layout.getLineStart(0))
                     assertEquals("$current $tab last visible character", label.length,
-                        layout.getLineEnd(0, visibleEnd = true))
-                    val left = layout.getLineLeft(0)
-                    val right = layout.getLineRight(0)
-                    assertTrue("$current $tab line outside text width: left=$left right=$right size=${layout.size}",
-                        left >= 0f && right > left && right <= layout.size.width.toFloat())
+                        layout.getLineEnd(layout.lineCount - 1, visibleEnd = true))
+                    for (line in 0 until layout.lineCount) {
+                        assertFalse("$current $tab ellipsized line $line", layout.isLineEllipsized(line))
+                        assertTrue("$current $tab text must fit line $line",
+                            layout.getLineLeft(line) >= 0f && layout.getLineRight(line) <= layout.size.width.toFloat())
+                    }
                     assertFalse("$current $tab vertical clipping", layout.didOverflowHeight)
-                    // The dot remains a named child in every tab, including offscreen ones after scrolling.
+                    // The unread dot stays a named, visible child of its destination.
                     compose.onNodeWithTag(chatChannelTabTag(tab)).assertIsDisplayed()
-                    compose.onNode(
+                    val badge = compose.onNode(
                         hasContentDescription(resources.getString(R.string.chatHub_tabUnread)) and
                             hasAnyAncestor(hasTestTag(chatChannelTabTag(tab))),
                         useUnmergedTree = true,
-                    ).assertIsDisplayed()
+                    )
+                    badge.assertIsDisplayed()
+                    val badgeBounds = badge.fetchSemanticsNode().boundsInRoot
+                    val labelBounds = labelNode.fetchSemanticsNode().boundsInRoot
+                    assertTrue("$current $tab unread badge must not overlap its label",
+                        badgeBounds.bottom <= labelBounds.top)
+                    assertTrue("$current $tab unread badge inside its target",
+                        badgeBounds.left >= bounds.left && badgeBounds.right <= bounds.right &&
+                            badgeBounds.top >= bounds.top && badgeBounds.bottom <= bounds.bottom)
                 }
             }
         }

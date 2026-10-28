@@ -170,6 +170,7 @@ fun EventDetailScreen(
     // Confirmed removal — invoked after the user accepts the confirmation dialog;
     // the route calls events.cancel. Shown only when [canManage]; null hides it.
     onRemove: (() -> Unit)? = null,
+    clubAttendance: (@Composable () -> Unit)? = null,
 ) {
     val haptics = LocalHapticFeedback.current
     // The event's single marker point, or null when it carries no valid pin — the
@@ -277,6 +278,8 @@ fun EventDetailScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+
+            clubAttendance?.invoke()
 
             // Creator actions — Edit + Remove, shown ONLY when the signed-in user
             // created this event and it is still editable (canManage). Placed with

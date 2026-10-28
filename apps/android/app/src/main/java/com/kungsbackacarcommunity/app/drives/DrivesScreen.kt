@@ -55,6 +55,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,8 +78,8 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
-import com.kungsbackacarcommunity.app.map.DriveRouteFullscreenDialog
-import com.kungsbackacarcommunity.app.map.DriveRouteMap
+import com.kungsbackacarcommunity.app.map.DriveRouteMapRenderer
+import com.kungsbackacarcommunity.app.map.MapboxDriveRouteMapRenderer
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.shell.AeroLazyPage
 import com.kungsbackacarcommunity.app.shell.AeroPage
@@ -1013,34 +1014,33 @@ fun SavedDriveDetailScreen(
     // Reads + decodes the drive's route.bin for the replay map; null in a
     // config-less / CI build (no Firebase), which degrades to the placeholder.
     routeRepository: RouteReplayRepository? = null,
-    // Owner uid, needed for the member-gated rideRoutes/{uid}/{rideId} read.
+    // Owner uid, checked against current auth before the authorized callable read.
     uid: String? = null,
+    routeMapRenderer: DriveRouteMapRenderer = MapboxDriveRouteMapRenderer,
 ) {
-    var showConfirm by remember { mutableStateOf(false) }
+    var showConfirm by remember(drive.rideId, uid) { mutableStateOf(false) }
     // Whether the full-screen, zoomable route popup is open. Reset per drive so a
     // new drive never opens with a stale popup showing the previous route.
-    var showRouteMap by remember(drive.rideId) { mutableStateOf(false) }
+    var showRouteMap by remember(drive.rideId, uid, routeRepository) { mutableStateOf(false) }
     val context = LocalContext.current
 
-    // A real Mapbox token is required to render the GL map; the config-less / CI
-    // build has none and falls back to the placeholder card.
-    val hasMapboxToken = stringResource(R.string.mapbox_access_token).isNotBlank()
+    // A Mapbox token is required for GL. The saved simplified thumbnail remains
+    // useful without it; full route loading can still supply the share summary.
+    val hasMapboxToken = routeMapRenderer.isAvailable()
 
-    // Load the driven route once per opened drive; cached in memory by the
-    // repository so re-opening the same drive redraws without a refetch. Loading
-    // starts pending and resolves to Ready (points) or Unavailable — the reader
-    // never throws. Gated on [hasMapboxToken] too: with no token the decoded
-    // route can never be drawn, so skip the Storage read + decode entirely.
-    var routeState by remember(drive.rideId) {
+    // Private state belongs to this owner, drive and reader. Replacing any key
+    // cancels the old load; its late result cannot update the new detail state.
+    var routeState by remember(drive.rideId, uid, routeRepository) {
         mutableStateOf<RouteReplayState>(RouteReplayState.Loading)
     }
-    LaunchedEffect(drive.rideId, routeRepository, uid, hasMapboxToken) {
-        routeState =
-            if (routeRepository != null && uid != null && hasMapboxToken) {
-                routeRepository.loadRoute(uid, drive.rideId)
-            } else {
-                RouteReplayState.Unavailable
-            }
+    var routeAttempt by remember(drive.rideId, uid, routeRepository) { mutableStateOf(0) }
+    LaunchedEffect(drive.rideId, routeRepository, uid, routeAttempt) {
+        routeState = RouteReplayState.Loading
+        routeState = when {
+            uid.isNullOrBlank() -> RouteReplayState.Unavailable(RouteReplayFailure.SIGN_IN_REQUIRED)
+            routeRepository == null -> RouteReplayState.Unavailable()
+            else -> routeRepository.loadRoute(uid, drive.rideId)
+        }
     }
 
     val dateText = formatDriveDate(drive.startedAtMillis ?: drive.createdAtMillis)
@@ -1063,20 +1063,19 @@ fun SavedDriveDetailScreen(
     // RoutePoint overload folds straight over the decoded points, so this no
     // longer allocates a ~20k RecordedPoint list on the UI thread as the route
     // loads.
-    val topSpeed =
-        remember(routeState) {
-            (routeState as? RouteReplayState.Ready)
-                ?.points
-                ?.let { DriveSummary.topSpeedMetersPerSecond(it) }
-        }
+    val topSpeed = remember(routeState) { routeReplayTopSpeed(routeState) }
+    val mapGeometry = remember(routeState, drive.routeThumbnail, uid) {
+        driveRouteGeometry(routeState, drive.routeThumbnail, hasOwner = !uid.isNullOrBlank())
+    }
+    LaunchedEffect(mapGeometry, hasMapboxToken) {
+        if (mapGeometry == null || !hasMapboxToken) showRouteMap = false
+    }
     val shareSummary = driveShareText(drive, topSpeedMetersPerSecond = topSpeed)
 
     AeroPage(title = stringResource(R.string.savedDrives_detailTitle), modifier = modifier) {
-            // Route replay: the actual driven route drawn on a static map. The
-            // route points are read + decoded from member-gated Cloud Storage
-            // (`rideRoutes/{uid}/{rideId}/route.bin`) by [routeRepository] and
-            // rendered by [DriveRouteMap]. Every non-happy path degrades to a
-            // one-line explanation instead of a broken/empty map.
+            // Exact recorded fixes and the authorized saved simplified polyline
+            // share the real static map surface. Provenance, failure details and
+            // retry remain distinct from the geometry chosen for display.
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
@@ -1088,73 +1087,61 @@ fun SavedDriveDetailScreen(
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     val ready = routeState as? RouteReplayState.Ready
-                    when {
-                        // No token / no reader (config-less or CI build): the GL
-                        // map cannot render, so explain rather than draw nothing.
-                        !hasMapboxToken || routeRepository == null ->
-                            RouteNote(stringResource(R.string.savedDrives_routeOverviewPlaceholder))
-
-                        routeState is RouteReplayState.Loading ->
-                            RouteNote(stringResource(R.string.savedDrives_routeLoading))
-
-                        // A drawable route (≥ 2 points): draw it on the replay map.
-                        // The same decoded points also feed the share-text top
-                        // speed (computed into [topSpeed] above). Tapping the
-                        // thumbnail opens the full-screen, zoomable popup (with the
-                        // per-km markers) — the expand badge makes that discoverable.
-                        ready != null && ready.points.size >= 2 -> {
+                    val failure = (routeState as? RouteReplayState.Unavailable)?.reason
+                    if (routeState is RouteReplayState.Loading) {
+                        RouteNote(stringResource(R.string.savedDrives_routeLoading))
+                    } else {
+                        if (mapGeometry is DriveRouteGeometry.Simplified) {
+                            RouteNote(stringResource(R.string.savedDrives_driveReplay_simplifiedOverview))
+                        }
+                        if (mapGeometry != null && hasMapboxToken) {
                             val expandLabel = stringResource(R.string.savedDrives_routeExpand)
-                            // TalkBack label for the whole tap target: the child is
-                            // an AndroidView-hosted MapView (a11y black box), so the
-                            // clickable node needs its OWN contentDescription — the
-                            // onClickLabel only names the action, not the control.
-                            // mergeDescendants keeps it a single focusable element.
-                            val thumbnailLabel =
-                                stringResource(R.string.savedDrives_routeMapThumbnailLabel)
+                            val mapLabel = stringResource(R.string.savedDrives_routeMapThumbnailLabel)
+                            val mapDescription = if (mapGeometry is DriveRouteGeometry.Simplified) {
+                                stringResource(R.string.savedDrives_driveReplay_simplifiedOverview) + " " + mapLabel
+                            } else mapLabel
                             Box(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .height(ROUTE_MAP_HEIGHT)
-                                        .clickable(onClickLabel = expandLabel) {
-                                            showRouteMap = true
-                                        }
-                                        .semantics(mergeDescendants = true) {
-                                            contentDescription = thumbnailLabel
-                                        },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(ROUTE_MAP_HEIGHT)
+                                    .testTag(DRIVE_ROUTE_MAP_PREVIEW_TAG)
+                                    .clickable(onClickLabel = expandLabel) { showRouteMap = true }
+                                    .semantics(mergeDescendants = true) { contentDescription = mapDescription },
                             ) {
-                                DriveRouteMap(
-                                    points = ready.points,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-                                // Non-interactive expand affordance (the whole
-                                // thumbnail is the tap target); a translucent badge
-                                // so it reads over any basemap tile.
-                                Surface(
-                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                                    shape = CircleShape,
-                                    modifier =
-                                        Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(KccSpacing.s2),
+                                routeMapRenderer.Preview(mapGeometry, Modifier.fillMaxSize())
+                                // A real button above the native view keeps expand
+                                // reachable even if a device consumes map touches.
+                                FilledTonalIconButton(
+                                    onClick = { showRouteMap = true },
+                                    modifier = Modifier.align(Alignment.TopEnd).padding(KccSpacing.s2),
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Fullscreen,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.padding(KccSpacing.s1).size(24.dp),
-                                    )
+                                    Icon(Icons.Filled.Fullscreen, contentDescription = expandLabel)
                                 }
                             }
+                        } else if (mapGeometry is DriveRouteGeometry.Simplified) {
+                            // Token-less builds still show the saved shape. Configured
+                            // History uses the real 240 dp Mapbox preview above.
+                            RouteThumbnailImage(encodedPolyline = drive.routeThumbnail)
                         }
-
-                        // Ready but too few points to draw (a summary-only drive).
-                        ready != null ->
-                            RouteNote(stringResource(R.string.savedDrives_routeEmpty))
-
-                        // Missing file / denied read / network / decode failure.
-                        else ->
-                            RouteNote(stringResource(R.string.savedDrives_routeUnavailable))
+                        if (mapGeometry != null && !hasMapboxToken) {
+                            RouteNote(stringResource(R.string.savedDrives_routeOverviewPlaceholder))
+                        }
+                        when {
+                            routeRepository == null && mapGeometry == null ->
+                                RouteNote(stringResource(R.string.savedDrives_routeOverviewPlaceholder))
+                            failure != null && routeRepository != null ->
+                                RouteNote(stringResource(routeFailureMessage(failure)))
+                            ready != null && ready.points.size < 2 ->
+                                RouteNote(stringResource(
+                                    if (mapGeometry is DriveRouteGeometry.Simplified) R.string.savedDrives_driveReplay_exactRouteEmpty
+                                    else R.string.savedDrives_routeEmpty,
+                                ))
+                        }
+                        if (routeRepository != null && failure?.canRetry == true) {
+                            TextButton(onClick = { routeAttempt++ }) {
+                                Text(stringResource(R.string.savedDrives_retry))
+                            }
+                        }
                     }
                 }
             }
@@ -1217,22 +1204,28 @@ fun SavedDriveDetailScreen(
         )
     }
 
-    // The full-screen, zoomable route popup. Only openable from the drawable-route
-    // branch (which requires ≥ 2 points), so the points read here are always
-    // drawable; guarded on the same Ready state so a route that becomes
-    // unavailable can't leave an empty popup open.
-    if (showRouteMap) {
-        val ready = routeState as? RouteReplayState.Ready
-        if (ready != null && ready.points.size >= 2) {
-            DriveRouteFullscreenDialog(
-                points = ready.points,
-                onDismiss = { showRouteMap = false },
-            )
-        } else {
-            showRouteMap = false
+    // The same provenance-preserving geometry opens in the real full-screen
+    // map. A denial, owner change or new load removes it immediately.
+    if (showRouteMap && mapGeometry != null && hasMapboxToken) {
+        key(mapGeometry) {
+            routeMapRenderer.Fullscreen(mapGeometry) { showRouteMap = false }
         }
     }
 }
+
+/** Map stable categories to localized copy, never raw backend error messages. */
+private fun routeFailureMessage(reason: RouteReplayFailure?): Int = when (reason) {
+    RouteReplayFailure.MISSING -> R.string.savedDrives_driveReplay_missing
+    RouteReplayFailure.SIGN_IN_REQUIRED -> R.string.savedDrives_driveReplay_signInRequired
+    RouteReplayFailure.ACCESS_DENIED -> R.string.savedDrives_driveReplay_accessDenied
+    RouteReplayFailure.NOT_FOUND -> R.string.savedDrives_driveReplay_notFound
+    RouteReplayFailure.SERVICE_UNAVAILABLE -> R.string.savedDrives_driveReplay_serviceUnavailable
+    RouteReplayFailure.DOWNLOAD_FAILED -> R.string.savedDrives_driveReplay_downloadFailed
+    RouteReplayFailure.CORRUPT -> R.string.savedDrives_driveReplay_corrupt
+    else -> R.string.savedDrives_routeUnavailable
+}
+
+internal const val DRIVE_ROUTE_MAP_PREVIEW_TAG = "drive_route_map_preview"
 
 /** Fixed height for the embedded route replay map. */
 private val ROUTE_MAP_HEIGHT = 240.dp

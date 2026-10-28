@@ -1,6 +1,6 @@
 import SwiftUI
 
-private enum PartnersSection: String, CaseIterable, Identifiable {
+enum PartnersSection: String, CaseIterable, Identifiable {
     case directory, saved
     var id: Self { self }
     var titleKey: LocalizedStringKey {
@@ -25,25 +25,24 @@ struct PartnersScreen: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            List {
-                Picker("partners.section", selection: $section) {
-                    ForEach(PartnersSection.allCases) { section in
-                        Text(section.titleKey).tag(section)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .listRowBackground(Color.clear)
-
-                switch section {
-                case .directory: directoryContent
-                case .saved: savedContent
+            VStack(spacing: 0) {
+                PartnersTabs(selection: $section)
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: KccSpacing.s4) {
+                        switch section {
+                        case .directory: directoryContent
+                        case .saved: savedContent
+                        }
+                    }.padding(KccSpacing.s4)
                 }
             }
+            .kccReadingSurface(pageBackground: true)
+            .tint(KccTheme.driver)
             .navigationTitle("partners.screenTitle")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(action: onBack) {
-                        Label("shell.back", systemImage: "chevron.backward")
+                        Label("shell.back", systemImage: "chevron.backward").frame(minHeight: 48)
                     }
                 }
             }
@@ -51,7 +50,8 @@ struct PartnersScreen: View {
                 PartnerDestinationScreen(coordinator: coordinator, destination: destination)
             }
         }
-        .background(.background, ignoresSafeAreaEdges: .all)
+        .kccReadingSurface(pageBackground: true)
+        .tint(KccTheme.driver)
         .onAppear { coordinator.start() }
         .onDisappear { coordinator.stop() }
     }
@@ -67,19 +67,10 @@ struct PartnersScreen: View {
                 Spacer()
             }
         case .empty:
-            ContentUnavailableView(
-                "partners.screenTitle",
-                systemImage: "building.2",
-                description: Text("partners.noPartnersNearby")
-            )
-            .listRowBackground(Color.clear)
+            SettingsStateCard(title: "partners.screenTitle", message: "partners.noPartnersNearby", symbol: "building.2")
         case .failed:
-            VStack(spacing: KccSpacing.s3) {
-                Text("partners.error").foregroundStyle(.secondary)
-                Button("partners.retry") { coordinator.reload() }
-                    .buttonStyle(.borderedProminent)
-            }
-            .frame(maxWidth: .infinity)
+            SettingsStateCard(title: "partners.screenTitle", message: "partners.error", symbol: "building.2",
+                retryTitle: "partners.retry", onRetry: coordinator.reload)
         case .loaded(let companies):
             if coordinator.offersState == .failed {
                 offersFailureRow
@@ -89,12 +80,12 @@ struct PartnersScreen: View {
                     companyId: company.id,
                     focusedOfferId: nil
                 )) {
-                    CompanyRow(
+                    PartnerCompanySummary(
                         company: company,
                         offerCount: coordinator.offersState == .loaded && coordinator.offersAreExhaustive
                             ? coordinator.offers(for: company.id).count : nil
-                    )
-                }
+                    ).kccContentCard()
+                }.buttonStyle(.plain)
             }
             if !coordinator.companiesAreExhaustive {
                 loadMoreCompaniesRow
@@ -104,19 +95,10 @@ struct PartnersScreen: View {
 
     @ViewBuilder private var savedContent: some View {
         if !coordinator.canAccessMemberOffers {
-            ContentUnavailableView(
-                "partnerOffers.upgradeForMemberOffers",
-                systemImage: "lock",
-                description: Text("partnerOffers.upgradeForMemberOffersHint")
-            )
-            .listRowBackground(Color.clear)
+            SettingsStateCard(title: "partnerOffers.upgradeForMemberOffers", message: "partnerOffers.upgradeForMemberOffersHint", symbol: "lock")
         } else if coordinator.savedState == .failed {
-            VStack(spacing: KccSpacing.s3) {
-                Text("partnerOffers.loadError").foregroundStyle(.secondary)
-                Button("partners.retry") { coordinator.reloadSavedOffers() }
-                    .buttonStyle(.borderedProminent)
-            }
-            .frame(maxWidth: .infinity)
+            SettingsStateCard(title: "partners.saved", message: "partnerOffers.loadError", symbol: "bookmark",
+                retryTitle: "partners.retry", onRetry: coordinator.reloadSavedOffers)
         } else if coordinator.savedState == .loading {
             HStack {
                 Spacer()
@@ -129,12 +111,7 @@ struct PartnersScreen: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            ContentUnavailableView(
-                "partnerOffers.savedEmptyTitle",
-                systemImage: "bookmark",
-                description: Text("partnerOffers.savedEmptyBody")
-            )
-            .listRowBackground(Color.clear)
+            SettingsStateCard(title: "partnerOffers.savedEmptyTitle", message: "partnerOffers.savedEmptyBody", symbol: "bookmark")
         } else {
             if !coordinator.savedOffersAreExhaustive {
                 Text("partnerOffers.savedLimitedBody")
@@ -146,21 +123,10 @@ struct PartnersScreen: View {
                     companyId: offer.companyId,
                     focusedOfferId: offer.id
                 )) {
-                    VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                        Text(offer.title).font(.headline)
-                        Text(
-                            companyName(for: offer.companyId)
-                                ?? offer.partnerCompanyName
-                                ?? String(localized: "partners.detailTitle")
-                        )
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        Text(LocalizedStringKey(offer.offerType.localizationKey))
-                            .font(.caption)
-                            .foregroundStyle(.tint)
-                    }
-                    .padding(.vertical, KccSpacing.s1)
-                }
+                    PartnerSavedOfferSummary(offer: offer, companyName: companyName(for: offer.companyId)
+                        ?? offer.partnerCompanyName ?? String(localized: "partners.detailTitle"))
+                        .kccContentCard()
+                }.buttonStyle(.plain)
             }
         }
     }
@@ -175,21 +141,12 @@ struct PartnersScreen: View {
     }
 
     private var unavailableRow: some View {
-        ContentUnavailableView(
-            "shell.unavailable",
-            systemImage: "building.2",
-            description: Text("shell.unavailable")
-        )
-        .listRowBackground(Color.clear)
+        SettingsStateCard(title: "partners.screenTitle", message: "shell.unavailable", symbol: "building.2")
     }
 
     private var offersFailureRow: some View {
-        VStack(spacing: KccSpacing.s3) {
-            Text("partnerOffers.loadError").foregroundStyle(.secondary)
-            Button("partners.retry") { coordinator.reload() }
-                .buttonStyle(.borderedProminent)
-        }
-        .frame(maxWidth: .infinity)
+        SettingsStateCard(title: "partnerOffers.sectionTitle", message: "partnerOffers.loadError", symbol: "tag",
+            retryTitle: "partners.retry", onRetry: coordinator.reload)
     }
 
     @ViewBuilder private var loadMoreCompaniesRow: some View {
@@ -203,10 +160,9 @@ struct PartnersScreen: View {
             if coordinator.didFailLoadingMoreCompanies {
                 Text("partners.error").foregroundStyle(.secondary)
             }
-            Button("partners.loadMore") {
-                Task { await coordinator.loadMoreCompanies() }
-            }
-            .frame(maxWidth: .infinity)
+            Button { Task { await coordinator.loadMoreCompanies() } } label: {
+                Text("partners.loadMore").frame(maxWidth: .infinity, minHeight: 48)
+            }.buttonStyle(.bordered)
         }
     }
 }
@@ -230,50 +186,25 @@ private struct PartnerDestinationScreen: View {
                 case .loading(let id) where id == destination.companyId:
                     ProgressView("partners.loading")
                 case .failed(let id) where id == destination.companyId:
-                    VStack(spacing: KccSpacing.s3) {
-                        Text("partners.error")
-                        Button("partners.retry") {
-                            coordinator.loadCompany(id: destination.companyId)
-                        }
+                    ScrollView {
+                        SettingsStateCard(title: "partners.detailTitle", message: "partners.error", symbol: "building.2",
+                            retryTitle: "partners.retry", onRetry: { coordinator.loadCompany(id: destination.companyId) })
+                            .padding(KccSpacing.s4)
                     }
                 default:
-                    ContentUnavailableView(
-                        "shell.unavailable",
-                        systemImage: "building.2",
-                        description: Text("shell.unavailable")
-                    )
+                    ScrollView {
+                        SettingsStateCard(title: "partners.detailTitle", message: "shell.unavailable", symbol: "building.2")
+                            .padding(KccSpacing.s4)
+                    }
                 }
             }
         }
+        .kccReadingSurface(pageBackground: true)
+        .tint(KccTheme.driver)
         .task(id: destination.companyId) {
             coordinator.loadCompany(id: destination.companyId)
         }
         .onDisappear { coordinator.closeCompanyDetail() }
-    }
-}
-
-private struct CompanyRow: View {
-    let company: PartnerCompany
-    let offerCount: Int?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: KccSpacing.s1) {
-            Text(company.name).font(.headline)
-            Text(LocalizedStringKey(company.category.localizationKey))
-                .font(.subheadline)
-                .foregroundStyle(.tint)
-            if let offerCount {
-                let key = offerCount == 1
-                    ? "partnerOffers.offerCountOne" : "partnerOffers.offerCountOther"
-                Text(verbatim: String.localizedStringWithFormat(
-                    NSLocalizedString(key, comment: "Number of active offers for a partner"),
-                    Int64(offerCount)
-                ))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.vertical, KccSpacing.s1)
     }
 }
 
@@ -283,23 +214,22 @@ private struct PartnerDetailScreen: View {
     let focusedOfferId: String?
 
     var body: some View {
-        List {
-            Section {
-                Text(LocalizedStringKey(company.category.localizationKey))
-                    .foregroundStyle(.tint)
-                if let description = company.description { Text(description) }
-                if let address = company.address {
-                    Label(address, systemImage: "mappin.and.ellipse")
-                        .foregroundStyle(.secondary)
-                }
-                externalActions
-            }
-
-            Section("partnerOffers.sectionTitle") {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: KccSpacing.s4) {
+                VStack(alignment: .leading, spacing: KccSpacing.s3) {
+                    PartnerCompanySummary(company: company, offerCount: nil, showsChevron: false)
+                    if let description = company.description { Text(verbatim: description).font(.body).fixedSize(horizontal: false, vertical: true) }
+                    if let address = company.address {
+                        Label(address, systemImage: "mappin.and.ellipse").font(.body).foregroundStyle(KccTheme.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    externalActions
+                }.kccContentCard()
+                Text("partnerOffers.sectionTitle").font(.title2.bold()).accessibilityAddTraits(.isHeader)
                 let offers = coordinator.detailOffers(for: company.id)
                 if coordinator.companyOffersState == .failed {
-                    Text("partnerOffers.loadError").foregroundStyle(.red)
-                    Button("partners.retry") { coordinator.reloadCompanyOffers() }
+                    SettingsStateCard(title: "partnerOffers.sectionTitle", message: "partnerOffers.loadError", symbol: "tag",
+                        retryTitle: "partners.retry", onRetry: coordinator.reloadCompanyOffers)
                 }
                 if !offers.isEmpty {
                     ForEach(offers) { offer in
@@ -307,31 +237,25 @@ private struct PartnerDetailScreen: View {
                     }
                 } else {
                     switch coordinator.companyOffersState {
-                    case .loading:
-                        ProgressView("partners.loading")
-                    case .failed:
-                        EmptyView()
+                    case .loading: ProgressView("partners.loading")
+                    case .failed: EmptyView()
                     case .loaded:
-                        if coordinator.companyOffersAreExhaustive {
-                            Text("partnerOffers.noOffers").foregroundStyle(.secondary)
-                        }
+                        if coordinator.companyOffersAreExhaustive { Text("partnerOffers.noOffers").foregroundStyle(KccTheme.secondary) }
                     }
                 }
-                if coordinator.companyOffersState == .loaded,
-                   coordinator.canLoadMoreCompanyOffers {
-                    if coordinator.isLoadingMoreCompanyOffers {
-                        ProgressView("partners.loading")
-                    } else {
-                        if coordinator.didFailLoadingMoreCompanyOffers {
-                            Text("partnerOffers.loadError").foregroundStyle(.secondary)
-                        }
-                        Button("partners.loadMore") {
-                            Task { await coordinator.loadMoreCompanyOffers() }
-                        }
+                if coordinator.companyOffersState == .loaded, coordinator.canLoadMoreCompanyOffers {
+                    if coordinator.isLoadingMoreCompanyOffers { ProgressView("partners.loading") }
+                    else {
+                        if coordinator.didFailLoadingMoreCompanyOffers { Text("partnerOffers.loadError").foregroundStyle(KccTheme.secondary) }
+                        Button { Task { await coordinator.loadMoreCompanyOffers() } } label: {
+                            Text("partners.loadMore").frame(maxWidth: .infinity, minHeight: 48)
+                        }.buttonStyle(.bordered)
                     }
                 }
-            }
+            }.padding(KccSpacing.s4)
         }
+        .kccReadingSurface(pageBackground: true)
+        .tint(KccTheme.driver)
         .navigationTitle(company.name)
         .navigationBarTitleDisplayMode(.inline)
         .task(id: focusedOfferId) {
@@ -353,17 +277,20 @@ private struct PartnerDetailScreen: View {
         ) {
             Link(destination: maps) {
                 Label("partners.navigateButton", systemImage: "arrow.triangle.turn.up.right.diamond")
-            }
+                    .frame(minHeight: 48).fixedSize(horizontal: false, vertical: true)
+            }.buttonStyle(.bordered)
         }
         if let phone = PartnerExternalDestination.phone(company.phone) {
             Link(destination: phone) {
                 Label("partners.callButton", systemImage: "phone")
-            }
+                    .frame(minHeight: 48).fixedSize(horizontal: false, vertical: true)
+            }.buttonStyle(.bordered)
         }
         if let website = PartnerExternalDestination.website(company.website) {
             Link(destination: website) {
                 Label("partners.websiteButton", systemImage: "safari")
-            }
+                    .frame(minHeight: 48).fixedSize(horizontal: false, vertical: true)
+            }.buttonStyle(.bordered)
         }
     }
 
@@ -378,17 +305,15 @@ private struct PartnerDetailScreen: View {
     }
 }
 
-private struct PartnerOfferCard: View {
+struct PartnerOfferCard: View {
     @Bindable var coordinator: PartnersCoordinator
     let offer: PartnerOffer
 
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s3) {
-            Text(offer.title).font(.headline)
-            Text(LocalizedStringKey(offer.offerType.localizationKey))
-                .font(.caption)
-                .foregroundStyle(.tint)
-            if !offer.teaserText.isEmpty { Text(offer.teaserText) }
+            Text(verbatim: offer.title).font(.headline).fixedSize(horizontal: false, vertical: true)
+            PartnerOfferTypeLabel(type: offer.offerType)
+            if !offer.teaserText.isEmpty { Text(verbatim: offer.teaserText).font(.body).fixedSize(horizontal: false, vertical: true) }
 
             if coordinator.canAccessMemberOffers {
                 Button {
@@ -399,25 +324,27 @@ private struct PartnerOfferCard: View {
                             ? "partnerOffers.unsaveOffer" : "partnerOffers.saveOffer",
                         systemImage: coordinator.savedOfferIds.contains(offer.id)
                             ? "bookmark.fill" : "bookmark"
-                    )
+                    ).frame(minHeight: 48).fixedSize(horizontal: false, vertical: true)
                 }
+                .buttonStyle(.bordered)
                 .disabled(saveIsWorking)
 
                 DisclosureGroup(isExpanded: expansionBinding) {
                     detailContent.padding(.top, KccSpacing.s2)
                 } label: {
-                    Text("partnerOffers.howToRedeem")
+                    Text("partnerOffers.howToRedeem").font(.body).frame(minHeight: 48)
                 }
             } else {
                 Label("partnerOffers.upgradeForMemberOffers", systemImage: "lock")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.tint)
                 Text("partnerOffers.upgradeForMemberOffersHint")
-                    .font(.caption)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, KccSpacing.s2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .kccContentCard()
     }
 
     @ViewBuilder private var detailContent: some View {
@@ -427,25 +354,25 @@ private struct PartnerOfferCard: View {
         case .missing:
             Text("partnerOffers.detailUnavailable").foregroundStyle(.secondary)
         case .failed:
-            Text("partnerOffers.detailLoadError").foregroundStyle(.red)
+            Text("partnerOffers.detailLoadError").foregroundStyle(KccPalette.errorRed)
         case .loaded(let detail):
             VStack(alignment: .leading, spacing: KccSpacing.s3) {
-                if let description = detail.description { Text(description) }
+                if let description = detail.description { Text(verbatim: description).font(.body).fixedSize(horizontal: false, vertical: true) }
                 if let instructions = detail.redemptionInstructions {
                     Text("partnerOffers.howToRedeem").font(.subheadline.weight(.semibold))
-                    Text(instructions)
+                    Text(verbatim: instructions).font(.body).fixedSize(horizontal: false, vertical: true)
                 }
                 if let terms = detail.terms {
                     Text("partnerOffers.terms").font(.subheadline.weight(.semibold))
-                    Text(terms).font(.caption).foregroundStyle(.secondary)
+                    Text(verbatim: terms).font(.footnote).fixedSize(horizontal: false, vertical: true).foregroundStyle(.secondary)
                 }
                 Label("partnerOffers.drivingSafetyWarning", systemImage: "car.side")
-                    .font(.caption)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
-                Button("partnerOffers.showCode") {
-                    Task { await coordinator.revealCode(offerId: offer.id) }
+                Button { Task { await coordinator.revealCode(offerId: offer.id) } } label: {
+                    Text("partnerOffers.showCode").frame(minHeight: 48).fixedSize(horizontal: false, vertical: true)
                 }
-                .buttonStyle(.borderedProminent)
+                .kccPrimaryAction()
                 .disabled(codeIsLoading)
                 codeContent
             }
@@ -458,18 +385,12 @@ private struct PartnerOfferCard: View {
             ProgressView("partners.loading")
         case .shown(let offerId, let code) where offerId == offer.id:
             if let code {
-                VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                    Text("partnerOffers.codeVisible").font(.caption).foregroundStyle(.secondary)
-                    Text(code).font(.title3.monospaced().weight(.semibold)).textSelection(.enabled)
-                }
-                .padding(KccSpacing.s3)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                PartnerOfferCodeValue(code: code)
             } else {
                 Text("partnerOffers.codeUnavailable").foregroundStyle(.secondary)
             }
         case .failed(let offerId) where offerId == offer.id:
-            Text("partnerOffers.codeLoadError").foregroundStyle(.red)
+            Text("partnerOffers.codeLoadError").foregroundStyle(KccPalette.errorRed)
         default:
             EmptyView()
         }

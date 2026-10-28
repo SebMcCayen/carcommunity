@@ -1,11 +1,16 @@
 package com.kungsbackacarcommunity.app.map
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.drives.RouteDistanceMarkers
 import com.kungsbackacarcommunity.app.drives.RoutePoint
+import com.kungsbackacarcommunity.app.drives.DriveRouteGeometry
+import com.kungsbackacarcommunity.app.navigation.LatLng
 import com.mapbox.common.MapboxOptions
 import com.mapbox.geojson.Point
 import com.mapbox.maps.EdgeInsets
@@ -25,9 +30,27 @@ import com.mapbox.maps.plugin.compass.compass
 import com.mapbox.maps.plugin.gestures.gestures
 import com.mapbox.maps.plugin.scalebar.scalebar
 
+/** Injectable map boundary: tests exercise the real open action without requiring native GL. */
+interface DriveRouteMapRenderer {
+    @Composable fun isAvailable(): Boolean
+    @Composable fun Preview(route: DriveRouteGeometry, modifier: Modifier)
+    @Composable fun Fullscreen(route: DriveRouteGeometry, onDismiss: () -> Unit)
+}
+
+object MapboxDriveRouteMapRenderer : DriveRouteMapRenderer {
+    @Composable override fun isAvailable() = stringResource(R.string.mapbox_access_token).isNotBlank()
+    @Composable override fun Preview(route: DriveRouteGeometry, modifier: Modifier) {
+        DriveRouteMap(route = route, modifier = modifier)
+    }
+    @Composable override fun Fullscreen(route: DriveRouteGeometry, onDismiss: () -> Unit) {
+        DriveRouteFullscreenDialog(route = route, onDismiss = onDismiss)
+    }
+}
+
 /**
- * A STATIC, non-following Mapbox map that draws the actual driven route of a
- * saved drive for History replay: the decoded [RoutePoint]s as a polyline, a
+ * A static Mapbox map for saved-drive geometry. The full-fix overload accepts
+ * decoded [RoutePoint]s; the geometry overload also renders an explicitly
+ * simplified saved polyline without manufacturing timestamps. Both draw a
  * start marker (green) and an end marker (the app's shared destination red from
  * [MapMarkerStyle]), with the camera fitted once to the whole route's bounds.
  *
@@ -73,48 +96,61 @@ fun DriveRouteMap(
     // wanted.
     interactive: Boolean = false,
 ) {
-    // The route is drawn ONCE, in the factory, from the points captured when the
-    // map enters composition. The caller only composes this once the route has
-    // resolved to a stable, drawable list (Ready with ≥ 2 points) and disposes it
-    // when leaving the drive, so those points never change under a live map —
-    // which is why `update` deliberately does nothing: re-running drawRoute would
-    // create a SECOND annotation manager on the same fixed layer/source ids.
-    AndroidView(
-        modifier = modifier,
-        factory = { context ->
-            // Set the global Mapbox access token (mirrors the shell surface) so
-            // tiles load even if History is opened before the map-first home.
-            val token = context.getString(R.string.mapbox_access_token)
-            if (token.isNotBlank()) {
-                MapboxOptions.accessToken = token
-            }
-            MapView(context).apply {
-                runCatching { scalebar.updateSettings { enabled = false } }
-                runCatching { compass.updateSettings { enabled = false } }
-                // Turn the MapView's touch handling OFF for the static thumbnail so
-                // the parent `clickable` reliably receives the tap-to-expand (an
-                // AndroidView-hosted MapView otherwise swallows the gesture).
-                if (!interactive) {
-                    runCatching {
-                        gestures.updateSettings {
-                            scrollEnabled = false
-                            pinchToZoomEnabled = false
-                            rotateEnabled = false
-                            pitchEnabled = false
-                            doubleTapToZoomInEnabled = false
-                            doubleTouchToZoomOutEnabled = false
-                            quickZoomEnabled = false
+    val route = remember(points) { DriveRouteGeometry.Recorded(points) }
+    DriveRouteMap(route, modifier, topSpeedMarker, interactive)
+}
+
+/** Geometry-only overload: simplified coordinates never acquire fabricated GPS times. */
+@Composable
+fun DriveRouteMap(
+    route: DriveRouteGeometry,
+    modifier: Modifier = Modifier,
+    topSpeedMarker: RoutePoint? = null,
+    interactive: Boolean = false,
+) {
+    // Recreate the native view when geometry/provenance changes (e.g. a retry
+    // replaces the simplified overview with exact fixes). Do not leave the old
+    // factory-captured route on screen or duplicate annotation managers.
+    key(route) {
+        // Draw once per keyed native view. Reusing annotation IDs in an update
+        // callback would otherwise create duplicate managers on the same style.
+        AndroidView(
+            modifier = modifier,
+            factory = { context ->
+                // Set the global Mapbox access token (mirrors the shell surface) so
+                // tiles load even if History is opened before the map-first home.
+                val token = context.getString(R.string.mapbox_access_token)
+                if (token.isNotBlank()) {
+                    MapboxOptions.accessToken = token
+                }
+                MapView(context).apply {
+                    runCatching { scalebar.updateSettings { enabled = false } }
+                    runCatching { compass.updateSettings { enabled = false } }
+                    // Turn the MapView's touch handling OFF for the static thumbnail so
+                    // the parent `clickable` reliably receives the tap-to-expand (an
+                    // AndroidView-hosted MapView otherwise swallows the gesture).
+                    if (!interactive) {
+                        runCatching {
+                            gestures.updateSettings {
+                                scrollEnabled = false
+                                pinchToZoomEnabled = false
+                                rotateEnabled = false
+                                pitchEnabled = false
+                                doubleTapToZoomInEnabled = false
+                                doubleTouchToZoomOutEnabled = false
+                                quickZoomEnabled = false
+                            }
                         }
                     }
+                    mapboxMap.loadStyle(Style.STANDARD) { _ ->
+                        drawRoute(this, route.coordinates)
+                        if (route is DriveRouteGeometry.Recorded) drawTopSpeedMarker(this, topSpeedMarker)
+                    }
                 }
-                mapboxMap.loadStyle(Style.STANDARD) { _ ->
-                    drawRoute(this, points)
-                    drawTopSpeedMarker(this, topSpeedMarker)
-                }
-            }
-        },
-        onRelease = { mapView -> runCatching { mapView.onDestroy() } },
-    )
+            },
+            onRelease = { mapView -> runCatching { mapView.onDestroy() } },
+        )
+    }
 }
 
 /**
@@ -126,7 +162,7 @@ fun DriveRouteMap(
  * loading or an unavailable camera-fit degrades to a blank/partial map rather
  * than crashing. Draws nothing for a route of fewer than two points.
  */
-internal fun drawRoute(mapView: MapView, points: List<RoutePoint>) {
+internal fun drawRoute(mapView: MapView, points: List<LatLng>) {
     if (points.size < 2) return
     runCatching {
         val linePoints = points.map { Point.fromLngLat(it.longitude, it.latitude) }

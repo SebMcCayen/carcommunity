@@ -193,16 +193,18 @@ fun EventsRoute(
             val createStatus by
                 createCoordinator.status.collectAsState(initial = CreateEventStatusUi.Idle)
 
-            // On a successful create, surface a snackbar and return to the list.
+            // Return as soon as the server confirms creation. The snackbar uses
+            // the route's scope so it survives removal of this form's effect
+            // without delaying navigation until the message is dismissed.
             // A member's event is published on creation (post-moderated), so it
             // appears in the published-only list straight away — no draft wait.
             val snackbarHostState = LocalSnackbarHostState.current
             val createdMessage = stringResource(R.string.events_createSuccess)
             LaunchedEffect(createStatus, snackbarHostState, createdMessage) {
                 if (createStatus is CreateEventStatusUi.Success) {
-                    snackbarHostState?.showSnackbar(createdMessage)
                     showCreate = false
                     createCoordinator.reset()
+                    scope.launch { snackbarHostState?.showSnackbar(createdMessage) }
                 }
             }
 
@@ -696,6 +698,7 @@ fun EventsRoute(
         }
 
     EventDetailScreen(
+        clubAttendance = { com.kungsbackacarcommunity.app.clubs.ClubEventAttendanceSection(uid, selected) },
         event = event,
         detail = detail,
         myRsvp = myRsvp,

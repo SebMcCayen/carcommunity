@@ -9,8 +9,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -23,8 +25,11 @@ import com.kungsbackacarcommunity.app.friends.FriendsRepository
 import com.kungsbackacarcommunity.app.friends.FriendsStatus
 import com.kungsbackacarcommunity.app.live.LiveShareStart
 import com.kungsbackacarcommunity.app.profile.FirebaseLiveProfileRepository
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Which convoy sub-screen the route is currently showing. */
 private enum class ConvoyView { List, Create, Detail }
@@ -111,16 +116,27 @@ fun ConvoyRoute(
     // Convoy. Sent with convoy-create so the owner's auto-started convoy session
     // denormalizes it; null lets the server fall back to their main car.
     createVehicleId: String? = null,
+    // Device-local ordering only; injectable so route tests exercise the same success path.
+    inviteUsageStore: ConvoyInviteUsageStore? = null,
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val usageStore = remember(inviteUsageStore, context) {
+        inviteUsageStore ?: LocalConvoyInviteUsageStore(context)
+    }
+    val currentViewerUid by rememberUpdatedState(viewerUid)
+    val createRepository = remember(repository, usageStore, viewerUid) {
+        RankedConvoyCreateRepository(repository, usageStore, viewerUid) { currentViewerUid }
+    }
+    var inviteCounts by remember(viewerUid) { mutableStateOf<Map<String, Int>>(emptyMap()) }
     // Refreshes the roster's denormalized member profiles from live users/{uid}
     // (ConvoyCoordinator.liveProfiles). Not remembered: sharedOrEmpty returns the
     // process-wide instance (or the EMPTY singleton), so it is already a stable
     // reference and cannot churn the coordinator's remember key.
     val liveProfiles = FirebaseLiveProfileRepository.sharedOrEmpty(LocalContext.current)
     val coordinator =
-        remember(repository, liveProfiles) {
-            ConvoyCoordinator(repository, liveProfiles = liveProfiles)
+        remember(createRepository, liveProfiles) {
+            ConvoyCoordinator(createRepository, liveProfiles = liveProfiles)
         }
     val status by coordinator.status.collectAsState()
     val refreshError by coordinator.refreshError.collectAsState()
@@ -134,7 +150,7 @@ fun ConvoyRoute(
     // picker renders as an "unavailable" notice — instead of a permanent Loading
     // spinner that would never resolve.
     val friendsCoordinator =
-        remember(friendsRepository) { friendsRepository?.let { FriendsCoordinator(it) } }
+        remember(friendsRepository, viewerUid) { friendsRepository?.let { FriendsCoordinator(it) } }
     val friendsStatus: FriendsStatus =
         friendsCoordinator?.status?.collectAsState()?.value
             ?: FriendsStatus.Error(FriendActionError.Generic)
@@ -143,7 +159,26 @@ fun ConvoyRoute(
     var detailConvoyId by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Create-flow local form state (reset each time the picker is opened).
-    var selectedUids by rememberSaveable { mutableStateOf<Set<String>>(emptySet()) }
+    var selectedUids by rememberSaveable(viewerUid) { mutableStateOf<Set<String>>(emptySet()) }
+    // Latch synchronously at the tap, before launching the coroutine/recomposition.
+    var createSubmitting by remember(viewerUid) { mutableStateOf(false) }
+    val createFriends = (friendsStatus as? FriendsStatus.Loaded)?.friends.orEmpty()
+        .filterNot { it.uid == viewerUid }
+    val eligibleSelection = createConvoySelection(selectedUids, createFriends, viewerUid)
+    LaunchedEffect(friendsStatus, viewerUid) {
+        if (friendsStatus is FriendsStatus.Loaded) selectedUids = eligibleSelection
+    }
+    LaunchedEffect(view, usageStore, viewerUid) {
+        if (view == ConvoyView.Create) {
+            inviteCounts = if (viewerUid.isNullOrBlank()) emptyMap() else try {
+                withContext(Dispatchers.IO) { usageStore.counts(viewerUid) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                emptyMap()
+            }
+        }
+    }
 
     // --- Optimistic live-share start ------------------------------------
     // A convoy live session is started SERVER-side: convoy-create auto-starts the
@@ -279,6 +314,7 @@ fun ConvoyRoute(
         if (openCreateOnEntry && !createDeepLinkConsumed) {
             createDeepLinkConsumed = true
             selectedUids = emptySet()
+            createSubmitting = false
             coordinator.resetCreate()
             // Friends load is driven declaratively by the LaunchedEffect(view)
             // above once the sub-view flips to Create.
@@ -343,8 +379,12 @@ fun ConvoyRoute(
                 onCreate = {
                     // Fresh form each time the picker opens; the friends snapshot
                     // is (re)loaded by the LaunchedEffect(view) once view == Create.
-                    selectedUids = emptySet()
-                    coordinator.resetCreate()
+                    // Back/reopen during a request must not reset Working and
+                    // permit a second submit while the first one is still running.
+                    if (!createSubmitting) {
+                        selectedUids = emptySet()
+                        coordinator.resetCreate()
+                    }
                     view = ConvoyView.Create
                 },
                 onOpenConvoy = { convoyId ->
@@ -399,37 +439,60 @@ fun ConvoyRoute(
                 onClearActionError = { coordinator.clearActionError() },
             )
 
-        ConvoyView.Create ->
+        ConvoyView.Create -> key(viewerUid) {
             CreateConvoyScreen(
-                friendsStatus = friendsStatus,
-                createState = createState,
-                selectedUids = selectedUids,
+                friendsStatus = (friendsStatus as? FriendsStatus.Loaded)?.copy(friends = createFriends) ?: friendsStatus,
+                createState = if (createSubmitting && createState !is CreateConvoyState.Created) {
+                    CreateConvoyState.Working
+                } else createState,
+                selectedUids = eligibleSelection,
+                successfulInvites = inviteCounts,
                 onToggleFriend = { uid ->
-                    selectedUids =
-                        if (uid in selectedUids) selectedUids - uid else selectedUids + uid
+                    if (!createSubmitting && createState !is CreateConvoyState.Working && createState !is CreateConvoyState.Created &&
+                        createFriends.any { it.uid == uid }
+                    ) {
+                        val currentSelection = createConvoySelection(selectedUids, createFriends, viewerUid)
+                        selectedUids = when {
+                            uid in currentSelection -> currentSelection - uid
+                            currentSelection.size < MAX_CREATE_CONVOY_INVITEES -> currentSelection + uid
+                            else -> currentSelection
+                        }
+                    }
                 },
                 // Only offer retry when there is a coordinator to retry with; a
                 // null repo (config-less build) gets no button (it could never
                 // succeed) — just the terminal unavailable notice.
                 onRetryFriends =
                     friendsCoordinator?.let { c -> { scope.launch { c.load() } } },
-                onSubmit = {
+                onSubmit = submit@{
+                    val currentSelection = createConvoySelection(selectedUids, createFriends, viewerUid)
+                    if (createSubmitting || friendsStatus !is FriendsStatus.Loaded || currentSelection.isEmpty() ||
+                        currentSelection.size > MAX_CREATE_CONVOY_INVITEES ||
+                        createState is CreateConvoyState.Working || createState is CreateConvoyState.Created
+                    ) return@submit
+                    val submittedUids = currentSelection.toList()
+                    createSubmitting = true
                     // Convoys are born ACTIVE, so creating one starts the owner's
                     // own live session server-side — mark it optimistically.
                     val marked = markLiveStarting()
                     // Convoys are unnamed — the title is always absent and the
                     // list/detail fall back to the neutral "untitled" label.
                     scope.launch {
-                        coordinator.create(selectedUids.toList(), null, createVehicleId)
-                        resolveLiveStarting(
-                            marked,
-                            coordinator.createState.value is CreateConvoyState.Created,
-                        )
+                        try {
+                            coordinator.create(submittedUids, null, createVehicleId)
+                            resolveLiveStarting(
+                                marked,
+                                coordinator.createState.value is CreateConvoyState.Created,
+                            )
+                        } finally {
+                            createSubmitting = false
+                        }
                     }
                 },
                 // No onDone: a successful create is handled by the
                 // LaunchedEffect(createState) above, which dismisses to the map.
             )
+        }
 
         ConvoyView.Detail -> {
             val convoy = (status as? ConvoyListStatus.Loaded)?.convoy(detailConvoyId ?: "")
