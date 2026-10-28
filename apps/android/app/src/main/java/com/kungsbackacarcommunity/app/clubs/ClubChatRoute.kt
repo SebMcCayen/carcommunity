@@ -17,6 +17,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.kungsbackacarcommunity.app.R
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -57,6 +59,7 @@ private fun VerifiedClubChat(uid: String, repo: ClubRepository?) {
 private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubChatState.Ready) {
     val membership = ready.membership
     var pages by remember { mutableStateOf<List<ClubMessagePage>>(emptyList()) }
+    var retainedLiveIds by remember { mutableStateOf<List<List<String>>>(emptyList()) }
     var pageCursor by remember { mutableStateOf<ClubMessageCursor?>(null) }
     var draft by remember { mutableStateOf("") }
     var operationId by remember { mutableStateOf(UUID.randomUUID().toString()) }
@@ -67,9 +70,17 @@ private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubCha
     var reporting by remember { mutableStateOf<ClubMessage?>(null) }
     var reported by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    fun retainLiveWindow() {
+        val observed = (retainedLiveIds.flatten() + pages.flatMap { it.ids }).toSet()
+        val added = ready.messages.map { it.id }.distinct().filterNot { it in observed }
+        // Immutable batches keep existing listeners alive as the latest-25 boundary moves.
+        // Keep only IDs: redactions/removals must come from live snapshots, never old DTOs.
+        if (added.isNotEmpty()) retainedLiveIds = retainedLiveIds + added.chunked(25)
+    }
+    SideEffect { if (paging || pages.isNotEmpty()) retainLiveWindow() }
     val olderRows = mutableListOf<ClubMessage>()
-    pages.forEach { page -> key(page.ids) {
-        val source = remember(repository, page.ids) { repository.observeMessageRows(membership.clubId, page.ids) }
+    (retainedLiveIds + pages.map { it.ids }).filter { it.isNotEmpty() }.distinct().forEach { ids -> key(ids) {
+        val source = remember(repository, ids) { repository.observeMessageRows(membership.clubId, ids) }
         val rows by source.collectAsState(initial = emptyList())
         olderRows.addAll(rows)
         Unit
@@ -117,8 +128,16 @@ private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubCha
             val nextCursor = pageCursor ?: ready.oldestCursor
             if (nextCursor != null && (if (pages.isEmpty()) ready.hasOlder else pageHasOlder)) item {
                 TextButton(enabled = !paging, onClick = {
+                    if (paging) return@TextButton
+                    // Pin the boundary before the suspend request: arrivals during loading
+                    // must not open a gap between the latest window and this older page.
+                    retainLiveWindow()
                     paging = true; scope.launch {
-                        try { val page = repository.olderMessages(membership.clubId, nextCursor); pages = pages + page; pageCursor = page.nextCursor; pageHasOlder = page.hasMore; error = null }
+                        try {
+                            val page = repository.olderMessages(membership.clubId, nextCursor)
+                            currentCoroutineContext().ensureActive()
+                            pages = pages + page; pageCursor = page.nextCursor; pageHasOlder = page.hasMore; error = null
+                        }
                         catch (e: CancellationException) { throw e } catch (e: Exception) { error = e }
                         finally { paging = false }
                     }
