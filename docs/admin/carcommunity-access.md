@@ -14,6 +14,34 @@ Firestore checks the product record and current identity decisions. RTDB uses pr
 
 Android and iOS gate the authenticated shell from own metadata, refresh on foreground, and fence all responses to the active UID. Offline presentation may retain the last trusted cached status, preserving existing offline driving; every online operation still passes server/rule authority. No background polling is added. Restricted views keep own warnings, support, privacy cleanup where applicable, account deletion and explicit sign-out reachable.
 
+## Accepted residual identity-link risk (2026-10-28)
+
+The repository owner has explicitly accepted the reported post-initialization
+provider-link risk for the present delivery. A previously initialized account
+can link a retained blocked Google/Apple identity and avoid the access-refresh
+callables; direct SDK rules can continue trusting its old projection. Linking
+then unlinking before server observation is also outside the retained-history
+boundary. This is an accepted residual risk, not a completed security fix.
+
+A complete SDK-preserving lifecycle solution needs an authoritative link-time
+server boundary. Firebase's beforeUserSignedIn blocking hook is re-triggered by
+provider linking and requires Authentication with Identity Platform. No platform
+upgrade, blocking hook activation or change to shared Driver authentication is
+authorized or performed here. See the official Firebase blocking-events
+requirements: https://firebase.google.com/docs/functions/auth-blocking-events.
+
+This acceptance does not waive the migration/compatible-app gates below or grant
+approval for potentially billable deployments. Existing main-branch Functions
+and Hosting workflows automatically deploy changes in this lane, so production
+merge remains a controlled rollout action.
+
+The CodeQL js/file-access-to-http report on the emulator setup was separately
+inspected: it sends the checked-in public database rules to a fixed 127.0.0.1
+endpoint using a validated numeric emulator port and fixed demo-test namespace.
+The literal owner bearer value is emulator administration, not a production
+credential. This intentional local setup is not a remote data-disclosure path;
+production/remote test execution remains prohibited by the existing guards.
+
 ## Controlled rollout — manual release gates
 
 Nothing in this PR deploys or changes production data. Missing policy defaults to strict initialization. Do not deploy new strict rules before migration and compatible app releases.
