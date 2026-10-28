@@ -364,6 +364,7 @@ fun MapHome(
     // −N KP" ReactionOverlay fired when the driver drives onto a rival's trap).
     // Composed ON TOP of the map chrome like [waveOverlay]; null (crownHuntPerks
     // off / config-less build) composes nothing. Non-blocking.
+    clubBadge: com.kungsbackacarcommunity.app.profile.ClubBadge? = null,
     trapDrainOverlay: (@Composable () -> Unit)? = null,
 ) {
     val loadState by mapSurface.loadState.collectAsState()
@@ -668,6 +669,7 @@ fun MapHome(
         ) {
             SearchBarRow(
                 avatarUrl = avatarUrl,
+                clubBadge = clubBadge,
                 onSearch = onSearch,
                 onOpenMore = { moreOpen = true },
                 searchExpanded = searchExpanded,
@@ -1801,6 +1803,7 @@ private fun SearchBarRow(
     moreMenuEntries: List<HubEntry>,
     moreMenuOpen: Boolean,
     onDismissMore: () -> Unit,
+    clubBadge: com.kungsbackacarcommunity.app.profile.ClubBadge? = null,
     liveSessionBar: (@Composable () -> Unit)? = null,
 ) {
     val haptics = LocalHapticFeedback.current
@@ -1953,6 +1956,7 @@ private fun SearchBarRow(
         // PopupPositionProvider, so the menu tracks the button wherever the
         // search row lays it out (font scaling, insets, future layout changes).
         Box {
+            com.kungsbackacarcommunity.app.profile.ClubAvatarFrame(badge = clubBadge) {
             Surface(
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.surface,
@@ -1997,6 +2001,7 @@ private fun SearchBarRow(
                         )
                     }
                 }
+            }
             }
             // Profile/account menu: a transparent Popup (no dimming scrim, the map
             // stays visible) anchored to this button's measured bounds; tapping

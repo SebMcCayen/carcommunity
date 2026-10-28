@@ -698,6 +698,7 @@ fun EventsRoute(
         }
 
     EventDetailScreen(
+        clubAttendance = { com.kungsbackacarcommunity.app.clubs.ClubEventAttendanceSection(uid, selected) },
         event = event,
         detail = detail,
         myRsvp = myRsvp,

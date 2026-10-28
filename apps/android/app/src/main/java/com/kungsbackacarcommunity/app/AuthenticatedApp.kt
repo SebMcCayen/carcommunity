@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app
 
+import com.kungsbackacarcommunity.app.clubs.SharedClubRoute
 import android.Manifest
 import android.content.Intent
 import android.graphics.Bitmap
@@ -4257,6 +4258,7 @@ fun AuthenticatedApp(
                 com.kungsbackacarcommunity.app.shell.LocalAeroOwnerHeader provides
                     if (route == ShellRoute.Profile) null else com.kungsbackacarcommunity.app.shell.AeroOwnerHeader(
                         avatarUrl = mapAvatarUrl,
+                        clubBadge = profile?.clubBadge,
                         showSupporterBadge = profile?.supporterBadge?.visible == true,
                         onOpenProfile = { pushRoute(ShellRoute.Profile) },
                     ),
@@ -6675,6 +6677,7 @@ fun AuthenticatedApp(
                                     isLiveSharing = isSharing,
                                     participantCount = mapParticipantUids.size,
                                     avatarUrl = mapAvatarUrl,
+                                    clubBadge = profile?.clubBadge,
                                     userLabel =
                                         stringResource(R.string.shell_userMarkerLabel),
                                     // Tapping "Where to?" opens the address
@@ -7550,6 +7553,11 @@ fun AuthenticatedApp(
                                                             // the "+" Create chooser's "Convoy"
                                                             // option and the chat hub's Convoys
                                                             // tab. Only this menu entry is gone.
+                                                            HubEntry(
+                                                                stringResource(R.string.clubs_title),
+                                                                Icons.Filled.Groups,
+                                                                { openRootRoute(ShellRoute.Clubs) },
+                                                            ),
                                                             HubEntry(
                                                                 stringResource(R.string.shell_socialEvents),
                                                                 Icons.Filled.Event,
@@ -9675,6 +9683,8 @@ private fun RouteHost(
                 // Always available: the changelog ships bundled with the app.
                 onWhatsNew = { onOpenRoute(ShellRoute.WhatsNew) },
             )
+
+        ShellRoute.Clubs -> SharedClubRoute(uid = uid, onOpenEvent = openEventFromNotification)
 
         ShellRoute.WhatsNew -> WhatsNewRoute()
 
