@@ -124,10 +124,7 @@ export function buildUserPrivateDocument(
     licenceConfirmedAt: null,
     termsAcceptedAt: null,
     privacyPolicyAcceptedAt: null,
-    // Anonymised partner statistics use a DEFAULT-ON / opt-out consent model:
-    // a newly provisioned member contributes unless they explicitly opt out
-    // (in onboarding or later under Privacy). A missing/true value means
-    // contributing; only an explicit `false` opts out (see recordInteraction).
+    // Optional partner analysis is off until versioned affirmative consent.
     anonymousPartnerStatsOptIn: false,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
