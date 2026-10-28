@@ -150,6 +150,23 @@ describe('account-deleteAccount (soft delete)', () => {
     );
   });
 
+  it('rejects an account switch before disabling either account', async () => {
+    const user = await createProvisionedUser('del-bound-user');
+    await signInAs(user);
+    await expect(
+      call('account-deleteAccount', { expectedUid: 'different-user' }),
+    ).rejects.toMatchObject({
+      code: 'functions/permission-denied',
+    });
+    expect((await adminAuth.getUser(user.uid)).disabled).toBe(false);
+    expect((await adminDb.collection('accountDeletionRequests').doc(user.uid).get()).exists).toBe(
+      false,
+    );
+    expect((await call('account-deleteAccount', { expectedUid: user.uid })).data).toMatchObject({
+      status: 'pending',
+    });
+  });
+
   it('works while suspended (deletion is a support path)', async () => {
     const user = await createProvisionedUser('del-suspended');
     await adminDb.collection('users').doc(user.uid).set({ suspended: true }, { merge: true });
@@ -231,18 +248,13 @@ describe('account purge (hard delete after retention)', () => {
       .collection('pushTokens')
       .doc('t'.repeat(64))
       .set({ platform: 'android', createdAt: Timestamp.now(), lastSeenAt: Timestamp.now() });
-    await adminDb
-      .collection('notifications')
-      .doc(uid)
-      .collection('items')
-      .doc('n1')
-      .set({
-        category: 'system_notice',
-        title: 'x',
-        previewText: 'x',
-        read: false,
-        createdAt: Timestamp.now(),
-      });
+    await adminDb.collection('notifications').doc(uid).collection('items').doc('n1').set({
+      category: 'system_notice',
+      title: 'x',
+      previewText: 'x',
+      read: false,
+      createdAt: Timestamp.now(),
+    });
     await adminDb
       .collection('pointsLedger')
       .doc(uid)
@@ -520,12 +532,23 @@ describe('account purge (hard delete after retention)', () => {
     // - a DM conversation the user is NOT part of,
     const otherConvRef = adminDb.collection('conversations').doc('x__y');
     await otherConvRef.set({ members: ['x-uid', 'y-uid'], createdAt: Timestamp.now() });
-    // - an EVENT chat message authored by the user (keyed on authorUserId; retained),
+    // Event content must now be erased even below an orphaned event parent.
     const eventMsg = await adminDb
       .collection('events')
       .doc('event-1')
       .collection('messages')
       .add({ authorUserId: uid, text: 'event hi', createdAt: Timestamp.now() });
+    const eventRsvp = adminDb.doc(`events/event-1/rsvps/${uid}`);
+    const otherRsvp = adminDb.doc('events/event-1/rsvps/other-rsvp-user');
+    const otherEventMsg = adminDb.doc('events/event-1/messages/other-message');
+    await eventRsvp.set({ status: 'going' });
+    await otherRsvp.set({ status: 'maybe' });
+    await otherEventMsg.set({
+      authorUserId: 'other-rsvp-user',
+      text: 'keep',
+      createdAt: Timestamp.now(),
+    });
+
     // - a friendship between two OTHER members (the collection-group mirror
     //   sweep must not touch friend rows that merely live next to the deleted
     //   user's),
@@ -723,12 +746,16 @@ describe('account purge (hard delete after retention)', () => {
     expect(endedDestination.label).toBe('Kungsbacka');
 
     // Controls survive: another user's community message, a DM the user isn't in,
-    // the user's EVENT chat message (authorUserId-keyed, deliberately retained),
+    // another member's event content,
     // and the friend row / friend request / block between two OTHER members
     // (the last with its RTDB mirror node still intact).
     expect((await otherCommunityMsg.get()).exists).toBe(true);
     expect((await otherConvRef.get()).exists).toBe(true);
-    expect((await eventMsg.get()).exists).toBe(true);
+    expect((await eventMsg.get()).exists).toBe(false);
+    expect((await eventRsvp.get()).exists).toBe(false);
+    expect((await otherEventMsg.get()).exists).toBe(true);
+    expect((await otherRsvp.get()).exists).toBe(true);
+    expect((await adminDb.doc(`accountPurgeProgress/${uid}`).get()).exists).toBe(false);
     expect((await bystanderFriendRef.get()).exists).toBe(true);
     expect((await bystanderReqRef.get()).exists).toBe(true);
     expect((await bystanderBlockRef.get()).exists).toBe(true);

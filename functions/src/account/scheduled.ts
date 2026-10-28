@@ -39,13 +39,13 @@
  *
  * Deliberately retained data is documented in deletion-core.ts
  * (moderation/audit history, hashed insight events, claim audit keys,
- * event-chat/RSVP community-context records).
+ * with event chat and RSVP records erased by the resumable event-content sweep).
  *
  * runAccountPurge is exported for deterministic emulator tests.
  */
 
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import type { Query } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { adminAuth, adminRtdb, adminStorage, db } from '../firebase';
@@ -429,6 +429,60 @@ async function deleteAuthoredChannelMessages(uid: string): Promise<void> {
   }
 }
 
+/** Erase content under events even when its parent has already disappeared.
+ * RSVP documents have only a status and their UID document ID. A durable
+ * document-name cursor therefore covers legacy/orphaned records without an
+ * unbounded in-memory scan or a destructive schema migration. At most 4,000
+ * RSVP rows are read per invocation; a pending request resumes the next day.
+ */
+async function deleteEventContent(uid: string): Promise<void> {
+  let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+  for (;;) {
+    let query = db
+      .collectionGroup('messages')
+      .where('authorUserId', '==', uid)
+      .orderBy(FieldPath.documentId())
+      .limit(QUERY_BATCH_SIZE);
+    if (cursor) query = query.startAfter(cursor);
+    const page = await query.get();
+    if (page.empty) break;
+    const batch = db.batch();
+    for (const doc of page.docs) {
+      const path = doc.ref.path.split('/');
+      if (path.length === 4 && path[0] === 'events' && path[2] === 'messages')
+        batch.delete(doc.ref);
+    }
+    await batch.commit();
+    cursor = page.docs.at(-1);
+    if (page.size < QUERY_BATCH_SIZE) break;
+  }
+  const progress = db.collection('accountPurgeProgress').doc(uid);
+  const saved = (await progress.get()).data();
+  if (saved?.rsvpComplete === true) return;
+  let after = typeof saved?.rsvpCursor === 'string' ? saved.rsvpCursor : undefined;
+  const size = 200;
+  for (let pageNumber = 0; pageNumber < 20; pageNumber++) {
+    let query = db.collectionGroup('rsvps').orderBy(FieldPath.documentId()).limit(size);
+    if (after) query = query.startAfter(db.doc(after));
+    const page = await query.get();
+    const batch = db.batch();
+    for (const doc of page.docs) {
+      const path = doc.ref.path.split('/');
+      if (path.length === 4 && path[0] === 'events' && path[2] === 'rsvps' && doc.id === uid) {
+        // The existing onRsvpWrite trigger maintains the surviving event's
+        // counts. Missing parents are already handled by that trigger.
+        batch.delete(doc.ref);
+      }
+    }
+    after = page.docs.at(-1)?.ref.path ?? after;
+    const complete = page.size < size;
+    batch.set(progress, { rsvpCursor: after ?? null, rsvpComplete: complete });
+    await batch.commit();
+    if (complete) return;
+  }
+  throw new Error('Account event erasure is pending; resume from its durable cursor.');
+}
+
 /** Purges one user's data per the plan. Idempotent — safe to re-run. */
 export async function purgeUserData(uid: string): Promise<void> {
   for (const collection of PURGE_DOC_TREES) {
@@ -457,6 +511,7 @@ export async function purgeUserData(uid: string): Promise<void> {
   // messages. DMs go first so no DM message survives into the channel sweep.
   await deleteDmConversations(uid);
   await deleteAuthoredChannelMessages(uid);
+  await deleteEventContent(uid);
   for (const prefix of PURGE_STORAGE_PREFIXES(uid)) {
     try {
       await adminStorage.bucket().deleteFiles({ prefix });
@@ -465,6 +520,7 @@ export async function purgeUserData(uid: string): Promise<void> {
       logger.warn('Storage purge failed for prefix', { prefix, error: String(error) });
     }
   }
+  await db.collection('accountPurgeProgress').doc(uid).delete();
   await adminAuth.deleteUser(uid).catch((error) => {
     // Already deleted on a previous partial run — idempotency.
     if ((error as { code?: string }).code !== 'auth/user-not-found') throw error;
