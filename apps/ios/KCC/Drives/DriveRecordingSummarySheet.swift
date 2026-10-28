@@ -13,33 +13,34 @@ struct DriveRecordingSummarySheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: KccSpacing.s4) {
                     if let summary = coordinator.state.summary {
-                        summaryCard(summary)
+                        DriveRecordingStatsCard(summary: summary)
                     }
                     Text(errorKey)
                         .foregroundStyle(KccPalette.errorRed)
                     if coordinator.state.canRetrySave {
                         Button(action: retry) {
                             Text("savedDrives.retryAction")
-                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .frame(maxWidth: .infinity, minHeight: 48)
                         }
                         .kccPrimaryAction()
                     } else {
                         Button(role: .destructive, action: discard) {
                             Text("savedDrives.discardAction")
-                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .frame(maxWidth: .infinity, minHeight: 48)
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.borderedProminent).tint(KccPalette.errorRed)
                     }
                     if coordinator.state.canRetrySave {
                         Button(role: .destructive, action: discard) {
                             Text("savedDrives.discardAction")
-                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .frame(maxWidth: .infinity, minHeight: 48)
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.bordered).tint(KccPalette.errorRed)
                     }
                 }
-                .padding(KccSpacing.s6)
+                .padding(KccSpacing.s4)
             }
+            .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .navigationTitle("savedDrives.saveFailedTitle")
         }
         .interactiveDismissDisabled()
@@ -64,23 +65,4 @@ struct DriveRecordingSummarySheet: View {
         dismiss()
     }
 
-    private func summaryCard(_ summary: DriveRecordingSummary) -> some View {
-        VStack(alignment: .leading, spacing: KccSpacing.s2) {
-            stat("savedDrives.distance", DriveFormatters.formatDistance(summary.distanceMeters))
-            stat("savedDrives.duration", DriveFormatters.formatDuration(summary.durationSeconds))
-            stat("savedDrives.averageSpeed", DriveFormatters.formatSpeed(summary.averageSpeedMetersPerSecond))
-        }
-        .padding(KccSpacing.s4)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(KccTheme.subtle)
-        .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
-    }
-
-    private func stat(_ label: LocalizedStringKey, _ value: String) -> some View {
-        HStack {
-            Text(label).foregroundStyle(.secondary)
-            Spacer()
-            Text(value).fontWeight(.semibold)
-        }
-    }
 }

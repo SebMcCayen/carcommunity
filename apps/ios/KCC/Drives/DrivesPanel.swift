@@ -44,22 +44,22 @@ struct DrivesPanel: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: KccSpacing.s4) {
-                HStack {
+                HStack(alignment: .top) {
                     Text("shell.moreDrives")
-                        .font(.title2.weight(.semibold))
+                        .font(.title2.weight(.semibold)).accessibilityAddTraits(.isHeader)
                     Spacer()
                     Button { showingStats = true } label: {
-                        Label("savedDrives.statsEntryAction", systemImage: "chart.bar")
+                        Image(systemName: "chart.bar").frame(minWidth: 48, minHeight: 48).contentShape(Rectangle())
                     }
-                    .labelStyle(.iconOnly)
-                    .frame(minWidth: 44, minHeight: 44)
+                    .accessibilityLabel(Text("savedDrives.statsEntryAction"))
                     .accessibilityIdentifier("myDrives.stats")
                 }
                 historyContent
             }
-            .padding(KccSpacing.s6)
+            .padding(KccSpacing.s4)
         }
-        .kccReadingSurface()
+        .kccReadingSurface(pageBackground: true)
+        .tint(KccTheme.driver)
         .task { await coordinator.load() }
         .sheet(item: $selectedDrive) { drive in
             SavedDriveDetailScreen(
@@ -92,11 +92,10 @@ struct DrivesPanel: View {
     @ViewBuilder private var historyContent: some View {
         switch coordinator.state {
         case .loading: ProgressView("savedDrives.loading")
-        case .unavailable: Text("savedDrives.error").foregroundStyle(.secondary)
+        case .unavailable: SettingsStateCard(title: "shell.moreDrives", message: "savedDrives.error", symbol: "car")
         case .failed:
-            Text("savedDrives.error").foregroundStyle(KccPalette.errorRed)
-            Button("savedDrives.retry") { Task { await coordinator.load() } }
-                .buttonStyle(.bordered).frame(maxWidth: .infinity, minHeight: 44)
+            SettingsStateCard(title: "shell.moreDrives", message: "savedDrives.error", symbol: "exclamationmark.circle",
+                retryTitle: "savedDrives.retry", onRetry: { Task { await coordinator.load() } })
         case .loaded: loadedHistory
         }
     }
@@ -104,7 +103,7 @@ struct DrivesPanel: View {
     @ViewBuilder private var loadedHistory: some View {
         if coordinator.hiddenDriveCount > 0 {
             Text(String(format: String(localized: "savedDrives.tierRestrictedBanner"), coordinator.hiddenDriveCount))
-                .font(.system(size: KccTypeScale.bodySm)).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(KccTheme.secondary)
         }
         Button { showingFilters.toggle() } label: {
             HStack {
@@ -112,10 +111,10 @@ struct DrivesPanel: View {
                       systemImage: "line.3.horizontal.decrease.circle")
                 Spacer()
                 if coordinator.filters.activeFilterCount > 0 {
-                    Text("\(coordinator.filters.activeFilterCount)").font(.caption.bold())
-                        .padding(6).background(.tint, in: Circle()).foregroundStyle(.white)
+                    Text("\(coordinator.filters.activeFilterCount)").font(.footnote.bold())
+                        .padding(KccSpacing.s2).background(KccTheme.driver, in: Capsule()).foregroundStyle(KccTheme.onDriver)
                 }
-            }.frame(minHeight: 44)
+            }.frame(minHeight: 48)
         }.buttonStyle(.plain)
         if showingFilters { filters }
 
@@ -123,7 +122,7 @@ struct DrivesPanel: View {
             Text("savedDrives.empty").foregroundStyle(.secondary)
         } else if coordinator.visibleDrives.isEmpty {
             Text("savedDrives.filterNoMatches").foregroundStyle(.secondary)
-            Button("savedDrives.filterNoMatchesAction") { coordinator.filters = .init() }
+            Button { coordinator.filters = .init() } label: { Text("savedDrives.filterNoMatchesAction").frame(minHeight: 48) }.buttonStyle(.bordered)
         } else {
             ForEach(coordinator.visibleDrives) { drive in
                 Button { selectedDrive = drive } label: {
@@ -150,40 +149,17 @@ struct DrivesPanel: View {
         if coordinator.deleteFailed { Text("savedDrives.deleteError").foregroundStyle(KccPalette.errorRed) }
     }
 
-    private var filters: some View {
-        VStack(alignment: .leading, spacing: KccSpacing.s3) {
-            TextField("savedDrives.filterSearchLabel", text: $coordinator.filters.query)
-                .textFieldStyle(.roundedBorder)
-            Picker("savedDrives.filterPeriod", selection: $coordinator.filters.dateRange) {
-                Text("savedDrives.filterAll").tag(DriveDateRange.all)
-                Text("savedDrives.filterThisWeek").tag(DriveDateRange.thisWeek)
-                Text("savedDrives.filterThisMonth").tag(DriveDateRange.thisMonth)
-            }
-            Picker("savedDrives.filterDistance", selection: $coordinator.filters.distanceBand) {
-                Text("savedDrives.filterAll").tag(DriveDistanceBand.all)
-                Text("savedDrives.filterUnder10").tag(DriveDistanceBand.under10)
-                Text("savedDrives.filter10to50").tag(DriveDistanceBand.from10To50)
-                Text("savedDrives.filterOver50").tag(DriveDistanceBand.over50)
-            }
-            Picker("savedDrives.filterSort", selection: $coordinator.filters.sort) {
-                Text("savedDrives.sortNewest").tag(DriveSort.newest)
-                Text("savedDrives.sortLongest").tag(DriveSort.longest)
-                Text("savedDrives.sortFastest").tag(DriveSort.fastestAverage)
-            }
-            if coordinator.filters.activeFilterCount > 0 {
-                Button("savedDrives.filterClear") { coordinator.filters = .init() }
-            }
-        }.pickerStyle(.menu)
-    }
+    private var filters: some View { DriveFilterControls(criteria: $coordinator.filters) }
 
     @ViewBuilder private var pagingControls: some View {
         if coordinator.loadingMore { ProgressView("savedDrives.loadingMore") }
         else if coordinator.loadMoreFailed {
             Text("savedDrives.loadMoreError").foregroundStyle(KccPalette.errorRed)
-            Button("savedDrives.retryAction") { Task { await coordinator.loadMore() } }
+            Button { Task { await coordinator.loadMore() } } label: { Text("savedDrives.retryAction").frame(minHeight: 48) }.buttonStyle(.bordered)
         } else if coordinator.hasMore {
-            Button("savedDrives.loadMore") { Task { await coordinator.loadMore() } }
-                .frame(maxWidth: .infinity, minHeight: 44)
+            Button { Task { await coordinator.loadMore() } } label: {
+                Text("savedDrives.loadMore").frame(maxWidth: .infinity, minHeight: 48)
+            }.buttonStyle(.bordered)
         }
     }
 }
@@ -192,28 +168,31 @@ struct DriveHistoryCard: View {
     let drive: SavedDrive
     let carImageURL: URL?
     var body: some View {
-        HStack(spacing: KccSpacing.s3) {
-            DriveRouteThumbnailView(encoded: drive.routeThumbnail).frame(width: 72, height: 56)
-            VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                Text(DriveDisplay.title(for: drive))
-                    .font(.system(size: KccTypeScale.titleMd, weight: KccTypeScale.medium))
-                Text(DriveDisplay.statsLine(for: drive))
-                    .font(.system(size: KccTypeScale.bodySm)).foregroundStyle(.secondary)
-                if !drive.convoyMembers.isEmpty {
-                    Label(DriveDisplay.convoyLine(for: drive), systemImage: "person.2")
-                        .font(.system(size: KccTypeScale.bodySm)).foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: KccSpacing.s3) {
+            VStack(alignment: .leading, spacing: KccSpacing.s3) {
+                SocialFlow {
+                    DriveRouteThumbnailView(encoded: drive.routeThumbnail).frame(width: 72, height: 56)
+                    VStack(alignment: .leading, spacing: KccSpacing.s2) {
+                        Text(verbatim: DriveDisplay.title(for: drive)).font(.headline).fixedSize(horizontal: false, vertical: true)
+                        Text(verbatim: DriveDisplay.statsLine(for: drive)).font(.subheadline).foregroundStyle(KccTheme.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }.frame(maxWidth: .infinity, alignment: .leading)
                 }
-            }
-            Spacer(minLength: 0)
-            if drive.carImagePath != nil {
-                AsyncImage(url: carImageURL) { image in image.resizable().scaledToFill() } placeholder: {
-                    Image(systemName: "car").foregroundStyle(.secondary)
-                }.frame(width: 44, height: 44).clipShape(Circle()).accessibilityHidden(true)
-            }
-            Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                if !drive.convoyMembers.isEmpty {
+                    Label(DriveDisplay.convoyLine(for: drive), systemImage: "person.2").font(.subheadline)
+                        .foregroundStyle(KccTheme.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                if drive.carImagePath != nil {
+                    AsyncImage(url: carImageURL) { phase in
+                        if let image = phase.image { image.resizable().scaledToFill() }
+                        else { Image(systemName: "car").foregroundStyle(KccTheme.secondary) }
+                    }.frame(width: 44, height: 44).clipShape(Circle()).accessibilityHidden(true)
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading)
+            Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(KccTheme.secondary).accessibilityHidden(true)
         }
-        .padding(KccSpacing.s4).frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
-        .background(KccTheme.subtle).clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
+        .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading).kccContentCard().contentShape(Rectangle())
     }
 }
 
@@ -228,9 +207,9 @@ private struct DriveRouteThumbnailView: View {
                 let rendered = CGPoint(x: 6 + point.x * (size.width - 12), y: 6 + point.y * (size.height - 12))
                 index == 0 ? path.move(to: rendered) : path.addLine(to: rendered)
             }
-            context.stroke(path, with: .color(.accentColor), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+            context.stroke(path, with: .color(KccTheme.driver), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
         }
-        .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: KccRadius.sm))
+        .background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.sm))
         .overlay { if points.count < 2 { Image(systemName: "map").foregroundStyle(.secondary) } }
         .accessibilityLabel("savedDrives.routeThumbnailLabel")
     }

@@ -453,6 +453,13 @@ final class ShellSmokeTests: XCTestCase {
         app.buttons["shell.myDrives"].tap()
         XCTAssertTrue(app.buttons["myDrives.stats"].waitForExistence(timeout: 5))
         attach(app, name: "\(prefix)-S53-my-drives-unavailable")
+        app.buttons["myDrives.stats"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["myDrives.stats.unavailable"].waitForExistence(timeout: 5))
+        let statsClose = app.buttons["myDrives.stats.close"]
+        XCTAssertTrue(statsClose.waitForExistence(timeout: 5))
+        XCTAssertTrue(statsClose.isHittable)
+        statsClose.tap()
+        XCTAssertTrue(app.buttons["myDrives.stats"].waitForExistence(timeout: 5))
         app.buttons[language == "sv" ? "Tillbaka" : "Back"].firstMatch.tap()
         XCTAssertTrue(app.buttons["profile.myDrives"].waitForExistence(timeout: 5))
         app.buttons[language == "sv" ? "Tillbaka" : "Back"].firstMatch.tap()
