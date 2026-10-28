@@ -773,3 +773,60 @@ validation and event mutation tests remain in native CI. Configured account
 writes/photos, keyboard/device visual comparison and real Mapbox/GPS/private-route
 acceptance remain device checks. No backend/rules/workflow/token/localization,
 production deploy or paid-service/artifact-upload opt-in change is included.
+
+## Remaining iOS flows and native visual proof (2026-10-28)
+
+This phase adopts the existing semantic page/card surfaces and native scalable
+fonts for event chat, saved-place management/editor/search rows, incident report
+selection and location controls, sign-in/welcome/onboarding, membership,
+restricted accounts, account deletion, feedback/tickets and What's new. It also
+finishes reading text in profile editing, Create chooser, event actions and chat
+metadata. Deliberate compact shell/convoy navigation typography remains bounded
+by its existing geometry tests.
+
+Existing account, member, RSVP/moderation, feature and location permission gates
+remain authoritative. Public support/incident notices, saved-place device-local
+persistence and no-coordinate-sharing policy, report commands and confirmation
+flows remain intact. Deletion still requires both explicit confirmations.
+StoreKit restore/purchase/verification remains with the original coordinator;
+no real purchase or production call is part of the visual test. Event chat uses
+the existing bounded native composer and clears a successfully sent draft only
+if it has not been edited while the send was pending.
+
+Support cards wrap full titles/summary and stack actions at accessibility sizes.
+The ticket introduction scrolls with its content instead of consuming a pinned
+portion of a short screen. Saved-place submit sits above the keyboard, and the
+What's new dialog keeps Close in the native navigation bar. Profile editor
+fields/actions lock while saving/uploading; existing validation and URL
+normalization remain intact. Welcome steps are independently renderable without
+changing the default first step or completion commands.
+
+FinalDesignVisualTests render production screens/components in UIWindow-backed
+UIHostingControllers with inert, synthetic fixtures. They exercise 320/390 pt,
+SV/EN, light/dark, normal/largest accessibility text and upper/lower scroll
+positions. Native component regressions check wrapping width/growth and bounded
+composer viewport without truncating its bound draft. Contact sheets are attached
+to the native result and exported as bounded JPEG chunks in the public CI log;
+only the explicit fixtures are captured, never an authenticated app window.
+This avoids opting into artifact storage or adding a runtime authentication
+bypass. Fake subscription/auth/deletion adapters fail if a command is attempted.
+
+The PR records the executed CI run and subsequent manual screenshot review.
+Generating a screenshot is not visual acceptance: each exported sheet must be
+saved and opened, blank/wrong-state captures rejected and collisions repaired
+before merge. This proof covers native fixture presentation and the config-less
+shell tests; it does not establish physical-device Mapbox/GPS, real account/photo
+writes, Apple authorization, StoreKit purchase or full VoiceOver compliance.
+No backend/rules/workflow/token/localization change or production deploy is
+included. Optional CI artifact uploads stay disabled.
+
+First native contact sheets exposed clipped Apple glyphs in iOS 26's default
+capsule buttons at accessibility sizes, a dark disabled primary label, large
+warning/Create icons compressing long text, and insufficient marker clearance
+above the incident picker commands. The follow-up fixes medium rectangular
+button corners, honors the disabled foreground, uses stable decorative icons
+and stacked labels, and compacts map commands to labelled 48 pt icons at
+accessibility sizes. Supporting copy uses the canonical secondary role; error
+reading uses the canonical light red and platform bright dark-mode red. Capture
+settling/scroll discovery is strengthened and short 320x480 sheet viewports are
+added. Fresh final-head renders must confirm these repairs before acceptance.

@@ -10,44 +10,45 @@ struct SignInScreen: View {
     @Bindable var coordinator: SignInCoordinator
 
     var body: some View {
-        VStack(spacing: KccSpacing.s4) {
-            Spacer()
+        ScrollView {
+            VStack(spacing: KccSpacing.s4) {
 
-            Text("auth.loginTitle")
-                .font(.system(size: KccTypeScale.headingLg, weight: .semibold))
-            Text("auth.loginSubtitle")
-                .font(.system(size: KccTypeScale.bodyMd))
-                .foregroundStyle(.secondary)
+                Text("auth.loginTitle")
+                    .font(.title2.bold())
+                Text("auth.loginSubtitle")
+                    .font(.body)
+                    .foregroundStyle(KccTheme.secondary)
 
-            Spacer()
-
-            switch coordinator.status {
-            case .inProgress:
-                ProgressView("auth.loading")
-            case .failed(.unavailable):
-                Text("auth.platformUnsupported")
-                    .font(.system(size: KccTypeScale.bodySm))
-                    .foregroundStyle(KccPalette.errorRed)
-                    .multilineTextAlignment(.center)
-            case .failed(.generic):
-                VStack(spacing: KccSpacing.s2) {
-                    Text("auth.errorGeneric")
-                        .font(.system(size: KccTypeScale.bodySm))
-                        .foregroundStyle(KccPalette.errorRed)
+                switch coordinator.status {
+                case .inProgress:
+                    ProgressView("auth.loading")
+                case .failed(.unavailable):
+                    Text("auth.platformUnsupported")
+                        .font(.subheadline)
+                        .foregroundStyle(KccTheme.error)
                         .multilineTextAlignment(.center)
+                case .failed(.generic):
+                    VStack(spacing: KccSpacing.s2) {
+                        Text("auth.errorGeneric")
+                            .font(.subheadline)
+                            .foregroundStyle(KccTheme.error)
+                            .multilineTextAlignment(.center)
+                        signInButton
+                    }
+                case .idle:
                     signInButton
                 }
-            case .idle:
-                signInButton
-            }
 
-            Text("auth.deleteAccountNote")
-                .font(.system(size: KccTypeScale.caption))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.top, KccSpacing.s6)
-        }
-        .padding(KccSpacing.s6)
+                Text("auth.deleteAccountNote")
+                    .font(.footnote)
+                    .foregroundStyle(KccTheme.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, KccSpacing.s4)
+            }
+            .frame(maxWidth: .infinity)
+            .kccContentCard()
+            .padding(KccSpacing.s4)
+        }.kccReadingSurface(pageBackground: true)
     }
 
     private var signInButton: some View {
@@ -55,11 +56,17 @@ struct SignInScreen: View {
             coordinator.resetFailure()
             Task { await coordinator.signIn() }
         } label: {
-            Label("auth.appleLoginButton", systemImage: "apple.logo")
-                .font(.system(size: KccTypeScale.bodyMd, weight: .semibold))
-                .frame(maxWidth: .infinity, minHeight: 44)
+            HStack(spacing: KccSpacing.s3) {
+                Image(systemName: "apple.logo").font(.system(size: 22, weight: .semibold)).accessibilityHidden(true)
+                Text("auth.appleLoginButton").font(.body.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+                .frame(maxWidth: .infinity, minHeight: 48)
         }
+        .accessibilityLabel(Text("auth.appleLoginButton"))
         .buttonStyle(.borderedProminent)
-        .tint(.primary)
+        .buttonBorderShape(.roundedRectangle(radius: KccRadius.md))
+        .tint(KccTheme.text)
+        .foregroundStyle(KccTheme.page)
     }
 }

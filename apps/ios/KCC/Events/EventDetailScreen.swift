@@ -204,7 +204,7 @@ struct EventDetailScreen: View {
                 if event.status == .cancelled {
                     Text("events.cancelledNotice")
                         .font(.body)
-                        .foregroundStyle(KccPalette.errorRed)
+                        .foregroundStyle(KccTheme.error)
                 }
                 Text(event.title)
                     .font(.title2.weight(.semibold))
@@ -349,7 +349,7 @@ struct EventDetailScreen: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: KccSpacing.s2) {
             Text("events.checkInTitle")
-                .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
+                .font(.body.weight(.semibold))
             if coordinator.checkInVerified {
                 Label("events.checkInConfirmed", systemImage: "checkmark.seal.fill")
                     .foregroundStyle(.green)
@@ -381,7 +381,7 @@ struct EventDetailScreen: View {
                         Text(finalGeofenceMiss
                              ? "events.checkInMoveBackToFinish"
                              : checkInErrorKey(error))
-                            .foregroundStyle(KccPalette.errorRed)
+                            .foregroundStyle(KccTheme.error)
                     }
             }
         }
@@ -456,7 +456,7 @@ struct EventDetailScreen: View {
             .buttonStyle(.bordered)
             .disabled(coordinator.manageState == .deleting)
             if case .failed(let reason) = coordinator.manageState {
-                Text(removeErrorKey(reason)).foregroundStyle(KccPalette.errorRed)
+                Text(removeErrorKey(reason)).foregroundStyle(KccTheme.error)
             }
         }
     }
@@ -476,7 +476,7 @@ struct EventDetailScreen: View {
     private func detailCard(_ detail: EventDetail?) -> some View {
         VStack(alignment: .leading, spacing: KccSpacing.s1) {
             Text("events.memberDetailPlaceholder")
-                .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
+                .font(.body.weight(.semibold))
             if let address = detail?.address {
                 Text(address)
                     .font(.body)
@@ -498,7 +498,7 @@ struct EventDetailScreen: View {
     private func infoCard(title: LocalizedStringKey, body: LocalizedStringKey) -> some View {
         VStack(alignment: .leading, spacing: KccSpacing.s1) {
             Text(title)
-                .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
+                .font(.body.weight(.semibold))
             Text(body)
                 .font(.body)
                 .foregroundStyle(.secondary)
@@ -515,7 +515,7 @@ struct EventDetailScreen: View {
     private func rsvpSection(_ event: EventSummary, coordinator: EventDetailCoordinator) -> some View {
         VStack(alignment: .leading, spacing: KccSpacing.s2) {
             Text("events.rsvpCountsLabel")
-                .font(.system(size: KccTypeScale.caption, weight: KccTypeScale.semibold))
+                .font(.footnote.weight(.semibold))
                 .foregroundStyle(.secondary)
             let layout = dynamicTypeSize.isAccessibilitySize
                 ? AnyLayout(VStackLayout(spacing: KccSpacing.s2))
@@ -528,7 +528,7 @@ struct EventDetailScreen: View {
             if case .failed = coordinator.rsvpState {
                 Text("events.rsvpSubmitError")
                     .font(.subheadline)
-                    .foregroundStyle(KccPalette.errorRed)
+                    .foregroundStyle(KccTheme.error)
             }
             // How many answered each way, from the server-maintained public
             // rsvpCounts tally — deliberately NEUTRAL: three equal-weight
@@ -574,7 +574,7 @@ struct EventDetailScreen: View {
     private func rsvpCount(_ label: LocalizedStringKey, count: Int) -> some View {
         VStack(spacing: KccSpacing.s1 / 2) {
             Text("\(count)")
-                .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
+                .font(.body.weight(.semibold))
             Text(label)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)

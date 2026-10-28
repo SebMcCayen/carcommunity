@@ -30,12 +30,13 @@ struct EventChatScreen: View {
                 }
             } else {
                 Text("chat.accessLost")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(KccTheme.secondary)
                     .multilineTextAlignment(.center)
                     .padding(KccSpacing.s4)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
         .navigationTitle(Text("chat.eventChatTitle"))
         .navigationBarTitleDisplayMode(.inline)
         .task(id: accessCoordinator.canOpenEventChat) {
@@ -79,7 +80,7 @@ struct EventChatScreen: View {
         case .loaded(let messages):
             if messages.isEmpty {
                 Text("chat.empty")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(KccTheme.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 messageList(messages)
@@ -137,21 +138,21 @@ struct EventChatScreen: View {
     private var statusArea: some View {
         if coordinator.sendState == .failed {
             Button("chat.errorSending") { coordinator.resetSendFailure() }
-                .font(.system(size: KccTypeScale.bodySm))
-                .foregroundStyle(KccPalette.errorRed)
+                .font(.subheadline)
+                .foregroundStyle(KccTheme.error)
                 .padding(.horizontal, KccSpacing.s3)
                 .padding(.top, KccSpacing.s2)
                 .accessibilityHint(Text("events.retry"))
         }
         if coordinator.reportState == .done {
             Button("chat.reportSubmitted") { coordinator.resetReport() }
-                .font(.system(size: KccTypeScale.bodySm))
+                .font(.subheadline)
                 .padding(.horizontal, KccSpacing.s3)
                 .padding(.top, KccSpacing.s2)
         } else if coordinator.reportState == .failed {
             Button("chat.reportError") { coordinator.resetReport() }
-                .font(.system(size: KccTypeScale.bodySm))
-                .foregroundStyle(KccPalette.errorRed)
+                .font(.subheadline)
+                .foregroundStyle(KccTheme.error)
                 .padding(.horizontal, KccSpacing.s3)
                 .padding(.top, KccSpacing.s2)
         }
@@ -166,7 +167,7 @@ struct EventChatScreen: View {
                     } label: {
                         Text(emoji)
                             .font(.title2)
-                            .frame(minWidth: 44, minHeight: 44)
+                            .frame(minWidth: 48, minHeight: 48)
                     }
                     .disabled(coordinator.sendState == .sending)
                     .accessibilityLabel(Text(LocalizedStringKey(quickEmojiKeys[index])))
@@ -178,30 +179,16 @@ struct EventChatScreen: View {
     }
 
     private var composer: some View {
-        HStack(spacing: KccSpacing.s2) {
-            TextField("chat.inputPlaceholder", text: $draft, axis: .vertical)
-                .lineLimit(1...4)
-                .textInputAutocapitalization(.sentences)
-                .autocorrectionDisabled(false)
-                .padding(.horizontal, KccSpacing.s3)
-                .padding(.vertical, KccSpacing.s2)
-                .background(KccPalette.softSand.opacity(0.4))
-                .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
-                .onChange(of: draft) { _, value in
-                    let limited = EventChat.truncateToMessageLimit(value)
-                    if limited != value { draft = limited }
-                }
-            Button("chat.sendButton") {
+        ChannelComposer(draft: $draft,
+            canSend: coordinator.sendState != .sending && EventChat.isSendable(draft)) {
                 let message = draft
-                Task {
-                    if await coordinator.send(message) { draft = "" }
-                }
+                Task { if await coordinator.send(message), draft == message { draft = "" } }
             }
-            .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
-            .disabled(coordinator.sendState == .sending || !EventChat.isSendable(draft))
-            .frame(minHeight: 44)
-        }
-        .padding(KccSpacing.s3)
+            .onChange(of: draft) { _, value in
+                let limited = EventChat.truncateToMessageLimit(value)
+                if limited != value { draft = limited }
+            }
+            .background(KccTheme.surface)
     }
 
     private func reasonKey(_ reason: ChatReportReason) -> LocalizedStringKey {
@@ -216,7 +203,7 @@ struct EventChatScreen: View {
     }
 }
 
-private struct EventChatMessageRow: View {
+struct EventChatMessageRow: View {
     let message: EventChatMessage
     let isOwn: Bool
     @State private var revealed = false
@@ -225,13 +212,14 @@ private struct EventChatMessageRow: View {
         VStack(alignment: isOwn ? .trailing : .leading, spacing: KccSpacing.s1) {
             if !isOwn {
                 Text(displayName)
-                    .font(.system(size: KccTypeScale.caption, weight: KccTypeScale.semibold))
-                    .foregroundStyle(.secondary)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(KccTheme.secondary)
             }
             messageBody
                 .padding(.horizontal, KccSpacing.s3)
                 .padding(.vertical, KccSpacing.s2)
-                .background(isOwn ? KccPalette.crownGold.opacity(0.25) : KccPalette.softSand.opacity(0.6))
+                .background(isOwn ? KccTheme.subtle : KccTheme.surface)
+                .overlay { RoundedRectangle(cornerRadius: KccRadius.md).strokeBorder(isOwn ? KccTheme.driver : KccTheme.border).allowsHitTesting(false) }
                 .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
         }
         .frame(maxWidth: .infinity, alignment: isOwn ? .trailing : .leading)
@@ -248,17 +236,17 @@ private struct EventChatMessageRow: View {
         if message.isRemoved {
             Text("chat.removedMessage")
                 .italic()
-                .foregroundStyle(.secondary)
+                .foregroundStyle(KccTheme.secondary)
         } else if message.isAutoHidden && !revealed {
             VStack(alignment: .leading, spacing: KccSpacing.s1) {
                 Text("chat.reportedHidden")
                     .italic()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(KccTheme.secondary)
                 Button("chat.showReportedMessage") { revealed = true }
-                    .frame(minHeight: 44)
+                    .frame(minHeight: 48)
             }
         } else {
-            Text(message.message)
+            Text(verbatim: message.message).font(.body).fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
         }
     }
