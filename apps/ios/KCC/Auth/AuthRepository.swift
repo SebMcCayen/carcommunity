@@ -9,6 +9,9 @@ struct AppleIDTokenPayload: Sendable {
     let rawNonce: String
     /// The user's name, only ever provided by Apple on FIRST sign-in.
     let fullName: PersonNameComponents?
+    /// Ephemeral; never persisted or included in diagnostics.
+    var authorizationCode: String? = nil
+    var providerUserID: String? = nil
 }
 
 /// Authentication session boundary — the iOS port of Android's
