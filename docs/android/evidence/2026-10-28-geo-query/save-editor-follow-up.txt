@@ -1,0 +1,6 @@
+
+com.kungsbackacarcommunity.app.navigation.GeoQueryHandoffTest:..
+
+Time: 28.687
+
+OK (2 tests)

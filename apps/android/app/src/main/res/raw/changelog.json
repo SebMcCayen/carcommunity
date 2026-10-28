@@ -2,6 +2,33 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 59,
+      "versionName": "1.1.4",
+      "releaseDate": "2026-10-28",
+      "highlights": [
+        "Klubbar med gemensam chatt, körstatistik och eventkalender",
+        "Stabilare konvojer och kartor för sparade körningar",
+        "Öppna platsnamn från Driver i kartans sökning"
+      ],
+      "changes": [
+        "Klubbar: skapa eller gå med i samma klubb i CarCommunity och Driver",
+        "Klubbar: presentation, logga, gemensam körstatistik och kalender för klubbens event",
+        "Klubbar: ägare och moderatorer kan hantera medlemmar och inbjudningar",
+        "Klubbchatt: skriv med klubbmedlemmarna och se klubbens logga vid profilbilder",
+        "Chatt: kompaktare flikar ger mer plats åt meddelandena",
+        "Konvoj: sök bland vänner och hitta ofta inbjudna personer högre upp i listan",
+        "Konvoj: förbättrad positionsdelning, Följ mig-spår och återhämtning när platsåtkomsten ändras",
+        "Konvoj: snabbare val mellan att fortsätta själv och att avsluta efter en konvoj",
+        "Mina körningar: förbättrad visning av sparade rutter på kartan",
+        "Tema: nytt automatiskt dag- och nattläge som växlar med klockslaget",
+        "Kartlager: välj varningar från 3 dagar, 1 vecka, 30 dagar eller alla",
+        "Karta: platsnamn i kartlänkar öppnar sökningen där du själv väljer rätt träff",
+        "Karta: förbättrad hantering av kartlänkar vid appstart och efter inloggning",
+        "Driver: länkar under inlägg, med hemsidan som alternativ när Driver inte kan öppna länken",
+        "Vald plats: den extra stängknappen längst ned har tagits bort"
+      ]
+    },
+    {
       "versionCode": 58,
       "versionName": "1.1.3",
       "releaseDate": "2026-10-27",

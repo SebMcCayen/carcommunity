@@ -24,12 +24,9 @@ sealed interface GeoUriTarget {
 
     /**
      * A free-text place query (`geo:0,0?q=Storgatan 1, Kungsbacka`) that carries
-     * no coordinate. Modelled explicitly — rather than folded into null — so the
-     * distinction is testable, but the shell currently IGNORES it (see the
-     * consumer in MainActivity): geocoding an arbitrary address from a deep link
-     * is out of scope, and dropping it is the honest degrade (the chooser still
-     * offered a real maps app alongside KCC). Kept as a typed result so wiring it
-     * to the address search later is a one-line change with no re-parse.
+     * no coordinate. Opens the existing place search with this text prefilled.
+     * Even a single match requires explicit selection; ambiguous names must
+     * never silently route to the first geocoding result.
      */
     data class Query(
         val text: String,
@@ -52,7 +49,7 @@ sealed interface GeoUriTarget {
  * - `geo:0,0?q=LAT,LNG(Label)` — the same, plus a human label used as the pin's
  *   name.
  * - `geo:0,0?q=<address>` — a free-text place; returned as [GeoUriTarget.Query]
- *   (the consumer ignores it, see that type's doc).
+ *   and opened in the existing place search for explicit selection.
  * - `google.navigation:q=LAT,LNG` / `google.navigation:q=<address>` — the
  *   turn-by-turn deep link some apps emit; parsed via the same `q` rules.
  *

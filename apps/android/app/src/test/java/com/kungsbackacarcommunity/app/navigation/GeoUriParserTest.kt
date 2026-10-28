@@ -94,6 +94,34 @@ class GeoUriParserTest {
     }
 
     @Test
+    fun `Driver encoded Swedish query preserves spaces ampersand and accents`() {
+        val result = GeoUriParser.parse("geo:0,0?q=%C3%85sa%20torg%20%26%20caf%C3%A9")
+
+        assertEquals(GeoUriTarget.Query("Åsa torg & café"), result)
+    }
+
+    @Test
+    fun `form encoded Swedish query preserves the same destination`() {
+        val result = GeoUriParser.parse("geo:0,0?q=%C3%85sa+torg+%26+caf%C3%A9")
+
+        assertEquals(GeoUriTarget.Query("Åsa torg & café"), result)
+    }
+
+    @Test
+    fun `encoded q coordinates with a Swedish label override the map centre`() {
+        val result =
+            point(
+                GeoUriParser.parse(
+                    "geo:10,20?q=57.48%2C12.08(%C3%85sa%20torg%20%26%20caf%C3%A9)",
+                ),
+            )
+
+        assertEquals(57.48, result.point.latitude, 1e-9)
+        assertEquals(12.08, result.point.longitude, 1e-9)
+        assertEquals("Åsa torg & café", result.label)
+    }
+
+    @Test
     fun `google navigation q coordinate parses`() {
         val result = point(GeoUriParser.parse("google.navigation:q=57.4874,12.0757"))
         assertEquals(57.4874, result.point.latitude, 1e-9)

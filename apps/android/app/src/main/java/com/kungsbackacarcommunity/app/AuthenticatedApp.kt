@@ -362,9 +362,11 @@ import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.navigation.ActiveNavigation
 import com.kungsbackacarcommunity.app.navigation.CurrentLocation
 import com.kungsbackacarcommunity.app.navigation.ExternalNavigation
+import com.kungsbackacarcommunity.app.navigation.GeoUriTarget
 import com.kungsbackacarcommunity.app.navigation.HttpMapboxSearchClient
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import com.kungsbackacarcommunity.app.navigation.MapLinkNavigator
+import com.kungsbackacarcommunity.app.navigation.MapboxSearchClient
 import com.kungsbackacarcommunity.app.navigation.NavResumePolicy
 import com.kungsbackacarcommunity.app.navigation.NavResumeStore
 import com.kungsbackacarcommunity.app.navigation.NavigationSearchScreen
@@ -873,6 +875,8 @@ fun AuthenticatedApp(
     // always takes the Play-backed default. Constructing it touches no app
     // wire-data, so evaluating it ahead of the gate is safe.
     appUpdateSource: AppUpdateSource? = rememberPlayAppUpdateSource(),
+    // Existing search transport seam; production uses the real guarded client.
+    navigationSearchClient: MapboxSearchClient? = null,
 ) {
     // THE GATE RUNS FIRST — ahead of every backend-dependent startup effect in
     // this composable (the push/login LaunchedEffects, the profile snapshot
@@ -3104,7 +3108,7 @@ fun AuthenticatedApp(
             val mapboxToken = stringResource(R.string.mapbox_access_token)
             val searchLanguage = remember { java.util.Locale.getDefault().language }
             val searchClient =
-                remember(mapboxToken, searchLanguage) {
+                navigationSearchClient ?: remember(mapboxToken, searchLanguage) {
                     HttpMapboxSearchClient(mapboxToken, searchLanguage)
                 }
             val originProvider: suspend () -> LatLng? =
@@ -3133,6 +3137,8 @@ fun AuthenticatedApp(
             // instead of the generic dropped-pin label. Cleared on the surface once
             // consumed so a later gesture re-triggers.
             var navSearchTarget by remember { mutableStateOf<LatLng?>(null) }
+            var navSearchInitialQuery by rememberSaveable { mutableStateOf<String?>(null) }
+            var navSearchRequestId by rememberSaveable { mutableIntStateOf(0) }
             var navSearchTargetName by remember { mutableStateOf<String?>(null) }
             // Set only when the picker was opened to CHANGE an already-saved
             // place's address (Saved-places screen → "Change address"): carries
@@ -3149,6 +3155,7 @@ fun AuthenticatedApp(
             val moveMapToPoint: (Double, Double, String?) -> Unit = { lat, lng, name ->
                 clearRoutes()
                 selectedTab = ShellTab.Map
+                navSearchInitialQuery = null
                 navSearchTarget = LatLng(longitude = lng, latitude = lat)
                 navSearchTargetName = name
                 navSearchOpen = true
@@ -3181,24 +3188,6 @@ fun AuthenticatedApp(
             val positionSavedText = stringResource(R.string.shell_placeSaved)
             val sharedLocationName = stringResource(R.string.shell_sharedLocationName)
 
-            // Incoming map-link deep link. MainActivity parses a geo: /
-            // google.navigation: URI the member opened WITH KCC (from Android's
-            // "Open with"/default-handler chooser) and parks the point in
-            // MapLinkNavigator — a process-level hand-off for the same reason as
-            // PushNavigator: the Intent arrives outside this composition and may
-            // precede it on a cold start. Consumed exactly once here and driven
-            // through the SAME in-app [moveMapToPoint] flow a chat geo-link tap or
-            // a saved-place pick uses (which raises the navigate-here preview over
-            // whatever is showing — see ShellNav.mapCover, where navSearchOpen is
-            // a Transparent cover that wins over the current tab/route). It never
-            // fires an external maps app. The link's own label names the pin when
-            // it carries one; otherwise the shared "shared location" name is used.
-            val mapLinkTarget by MapLinkNavigator.pending.collectAsState()
-            LaunchedEffect(mapLinkTarget) {
-                val target = MapLinkNavigator.consume() ?: return@LaunchedEffect
-                val name = target.label?.takeIf { it.isNotBlank() } ?: sharedLocationName
-                moveMapToPoint(target.point.latitude, target.point.longitude, name)
-            }
             // Share-to-friend confirmation copy, resolved in composition (the send
             // callback fires off the UI thread and cannot call stringResource). The
             // "shared" line keeps its %1$s placeholder and is String.format-ed with
@@ -4974,8 +4963,46 @@ fun AuthenticatedApp(
                     navSearchOpen = false
                     navSearchTarget = null
                     navSearchTargetName = null
+                    navSearchInitialQuery = null
                     navSearchConvoyPick = false
                     navSearchInitialEdit = null
+                }
+                // Parked before sign-in/onboarding; only the ready Main shell
+                // consumes it. Queries use the same search as the map's search
+                // bar, never an implicit first result or a second geocoder.
+                val mapLinkTarget by MapLinkNavigator.pending.collectAsState()
+                val mapLinkLifecycle by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
+                LaunchedEffect(mapLinkTarget, mapLinkLifecycle) {
+                    // Another app can open a new Activity while an older shell
+                    // still exists in a background task. Only the foreground
+                    // receiver may consume the handoff.
+                    if (!mapLinkLifecycle.isAtLeast(Lifecycle.State.RESUMED)) return@LaunchedEffect
+                    val target = MapLinkNavigator.consume() ?: return@LaunchedEffect
+                    closeNavSearch()
+                    navDestination = null
+                    navDestinationLabel = ""
+                    navResumeStore.clear()
+                    navResumeCandidate = null
+                    showExitNavConfirm = false
+                    placeMenuTarget = null
+                    savedPlacesPickerOpen = false
+                    saveLocationTarget = null
+                    shareLocationTarget = null
+                    chatHubOpen = false
+                    navSearchRequestId++
+                    when (target) {
+                        is GeoUriTarget.Point -> moveMapToPoint(
+                            target.point.latitude,
+                            target.point.longitude,
+                            target.label?.takeIf { it.isNotBlank() } ?: sharedLocationName,
+                        )
+                        is GeoUriTarget.Query -> {
+                            clearRoutes()
+                            selectedTab = ShellTab.Map
+                            navSearchInitialQuery = target.text
+                            navSearchOpen = true
+                        }
+                    }
                 }
                 // Honour a dismiss parked by a chat-notification tap (which runs far
                 // above this scope) with that SAME teardown, so an out-of-scope close
@@ -6024,6 +6051,7 @@ fun AuthenticatedApp(
                     showExitNavConfirm = false
                     mapSurface.setRouteOverlay(null)
                     navSearchOpen = false
+                    navSearchInitialQuery = null
                     // Closing the underlying picker: drop any change-address
                     // context so the next open starts uncontextualized.
                     navSearchInitialEdit = null
@@ -6252,6 +6280,8 @@ fun AuthenticatedApp(
                         initialTarget = navSearchTarget,
                         initialTargetName = navSearchTargetName,
                         initialSaveEdit = navSearchInitialEdit,
+                        initialQuery = navSearchInitialQuery,
+                        initialRequestId = navSearchRequestId,
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else if (convoyInviteConvoyId != null && convoyBarCoordinator != null) {
@@ -6563,6 +6593,7 @@ fun AuthenticatedApp(
                             // opens on the search field, not a stale place preview.
                             navSearchTarget = null
                             navSearchTargetName = null
+                            navSearchInitialQuery = null
                             navSearchConvoyPick = false
                             clearRoutes()
                             navSearchOpen = true
@@ -6578,6 +6609,7 @@ fun AuthenticatedApp(
                             // can't override the search-first change-address flow.
                             navSearchTarget = null
                             navSearchTargetName = null
+                            navSearchInitialQuery = null
                             navSearchConvoyPick = false
                             clearRoutes()
                             navSearchOpen = true
@@ -6710,7 +6742,10 @@ fun AuthenticatedApp(
                                         stringResource(R.string.shell_userMarkerLabel),
                                     // Tapping "Where to?" opens the address
                                     // search + directions overlay.
-                                    onSearch = { navSearchOpen = true },
+                                    onSearch = {
+                                        navSearchInitialQuery = null
+                                        navSearchOpen = true
+                                    },
                                     // The saved-places control opens the saved-
                                     // locations picker; a pick moves the map via
                                     // the shared in-app move-to-point flow. (The
