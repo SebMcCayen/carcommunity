@@ -5,7 +5,7 @@
  * Once a day, over a rolling {@link DRIVE_HEAT_WINDOW_DAYS}-day window of
  * completed drives from CONSENTED users, this:
  *  1. lists `rides/{rideId}` in the window,
- *  2. keeps only rides whose owner has `anonymousPartnerStatsOptIn === true`
+ *  2. keeps only rides whose owner has explicit versioned partner-analysis consent
  *     (userPrivate/{uid}) — the SAME consent flag the partner-stats pass-by
  *     feature gates on,
  *  3. downloads each `rideRoutes/{uid}/{rideId}/route.bin`, decodes the driven
