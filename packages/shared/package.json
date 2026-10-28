@@ -64,7 +64,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "node ../../scripts/run-no-cloud.mjs -- npm run build && node --test tests/*.test.mjs"
+    "test": "npm run build && node ../../scripts/run-no-cloud.mjs -- node --test tests/*.test.mjs"
   },
   "devDependencies": {
     "typescript": "~6.0.3"
