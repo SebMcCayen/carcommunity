@@ -318,11 +318,144 @@ service cloud.firestore {
         && dmNotBlockedWith(members[0] == request.auth.uid ? members[1] : members[0]);
     }
 
+    // Shared clubs use canonical CarCommunity identities, not driverUsers or
+    // global/admin claims. New reads are restricted to migrated v2 documents.
+    function hasSharedClubAccount() {
+      let user = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return isAuthenticated() && isNotSuspended() && user != null
+        && (!('banned' in request.auth.token) || request.auth.token.banned != true)
+        && user.data.get('onboardingCompletedAt', null) is timestamp
+        && user.data.get('suspended', false) != true
+        && user.data.get('deleted', false) != true
+        && user.data.get('banned', false) != true
+        && !(user.data.get('status', '') in ['deleted', 'suspended', 'deletionPending', 'banned']);
+    }
+
+    function sharedClubsEnabled() {
+      let config = get(/databases/$(database)/documents/config/sharedClubs);
+      return config != null && config.data.get('enabled', false) == true
+        && config.data.get('activatedAt', null) is timestamp;
+    }
+
+    function sharedClubAttendanceReady() {
+      let config = get(/databases/$(database)/documents/config/sharedClubs);
+      return config != null && config.data.get('enabled', false) == true
+        && config.data.get('activatedAt', null) is timestamp
+        && config.data.get('publicAttendanceReady', false) == true;
+    }
+
+    function sharedClubEventIsUpcoming(eventId) {
+      let event = get(/databases/$(database)/documents/events/$(eventId));
+      return event != null && event.data.get('status', '') == 'published'
+        && event.data.get('startsAt', null) is timestamp
+        && event.data.startsAt > request.time;
+    }
+
+    function sharedClubIsActive(clubId) {
+      let club = get(/databases/$(database)/documents/driverClubs/$(clubId));
+      return sharedClubsEnabled() && club != null && club.data.get('schemaVersion', 0) == 2
+        && club.data.get('status', '') == 'active';
+    }
+
+    function hasCurrentSharedClubMembership(clubId) {
+      let account = get(/databases/$(database)/documents/driverClubAccounts/$(request.auth.uid));
+      return hasSharedClubAccount() && sharedClubIsActive(clubId)
+        && account != null && account.data.get('deletionRevoked', false) != true
+        && account.data.get('activeClubId', null) == clubId
+        && exists(/databases/$(database)/documents/driverClubs/$(clubId)/members/$(request.auth.uid));
+    }
+
+    function managesSharedClub(clubId) {
+      let club = get(/databases/$(database)/documents/driverClubs/$(clubId)).data;
+      let member = get(/databases/$(database)/documents/driverClubs/$(clubId)/members/$(request.auth.uid)).data;
+      return hasCurrentSharedClubMembership(clubId)
+        && ((club.ownerUid == request.auth.uid && member.role == 'owner')
+          || (club.ownerUid != request.auth.uid && member.role == 'moderator'));
+    }
+
+    function validSharedClubSummary(clubId) {
+      let name = resource.data.get('name', resource.data.get('clubName', null));
+      return resource.data.keys().hasOnly(['clubId', 'name', 'clubName', 'logoUrl'])
+        && resource.data.keys().size() == 3 && resource.data.clubId == clubId
+        && name is string && name.size() <= 60
+        && (resource.data.logoUrl == null
+          || (resource.data.logoUrl is string && resource.data.logoUrl.size() <= 2048));
+    }
+
+    function boundedSharedClubQuery(maximum) {
+      return request.query.limit != null && request.query.limit <= maximum;
+    }
+
     // -------------------------------------------------------------------------
     // Deny-all catch-all (rules below override for specific paths)
     // -------------------------------------------------------------------------
     match /{document=**} {
       allow read, write: if false;
+    }
+
+    // Shared-clubs writes, locks, history, operations and cleanup are Admin SDK
+    // only. No recursive match: new/private subcollections stay denied.
+    match /config/sharedClubs {
+      // Safe feature state/stats-since metadata only. A missing document is a
+      // readable absence so clients can hide an inactive feature.
+      allow get: if hasSharedClubAccount();
+    }
+
+    match /driverClubAccounts/{uid} {
+      allow get: if isOwner(uid) && hasSharedClubAccount();
+    }
+
+    match /driverClubs/{clubId} {
+      // Backend must store only directory-safe fields here; Firestore cannot
+      // redact individual fields. Legacy documents require migration first.
+      allow get: if hasSharedClubAccount() && sharedClubsEnabled()
+        && resource.data.get('schemaVersion', 0) == 2
+        && resource.data.get('status', '') == 'active';
+      allow list: if hasSharedClubAccount() && sharedClubsEnabled() && boundedSharedClubQuery(25)
+        && resource.data.schemaVersion == 2 && resource.data.status == 'active';
+
+      match /members/{uid} {
+        // The self get deliberately does not require a still-existing member
+        // or account lock: a listener must receive absence after removal.
+        allow get: if hasSharedClubAccount() && sharedClubIsActive(clubId)
+          && ((isOwner(uid) && !exists(/databases/$(database)/documents/driverClubs/$(clubId)/members/$(uid)))
+            || hasCurrentSharedClubMembership(clubId));
+        allow list: if hasCurrentSharedClubMembership(clubId) && boundedSharedClubQuery(25);
+      }
+      match /messages/{messageId} {
+        allow get: if hasCurrentSharedClubMembership(clubId);
+        allow list: if hasCurrentSharedClubMembership(clubId) && boundedSharedClubQuery(50);
+      }
+      match /invitations/{uid} {
+        allow get: if hasSharedClubAccount() && sharedClubIsActive(clubId)
+          && ((isOwner(uid) && resource.data.recipientUid == request.auth.uid)
+            || managesSharedClub(clubId));
+        allow list: if hasSharedClubAccount() && sharedClubIsActive(clubId)
+          && boundedSharedClubQuery(25)
+          && (resource.data.recipientUid == request.auth.uid || managesSharedClub(clubId));
+      }
+      match /events/{eventId} {
+        allow get: if hasCurrentSharedClubMembership(clubId);
+        allow list: if hasCurrentSharedClubMembership(clubId) && boundedSharedClubQuery(25);
+      }
+    }
+
+    // Public attendance is a server-owned summary, never a roster or calendar.
+    // Unfiltered document-ID pages cannot prove per-result fields/club status.
+    // List authorization uses three fixed lookups (user/config/event), so 25
+    // distinct clubs fit the query budget. The backend strictly projects only
+    // clubId/name/logoUrl. Archive transactions set publicAttendanceReady=false
+    // before async withdrawal; completion restores true only after all pending
+    // cleanup passes the backend CAS. Missing/false gates deny all attendance.
+    // Point gets retain extra shape/current-club checks.
+    match /events/{eventId}/clubs/{clubId} {
+      allow get: if hasSharedClubAccount() && sharedClubAttendanceReady()
+        && sharedClubIsActive(clubId)
+        && validSharedClubSummary(clubId)
+        && sharedClubEventIsUpcoming(eventId);
+      allow list: if hasSharedClubAccount() && sharedClubAttendanceReady()
+        && boundedSharedClubQuery(25)
+        && sharedClubEventIsUpcoming(eventId);
     }
 
     // -------------------------------------------------------------------------

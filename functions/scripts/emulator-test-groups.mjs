@@ -52,6 +52,7 @@ export const GROUPS = [
     name: 'Security Rules, Admin & Platform Core',
     patterns: [
       'security-rules',
+      'rules-shared-clubs',
       'driver-shared-identity',
       'auth',
       'account',
