@@ -1423,13 +1423,14 @@ struct ShellView: View {
                             Button {
                                 closeConvoyScreen()
                             } label: {
-                                Label("shell.back", systemImage: "chevron.backward")
+                                Label("shell.back", systemImage: "chevron.backward").frame(minHeight: 48)
                             }
                             .disabled(convoyActionIsWorking)
                         }
                     }
                 }
-                .background(.background, ignoresSafeAreaEdges: .all)
+                .background(KccTheme.page, ignoresSafeAreaEdges: .all)
+                .tint(KccTheme.driver)
             } else {
                 unavailableRoute
             }
