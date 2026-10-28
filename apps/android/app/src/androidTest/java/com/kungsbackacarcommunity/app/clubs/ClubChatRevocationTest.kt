@@ -86,8 +86,17 @@ class ClubChatRevocationTest {
         compose.setContent { KccTheme { ClubChatRoute("me", repo) } }
         loadOlder()
         loadOlder()
-        // One arrival, a partial window, then another arrival displace >25 IDs.
-        for (last in listOf(76, 100, 101)) compose.runOnIdle { publishLatest(last) }
+        // Each arrival gets its own settled window, so StateFlow cannot conflate them.
+        // Only one partial query may exist beyond full batches, not one per arrival.
+        for (last in 76..101) {
+            compose.runOnIdle { publishLatest(last) }
+            compose.runOnIdle {
+                val retainedIdCount = 25 + (last - 75)
+                val retainedQueryBound = (retainedIdCount + 24) / 25
+                assertEquals("Active history + retained queries after arrival $last",
+                    2 + retainedQueryBound, repo.activeRowQueryCount())
+            }
+        }
         for (i in 101 downTo 1) if (i != 26) show("Message $i")
         compose.runOnIdle {
             assertTrue(repo.rowRequests.all { it.size in 1..25 })
@@ -239,6 +248,7 @@ private class FakeClubRepository(initial: ClubChatState) : ClubRepository {
     val rowRequests = mutableListOf<List<String>>()
     private val activeRows = mutableListOf<List<String>>()
     fun activeRowIds() = activeRows.flatten().toSet()
+    fun activeRowQueryCount() = activeRows.size
     var pageGate: CompletableDeferred<Unit>? = null
     var pageResults: List<ClubMessagePage> = emptyList()
     val cursorRequests = mutableListOf<ClubMessageCursor>()

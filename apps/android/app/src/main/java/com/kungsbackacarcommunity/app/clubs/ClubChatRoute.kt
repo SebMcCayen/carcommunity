@@ -73,9 +73,10 @@ private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubCha
     fun retainLiveWindow() {
         val observed = (retainedLiveIds.flatten() + pages.flatMap { it.ids }).toSet()
         val added = ready.messages.map { it.id }.distinct().filterNot { it in observed }
-        // Immutable batches keep existing listeners alive as the latest-25 boundary moves.
+        // Fill the partial tail before adding batches: full batches keep their listeners,
+        // and only the changed tail reconnects with an empty initial snapshot.
         // Keep only IDs: redactions/removals must come from live snapshots, never old DTOs.
-        if (added.isNotEmpty()) retainedLiveIds = retainedLiveIds + added.chunked(25)
+        if (added.isNotEmpty()) retainedLiveIds = (retainedLiveIds.flatten() + added).chunked(25)
     }
     SideEffect { if (paging || pages.isNotEmpty()) retainLiveWindow() }
     val olderRows = mutableListOf<ClubMessage>()
