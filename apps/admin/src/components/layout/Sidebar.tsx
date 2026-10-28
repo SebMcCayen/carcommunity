@@ -74,7 +74,7 @@ const navGroups: NavGroup[] = [
   },
 ];
 
-export function Sidebar() {
+export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { pathname } = useLocation();
   const { user } = useAdminAuth();
 
@@ -101,6 +101,7 @@ export function Sidebar() {
               <Link
                 key={item.href}
                 to={item.href}
+                onClick={onNavigate}
                 className={`${styles.navItem} ${isActive(item.href) ? styles.active : ''}`}
                 aria-current={isActive(item.href) ? 'page' : undefined}
               >

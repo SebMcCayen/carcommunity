@@ -10,6 +10,8 @@ The Points tab reads the authoritative balance from the same first ledger page, 
 
 Reviewed dialogs center within the viewport, constrain and scroll their contents, keep field labels on separate rows, and return keyboard focus to the triggering control after cancellation.
 
+On narrow viewports the existing navigation becomes a bounded disclosure above the content. It closes after choosing a destination. The broader navigation regrouping remains a later phase.
+
 Profile separates name changes from advanced account/role controls. Account deletion still affects the shared Firebase identity and therefore explicitly explains its possible Driver impact. Access decisions remain CarCommunity-only. Existing typed-name/reason confirmation and backend deletion protections are preserved.
 
 Warning lifecycle decisions have their own reason/duration controls in the review dialog; they do not depend on filling the new-warning form. Revoked warnings cannot be reactivated. Reviewed versions, actor binding and durable retry receipts retain their existing backend contracts.

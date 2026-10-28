@@ -23,9 +23,10 @@ export const actionLabel = (action: string) =>
       'user.carCommunity.blacklist': 'Svartlistad i CarCommunity',
       'user.carCommunity.unlist': 'Borttagen från svartlistan',
       'user.setAdminRole': 'Administratörsroll ändrad',
+      'points.adminAdjust': 'Poäng justerade',
+      'points.adminReverse': 'Poängpost återförd',
     }) as Record<string, string>
-  )[action] ??
-  (action || 'Administrativ åtgärd');
+  )[action] ?? 'Administrativ åtgärd';
 export function MemberHistory({ uid }: { uid: string }) {
   const read = useCallback(
     async (cursor: string | null) =>
