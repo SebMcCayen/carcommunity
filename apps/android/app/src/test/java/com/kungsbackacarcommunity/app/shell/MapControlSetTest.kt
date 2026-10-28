@@ -6,15 +6,24 @@ import org.junit.Test
 /**
  * Pins the bottom-right control stack.
  *
- * The requirement is literal: turn-by-turn shows "the same round buttons on the
- * right side as on the main page, with the same functions… not more, not fewer,
- * and no other type of button". Both screens render
+ * The shared controls keep the same order and functions in both map modes;
+ * map home alone moves Saved places to its avatar menu. Both screens render
  * [MapControlSet.rightSideStack] through an exhaustive `when`, so this test plus
  * the compiler is what enforces it — asserting the LIST catches a control being
  * added, removed or reordered, and the exhaustive `when` catches a screen
  * forgetting to draw one.
  */
 class MapControlSetTest {
+    @Test
+    fun `map home moves only saved places to the avatar menu for every flag combination`() {
+        for (reporting in listOf(false, true)) for (perks in listOf(false, true)) {
+            val navigation = MapControlSet.rightSideStack(reporting, perks)
+            val home = MapControlSet.rightSideStack(reporting, perks, savedPlacesInProfileMenu = true)
+            assertEquals(navigation.filterNot { it == MapCircleControlKind.SavedPlaces }, home)
+            assertEquals(listOf(MapCircleControlKind.SavedPlaces), navigation - home.toSet())
+        }
+    }
+
     @Test
     fun `full stack is report, layers, compass, saved places, perks`() {
         assertEquals(
