@@ -141,7 +141,7 @@ final class FirebaseEmulatorIntegrationTests: XCTestCase {
         let publicUpdates = documentUpdates(firestore.document("communityChat/global/messages/native-public-message"))
         let quoteUpdates = documentUpdates(firestore.document("communityChat/global/messages/native-public-reply"))
         for source in ["event", "community"] {
-            let target: [String: Any] = source == "event" ? ["source": source, "eventId": "native-moderation", "messageId": "native-event-message"] : ["source": source, "messageId": "native-public-message"]
+            let target: [String: String] = source == "event" ? ["source": source, "eventId": "native-moderation", "messageId": "native-event-message"] : ["source": source, "messageId": "native-public-message"]
             let evidenceResult = try await adminFunctions.httpsCallable("admin-getPublicModerationCase").call(target)
             let evidence = try XCTUnwrap(evidenceResult.data as? [String: Any])
             let removal: [String: Any] = ["target": target, "expectedActorUid": "native-admin", "expectedVersion": try XCTUnwrap(evidence["version"]), "action": "remove", "reason": "Native public moderation", "idempotencyKey": UUID().uuidString]
@@ -173,6 +173,7 @@ final class FirebaseEmulatorIntegrationTests: XCTestCase {
         }
     }
 
+    @MainActor
     private func waitForDocument(_ updates: AsyncThrowingStream<DocumentSnapshot, Error>, predicate: @escaping @Sendable (DocumentSnapshot) -> Bool) async throws {
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
