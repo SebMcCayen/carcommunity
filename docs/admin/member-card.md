@@ -4,6 +4,10 @@ The approved member overview is implemented using existing admin tokens and real
 
 Overview shows available latest-login data and explicitly says that login frequency is unavailable. Warning and points previews are bounded; a partial warning page is never described as a complete absence of active warnings. Warning preview expiry uses the server's remaining duration against a monotonic browser clock. No polling reads are added.
 
+The access badge requires both completed product initialization and rollout readiness before displaying Active. An admin read never initializes the target account. Missing metadata is shown as unverified rather than an inferred absence of restrictions.
+
+Reviewed dialogs center within the viewport, constrain and scroll their contents, keep field labels on separate rows, and return keyboard focus to the triggering control after cancellation.
+
 Profile separates name changes from advanced account/role controls. Account deletion still affects the shared Firebase identity and therefore explicitly explains its possible Driver impact. Access decisions remain CarCommunity-only. Existing typed-name/reason confirmation and backend deletion protections are preserved.
 
 Warning lifecycle decisions have their own reason/duration controls in the review dialog; they do not depend on filling the new-warning form. Revoked warnings cannot be reactivated. Reviewed versions, actor binding and durable retry receipts retain their existing backend contracts.

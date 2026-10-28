@@ -75,6 +75,7 @@ export async function adminAccessView(targetUid: string) {
   const policy = await db.collection('carCommunityPolicy').doc('access').get();
   return {
     ...result.status,
+    initialized: result.data?.initialized === true,
     blacklisted: typeof result.data?.explicitBlacklistId === 'string' || active.length > 0,
     version: Number(result.data?.version ?? 0),
     ready: policy.get('enforceInitialized') === true && policy.get('rolloutState') === 'ready',

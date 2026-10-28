@@ -261,6 +261,7 @@ export default function UserDetailPage() {
               <div className={styles.identityLine}>
                 <h1>{detail.displayName || t('users.unnamed')}</h1>
                 <span
+                  role="status"
                   className={`${styles.statusBadge} ${detail.suspended || detail.deleted || detail.carCommunityAccess?.suspended || detail.carCommunityAccess?.blacklisted ? styles.restrictedBadge : ''}`}
                 >
                   <Circle size={10} fill="currentColor" strokeWidth={0} aria-hidden="true" />
@@ -270,15 +271,28 @@ export default function UserDetailPage() {
                       ? 'Avstängd'
                       : detail.carCommunityAccess?.blacklisted
                         ? 'Svartlistad'
-                        : detail.carCommunityAccess?.ready
+                        : detail.carCommunityAccess?.ready && detail.carCommunityAccess?.initialized
                           ? 'Aktiv'
                           : 'Åtkomst ej verifierad'}
                 </span>
               </div>
               <p>
-                Avstängning: <strong>{detail.carCommunityAccess?.suspended ? 'Ja' : 'Nej'}</strong>{' '}
+                Avstängning:{' '}
+                <strong>
+                  {detail.carCommunityAccess?.suspended
+                    ? 'Ja'
+                    : detail.carCommunityAccess?.initialized
+                      ? 'Nej'
+                      : 'Ej verifierad'}
+                </strong>{' '}
                 · Svartlistning:{' '}
-                <strong>{detail.carCommunityAccess?.blacklisted ? 'Ja' : 'Nej'}</strong>
+                <strong>
+                  {detail.carCommunityAccess?.blacklisted
+                    ? 'Ja'
+                    : detail.carCommunityAccess?.initialized
+                      ? 'Nej'
+                      : 'Ej verifierad'}
+                </strong>
               </p>
               <p className={styles.meta}>
                 Två separata statusar som hanteras oberoende av varandra.

@@ -33,7 +33,13 @@ let app: FirebaseApp, auth: Auth, functions: Functions;
 type User = { uid: string; email: string; password: string };
 let actor: User, member: User, other: User;
 interface ToolResponse {
-  user: { pointsBalance: number; actorUid: string; lastLoginAt: string; loginFrequency: null };
+  user: {
+    pointsBalance: number;
+    actorUid: string;
+    lastLoginAt: string;
+    loginFrequency: null;
+    carCommunityAccess: { initialized: boolean };
+  };
   warnings: Array<{
     id: string;
     internalNote?: string;
@@ -116,6 +122,23 @@ beforeEach(async () => {
 });
 afterAll(async () => deleteApp(app));
 describe('member tools contracts', () => {
+  it('keeps uninitialized imported accounts visibly unverified without initializing from an admin read', async () => {
+    const uid = `dormant-${member.uid}`;
+    expect(
+      (await adminAuth.importUsers([{ uid, displayName: 'Dormant local fixture' }])).successCount,
+    ).toBe(1);
+    await db
+      .doc(`users/${uid}`)
+      .set({
+        role: 'user',
+        displayName: 'Dormant local fixture',
+        suspended: false,
+        deleted: false,
+      });
+    const { user } = await call('admin-getMember', { targetUid: uid });
+    expect(user.carCommunityAccess.initialized).toBe(false);
+    expect((await db.doc(`carCommunityAccess/${uid}`).get()).exists).toBe(false);
+  });
   it('returns only safe member fields and truthful available activity', async () => {
     await db.collection('userPrivate').doc(member.uid).set({ secret: 'PRIVATE-PII' });
     await db

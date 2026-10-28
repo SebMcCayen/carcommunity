@@ -113,6 +113,11 @@ async function render() {
   await flush();
 }
 
+it('does not label a member with missing product access metadata as active', async () => {
+  await render();
+  expect(container.querySelector('[role="status"]')?.textContent).toBe('Åtkomst ej verifierad');
+});
+
 describe('User detail — delete danger zone', () => {
   it('reveals a confirm dialog naming the user only after pressing Delete user', async () => {
     await render();
