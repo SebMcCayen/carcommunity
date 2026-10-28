@@ -12,7 +12,9 @@ const originalHome = homedir();
 // Firebase worker socket names share Unix's short pathname limit. macOS's
 // system TMPDIR can consume most of that budget before our private directory.
 // Keep the same private IPC boundary under a short POSIX temporary root.
-const directory = mkdtempSync(resolve(process.platform === 'win32' ? tmpdir() : '/tmp', 'kcc-no-cloud-'));
+const directory = mkdtempSync(
+  resolve(process.platform === 'win32' ? tmpdir() : '/tmp', 'kcc-no-cloud-'),
+);
 const home = resolve(directory, 'home');
 mkdirSync(home);
 const env = { ...process.env };
