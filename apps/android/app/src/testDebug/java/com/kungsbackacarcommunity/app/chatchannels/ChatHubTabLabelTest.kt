@@ -144,6 +144,12 @@ class ChatHubTabLabelTest {
                     badge.assertIsDisplayed()
                     val badgeBounds = badge.fetchSemanticsNode().boundsInRoot
                     val labelBounds = labelNode.fetchSemanticsNode().boundsInRoot
+                    // Check the rendered lines, not a padded/centred wrapper:
+                    // the old badge+label Column shifted every label down 4dp.
+                    val textTop = labelBounds.top + layout.getLineTop(0)
+                    val textBottom = labelBounds.top + layout.getLineBottom(layout.lineCount - 1)
+                    assertEquals("$current $tab rendered text is vertically centred",
+                        bounds.center.y, (textTop + textBottom) / 2f, 1f)
                     assertTrue("$current $tab unread badge must not overlap its label",
                         badgeBounds.bottom <= labelBounds.top)
                     assertTrue("$current $tab unread badge inside its target",

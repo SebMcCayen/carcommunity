@@ -24,6 +24,16 @@ on:
       - '.npmrc'
       - 'tsconfig.base.json'
   workflow_dispatch:
+    inputs:
+      resource:
+        description: 'Reviewed resource to deploy from main to production'
+        type: choice
+        required: true
+        default: functions
+        options:
+          - functions
+          - firestore:indexes
+          - firestore:rules
 
 permissions:
   contents: read
@@ -35,10 +45,22 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     concurrency:
-      group: deploy-functions-production
+      # Data deployments must not replace a pending Functions deployment in
+      # GitHub's single pending slot for a concurrency group.
+      group: deploy-${{ inputs.resource || 'functions' }}-production
       cancel-in-progress: false
+    env:
+      FIREBASE_DEPLOY_TARGET: ${{ inputs.resource || 'functions' }}
 
     steps:
+      - name: Validate deployment target
+        shell: bash
+        run: |
+          case "$FIREBASE_DEPLOY_TARGET" in
+            functions|firestore:indexes|firestore:rules) ;;
+            *) echo "::error::Unsupported Firebase deployment target."; exit 1 ;;
+          esac
+
       - name: Checkout
         uses: actions/checkout@v5
 
@@ -87,6 +109,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check deploy lockfile
+        if: env.FIREBASE_DEPLOY_TARGET == 'functions'
         # Last line of defence before upload: the Cloud Build for this deploy
         # runs `npm ci` against functions/package-lock.json, so refuse to
         # deploy if that lockfile does not pin the CI-tested versions.
@@ -94,10 +117,22 @@ jobs:
         run: pnpm run lockfile:check
 
       - name: Build
+        if: env.FIREBASE_DEPLOY_TARGET == 'functions'
         working-directory: functions
         run: pnpm run build
 
+      - name: Deploy selected Firestore configuration
+        if: env.FIREBASE_DEPLOY_TARGET != 'functions'
+        shell: bash
+        # No --force: unexpected index deletions must fail for review.
+        run: |
+          ./functions/node_modules/.bin/firebase deploy --only "$FIREBASE_DEPLOY_TARGET" --project kungsbacka-car-community --non-interactive
+          if [ "$FIREBASE_DEPLOY_TARGET" = "firestore:indexes" ]; then
+            node scripts/check-field-index-readiness.mjs kungsbacka-car-community
+          fi
+
       - name: Deploy Cloud Functions
+        if: env.FIREBASE_DEPLOY_TARGET == 'functions'
         # Run from the repo root so firebase-tools auto-discovers ./firebase.json,
         # whose functions source ("functions") sits inside the project directory.
         #

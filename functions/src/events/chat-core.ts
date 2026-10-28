@@ -1,3 +1,4 @@
+import { containsObjectionableText } from '../moderation/content-filter';
 /**
  * Event chat domain — pure input validation, eligibility predicates, and
  * document builders (Phase 9c).
@@ -104,7 +105,14 @@ export function shouldAutoHide(distinctReporterCount: number): boolean {
 const postChatMessageInputSchema = z
   .object({
     eventId: z.string().trim().min(1),
-    message: z.string().min(1).max(CHAT_MESSAGE_MAX_LENGTH),
+    message: z
+      .string()
+      .min(1)
+      .max(CHAT_MESSAGE_MAX_LENGTH)
+      .refine(
+        (value) => !containsObjectionableText(value),
+        'Content violates the community rules.',
+      ),
   })
   .strict();
 
@@ -166,11 +174,7 @@ export function parseReportChatMessageInput(data: unknown): ParseResult<ReportCh
 }
 
 export function parseRemoveChatMessageInput(data: unknown): ParseResult<RemoveChatMessageInput> {
-  return parse(
-    removeChatMessageInputSchema,
-    data,
-    'Expected { eventId, messageId, reason }.',
-  );
+  return parse(removeChatMessageInputSchema, data, 'Expected { eventId, messageId, reason }.');
 }
 
 export function parseAllowChatMessageInput(data: unknown): ParseResult<AllowChatMessageInput> {
@@ -184,8 +188,7 @@ export function parseAllowChatMessageInput(data: unknown): ParseResult<AllowChat
 const CHAT_ALLOWED_RSVP_STATUSES: ReadonlySet<string> = new Set(['going', 'maybe']);
 
 export type ChatEligibility =
-  | { ok: true }
-  | { ok: false; code: 'permission-denied' | 'failed-precondition'; message: string };
+  { ok: true } | { ok: false; code: 'permission-denied' | 'failed-precondition'; message: string };
 
 /**
  * Chat participation (read and post) requires: passing the member gate, a

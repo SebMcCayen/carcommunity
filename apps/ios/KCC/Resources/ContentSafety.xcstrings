@@ -1,0 +1,74 @@
+{
+  "sourceLanguage": "sv",
+  "strings": {
+    "contentSafety.report": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anmäl innehåll"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Report content"
+          }
+        }
+      }
+    },
+    "contentSafety.reportAd": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anmäl annons"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Report advertisement"
+          }
+        }
+      }
+    },
+    "contentSafety.success": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tack! Rapporten har skickats privat till moderatorerna."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thank you. Your report was sent privately to the moderators."
+          }
+        }
+      }
+    },
+    "contentSafety.profileAndBlock": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa profil och blockera"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View profile and block"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}
