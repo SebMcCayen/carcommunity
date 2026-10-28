@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.navigation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -44,13 +45,14 @@ interface MapboxSearchClient {
  *
  * ## Offline-verification note
  * The request *shape* is built by the pure [MapboxRequests] (unit-tested); the
- * HTTP round-trip here runs only on device and is therefore verified on device,
- * not in JVM unit tests. The `org.json` parsing is exercisable on the JVM (the
- * unit-test classpath now bundles the real `org.json`), but it is only ever fed
- * live responses, so end-to-end it is verified on device. Failures degrade to
- * empty/null rather than throwing, so a flaky network or an unexpected payload
- * never crashes the UI.
+ * live HTTP round-trip needs a configured device. Injected responses exercise
+ * request encoding, parsing and failure propagation on the JVM without a token
+ * or network (`org.json` is available on the unit-test classpath). Forward-search errors
+ * propagate to the controller's inline search error, rather than masquerading
+ * as a successful empty result. Routing/reverse lookup still degrade to null.
  *
+ * @param responseReader optional HTTP seam for deterministic transport tests.
+ *   Production always uses the default HTTPS implementation.
  * @param language optional BCP-47 language for localized results/instructions.
  *   Wired to the device locale (so "sv" for our members) and deliberately kept
  *   as-is when searching abroad. It is a *presentation* parameter: Mapbox
@@ -64,12 +66,16 @@ interface MapboxSearchClient {
 class HttpMapboxSearchClient(
     private val token: String,
     private val language: String? = null,
+    private val responseReader: (suspend (String) -> String?)? = null,
 ) : MapboxSearchClient {
     override suspend fun geocode(query: String, proximity: LatLng?): List<PlaceSuggestion> {
         if (token.isBlank()) return emptyList()
         val url = MapboxRequests.forwardGeocode(query, token, proximity, language) ?: return emptyList()
-        val body = runCatchingCancellable { get(url) }.getOrNull() ?: return emptyList()
-        return runCatching { parseSuggestions(body) }.getOrDefault(emptyList())
+        // Keep transport/HTTP/parse errors distinct from a successful search
+        // with zero matches. NavigationController renders its existing error
+        // state and keeps the query editable; cancellation still propagates.
+        val body = get(url) ?: throw IOException("Place search request failed")
+        return parseSuggestions(body)
     }
 
     override suspend fun route(origin: LatLng, destination: LatLng): RouteSummary? {
@@ -87,6 +93,9 @@ class HttpMapboxSearchClient(
     }
 
     private suspend fun get(url: String): String? =
+        if (responseReader != null) responseReader.invoke(url) else request(url)
+
+    private suspend fun request(url: String): String? =
         withContext(Dispatchers.IO) {
             val connection = URL(url).openConnection() as HttpURLConnection
             try {
@@ -106,7 +115,7 @@ class HttpMapboxSearchClient(
 
         /** Maps a Mapbox Search Box `/forward` FeatureCollection to [PlaceSuggestion]s. */
         fun parseSuggestions(json: String): List<PlaceSuggestion> {
-            val features = JSONObject(json).optJSONArray("features") ?: return emptyList()
+            val features = JSONObject(json).getJSONArray("features")
             val out = ArrayList<PlaceSuggestion>(features.length())
             for (i in 0 until features.length()) {
                 val feature = features.optJSONObject(i) ?: continue

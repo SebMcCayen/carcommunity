@@ -46,6 +46,12 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.KCC">
 
+        <!-- Driver may send text-only geo: places only after checking this
+             application-level capability; the receiving search requires a pick. -->
+        <meta-data
+            android:name="com.kungsbackacarcommunity.app.SUPPORTS_GEO_QUERY"
+            android:value="true" />
+
         <!-- Per-app language (AppCompat). android:localeConfig above lists the
              app's translated locales so Android 13+ shows a system "Language"
              screen for KCC; this service enables AppCompat's autoStoreLocales,

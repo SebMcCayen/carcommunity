@@ -131,6 +131,9 @@ class NavigationController(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
+                    // A cancelled blocking lookup may still throw; its failure
+                    // must not overwrite a newer query's state.
+                    coroutineContext.ensureActive()
                     // Geocoding failed (network/HTTP/parse) — surface an inline
                     // hint and stop the spinner instead of hanging on `searching`.
                     stateFlow.value =

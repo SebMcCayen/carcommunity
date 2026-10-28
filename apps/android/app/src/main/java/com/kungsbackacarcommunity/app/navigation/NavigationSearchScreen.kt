@@ -183,6 +183,9 @@ fun savedPlaceKindTestTag(kind: SavedPlaceKind): String = "nav_save_kind_${kind.
  *   False while `convoy-setDestination` does not exist
  *   (`ConvoyDestinations.availability`), which renders the button disabled rather
  *   than absent — same honesty rule as the convoy bar's own controls.
+ * @param initialQuery optional decoded external place name; prefilled and searched,
+ *   never auto-selected. Ignored when a coordinate target is supplied.
+ * @param initialRequestId re-arms even an identical external link delivered again.
  * @param initialSaveEdit set when this overlay was opened to CHANGE the address of
  *   an already-saved place (the Saved-places screen's "Change address"). It
  *   pre-frames the save dialog to that place's kind (so re-pointing Home saves
@@ -204,6 +207,8 @@ fun NavigationSearchScreen(
     onSetAsConvoyDestination: ((LatLng, String) -> Unit)? = null,
     convoyDestinationEnabled: Boolean = false,
     initialSaveEdit: SavedPlaceEdit? = null,
+    initialQuery: String? = null,
+    initialRequestId: Int = 0,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -281,13 +286,19 @@ fun NavigationSearchScreen(
     // for a label and falls back to "dropped pin". Keyed on the target AND its
     // name so a new gesture re-previews.
     val droppedPinLabel = stringResource(R.string.addressSearch_droppedPin)
-    LaunchedEffect(controller, initialTarget, initialTargetName) {
+    LaunchedEffect(controller, initialTarget, initialTargetName, initialQuery, initialRequestId) {
         if (initialTarget != null) {
             controller.selectPoint(
                 point = initialTarget,
                 fallbackLabel = droppedPinLabel,
                 knownName = initialTargetName,
             )
+        } else if (initialQuery != null) {
+            // A new external query replaces any old preview/in-flight lookup,
+            // but never selects a suggestion. The request ID also re-arms an
+            // identical URI delivered again while this overlay is already open.
+            controller.clearDestination()
+            controller.onQueryChange(initialQuery)
         }
     }
 
