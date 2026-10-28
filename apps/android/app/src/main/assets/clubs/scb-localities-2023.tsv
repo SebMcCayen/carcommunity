@@ -1,0 +1,2084 @@
+# kcc-club-localities-v1; SCB 2023; see docs/features/club-location-catalog.md
+C	01	Stockholms län
+C	03	Uppsala län
+C	04	Södermanlands län
+C	05	Östergötlands län
+C	06	Jönköpings län
+C	07	Kronobergs län
+C	08	Kalmar län
+C	09	Gotlands län
+C	10	Blekinge län
+C	12	Skåne län
+C	13	Hallands län
+C	14	Västra Götalands län
+C	17	Värmlands län
+C	18	Örebro län
+C	19	Västmanlands län
+C	20	Dalarnas län
+C	21	Gävleborgs län
+C	22	Västernorrlands län
+C	23	Jämtlands län
+C	24	Västerbottens län
+C	25	Norrbottens län
+L	01	0114TB103	Löwenströmska lasarettet	Upplands Väsby
+L	01	0114TB107	Båtbyggartorp och Harva	Upplands Väsby
+L	01	0115TB101	Brottby	Vallentuna
+L	01	0115TB102	Ekskogen, Älgeby och Långsjötorp	Norrtälje, Vallentuna
+L	01	0115TB103	Ekskogen	Vallentuna
+L	01	0115TB104	Johannesudd	Vallentuna
+L	01	0115TB105	Karby	Vallentuna
+L	01	0115TB106	Kårsta	Vallentuna
+L	01	0115TB107	Lindholmen	Vallentuna
+L	01	0115TC108	Vallentuna	Täby, Vallentuna
+L	01	0117TB101	Bammarboda	Österåker
+L	01	0117TB104	Laggarsvik och Linanäs	Österåker
+L	01	0117TB105	Täljö och Näs	Österåker
+L	01	0117TB106	Rydbo	Österåker
+L	01	0117TB107	Solberga	Österåker
+L	01	0117TB108	Nyhagen och Översättra	Österåker
+L	01	0117TB109	Stava	Vallentuna, Österåker
+L	01	0117TB110	Nolsjö och Mellansjö	Österåker
+L	01	0117TB111	Svinninge	Österåker
+L	01	0117TC112	Åkersberga	Österåker
+L	01	0120TB102	Grönskan, Vedhamn och Baldersnäs	Värmdö
+L	01	0120TB104	Betsede	Värmdö
+L	01	0120TB105	Djurö	Värmdö
+L	01	0120TB108	Fågelvik, Brunn och Fagerholm	Värmdö
+L	01	0120TB113	Norra Ingaröstrand och Skälsmara	Värmdö
+L	01	0120TB114	Kopparmora	Värmdö
+L	01	0120TB115	Långvik, Björnömalmen och Klacknäset	Värmdö
+L	01	0120TB117	Norra Lagnö	Värmdö
+L	01	0120TB119	Lugnet och Skälsmara	Värmdö
+L	01	0120TB120	Stavsnäs	Värmdö
+L	01	0120TB121	Strömma	Värmdö
+L	01	0120TB123	Koviksudde och Skeviksstrand	Värmdö
+L	01	0120TB125	Ängsvik	Värmdö
+L	01	0120TB126	Älvsala	Värmdö
+L	01	0120TB127	Norra Vindö	Värmdö
+L	01	0120TB178	Södra Vindö	Värmdö
+L	01	0120TC109	Gustavsberg	Värmdö
+L	01	0125TB101	Drottningholm	Ekerö
+L	01	0125TB103	Ekerö sommarstad	Ekerö
+L	01	0125TB104	Parksidan och Solsidan	Ekerö
+L	01	0125TB105	Hilleshögby	Ekerö
+L	01	0125TB106	Kungsberga	Ekerö
+L	01	0125TB107	Lilla Stenby	Ekerö
+L	01	0125TB108	Lurudden	Ekerö
+L	01	0125TB109	Sundby	Ekerö
+L	01	0125TB111	Stenhamra	Ekerö
+L	01	0125TB112	Söderby	Ekerö
+L	01	0125TB113	Tureholm	Ekerö
+L	01	0125TB114	Älvnäs	Ekerö
+L	01	0125TB115	Ölsta	Ekerö
+L	01	0125TB120	Ekeby tomtområde	Ekerö
+L	01	0125TB157	Slottshagen, Bona, Helgö bol och Kungens täppa	Ekerö
+L	01	0125TB173	Jungfrusund	Ekerö
+L	01	0125TC102	Ekerö	Ekerö
+L	01	0126TB101	Gladö kvarn	Huddinge
+L	01	0126TB102	Vidja	Huddinge
+L	01	0126TB103	Östorp och Ådran	Haninge, Huddinge
+L	01	0127TB101	Norra Riksten	Botkyrka
+L	01	0127TB102	Sibble	Botkyrka
+L	01	0127TB115	Kagghamra tomtområde	Botkyrka
+L	01	0127TC103	Tumba	Botkyrka, Salem
+L	01	0136TB101	Dalarö	Haninge
+L	01	0136TB103	Muskö	Haninge
+L	01	0136TB104	Norra Muskö	Haninge
+L	01	0136TB105	Väländan	Haninge
+L	01	0136TB106	Västerhaninge	Haninge
+L	01	0136TB107	Gansta och Söderby	Haninge
+L	01	0136TB108	Årsta Havsbad	Haninge
+L	01	0136TB139	Runsten	Haninge, Nynäshamn
+L	01	0139TB101	Bro	Upplands-Bro
+L	01	0139TB103	Håbo-Tibble kyrkby	Upplands-Bro
+L	01	0139TB106	Rättarboda	Upplands-Bro
+L	01	0139TB114	Jursta	Upplands-Bro
+L	01	0139TB120	Smidö	Upplands-Bro
+L	01	0139TC104	Kungsängen och Brunna	Upplands-Bro
+L	01	0140TB101	Finkarby	Nykvarn
+L	01	0140TB103	Nygårds hagar	Nykvarn
+L	01	0140TB104	Stensättra tomtområde	Nykvarn
+L	01	0140TB105	Turinge och Vidbynäs	Nykvarn
+L	01	0140TB117	Rimsjöhöjden	Nykvarn
+L	01	0140TC102	Nykvarn	Nykvarn
+L	01	0160TB101	Arninge	Täby, Österåker
+L	01	0162TB101	Tranholmen	Danderyd
+L	01	0163TC103	Upplands Väsby och Sollentuna	Sollentuna, Solna, Stockholm, Sundbyberg, Upplands Väsby
+L	01	0180TC101	Stockholm	Botkyrka, Danderyd, Haninge, Huddinge, Järfälla, Nacka, Sollentuna, Solna, Stockholm, Sundbyberg, Tyresö, Täby
+L	01	0181TB101	Ekeby	Södertälje
+L	01	0181TB102	Hölö	Södertälje
+L	01	0181TB103	Järna	Södertälje
+L	01	0181TB104	Mölnbo	Södertälje
+L	01	0181TB105	Pershagen	Södertälje
+L	01	0181TB106	Sandviken	Södertälje
+L	01	0181TB107	Nibble	Södertälje
+L	01	0181TB109	Tuna	Södertälje
+L	01	0181TB110	Vattubrinken	Södertälje
+L	01	0181TB111	Viksäter och Viksberg	Salem, Södertälje
+L	01	0181TB113	Kallfors	Södertälje
+L	01	0181TC108	Södertälje	Salem, Södertälje
+L	01	0182TB102	Fisksätra	Nacka
+L	01	0182TB103	Hästhagen	Nacka
+L	01	0182TB104	Kil	Nacka
+L	01	0182TB106	Saltsjöbaden	Nacka
+L	01	0182TB108	Älgö	Nacka
+L	01	0186TB103	Sticklinge udde	Lidingö
+L	01	0186TB107	Storholmen	Lidingö
+L	01	0186TC102	Lidingö	Lidingö
+L	01	0187TB102	Rindö	Vaxholm
+L	01	0187TB103	Resarö	Vaxholm
+L	01	0187TB105	Tynningö	Vaxholm
+L	01	0187TB106	Skarpö	Vaxholm
+L	01	0187TC104	Vaxholm	Vaxholm
+L	01	0188TB101	Bergshamra	Norrtälje
+L	01	0188TB102	Blidö	Norrtälje
+L	01	0188TB103	Edsbro	Norrtälje
+L	01	0188TB104	Finsta	Norrtälje
+L	01	0188TB105	Grisslehamn	Norrtälje
+L	01	0188TB106	Hallstavik	Norrtälje
+L	01	0188TB107	Herräng	Norrtälje
+L	01	0188TB108	Nabbo, Gräddö och Rävsnäs	Norrtälje
+L	01	0188TB110	Riala	Norrtälje
+L	01	0188TB111	Rimbo	Norrtälje
+L	01	0188TB112	Rånäs	Norrtälje
+L	01	0188TB113	Skebobruk	Norrtälje
+L	01	0188TB114	Spillersboda	Norrtälje
+L	01	0188TB115	Nysättra	Norrtälje
+L	01	0188TB116	Svanberga	Norrtälje
+L	01	0188TB117	Söderby-Karl	Norrtälje
+L	01	0188TB118	Södersvik	Norrtälje
+L	01	0188TB119	Sättra	Norrtälje
+L	01	0188TB120	Älmsta	Norrtälje
+L	01	0188TB122	Hästängen och Mora	Norrtälje
+L	01	0188TB132	Baltora och Sänsjö	Norrtälje
+L	01	0188TB138	Oxhalsö	Norrtälje
+L	01	0188TB147	Hattudden, Björnösund och Björknäs	Norrtälje
+L	01	0188TB172	Malstaby	Norrtälje
+L	01	0188TB187	Husby	Norrtälje
+L	01	0188TB197	Härsby, Mälby, Eke och Ösby	Norrtälje
+L	01	0188TB223	Tranvik, Lugnet och Brohägnaden	Norrtälje
+L	01	0188TC109	Norrtälje	Norrtälje
+L	01	0191TB101	Granby	Sigtuna
+L	01	0191TB103	Rosersberg	Sigtuna
+L	01	0191TB104	Sigtuna	Sigtuna
+L	01	0191TB105	Steningehöjden	Sigtuna
+L	01	0191TB125	Steninge	Sigtuna
+L	01	0191TB129	Venngarn	Sigtuna
+L	01	0191TC102	Märsta	Sigtuna
+L	01	0192TB101	Landfjärden	Nynäshamn
+L	01	0192TB102	Lidatorp och Klövsta	Nynäshamn
+L	01	0192TB104	Sorunda	Nynäshamn
+L	01	0192TB105	Segersäng	Nynäshamn
+L	01	0192TB106	Stora Vika	Nynäshamn
+L	01	0192TB107	Grödby	Nynäshamn
+L	01	0192TB108	Oxnö och Svärdsö	Nynäshamn
+L	01	0192TB109	Ösmo	Nynäshamn
+L	01	0192TC103	Nynäshamn	Nynäshamn
+L	01	0461TC102	Gnesta	Södertälje
+L	03	0305TB102	Vibyäng	Håbo
+L	03	0305TB103	Häggeby och Vreta	Håbo
+L	03	0305TB104	Krägga	Enköping, Håbo
+L	03	0305TB105	Råby	Håbo
+L	03	0305TB106	Slottsskogen	Håbo
+L	03	0305TB108	Söderskogen	Håbo
+L	03	0305TB114	Kivinge	Håbo
+L	03	0305TC101	Bålsta	Håbo
+L	03	0319TB101	Gårdskär	Älvkarleby
+L	03	0319TB102	Marma	Älvkarleby
+L	03	0319TB104	Älvkarleby	Älvkarleby
+L	03	0319TB105	Älvkarleö	Älvkarleby
+L	03	0319TC103	Skutskär	Älvkarleby
+L	03	0330TB101	Alsike	Knivsta
+L	03	0330TB103	Edeby	Knivsta
+L	03	0330TC102	Knivsta	Knivsta
+L	03	0331TB101	Harbo	Heby
+L	03	0331TB103	Morgongåva	Heby
+L	03	0331TB105	Tärnsjö	Heby
+L	03	0331TB106	Vittinge	Heby
+L	03	0331TB107	Östervåla	Heby
+L	03	0331TC102	Heby	Heby
+L	03	0360TB101	Karlholmsbruk	Tierp
+L	03	0360TB102	Mehedeby	Tierp
+L	03	0360TB103	Månkarbo	Tierp
+L	03	0360TB104	Skärplinge	Tierp
+L	03	0360TB105	Söderfors	Tierp
+L	03	0360TB107	Tobo	Tierp
+L	03	0360TB108	Upplanda	Tierp
+L	03	0360TB109	Örbyhus	Tierp
+L	03	0360TC106	Tierp	Tierp
+L	03	0380TB101	Almunge	Uppsala
+L	03	0380TB102	Björklinge	Uppsala
+L	03	0380TB103	Jälla	Uppsala
+L	03	0380TB104	Vänge	Uppsala
+L	03	0380TB105	Bälinge	Uppsala
+L	03	0380TB107	Danmark	Uppsala
+L	03	0380TB108	Funbo	Uppsala
+L	03	0380TB109	Gunsta	Uppsala
+L	03	0380TB110	Gåvsta	Uppsala
+L	03	0380TB111	Håga	Uppsala
+L	03	0380TB112	Järlåsa	Uppsala
+L	03	0380TB113	Knutby	Uppsala
+L	03	0380TB114	Läby	Tierp, Uppsala
+L	03	0380TB115	Länna	Uppsala
+L	03	0380TB116	Lövstalöt	Uppsala
+L	03	0380TB117	Selknä och Marielund	Uppsala
+L	03	0380TB118	Ramstalund	Uppsala
+L	03	0380TB119	Skyttorp	Uppsala
+L	03	0380TB120	Skölsta	Uppsala
+L	03	0380TB121	Storvreta	Uppsala
+L	03	0380TB122	Sävja	Uppsala
+L	03	0380TB123	Blackstalund	Uppsala
+L	03	0380TB124	Ultuna	Uppsala
+L	03	0380TB126	Vattholma	Uppsala
+L	03	0380TB127	Ytternäs och Vreta	Uppsala
+L	03	0380TB163	Vångelsta	Uppsala
+L	03	0380TB224	Tuna	Uppsala
+L	03	0380TB238	Sydöstra Fullerö	Uppsala
+L	03	0380TB274	Vattholma västra	Uppsala
+L	03	0380TC125	Uppsala	Uppsala
+L	03	0381TB102	Fjärdhundra	Enköping
+L	03	0381TB103	Grillby	Enköping
+L	03	0381TB104	Haga	Enköping
+L	03	0381TB105	Hummelsta	Enköping
+L	03	0381TB106	Lillkyrka	Enköping
+L	03	0381TB107	Bredsand	Enköping
+L	03	0381TB108	Örsundsbro	Enköping
+L	03	0381TB109	Örsundsbro norra	Enköping
+L	03	0381TB118	Åkersberg	Enköping
+L	03	0381TB131	Märsön	Enköping
+L	03	0381TB134	Skolsta	Enköping
+L	03	0381TB140	Gamla Nynäs	Enköping
+L	03	0381TC101	Enköping	Enköping
+L	03	0382TB101	Alunda	Östhammar
+L	03	0382TB102	Dannemora	Östhammar
+L	03	0382TB103	Gimo	Östhammar
+L	03	0382TB104	Hargshamn	Östhammar
+L	03	0382TB106	Skoby	Uppsala, Östhammar
+L	03	0382TB107	Öregrund	Östhammar
+L	03	0382TB108	Österbybruk	Östhammar
+L	03	0382TC109	Östhammar	Östhammar
+L	03	1980TB108	Kärsta och Bredsdal	Enköping
+L	04	0428TB101	Baggetorp	Katrineholm, Vingåker
+L	04	0428TB102	Högsjö	Vingåker
+L	04	0428TB103	Marmorbyn	Vingåker
+L	04	0428TB104	Läppe	Vingåker
+L	04	0428TC105	Vingåker	Vingåker
+L	04	0461TB101	Björnlunda	Gnesta
+L	04	0461TB103	Stjärnhov	Gnesta
+L	04	0461TC102	Gnesta	Gnesta
+L	04	0480TB102	Bergshammar	Nyköping
+L	04	0480TB104	Enstaberga	Nyköping
+L	04	0480TB105	Jönåker	Nyköping
+L	04	0480TB106	Kvegerö	Gnesta, Nyköping, Trosa
+L	04	0480TB108	Nävekvarn	Nyköping
+L	04	0480TB111	Sjösa	Nyköping
+L	04	0480TB113	Stavsjö	Nyköping
+L	04	0480TB114	Stigtomta	Nyköping
+L	04	0480TB115	Svalsta	Nyköping
+L	04	0480TB116	Tystberga	Nyköping
+L	04	0480TB117	Vrena	Nyköping
+L	04	0480TB118	Ålberga	Nyköping
+L	04	0480TB143	Örstig	Nyköping
+L	04	0480TC107	Nyköping	Nyköping
+L	04	0481TB101	Inskogen	Oxelösund
+L	04	0481TC102	Oxelösund	Oxelösund
+L	04	0482TB101	Bettna	Flen
+L	04	0482TB103	Hälleforsnäs	Flen
+L	04	0482TB104	Malmköping	Flen
+L	04	0482TB105	Mellösa	Flen
+L	04	0482TB106	Orrhammar	Flen
+L	04	0482TB108	Sparreholm	Flen
+L	04	0482TC102	Flen	Flen
+L	04	0483TB101	Bie	Katrineholm
+L	04	0483TB102	Björkvik	Katrineholm
+L	04	0483TB104	Forssjö	Katrineholm
+L	04	0483TB106	Sköldinge	Katrineholm
+L	04	0483TB107	Strångsjö	Katrineholm
+L	04	0483TB108	Valla	Katrineholm
+L	04	0483TB109	Äsköping	Katrineholm
+L	04	0483TC105	Katrineholm	Katrineholm
+L	04	0484TB101	Alberga	Eskilstuna
+L	04	0484TB103	Bälgviken	Eskilstuna
+L	04	0484TB105	Hållsta	Eskilstuna
+L	04	0484TB106	Hällberga	Eskilstuna
+L	04	0484TB107	Hällbybrunn	Eskilstuna
+L	04	0484TB108	Kullersta, Kolsta och Hensta	Eskilstuna
+L	04	0484TB109	Kjulaås	Eskilstuna
+L	04	0484TB111	Skiftinge	Eskilstuna
+L	04	0484TB112	Sundbyholm	Eskilstuna
+L	04	0484TB113	Torshälla	Eskilstuna
+L	04	0484TB115	Tumbo	Eskilstuna
+L	04	0484TB116	Udden	Eskilstuna
+L	04	0484TB118	Ärla	Eskilstuna
+L	04	0484TB159	Gredbylund och Odlaren	Eskilstuna
+L	04	0484TC104	Eskilstuna	Eskilstuna
+L	04	0486TB101	Abborrberget	Strängnäs
+L	04	0486TB102	Sanda	Strängnäs
+L	04	0486TB103	Härad	Strängnäs
+L	04	0486TB104	Kalkudden	Strängnäs
+L	04	0486TB105	Marielund	Strängnäs
+L	04	0486TB106	Mariefred	Strängnäs
+L	04	0486TB107	Merlänna	Strängnäs
+L	04	0486TB108	Stallarholmen	Strängnäs
+L	04	0486TB110	Husby och Tuna	Strängnäs
+L	04	0486TB112	Åkers styckebruk	Strängnäs
+L	04	0486TC109	Strängnäs	Strängnäs
+L	04	0488TB103	Vagnhärad	Trosa
+L	04	0488TB104	Sund	Trosa
+L	04	0488TB105	Västerljung	Trosa
+L	04	0488TB107	Åda	Trosa
+L	04	0488TB110	Stensund	Trosa
+L	04	0488TC102	Trosa	Trosa
+L	04	1980TB101	Kvicksund	Eskilstuna
+L	05	0509TB101	Hästholmen	Ödeshög
+L	05	0509TC103	Ödeshög	Ödeshög
+L	05	0512TB102	Hestra	Ydre
+L	05	0512TB103	Rydsnäs	Ydre
+L	05	0512TC104	Österbymo	Ydre
+L	05	0513TB101	Horn	Kinda
+L	05	0513TB103	Rimforsa	Kinda
+L	05	0513TC102	Kisa	Kinda
+L	05	0560TB102	Strålsnäs	Boxholm
+L	05	0560TC101	Boxholm	Boxholm
+L	05	0561TB101	Berg	Åtvidaberg
+L	05	0561TB102	Björsäter	Åtvidaberg
+L	05	0561TB103	Falerum	Åtvidaberg
+L	05	0561TB104	Grebo	Åtvidaberg
+L	05	0561TC105	Åtvidaberg	Åtvidaberg
+L	05	0562TB101	Borggård	Finspång
+L	05	0562TB102	Falla	Finspång
+L	05	0562TB104	Grytgöl	Finspång
+L	05	0562TB105	Hällestad	Finspång
+L	05	0562TB107	Igelfors	Finspång
+L	05	0562TB108	Ljusfallshammar	Finspång
+L	05	0562TB109	Lotorp	Finspång
+L	05	0562TB110	Butbro	Finspång
+L	05	0562TB111	Rejmyre	Finspång
+L	05	0562TB112	Sonstorp	Finspång
+L	05	0562TC103	Finspång	Finspång
+L	05	0563TB101	Gryt	Valdemarsvik
+L	05	0563TB102	Gusum	Valdemarsvik
+L	05	0563TB103	Ringarum	Valdemarsvik
+L	05	0563TC104	Valdemarsvik	Valdemarsvik
+L	05	0580TB101	Askeby	Linköping
+L	05	0580TB102	Bankekind	Linköping
+L	05	0580TB103	Bergs slussar	Linköping
+L	05	0580TB104	Bestorp	Linköping
+L	05	0580TB105	Brokind	Linköping
+L	05	0580TB106	Ekängen	Linköping
+L	05	0580TB107	Gistad	Linköping
+L	05	0580TB109	Kränge	Linköping
+L	05	0580TB110	Linghem	Linköping
+L	05	0580TB112	Ljungsbro	Linköping
+L	05	0580TB113	Malmslätt	Linköping
+L	05	0580TB114	Nykil	Linköping
+L	05	0580TB115	Rappestad	Linköping
+L	05	0580TB116	Sjögestad	Linköping
+L	05	0580TB117	Skeda udde	Linköping
+L	05	0580TB118	Slaka	Linköping
+L	05	0580TB119	Sturefors	Linköping
+L	05	0580TB120	Tallboda	Linköping
+L	05	0580TB122	Vikingstad	Linköping
+L	05	0580TB123	Västerlösa	Linköping
+L	05	0580TB140	Maspelösa	Linköping
+L	05	0580TC111	Linköping	Linköping
+L	05	0581TB102	Berga	Norrköping
+L	05	0581TB103	Eksund	Norrköping
+L	05	0581TB105	Djurön	Norrköping
+L	05	0581TB106	Graversfors	Norrköping
+L	05	0581TB107	Herstadberg	Norrköping
+L	05	0581TB109	Kimstad	Norrköping
+L	05	0581TB110	Krokek	Norrköping
+L	05	0581TB111	Lindö	Norrköping
+L	05	0581TB113	Ljunga	Norrköping
+L	05	0581TB115	Marby och Marbystrand	Norrköping
+L	05	0581TB117	Norsholm	Norrköping
+L	05	0581TB118	Simonstorp	Norrköping
+L	05	0581TB120	Skärblacka	Norrköping
+L	05	0581TB122	Svärtinge	Finspång, Norrköping
+L	05	0581TB123	Vånga	Norrköping
+L	05	0581TB124	Åby	Norrköping
+L	05	0581TB126	Öbonäs	Norrköping
+L	05	0581TB127	Östra Husby	Norrköping
+L	05	0581TB130	Arkösund	Norrköping
+L	05	0581TB135	Lundby och Malm	Norrköping
+L	05	0581TB160	Kartlandet och Ringstadmo	Norrköping
+L	05	0581TB161	Sidus	Norrköping
+L	05	0581TC116	Norrköping	Norrköping
+L	05	0582TB101	Luddingsbo	Norrköping, Söderköping
+L	05	0582TB102	Snöveltorp	Söderköping
+L	05	0582TB103	Mogata	Söderköping
+L	05	0582TB105	Västra Husby	Söderköping
+L	05	0582TB106	Östra Ryd	Söderköping
+L	05	0582TC104	Söderköping	Söderköping
+L	05	0583TB101	Borensberg	Motala
+L	05	0583TB102	Fornåsa	Motala
+L	05	0583TB103	Fågelsta	Motala
+L	05	0583TB105	Klockrike	Motala
+L	05	0583TB107	Nykyrka	Motala
+L	05	0583TB108	Tjällmo	Motala
+L	05	0583TB109	Västanvik	Motala
+L	05	0583TB110	Österstad	Motala
+L	05	0583TB130	Södra Freberga	Motala
+L	05	0583TC106	Motala	Motala
+L	05	0584TC102	Vadstena	Vadstena
+L	05	0586TB101	Hogstad	Mjölby
+L	05	0586TB102	Mantorp	Mjölby
+L	05	0586TB104	Skänninge	Mjölby
+L	05	0586TB105	Spångsholm	Mjölby
+L	05	0586TB106	Sya	Mjölby
+L	05	0586TB107	Väderstad	Mjölby
+L	05	0586TC103	Mjölby	Mjölby
+L	06	0604TB102	Frinnaryd	Aneby
+L	06	0604TB103	Sundhultsbrunn	Aneby
+L	06	0604TC101	Aneby	Aneby
+L	06	0617TB102	Hillerstorp	Gnosjö
+L	06	0617TB103	Kulltorp	Gnosjö
+L	06	0617TB105	Nissafors	Gnosjö
+L	06	0617TB106	Törestorp	Gnosjö
+L	06	0617TC101	Gnosjö	Gnosjö
+L	06	0642TB102	Sandhem	Mullsjö
+L	06	0642TC101	Mullsjö	Habo, Mullsjö
+L	06	0643TB102	Fagerhult	Habo
+L	06	0643TB103	Furusjö	Habo
+L	06	0643TC104	Habo	Habo, Jönköping
+L	06	0662TB101	Anderstorp	Gislaved
+L	06	0662TB102	Broaryd	Gislaved
+L	06	0662TB103	Burseryd	Gislaved
+L	06	0662TB105	Hestra	Gislaved
+L	06	0662TB106	Reftele	Gislaved
+L	06	0662TB107	Skeppshult	Gislaved
+L	06	0662TB108	Smålandsstenar	Gislaved
+L	06	0662TC104	Gislaved	Gislaved
+L	06	0665TB101	Bondstorp	Vaggeryd
+L	06	0665TB102	Hok	Vaggeryd
+L	06	0665TB103	Klevshult	Vaggeryd
+L	06	0665TC104	Skillingaryd	Vaggeryd
+L	06	0665TC105	Vaggeryd	Vaggeryd
+L	06	0680TB101	Bankeryd	Habo, Jönköping
+L	06	0680TB103	Bottnaryd	Jönköping
+L	06	0680TB104	Ölmstad	Jönköping
+L	06	0680TB105	Bosgård, Rudu och Gissebo	Jönköping
+L	06	0680TB106	Gränna	Jönköping
+L	06	0680TB108	Kaxholmen	Jönköping
+L	06	0680TB109	Kortebo	Jönköping
+L	06	0680TB110	Lekeryd	Jönköping
+L	06	0680TB111	Barnarp och Odensjö	Jönköping
+L	06	0680TB112	Ryd	Jönköping
+L	06	0680TB113	Skärstad	Jönköping
+L	06	0680TB114	Taberg	Jönköping
+L	06	0680TB115	Tenhult	Jönköping
+L	06	0680TB117	Tunnerstad	Jönköping
+L	06	0680TB118	Öggestorp	Jönköping
+L	06	0680TB119	Örserum	Jönköping
+L	06	0680TB156	Tovrida udde	Jönköping
+L	06	0680TB158	Hulukvarn, Ulvstorp, Västersjön och Hedenstorp	Jönköping
+L	06	0680TC107	Jönköping	Jönköping
+L	06	0682TB101	Anneberg	Nässjö
+L	06	0682TB102	Bodafors	Nässjö
+L	06	0682TB103	Flisby	Nässjö
+L	06	0682TB104	Forserum	Nässjö
+L	06	0682TB105	Fredriksdal	Nässjö
+L	06	0682TB106	Grimstorp	Nässjö
+L	06	0682TB107	Malmbäck	Nässjö
+L	06	0682TB109	Ormaryd	Nässjö
+L	06	0682TB111	Solberga	Nässjö
+L	06	0682TB112	Stensjön	Nässjö
+L	06	0682TB113	Äng	Nässjö
+L	06	0682TC108	Nässjö	Nässjö
+L	06	0683TB101	Bor	Värnamo
+L	06	0683TB102	Bredaryd	Värnamo
+L	06	0683TB103	Forsheda	Värnamo
+L	06	0683TB104	Horda	Värnamo
+L	06	0683TB105	Hånger	Värnamo
+L	06	0683TB106	Kärda	Värnamo
+L	06	0683TB107	Lanna	Gnosjö, Värnamo
+L	06	0683TB108	Rydaholm	Värnamo
+L	06	0683TB111	Åminne	Värnamo
+L	06	0683TC110	Värnamo	Värnamo
+L	06	0684TB101	Rörvik	Sävsjö
+L	06	0684TB102	Stockaryd	Sävsjö
+L	06	0684TB104	Vrigstad	Sävsjö
+L	06	0684TC103	Sävsjö	Sävsjö
+L	06	0685TB101	Björköby	Vetlanda
+L	06	0685TB102	Ekenässjön	Vetlanda
+L	06	0685TB103	Holsbybrunn	Vetlanda
+L	06	0685TB104	Kvillsfors	Vetlanda
+L	06	0685TB105	Landsbro	Vetlanda
+L	06	0685TB106	Myresjö	Vetlanda
+L	06	0685TB109	Sjunnen	Vetlanda
+L	06	0685TB110	Skede	Vetlanda
+L	06	0685TB112	Korsberga	Vetlanda
+L	06	0685TC111	Vetlanda	Vetlanda
+L	06	0686TB101	Bruzaholm	Eksjö
+L	06	0686TB103	Hjältevad	Eksjö
+L	06	0686TB104	Hult	Eksjö
+L	06	0686TB105	Ingatorp	Eksjö
+L	06	0686TB106	Mariannelund	Eksjö
+L	06	0686TC102	Eksjö	Eksjö
+L	06	0687TB101	Gripenberg	Tranås
+L	06	0687TB102	Hätte, Seglarvik och Sandvik	Tranås
+L	06	0687TB103	Sommen	Tranås
+L	06	0687TB108	Norraby	Tranås
+L	06	0687TC104	Tranås	Tranås
+L	07	0760TB101	Alstermo	Uppvidinge
+L	07	0760TB103	Lenhovda	Uppvidinge
+L	07	0760TB104	Norrhult-Klavreström	Uppvidinge, Växjö
+L	07	0760TB106	Älghult	Uppvidinge
+L	07	0760TC105	Åseda	Uppvidinge
+L	07	0761TB101	Hovmantorp	Lessebo
+L	07	0761TB102	Kosta	Lessebo
+L	07	0761TB104	Skruv	Lessebo
+L	07	0761TC103	Lessebo	Lessebo
+L	07	0763TB103	Konga	Tingsryd
+L	07	0763TB104	Linneryd	Tingsryd
+L	07	0763TB105	Ryd	Tingsryd
+L	07	0763TB106	Rävemåla	Tingsryd
+L	07	0763TB108	Urshult	Tingsryd
+L	07	0763TB109	Väckelsång	Tingsryd
+L	07	0763TC107	Tingsryd	Tingsryd
+L	07	0764TB102	Grimslöv	Alvesta
+L	07	0764TB103	Hjortsberga	Alvesta
+L	07	0764TB104	Moheda	Alvesta
+L	07	0764TB105	Torpsbruk	Alvesta
+L	07	0764TB106	Vislanda	Alvesta
+L	07	0764TC101	Alvesta	Alvesta
+L	07	0765TB102	Diö och Liatorp	Älmhult
+L	07	0765TB103	Eneryda	Älmhult
+L	07	0765TC106	Älmhult	Älmhult
+L	07	0767TB102	Strömsnäsbruk	Markaryd
+L	07	0767TB104	Traryd	Markaryd
+L	07	0767TC101	Markaryd	Markaryd
+L	07	0780TB101	Björnö	Växjö
+L	07	0780TB102	Braås	Växjö
+L	07	0780TB103	Furuby	Växjö
+L	07	0780TB104	Gemla	Växjö
+L	07	0780TB105	Ingelstad	Växjö
+L	07	0780TB106	Lammhult	Växjö
+L	07	0780TB107	Nöbbele	Växjö
+L	07	0780TB108	Rottne	Växjö
+L	07	0780TB109	Tävelsås	Växjö
+L	07	0780TB111	Åby	Växjö
+L	07	0780TB112	Åryd	Växjö
+L	07	0780TB138	Öja	Växjö
+L	07	0780TC110	Växjö	Växjö
+L	07	0781TB102	Angelstad	Ljungby
+L	07	0781TB103	Kånna	Ljungby
+L	07	0781TB104	Lagan	Ljungby
+L	07	0781TB105	Lidhult	Ljungby
+L	07	0781TB107	Ryssby	Ljungby
+L	07	0781TB108	Vittaryd	Ljungby
+L	07	0781TC106	Ljungby	Ljungby
+L	08	0685TB104	Kvillsfors	Hultsfred
+L	08	0821TB101	Berga	Högsby
+L	08	0821TB103	Fågelfors	Högsby
+L	08	0821TB106	Ruda	Högsby
+L	08	0821TC105	Högsby	Högsby
+L	08	0834TB101	Bergkvara	Torsås
+L	08	0834TB102	Söderåkra	Torsås
+L	08	0834TC103	Torsås	Torsås
+L	08	0840TB101	Algutsrum	Mörbylånga
+L	08	0840TB103	Degerhamn	Mörbylånga
+L	08	0840TB104	Färjestaden	Mörbylånga
+L	08	0840TB105	Glömminge och Strandskogen	Mörbylånga
+L	08	0840TB107	Gårdby	Mörbylånga
+L	08	0840TB108	Kastlösa	Mörbylånga
+L	08	0840TB112	Skogsby	Mörbylånga
+L	08	0840TB113	Vickleby	Mörbylånga
+L	08	0840TB134	Stora Frö och Haga park	Mörbylånga
+L	08	0840TC109	Mörbylånga	Mörbylånga
+L	08	0860TB102	Järnforsen	Hultsfred
+L	08	0860TB104	Målilla	Hultsfred
+L	08	0860TB105	Mörlunda	Hultsfred
+L	08	0860TB106	Rosenfors	Hultsfred
+L	08	0860TB107	Silverdalen	Hultsfred
+L	08	0860TB108	Vena	Hultsfred
+L	08	0860TB109	Virserum	Hultsfred
+L	08	0860TC101	Hultsfred	Hultsfred
+L	08	0861TB101	Blomstermåla	Mönsterås
+L	08	0861TB103	Fliseryd	Mönsterås
+L	08	0861TB105	Oknö	Mönsterås
+L	08	0861TB106	Timmernabben	Mönsterås
+L	08	0861TC104	Mönsterås	Mönsterås
+L	08	0862TB104	Johansfors	Emmaboda
+L	08	0862TB105	Långasjö	Emmaboda
+L	08	0862TB106	Vissefjärda	Emmaboda
+L	08	0862TC102	Emmaboda	Emmaboda
+L	08	0880TB102	Dunö	Kalmar
+L	08	0880TB103	Hagby	Kalmar
+L	08	0880TB104	Halltorp	Kalmar
+L	08	0880TB106	Lindsdal	Kalmar
+L	08	0880TB107	Ljungbyholm	Kalmar
+L	08	0880TB108	Läckeby	Kalmar
+L	08	0880TB109	Påryd	Kalmar
+L	08	0880TB110	Rinkabyholm	Kalmar
+L	08	0880TB111	Rockneby	Kalmar
+L	08	0880TB112	Smedby	Kalmar
+L	08	0880TB113	Drag	Kalmar
+L	08	0880TB114	Trekanten	Kalmar
+L	08	0880TB115	Tvärskog	Kalmar
+L	08	0880TB116	Vassmolösa	Kalmar
+L	08	0880TB117	Åmunnen	Kalmar
+L	08	0880TB137	Revsudden	Kalmar
+L	08	0880TB147	Snurrom	Kalmar
+L	08	0880TC105	Kalmar	Kalmar
+L	08	0881TB101	Alsterbro	Nybro
+L	08	0881TB102	Bäckebo	Nybro
+L	08	0881TB104	Flygsfors	Nybro
+L	08	0881TB105	Kristvallabrunn	Nybro
+L	08	0881TB108	Orrefors	Nybro
+L	08	0881TB109	Örsjö	Nybro
+L	08	0881TC107	Nybro	Nybro
+L	08	0882TB101	Bockara	Oskarshamn
+L	08	0882TB102	Emsfors	Mönsterås, Oskarshamn
+L	08	0882TB103	Figeholm	Oskarshamn
+L	08	0882TB104	Fårbo	Oskarshamn
+L	08	0882TB105	Kristdala	Oskarshamn
+L	08	0882TB109	Påskallavik	Oskarshamn
+L	08	0882TB112	Stångehamn	Oskarshamn
+L	08	0882TC108	Oskarshamn	Oskarshamn
+L	08	0883TB102	Ankarsrum	Västervik
+L	08	0883TB104	Edsbruk	Västervik
+L	08	0883TB105	Gamleby	Västervik
+L	08	0883TB106	Gunnebo	Västervik
+L	08	0883TB107	Hjorted	Västervik
+L	08	0883TB109	Loftahammar	Västervik
+L	08	0883TB110	Piperskärr	Västervik
+L	08	0883TB111	Totebo	Vimmerby, Västervik
+L	08	0883TB113	Överum	Västervik
+L	08	0883TC112	Västervik	Västervik
+L	08	0884TB101	Frödinge	Vimmerby
+L	08	0884TB102	Gullringen	Vimmerby
+L	08	0884TB104	Storebro	Vimmerby
+L	08	0884TB105	Södra Vi	Vimmerby
+L	08	0884TB106	Tuna	Vimmerby
+L	08	0884TC107	Vimmerby	Vimmerby
+L	08	0885TB103	Rälla	Borgholm
+L	08	0885TB105	Löttorp	Borgholm
+L	08	0885TC102	Borgholm	Borgholm
+L	08	1080TB133	Brömsebro	Torsås
+L	09	0980TB101	Burgsvik	Gotland
+L	09	0980TB102	Fårösund	Gotland
+L	09	0980TB104	Havdhem	Gotland
+L	09	0980TB105	Hemse	Gotland
+L	09	0980TB107	Klintehamn	Gotland
+L	09	0980TB108	Ljugarn	Gotland
+L	09	0980TB109	Lärbro	Gotland
+L	09	0980TB111	Romakloster	Gotland
+L	09	0980TB113	Slite	Gotland
+L	09	0980TB114	Brissund och Själsö	Gotland
+L	09	0980TB115	Stånga	Gotland
+L	09	0980TB116	Tingstäde	Gotland
+L	09	0980TB117	Tofta	Gotland
+L	09	0980TB118	Vibble	Gotland
+L	09	0980TB120	Väskinde	Gotland
+L	09	0980TB121	Västerhejde	Gotland
+L	09	0980TB193	Västergarn	Gotland
+L	09	0980TC119	Visby	Gotland
+L	10	1060TB101	Gränum	Olofström
+L	10	1060TB102	Jämshög	Olofström
+L	10	1060TB103	Kyrkhult	Olofström
+L	10	1060TB105	Vilshult	Olofström
+L	10	1060TC104	Olofström	Olofström
+L	10	1080TB102	Drottningskär	Karlskrona
+L	10	1080TB103	Fridlevstad	Karlskrona
+L	10	1080TB104	Fågelmara	Karlskrona
+L	10	1080TB105	Gängletorp	Karlskrona
+L	10	1080TB106	Hasslö	Karlskrona
+L	10	1080TB107	Holmsjö	Karlskrona
+L	10	1080TB108	Jämjö	Karlskrona
+L	10	1080TB110	Kättilsmåla	Karlskrona
+L	10	1080TB111	Nättraby	Karlskrona
+L	10	1080TB112	Nävragöl	Karlskrona
+L	10	1080TB113	Ramdala	Karlskrona
+L	10	1080TB114	Rödeby	Karlskrona
+L	10	1080TB115	Skavkulla och Skillingenäs	Karlskrona
+L	10	1080TB116	Sturkö	Karlskrona
+L	10	1080TB117	Sjuhalla	Karlskrona
+L	10	1080TB118	Spjutsbygd	Karlskrona
+L	10	1080TB119	Torhamn	Karlskrona
+L	10	1080TB120	Tving	Karlskrona
+L	10	1080TB133	Brömsebro	Karlskrona
+L	10	1080TB142	Färmanstorp och Skavkulla brygga	Karlskrona, Ronneby
+L	10	1080TB157	Möcklö	Karlskrona
+L	10	1080TB163	Stensnäset och Trummenäs	Karlskrona
+L	10	1080TC109	Karlskrona	Karlskrona
+L	10	1081TB101	Backaryd	Ronneby
+L	10	1081TB102	Bräkne-Hoby	Ronneby
+L	10	1081TB103	Eringsboda	Ronneby
+L	10	1081TB104	Hallabro	Ronneby
+L	10	1081TB105	Johannishus	Ronneby
+L	10	1081TB106	Kallinge	Ronneby
+L	10	1081TB107	Bökenäs, Korsanäs och Kuggeboda	Ronneby
+L	10	1081TB108	Listerby	Ronneby
+L	10	1081TB110	Ronnebyhamn	Ronneby
+L	10	1081TB111	Spjälkö och Saxemara	Ronneby
+L	10	1081TC109	Ronneby	Ronneby
+L	10	1082TB101	Hällaryd	Karlshamn
+L	10	1082TB103	Mörrum	Karlshamn
+L	10	1082TB104	Svängsta	Karlshamn
+L	10	1082TB105	Horsaryd och Stilleryd	Karlshamn
+L	10	1082TB107	Åryd	Karlshamn
+L	10	1082TB134	Vettekulla och Matvik	Karlshamn
+L	10	1082TC102	Karlshamn	Karlshamn
+L	10	1083TB102	Hällevik	Sölvesborg
+L	10	1083TB103	Hörvik	Sölvesborg
+L	10	1083TB104	Lörby	Sölvesborg
+L	10	1083TB105	Mjällby	Sölvesborg
+L	10	1083TB107	Norje	Sölvesborg
+L	10	1083TB108	Pukavik	Karlshamn, Sölvesborg
+L	10	1083TB111	Ysane	Sölvesborg
+L	10	1083TB114	Ljungaviken	Sölvesborg
+L	10	1083TB129	Västra Näs, Sandviken och Siretorp	Sölvesborg
+L	10	1083TC109	Sölvesborg	Sölvesborg
+L	10	1272TB106	Valje	Sölvesborg
+L	12	1214TB101	Billeberga	Svalöv
+L	12	1214TB102	Kågeröd	Svalöv
+L	12	1214TB103	Röstånga	Svalöv
+L	12	1214TB105	Teckomatorp	Svalöv
+L	12	1214TB106	Tågarp	Helsingborg, Landskrona, Svalöv
+L	12	1214TC104	Svalöv	Svalöv
+L	12	1230TB101	Bergströmshusen	Lund, Staffanstorp
+L	12	1230TB103	Hjärup	Staffanstorp
+L	12	1230TB104	Kyrkheddinge	Staffanstorp
+L	12	1230TB115	Nordanå	Burlöv, Staffanstorp
+L	12	1230TC105	Staffanstorp	Staffanstorp
+L	12	1231TB101	Burlövs egnahem	Burlöv
+L	12	1231TB102	Åkarp	Burlöv, Lomma, Staffanstorp
+L	12	1233TB101	Arrie	Vellinge
+L	12	1233TB102	Gessie Villastad	Vellinge
+L	12	1233TB103	Hököpinge	Vellinge
+L	12	1233TB104	Höllviken och Ljunghusen	Vellinge
+L	12	1233TB107	Skanör med Falsterbo	Vellinge
+L	12	1233TB109	Västra Ingelstad	Vellinge
+L	12	1233TB110	Östra Grevie	Vellinge
+L	12	1233TB128	Vellinge östra	Vellinge
+L	12	1233TC108	Vellinge	Vellinge
+L	12	1256TB102	Glimåkra	Östra Göinge
+L	12	1256TB103	Hanaskog	Östra Göinge
+L	12	1256TB105	Immeln	Östra Göinge
+L	12	1256TB106	Knislinge	Östra Göinge
+L	12	1256TB107	Sibbhult	Östra Göinge
+L	12	1256TC101	Broby	Östra Göinge
+L	12	1257TB101	Eket	Örkelljunga
+L	12	1257TB102	Skånes-Fagerhult	Örkelljunga
+L	12	1257TB103	Åsljunga	Örkelljunga
+L	12	1257TC104	Örkelljunga	Örkelljunga
+L	12	1260TB103	Ekeby	Bjuv, Svalöv
+L	12	1260TB104	Gunnarstorp	Bjuv
+L	12	1260TC102	Bjuv	Bjuv, Svalöv
+L	12	1261TB101	Järavallen	Kävlinge
+L	12	1261TB102	Barsebäck	Kävlinge
+L	12	1261TB103	Barsebäckshamn	Kävlinge
+L	12	1261TB104	Dösjebro	Kävlinge
+L	12	1261TB105	Furulund	Kävlinge
+L	12	1261TB106	Hofterup	Kävlinge
+L	12	1261TB108	Lilla Harrie	Eslöv, Kävlinge, Lund
+L	12	1261TB109	Löddeköpinge	Kävlinge
+L	12	1261TB110	Sandskogen	Kävlinge
+L	12	1261TB111	Västra Karaby	Kävlinge
+L	12	1261TC107	Kävlinge	Kävlinge
+L	12	1262TB101	Bjärred	Lomma
+L	12	1262TB102	Flädie	Lomma
+L	12	1262TC103	Lomma	Lomma
+L	12	1263TB101	Bara	Svedala
+L	12	1263TB102	Holmeja	Svedala
+L	12	1263TB103	Klågerup	Svedala
+L	12	1263TC105	Svedala	Svedala
+L	12	1264TB101	Abbekås	Skurup
+L	12	1264TB102	Rydsgård	Skurup
+L	12	1264TB103	Skivarp	Skurup
+L	12	1264TC104	Skurup	Skurup
+L	12	1265TB101	Karups sommarby	Sjöbo
+L	12	1265TB102	Bjärsjölagård	Sjöbo
+L	12	1265TB103	Blentarp	Sjöbo
+L	12	1265TB104	Lövestad	Sjöbo
+L	12	1265TB107	Sövde	Sjöbo
+L	12	1265TB108	Vollsjö	Sjöbo
+L	12	1265TB109	Äsperöd	Sjöbo
+L	12	1265TB120	Humlamaden och Hemmestorps björke, boke och fure	Lund, Sjöbo
+L	12	1265TC105	Sjöbo	Sjöbo
+L	12	1266TB103	Osbyholm	Hörby
+L	12	1266TB104	Önneköp	Hörby
+L	12	1266TB116	Killhult och Älmhult	Hörby
+L	12	1266TC101	Hörby	Hörby
+L	12	1267TB105	Norra Rörum	Höör
+L	12	1267TB107	Snogeröd	Höör
+L	12	1267TB109	Tjörnarp	Höör
+L	12	1267TC103	Höör	Hörby, Höör
+L	12	1270TB101	Brösarp	Tomelilla
+L	12	1270TB102	Lunnarp	Tomelilla
+L	12	1270TB103	Onslunda	Tomelilla
+L	12	1270TB104	Skåne-Tranås	Tomelilla
+L	12	1270TB105	Smedstorp	Tomelilla
+L	12	1270TB106	Spjutstorp	Tomelilla
+L	12	1270TC107	Tomelilla	Tomelilla
+L	12	1272TB103	Gualöv	Bromölla
+L	12	1272TB104	Nymölla	Bromölla
+L	12	1272TB105	Näsum	Bromölla
+L	12	1272TB106	Valje	Bromölla
+L	12	1272TC101	Bromölla	Bromölla
+L	12	1273TB102	Killeberg	Osby
+L	12	1273TB103	Lönsboda	Osby
+L	12	1273TC104	Osby	Osby
+L	12	1275TB103	Oderljunga och Häljalt	Perstorp
+L	12	1275TC101	Perstorp	Klippan, Perstorp
+L	12	1276TB102	Klippans bruk	Klippan
+L	12	1276TB103	Ljungbyhed	Klippan
+L	12	1276TB105	Östra Ljungby	Klippan
+L	12	1276TC101	Klippan	Klippan
+L	12	1277TB101	Björnås	Bjuv, Åstorp
+L	12	1277TB102	Hyllinge	Helsingborg, Åstorp
+L	12	1277TB103	Kvidinge	Åstorp
+L	12	1277TC104	Åstorp	Bjuv, Ängelholm, Åstorp
+L	12	1278TB102	Förslöv	Båstad
+L	12	1278TB103	Grevie	Båstad
+L	12	1278TB104	Torekov	Båstad
+L	12	1278TB105	Västra Karup	Båstad
+L	12	1278TC101	Båstad	Båstad
+L	12	1280TB101	Bunkeflostrand	Malmö
+L	12	1280TB107	Oxie	Malmö, Svedala
+L	12	1280TB108	Skumparp	Malmö
+L	12	1280TB111	Tygelsjö	Malmö
+L	12	1280TC106	Malmö	Burlöv, Lomma, Malmö
+L	12	1281TB101	Dalby	Lund
+L	12	1281TB102	Genarp	Lund
+L	12	1281TB103	Torna Hällestad	Lund
+L	12	1281TB106	Revinge	Lund
+L	12	1281TB107	Stångby	Lund
+L	12	1281TB108	Södra Sandby	Lund
+L	12	1281TB110	Veberöd	Lund
+L	12	1281TC105	Lund	Lund, Staffanstorp
+L	12	1282TB101	Tuna	Landskrona
+L	12	1282TB102	Annelöv	Landskrona
+L	12	1282TB103	Asmundtorp	Landskrona
+L	12	1282TB104	Glumslöv	Landskrona
+L	12	1282TB105	Häljarp	Landskrona
+L	12	1282TB106	Härslöv	Landskrona
+L	12	1282TB107	Kvärlöv	Landskrona
+L	12	1282TB109	Saxtorpsskogen	Kävlinge, Landskrona
+L	12	1282TB118	Munkebäck	Landskrona
+L	12	1282TC108	Landskrona	Landskrona
+L	12	1283TB101	Fleninge	Helsingborg
+L	12	1283TB102	Allerum	Helsingborg
+L	12	1283TB104	Domsten	Helsingborg
+L	12	1283TB105	Gantofta	Helsingborg
+L	12	1283TB106	Hasslarp	Helsingborg, Ängelholm
+L	12	1283TB108	Hittarp	Helsingborg
+L	12	1283TB109	Kattarp	Helsingborg
+L	12	1283TB110	Mörarp	Helsingborg
+L	12	1283TB111	Påarp	Helsingborg
+L	12	1283TB112	Rydebäck	Helsingborg, Landskrona
+L	12	1283TB113	Tånga och Rögle	Helsingborg
+L	12	1283TB114	Utvälinge	Helsingborg
+L	12	1283TB115	Vallåkra	Helsingborg, Landskrona
+L	12	1283TB116	Ödåkra	Helsingborg
+L	12	1283TC107	Helsingborg	Helsingborg
+L	12	1284TB101	Farhult	Höganäs
+L	12	1284TB102	Arild	Höganäs
+L	12	1284TB104	Ingelsträde	Höganäs
+L	12	1284TB105	Jonstorp	Höganäs
+L	12	1284TB107	Mjöhult	Höganäs
+L	12	1284TB108	Mölle	Höganäs
+L	12	1284TB109	Viken	Helsingborg, Höganäs
+L	12	1284TC103	Höganäs	Höganäs
+L	12	1285TB101	Billinge	Eslöv
+L	12	1285TB103	Flyinge	Eslöv
+L	12	1285TB104	Gårdstånga	Eslöv
+L	12	1285TB105	Harlösa	Eslöv
+L	12	1285TB106	Hurva	Eslöv
+L	12	1285TB107	Kungshult	Eslöv
+L	12	1285TB108	Löberöd	Eslöv, Höör
+L	12	1285TB109	Marieholm	Eslöv, Svalöv
+L	12	1285TB110	Stehag	Eslöv
+L	12	1285TB111	Stockamöllan	Eslöv, Höör
+L	12	1285TB112	Örtofta	Eslöv
+L	12	1285TB113	Väggarp	Eslöv
+L	12	1285TC102	Eslöv	Eslöv
+L	12	1286TB101	Rynge och Vallösa	Skurup, Ystad
+L	12	1286TB102	Glemmingebro	Ystad
+L	12	1286TB104	Köpingebro	Ystad
+L	12	1286TB105	Löderup	Ystad
+L	12	1286TB106	Nybrostrand	Ystad
+L	12	1286TB107	Stora Herrestad	Ystad
+L	12	1286TB108	Svarte	Ystad
+L	12	1286TB109	Sövestad	Ystad
+L	12	1286TB121	Trunnerup, Bleckstorp och Rögla	Skurup, Ystad
+L	12	1286TC110	Ystad	Ystad
+L	12	1287TB101	Alstad	Trelleborg
+L	12	1287TB102	Anderslöv	Trelleborg
+L	12	1287TB103	Beddingestrand	Skurup, Trelleborg
+L	12	1287TB105	Klagstorp	Trelleborg
+L	12	1287TB106	Kurland	Trelleborg
+L	12	1287TB108	Skegrie	Trelleborg
+L	12	1287TB109	Smygehamn	Trelleborg
+L	12	1287TB111	Västra Tommarp	Trelleborg
+L	12	1287TC110	Trelleborg	Trelleborg
+L	12	1290TB101	Arkelstorp	Kristianstad
+L	12	1290TB102	Balsby	Kristianstad
+L	12	1290TB103	Bäckaskog	Kristianstad
+L	12	1290TB104	Degeberga	Kristianstad
+L	12	1290TB105	Everöd	Kristianstad
+L	12	1290TB106	Fjälkinge	Kristianstad
+L	12	1290TB107	Färlöv	Kristianstad
+L	12	1290TB108	Gärds Köpinge	Kristianstad
+L	12	1290TB109	Hammar	Kristianstad
+L	12	1290TB111	Huaröd	Kristianstad
+L	12	1290TB113	Linderöd	Kristianstad
+L	12	1290TB115	Nyehusen och Furuboda	Kristianstad
+L	12	1290TB117	Rinkaby	Kristianstad
+L	12	1290TB118	Tollarp	Kristianstad
+L	12	1290TB119	Torsebro	Kristianstad
+L	12	1290TB120	Vanneberga	Kristianstad
+L	12	1290TB121	Viby	Kristianstad
+L	12	1290TB123	Vittskövle	Kristianstad
+L	12	1290TB124	Vånga	Kristianstad
+L	12	1290TB125	Yngsjö	Kristianstad
+L	12	1290TB126	Åhus	Kristianstad
+L	12	1290TB127	Önnestad	Kristianstad
+L	12	1290TB128	Österslöv	Kristianstad
+L	12	1290TB129	Östra Sönnarslöv	Kristianstad
+L	12	1290TB130	Bjärlöv	Kristianstad
+L	12	1290TB168	Skepparslöv	Kristianstad
+L	12	1290TC112	Kristianstad	Kristianstad
+L	12	1291TB101	Baskemölla	Simrishamn
+L	12	1291TB102	Borrby	Simrishamn
+L	12	1291TB103	Brantevik	Simrishamn
+L	12	1291TB104	Gärsnäs	Simrishamn
+L	12	1291TB105	Hammenhög	Simrishamn
+L	12	1291TB106	Kivik	Simrishamn
+L	12	1291TB107	Sankt Olof	Simrishamn
+L	12	1291TB110	Skillinge	Simrishamn
+L	12	1291TB111	Vik	Simrishamn
+L	12	1291TB112	Vitaby	Simrishamn
+L	12	1291TB113	Östra Tommarp	Simrishamn
+L	12	1291TB114	Östra Vemmerlöv	Simrishamn
+L	12	1291TB122	Gröstorp	Simrishamn
+L	12	1291TC109	Simrishamn	Simrishamn
+L	12	1292TB101	Hjärnarp	Ängelholm
+L	12	1292TB102	Höja	Ängelholm
+L	12	1292TB103	Lerbäckshult och Tullstorp	Ängelholm
+L	12	1292TB104	Margretetorp	Ängelholm
+L	12	1292TB105	Munka-Ljungby	Ängelholm
+L	12	1292TB107	Strövelstorp	Ängelholm
+L	12	1292TB108	Svenstorp	Ängelholm
+L	12	1292TB109	Toarp och Tåstarp	Ängelholm
+L	12	1292TB113	Össjö	Ängelholm
+L	12	1292TC111	Ängelholm	Båstad, Ängelholm
+L	12	1293TB101	Ballingslöv	Hässleholm
+L	12	1293TB102	Bjärnum	Hässleholm
+L	12	1293TB103	Emmaljunga	Hässleholm
+L	12	1293TB104	Finja	Hässleholm
+L	12	1293TB106	Hästveda	Hässleholm
+L	12	1293TB107	Hörja	Hässleholm
+L	12	1293TB108	Mala	Hässleholm
+L	12	1293TB109	Röke	Hässleholm
+L	12	1293TB110	Sjörröd	Hässleholm
+L	12	1293TB111	Stoby	Hässleholm
+L	12	1293TB112	Sösdala	Hässleholm
+L	12	1293TB113	Tormestorp	Hässleholm
+L	12	1293TB114	Tyringe	Hässleholm
+L	12	1293TB115	Vankiva	Hässleholm
+L	12	1293TB116	Vinslöv	Hässleholm
+L	12	1293TB117	Vittsjö	Hässleholm
+L	12	1293TB118	Västra Torup	Hässleholm
+L	12	1293TC105	Hässleholm	Hässleholm
+L	12	1381TB107	Mellbystrand	Båstad
+L	13	1278TC101	Båstad	Laholm
+L	13	1315TB102	Kinnared	Hylte
+L	13	1315TB103	Landeryd	Hylte
+L	13	1315TB104	Rydöbruk	Hylte
+L	13	1315TB105	Torup	Hylte
+L	13	1315TB106	Unnaryd	Hylte
+L	13	1315TC101	Hyltebruk	Hylte
+L	13	1380TB101	Eldsberga	Halmstad
+L	13	1380TB102	Frösakull	Halmstad
+L	13	1380TB104	Getinge	Halmstad
+L	13	1380TB105	Gullbrandstorp	Halmstad
+L	13	1380TB106	Gullbranna	Halmstad
+L	13	1380TB108	Harplinge	Halmstad
+L	13	1380TB109	Haverdal	Halmstad
+L	13	1380TB110	Holm	Halmstad
+L	13	1380TB111	Kvibille	Halmstad
+L	13	1380TB112	Laxvik	Halmstad
+L	13	1380TB113	Oskarström	Halmstad
+L	13	1380TB114	Sennan	Halmstad
+L	13	1380TB115	Simlångsdalen	Halmstad
+L	13	1380TB116	Skedala	Halmstad
+L	13	1380TB117	Steninge	Falkenberg, Halmstad
+L	13	1380TB118	Trönninge	Halmstad
+L	13	1380TB120	Villshärad	Halmstad
+L	13	1380TB121	Åled	Halmstad
+L	13	1380TC107	Halmstad	Halmstad
+L	13	1381TB101	Genevad	Laholm
+L	13	1381TB102	Hasslöv	Laholm
+L	13	1381TB103	Hishult	Laholm
+L	13	1381TB104	Knäred	Laholm
+L	13	1381TB106	Lilla Tjärby	Laholm
+L	13	1381TB107	Mellbystrand	Laholm
+L	13	1381TB108	Ränneslöv	Laholm
+L	13	1381TB109	Skottorp	Laholm
+L	13	1381TB111	Vallberga	Laholm
+L	13	1381TB112	Veinge	Laholm
+L	13	1381TB113	Våxtorp	Laholm
+L	13	1381TB114	Ysby	Laholm
+L	13	1381TC105	Laholm	Laholm
+L	13	1382TB101	Bergagård	Falkenberg
+L	13	1382TB103	Fegen	Falkenberg
+L	13	1382TB104	Glommen	Falkenberg
+L	13	1382TB105	Heberg	Falkenberg
+L	13	1382TB106	Köinge	Falkenberg
+L	13	1382TB107	Långås	Falkenberg
+L	13	1382TB108	Långasand och Ugglarp	Falkenberg
+L	13	1382TB109	Morup	Falkenberg
+L	13	1382TB114	Slöinge	Falkenberg
+L	13	1382TB115	Ullared	Falkenberg
+L	13	1382TB116	Vessigebro	Falkenberg
+L	13	1382TB117	Vinberg	Falkenberg
+L	13	1382TB119	Årstad	Falkenberg
+L	13	1382TB120	Älvsered	Falkenberg
+L	13	1382TB121	Ätran	Falkenberg
+L	13	1382TB141	Olofsbo	Falkenberg
+L	13	1382TC102	Falkenberg	Falkenberg
+L	13	1383TB101	Bua	Varberg
+L	13	1383TB102	Getterön	Varberg
+L	13	1383TB103	Himle	Varberg
+L	13	1383TB104	Hunnestad	Varberg
+L	13	1383TB105	Kungsäter	Varberg
+L	13	1383TB106	Nordvära och Källstorp	Varberg
+L	13	1383TB108	Rolfstorp	Varberg
+L	13	1383TB109	Skällinge	Varberg
+L	13	1383TB110	Tofta	Varberg
+L	13	1383TB111	Torpa	Varberg
+L	13	1383TB115	Bläshammar och Trönningenäs	Varberg
+L	13	1383TB116	Tvååker	Varberg
+L	13	1383TB117	Tångaberg	Varberg
+L	13	1383TB118	Valinge	Varberg
+L	13	1383TB120	Veddige	Varberg
+L	13	1383TB121	Väröbacka	Varberg
+L	13	1383TB122	Årnäs	Varberg
+L	13	1383TB123	Åsby	Varberg
+L	13	1383TB149	Moarna	Varberg
+L	13	1383TB155	Ringhals, Skällåkra och Lingome	Varberg
+L	13	1383TC119	Varberg	Varberg
+L	13	1384TB101	Röda holme	Kungsbacka
+L	13	1384TB105	Buerås	Kungsbacka
+L	13	1384TB106	Fjärås kyrkby	Kungsbacka
+L	13	1384TB107	Fjärås station	Kungsbacka
+L	13	1384TB108	Frillesås	Kungsbacka, Varberg
+L	13	1384TB112	Halla Heberg	Kungsbacka
+L	13	1384TB113	Hjälm	Kungsbacka
+L	13	1384TB115	Kläppa	Kungsbacka
+L	13	1384TB119	Onsala	Kungsbacka
+L	13	1384TB122	Östra Hanhals och Torkelstorp	Kungsbacka
+L	13	1384TB123	Vallda	Kungsbacka
+L	13	1384TB126	Åsa	Kungsbacka
+L	13	1384TB127	Västra Hagen	Kungsbacka
+L	13	1384TB145	Dala	Kungsbacka
+L	13	1384TB164	Västra Hanhals	Kungsbacka
+L	13	1480TC108	Göteborg	Kungsbacka
+L	14	1401TB103	Eskilsby och Snugga	Härryda, Mark, Mölndal
+L	14	1401TB104	Hällingsjö	Härryda
+L	14	1401TB105	Hindås	Bollebygd, Härryda
+L	14	1401TB106	Härryda	Härryda
+L	14	1401TB107	Landvetter	Härryda
+L	14	1401TB109	Nya Långenäs	Härryda
+L	14	1401TB110	Rya	Härryda
+L	14	1401TB111	Rävlanda	Härryda
+L	14	1401TB112	Stora Bugärde	Härryda
+L	14	1401TC108	Mölnlycke och Öjersjö	Härryda, Mölndal, Partille
+L	14	1402TB101	Jonsered	Lerum, Partille
+L	14	1402TB102	Kåhög	Partille
+L	14	1407TB101	Björkö	Öckerö
+L	14	1407TB102	Fotö	Öckerö
+L	14	1407TB104	Hälsö	Öckerö
+L	14	1407TB106	Kalvsund	Öckerö
+L	14	1407TB107	Källö-Knippla	Öckerö
+L	14	1407TB108	Rörö	Öckerö
+L	14	1407TC109	Hönö och Öckerö	Öckerö
+L	14	1415TB102	Jörlanda	Stenungsund
+L	14	1415TB105	Stora Höga	Stenungsund
+L	14	1415TB106	Stenungsön	Stenungsund
+L	14	1415TB108	Svartehallen	Stenungsund
+L	14	1415TB109	Svenshögen	Stenungsund, Uddevalla
+L	14	1415TB110	Ucklum	Stenungsund
+L	14	1415TB111	Spekeröd	Stenungsund
+L	14	1415TB112	Ödsmål	Stenungsund
+L	14	1415TB135	Vulseröd, Skotthed och Tortorp	Stenungsund
+L	14	1415TC104	Stenungsund	Stenungsund
+L	14	1419TB101	Bleket och Klädesholmen	Tjörn
+L	14	1419TB102	Djupvik och Fagerfjäll	Tjörn
+L	14	1419TB104	Valsäng	Tjörn
+L	14	1419TB105	Kyrkesund	Tjörn
+L	14	1419TB106	Kållekärr	Tjörn
+L	14	1419TB107	Höviksnäs	Tjörn
+L	14	1419TB109	Rönnäng	Tjörn
+L	14	1419TB120	Olsby, Rösselvik, Gåre och Hede	Tjörn
+L	14	1419TC110	Skärhamn	Tjörn
+L	14	1421TB101	Ellös	Orust
+L	14	1421TB104	Höggeröd	Orust
+L	14	1421TB106	Svanesund	Orust
+L	14	1421TB108	Varekil	Orust
+L	14	1421TC102	Henån	Orust
+L	14	1427TB101	Bovallstrand	Sotenäs
+L	14	1427TB103	Hunnebostrand	Sotenäs
+L	14	1427TB105	Malmön	Sotenäs
+L	14	1427TC104	Smögen, Kungshamn och Väjern	Sotenäs
+L	14	1430TB101	Dingle	Munkedal
+L	14	1430TB102	Hedekas	Munkedal
+L	14	1430TB103	Hällevadsholm	Munkedal
+L	14	1430TB105	Torreby	Munkedal
+L	14	1430TC104	Munkedal	Munkedal
+L	14	1435TB101	Fjällbacka	Tanum
+L	14	1435TB102	Grebbestad	Tanum
+L	14	1435TB103	Hamburgsund	Tanum
+L	14	1435TB104	Rabbalshede	Tanum
+L	14	1435TB124	Östad	Tanum
+L	14	1435TC105	Tanumshede	Tanum
+L	14	1438TC101	Ed	Dals-Ed
+L	14	1439TB102	Högsäter	Färgelanda
+L	14	1439TB103	Stigen	Färgelanda
+L	14	1439TB104	Ödeborg	Färgelanda
+L	14	1439TC101	Färgelanda	Färgelanda
+L	14	1440TB101	Alvhem	Ale, Lilla Edet
+L	14	1440TB104	Skepplanda	Ale
+L	14	1440TB105	Surte	Ale
+L	14	1440TB106	Älvängen	Ale
+L	14	1440TC102	Nödinge-Nol	Ale
+L	14	1441TB102	Slätthult	Lerum
+L	14	1441TB103	Björboholm	Lerum
+L	14	1441TB105	Gråbo	Lerum
+L	14	1441TB108	Sjövik	Lerum
+L	14	1441TB109	Tollered	Alingsås, Lerum
+L	14	1441TB110	Öxeryd	Härryda, Lerum
+L	14	1441TB112	Ytterstad	Göteborg, Lerum
+L	14	1441TB130	Sandkullen och Sågarehagen	Lerum
+L	14	1441TC106	Lerum	Lerum
+L	14	1442TB101	Horla	Vårgårda
+L	14	1442TB103	Östadkulle	Vårgårda
+L	14	1442TC102	Vårgårda	Vårgårda
+L	14	1443TB102	Hultafors	Bollebygd
+L	14	1443TB103	Olsfors	Bollebygd
+L	14	1443TB104	Töllsjö	Bollebygd
+L	14	1443TB111	Dammkullen, Fjällastorp och Stenaskjum	Bollebygd
+L	14	1443TC101	Bollebygd	Bollebygd
+L	14	1444TC101	Grästorp	Grästorp
+L	14	1445TB101	Främmestad	Essunga
+L	14	1445TB102	Jonslund	Essunga
+L	14	1445TC103	Nossebro	Essunga
+L	14	1446TB101	Forsvik	Karlsborg
+L	14	1446TB103	Mölltorp	Karlsborg
+L	14	1446TB104	Undenäs	Karlsborg
+L	14	1446TC102	Karlsborg	Karlsborg
+L	14	1447TB103	Otterbäcken	Gullspång
+L	14	1447TC101	Gullspång	Gullspång
+L	14	1447TC102	Hova	Gullspång
+L	14	1452TB101	Ambjörnarp	Tranemo
+L	14	1452TB102	Dalstorp	Tranemo
+L	14	1452TB103	Grimsås	Tranemo
+L	14	1452TB104	Limmared	Tranemo
+L	14	1452TB105	Ljungsarp	Tranemo
+L	14	1452TB106	Länghem	Tranemo
+L	14	1452TB107	Rosenlund	Tranemo
+L	14	1452TB110	Uddebo	Tranemo
+L	14	1452TB113	Nittorp	Tranemo
+L	14	1452TC109	Tranemo	Tranemo
+L	14	1460TB102	Billingsfors	Bengtsfors
+L	14	1460TB103	Bäckefors	Bengtsfors
+L	14	1460TB104	Dals Långed	Bengtsfors
+L	14	1460TB105	Skåpafors	Bengtsfors
+L	14	1460TC101	Bengtsfors	Bengtsfors
+L	14	1461TB102	Dals Rostock	Mellerud
+L	14	1461TB104	Åsensbruk	Mellerud
+L	14	1461TC103	Mellerud	Mellerud
+L	14	1462TB101	Lilla Edet västra	Lilla Edet
+L	14	1462TB102	Göta	Lilla Edet
+L	14	1462TB103	Hjärtum	Lilla Edet
+L	14	1462TB105	Lödöse	Lilla Edet
+L	14	1462TB106	Nygård	Lilla Edet
+L	14	1462TB113	Groröd, Svenseröd, Torskog och Källeröd	Lilla Edet
+L	14	1462TB121	Kyrkeby, Ballabo och Ivarslund	Lilla Edet
+L	14	1462TC104	Lilla Edet	Lilla Edet
+L	14	1463TB101	Ubbhult norra	Härryda, Mark
+L	14	1463TB102	Berghem	Mark
+L	14	1463TB103	Björketorp	Mark
+L	14	1463TB104	Fritsla	Mark
+L	14	1463TB105	Horred	Mark
+L	14	1463TB106	Hyssna	Mark
+L	14	1463TB108	Rydal	Mark
+L	14	1463TB109	Sätila	Mark
+L	14	1463TB110	Torestorp	Mark
+L	14	1463TB111	Öxabäck	Mark
+L	14	1463TB133	Fotskäl	Mark
+L	14	1463TB137	Flygsnäs och Hägnen	Mark
+L	14	1463TC107	Kinna	Mark
+L	14	1465TB101	Hillared	Svenljunga
+L	14	1465TB102	Holsljunga	Svenljunga
+L	14	1465TB103	Mjöbäck	Svenljunga
+L	14	1465TB105	Sexdrega	Svenljunga
+L	14	1465TB107	Östra Frölunda	Svenljunga
+L	14	1465TB108	Överlida	Svenljunga
+L	14	1465TB114	Sandsjön och Sågbacken	Borås, Svenljunga
+L	14	1465TC106	Svenljunga	Svenljunga
+L	14	1466TB101	Ljung och Annelund	Herrljunga
+L	14	1466TC103	Herrljunga	Herrljunga
+L	14	1470TB101	Arentorp	Vara
+L	14	1470TB102	Emtunga	Vara
+L	14	1470TB104	Jung	Vara
+L	14	1470TB105	Kvänum	Vara
+L	14	1470TB106	Larv	Vara
+L	14	1470TB107	Stora Levene	Vara
+L	14	1470TB108	Tråvad	Vara
+L	14	1470TB110	Vedum	Vara
+L	14	1470TC109	Vara	Vara
+L	14	1471TB103	Hällekis	Götene
+L	14	1471TB104	Källby	Götene
+L	14	1471TB105	Lundsbrunn	Götene
+L	14	1471TB108	Källby norra	Götene
+L	14	1471TC102	Götene	Götene
+L	14	1472TB101	Fagersanna	Tibro
+L	14	1472TB104	Bråbacka	Tibro
+L	14	1472TC102	Tibro	Tibro
+L	14	1473TB101	Moholm	Töreboda
+L	14	1473TB103	Älgarås	Gullspång, Töreboda
+L	14	1473TC102	Töreboda	Töreboda
+L	14	1480TB101	Angered	Göteborg
+L	14	1480TB102	Asperö	Göteborg
+L	14	1480TB104	Brännö	Göteborg
+L	14	1480TB107	Nordöstra Göteborg	Ale, Göteborg
+L	14	1480TB113	Tumlehed	Göteborg
+L	14	1480TB115	Nolvik	Göteborg
+L	14	1480TB117	Olofstorp	Göteborg
+L	14	1480TB120	Stenared	Göteborg, Lerum
+L	14	1480TB121	Styrsö och Donsö	Göteborg
+L	14	1480TB122	Säve	Göteborg
+L	14	1480TB123	Vrångö	Göteborg
+L	14	1480TB164	Assmundtorp och Skändla	Göteborg
+L	14	1480TC108	Göteborg	Göteborg, Mölndal, Partille
+L	14	1481TB101	Hällesåker	Mölndal
+L	14	1481TB121	Östra Balltorp	Mölndal
+L	14	1481TB122	Björnåsen	Mölndal
+L	14	1481TB123	Västra Balltorp	Mölndal
+L	14	1482TB101	Diseröd	Kungälv
+L	14	1482TB102	Kyrkeby och Nereby	Kungälv
+L	14	1482TB104	Kode	Kungälv
+L	14	1482TB105	Kovikshamn och Åkerhög	Kungälv
+L	14	1482TB107	Kareby och Ringby	Kungälv
+L	14	1482TB108	Kärna	Kungälv
+L	14	1482TB109	Lundby och Rogstorp	Kungälv
+L	14	1482TB110	Marstrand	Kungälv
+L	14	1482TB111	Arvidsvik	Kungälv
+L	14	1482TB112	Risby	Kungälv
+L	14	1482TB113	Signehög och Norrmannebo	Kungälv, Lilla Edet
+L	14	1482TB114	Duvesjön	Kungälv
+L	14	1482TB115	Tjuvkil	Kungälv
+L	14	1482TB117	Ödsmål och Åsebyberg	Kungälv
+L	14	1482TB118	Rörtången och Ödsmåls mosse	Kungälv
+L	14	1482TB119	Aröd och Timmervik	Kungälv, Stenungsund
+L	14	1482TB123	Lycke och Bremnäs	Kungälv
+L	14	1482TB130	Banken, Löstorp och Rävsal	Kungälv
+L	14	1482TB133	Hålta och Vävra	Kungälv
+L	14	1482TC106	Kungälv	Göteborg, Kungälv
+L	14	1484TB101	Brastad	Lysekil
+L	14	1484TB103	Fiskebäckskil	Lysekil
+L	14	1484TB104	Grundsund	Lysekil
+L	14	1484TB109	Häggvall, Heden och Gåseberg	Lysekil
+L	14	1484TB116	Rixö och Ryk	Lysekil
+L	14	1484TC105	Lysekil	Lysekil
+L	14	1485TB101	Ammenäs	Uddevalla
+L	14	1485TB102	Fagerhult	Uddevalla
+L	14	1485TB104	Hogstorp	Uddevalla
+L	14	1485TB105	Kurveröd	Uddevalla
+L	14	1485TB106	Lanesund och Överby	Uddevalla
+L	14	1485TB107	Ljungskile	Uddevalla
+L	14	1485TB108	Strandskogen, Restenäs och Ulvesund	Uddevalla
+L	14	1485TB109	Smedseröd	Uddevalla
+L	14	1485TB112	Sjöskogen och Strand	Uddevalla
+L	14	1485TB113	Kristevik och Sundsandvik	Uddevalla
+L	14	1485TB114	Utby	Uddevalla
+L	14	1485TB115	Sundsstrand	Uddevalla
+L	14	1485TB117	Backa, Kamperöd, Berg och Skogen	Uddevalla
+L	14	1485TC111	Uddevalla	Uddevalla
+L	14	1486TB101	Kebal	Strömstad
+L	14	1486TB102	Skee	Strömstad
+L	14	1486TB115	Rossö	Strömstad
+L	14	1486TC103	Strömstad	Strömstad
+L	14	1487TB101	Katrinedal	Vänersborg
+L	14	1487TB102	Brålanda	Vänersborg
+L	14	1487TB103	Frändefors	Vänersborg
+L	14	1487TB104	Nordkroken	Vänersborg
+L	14	1487TB105	Vargön	Vänersborg
+L	14	1487TC106	Vänersborg	Vänersborg
+L	14	1488TB102	Sjuntorp	Trollhättan
+L	14	1488TB103	Velanda	Trollhättan
+L	14	1488TB106	Upphärad	Trollhättan
+L	14	1488TB107	Väne-Åsaka	Trollhättan
+L	14	1488TB112	Sjölanda	Trollhättan
+L	14	1488TC105	Trollhättan	Trollhättan, Vänersborg
+L	14	1489TB102	Långared	Alingsås
+L	14	1489TB103	Magra	Alingsås
+L	14	1489TB105	Färgens östra strand	Alingsås
+L	14	1489TB107	Gräfsnäs	Alingsås
+L	14	1489TB108	Hjälmared	Alingsås
+L	14	1489TB109	Ingared	Alingsås, Lerum
+L	14	1489TB111	Sollebrunn	Alingsås
+L	14	1489TB112	Stora Mellby	Alingsås
+L	14	1489TB113	Västerbodarna	Alingsås
+L	14	1489TC106	Alingsås	Alingsås
+L	14	1490TB101	Funningen och Bosnäs	Borås
+L	14	1490TB102	Aplared	Borås
+L	14	1490TB103	Borgstena	Borås
+L	14	1490TB105	Bredared	Borås
+L	14	1490TB106	Dalsjöfors	Borås
+L	14	1490TB107	Dannike	Borås
+L	14	1490TB108	Fristad	Borås
+L	14	1490TB110	Gånghester och Målsryd	Borås
+L	14	1490TB111	Hedared	Borås
+L	14	1490TB112	Kinnarumma	Borås
+L	14	1490TB114	Rydboholm	Borås
+L	14	1490TB115	Rångedala	Borås
+L	14	1490TB116	Sjömarken och Viared	Borås
+L	14	1490TB117	Sandhult	Borås
+L	14	1490TB120	Viskafors	Borås
+L	14	1490TB121	Äspered	Borås
+L	14	1490TB137	Svaneholm och Bogryd	Borås
+L	14	1490TB158	Sandared	Borås
+L	14	1490TC104	Borås	Borås
+L	14	1491TB101	Blidsberg	Ulricehamn
+L	14	1491TB102	Dalum	Ulricehamn
+L	14	1491TB103	Gällstad	Ulricehamn
+L	14	1491TB104	Hulu	Ulricehamn
+L	14	1491TB105	Hökerum	Ulricehamn
+L	14	1491TB106	Marbäck	Ulricehamn
+L	14	1491TB107	Nitta	Ulricehamn
+L	14	1491TB108	Rånnaväg	Ulricehamn
+L	14	1491TB109	Timmele	Ulricehamn
+L	14	1491TB110	Trädet	Ulricehamn
+L	14	1491TB112	Vegby	Ulricehamn
+L	14	1491TC111	Ulricehamn	Ulricehamn
+L	14	1492TB101	Fengersfors	Åmål
+L	14	1492TB102	Tösse	Åmål
+L	14	1492TC103	Åmål	Åmål
+L	14	1493TB101	Lugnås	Mariestad
+L	14	1493TB102	Lyrestad	Mariestad
+L	14	1493TB104	Sjötorp	Mariestad
+L	14	1493TB105	Ullervad	Mariestad
+L	14	1493TC103	Mariestad	Mariestad
+L	14	1494TB101	Lidköping norra	Lidköping
+L	14	1494TB102	Filsbäck	Götene, Lidköping
+L	14	1494TB103	Järpås	Lidköping
+L	14	1494TB106	Saleby	Lidköping
+L	14	1494TB109	Vinninga	Lidköping
+L	14	1494TB110	Örslösa	Lidköping
+L	14	1494TB127	Mellby	Lidköping
+L	14	1494TC104	Lidköping	Lidköping
+L	14	1495TB101	Ardala	Skara
+L	14	1495TB102	Axvall	Skara
+L	14	1495TB103	Eggby	Skara
+L	14	1495TB105	Varnhem	Skara
+L	14	1495TC104	Skara	Skara
+L	14	1496TB101	Igelstorp	Skövde
+L	14	1496TB102	Lerdala	Skövde
+L	14	1496TB103	Skultorp	Skövde
+L	14	1496TB105	Stöpen	Skövde
+L	14	1496TB106	Tidan	Skövde
+L	14	1496TB107	Timmersdala	Skövde
+L	14	1496TB108	Ulvåker	Skövde
+L	14	1496TB109	Väring	Skövde
+L	14	1496TB110	Värsås	Skövde
+L	14	1496TC104	Skövde	Skövde
+L	14	1497TB103	Korsberga	Hjo
+L	14	1497TC102	Hjo	Hjo
+L	14	1498TB101	Ekedalen	Tidaholm
+L	14	1498TB103	Madängsholm	Tidaholm
+L	14	1498TC104	Tidaholm	Tidaholm
+L	14	1499TB102	Floby	Falköping
+L	14	1499TB103	Gudhem	Falköping
+L	14	1499TB104	Kinnarp	Falköping
+L	14	1499TB105	Kättilstorp	Falköping
+L	14	1499TB106	Odensberg	Falköping
+L	14	1499TB107	Stenstorp	Falköping
+L	14	1499TB108	Torbjörntorp	Falköping
+L	14	1499TB109	Vartofta	Falköping
+L	14	1499TB110	Åsarp	Falköping
+L	14	1499TC101	Falköping	Falköping
+L	17	1715TB101	Fagerås	Kil
+L	17	1715TB103	Högboda	Kil
+L	17	1715TC102	Kil	Karlstad, Kil
+L	17	1730TB102	Eda Glasbruk	Eda
+L	17	1730TB103	Koppom	Eda
+L	17	1730TB104	Åmotfors	Arvika, Eda
+L	17	1730TC101	Charlottenberg	Eda
+L	17	1737TB104	Oleby	Torsby
+L	17	1737TB106	Sysslebäck	Torsby
+L	17	1737TC107	Torsby	Torsby
+L	17	1760TB101	Kyrksten	Storfors
+L	17	1760TC102	Storfors	Storfors
+L	17	1761TB101	Rud	Hammarö
+L	17	1761TB103	Tye	Hammarö
+L	17	1761TB104	Vidöåsen	Hammarö
+L	17	1761TC102	Skoghall	Hammarö
+L	17	1762TC101	Munkfors	Hagfors, Munkfors
+L	17	1763TB101	Deje	Forshaga
+L	17	1763TB102	Dyvelsten	Forshaga
+L	17	1763TC103	Forshaga	Forshaga
+L	17	1764TB103	Segmon	Grums
+L	17	1764TB104	Slottsbron	Grums
+L	17	1764TC102	Grums	Grums
+L	17	1765TB102	Töcksfors	Årjäng
+L	17	1765TC103	Årjäng	Årjäng
+L	17	1766TB101	Lysvik	Sunne
+L	17	1766TB102	Rottneros	Sunne
+L	17	1766TB104	Uddheden	Sunne
+L	17	1766TB105	Västra Ämtervik	Sunne
+L	17	1766TC103	Sunne	Sunne
+L	17	1780TB101	Alster	Karlstad
+L	17	1780TB104	Edsvalla	Karlstad
+L	17	1780TB105	Edsvalla Övre bruket	Karlstad
+L	17	1780TB107	Molkom	Karlstad
+L	17	1780TB108	Norsbron	Karlstad
+L	17	1780TB109	Älvåker och Råtorp	Karlstad
+L	17	1780TB110	Skattkärr	Karlstad
+L	17	1780TB111	Skåre	Karlstad
+L	17	1780TB112	Vallargärdet	Karlstad
+L	17	1780TB113	Vålberg	Grums, Karlstad
+L	17	1780TB114	Väse	Karlstad
+L	17	1780TC106	Karlstad	Karlstad
+L	17	1781TB101	Björneborg	Kristinehamn
+L	17	1781TB102	Bäckhammar	Kristinehamn
+L	17	1781TB105	Ölme	Kristinehamn
+L	17	1781TC103	Kristinehamn	Kristinehamn
+L	17	1782TB102	Lesjöfors	Filipstad
+L	17	1782TB104	Nykroppa	Filipstad
+L	17	1782TC101	Filipstad	Filipstad
+L	17	1783TB103	Geijersholm	Hagfors
+L	17	1783TB105	Ekshärad	Hagfors
+L	17	1783TB107	Råda	Hagfors
+L	17	1783TB108	Sunnemo	Hagfors
+L	17	1783TB109	Uddeholm	Hagfors
+L	17	1783TC104	Hagfors	Hagfors
+L	17	1784TB102	Edane	Arvika
+L	17	1784TB104	Gunnarskog	Arvika
+L	17	1784TB105	Jössefors	Arvika
+L	17	1784TB106	Klässbol	Arvika
+L	17	1784TB108	Sulvik	Arvika
+L	17	1784TC101	Arvika	Arvika
+L	17	1785TB102	Svanskog	Säffle
+L	17	1785TB104	Värmlandsbro	Säffle
+L	17	1785TC103	Säffle	Säffle
+L	18	0428TB104	Läppe	Örebro
+L	18	0583TB109	Västanvik	Askersund
+L	18	1814TB102	Gropen	Lekeberg
+L	18	1814TB104	Mullhyttan	Lekeberg
+L	18	1814TB105	Vintrosa	Lekeberg, Örebro
+L	18	1814TC101	Fjugesta	Lekeberg
+L	18	1860TB101	Finnerödja	Laxå
+L	18	1860TB102	Hasselfors	Laxå
+L	18	1860TC103	Laxå	Laxå
+L	18	1861TB102	Hjortkvarn	Hallsberg
+L	18	1861TB103	Pålsboda	Hallsberg
+L	18	1861TB104	Sköllersta	Hallsberg
+L	18	1861TB105	Vretstorp	Hallsberg
+L	18	1861TB106	Östansjö	Hallsberg
+L	18	1861TC101	Hallsberg	Hallsberg, Kumla
+L	18	1862TB102	Svartå	Degerfors
+L	18	1862TC101	Degerfors	Degerfors
+L	18	1863TB101	Grythyttan	Hällefors
+L	18	1863TC103	Hällefors	Hällefors
+L	18	1864TB104	Ställdalen	Ljusnarsberg
+L	18	1864TC102	Kopparberg	Ljusnarsberg
+L	18	1880TB101	Askersby	Örebro
+L	18	1880TB104	Ekeby-Almby	Örebro
+L	18	1880TB105	Garphyttan	Örebro
+L	18	1880TB106	Glanshammar	Örebro
+L	18	1880TB107	Hampetorp	Örebro
+L	18	1880TB108	Hovsta	Örebro
+L	18	1880TB110	Latorpsbruk	Örebro
+L	18	1880TB112	Norra Bro	Örebro
+L	18	1880TB114	Odensbacken	Örebro
+L	18	1880TB115	Stora Mellösa	Örebro
+L	18	1880TB116	Ölmbrotorp	Örebro
+L	18	1880TB133	Sjöboviken	Örebro
+L	18	1880TB146	Gällersta, Södra Bro och Gällerstafallen	Kumla, Örebro
+L	18	1880TB169	Runnaby	Örebro
+L	18	1880TC117	Örebro	Örebro
+L	18	1881TB101	Ekeby	Kumla
+L	18	1881TB105	Sannahed	Kumla
+L	18	1881TB106	Åbytorp	Kumla
+L	18	1881TC103	Kumla	Kumla
+L	18	1882TB102	Hammar	Askersund
+L	18	1882TB103	Olshammar	Askersund
+L	18	1882TB105	Sänna	Askersund
+L	18	1882TB106	Zinkgruvan	Askersund
+L	18	1882TB107	Åmmeberg	Askersund
+L	18	1882TB108	Åsbro	Askersund
+L	18	1882TC101	Askersund	Askersund
+L	18	1883TB102	Valåsen och Labbsand	Karlskoga
+L	18	1883TC101	Karlskoga	Karlskoga
+L	18	1884TB101	Gyttorp	Nora
+L	18	1884TB104	Striberg	Nora
+L	18	1884TB105	Ås	Nora
+L	18	1884TC102	Nora	Nora
+L	18	1885TB101	Fellingsbro	Lindesberg
+L	18	1885TB102	Frövi	Lindesberg
+L	18	1885TB103	Gusselby	Lindesberg
+L	18	1885TB106	Rockhammar	Lindesberg
+L	18	1885TB107	Storå	Lindesberg
+L	18	1885TB108	Stråssa	Lindesberg
+L	18	1885TB109	Vedevåg	Lindesberg
+L	18	1885TC104	Lindesberg	Lindesberg
+L	19	1904TB101	Riddarhyttan	Skinnskatteberg
+L	19	1904TC102	Skinnskatteberg	Skinnskatteberg
+L	19	1907TB101	Ramnäs	Surahammar
+L	19	1907TB103	Virsbo	Surahammar
+L	19	1907TC102	Surahammar	Surahammar
+L	19	1960TB102	Valskog	Kungsör
+L	19	1960TC101	Kungsör	Kungsör
+L	19	1961TB102	Kolbäck	Hallstahammar
+L	19	1961TB103	Strömsholm	Hallstahammar
+L	19	1961TB104	Sörstafors	Hallstahammar
+L	19	1961TB110	Södra Hallstahammar	Hallstahammar
+L	19	1961TB111	Västra Hallstahammar	Hallstahammar
+L	19	1961TC101	Hallstahammar	Hallstahammar
+L	19	1962TC101	Norberg	Norberg
+L	19	1980TB101	Kvicksund	Västerås
+L	19	1980TB102	Barkarö	Västerås
+L	19	1980TB103	Dingtuna	Västerås
+L	19	1980TB104	Enhagen-Ekbacken	Västerås
+L	19	1980TB106	Harkie	Västerås
+L	19	1980TB107	Lycksta	Västerås
+L	19	1980TB108	Kärsta och Bredsdal	Västerås
+L	19	1980TB109	Malmen	Västerås
+L	19	1980TB110	Munga	Västerås
+L	19	1980TB111	Skultuna	Västerås
+L	19	1980TB112	Tidö-Lindö	Västerås
+L	19	1980TB113	Tillberga	Västerås
+L	19	1980TB114	Tortuna	Västerås
+L	19	1980TB115	Irsta	Västerås
+L	19	1980TB117	Örtagården	Västerås
+L	19	1980TB120	Hustahöjden	Västerås
+L	19	1980TB126	Eriksbo	Västerås
+L	19	1980TC116	Västerås	Västerås
+L	19	1981TB102	Möklinta	Sala
+L	19	1981TB103	Ransta	Sala
+L	19	1981TB105	Salbohed	Sala
+L	19	1981TB106	Sätra Brunn	Sala
+L	19	1981TB107	Västerfärnebo	Sala
+L	19	1981TC104	Sala	Sala
+L	19	1982TB102	Hedkärra	Fagersta
+L	19	1982TC101	Fagersta	Fagersta
+L	19	1983TB101	Kolsva	Köping
+L	19	1983TB103	Munktorp	Köping
+L	19	1983TC102	Köping	Köping
+L	19	1984TB102	Götlunda	Arboga
+L	19	1984TB103	Medåker	Arboga
+L	19	1984TC101	Arboga	Arboga
+L	19	2084TC101	Avesta	Norberg
+L	20	2021TB101	Järna	Vansbro
+L	20	2021TB103	Heden och Skansbacken	Vansbro
+L	20	2021TB104	Skålö	Vansbro
+L	20	2021TB106	Äppelbo	Vansbro
+L	20	2021TC105	Vansbro	Vansbro
+L	20	2023TB101	Lima	Malung-Sälen
+L	20	2023TB102	Limedsforsen	Malung-Sälen
+L	20	2023TB104	Malungsfors	Malung-Sälen
+L	20	2023TB105	Sälen	Malung-Sälen
+L	20	2023TB106	Transtrand	Malung-Sälen
+L	20	2023TC103	Malung	Malung-Sälen
+L	20	2026TB101	Björbo	Gagnef
+L	20	2026TB102	Bäsna	Gagnef
+L	20	2026TB103	Floda / Dala-Floda	Gagnef
+L	20	2026TB105	Djurås	Gagnef
+L	20	2026TB107	Mockfjärd	Gagnef
+L	20	2026TB108	Sifferbo	Borlänge, Gagnef
+L	20	2026TB127	Västtjärna, Östtjärna och Bomsarvet	Gagnef
+L	20	2026TC106	Gagnef	Gagnef
+L	20	2029TB101	Alvik	Leksand
+L	20	2029TB102	Djura	Gagnef, Leksand
+L	20	2029TB103	Hjortnäs och Sunnanäng	Leksand
+L	20	2029TB104	Häradsbygden	Leksand
+L	20	2029TB105	Insjön	Leksand
+L	20	2029TB107	Siljansnäs	Leksand
+L	20	2029TB108	Tällberg	Leksand
+L	20	2029TB109	Västanvik	Leksand
+L	20	2029TC106	Leksand	Leksand
+L	20	2031TB101	Nittsjö, Sätra och Backa	Rättvik
+L	20	2031TB102	Boda	Rättvik
+L	20	2031TB103	Furudal	Rättvik
+L	20	2031TB104	Gulleråsen	Rättvik
+L	20	2031TB105	Nedre Gärdsjö	Rättvik
+L	20	2031TB108	Vikarbyn	Rättvik
+L	20	2031TC106	Rättvik	Rättvik
+L	20	2034TB102	Skattungbyn	Orsa
+L	20	2034TB111	Stackmora	Orsa
+L	20	2034TC101	Orsa	Mora, Orsa
+L	20	2039TB101	Brunnsberg	Älvdalen
+L	20	2039TB102	Evertsberg	Älvdalen
+L	20	2039TB103	Idre	Älvdalen
+L	20	2039TB105	Rot	Älvdalen
+L	20	2039TB106	Särna	Älvdalen
+L	20	2039TB108	Västermyckeläng	Älvdalen
+L	20	2039TB109	Åsen	Älvdalen
+L	20	2039TC110	Älvdalen	Älvdalen
+L	20	2061TB101	Gubbo	Smedjebacken
+L	20	2061TB102	Hagge	Smedjebacken
+L	20	2061TB104	Söderbärke	Smedjebacken
+L	20	2061TB105	Vad	Smedjebacken
+L	20	2061TC103	Smedjebacken	Smedjebacken
+L	20	2062TB102	Bonäs	Mora
+L	20	2062TB104	Gesunda	Mora
+L	20	2062TB106	Nusnäs	Mora
+L	20	2062TB107	Selja	Mora
+L	20	2062TB108	Sollerön	Mora
+L	20	2062TB110	Venjan	Mora
+L	20	2062TB111	Stenis och Vika	Mora
+L	20	2062TB112	Vinäs	Mora
+L	20	2062TB113	Våmhus	Mora
+L	20	2062TC105	Mora	Mora
+L	20	2080TB101	Aspeboda	Falun
+L	20	2080TB102	Bengtsheden	Falun
+L	20	2080TB103	Bjursås	Falun
+L	20	2080TB104	Karlsbyheden och Blixbo	Falun
+L	20	2080TB105	Gamla Berget och Korsgården	Falun
+L	20	2080TB106	Danholn	Falun
+L	20	2080TB107	Enviken, Linghed och Yttertänger	Falun
+L	20	2080TB109	Grycksbo	Falun
+L	20	2080TB114	Sundborn	Falun
+L	20	2080TB115	Svärdsjö	Falun
+L	20	2080TB116	Sågmyra	Falun
+L	20	2080TB117	Toftbyn	Falun
+L	20	2080TB118	Vika	Falun
+L	20	2080TB119	Övertänger	Falun
+L	20	2080TB175	Österå, Uggelviken och Hökviken	Falun
+L	20	2080TC108	Falun	Falun
+L	20	2081TB102	Halvarsgårdarna	Borlänge
+L	20	2081TB104	Norr Amsberg	Borlänge
+L	20	2081TB105	Ornäs	Borlänge
+L	20	2081TB106	Repbäcken	Borlänge
+L	20	2081TB108	Torsång	Borlänge
+L	20	2081TC101	Borlänge	Borlänge
+L	20	2082TB101	Enbacka, Mora och Naglarby	Säter
+L	20	2082TB106	Solvarbo	Säter
+L	20	2082TB107	Skedvi kyrkby	Säter
+L	20	2082TB114	Bispberg	Säter
+L	20	2082TC108	Säter	Säter
+L	20	2083TB101	Husby	Hedemora
+L	20	2083TB102	Garpenberg	Hedemora
+L	20	2083TB104	Långshyttan	Hedemora
+L	20	2083TB105	Vikmanshyttan	Hedemora
+L	20	2083TB106	Västerby	Hedemora
+L	20	2083TC103	Hedemora	Hedemora
+L	20	2084TB102	Folkärna	Avesta
+L	20	2084TB103	Fors	Avesta
+L	20	2084TB104	Horndal	Avesta
+L	20	2084TB106	Nordanö	Avesta
+L	20	2084TC101	Avesta	Avesta
+L	20	2085TB101	Blötberget	Ludvika
+L	20	2085TB102	Fredriksberg västra	Ludvika
+L	20	2085TB103	Fredriksberg östra	Ludvika
+L	20	2085TB104	Gonäs	Ludvika
+L	20	2085TB106	Grängesberg västra	Ludvika
+L	20	2085TB107	Grängesberg	Ludvika
+L	20	2085TB108	Håksberg	Ludvika
+L	20	2085TB111	Nyhammar	Ludvika
+L	20	2085TB112	Saxdalen	Ludvika
+L	20	2085TB113	Sunnansjö	Ludvika
+L	20	2085TB114	Sörvik	Ludvika
+L	20	2085TB115	Norrbo och Västansjö	Ludvika
+L	20	2085TB116	Persbo	Ludvika, Smedjebacken
+L	20	2085TB128	Laggarudden	Ludvika
+L	20	2085TC110	Ludvika	Ludvika, Smedjebacken
+L	21	0319TC103	Skutskär	Gävle
+L	21	2101TB102	Lingbo	Ockelbo
+L	21	2101TB104	Åmot	Ockelbo
+L	21	2101TC103	Ockelbo	Ockelbo
+L	21	2104TB102	Robertsholm	Hofors
+L	21	2104TB103	Torsåker	Hofors
+L	21	2104TC101	Hofors	Hofors
+L	21	2121TB101	Alfta	Ovanåker
+L	21	2121TB103	Knåda	Ovanåker
+L	21	2121TB105	Roteberg	Ovanåker
+L	21	2121TB106	Runemo	Ovanåker
+L	21	2121TB107	Viksjöfors	Ovanåker
+L	21	2121TC102	Edsbyn	Ovanåker
+L	21	2132TB102	Gnarp	Nordanstig
+L	21	2132TB103	Harmånger	Nordanstig
+L	21	2132TB105	Ilsbo	Nordanstig
+L	21	2132TB106	Jättendal	Nordanstig
+L	21	2132TB107	Hassela	Nordanstig
+L	21	2132TB108	Stocka	Nordanstig
+L	21	2132TB109	Strömsbruk	Nordanstig
+L	21	2132TC101	Bergsjö	Nordanstig
+L	21	2161TB101	Färila	Ljusdal
+L	21	2161TB104	Järvsö	Ljusdal
+L	21	2161TB106	Lillhaga	Ljusdal
+L	21	2161TB108	Los	Ljusdal
+L	21	2161TB112	Tallåsen	Ljusdal
+L	21	2161TC107	Ljusdal	Ljusdal
+L	21	2180TB101	Berg	Gävle
+L	21	2180TB102	Bergby	Gävle
+L	21	2180TB103	Björke	Gävle
+L	21	2180TB105	Forsby	Gävle
+L	21	2180TB106	Forsbacka	Gävle
+L	21	2180TB107	Furuvik	Gävle
+L	21	2180TB111	Hedesunda	Gävle
+L	21	2180TB113	Lund	Gävle
+L	21	2180TB115	Norrsundet	Gävle
+L	21	2180TB116	Sälgsjön	Gävle
+L	21	2180TB118	Trödje	Gävle
+L	21	2180TB120	Harkskär och Utvalnäs	Gävle
+L	21	2180TB121	Åbyggeby	Gävle
+L	21	2180TB122	Överhärde	Gävle
+L	21	2180TC108	Gävle	Gävle
+L	21	2181TB101	Backberg och Norrberg	Sandviken
+L	21	2181TB103	Hammarby	Sandviken
+L	21	2181TB104	Hillsta och Se	Sandviken
+L	21	2181TB105	Jäderfors	Sandviken
+L	21	2181TB106	Järbo	Sandviken
+L	21	2181TB107	Kungsgården	Sandviken
+L	21	2181TB109	Storvik	Sandviken
+L	21	2181TB110	Västerberg	Sandviken
+L	21	2181TB111	Årsunda	Sandviken
+L	21	2181TB112	Åshammar	Sandviken
+L	21	2181TB113	Österfärnebo	Sandviken
+L	21	2181TB141	Östanå	Sandviken
+L	21	2181TC108	Sandviken	Sandviken
+L	21	2182TB101	Bergvik	Söderhamn
+L	21	2182TB102	Ljusne	Söderhamn
+L	21	2182TB103	Marmaverken	Söderhamn
+L	21	2182TB104	Marmaskogen	Söderhamn
+L	21	2182TB105	Mohed	Söderhamn
+L	21	2182TB106	Sandarne	Söderhamn
+L	21	2182TB110	Trönö	Söderhamn
+L	21	2182TB111	Vallvik	Söderhamn
+L	21	2182TB112	Vannsätter	Söderhamn
+L	21	2182TB129	Klapparvik, Malenedal och Källvik	Söderhamn
+L	21	2182TC109	Söderhamn	Söderhamn
+L	21	2183TB101	Arbrå	Bollnäs
+L	21	2183TB103	Freluga	Bollnäs
+L	21	2183TB105	Kilafors	Bollnäs
+L	21	2183TB106	Lottefors	Bollnäs
+L	21	2183TB107	Rengsjö	Bollnäs
+L	21	2183TB108	Segersta	Bollnäs
+L	21	2183TB109	Sibo	Bollnäs
+L	21	2183TB110	Vallsta	Bollnäs
+L	21	2183TC102	Bollnäs	Bollnäs
+L	21	2184TB101	Delsbo	Hudiksvall
+L	21	2184TB102	Enånger	Hudiksvall
+L	21	2184TB104	Friggesund	Hudiksvall
+L	21	2184TB106	Edsta	Hudiksvall
+L	21	2184TB108	Iggesund	Hudiksvall
+L	21	2184TB110	Njutånger	Hudiksvall
+L	21	2184TB111	Näsviken	Hudiksvall
+L	21	2184TB112	Sörforsa	Hudiksvall
+L	21	2184TB142	Tomta, Näsbyn och Hagen	Hudiksvall
+L	21	2184TC105	Hudiksvall	Hudiksvall
+L	22	2260TB101	Alby	Ånge
+L	22	2260TB103	Ljungaverk och Fränsta	Ånge
+L	22	2260TB105	Torpshammar	Ånge
+L	22	2260TC106	Ånge	Ånge
+L	22	2262TB105	Söråker	Timrå
+L	22	2280TB103	Ramvik	Härnösand
+L	22	2280TB105	Älandsbro	Härnösand
+L	22	2280TB111	Utansjö	Härnösand
+L	22	2280TC101	Härnösand	Härnösand
+L	22	2281TB101	Klingsta och Allsta	Sundsvall
+L	22	2281TB102	Vi	Sundsvall
+L	22	2281TB108	Hartungviken och Spikarna	Sundsvall
+L	22	2281TB109	Hovid	Sundsvall
+L	22	2281TB110	Indal	Sundsvall
+L	22	2281TB113	Kovland	Sundsvall
+L	22	2281TB114	Kvissleby	Sundsvall
+L	22	2281TB116	Liden	Sundsvall
+L	22	2281TB117	Lucksta	Sundsvall
+L	22	2281TB118	Matfors	Sundsvall
+L	22	2281TB119	Nedansjö	Sundsvall
+L	22	2281TB120	Njurundabommen	Sundsvall
+L	22	2281TB121	Selånger	Sundsvall
+L	22	2281TB122	Vikarbodarna och Skatan	Sundsvall
+L	22	2281TB124	Stockvik	Sundsvall
+L	22	2281TB125	Stöde	Sundsvall
+L	22	2281TB128	Svartvik	Sundsvall
+L	22	2281TB129	Viforsen och Tunbyn	Sundsvall
+L	22	2281TB131	Vattjom	Sundsvall
+L	22	2281TB170	Ås, Slädaviken och Bullås	Sundsvall
+L	22	2281TC127	Sundsvall och Timrå	Sundsvall, Timrå
+L	22	2282TB101	Bollstabruk	Kramfors
+L	22	2282TB102	Docksta	Kramfors
+L	22	2282TB105	Klockestrand	Kramfors
+L	22	2282TB108	Lugnvik	Kramfors
+L	22	2282TB109	Lunde	Kramfors
+L	22	2282TB111	Nordingrå	Kramfors
+L	22	2282TB112	Nyland	Kramfors
+L	22	2282TB113	Sandslån	Kramfors
+L	22	2282TB117	Ullånger	Kramfors
+L	22	2282TC106	Kramfors	Kramfors
+L	22	2283TB102	Junsele	Sollefteå
+L	22	2283TB103	Långsele	Sollefteå
+L	22	2283TB104	Näsåker	Sollefteå
+L	22	2283TB105	Ramsele	Sollefteå
+L	22	2283TC107	Sollefteå	Sollefteå
+L	22	2284TB102	Billsta	Örnsköldsvik
+L	22	2284TB103	Bjästa	Örnsköldsvik
+L	22	2284TB104	Björna	Örnsköldsvik
+L	22	2284TB105	Bredbyn	Örnsköldsvik
+L	22	2284TB106	Gideå	Örnsköldsvik
+L	22	2284TB108	Gottne	Örnsköldsvik
+L	22	2284TB109	Husum	Örnsköldsvik
+L	22	2284TB110	Köpmanholmen	Örnsköldsvik
+L	22	2284TB112	Mellansel	Örnsköldsvik
+L	22	2284TB113	Moliden	Örnsköldsvik
+L	22	2284TB114	Sidensjö	Örnsköldsvik
+L	22	2284TB119	Åmynnet	Örnsköldsvik
+L	22	2284TC120	Örnsköldsvik	Örnsköldsvik
+L	23	2303TB101	Östra Bispgården	Ragunda
+L	23	2303TB102	Västra Bispgården	Ragunda
+L	23	2303TB104	Stugun	Ragunda
+L	23	2303TC103	Hammarstrand	Ragunda
+L	23	2305TB102	Gällö	Bräcke
+L	23	2305TB103	Kälarne	Bräcke
+L	23	2305TB104	Pilgrimstad	Bräcke
+L	23	2305TC101	Bräcke	Bräcke
+L	23	2309TB101	Aspås	Krokom
+L	23	2309TB102	Åssjöns norra strand	Krokom
+L	23	2309TB103	Dvärsätt	Krokom
+L	23	2309TB104	Föllinge	Krokom
+L	23	2309TB105	Hissmofors	Krokom
+L	23	2309TB108	Nälden	Krokom
+L	23	2309TB109	Trångsviken	Krokom
+L	23	2309TB110	Vaplan	Krokom
+L	23	2309TB112	Ås	Krokom
+L	23	2309TB113	Änge	Krokom
+L	23	2309TB121	Rödön	Krokom
+L	23	2309TB130	Kaxås	Krokom
+L	23	2309TC107	Krokom	Krokom
+L	23	2313TB101	Backe	Strömsund
+L	23	2313TB102	Gäddede	Strömsund
+L	23	2313TB103	Hammerdal	Strömsund
+L	23	2313TB104	Hoting	Strömsund
+L	23	2313TB106	Näsviken	Strömsund
+L	23	2313TB107	Rossön	Strömsund
+L	23	2313TC108	Strömsund	Strömsund
+L	23	2321TB101	Björnänge	Åre
+L	23	2321TB103	Hallen	Åre
+L	23	2321TB105	Mörsil	Åre
+L	23	2321TB106	Undersåker	Åre
+L	23	2321TB107	Åre	Åre
+L	23	2321TB119	Hålland	Åre
+L	23	2321TC104	Järpen	Åre
+L	23	2326TB101	Hackås	Berg
+L	23	2326TB103	Klövsjö	Berg
+L	23	2326TB104	Myrviken	Berg
+L	23	2326TB108	Åsarne	Berg
+L	23	2326TC107	Svenstavik	Berg
+L	23	2361TB101	Funäsdalen	Härjedalen
+L	23	2361TB102	Hede	Härjedalen
+L	23	2361TB103	Lillhärdal	Härjedalen
+L	23	2361TB104	Norr-Hede	Härjedalen
+L	23	2361TB106	Ulvkälla	Härjedalen
+L	23	2361TB107	Vemdalen	Härjedalen
+L	23	2361TB108	Ytterhogdal	Härjedalen
+L	23	2361TB114	Bruksvallarna/Våålleh	Härjedalen
+L	23	2361TC105	Sveg	Härjedalen
+L	23	2380TB102	Fåker, Ålsta och Månsta	Östersund
+L	23	2380TB103	Hara	Östersund
+L	23	2380TB104	Häggenås	Östersund
+L	23	2380TB106	Lit	Östersund
+L	23	2380TB107	Marieby	Östersund
+L	23	2380TB108	Målsta, Genvalla och Fillsta	Östersund
+L	23	2380TB110	Orrviken	Östersund
+L	23	2380TB112	Tandsbyn	Östersund
+L	23	2380TB113	Ängsmon	Östersund
+L	23	2380TB148	Slandrom	Östersund
+L	23	2380TC114	Östersund	Krokom, Östersund
+L	24	2401TB102	Lögdeå	Nordmaling
+L	24	2401TB104	Rundvik	Nordmaling
+L	24	2401TC103	Nordmaling	Nordmaling
+L	24	2403TC101	Bjurholm	Bjurholm
+L	24	2404TB102	Hällnäs	Vindeln
+L	24	2404TB103	Tvärålund	Vindeln
+L	24	2404TC104	Vindeln	Vindeln
+L	24	2409TB101	Bygdeå	Robertsfors
+L	24	2409TB103	Ånäset	Robertsfors
+L	24	2409TC102	Robertsfors	Robertsfors
+L	24	2417TB101	Bastuträsk	Norsjö
+L	24	2417TC102	Norsjö	Norsjö
+L	24	2418TC102	Malå	Malå
+L	24	2421TB102	Hemavan/Bierke	Storuman
+L	24	2421TB103	Stensele	Storuman
+L	24	2421TB105	Tärnaby	Storuman
+L	24	2421TC104	Storuman	Storuman
+L	24	2422TC103	Sorsele	Sorsele
+L	24	2425TC101	Dorotea	Dorotea
+L	24	2460TB102	Vännäsby	Vännäs
+L	24	2460TC101	Vännäs	Vännäs
+L	24	2462TC103	Vilhelmina	Vilhelmina
+L	24	2463TC102	Åsele	Åsele
+L	24	2480TB101	Botsmark	Umeå
+L	24	2480TB102	Brännäset och Boviken	Umeå
+L	24	2480TB103	Brännland	Umeå
+L	24	2480TB104	Bullmark	Umeå
+L	24	2480TB105	Flurkmark	Umeå
+L	24	2480TB106	Hissjön	Umeå
+L	24	2480TB107	Holmsund	Umeå
+L	24	2480TB108	Hörnefors	Umeå
+L	24	2480TB109	Innertavle	Umeå
+L	24	2480TB110	Norrmjöle	Umeå
+L	24	2480TB111	Obbola	Umeå
+L	24	2480TB112	Röbäck	Umeå
+L	24	2480TB113	Stöcke	Umeå
+L	24	2480TB114	Stöcksjö	Umeå
+L	24	2480TB115	Sävar	Umeå
+L	24	2480TB116	Sörfors	Umeå
+L	24	2480TB117	Sörmjöle	Umeå
+L	24	2480TB118	Tavelsjö	Umeå
+L	24	2480TB120	Täfteå	Umeå
+L	24	2480TB121	Ersmark	Umeå
+L	24	2480TB124	Yttersjö	Umeå
+L	24	2480TB125	Överboda	Umeå
+L	24	2480TB146	Degernäs	Umeå
+L	24	2480TB149	Djäkneböle	Umeå
+L	24	2480TB161	Kassjö	Umeå
+L	24	2480TB174	Svedjan	Umeå
+L	24	2480TB175	Skravelsjö	Umeå
+L	24	2480TB176	Ström	Umeå
+L	24	2480TC122	Umeå	Umeå
+L	24	2481TB101	Hedlunda	Lycksele
+L	24	2481TB104	Rusksele	Lycksele
+L	24	2481TC103	Lycksele	Lycksele
+L	24	2482TB102	Boliden	Skellefteå
+L	24	2482TB103	Bureå	Skellefteå
+L	24	2482TB104	Burträsk	Skellefteå
+L	24	2482TB105	Bygdsiljum	Skellefteå
+L	24	2482TB106	Byske	Skellefteå
+L	24	2482TB107	Ersmark	Skellefteå
+L	24	2482TB109	Jörn	Skellefteå
+L	24	2482TB110	Klutmark	Skellefteå
+L	24	2482TB111	Kusmark	Skellefteå
+L	24	2482TB112	Kåge	Skellefteå
+L	24	2482TB113	Lövånger	Skellefteå
+L	24	2482TB114	Medle	Skellefteå
+L	24	2482TB115	Myckle	Skellefteå
+L	24	2482TB116	Ostvik	Skellefteå
+L	24	2482TB117	Skelleftehamn	Skellefteå
+L	24	2482TB118	Ursviken	Skellefteå
+L	24	2482TB120	Drängsmark	Skellefteå
+L	24	2482TB121	Södra Bergsbyn och Stackgrönnan	Skellefteå
+L	24	2482TB122	Örviken	Skellefteå
+L	24	2482TB137	Boviken	Skellefteå
+L	24	2482TB141	Frostkåge	Skellefteå
+L	24	2482TC119	Skellefteå	Skellefteå
+L	25	2505TB102	Glommersträsk	Arvidsjaur
+L	25	2505TC101	Arvidsjaur	Arvidsjaur
+L	25	2506TC101	Arjeplog	Arjeplog
+L	25	2510TB103	Porjus	Jokkmokk
+L	25	2510TB104	Vuollerim	Jokkmokk
+L	25	2510TC101	Jokkmokk	Jokkmokk
+L	25	2513TB102	Svartbyn	Överkalix
+L	25	2513TB103	Tallvik	Överkalix
+L	25	2513TC105	Överkalix	Överkalix
+L	25	2514TB101	Bredviken	Kalix
+L	25	2514TB103	Gammelgården	Kalix
+L	25	2514TB107	Pålänge	Kalix
+L	25	2514TB108	Risögrund	Kalix
+L	25	2514TB110	Sangis	Kalix
+L	25	2514TB111	Töre	Kalix
+L	25	2514TB112	Nyborg	Kalix
+L	25	2514TC104	Kalix	Kalix
+L	25	2518TB101	Hedenäset	Övertorneå
+L	25	2518TB102	Juoksengi	Övertorneå
+L	25	2518TC105	Övertorneå	Övertorneå
+L	25	2521TB101	Junosuando	Pajala
+L	25	2521TB102	Kangos	Pajala
+L	25	2521TB103	Korpilombolo	Pajala
+L	25	2521TC104	Pajala	Pajala
+L	25	2523TB102	Hakkas	Gällivare
+L	25	2523TB103	Koskullskulle	Gällivare
+L	25	2523TB104	Malmberget östra	Gällivare
+L	25	2523TB105	Malmberget västra	Gällivare
+L	25	2523TB111	Tjautjas/Cavccas	Gällivare
+L	25	2523TC101	Gällivare	Gällivare
+L	25	2560TB101	Korsträsk	Älvsbyn
+L	25	2560TB102	Vidsel	Älvsbyn
+L	25	2560TB103	Vistträsk	Älvsbyn
+L	25	2560TC104	Älvsbyn	Älvsbyn
+L	25	2580TB102	Antnäs	Luleå
+L	25	2580TB103	Avan	Luleå
+L	25	2580TB104	Bensbyn	Luleå
+L	25	2580TB105	Bergnäset	Luleå
+L	25	2580TB107	Brändön	Luleå
+L	25	2580TB108	Bälinge	Luleå
+L	25	2580TB109	Ersnäs	Luleå
+L	25	2580TB110	Gammelstaden	Luleå
+L	25	2580TB112	Kallax	Luleå
+L	25	2580TB114	Klöverträsk	Luleå
+L	25	2580TB116	Måttsund	Luleå
+L	25	2580TB118	Persön	Luleå
+L	25	2580TB119	Rutvik	Luleå
+L	25	2580TB120	Råneå	Luleå
+L	25	2580TB121	Sundom	Luleå
+L	25	2580TB122	Hällbacken och Sinksundet	Luleå
+L	25	2580TB123	Södra Sunderbyn	Luleå
+L	25	2580TC115	Luleå	Luleå
+L	25	2581TB101	Bergsviken	Piteå
+L	25	2581TB102	Blåsmark	Piteå
+L	25	2581TB103	Böle	Piteå
+L	25	2581TB105	Hemmingsmark	Piteå
+L	25	2581TB106	Hortlax	Piteå
+L	25	2581TB107	Jävre	Piteå
+L	25	2581TB108	Kopparnäs	Piteå
+L	25	2581TB109	Lillpite	Piteå
+L	25	2581TB111	Norrfjärden	Piteå
+L	25	2581TB113	Roknäs	Piteå
+L	25	2581TB114	Rosvik	Piteå
+L	25	2581TB116	Sjulsmark	Piteå
+L	25	2581TB118	Svensbyn	Piteå
+L	25	2581TC112	Piteå	Piteå
+L	25	2582TB105	Harads	Boden
+L	25	2582TB107	Sävast	Boden
+L	25	2582TB109	Trångforsen och Heden	Boden
+L	25	2582TB110	Unbyn	Boden
+L	25	2582TB111	Vittjärv	Boden
+L	25	2582TB121	Norra Bredåker	Boden
+L	25	2582TC102	Boden	Boden
+L	25	2583TB104	Nikkala	Haparanda
+L	25	2583TB105	Seskarö	Haparanda
+L	25	2583TC101	Haparanda	Haparanda
+L	25	2584TB101	Jukkasjärvi	Kiruna
+L	25	2584TB102	Karesuando	Kiruna
+L	25	2584TB104	Kuttainen	Kiruna
+L	25	2584TB105	Svappavaara	Kiruna
+L	25	2584TB107	Vittangi	Kiruna
+L	25	2584TC103	Kiruna	Kiruna
+A	01	0117TB113	Spånlöt	Österåker	0117TC112
+A	01	0117TB154	Näs	Österåker	0117TB105
+A	01	0120TB101	Björnömalmen och Klacknäset	Värmdö	0120TB115
+A	01	0120TB103	Brunn	Värmdö	0120TB108
+A	01	0120TB138	Västra Älvsala	Värmdö	0120TB126
+A	01	0136TB102	Jordbro	Haninge	0136TB106
+A	01	0139TB102	Brunna	Upplands-Bro	0139TC104
+A	03	0380TB106	Bärby	Uppsala	0380TB109
+A	06	0683TB117	Ekenhaga	Värnamo	0683TC110
+A	07	0765TB105	Liatorp	Älmhult	0765TB102
+A	09	0980TB103	Norra Visby	Gotland	0980TC119
+A	12	1267TB101	Jularp och Sjunnerup	Höör	1267TC103
+A	12	1278TB106	Östra Karup	Båstad	1278TC101
+A	12	1280TB112	Vintrie	Malmö	1280TC106
+A	12	1281TB109	Vallkärra	Lund	1281TC105
+A	12	1286TB103	Hedeskoga	Ystad	1286TC110
+A	13	1384TC117	Kungsbacka	Kungsbacka	1480TC108
+A	14	1402TB103	Öjersjö	Partille	1401TC108
+A	14	1480TB103	Björlanda	Göteborg	1480TC108
+A	14	1480TB112	Låssby	Göteborg	1480TC108
+A	14	1480TB116	Torslanda	Göteborg	1480TC108
+A	14	1489TB104	Hästeryd och Ryd	Alingsås	1489TB109
+A	14	1490TB109	Frufällan	Borås	1490TC104
+A	14	1490TB135	Funningen	Borås	1490TB101
+A	17	1715TB104	Östra Stenåsen	Kil	1715TC102
+A	20	2082TB125	Naglarby, Lisselhaga och Storhaga	Säter	2082TB101
+A	21	2180TB119	Valbo	Gävle	2180TC108
+A	22	2262TB101	Bergeforsen	Timrå	2281TC127
+A	22	2262TC106	Timrå	Timrå	2281TC127
+A	23	2380TB105	Lunne	Östersund	2380TC114
+A	25	2523TB129	Repisvaara	Gällivare	2523TC101
+A	25	2581TB128	Övermarken, Skatan och Maran	Piteå	2581TB106

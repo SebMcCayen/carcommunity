@@ -5628,6 +5628,40 @@
         }
       }
     },
+    "clubs.chooseCounty": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Välj län"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose county"
+          }
+        }
+      }
+    },
+    "clubs.chooseCountyFirst": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Välj län först"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a county first"
+          }
+        }
+      }
+    },
     "clubs.chooseEvent": {
       "extractionState": "manual",
       "localizations": {
@@ -5641,6 +5675,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choose an event"
+          }
+        }
+      }
+    },
+    "clubs.chooseLocality": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Välj ort"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose locality"
           }
         }
       }
@@ -5743,6 +5794,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "You must wait 24 hours after leaving or being removed."
+          }
+        }
+      }
+    },
+    "clubs.county": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Län"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "County"
           }
         }
       }
@@ -6121,6 +6189,23 @@
         }
       }
     },
+    "clubs.localityPartOf": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ingår i %1$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Part of %1$@"
+          }
+        }
+      }
+    },
     "clubs.location": {
       "extractionState": "manual",
       "localizations": {
@@ -6134,6 +6219,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Location"
+          }
+        }
+      }
+    },
+    "clubs.locationCatalogError": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det gick inte att läsa in orterna. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not load localities. Try again."
+          }
+        }
+      }
+    },
+    "clubs.locationLoading": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Läser in orter…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading localities…"
           }
         }
       }
