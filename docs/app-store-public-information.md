@@ -15,7 +15,8 @@ before merge; the draft status is intentional, even with green checks.
 
 Before publishing, the service operator must:
 
-1. Supply legal operator name, public service/contact address and any organisation
+1. The owner selected **Kungsbacka Car Community** as the public operator name.
+   Confirm its legal form, public service/contact address and any organisation
    information, and approve the published contact mailbox.
 2. Confirm legal bases, recipients/contracts, international-transfer safeguards,
    precise retention periods and legal reasons for exceptions to account erasure.

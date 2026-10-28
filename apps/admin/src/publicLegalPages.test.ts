@@ -1,6 +1,6 @@
+/// <reference types="node" />
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
 const publicRoot = resolve(import.meta.dirname, '../public');
@@ -11,7 +11,7 @@ describe('public app information', () => {
   for (const route of ['privacy', 'terms', 'support']) {
     it(`${route} is readable without JavaScript, authentication or remote assets`, () => {
       const html = readFileSync(resolve(publicRoot, route, 'index.html'), 'utf8');
-      const { document } = new JSDOM(html).window;
+      const document = new DOMParser().parseFromString(html, 'text/html');
       expect(document.documentElement.lang).toBe('sv');
       expect(document.querySelector('meta[name="viewport"]')?.getAttribute('content')).toContain(
         'width=device-width',
@@ -43,8 +43,10 @@ describe('public app information', () => {
 
   it('keeps the unresolved owner decisions explicit until reviewed', () => {
     for (const route of ['privacy', 'terms', 'support']) {
-      const { document } = new JSDOM(readFileSync(resolve(publicRoot, route, 'index.html'), 'utf8'))
-        .window;
+      const document = new DOMParser().parseFromString(
+        readFileSync(resolve(publicRoot, route, 'index.html'), 'utf8'),
+        'text/html',
+      );
       expect(document.querySelector('.draft')?.textContent).toContain('Pre-release draft');
       expect(document.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe(
         'noindex',
