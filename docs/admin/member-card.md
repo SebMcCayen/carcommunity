@@ -6,6 +6,8 @@ Overview shows available latest-login data and explicitly says that login freque
 
 The access badge requires both completed product initialization and rollout readiness before displaying Active. An admin read never initializes the target account. Missing metadata is shown as unverified rather than an inferred absence of restrictions.
 
+The Points tab reads the authoritative balance from the same first ledger page, avoiding a second wallet read and any cache fallback. Successful adjustments immediately use the backend-confirmed balance and refresh the ledger; earlier in-flight balance reads cannot overwrite that result.
+
 Reviewed dialogs center within the viewport, constrain and scroll their contents, keep field labels on separate rows, and return keyboard focus to the triggering control after cancellation.
 
 Profile separates name changes from advanced account/role controls. Account deletion still affects the shared Firebase identity and therefore explicitly explains its possible Driver impact. Access decisions remain CarCommunity-only. Existing typed-name/reason confirmation and backend deletion protections are preserved.

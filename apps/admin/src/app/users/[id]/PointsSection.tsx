@@ -21,7 +21,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useCursorHistory } from '@/hooks/useCursorHistory';
 import { HistoryPager } from '@/components/ui/HistoryPager';
 import {
-  getAdminUserPointsBalance,
   getAdminUserPointsLedger,
   applyAdminPointsAdjustment,
   type PointsBalanceResponse,
@@ -59,14 +58,35 @@ export function UserPointsSection({ userId, actorUid, canAdjust = true }: UserPo
   const [balance, setBalance] = useState<PointsBalanceResponse | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(true);
   const [balanceError, setBalanceError] = useState<string | null>(null);
+  const balanceRequest = useRef(0);
 
   // ---------------------------------------------------------------------------
   // Ledger state
   // ---------------------------------------------------------------------------
   const readLedger = useCallback(
     async (cursor: string | null) => {
-      const result = await getAdminUserPointsLedger(userId, undefined, undefined, cursor);
-      return { items: result.data.transactions, meta: result.meta };
+      const sequence = cursor === null ? ++balanceRequest.current : balanceRequest.current;
+      if (cursor === null) {
+        setBalanceLoading(true);
+        setBalanceError(null);
+      }
+      try {
+        const result = await getAdminUserPointsLedger(userId, undefined, undefined, cursor);
+        if (cursor === null && sequence === balanceRequest.current) {
+          setBalance({
+            ok: true,
+            data: { balance: result.data.balance, displayName: 'Kronpoäng', shortForm: 'KP' },
+          });
+          setBalanceLoading(false);
+        }
+        return { items: result.data.transactions, meta: result.meta };
+      } catch (error) {
+        if (cursor === null && sequence === balanceRequest.current) {
+          setBalanceError(t('points.error'));
+          setBalanceLoading(false);
+        }
+        throw error;
+      }
     },
     [userId],
   );
@@ -88,25 +108,13 @@ export function UserPointsSection({ userId, actorUid, canAdjust = true }: UserPo
 
   const adjustingRef = useRef(false);
 
-  // ---------------------------------------------------------------------------
-  // Fetch balance
-  // ---------------------------------------------------------------------------
-  const fetchBalance = useCallback(async () => {
-    setBalanceLoading(true);
-    setBalanceError(null);
-    try {
-      const result = await getAdminUserPointsBalance(userId);
-      setBalance(result);
-    } catch (err) {
-      setBalanceError((err as ApiError).message ?? t('points.error'));
-    } finally {
-      setBalanceLoading(false);
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    void fetchBalance();
-  }, [fetchBalance]);
+  const fetchBalance = fetchLedger;
+  useEffect(
+    () => () => {
+      balanceRequest.current++;
+    },
+    [userId],
+  );
 
   // ---------------------------------------------------------------------------
   // Derived expected balance for UI guidance only
@@ -148,7 +156,7 @@ export function UserPointsSection({ userId, actorUid, canAdjust = true }: UserPo
         expectedActorUid: actorUid,
       };
       const receipt = pendingOperation(`${actorUid}:${userId}:points-adjust`, payload);
-      await applyAdminPointsAdjustment(userId, {
+      const result = await applyAdminPointsAdjustment(userId, {
         type: adjustDirection === 'credit' ? 'adjustment_credit' : 'adjustment_debit',
         amount: parsedAmount,
         reason: adjustReason.trim(),
@@ -156,10 +164,16 @@ export function UserPointsSection({ userId, actorUid, canAdjust = true }: UserPo
         idempotencyKey: receipt.key,
       });
       receipt.clear();
+      balanceRequest.current++;
+      setBalance({
+        ok: true,
+        data: { balance: result.data.balanceAfter, displayName: 'Kronpoäng', shortForm: 'KP' },
+      });
+      setBalanceError(null);
+      setBalanceLoading(false);
       setAdjustSuccess(t('points.adjust.success'));
       setAdjustAmount('');
       setAdjustReason('');
-      await fetchBalance();
       await fetchLedger();
     } catch (err) {
       const apiErr = err as ApiError;
@@ -312,7 +326,14 @@ export function UserPointsSection({ userId, actorUid, canAdjust = true }: UserPo
           className={styles.form}
           onSubmit={(e) => {
             e.preventDefault();
-            if (!validAmount || !adjustReason.trim()) return;
+            if (
+              !validAmount ||
+              !adjustReason.trim() ||
+              balanceLoading ||
+              balanceError ||
+              currentBalance === null
+            )
+              return;
             setShowConfirm(true);
           }}
           noValidate
@@ -392,7 +413,14 @@ export function UserPointsSection({ userId, actorUid, canAdjust = true }: UserPo
             type="submit"
             className={styles.submitButton}
             disabled={
-              !canAdjust || adjustLoading || !validAmount || !adjustReason.trim() || showConfirm
+              !canAdjust ||
+              adjustLoading ||
+              !validAmount ||
+              !adjustReason.trim() ||
+              showConfirm ||
+              balanceLoading ||
+              !!balanceError ||
+              currentBalance === null
             }
             aria-busy={adjustLoading}
           >
