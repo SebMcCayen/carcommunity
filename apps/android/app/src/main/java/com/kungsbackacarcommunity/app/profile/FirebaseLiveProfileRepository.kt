@@ -181,6 +181,7 @@ class FirebaseLiveProfileRepository private constructor(
                     LiveProfile(
                         displayName = document.getString(DISPLAY_NAME),
                         avatarPath = document.getString(AVATAR_PATH),
+                        clubBadge = ClubBadge.fromField(document.get("clubBadge")),
                     ),
                     readAtMillis,
                 )

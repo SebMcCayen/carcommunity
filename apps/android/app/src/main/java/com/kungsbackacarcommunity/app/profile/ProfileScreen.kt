@@ -273,6 +273,7 @@ private fun ProfileIdentitySection(
         ) {
             AvatarSection(
                 supporterBadgeVisible = profile?.supporterBadge?.visible == true,
+                clubBadge = profile?.clubBadge,
                 avatarUrl = avatarUrl,
                 uploadStatus = uploadStatus,
                 onChangeAvatar = onChangeAvatar,
@@ -306,6 +307,7 @@ private fun ProfileIdentitySection(
 @Composable
 private fun AvatarSection(
     supporterBadgeVisible: Boolean,
+    clubBadge: ClubBadge?,
     avatarUrl: String?,
     uploadStatus: ImageUploadStatus,
     onChangeAvatar: (() -> Unit)?,
@@ -319,7 +321,7 @@ private fun AvatarSection(
         verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
     ) {
         ProfileVehicleHero(coverImagePath) {
-        SupporterAvatarFrame(supporterBadgeVisible) {
+        SupporterAvatarFrame(supporterBadgeVisible, clubBadge) {
             Box(
                 modifier = Modifier
                     .size(112.dp)

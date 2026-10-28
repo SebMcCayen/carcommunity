@@ -47,6 +47,7 @@ class FirebaseProfileRepository private constructor(
                             isRestricted =
                                 snapshot.getBoolean("suspended") == true ||
                                     snapshot.getBoolean("deleted") == true,
+                            clubBadge = ClubBadge.fromField(snapshot.get("clubBadge")),
                             supporterBadge = SupporterBadge.fromFields(
                                 snapshot.get("supporterBadgeEligible"), snapshot.get("showSupporterBadge"),
                             ),

@@ -1,4 +1,7 @@
 {
+  "clubBadge": {
+    "accessibility": "Club: %1$s"
+  },
   "supporterBadge": {
     "accessibility": "Supporter crown",
     "settingTitle": "Show Supporter crown",

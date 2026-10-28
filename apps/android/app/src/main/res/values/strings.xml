@@ -3,6 +3,7 @@
      Source: contracts/localization/sv.json
      Regenerate: node apps/android/scripts/generate-strings.mjs -->
 <resources>
+    <string name="clubBadge_accessibility">Klubb: %1$s</string>
     <string name="supporterBadge_accessibility">Supporter-krona</string>
     <string name="supporterBadge_settingTitle">Visa Supporter-krona</string>
     <string name="supporterBadge_settingBody">Visar en liten krona på din profilbild när ditt Supporter-medlemskap är aktivt. Ditt val sparas även när medlemskapet upphör.</string>

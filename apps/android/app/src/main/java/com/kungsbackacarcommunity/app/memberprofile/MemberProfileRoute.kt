@@ -106,9 +106,9 @@ fun MemberProfileRoute(
     // Subscribe only while a profile is actually visible; blocking disposes it.
     val loaded = state as? MemberProfileState.Loaded
     val displayedState = if (loaded != null) {
-        val badge by remember(repository, targetUid) { repository.observeSupporterBadge(targetUid) }
-            .collectAsState(initial = loaded.profile.supporterBadge)
-        loaded.copy(profile = loaded.profile.copy(supporterBadge = badge))
+        val badges by remember(repository, targetUid) { repository.observeAvatarBadges(targetUid) }
+            .collectAsState(initial = MemberAvatarBadges(loaded.profile.supporterBadge, loaded.profile.clubBadge))
+        loaded.copy(profile = badges.applyTo(loaded.profile))
     } else state
 
     MemberProfileScreen(
