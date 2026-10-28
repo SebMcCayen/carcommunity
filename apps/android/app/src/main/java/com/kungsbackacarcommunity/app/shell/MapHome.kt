@@ -182,7 +182,7 @@ fun MapHome(
     userLabel: String,
     avatarUrl: String? = null,
     onSearch: () -> Unit,
-    // Opens the saved-locations picker (the map control's action). The picker and
+    // Opens the saved-locations picker from the avatar menu. The picker and
     // its "jump the map here" behaviour are the host's, so the map home only
     // raises it. Recentring the camera is now the compass control's job (it
     // re-centres on the user as it applies an orientation) plus the ~10s idle
@@ -679,7 +679,13 @@ fun MapHome(
                 // The profile/account menu popup is composed next to the profile
                 // button (inside SearchBarRow) so the Popup anchors to the
                 // button's real measured bounds instead of a hard-coded offset.
-                moreMenuEntries = moreMenuEntries,
+                moreMenuEntries = listOf(
+                    HubEntry(
+                        stringResource(R.string.shell_savedPlacesButton),
+                        Icons.Filled.Place,
+                        onOpenSavedPlaces,
+                    ),
+                ) + moreMenuEntries,
                 moreMenuOpen = moreOpen,
                 onDismissMore = { moreOpen = false },
             )
@@ -723,13 +729,18 @@ fun MapHome(
             // [isLiveSharing]); it just no longer has a dedicated right-side disc.
             //
             // WHICH controls, and in WHAT order, is [MapControlSet.rightSideStack]
-            // — the one list turn-by-turn renders too, so the two stacks cannot
-            // drift apart again. This `when` is exhaustive, so adding a member to
+            // — the one list turn-by-turn renders too. Map home moves Saved
+            // places into its avatar menu; navigation keeps its round shortcut.
+            // This `when` is exhaustive, so adding a member to
             // [MapCircleControlKind] fails to compile here until this screen draws
             // it. What each control DOES is still local to its own screen (a
             // re-centre means something different to a follow camera), which is
             // why the list carries kinds rather than composables.
-            MapControlSet.rightSideStack(incidentReportingEnabled, crownHuntPerksEnabled).forEach { control ->
+            MapControlSet.rightSideStack(
+                incidentReportingEnabled,
+                crownHuntPerksEnabled,
+                savedPlacesInProfileMenu = true,
+            ).forEach { control ->
                 when (control) {
                     // Report-incident control — opens the type picker. Present
                     // only when incident reporting is available (a repository
@@ -810,16 +821,8 @@ fun MapHome(
                             modifier = Modifier.testTag(MAP_HOME_COMPASS_TAG),
                         )
 
-                    // Saved places — opens the saved-locations picker; tapping a
-                    // place jumps the map there (host-owned, same in-app "move map
-                    // to point" flow a chat geo-link tap uses).
-                    MapCircleControlKind.SavedPlaces ->
-                        CircleControl(
-                            icon = Icons.Filled.Place,
-                            contentDescription = stringResource(R.string.shell_savedPlacesButton),
-                            onClick = onOpenSavedPlaces,
-                            modifier = Modifier.testTag(MAP_HOME_SAVED_PLACES_TAG),
-                        )
+                    // Map home's saved-places action is in the avatar popup.
+                    MapCircleControlKind.SavedPlaces -> Unit
 
                     // Kronjakt perk-deploy control — opens the "use a perk" menu
                     // (drop a trap / raise a shield / arm the boost). Present only
@@ -1002,7 +1005,7 @@ const val MAP_HOME_WAVE_TAG = "map_home_wave"
 /** Test tag on the floating compass control (directly above the my-location control). */
 const val MAP_HOME_COMPASS_TAG = "map_home_compass"
 
-/** Test tag on the saved-places control in the map-home right-side stack. */
+/** Retired map-home control tag, retained for assertions that the disc stays absent. */
 const val MAP_HOME_SAVED_PLACES_TAG = "map_home_saved_places"
 
 /** Test tag on the collapsed round search button (upper-left). */
@@ -1576,7 +1579,7 @@ private fun ProfileMenuPopup(
             shadowElevation = 6.dp,
         ) {
             Column(
-                modifier = Modifier.padding(8.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState()).padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 entries.forEach { entry ->
