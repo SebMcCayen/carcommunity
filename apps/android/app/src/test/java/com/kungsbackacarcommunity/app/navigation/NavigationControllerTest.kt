@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.navigation
 
 import com.kungsbackacarcommunity.app.diagnostics.CrashFeatures
 import com.kungsbackacarcommunity.app.diagnostics.RecordingCrashTelemetry
+import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
@@ -483,6 +484,51 @@ class NavigationControllerTest {
         advanceUntilIdle()
 
         assertTrue(controller.state.value.suggestions.isEmpty())
+        assertFalse(controller.state.value.searching)
+    }
+
+    @Test
+    fun `a cancelled geocode that throws late preserves a newer successful query`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        var oldLookupStarted = false
+        var lateFailureThrown = false
+        val client =
+            object : MapboxSearchClient {
+                override suspend fun geocode(query: String, proximity: LatLng?): List<PlaceSuggestion> {
+                    if (query == "old query") {
+                        oldLookupStarted = true
+                        // Model blocking HTTP that ignores cancellation, then fails
+                        // only after the replacement query has already succeeded.
+                        withContext(NonCancellable) { gate.await() }
+                        lateFailureThrown = true
+                        throw IOException("Cancelled lookup failed late")
+                    }
+                    return listOf(suggestion)
+                }
+
+                override suspend fun route(origin: LatLng, destination: LatLng): RouteSummary? = null
+            }
+        val controller = NavigationController(client, originProvider = { origin }, scope = this)
+
+        controller.onQueryChange("old query")
+        advanceTimeBy(300)
+        runCurrent()
+        assertTrue(oldLookupStarted)
+
+        controller.onQueryChange("new query")
+        advanceTimeBy(300)
+        runCurrent()
+        assertEquals(listOf(suggestion), controller.state.value.suggestions)
+        assertNull(controller.state.value.error)
+        assertFalse(lateFailureThrown)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertTrue(lateFailureThrown)
+        assertEquals("new query", controller.state.value.query)
+        assertEquals(listOf(suggestion), controller.state.value.suggestions)
+        assertNull(controller.state.value.error)
         assertFalse(controller.state.value.searching)
     }
 

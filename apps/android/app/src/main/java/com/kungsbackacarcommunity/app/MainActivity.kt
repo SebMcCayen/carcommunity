@@ -23,6 +23,8 @@ import com.kungsbackacarcommunity.app.map.MapZoomController
 import com.kungsbackacarcommunity.app.map.MapZoomPreferenceStore
 import com.kungsbackacarcommunity.app.navigation.GeoUriParser
 import com.kungsbackacarcommunity.app.navigation.GeoUriTarget
+import com.kungsbackacarcommunity.app.navigation.LatLng
+import com.kungsbackacarcommunity.app.navigation.isValidWgs84Coordinate
 import com.kungsbackacarcommunity.app.navigation.MapLinkNavigator
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -160,6 +162,24 @@ class MainActivity : ComponentActivity() {
             // composes so it is already waiting, and guard on savedInstanceState
             // so a rotation does not replay a navigation already performed.
             publishMapLinkDeepLink(intent)
+        } else if (MapLinkNavigator.pending.value == null) {
+            // Only restore a target that was still waiting for authentication.
+            // Re-reading the launch Intent would replay already-consumed links.
+            savedInstanceState.getBundle(PENDING_MAP_LINK_STATE)?.let { savedTarget ->
+                val query = savedTarget.getString("query")
+                val coordinates = savedTarget.getDoubleArray("point")
+                val target = when {
+                    !query.isNullOrBlank() -> GeoUriTarget.Query(query)
+                    coordinates?.size == 2 -> {
+                        val point = LatLng(longitude = coordinates[1], latitude = coordinates[0])
+                        if (isValidWgs84Coordinate(point)) {
+                            GeoUriTarget.Point(point, savedTarget.getString("label"))
+                        } else null
+                    }
+                    else -> null
+                }
+                target?.let(MapLinkNavigator::publish)
+            }
         }
 
         // Draw edge-to-edge so map/content renders behind the system bars. The
@@ -559,6 +579,26 @@ class MainActivity : ComponentActivity() {
         publishMapLinkDeepLink(intent)
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        // The current Intent may have been replaced by a notification/launcher
+        // while sign-in still blocks the link. Save the queued target itself.
+        MapLinkNavigator.pending.value?.let { target ->
+            val savedTarget = Bundle()
+            when (target) {
+                is GeoUriTarget.Query -> savedTarget.putString("query", target.text)
+                is GeoUriTarget.Point -> {
+                    savedTarget.putDoubleArray(
+                        "point",
+                        doubleArrayOf(target.point.latitude, target.point.longitude),
+                    )
+                    savedTarget.putString("label", target.label)
+                }
+            }
+            outState.putBundle(PENDING_MAP_LINK_STATE, savedTarget)
+        }
+        super.onSaveInstanceState(outState)
+    }
+
     /** Hands a tapped notification's destination to the shell, if there is one. */
     private fun publishPushDeepLink(intent: Intent?) {
         KccMessagingService.deepLinkFrom(intent)?.let(PushNavigator::publish)
@@ -566,18 +606,14 @@ class MainActivity : ComponentActivity() {
 
     /**
      * Hands an incoming map link (geo: / google.navigation:) to the shell as an
-     * in-app navigate-here point, if the Intent is one and carries a real
-     * coordinate. Only ACTION_VIEW Intents are considered, so a plain launcher
-     * start never triggers it. A free-text address query ([GeoUriTarget.Query])
-     * is intentionally ignored — the chooser still offered a real maps app
-     * alongside KCC, and geocoding an arbitrary address from a deep link is out
-     * of scope (see GeoUriTarget.Query).
+     * coordinate preview or a prefilled place search. Only ACTION_VIEW Intents
+     * are considered, so a plain launcher start never triggers it. The target
+     * waits here through sign-in/onboarding; search results need user selection.
      */
     private fun publishMapLinkDeepLink(intent: Intent?) {
         if (intent?.action != Intent.ACTION_VIEW) return
         val data = intent.data ?: return
-        val target = GeoUriParser.parse(data.toString())
-        if (target is GeoUriTarget.Point) MapLinkNavigator.publish(target)
+        GeoUriParser.parse(data.toString())?.let(MapLinkNavigator::publish)
     }
 
     /**
@@ -651,6 +687,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private companion object {
+        const val PENDING_MAP_LINK_STATE = "pending_map_link_target"
         /**
          * Upper bound on how long sign-out waits for the push-token unregister.
          * Short on purpose: sign-out must feel immediate, and a stale token has

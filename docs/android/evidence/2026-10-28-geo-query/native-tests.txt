@@ -1,0 +1,10 @@
+
+com.kungsbackacarcommunity.app.navigation.GeoQueryHandoffTest:s_glBindAttribLocation: bind attrib 0 name position
+s_glBindAttribLocation: bind attrib 1 name color
+s_glBindAttribLocation: bind attrib 2 name localCoord
+........
+com.kungsbackacarcommunity.app.navigation.NavigationSearchScreenTest:.....
+
+Time: 58.313
+
+OK (13 tests)

@@ -12,32 +12,30 @@ import kotlinx.coroutines.flow.asStateFlow
  * for a `geo:` / `google.navigation:` link, the URI arrives on MainActivity as
  * an ACTION_VIEW Intent, which is outside the shell's composition and may arrive
  * before it exists (a cold start straight into the chooser). MainActivity parses
- * the URI (via [GeoUriParser]) and parks the resulting point here; the shell
- * collects it and drives its OWN existing in-app "navigate here" flow
- * (`moveMapToPoint`) with it — the same path a chat geo-link tap or a saved-place
- * pick uses. No external maps app is launched and no second navigation mechanism
- * exists.
+ * the URI (via [GeoUriParser]) and parks the resulting point or text query here.
+ * The authenticated shell opens its existing coordinate preview or place search;
+ * a query never picks a result until the member explicitly chooses one.
  *
  * Process-scoped on purpose (the Activity may publish before the shell is there
  * to consume), and [consume] clears it so a configuration change cannot replay a
  * navigation the member already saw.
  */
 object MapLinkNavigator {
-    private val _pending = MutableStateFlow<GeoUriTarget.Point?>(null)
+    private val _pending = MutableStateFlow<GeoUriTarget?>(null)
 
-    /** The map point awaiting handling, or null. */
-    val pending: StateFlow<GeoUriTarget.Point?> = _pending.asStateFlow()
+    /** The map target awaiting the authenticated shell, or null. */
+    val pending: StateFlow<GeoUriTarget?> = _pending.asStateFlow()
 
-    /** Parks a point for the shell. A newer link replaces an unconsumed one. */
-    fun publish(target: GeoUriTarget.Point) {
+    /** Parks a target for the shell. A newer link replaces an unconsumed one. */
+    fun publish(target: GeoUriTarget) {
         _pending.value = target
     }
 
-    /** Takes the pending point (if any), clearing it so it fires exactly once. */
-    fun consume(): GeoUriTarget.Point? = _pending.getAndSet(null)
+    /** Takes the pending target (if any), clearing it so it fires exactly once. */
+    fun consume(): GeoUriTarget? = _pending.getAndSet(null)
 
     /**
-     * Drops any pending point. Called on sign-out for symmetry with the other
+     * Drops any pending target. Called on sign-out for symmetry with the other
      * process-scoped hand-offs, so nothing decoded before a session change is
      * carried into the next one.
      */
