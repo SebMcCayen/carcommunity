@@ -20,7 +20,7 @@ The Google Services Gradle plugin is applied **only when the file exists**, so C
 
 ## Release build (Google Play)
 
-The signed release AAB is produced by the **Build Android Release** GitHub Actions workflow (`.github/workflows/build-android-release.yml`, manual dispatch only). It decodes the upload keystore, injects the Mapbox token, signs the bundle, and uploads it as the `app-release-aab` artifact. Required `production` **environment** secrets:
+The signed release AAB and APK are produced by the **Build Android Release** GitHub Actions workflow (`.github/workflows/build-android-release.yml`, manual dispatch only). It decodes the upload keystore, injects the Mapbox token, signs both outputs, verifies the APK signature and 16 KB alignment, and uploads separate `app-release-aab` (Google Play) and `app-release-apk` (installation) artifacts. Required `production` **environment** secrets:
 
 | Secret | What |
 | --- | --- |
