@@ -25,6 +25,9 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useCursorHistory } from '@/hooks/useCursorHistory';
+import { HistoryPager } from '@/components/ui/HistoryPager';
 
 import type {
   AdminCrownHuntClaimSummary,
@@ -258,9 +261,7 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
       <MapLocationPicker
         latitude={form.latitude}
         longitude={form.longitude}
-        onChange={(latitude, longitude) =>
-          setForm((prev) => ({ ...prev, latitude, longitude }))
-        }
+        onChange={(latitude, longitude) => setForm((prev) => ({ ...prev, latitude, longitude }))}
         labelLat={t('crownHunt.formLatitudeLabel')}
         labelLng={t('crownHunt.formLongitudeLabel')}
         helpText={t('map.dragHint')}
@@ -324,7 +325,9 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
             onClick={() => selectCollectorMode('everyone')}
           >
             <span className={styles.collectorOptionName}>{t('crownHunt.collectorsEveryone')}</span>
-            <span className={styles.collectorOptionDesc}>{t('crownHunt.collectorsEveryoneHint')}</span>
+            <span className={styles.collectorOptionDesc}>
+              {t('crownHunt.collectorsEveryoneHint')}
+            </span>
           </button>
           <button
             type="button"
@@ -333,7 +336,9 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
             onClick={() => selectCollectorMode('limited')}
           >
             <span className={styles.collectorOptionName}>{t('crownHunt.collectorsLimited')}</span>
-            <span className={styles.collectorOptionDesc}>{t('crownHunt.collectorsLimitedHint')}</span>
+            <span className={styles.collectorOptionDesc}>
+              {t('crownHunt.collectorsLimitedHint')}
+            </span>
           </button>
         </div>
         {form.collectorMode === 'limited' && (
@@ -393,10 +398,19 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
       {saveError !== null && <p className={styles.errorText}>{saveError}</p>}
 
       <div className={styles.formActions}>
-        <button type="button" className={styles.btnSecondary} onClick={onCancel} disabled={isSaving}>
+        <button
+          type="button"
+          className={styles.btnSecondary}
+          onClick={onCancel}
+          disabled={isSaving}
+        >
           {t('crownHunt.cancel')}
         </button>
-        <button type="submit" className={styles.btnPrimary} disabled={isSaving || maxCollectorsInvalid}>
+        <button
+          type="submit"
+          className={styles.btnPrimary}
+          disabled={isSaving || maxCollectorsInvalid}
+        >
           {isSaving ? t('crownHunt.loading') : t('crownHunt.savePoint')}
         </button>
       </div>
@@ -431,17 +445,14 @@ const ActivateModal = ({ point, onConfirm, onCancel, isConfirming, error }: Acti
           <span className={styles.tierCrown} style={{ color: display.color }} aria-hidden="true">
             ♛
           </span>{' '}
-          {display.label} · {point.rewardPoints} KP · {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)}
+          {display.label} · {point.rewardPoints} KP · {point.latitude.toFixed(5)},{' '}
+          {point.longitude.toFixed(5)}
         </p>
         <p className={styles.safetyWarning}>⚠️ {t('crownHunt.safetyWarning')}</p>
 
         <label className={styles.label}>
-          <input
-            type="checkbox"
-            checked={checked}
-            onChange={(e) => setChecked(e.target.checked)}
-          />
-          {' '}{t('crownHunt.safetyConfirmed')}
+          <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} />{' '}
+          {t('crownHunt.safetyConfirmed')}
         </label>
 
         <label className={styles.label} style={{ marginTop: '12px' }}>
@@ -500,7 +511,8 @@ const DeleteModal = ({ point, onConfirm, onCancel, isConfirming, error }: Delete
           <span className={styles.tierCrown} style={{ color: display.color }} aria-hidden="true">
             ♛
           </span>{' '}
-          {display.label} · {point.rewardPoints} KP · {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)}
+          {display.label} · {point.rewardPoints} KP · {point.latitude.toFixed(5)},{' '}
+          {point.longitude.toFixed(5)}
         </p>
         <p className={styles.safetyWarning}>⚠️ {t('crownHunt.deleteConfirmBody')}</p>
 
@@ -599,55 +611,59 @@ const PointsTab = ({
           {points.map((point) => {
             const display = tierDisplay(point.rewardPoints);
             return (
-            <tr key={point.pointId}>
-              <td>
-                <span
-                  className={styles.tierChip}
-                  style={{ ['--tier-color' as string]: display.color }}
-                >
-                  <span className={styles.tierCrown} style={{ color: display.color }} aria-hidden="true">
-                    ♛
+              <tr key={point.pointId}>
+                <td>
+                  <span
+                    className={styles.tierChip}
+                    style={{ ['--tier-color' as string]: display.color }}
+                  >
+                    <span
+                      className={styles.tierCrown}
+                      style={{ color: display.color }}
+                      aria-hidden="true"
+                    >
+                      ♛
+                    </span>
+                    {display.label}
                   </span>
-                  {display.label}
-                </span>
-              </td>
-              <td>
-                <span className={`${styles.badge} ${styles[`badge_${point.status}`] ?? ''}`}>
-                  {statusLabel(point.status)}
-                </span>
-              </td>
-              <td>{point.rewardPoints}</td>
-              <td>
-                {point.maxCollectors == null
-                  ? t('crownHunt.collectorsEveryone')
-                  : `${point.collectorCount} / ${point.maxCollectors}`}
-              </td>
-              <td>{point.repeatRule}</td>
-              <td>{formatDate(point.createdAt)}</td>
-              <td className={styles.actions}>
-                {(point.status === 'draft' || point.status === 'paused') && (
-                  <button className={styles.btnSmall} onClick={() => onEdit(point)}>
-                    {t('crownHunt.editPoint')}
-                  </button>
-                )}
-                {point.status === 'draft' && (
-                  <button className={styles.btnSmallPrimary} onClick={() => onActivate(point)}>
-                    {t('crownHunt.activatePoint')}
-                  </button>
-                )}
-                {point.status === 'active' && (
-                  <button className={styles.btnSmallWarning} onClick={() => onPause(point)}>
-                    {t('crownHunt.pausePoint')}
-                  </button>
-                )}
-                {/* Remove (hard-delete) is available in every status — it is the
+                </td>
+                <td>
+                  <span className={`${styles.badge} ${styles[`badge_${point.status}`] ?? ''}`}>
+                    {statusLabel(point.status)}
+                  </span>
+                </td>
+                <td>{point.rewardPoints}</td>
+                <td>
+                  {point.maxCollectors == null
+                    ? t('crownHunt.collectorsEveryone')
+                    : `${point.collectorCount} / ${point.maxCollectors}`}
+                </td>
+                <td>{point.repeatRule}</td>
+                <td>{formatDate(point.createdAt)}</td>
+                <td className={styles.actions}>
+                  {(point.status === 'draft' || point.status === 'paused') && (
+                    <button className={styles.btnSmall} onClick={() => onEdit(point)}>
+                      {t('crownHunt.editPoint')}
+                    </button>
+                  )}
+                  {point.status === 'draft' && (
+                    <button className={styles.btnSmallPrimary} onClick={() => onActivate(point)}>
+                      {t('crownHunt.activatePoint')}
+                    </button>
+                  )}
+                  {point.status === 'active' && (
+                    <button className={styles.btnSmallWarning} onClick={() => onPause(point)}>
+                      {t('crownHunt.pausePoint')}
+                    </button>
+                  )}
+                  {/* Remove (hard-delete) is available in every status — it is the
                     only way to take a mis-placed crown off the map for good.
                     Gated behind a confirm dialog. */}
-                <button className={styles.btnSmallWarning} onClick={() => onDelete(point)}>
-                  {t('crownHunt.deletePoint')}
-                </button>
-              </td>
-            </tr>
+                  <button className={styles.btnSmallWarning} onClick={() => onDelete(point)}>
+                    {t('crownHunt.deletePoint')}
+                  </button>
+                </td>
+              </tr>
             );
           })}
         </tbody>
@@ -661,6 +677,8 @@ const PointsTab = ({
 // ---------------------------------------------------------------------------
 
 interface ClaimsTabProps {
+  source: 'all' | 'hand_placed' | 'automatic';
+  onSourceChange: (source: 'all' | 'hand_placed' | 'automatic') => void;
   claims: AdminCrownHuntClaimSummary[];
   isLoading: boolean;
   error: string | null;
@@ -670,6 +688,8 @@ interface ClaimsTabProps {
 }
 
 const ClaimsTab = ({
+  source,
+  onSourceChange,
   claims,
   isLoading,
   error,
@@ -680,8 +700,19 @@ const ClaimsTab = ({
   <section>
     <div className={styles.tabHeader}>
       <label className={styles.checkLabel}>
-        <input type="checkbox" checked={filterRiskReview} onChange={onToggleRiskFilter} />
-        {' '}{t('crownHunt.suspiciousClaims')}
+        Ursprung{' '}
+        <select
+          value={source}
+          onChange={(event) => onSourceChange(event.target.value as ClaimsTabProps['source'])}
+        >
+          <option value="all">Alla ursprung</option>
+          <option value="hand_placed">Handplacerade</option>
+          <option value="automatic">Automatiska</option>
+        </select>
+      </label>
+      <label className={styles.checkLabel}>
+        <input type="checkbox" checked={filterRiskReview} onChange={onToggleRiskFilter} />{' '}
+        {t('crownHunt.suspiciousClaims')}
       </label>
     </div>
 
@@ -703,18 +734,24 @@ const ClaimsTab = ({
       <table className={styles.table}>
         <thead>
           <tr>
+            <th>Ursprung</th>
             <th>{t('crownHunt.columnPoint')}</th>
             <th>{t('crownHunt.columnUser')}</th>
             <th>{t('crownHunt.columnResult')}</th>
             <th>{t('crownHunt.columnClaimedAt')}</th>
-            <th>{t('crownHunt.columnRiskReasons')}</th>
+            <th>Utdelade poäng</th>
           </tr>
         </thead>
         <tbody>
           {claims.map((claim) => (
             <tr key={claim.claimId}>
-              <td>{claim.pointTitle}</td>
-              <td title={claim.userId}>{claim.userId.slice(0, 8)}…</td>
+              <td>{claim.source === 'automatic' ? 'Automatisk' : 'Handplacerad'}</td>
+              <td>{claim.pointTitle || claim.pointId}</td>
+              <td title={claim.userId}>
+                <Link to={`/users/${encodeURIComponent(claim.userId)}`}>
+                  {claim.userId.slice(0, 8)}…
+                </Link>
+              </td>
               <td>
                 <span
                   className={`${styles.badge} ${claim.result === 'risk_review' ? styles.badge_risk : claim.result === 'awarded' ? styles.badge_active : styles.badge_draft}`}
@@ -722,13 +759,8 @@ const ClaimsTab = ({
                   {claim.result}
                 </span>
               </td>
-              <td>{formatDate(claim.claimedAt)}</td>
-              <td>
-                {/* Only show risk reason categories — no raw signals or thresholds */}
-                {claim.riskReasonCategories.length > 0
-                  ? claim.riskReasonCategories.join(', ')
-                  : '—'}
-              </td>
+              <td>{new Date(claim.claimedAt).toLocaleString('sv-SE')}</td>
+              <td>{claim.pointsAwarded ?? '—'}</td>
             </tr>
           ))}
         </tbody>
@@ -747,21 +779,39 @@ export default function KronjaktPage() {
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   const [activeTab, setActiveTab] = useState<Tab>('points');
 
-  // Points state
-  const [points, setPoints] = useState<AdminCrownHuntPointSummary[]>([]);
-  const [pointsLoading, setPointsLoading] = useState(false);
-  const [pointsError, setPointsError] = useState<string | null>(null);
-
-  // Claims state
-  const [claims, setClaims] = useState<AdminCrownHuntClaimSummary[]>([]);
-  const [claimsLoading, setClaimsLoading] = useState(false);
-  const [claimsError, setClaimsError] = useState<string | null>(null);
   const [filterRiskReview, setFilterRiskReview] = useState(false);
+  const [claimSource, setClaimSource] = useState<'all' | 'hand_placed' | 'automatic'>('all');
+  const readPoints = useCallback(async (cursor: string | null) => {
+    const result = await adminListCrownHuntPoints(1, undefined, cursor);
+    return { items: result.data.points, meta: result.meta };
+  }, []);
+  const pointHistory = useCursorHistory(readPoints, 'pointId');
+  const readClaims = useCallback(
+    async (cursor: string | null) => {
+      if (activeTab !== 'claims')
+        return { items: [] as AdminCrownHuntClaimSummary[], meta: { total: 0, nextCursor: null } };
+      const filter: CrownHuntClaimResult | undefined = filterRiskReview ? 'risk_review' : undefined;
+      const result = await adminListCrownHuntClaims(1, filter, undefined, cursor, claimSource);
+      return { items: result.data.claims, meta: result.meta };
+    },
+    [activeTab, filterRiskReview, claimSource],
+  );
+  const claimHistory = useCursorHistory(readClaims, 'claimId');
+  const points = pointHistory.items;
+  const pointsLoading = pointHistory.loading;
+  const pointsError = pointHistory.error;
+  const claims = claimHistory.items;
+  const claimsLoading = claimHistory.loading;
+  const claimsError = claimHistory.error;
+  const loadPoints = pointHistory.refresh;
+  const loadClaims = claimHistory.refresh;
 
   // Form state
   const [showForm, setShowForm] = useState(false);
@@ -783,57 +833,14 @@ export default function KronjaktPage() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // ---------------------------------------------------------------------------
-  // Data loading
-  // ---------------------------------------------------------------------------
-
-  const loadPoints = useCallback(async () => {
-    setPointsLoading(true);
-    setPointsError(null);
-    try {
-      const res = await adminListCrownHuntPoints();
-      if (!mountedRef.current) return;
-      setPoints(res.data.points);
-    } catch {
-      if (!mountedRef.current) return;
-      setPointsError(t('crownHunt.error'));
-    } finally {
-      if (mountedRef.current) setPointsLoading(false);
-    }
-  }, []);
-
-  const loadClaims = useCallback(async (riskOnly: boolean) => {
-    setClaimsLoading(true);
-    setClaimsError(null);
-    try {
-      const filter: CrownHuntClaimResult | undefined = riskOnly ? 'risk_review' : undefined;
-      const res = await adminListCrownHuntClaims(1, filter);
-      if (!mountedRef.current) return;
-      setClaims(res.data.claims);
-    } catch {
-      if (!mountedRef.current) return;
-      setClaimsError(t('crownHunt.error'));
-    } finally {
-      if (mountedRef.current) setClaimsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadPoints();
-  }, [loadPoints]);
-
-  useEffect(() => {
-    if (activeTab === 'claims') {
-      void loadClaims(filterRiskReview);
-    }
-  }, [activeTab, filterRiskReview, loadClaims]);
-
-  // ---------------------------------------------------------------------------
   // Form handlers
   // ---------------------------------------------------------------------------
 
   const showSuccess = (msg: string) => {
     setSuccessMsg(msg);
-    setTimeout(() => { if (mountedRef.current) setSuccessMsg(null); }, 3000);
+    setTimeout(() => {
+      if (mountedRef.current) setSuccessMsg(null);
+    }, 3000);
   };
 
   const handleSave = useCallback(
@@ -856,14 +863,16 @@ export default function KronjaktPage() {
           // (unlimited); 'limited' → the entered N (validated >= 1 in the form,
           // re-validated server-side). Sending null on edit reverts a limited
           // crown to unlimited.
-          maxCollectors:
-            form.collectorMode === 'limited' ? Number(form.maxCollectors) : null,
+          maxCollectors: form.collectorMode === 'limited' ? Number(form.maxCollectors) : null,
           availableFrom: localToIso(form.availableFrom) ?? undefined,
           availableUntil: localToIso(form.availableUntil) ?? undefined,
         };
 
         if (editingPoint !== null) {
-          await adminUpdateCrownHuntPoint(editingPoint.pointId, base as AdminUpdateCrownHuntPointRequest);
+          await adminUpdateCrownHuntPoint(
+            editingPoint.pointId,
+            base as AdminUpdateCrownHuntPointRequest,
+          );
           showSuccess(t('crownHunt.updateSuccess'));
         } else {
           await adminCreateCrownHuntPoint(base as AdminCreateCrownHuntPointRequest);
@@ -1013,42 +1022,70 @@ export default function KronjaktPage() {
 
       {/* Active tab content */}
       {activeTab === 'points' && !showForm && (
-        <PointsTab
-          points={points}
-          isLoading={pointsLoading}
-          error={pointsError}
-          onRefresh={() => void loadPoints()}
-          onActivate={(p) => {
-            setActivatingPoint(p);
-            setActivateError(null);
-          }}
-          onPause={(p) => void handlePause(p)}
-          onEdit={(p) => {
-            setEditingPoint(p);
-            setShowForm(true);
-            setSaveError(null);
-          }}
-          onDelete={(p) => {
-            setDeletingPoint(p);
-            setDeleteError(null);
-          }}
-          onCreateNew={() => {
-            setEditingPoint(null);
-            setShowForm(true);
-            setSaveError(null);
-          }}
-        />
+        <>
+          <PointsTab
+            points={points}
+            isLoading={pointsLoading}
+            error={points.length === 0 ? pointsError : null}
+            onRefresh={() => void loadPoints()}
+            onActivate={(p) => {
+              setActivatingPoint(p);
+              setActivateError(null);
+            }}
+            onPause={(p) => void handlePause(p)}
+            onEdit={(p) => {
+              setEditingPoint(p);
+              setShowForm(true);
+              setSaveError(null);
+            }}
+            onDelete={(p) => {
+              setDeletingPoint(p);
+              setDeleteError(null);
+            }}
+            onCreateNew={() => {
+              setEditingPoint(null);
+              setShowForm(true);
+              setSaveError(null);
+            }}
+          />
+          {((!pointHistory.loading && !pointHistory.error) || points.length > 0) && (
+            <HistoryPager
+              shown={points.length}
+              total={pointHistory.total}
+              hasNext={!!pointHistory.nextCursor}
+              loading={pointsLoading}
+              error={pointsError}
+              onMore={() => void pointHistory.loadMore()}
+              onRefresh={() => void loadPoints()}
+            />
+          )}
+        </>
       )}
 
       {activeTab === 'claims' && (
-        <ClaimsTab
-          claims={claims}
-          isLoading={claimsLoading}
-          error={claimsError}
-          onRefresh={() => void loadClaims(filterRiskReview)}
-          filterRiskReview={filterRiskReview}
-          onToggleRiskFilter={() => setFilterRiskReview((v) => !v)}
-        />
+        <>
+          <ClaimsTab
+            source={claimSource}
+            onSourceChange={setClaimSource}
+            claims={claims}
+            isLoading={claimsLoading}
+            error={claims.length === 0 ? claimsError : null}
+            onRefresh={() => void loadClaims()}
+            filterRiskReview={filterRiskReview}
+            onToggleRiskFilter={() => setFilterRiskReview((v) => !v)}
+          />
+          {((!claimHistory.loading && !claimHistory.error) || claims.length > 0) && (
+            <HistoryPager
+              shown={claims.length}
+              total={claimHistory.total}
+              hasNext={!!claimHistory.nextCursor}
+              loading={claimsLoading}
+              error={claimsError}
+              onMore={() => void claimHistory.loadMore()}
+              onRefresh={() => void loadClaims()}
+            />
+          )}
+        </>
       )}
 
       {activeTab === 'areas' && <AreasTab onFlash={showSuccess} />}

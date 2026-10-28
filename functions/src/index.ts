@@ -23,6 +23,7 @@ import { setAdminRole } from './admin/setAdminRole';
 import { suspendUser } from './admin/suspendUser';
 import { deleteUser as adminDeleteUser } from './admin/deleteUser';
 import { warnUser } from './admin/warnUser';
+import { listCrownClaims, listCrownPoints, listPointsLedger } from './admin/listHistory';
 import { purgeNeverOnboarded } from './admin/purgeNeverOnboarded';
 import { cancel, complete, publish } from './events/eventLifecycle';
 import { autoClose } from './events/scheduled';
@@ -304,6 +305,9 @@ export const auth = {
  * here via the Admin SDK — clients can never set or modify them.
  */
 export const admin = {
+  listCrownClaims,
+  listCrownPoints,
+  listPointsLedger,
   setAdminRole,
   suspendUser,
   restoreAccess,

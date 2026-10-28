@@ -14,22 +14,12 @@
  *  - A reason is required for every adjustment and is audited server-side.
  */
 
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  type Timestamp,
-} from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import {
   type PointsBalanceResponse,
   type PaginatedPointsLedgerResponse,
   type AdminPointsAdjustmentRequest,
   type AdminPointsAdjustmentResponse,
-  type PointsTransactionSummary,
 } from '@carcommunity/shared/points';
 
 import { ApiError } from '../../lib/errors';
@@ -43,17 +33,6 @@ export type {
   AdminPointsAdjustmentResponse,
 };
 export { ApiError };
-
-const LEDGER_PAGE_SIZE = 20;
-
-interface LedgerEntryDoc {
-  transactionType: PointsTransactionSummary['transactionType'];
-  source: PointsTransactionSummary['source'];
-  amount: number;
-  balanceAfter: number;
-  description: string;
-  createdAt: Timestamp;
-}
 
 /**
  * Returns the current Kronpoäng balance for a user (direct Firestore
@@ -71,55 +50,17 @@ export async function getAdminUserPointsBalance(
   };
 }
 
-/**
- * Returns the most recent ledger entries for a user, newest first.
- * Firestore cursor pagination replaces the legacy page numbers; this
- * adapter serves the first page (deeper history lands with the full
- * admin ledger view in the Phase 13 checklist).
- */
+/** Reads older ledger entries through a query-bound backend cursor. */
 export async function getAdminUserPointsLedger(
   userId: string,
   _page?: number,
   _token?: string,
+  cursor?: string | null,
 ): Promise<PaginatedPointsLedgerResponse> {
-  const db = getAdminFirestore();
-  const [walletSnap, entriesSnap] = await Promise.all([
-    getDoc(doc(db, 'pointsLedger', userId)),
-    getDocs(
-      query(
-        collection(db, 'pointsLedger', userId, 'entries'),
-        orderBy('createdAt', 'desc'),
-        limit(LEDGER_PAGE_SIZE),
-      ),
-    ),
-  ]);
-
-  const transactions: PointsTransactionSummary[] = entriesSnap.docs.map((entry) => {
-    const data = entry.data() as LedgerEntryDoc;
-    return {
-      transactionId: entry.id,
-      transactionType: data.transactionType,
-      source: data.source,
-      amount: data.amount,
-      balanceAfter: data.balanceAfter,
-      description: data.description,
-      createdAt: data.createdAt.toDate().toISOString(),
-    };
+  return callAdmin<PaginatedPointsLedgerResponse>('admin-listPointsLedger', {
+    targetUid: userId,
+    cursor: cursor ?? null,
   });
-
-  return {
-    ok: true,
-    data: {
-      balance: (walletSnap.data()?.balance as number | undefined) ?? 0,
-      transactions,
-    },
-    meta: {
-      page: 1,
-      pageSize: LEDGER_PAGE_SIZE,
-      total: transactions.length,
-      hasNext: transactions.length === LEDGER_PAGE_SIZE,
-    },
-  };
 }
 
 interface PointsAdminCallableResponse {

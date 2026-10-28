@@ -194,3 +194,24 @@ test('event chat reports declare their collection-group date index without remov
     );
   }
 });
+
+for (const [collectionGroup, equality, date] of [
+  ['crownHuntPoints', 'status', 'createdAt'],
+  ['crownHuntClaims', 'result', 'claimedAt'],
+  ['crownSpawnClaims', 'result', 'claimedAt'],
+]) {
+  test(`admin history declares the ${collectionGroup} filter/date index`, () => {
+    const config = JSON.parse(
+      readFileSync(resolve(REPO_ROOT, 'firebase/firestore.indexes.json'), 'utf8'),
+    );
+    const expected = {
+      collectionGroup,
+      queryScope: 'COLLECTION',
+      fields: [asc(equality), desc(date)],
+    };
+    assert.ok(
+      config.indexes.some((index) => indexKey(index) === indexKey(expected)),
+      `missing ${indexKey(expected)}`,
+    );
+  });
+}

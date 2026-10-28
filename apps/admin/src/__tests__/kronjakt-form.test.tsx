@@ -184,6 +184,35 @@ afterEach(() => {
 });
 
 describe('Kronjakt point form — collectable redesign', () => {
+  it('pages the actual point table and keeps its continuation after a read failure', async () => {
+    const firstPoints = Array.from({ length: 20 }, (_, i) => makePoint({ pointId: `p-${i}` }));
+    const first = {
+      ...pointsResponse(firstPoints),
+      meta: { page: 1, pageSize: 20, total: 21, hasNext: true, nextCursor: 'point-next' },
+    };
+    const last = {
+      ...pointsResponse([makePoint({ pointId: 'last' })]),
+      meta: { page: 2, pageSize: 20, total: 21, hasNext: false, nextCursor: null },
+    };
+    mocks.listPoints
+      .mockReset()
+      .mockResolvedValueOnce(first)
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce(last);
+    await render();
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(20);
+    await act(async () => buttonByText('Visa fler').click());
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(20);
+    await act(async () => buttonByText('Försök läsa fler igen').click());
+    expect(mocks.listPoints.mock.calls).toEqual([
+      [1, undefined, null],
+      [1, undefined, 'point-next'],
+      [1, undefined, 'point-next'],
+    ]);
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(21);
+    expect(container.textContent).toContain('Visar 21 av 21 poster');
+  });
+
   it('renders NO title/description fields and a four-tier rarity selector', async () => {
     await render();
     await openCreateForm();

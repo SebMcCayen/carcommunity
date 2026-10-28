@@ -137,6 +137,8 @@ export interface PaginatedPointsLedgerResponse {
     pageSize: number;
     total: number;
     hasNext: boolean;
+    nextCursor?: string | null;
+    asOf?: string;
   };
 }
 
@@ -182,4 +184,3 @@ export interface AdminPointsAdjustmentResponse {
     createdAt: string;
   };
 }
-

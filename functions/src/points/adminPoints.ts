@@ -68,15 +68,8 @@ export const adminAdjust = onCall(CALLABLE_OPTS, async (request): Promise<Points
     throw new HttpsError('not-found', 'Target user not found.');
   }
   const targetState = toUserAccessState(targetSnap.data());
-  if (
-    isOwnerRole(targetState.role) &&
-    targetUid !== actor.uid &&
-    !isOwnerRole(actor.state.role)
-  ) {
-    throw new HttpsError(
-      'permission-denied',
-      'Only an owner may adjust points for another owner.',
-    );
+  if (isOwnerRole(targetState.role) && targetUid !== actor.uid && !isOwnerRole(actor.state.role)) {
+    throw new HttpsError('permission-denied', 'Only an owner may adjust points for another owner.');
   }
 
   const isCredit = type === 'adjustment_credit';
@@ -136,11 +129,27 @@ export const adminReverse = onCall(CALLABLE_OPTS, async (request): Promise<Point
   const serverTimestamp = () => FieldValue.serverTimestamp();
 
   const result = await db.runTransaction(async (tx) => {
-    const [originalSnap, reversalSnap, ledgerSnap] = await Promise.all([
+    const [originalSnap, reversalSnap, ledgerSnap, targetSnap] = await Promise.all([
       tx.get(originalRef),
       tx.get(reversalRef),
       tx.get(ledgerRef),
+      tx.get(db.collection('users').doc(targetUid)),
     ]);
+
+    if (!targetSnap.exists) {
+      throw new HttpsError('not-found', 'Target user not found.');
+    }
+    // Reauthorize even a replay before returning any existing compensation.
+    if (
+      isOwnerRole(toUserAccessState(targetSnap.data()).role) &&
+      targetUid !== actor.uid &&
+      !isOwnerRole(actor.state.role)
+    ) {
+      throw new HttpsError(
+        'permission-denied',
+        'Only an owner may reverse points for another owner.',
+      );
+    }
 
     if (!originalSnap.exists) {
       throw new HttpsError('not-found', 'Original transaction not found.');

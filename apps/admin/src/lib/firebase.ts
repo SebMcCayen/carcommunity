@@ -9,12 +9,9 @@
  */
 
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
-import {
-  initializeAppCheck,
-  ReCaptchaEnterpriseProvider,
-  type AppCheck,
-} from 'firebase/app-check';
-import { getAuth, type Auth } from 'firebase/auth';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider, type AppCheck } from 'firebase/app-check';
+import { connectAuthEmulator, getAuth, type Auth } from 'firebase/auth';
+import { validateEmulatorConfig } from './emulator-config';
 
 function requireEnv(name: keyof ImportMetaEnv): string {
   const value = import.meta.env[name];
@@ -32,6 +29,18 @@ const firebaseConfig = {
   messagingSenderId: requireEnv('VITE_FIREBASE_MESSAGING_SENDER_ID'),
   appId: requireEnv('VITE_FIREBASE_APP_ID'),
 };
+
+const authEmulatorHost = import.meta.env.VITE_AUTH_EMULATOR_HOST as string | undefined;
+validateEmulatorConfig(
+  firebaseConfig.projectId,
+  {
+    auth: authEmulatorHost,
+    firestore: import.meta.env.VITE_FIRESTORE_EMULATOR_HOST as string | undefined,
+    functions: import.meta.env.VITE_FUNCTIONS_EMULATOR_HOST as string | undefined,
+  },
+  import.meta.env.PROD,
+);
+let authEmulatorConnected = false;
 
 let appCheckInstance: AppCheck | null = null;
 
@@ -75,5 +84,10 @@ export function getFirebaseApp(): FirebaseApp {
 }
 
 export function getFirebaseAuth(): Auth {
-  return getAuth(getFirebaseApp());
+  const auth = getAuth(getFirebaseApp());
+  if (authEmulatorHost && !import.meta.env.PROD && !authEmulatorConnected) {
+    connectAuthEmulator(auth, `http://${authEmulatorHost}`, { disableWarnings: true });
+    authEmulatorConnected = true;
+  }
+  return auth;
 }
