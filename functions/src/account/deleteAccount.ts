@@ -47,6 +47,12 @@ export const deleteAccount = onCall(
       throw new HttpsError('invalid-argument', parsed.message);
     }
 
+    // A freshly reauthorized native deletion must never act on an account
+    // that replaced the SDK session while Apple authorization was awaiting.
+    if (parsed.input.expectedUid !== undefined && parsed.input.expectedUid !== uid) {
+      throw new HttpsError('permission-denied', 'The account changed. Reopen account deletion.');
+    }
+
     const requestRef = db.collection('accountDeletionRequests').doc(uid);
     const existing = await requestRef.get();
     if (existing.exists) {

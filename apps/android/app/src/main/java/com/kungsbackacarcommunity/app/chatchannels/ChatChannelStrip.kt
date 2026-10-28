@@ -4,7 +4,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -111,30 +110,27 @@ internal fun ChatChannelStrip(
                             else MaterialTheme.colorScheme.outlineVariant),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Column(
-                                modifier = Modifier,
-                                horizontalAlignment = Alignment.CenterHorizontally,
+                            Text(
+                                labelTexts[tab.ordinal],
+                                // Equal space above AND below keeps the rendered
+                                // text centred. The top lane holds the unread dot;
+                                // multiline/scaled labels grow the target with it.
+                                modifier = Modifier.fillMaxWidth().padding(vertical = KccSpacing.s2),
+                                style = labelStyle,
+                                textAlign = TextAlign.Center,
+                            )
+                            Box(
+                                modifier = Modifier.align(Alignment.TopCenter)
+                                    .fillMaxWidth().height(KccSpacing.s2),
+                                contentAlignment = Alignment.Center,
                             ) {
-                                // Reserve the same compact badge lane for every tab,
-                                // so unread changes never move or overlap its label.
-                                Box(
-                                    modifier = Modifier.fillMaxWidth().height(KccSpacing.s2),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    if (unread.getOrElse(tab.ordinal) { false }) {
-                                        Badge(
-                                            modifier = Modifier.semantics { contentDescription = unreadLabel },
-                                            containerColor = MaterialTheme.colorScheme.tertiary,
-                                            contentColor = MaterialTheme.colorScheme.onTertiary,
-                                        )
-                                    }
+                                if (unread.getOrElse(tab.ordinal) { false }) {
+                                    Badge(
+                                        modifier = Modifier.semantics { contentDescription = unreadLabel },
+                                        containerColor = MaterialTheme.colorScheme.tertiary,
+                                        contentColor = MaterialTheme.colorScheme.onTertiary,
+                                    )
                                 }
-                                Text(
-                                    labelTexts[tab.ordinal],
-                                    modifier = Modifier.fillMaxWidth(),
-                                    style = labelStyle,
-                                    textAlign = TextAlign.Center,
-                                )
                             }
                         }
                     }

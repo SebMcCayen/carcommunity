@@ -1,13 +1,29 @@
+import { containsObjectionableText } from '../moderation/content-filter';
 import {
-  FieldPath, Timestamp, type DocumentSnapshot, type Firestore,
-  type Query, type Transaction,
+  FieldPath,
+  Timestamp,
+  type DocumentSnapshot,
+  type Firestore,
+  type Query,
+  type Transaction,
 } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { toHiddenUidSet } from '../blocking/block-visibility';
 import {
-  deny, detailSchema, documentId, listSchema, nonnegativeCount, parse, profileFailure,
-  READS_PER_HOUR, timestampCursor,
-  type Comment, type DetailResponse, type ListResponse, type PageInput, type Post,
+  deny,
+  detailSchema,
+  documentId,
+  listSchema,
+  nonnegativeCount,
+  parse,
+  profileFailure,
+  READS_PER_HOUR,
+  timestampCursor,
+  type Comment,
+  type DetailResponse,
+  type ListResponse,
+  type PageInput,
+  type Post,
 } from './contract';
 
 type Request = Pick<CallableRequest<unknown>, 'auth' | 'data'>;
@@ -15,7 +31,10 @@ type Author = { name: string; handle: string };
 
 /** One bounded page; no writes to Driver content, profiles, consent, or roles. */
 export class DriverFeedReader {
-  constructor(private readonly db: Firestore, private readonly now = Date.now) {}
+  constructor(
+    private readonly db: Firestore,
+    private readonly now = Date.now,
+  ) {}
 
   private uid(request: Request): string {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in to continue.');
@@ -26,7 +45,8 @@ export class DriverFeedReader {
 
   private async guard(tx: Transaction, uid: string): Promise<void> {
     const [canonical, driver] = await tx.getAll(
-      this.db.doc(`users/${uid}`), this.db.doc(`driverUsers/${uid}`),
+      this.db.doc(`users/${uid}`),
+      this.db.doc(`driverUsers/${uid}`),
     );
     const failure = profileFailure(canonical!.data(), driver!.data());
     if (failure) deny(failure);
@@ -39,19 +59,25 @@ export class DriverFeedReader {
     const now = this.now();
     const bucket = Math.floor(now / 3_600_000);
     const ref = this.db.doc(`driverRateLimits/${uid}_nativeFeedRead`);
-    await this.db.runTransaction(async (tx) => {
-      await this.guard(tx, uid);
-      const snap = await tx.get(ref);
-      const data = snap.data();
-      const count = data?.bucket === bucket ? data.count : 0;
-      if (!Number.isSafeInteger(count) || count < 0 || count >= READS_PER_HOUR) {
-        throw new HttpsError('resource-exhausted', 'Driver feed page limit reached.');
-      }
-      tx.set(ref, {
-        uid, action: 'nativeFeedRead', bucket, count: count + 1,
-        expiresAt: Timestamp.fromMillis(now + 7_200_000),
-      });
-    }, { maxAttempts: 3 });
+    await this.db.runTransaction(
+      async (tx) => {
+        await this.guard(tx, uid);
+        const snap = await tx.get(ref);
+        const data = snap.data();
+        const count = data?.bucket === bucket ? data.count : 0;
+        if (!Number.isSafeInteger(count) || count < 0 || count >= READS_PER_HOUR) {
+          throw new HttpsError('resource-exhausted', 'Driver feed page limit reached.');
+        }
+        tx.set(ref, {
+          uid,
+          action: 'nativeFeedRead',
+          bucket,
+          count: count + 1,
+          expiresAt: Timestamp.fromMillis(now + 7_200_000),
+        });
+      },
+      { maxAttempts: 3 },
+    );
   }
 
   private async context(tx: Transaction, uid: string) {
@@ -67,20 +93,32 @@ export class DriverFeedReader {
       if (!result) {
         result = (async () => {
           const paths = [`users/${other}`, `driverUsers/${other}`];
-          if (other !== uid) paths.push(
-            `driverUsers/${uid}/blockedUsers/${other}`,
-            `driverUsers/${other}/blockedUsers/${uid}`,
-            `userBlocks/${uid}/blocked/${other}`,
-            `userBlocks/${other}/blocked/${uid}`,
+          if (other !== uid)
+            paths.push(
+              `driverUsers/${uid}/blockedUsers/${other}`,
+              `driverUsers/${other}/blockedUsers/${uid}`,
+              `userBlocks/${uid}/blocked/${other}`,
+              `userBlocks/${other}/blocked/${uid}`,
+            );
+          const [canonical, driver, ...blocks] = await tx.getAll(
+            ...paths.map((path) => this.db.doc(path)),
           );
-          const [canonical, driver, ...blocks] = await tx.getAll(...paths.map((path) => this.db.doc(path)));
-          if (profileFailure(canonical!.data(), driver!.data()) || blocks.some((block) => block.exists)) {
+          if (
+            profileFailure(canonical!.data(), driver!.data()) ||
+            blocks.some((block) => block.exists)
+          ) {
             return null;
           }
           const name: unknown = canonical!.data()?.displayName;
           const handle: unknown = driver!.data()?.handle;
-          if (typeof name !== 'string' || !name.trim() || name.length > 120 ||
-              typeof handle !== 'string' || !/^[a-z0-9_]{3,24}$/.test(handle)) return null;
+          if (
+            typeof name !== 'string' ||
+            !name.trim() ||
+            name.length > 120 ||
+            typeof handle !== 'string' ||
+            !/^[a-z0-9_]{3,24}$/.test(handle)
+          )
+            return null;
           return { name, handle };
         })();
         authors.set(other, result);
@@ -110,62 +148,132 @@ export class DriverFeedReader {
   }
 
   private async comment(
-    doc: DocumentSnapshot, author: (uid: unknown) => Promise<Author | null>,
+    doc: DocumentSnapshot,
+    author: (uid: unknown) => Promise<Author | null>,
   ): Promise<Comment | null> {
     const data = doc.data();
-    if (!data || data.status !== 'active' || !timestampCursor(doc.id, data.createdAt) ||
-        typeof data.text !== 'string' || !data.text.trim() || data.text.length > 1200) return null;
+    if (
+      !data ||
+      data.status !== 'active' ||
+      !timestampCursor(doc.id, data.createdAt) ||
+      typeof data.text !== 'string' ||
+      !data.text.trim() ||
+      data.text.length > 1200 ||
+      containsObjectionableText(data.text)
+    )
+      return null;
     const identity = await author(data.authorUid);
     if (!identity) return null;
     return {
-      id: doc.id, authorUid: data.authorUid as string,
-      authorName: identity.name, authorHandle: identity.handle, text: data.text,
+      id: doc.id,
+      authorUid: data.authorUid as string,
+      authorName: identity.name,
+      authorHandle: identity.handle,
+      text: data.text,
       createdAtMillis: Math.floor((data.createdAt as Timestamp).toMillis()),
     };
   }
 
   private async post(
-    doc: DocumentSnapshot, author: (uid: unknown) => Promise<Author | null>,
+    doc: DocumentSnapshot,
+    author: (uid: unknown) => Promise<Author | null>,
   ): Promise<Post | null> {
     const base = await this.comment(doc, author);
     if (!base) return null;
     const data = doc.data()!;
     return {
       ...base,
-      mediaUrls: Array.isArray(data.mediaUrls) ? data.mediaUrls.slice(0, 4).filter(
-        (url): url is string => typeof url === 'string' && url.length <= 2048 &&
-          /^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\/[^/]+\/o\/driverThreadMedia%2F/i.test(url),
-      ) : [],
-      likeCount: nonnegativeCount(data.likeCount), replyCount: nonnegativeCount(data.replyCount),
+      mediaUrls: Array.isArray(data.mediaUrls)
+        ? data.mediaUrls
+            .slice(0, 4)
+            .filter(
+              (url): url is string =>
+                typeof url === 'string' &&
+                url.length <= 2048 &&
+                /^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\/[^/]+\/o\/driverThreadMedia%2F/i.test(
+                  url,
+                ),
+            )
+        : [],
+      likeCount: nonnegativeCount(data.likeCount),
+      replyCount: nonnegativeCount(data.replyCount),
     };
+  }
+
+  /** Reporting returns no content to the client and remains available after
+   * blocking. Only a published selected item is copied to the private queue. */
+  async captureForReport(request: Request, threadId: string, commentId?: string) {
+    const uid = this.uid(request);
+    return this.db.runTransaction(
+      async (tx) => {
+        await this.guard(tx, uid);
+        const parent = this.db.doc(`driverThreads/${threadId}`);
+        const thread = await tx.get(parent);
+        if (thread.data()?.status !== 'active') deny('thread-unavailable');
+        const item = commentId ? await tx.get(parent.collection('replies').doc(commentId)) : thread;
+        const data = item.data();
+        if (
+          !data ||
+          data.status !== 'active' ||
+          !documentId.safeParse(data.authorUid).success ||
+          typeof data.text !== 'string' ||
+          data.text.length > 1200
+        )
+          deny('thread-unavailable');
+        const author = await tx.get(this.db.doc(`users/${data.authorUid as string}`));
+        if (!author.exists || author.data()?.deleted === true) deny('thread-unavailable');
+        return {
+          authorUserId: data.authorUid as string,
+          authorDisplayName:
+            typeof author.data()?.displayName === 'string'
+              ? (author.data()!.displayName as string).slice(0, 120)
+              : null,
+          text: data.text,
+          createdAt: data.createdAt instanceof Timestamp ? data.createdAt : null,
+        };
+      },
+      { readOnly: true },
+    );
   }
 
   async list(request: Request): Promise<ListResponse> {
     const uid = this.uid(request);
     const input = parse(listSchema, request.data);
     await this.charge(uid);
-    return this.db.runTransaction(async (tx) => {
-      const { author } = await this.context(tx, uid);
-      const page = await tx.get(this.query(this.db.collection('driverThreads'), input, 'desc'));
-      const posts = await Promise.all(page.docs.map((doc) => this.post(doc, author)));
-      return { posts: posts.filter((post): post is Post => post !== null), nextCursor: this.next(page.docs, input) };
-    }, { readOnly: true });
+    return this.db.runTransaction(
+      async (tx) => {
+        const { author } = await this.context(tx, uid);
+        const page = await tx.get(this.query(this.db.collection('driverThreads'), input, 'desc'));
+        const posts = await Promise.all(page.docs.map((doc) => this.post(doc, author)));
+        return {
+          posts: posts.filter((post): post is Post => post !== null),
+          nextCursor: this.next(page.docs, input),
+        };
+      },
+      { readOnly: true },
+    );
   }
 
   async detail(request: Request): Promise<DetailResponse> {
     const uid = this.uid(request);
     const input = parse(detailSchema, request.data);
     await this.charge(uid);
-    return this.db.runTransaction(async (tx) => {
-      const { author } = await this.context(tx, uid);
-      // The parent is re-read and authorized in the SAME snapshot on EVERY page.
-      const ref = this.db.doc(`driverThreads/${input.threadId}`);
-      const post = await this.post(await tx.get(ref), author);
-      if (!post) deny('thread-unavailable');
-      const page = await tx.get(this.query(ref.collection('replies'), input, 'asc'));
-      const comments = await Promise.all(page.docs.map((doc) => this.comment(doc, author)));
-      return { post, comments: comments.filter((comment): comment is Comment => comment !== null),
-        nextCursor: this.next(page.docs, input) };
-    }, { readOnly: true });
+    return this.db.runTransaction(
+      async (tx) => {
+        const { author } = await this.context(tx, uid);
+        // The parent is re-read and authorized in the SAME snapshot on EVERY page.
+        const ref = this.db.doc(`driverThreads/${input.threadId}`);
+        const post = await this.post(await tx.get(ref), author);
+        if (!post) deny('thread-unavailable');
+        const page = await tx.get(this.query(ref.collection('replies'), input, 'asc'));
+        const comments = await Promise.all(page.docs.map((doc) => this.comment(doc, author)));
+        return {
+          post,
+          comments: comments.filter((comment): comment is Comment => comment !== null),
+          nextCursor: this.next(page.docs, input),
+        };
+      },
+      { readOnly: true },
+    );
   }
 }

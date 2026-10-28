@@ -303,6 +303,15 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).assertDoesNotExist()
         captureRedesignScreen("S01-map-collapsed-search")
 
+        composeTestRule.onNodeWithTag(MAP_HOME_MORE_TAG).performClick()
+        composeTestRule.onNodeWithText(str(R.string.shell_savedPlacesButton)).assertIsDisplayed()
+        captureRedesignScreen("S07-profile-menu-saved-places")
+        composeTestRule.onNodeWithText(str(R.string.shell_savedPlacesButton)).performClick()
+        composeTestRule.onNodeWithTag(SAVED_PLACES_PICKER_SHEET_TEST_TAG).assertIsDisplayed()
+        captureRedesignScreen("S08-saved-places-from-menu")
+        composeTestRule.runOnUiThread { composeTestRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertIsDisplayed()
+
         openNavSearch()
         composeTestRule.onNodeWithTag(NAV_SEARCH_TEST_TAG).assertIsDisplayed()
         captureRedesignScreen("S02-search-expanded")
@@ -664,7 +673,8 @@ class MapFirstShellTest {
         // the "Where to?" hint is hidden until the button is tapped.
         composeTestRule.onNodeWithTag(MAP_HOME_SEARCH_TAG).assertExists()
         composeTestRule.onNodeWithText(str(R.string.shell_searchHint)).assertDoesNotExist()
-        // Floating controls: layers + compass + recenter. (There is no longer a
+        // Floating controls: layers + compass; Saved places is in the avatar menu.
+        // (There is no longer a
         // right-side live-share control — its capabilities moved to the centre
         // live control's manage sheet. Order is pinned separately by
         // rightSideControls_areOrderedReportFirst.)
@@ -675,7 +685,7 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).assertExists()
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_layersButton)).assertExists()
-        composeTestRule.onNodeWithTag(MAP_HOME_SAVED_PLACES_TAG).assertExists()
+        composeTestRule.onNodeWithTag(MAP_HOME_SAVED_PLACES_TAG).assertDoesNotExist()
     }
 
     @Test
@@ -793,7 +803,7 @@ class MapFirstShellTest {
 
     /**
      * The right-side stack's ORDER, top-to-bottom:
-     * report → layers → compass → saved-places → chat.
+     * report → layers → compass. Saved places is in the avatar menu.
      *
      * Pinned by measured position rather than by declaration order, because the
      * order is the whole user-visible point of the change and a reordering of
@@ -807,16 +817,11 @@ class MapFirstShellTest {
         val report = topOf(MAP_HOME_REPORT_TAG)
         val layers = topOf(MAP_HOME_LAYERS_TAG)
         val compass = topOf(MAP_HOME_COMPASS_TAG)
-        val savedPlaces = topOf(MAP_HOME_SAVED_PLACES_TAG)
+        composeTestRule.onNodeWithTag(MAP_HOME_SAVED_PLACES_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).assertDoesNotExist()
 
         assertTrue("report must be above layers", report < layers)
         assertTrue("layers must be above the compass", layers < compass)
-        assertTrue("the compass must be above saved-places", compass < savedPlaces)
-        // Nothing sits between the compass and the saved-places control.
-        listOf(report, layers).forEach {
-            assertFalse("no control may sit between compass and saved-places", it in compass..savedPlaces)
-        }
     }
 
     /**
@@ -1060,7 +1065,7 @@ class MapFirstShellTest {
             assertEquals(1, surface.contentCompositions)
             assertFalse(surface.isActive)
         }
-        // All four complete labels must be visible together. A scroll action
+        // All five complete labels must be visible together. A scroll action
         // would both contradict that contract and fail on the fixed-width strip.
         val strip = composeTestRule.onNodeWithTag(CHAT_CHANNEL_STRIP_TEST_TAG).fetchSemanticsNode()
         assertFalse("Chat destinations must not scroll horizontally",
@@ -1092,6 +1097,11 @@ class MapFirstShellTest {
             val layouts = mutableListOf<TextLayoutResult>()
             labelNode.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
             val layout = layouts.single()
+            val labelBounds = labelNode.fetchSemanticsNode().boundsInRoot
+            val textTop = labelBounds.top + layout.getLineTop(0)
+            val textBottom = labelBounds.top + layout.getLineBottom(layout.lineCount - 1)
+            assertEquals("$tab rendered text is vertically centred",
+                bounds.center.y, (textTop + textBottom) / 2f, 1f)
             assertEquals("$tab full label source", label, layout.layoutInput.text.text)
             assertEquals("$tab first visible character", 0, layout.getLineStart(0))
             assertEquals("$tab last visible character", label.length,
@@ -1102,7 +1112,6 @@ class MapFirstShellTest {
                 assertTrue("$tab line $line fits the text layout",
                     layout.getLineLeft(line) >= 0f && layout.getLineRight(line) <= layout.size.width.toFloat())
             }
-            val labelBounds = labelNode.fetchSemanticsNode().boundsInRoot
             assertTrue("$tab label inside its target: $labelBounds / $bounds",
                 labelBounds.left >= bounds.left && labelBounds.right <= bounds.right &&
                     labelBounds.top >= bounds.top && labelBounds.bottom <= bounds.bottom)
@@ -1219,6 +1228,30 @@ class MapFirstShellTest {
                 "(was ${surface.panGestureCount})",
             surface.panGestureCount > 0,
         )
+    }
+
+    @Test
+    fun savedPlaces_avatarMenuOpensPicker_andBackReturnsToMap() {
+        setShell()
+        composeTestRule.onNodeWithTag(MAP_HOME_SAVED_PLACES_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.shell_savedPlacesButton)).assertDoesNotExist()
+
+        composeTestRule.onNodeWithTag(MAP_HOME_MORE_TAG).performClick()
+        composeTestRule.onNodeWithText(str(R.string.shell_savedPlacesButton)).assertIsDisplayed()
+        // Exercise Back through the popup window, before invoking its action.
+        androidx.test.espresso.Espresso.pressBack()
+        composeTestRule.onNodeWithTag(MAP_HOME_MORE_POPUP_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(SAVED_PLACES_PICKER_SHEET_TEST_TAG).assertDoesNotExist()
+
+        composeTestRule.onNodeWithTag(MAP_HOME_MORE_TAG).performClick()
+        composeTestRule.onNodeWithText(str(R.string.shell_savedPlacesButton)).performClick()
+        composeTestRule.onNodeWithTag(MAP_HOME_MORE_POPUP_TAG).assertDoesNotExist()
+        // This is the existing host-owned picker, using the existing saved store.
+        composeTestRule.onNodeWithTag(SAVED_PLACES_PICKER_SHEET_TEST_TAG).assertIsDisplayed()
+        androidx.test.espresso.Espresso.pressBack()
+        composeTestRule.onNodeWithTag(SAVED_PLACES_PICKER_SHEET_TEST_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(MAP_HOME_MORE_POPUP_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertIsDisplayed()
     }
 
     @Test

@@ -104,7 +104,10 @@ class ChatHubViewportTest {
         }
         if (scale == 1f && width >= 360) {
             assertEquals("Normal-width tab strip stays compact", 48f, strip.height, 0.01f)
-            assertTrue("Normal-width chrome leaves extra reading space", strip.bottom - root.top <= 124f)
+            // The source row has 4dp above/below its 48dp targets (56dp),
+            // replacing the old 48dp pill plus its 4dp bottom-only gap.
+            assertEquals("Normal source text tabs and symmetric gaps", 56f, sources.height, 0.01f)
+            assertTrue("Normal-width chrome leaves extra reading space", strip.bottom - root.top <= 128f)
         }
         // Budget includes the real status inset. The old title/source/back/icon stack exceeds it.
         assertTrue("Chrome must leave room for messages: $strip / $root", strip.bottom - root.top <= 144f)

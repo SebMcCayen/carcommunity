@@ -682,6 +682,7 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   'chatchannels.reportMessage': 'variable-member',
   'chatchannels.adminDeleteMessage': 'admin-rare',
   'moderation.reportUser': 'variable-member',
+  'moderation.reportPublicContent': 'variable-member',
   'incidents.report': 'variable-member',
   'incidents.listNearby': 'variable-member',
   'incidents.remove': 'variable-member',

@@ -246,6 +246,7 @@ import {
 import { reportMessage as chatChannelsReportMessage } from './chatchannels/reportMessage';
 import { adminDeleteMessage as chatChannelsAdminDeleteMessage } from './chatchannels/adminDeleteMessage';
 import { reportMessage as dmReportMessage } from './dm/reportMessage';
+import { reportPublicContent } from './moderation/reportPublicContent';
 import { reportUser as moderationReportUser } from './moderation/reportUser';
 
 /** Native Driver read bridge; owned by this Firebase project's default codebase. */
@@ -1505,6 +1506,7 @@ export const chatchannels = {
  * admin triage. See functions/src/moderation/moderation-core.ts.
  */
 export const moderation = {
+  reportPublicContent,
   reportUser: moderationReportUser,
 };
 

@@ -57,8 +57,8 @@ class ConvoyDockGeometryTest {
         for (a in controls.indices) for (b in a + 1 until controls.size) {
             assertTrue("convoy controls must not overlap", !controls[a].overlaps(controls[b]))
         }
-        for (tag in listOf(MAP_HOME_REPORT_TAG, MAP_HOME_LAYERS_TAG, MAP_HOME_COMPASS_TAG,
-            MAP_HOME_SAVED_PLACES_TAG)) {
+        rule.onNodeWithTag(MAP_HOME_SAVED_PLACES_TAG).assertDoesNotExist()
+        for (tag in listOf(MAP_HOME_REPORT_TAG, MAP_HOME_LAYERS_TAG, MAP_HOME_COMPASS_TAG)) {
             rule.onNodeWithTag(tag).performScrollTo().assertIsDisplayed()
             assertTrue("$tag stays above measured dock", bounds(tag).bottom <= dock.top + 1f)
         }

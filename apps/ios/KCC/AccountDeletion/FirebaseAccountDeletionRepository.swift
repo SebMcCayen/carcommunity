@@ -1,3 +1,4 @@
+import FirebaseAuth
 import FirebaseCore
 import Foundation
 
@@ -17,13 +18,16 @@ final class FirebaseAccountDeletionRepository: AccountDeletionRepository, @unche
     static let maximumReasonLength = 500
 
     private let functions: any AccountDeletionFunctionsCalling
+    private let expectedUID: String?
 
-    init(functions: any AccountDeletionFunctionsCalling) {
+    init(functions: any AccountDeletionFunctionsCalling, expectedUID: String? = nil) {
         self.functions = functions
+        self.expectedUID = expectedUID
     }
 
     func deleteAccount(reason: String?) async throws {
         var payload: [String: Any] = [:]
+        if let expectedUID { payload["expectedUid"] = expectedUID }
         if let reason = Self.normalizedReason(reason) {
             // The Functions backend validates JavaScript string length, which
             // is measured in UTF-16 code units rather than grapheme clusters.
@@ -37,7 +41,7 @@ final class FirebaseAccountDeletionRepository: AccountDeletionRepository, @unche
         guard let response = raw as? [String: Any],
               response["status"] as? String == "pending",
               let requestId = response["requestId"] as? String,
-              !requestId.isEmpty
+              !requestId.isEmpty, expectedUID == nil || expectedUID == requestId
         else {
             throw KccFunctionsError(code: .unknown)
         }
@@ -54,6 +58,9 @@ final class FirebaseAccountDeletionRepository: AccountDeletionRepository, @unche
         guard FirebaseApp.app() != nil,
               let functions = KccFunctionsClient.createIfAvailable()
         else { return nil }
-        return FirebaseAccountDeletionRepository(functions: functions)
+        guard let user = Auth.auth().currentUser else { return nil }
+        let repository = FirebaseAccountDeletionRepository(functions: functions, expectedUID: user.uid)
+        return AuthorizedAccountDeletionRepository(repository: repository,
+            authorization: FirebaseAppleDeletionAuthorization(auth: Auth.auth(), user: user))
     }
 }

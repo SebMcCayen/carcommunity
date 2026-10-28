@@ -225,6 +225,12 @@ describe('CarCommunity-only access with shared Firebase identity', () => {
       await expect(call('garage-addVehicle', {})).rejects.toMatchObject({
         code: 'functions/permission-denied',
       });
+      // Product suspension must precede payload parsing even for the newly
+      // integrated public-content reporter; shared Auth remains usable.
+      await expect(call('moderation-reportPublicContent', {})).rejects.toMatchObject({
+        code: 'functions/permission-denied',
+        details: { reason: 'carcommunity_access_restricted' },
+      });
       await expect(
         getDoc(doc(clientFirestore(memberApp), 'communityChat', 'global')),
       ).rejects.toMatchObject({ code: 'permission-denied' });
