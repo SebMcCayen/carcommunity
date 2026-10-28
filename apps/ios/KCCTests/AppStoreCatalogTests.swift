@@ -17,6 +17,19 @@ final class AppStoreCatalogTests: XCTestCase {
             XCTAssertFalse(StoreCatalogPolicy.permits([bad]))
         }
     }
+    func testReleaseDisclosuresResolveFromTheirDedicatedTableInBothLanguages() throws {
+        for language in ["sv", "en"] {
+            let path = try XCTUnwrap(Bundle.main.path(forResource: language, ofType: "lproj"))
+            let bundle = try XCTUnwrap(Bundle(path: path))
+            for key in ["iosStore.manage", "iosStore.renewal", "iosStore.deletionBilling"] {
+                let text = bundle.localizedString(forKey: key, value: nil, table: "AppStore")
+                XCTAssertNotEqual(text, key, "Missing \(language) release disclosure")
+            }
+            let price = bundle.localizedString(forKey: "iosStore.monthlyPrice", value: nil, table: "AppStore")
+            XCTAssertTrue(String(format: price, "TEST_PRICE").contains("TEST_PRICE"))
+        }
+    }
+
     private func entry(_ id: String, auto: Bool = true, months: Int? = 1, group: String? = "membership") -> StoreCatalogEntry {
         StoreCatalogEntry(id: id, isAutoRenewable: auto, monthlyPeriod: months, groupID: group)
     }

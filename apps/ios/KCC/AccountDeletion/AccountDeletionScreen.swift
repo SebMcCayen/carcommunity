@@ -25,7 +25,7 @@ struct AccountDeletionScreen: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(KccTheme.error.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
 
-                    Text("iosStore.deletionBilling")
+                    Text("iosStore.deletionBilling", tableName: "AppStore")
                         .font(.body).fixedSize(horizontal: false, vertical: true)
                     AppStoreSubscriptionManagementLink()
                     failureContent

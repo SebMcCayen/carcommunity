@@ -4,7 +4,7 @@ import SwiftUI
 struct AppStoreSubscriptionManagementLink: View {
     var body: some View {
         Link(destination: URL(string: "https://apps.apple.com/account/subscriptions")!) {
-            Text("iosStore.manage").frame(minHeight: 48)
+            Text("iosStore.manage", tableName: "AppStore").frame(minHeight: 48)
         }.buttonStyle(.bordered)
     }
 }

@@ -21,7 +21,7 @@ struct MembershipScreen: View {
                     body: "subscription.supporterBody"
                 )
 
-                Text("iosStore.renewal").font(.footnote).foregroundStyle(KccTheme.secondary)
+                Text("iosStore.renewal", tableName: "AppStore").font(.footnote).foregroundStyle(KccTheme.secondary)
                 AppStoreLegalLinks()
                 statusView
 
@@ -99,7 +99,7 @@ struct MembershipScreen: View {
                 .font(.subheadline)
                 .foregroundStyle(KccTheme.secondary)
             if let product {
-                Text(String.localizedStringWithFormat(NSLocalizedString("iosStore.monthlyPrice", comment: "Store price and verified monthly duration"), product.displayPrice))
+                Text(String.localizedStringWithFormat(NSLocalizedString("iosStore.monthlyPrice", tableName: "AppStore", comment: "Store price and verified monthly duration"), product.displayPrice))
                     .font(.subheadline.weight(.semibold))
                 Button { Task { await coordinator.purchase(productID) } } label: {
                     EditorSubmitLabel(title: isCurrent ? "subscription.currentPlanAction" : actionKey(for: productID))
