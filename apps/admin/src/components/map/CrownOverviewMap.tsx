@@ -74,7 +74,8 @@ export function CrownOverviewMap({
         const gl = module.default;
         instance = new gl.Map({
           container: node.current,
-          accessToken: geometryOnly ? '' : token,
+          // Deliberately invalid test token: no billable account. Empty tokens clear the canvas.
+          accessToken: geometryOnly ? 'pk.local-demo-no-cloud' : token,
           testMode: !!geometryOnly,
           preserveDrawingBuffer: !!geometryOnly,
           performanceMetricsCollection: !geometryOnly,
