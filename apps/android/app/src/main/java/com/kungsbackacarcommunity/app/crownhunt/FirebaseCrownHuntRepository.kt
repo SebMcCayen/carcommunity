@@ -21,7 +21,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  * index deploy is needed. Construction is guarded ([createIfAvailable]
  * returns null without Firebase).
  */
-class FirebaseCrownHuntRepository private constructor(
+class FirebaseCrownHuntRepository internal constructor(
     private val firestore: FirebaseFirestore,
     private val functions: FirebaseFunctions,
 ) : CrownHuntRepository {

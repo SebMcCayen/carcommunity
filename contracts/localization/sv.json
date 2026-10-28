@@ -2276,5 +2276,13 @@
     "more": "Visa fler varningar",
     "untilRevoked": "Gäller tills den återkallas",
     "expires": "Giltig till"
+  },
+  "carCommunityAccess": {
+    "checking": "Kontrollerar åtkomst…",
+    "error": "Åtkomsten kunde inte kontrolleras. Försök igen.",
+    "blacklistedTitle": "Svartlistad i CarCommunity",
+    "suspendedTitle": "Åtkomsten är begränsad",
+    "body": "Din åtkomst till CarCommunity är begränsad. Kontakta administratörerna om du har frågor.",
+    "retry": "Kontrollera igen"
   }
 }

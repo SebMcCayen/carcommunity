@@ -16,7 +16,8 @@
  * periodStart) via getAll — no query, no collectionGroup index.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import type { DocumentReference } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
@@ -77,7 +78,9 @@ export const adminSummary = onCall(
     const { companyId } = parsed.input;
     const periodType = parsed.input.periodType ?? 'day';
     // Default to the last aggregated day (aggregation runs for "yesterday").
-    const referenceDate = parsed.input.date ? new Date(parsed.input.date) : new Date(Date.now() - DAY_MS);
+    const referenceDate = parsed.input.date
+      ? new Date(parsed.input.date)
+      : new Date(Date.now() - DAY_MS);
     const bounds = resolvePeriodBounds(referenceDate, periodType);
 
     const threshold = await readEffectiveThreshold();
@@ -95,7 +98,8 @@ export const adminSummary = onCall(
       const stored: StoredAggregateMetric | null = data
         ? {
             totalCount: (data.totalCount as number | undefined) ?? 0,
-            uniqueContributorCount: (data.uniqueContributorCount as number | null | undefined) ?? null,
+            uniqueContributorCount:
+              (data.uniqueContributorCount as number | null | undefined) ?? null,
             // Untrusted stored value — coerce to a known status, failing closed
             // to no_data if the aggregate doc is corrupt/legacy.
             resultStatus: coerceResultStatus(data.resultStatus),

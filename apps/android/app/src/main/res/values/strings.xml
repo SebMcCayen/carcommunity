@@ -2119,4 +2119,10 @@
     <string name="accountWarnings_more">Visa fler varningar</string>
     <string name="accountWarnings_untilRevoked">Gäller tills den återkallas</string>
     <string name="accountWarnings_expires">Giltig till</string>
+    <string name="carCommunityAccess_checking">Kontrollerar åtkomst…</string>
+    <string name="carCommunityAccess_error">Åtkomsten kunde inte kontrolleras. Försök igen.</string>
+    <string name="carCommunityAccess_blacklistedTitle">Svartlistad i CarCommunity</string>
+    <string name="carCommunityAccess_suspendedTitle">Åtkomsten är begränsad</string>
+    <string name="carCommunityAccess_body">Din åtkomst till CarCommunity är begränsad. Kontakta administratörerna om du har frågor.</string>
+    <string name="carCommunityAccess_retry">Kontrollera igen</string>
 </resources>

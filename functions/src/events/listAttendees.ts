@@ -46,7 +46,8 @@
  * the single-peer helper below, NOT one Firestore query per candidate uid.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { FieldPath } from 'firebase-admin/firestore';
 import type { DocumentReference } from 'firebase-admin/firestore';
 import { db } from '../firebase';

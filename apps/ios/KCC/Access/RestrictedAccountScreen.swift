@@ -3,6 +3,7 @@ import SwiftUI
 struct RestrictedAccountScreen: View {
     @Environment(\.openURL) private var openURL
     let access: AccountAccess?
+    var uid: String? = nil
     @Bindable var privacyCoordinator: LiveLocationCoordinator
     let onSignOut: () -> Bool
     let onDeleted: () -> Bool
@@ -20,11 +21,16 @@ struct RestrictedAccountScreen: View {
                     .font(.system(size: 48))
                     .foregroundStyle(KccTheme.secondary)
                     .accessibilityHidden(true)
-                Text("accountStatus.suspendedTitle")
+                Text(access?.blacklisted == true ? "carCommunityAccess.blacklistedTitle" : "carCommunityAccess.suspendedTitle")
                     .font(.title2.bold())
                 Text(bodyKey)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(KccTheme.secondary)
+
+                if let reason = access?.restrictionReason {
+                    Text(verbatim: reason).font(.body).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                }
+                if let uid { AccountWarningsSection(uid: uid).id(uid) }
 
                 Button {
                     openURL(URL(string: "https://github.com/SebMcCayen/carcommunity/issues")!)
@@ -94,7 +100,7 @@ struct RestrictedAccountScreen: View {
     private var bodyKey: LocalizedStringKey {
         access == nil
             ? "accountStatus.verificationFailedBody"
-            : "accountStatus.suspendedBody"
+            : "carCommunityAccess.body"
     }
 
     private func policyButton(_ title: LocalizedStringKey, urlKey: String) -> some View {

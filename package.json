@@ -11,8 +11,8 @@
     "format:check": "prettier --check .",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm test --workspaces --if-present",
-    "test:scripts": "node --test \"scripts/*.test.mjs\"",
+    "test": "node scripts/run-no-cloud.mjs -- npm test --workspaces --if-present",
+    "test:scripts": "node scripts/run-no-cloud.mjs -- node --test \"scripts/*.test.mjs\"",
     "build": "npm run build --workspaces --if-present"
   },
   "devDependencies": {

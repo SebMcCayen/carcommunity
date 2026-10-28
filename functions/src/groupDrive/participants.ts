@@ -11,7 +11,8 @@
  * - leave: idempotent; does NOT stop the live location session.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
@@ -74,7 +75,10 @@ export const join = onCall(CALLABLE_OPTS, async (request): Promise<ParticipantRe
   const rejoined = await db.runTransaction(async (tx) => {
     const existing = await tx.get(ref);
     if (!existing.exists) {
-      tx.set(ref, buildParticipantDocument(displayName, () => FieldValue.serverTimestamp()));
+      tx.set(
+        ref,
+        buildParticipantDocument(displayName, () => FieldValue.serverTimestamp()),
+      );
       return false;
     }
     if (existing.data()!.status === 'left') {
@@ -93,29 +97,26 @@ export const join = onCall(CALLABLE_OPTS, async (request): Promise<ParticipantRe
   return { eventId, status: 'joined', rejoined };
 });
 
-export const updateStatus = onCall(
-  CALLABLE_OPTS,
-  async (request): Promise<ParticipantResponse> => {
-    const actor = await requireActiveActor(request);
+export const updateStatus = onCall(CALLABLE_OPTS, async (request): Promise<ParticipantResponse> => {
+  const actor = await requireActiveActor(request);
 
-    const parsed = parseUpdateDriveStatusInput(request.data);
-    if (!parsed.ok) {
-      throw new HttpsError('invalid-argument', parsed.message);
+  const parsed = parseUpdateDriveStatusInput(request.data);
+  if (!parsed.ok) {
+    throw new HttpsError('invalid-argument', parsed.message);
+  }
+  const { eventId, status } = parsed.input;
+  const ref = participantRef(eventId, actor.uid);
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists || snap.data()!.status === 'left') {
+      throw new HttpsError('failed-precondition', 'Not an active group drive participant.');
     }
-    const { eventId, status } = parsed.input;
-    const ref = participantRef(eventId, actor.uid);
+    tx.update(ref, { status, updatedAt: FieldValue.serverTimestamp() });
+  });
 
-    await db.runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
-      if (!snap.exists || snap.data()!.status === 'left') {
-        throw new HttpsError('failed-precondition', 'Not an active group drive participant.');
-      }
-      tx.update(ref, { status, updatedAt: FieldValue.serverTimestamp() });
-    });
-
-    return { eventId, status };
-  },
-);
+  return { eventId, status };
+});
 
 export const leave = onCall(CALLABLE_OPTS, async (request): Promise<ParticipantResponse> => {
   // Leaving must work even if the entitlement lapsed mid-drive.

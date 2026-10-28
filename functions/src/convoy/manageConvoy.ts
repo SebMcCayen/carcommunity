@@ -52,7 +52,8 @@
  *    notification still deep-links via 'open_notifications'.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { logger } from 'firebase-functions';
 import { FieldPath, FieldValue, Timestamp, type Transaction } from 'firebase-admin/firestore';
 import { db } from '../firebase';
@@ -60,11 +61,7 @@ import { requireActiveActor } from '../shared/memberActor';
 import { isRestricted, toUserAccessState } from '../shared/access';
 import { writeInAppNotification } from '../notifications/deliver';
 import { reportServerError } from '../errors/serverErrors';
-import {
-  isLiveShareEnabled,
-  startConvoyAutoSession,
-  stopConvoyAutoSession,
-} from '../live/session';
+import { isLiveShareEnabled, startConvoyAutoSession, stopConvoyAutoSession } from '../live/session';
 import {
   ACTIVE_CONVOY_STATUSES,
   ALREADY_IN_CONVOY_MESSAGE,
@@ -332,11 +329,7 @@ async function clearFollowMeTrail(
   convoyId: string,
   opts: { force: true } | { force?: false; departingUid: string },
 ): Promise<void> {
-  const ref = db
-    .collection('convoys')
-    .doc(convoyId)
-    .collection('followMe')
-    .doc(FOLLOW_ME_DOC_ID);
+  const ref = db.collection('convoys').doc(convoyId).collection('followMe').doc(FOLLOW_ME_DOC_ID);
   try {
     if (opts.force) {
       await ref.delete();
@@ -853,9 +846,7 @@ export const end = onCall(CALLABLE_OPTS, async (request): Promise<{ convoy: Conv
   // surface that silently vanishes reads as a bug — and someone whose app was
   // backgrounded gets no signal at all without this.
   await Promise.all([
-    forEachAutoSession(acceptedUids, (uid) =>
-      stopConvoyAutoSession(uid, parsed.input.convoyId),
-    ),
+    forEachAutoSession(acceptedUids, (uid) => stopConvoyAutoSession(uid, parsed.input.convoyId)),
     notifyConvoyMembers(
       endedFor,
       parsed.input.convoyId,
@@ -913,7 +904,9 @@ export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListConvoysRe
     .limit(MAX_CONVOYS_RETURNED);
 
   const newestSnap = await newestQuery.get();
-  let acceptedLive = newestSnap.docs.find((doc) => isActiveConvoyParticipant(doc.data(), actor.uid));
+  let acceptedLive = newestSnap.docs.find((doc) =>
+    isActiveConvoyParticipant(doc.data(), actor.uid),
+  );
   let liveScanIncomplete = false;
   // An uncapped newest response is already the caller's complete history.
   // If the accepted live convoy is in the capped newest page, it also needs
@@ -923,16 +916,17 @@ export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListConvoysRe
     let livePagesRead = 1;
     acceptedLive = livePage.docs.find((doc) => isActiveConvoyParticipant(doc.data(), actor.uid));
     while (!acceptedLive && livePage.docs.length === MAX_CONVOYS_RETURNED && livePagesRead < 2) {
-      livePage = await liveMembershipQuery.startAfter(livePage.docs[livePage.docs.length - 1]).get();
+      livePage = await liveMembershipQuery
+        .startAfter(livePage.docs[livePage.docs.length - 1])
+        .get();
       livePagesRead += 1;
       acceptedLive = livePage.docs.find((doc) => isActiveConvoyParticipant(doc.data(), actor.uid));
     }
     liveScanIncomplete = !acceptedLive && livePage.docs.length === MAX_CONVOYS_RETURNED;
   }
   const newestIds = new Set(newestSnap.docs.map((doc) => doc.id));
-  const missingLiveMemberships = acceptedLive && !newestIds.has(acceptedLive.id)
-    ? [acceptedLive]
-    : [];
+  const missingLiveMemberships =
+    acceptedLive && !newestIds.has(acceptedLive.id) ? [acceptedLive] : [];
   const docs = [
     ...missingLiveMemberships,
     ...newestSnap.docs.slice(0, MAX_CONVOYS_RETURNED - missingLiveMemberships.length),
@@ -1120,9 +1114,7 @@ export const leave = onCall(CALLABLE_OPTS, async (request): Promise<LeaveConvoyR
       outcome: decision.outcome,
       newLeaderUid: decision.newLeaderUid,
       leaverName: memberDisplayName(data, actor.uid),
-      newLeaderName: decision.newLeaderUid
-        ? memberDisplayName(data, decision.newLeaderUid)
-        : null,
+      newLeaderName: decision.newLeaderUid ? memberDisplayName(data, decision.newLeaderUid) : null,
     };
   });
 
@@ -1157,9 +1149,7 @@ export const leave = onCall(CALLABLE_OPTS, async (request): Promise<LeaveConvoyR
   // member-side freshness/membership gate is the backstop if this delete fails.
   await clearFollowMeTrail(
     convoyId,
-    settled.outcome === 'left_and_ended'
-      ? { force: true }
-      : { departingUid: actor.uid },
+    settled.outcome === 'left_and_ended' ? { force: true } : { departingUid: actor.uid },
   );
 
   // Tell the people still in it (or, when it ended, the people it ended for).
@@ -1294,9 +1284,7 @@ export const invite = onCall(CALLABLE_OPTS, async (request): Promise<InviteToCon
   // again INSIDE the transaction against a fresh read, which is the check that
   // actually enforces the cap.
   const preMemberSet = new Set(existingMemberUids);
-  const growthRequested = inviteeUids.some(
-    (uid) => uid !== actor.uid && !preMemberSet.has(uid),
-  );
+  const growthRequested = inviteeUids.some((uid) => uid !== actor.uid && !preMemberSet.has(uid));
   if (growthRequested && existingMemberUids.length >= MAX_CONVOY_SIZE) {
     throw new HttpsError('failed-precondition', CONVOY_FULL_MESSAGE);
   }
@@ -1391,8 +1379,11 @@ export const invite = onCall(CALLABLE_OPTS, async (request): Promise<InviteToCon
     const memberPatch: Record<string, unknown> = {};
     const profilePatch: Record<string, unknown> = {};
     for (const invitee of stillNew) {
-      memberPatch[invitee.uid] = buildMemberEntry(invitee.uid, 'member', 'invited', () =>
-        FieldValue.serverTimestamp(),
+      memberPatch[invitee.uid] = buildMemberEntry(
+        invitee.uid,
+        'member',
+        'invited',
+        () => FieldValue.serverTimestamp(),
         false,
       );
       profilePatch[invitee.uid] = {

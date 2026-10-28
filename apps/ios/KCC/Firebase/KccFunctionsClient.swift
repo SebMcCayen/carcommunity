@@ -24,7 +24,7 @@ final class KccFunctionsClient: @unchecked Sendable {
 
     private let functions: Functions
 
-    private init(functions: Functions) {
+    init(functions: Functions) {
         self.functions = functions
     }
 

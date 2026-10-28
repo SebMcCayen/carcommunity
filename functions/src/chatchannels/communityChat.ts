@@ -78,7 +78,8 @@
  * marker + the client's unread dot still serve the second one for free.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { FieldValue, Timestamp, type DocumentReference } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
@@ -190,9 +191,7 @@ async function resolveMentions(candidates: string[], senderUid: string): Promise
 
   const [profileSnaps, blockSnaps] = await Promise.all([
     db.getAll(...candidates.map((uid) => db.collection('users').doc(uid))),
-    db.getAll(
-      ...candidates.flatMap((uid) => [blockRef(senderUid, uid), blockRef(uid, senderUid)]),
-    ),
+    db.getAll(...candidates.flatMap((uid) => [blockRef(senderUid, uid), blockRef(uid, senderUid)])),
   ]);
 
   return candidates.filter((_uid, index) => {
@@ -318,7 +317,7 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
   // reply snapshot is resolved in parallel (server-side, same channel — the
   // client never supplies the quoted author/text); it stays null unless this
   // post is a reply AND chatReplies is on.
-  const [mentions, replyTo] = await Promise.all([
+  const [mentions, resolvedReply] = await Promise.all([
     resolveMentions(normalizeMentionCandidates(mentionedUids, actor.uid), actor.uid),
     resolveReplySnapshot(replyToMessageId),
   ]);
@@ -328,9 +327,7 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
   // setup: `gcloud firestore fields ttls update expireAt \
   //   --collection-group=messages`; the policy is field-scoped, so it also
   // covers convoy messages, which share the `messages` collection group).
-  const expireAt = Timestamp.fromDate(
-    chatMessageExpiry(new Date(), COMMUNITY_CHAT_RETENTION_DAYS),
-  );
+  const expireAt = Timestamp.fromDate(chatMessageExpiry(new Date(), COMMUNITY_CHAT_RETENTION_DAYS));
 
   // `create()`, NOT `set()`: the write IS the idempotency guard, and it is the
   // only one. A pre-read ("does this id exist yet?") cannot be the guard — two
@@ -339,10 +336,11 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
   // mention notifications below. With `create()` Firestore arbitrates: exactly
   // one wins, and the loser replays the winner's result — including the winner's
   // stored mention set — with no side effects of its own. Since the guard needs
-  // no read, the send costs a single write on the normal path and only pays for
-  // a read when it actually loses a race.
+  // an ordinary keyed post reads the deletion marker as well. Replies also
+  // read the canonical parent, serializing sends with moderation.
+  let replyTo = resolvedReply;
   try {
-    await messageRef.create(
+    const document = () =>
       buildChatMessageDocument(
         {
           senderUid: actor.uid,
@@ -351,13 +349,35 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
           expireAt,
           mentionedUids: mentions,
           clientId,
-          // Persisted only when non-null (an actual reply with a resolvable
-          // parent) — buildChatMessageDocument omits the field otherwise.
           ...(replyTo ? { replyTo } : {}),
         },
         () => FieldValue.serverTimestamp(),
-      ),
-    );
+      );
+    if (resolvedReply || clientId !== undefined) {
+      // Serialize the quoted snapshot with moderation deleting its canonical parent.
+      // A racing retry re-reads the parent; it can never resurrect removed text.
+      await db.runTransaction(async (tx) => {
+        const tombstone = await tx.get(
+          db.collection('communityChatDeletedMessages').doc(messageRef.id),
+        );
+        if (tombstone.exists)
+          throw new HttpsError('failed-precondition', 'Meddelandet har tagits bort av moderator.');
+        const parent = resolvedReply
+          ? await tx.get(communityMessagesRef().doc(resolvedReply.messageId))
+          : null;
+        replyTo = buildReplyToSnapshot(
+          parent?.exists
+            ? {
+                messageId: parent.id,
+                senderUid: parent.get('senderUid'),
+                senderDisplayName: parent.get('senderDisplayName'),
+                text: parent.get('text'),
+              }
+            : null,
+        );
+        tx.create(messageRef, document());
+      });
+    } else await messageRef.create(document());
   } catch (error) {
     if (clientId === undefined || !isAlreadyExistsError(error)) {
       throw error;

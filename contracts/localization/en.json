@@ -2276,5 +2276,13 @@
     "more": "Load more warnings",
     "untilRevoked": "Valid until revoked",
     "expires": "Valid until"
+  },
+  "carCommunityAccess": {
+    "checking": "Checking access…",
+    "error": "Access could not be verified. Please retry.",
+    "blacklistedTitle": "Blacklisted in CarCommunity",
+    "suspendedTitle": "Access is restricted",
+    "body": "Your access to CarCommunity is restricted. Contact the administrators if you have questions.",
+    "retry": "Check again"
   }
 }

@@ -13,6 +13,7 @@
 import * as functionsV1 from 'firebase-functions/v1';
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
+import { initializeCarCommunityAccess } from '../access/carCommunity';
 import { db } from '../firebase';
 import {
   buildUserPrivateDocument,
@@ -34,10 +35,7 @@ export async function provisionUserDocuments(
   const serverTimestamp = () => FieldValue.serverTimestamp();
 
   return firestore.runTransaction(async (tx) => {
-    const [profileSnap, privateSnap] = await Promise.all([
-      tx.get(profileRef),
-      tx.get(privateRef),
-    ]);
+    const [profileSnap, privateSnap] = await Promise.all([tx.get(profileRef), tx.get(privateRef)]);
     if (profileSnap.exists) {
       return false;
     }
@@ -66,6 +64,11 @@ export const onUserCreate = functionsV1
     const created = await provisionUserDocuments(db, {
       uid: user.uid,
       email: user.email,
+    });
+    await initializeCarCommunityAccess(user.uid).catch(() => {
+      logger.warn('CarCommunity initialization pending; shared profile is provisioned', {
+        uid: user.uid,
+      });
     });
     // Never log emails, tokens, or other credentials — UID only.
     logger.info(created ? 'Provisioned user documents' : 'User documents already provisioned', {

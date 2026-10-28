@@ -91,6 +91,7 @@ export function parseDeleteAccountInput(data: unknown): ParseResult<DeleteAccoun
 export const PURGE_DOC_TREES = [
   'userWarnings',
   'accountWarningSignals',
+  'carCommunityAccess',
   'adminMemberOperations',
   'users',
   'userPrivate',
@@ -305,7 +306,7 @@ export function blockMirrorRtdbKey(rowPath: string): string | null {
  * retry after a partially-failed purge still finds the path, and re-running only
  * ever rewrites the same `null`.
  */
-export const LIVE_LOCATION_RTDB_ROOTS = ['liveLocation', 'presence'] as const;
+export const LIVE_LOCATION_RTDB_ROOTS = ['liveLocation', 'presence', 'carCommunityAccess'] as const;
 
 export const PURGE_STORAGE_PREFIXES = (uid: string): string[] => [
   `profileImages/${uid}/`,

@@ -858,7 +858,7 @@
     {
       "name": "account.deleteAccount",
       "domain": "account",
-      "description": "Immediate soft delete (stage 1 of the two-stage deletion workflow): disables the Firebase Auth user and revokes refresh tokens FIRST (fail-safe ordering), then writes accountDeletionRequests/{uid} (status pending) and users/{uid}.deleted=true atomically. Idempotent — repeat calls return the pending request. signedIn access: works while suspended (deletion is a support path). The hard purge runs after the 30-day retention window via the scheduled account-purgeDeleted (Firestore trees, owned vehicles/rides, storage prefixes, the Auth user; moderation/audit history is deliberately retained and the request record becomes the proof-of-deletion). Deployed via grouped export as account-deleteAccount (functions/src/account/deleteAccount.ts). Native clients may supply expectedUid; a mismatch with authenticated UID is rejected before mutation. Apple authorization is freshly reauthenticated/revoked on iOS. The purge also erases authored event chat and RSVP records, including orphaned parents, using a resumable backend-only cursor.",
+      "description": "Immediate soft delete (stage 1 of the two-stage deletion workflow): disables the Firebase Auth user and revokes refresh tokens FIRST (fail-safe ordering), then writes accountDeletionRequests/{uid} (status pending) and users/{uid}.deleted=true atomically. Idempotent — repeat calls return the pending request. signedIn access: works while suspended (deletion is a support path). The hard purge runs after the 30-day retention window via the scheduled account-purgeDeleted (Firestore trees, owned vehicles/rides, storage prefixes, the Auth user; moderation/audit history is deliberately retained and the request record becomes the proof-of-deletion). Deployed via grouped export as account-deleteAccount (functions/src/account/deleteAccount.ts).",
       "access": "signedIn",
       "appCheck": true,
       "status": "implemented",
@@ -903,7 +903,7 @@
     {
       "name": "admin.suspendUser",
       "domain": "admin",
-      "description": "Suspends a user (moderation): sets the suspended custom claim, mirrors users/{uid}.suspended, and writes immutable moderationActions and adminAuditEvents records with actor, target, reason, and server timestamp. Deployed via grouped export as admin-suspendUser (functions/src/admin/suspendUser.ts).",
+      "description": "Compatibility payload/response for audited CarCommunity-only suspension or restoration. Never modifies shared Auth claims, disabled state or canonical users restrictions.",
       "access": "admin",
       "appCheck": true,
       "status": "implemented",
@@ -921,7 +921,7 @@
     {
       "name": "admin.restoreAccess",
       "domain": "admin",
-      "description": "Restores a suspended user: clears the suspended custom claim, mirrors users/{uid}.suspended, and writes immutable moderationActions and adminAuditEvents records. Deployed via grouped export as admin-restoreAccess (functions/src/admin/restoreAccess.ts).",
+      "description": "Compatibility payload/response for audited CarCommunity-only suspension or restoration. Never modifies shared Auth claims, disabled state or canonical users restrictions.",
       "access": "admin",
       "appCheck": true,
       "status": "implemented",
@@ -1448,6 +1448,87 @@
       "appCheck": true,
       "status": "implemented",
       "source": "docs/admin/member-tools.md"
+    },
+    {
+      "name": "account.getAccess",
+      "domain": "account",
+      "description": "Own product-only access initialization/status; verified provider subject hashes; no shared Auth mutations.",
+      "access": "signedIn",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin/carcommunity-access.md"
+    },
+    {
+      "name": "admin.getAccessTarget",
+      "domain": "admin",
+      "description": "Fresh authorized product-only access decision state including deleted original UID.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin/carcommunity-access.md"
+    },
+    {
+      "name": "admin.updateAccess",
+      "domain": "admin",
+      "description": "Audited CarCommunity-only suspension/restore and persistent Google/Apple blacklist/unlist; separate statuses, reviewed versions and idempotent receipts.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin/carcommunity-access.md"
+    },
+    {
+      "name": "admin.listAccessBlocks",
+      "domain": "admin",
+      "description": "Paged active blacklist cases, retained across account erasure so an admin can explicitly unlist the case.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin/carcommunity-access.md"
+    },
+    {
+      "name": "admin.listMemberHistory",
+      "domain": "admin",
+      "description": "Paged safe member audit summary with actor display name; raw evidence and details never returned.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin/member-card.md"
+    },
+    {
+      "name": "admin.listPublicReports",
+      "domain": "admin",
+      "description": "Cursor-paginated event and public community message reports. Server status filters, strict canonical path allowlist. No DM or convoy reports.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin-public-moderation.md"
+    },
+    {
+      "name": "admin.listMemberMessages",
+      "domain": "admin",
+      "description": "Admin-only bounded member message pages across event chats and communityChat/global. No private messages, convoy or club chat.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin-public-moderation.md"
+    },
+    {
+      "name": "admin.getPublicModerationCase",
+      "domain": "admin",
+      "description": "Current message, report version, one earlier message from the same chat and safe moderation history. Strict report and canonical scope binding.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin-public-moderation.md"
+    },
+    {
+      "name": "admin.decidePublicModeration",
+      "domain": "admin",
+      "description": "Mandatory reason, reviewed version, actor binding and durable receipt. Commit-time authority, transactional message/report/audit decision; bounded resumable public quote redaction.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin-public-moderation.md"
     },
     {
       "name": "moderation.reportPublicContent",

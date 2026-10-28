@@ -15,7 +15,8 @@
  * post, so this callable has no block checks.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import {
@@ -73,11 +74,7 @@ export const postChatMessage = onCall(
       );
     }
 
-    const messageRef = db
-      .collection('events')
-      .doc(input.eventId)
-      .collection('messages')
-      .doc();
+    const messageRef = db.collection('events').doc(input.eventId).collection('messages').doc();
     await messageRef.set(
       buildChatMessageDocument(
         {

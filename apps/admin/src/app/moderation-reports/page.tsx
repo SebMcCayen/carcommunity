@@ -17,10 +17,10 @@
  *    adminAuditEvents record) — a possible follow-up if audit parity is wanted.
  */
 
+import { Link } from 'react-router-dom';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
-  adminDeleteCommunityMessage,
   adminListModerationReports,
   isCommunityMessageReport,
   MODERATION_REPORT_TARGET_TYPES,
@@ -215,37 +215,6 @@ export default function ModerationReportsPage() {
     [filter, load],
   );
 
-  const handleDeleteMessage = useCallback(
-    async (report: AdminModerationReport) => {
-      if (actingRef.current) return;
-      if (!window.confirm(t('moderationReports.confirmDeleteMessage'))) return;
-      actingRef.current = true;
-      setActingId(report.id);
-      setActionError(null);
-      setSuccessMessage(null);
-      try {
-        // Deliberately pass NO reason: the callable's `reason` is a MODERATOR
-        // note (the backend stamps a default when omitted). The report's
-        // `reason` is the REPORTER's category (e.g. "spam"), so forwarding it
-        // would misrepresent what the moderator did in the admin audit log. If a
-        // note field is ever added to this UI, pass it only when non-empty.
-        const result = await adminDeleteCommunityMessage(report.targetId);
-        // Reload so the report's now-resolved status (and any sibling reports on
-        // the same message) reflect the backend's transactional resolution.
-        await load(filter);
-        setSuccessMessage(
-          t(result.deleted ? 'moderationReports.deleteSuccess' : 'moderationReports.alreadyDeleted'),
-        );
-      } catch (err) {
-        setActionError((err as ApiError)?.message ?? t('moderationReports.deleteError'));
-      } finally {
-        setActingId(null);
-        actingRef.current = false;
-      }
-    },
-    [filter, load],
-  );
-
   return (
     <div className={styles.page}>
       <header className={styles.header}>
@@ -329,7 +298,9 @@ export default function ModerationReportsPage() {
                     {report.snapshotText && (
                       <span
                         className={styles.messageSnapshot}
-                        title={report.snapshotAuthorDisplayName ?? report.snapshotAuthorUserId ?? ''}
+                        title={
+                          report.snapshotAuthorDisplayName ?? report.snapshotAuthorUserId ?? ''
+                        }
                       >
                         {t('moderationReports.messageSnapshotLabel')}: “{report.snapshotText}”
                       </span>
@@ -348,18 +319,14 @@ export default function ModerationReportsPage() {
                   <td>
                     <div className={styles.actions}>
                       {isCommunityMessageReport(report) && (
-                        <button
-                          type="button"
-                          className={styles.deleteButton}
-                          onClick={() => void handleDeleteMessage(report)}
-                          disabled={actingId !== null}
+                        <Link
+                          className={styles.actionButton}
+                          to={`/moderation?caseSource=community&messageId=${encodeURIComponent(report.targetId)}&reportId=${encodeURIComponent(report.id)}`}
                         >
-                          {actingId === report.id
-                            ? t('moderationReports.deletePending')
-                            : t('moderationReports.deleteMessage')}
-                        </button>
+                          Granska i modereringskön
+                        </Link>
                       )}
-                      {report.status !== 'reviewed' && (
+                      {!isCommunityMessageReport(report) && report.status !== 'reviewed' && (
                         <button
                           type="button"
                           className={styles.actionButton}
@@ -371,7 +338,7 @@ export default function ModerationReportsPage() {
                             : t('moderationReports.markReviewed')}
                         </button>
                       )}
-                      {report.status !== 'dismissed' && (
+                      {!isCommunityMessageReport(report) && report.status !== 'dismissed' && (
                         <button
                           type="button"
                           className={styles.actionButton}
@@ -383,7 +350,7 @@ export default function ModerationReportsPage() {
                             : t('moderationReports.dismiss')}
                         </button>
                       )}
-                      {report.status !== 'pending' && (
+                      {!isCommunityMessageReport(report) && report.status !== 'pending' && (
                         <button
                           type="button"
                           className={styles.actionButton}

@@ -19,7 +19,7 @@
  * No input (an empty object, or any input, is ignored).
  */
 
-import { onCall } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';

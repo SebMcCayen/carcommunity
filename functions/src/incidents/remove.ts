@@ -10,7 +10,8 @@
  * the marker disappears for everyone on the next nearby fetch.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';

@@ -13,6 +13,7 @@
 
 import { HttpsError } from 'firebase-functions/v2/https';
 import type { CallableRequest } from 'firebase-functions/v2/https';
+import { requireCarCommunityAccess } from '../access/carCommunity';
 import { db } from '../firebase';
 import { guardActorIsActiveAdmin } from './claims-core';
 import { toUserAccessState, type UserAccessState } from '../shared/access';
@@ -46,5 +47,6 @@ export async function requireAdminActor(request: CallableRequest): Promise<Admin
     throw new HttpsError(guard.code, guard.message);
   }
 
+  await requireCarCommunityAccess(auth.uid);
   return { uid: auth.uid, state };
 }

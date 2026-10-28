@@ -27,7 +27,7 @@
  * the link to the Google Cloud billing console.
  */
 
-import { onCall } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
 import { MAX_INSTANCES_ADMIN, CPU_ADMIN } from '../shared/instanceLimits';
@@ -60,17 +60,16 @@ const CALLABLE_OPTS = {
  * its date. Returns nulls if no snapshot exists yet — the model then falls back
  * to a labelled default and the board says so.
  */
-async function readLatestMemberCount(): Promise<{ totalUsers: number | null; date: string | null }> {
+async function readLatestMemberCount(): Promise<{
+  totalUsers: number | null;
+  date: string | null;
+}> {
   // Ordered by the `date` field (== the YYYY-MM-DD doc id) descending, served
   // from the automatic single-field index — no composite index required.
   // Deliberately NOT orderBy('__name__','desc'): descending key scans are
   // rejected by Firestore ("does not support descending key scans"), so we sort
   // the mirrored `date` field instead, which every snapshot carries.
-  const snap = await db
-    .collection(METRICS_COLLECTION)
-    .orderBy('date', 'desc')
-    .limit(1)
-    .get();
+  const snap = await db.collection(METRICS_COLLECTION).orderBy('date', 'desc').limit(1).get();
   if (snap.empty) {
     return { totalUsers: null, date: null };
   }

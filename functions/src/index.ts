@@ -1,3 +1,12 @@
+import {
+  listPublicReports,
+  listMemberMessages,
+  getPublicModerationCase,
+  decidePublicModeration,
+} from './admin/publicModeration';
+import { listMemberHistory } from './admin/memberHistory';
+import { getAccess, onAccessWrite, onIdentityWrite } from './access/carCommunity';
+import { getAccessTarget, updateAccess, listAccessBlocks } from './access/adminAccess';
 /**
  * Cloud Functions entry point.
  *
@@ -308,6 +317,14 @@ export const auth = {
  * here via the Admin SDK — clients can never set or modify them.
  */
 export const admin = {
+  listPublicReports,
+  listMemberMessages,
+  getPublicModerationCase,
+  decidePublicModeration,
+  listMemberHistory,
+  getAccessTarget,
+  listAccessBlocks,
+  updateAccess,
   listWarnings,
   revokeWarning,
   setWarningExpiry,
@@ -1084,6 +1101,7 @@ export const police = {
  * functions/src/account/deletion-core.ts.
  */
 export const account = {
+  getAccess,
   listWarnings: listOwnWarnings,
   deleteAccount,
   purgeDeleted,
@@ -1534,3 +1552,6 @@ export const finance = {
   updateRecurringCost: financeUpdateRecurringCost,
   deleteRecurringCost: financeDeleteRecurringCost,
 };
+
+/** Product-only access mirrors; no shared Auth changes. */
+export const carCommunityAccess = { onAccessWrite, onIdentityWrite };

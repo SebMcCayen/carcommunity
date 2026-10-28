@@ -8,13 +8,14 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
-    "test": "vitest run"
+    "test": "node ../../scripts/run-no-cloud.mjs -- vitest run"
   },
   "dependencies": {
     "@carcommunity/shared": "^0.1.0",
     "@mapbox/mapbox-gl-draw": "^1.5.2",
     "firebase": "^12.19.0",
     "h3-js": "^4.2.1",
+    "lucide-react": "1.62.0",
     "mapbox-gl": "^3.32.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

@@ -82,6 +82,10 @@ final class AppAccessSession {
         return accountState
     }
 
+    func refreshProductAccess() {
+        if let uid { accessRepository?.refreshProductAccess(uid: uid) }
+    }
+
     func refreshFlags() async {
         guard uid != nil, let flagsRepository else { return }
         do { flags = try await flagsRepository.fetch() } catch {
