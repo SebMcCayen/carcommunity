@@ -28,22 +28,28 @@ struct BlockedUsersScreen: View {
         VStack(alignment: .leading, spacing: KccSpacing.s4) {
             Button(action: onBack) {
                 Label("profile.back", systemImage: "chevron.backward")
-                    .font(.system(size: KccTypeScale.bodyMd))
+                    .font(.body)
+                    .frame(minHeight: 48)
             }
             .accessibilityIdentifier("blockedUsers.back")
+            .padding(.horizontal, KccSpacing.s4)
 
-            Text("blocking.blockedUsersTitle")
-                .font(.system(size: KccTypeScale.headingLg, weight: .semibold))
-
-            if case .failed = coordinator.actionStatus {
-                errorNotice
+            ScrollView {
+                VStack(alignment: .leading, spacing: KccSpacing.s4) {
+                    if case .loaded = coordinator.state {
+                        Text("blocking.blockedUsersTitle").font(.title2.bold()).accessibilityAddTraits(.isHeader)
+                    }
+                    if case .failed = coordinator.actionStatus { errorNotice }
+                    content
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(KccSpacing.s4)
             }
-
-            content
+            .accessibilityIdentifier("blockedUsers.content")
         }
-        .padding(KccSpacing.s6)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(.background, ignoresSafeAreaEdges: .all)
+        .kccReadingSurface(pageBackground: true)
+        .tint(KccTheme.driver)
         .task { coordinator.start() }
         .task(id: unblockRequest?.id) {
             guard let request = unblockRequest else { return }
@@ -79,63 +85,38 @@ struct BlockedUsersScreen: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityLabel(Text("blocking.blockedUsersTitle"))
         case .unavailable:
-            Text("blocking.unavailable")
-                .foregroundStyle(.secondary)
+            SettingsStateCard(title: "blocking.blockedUsersTitle", message: "blocking.unavailable", symbol: "person.slash")
                 .accessibilityIdentifier("blockedUsers.unavailable")
         case .empty:
-            Text("blocking.blockedUsersEmpty")
-                .foregroundStyle(.secondary)
+            SettingsStateCard(title: "blocking.blockedUsersTitle", message: "blocking.blockedUsersEmpty", symbol: "person.slash")
                 .accessibilityIdentifier("blockedUsers.empty")
         case .failed:
-            VStack(alignment: .leading, spacing: KccSpacing.s3) {
-                Text("blocking.errorGeneric")
-                    .foregroundStyle(.red)
-                Button("blocking.retry") { coordinator.reload() }
-                    .buttonStyle(.bordered)
-            }
-            .accessibilityIdentifier("blockedUsers.loadError")
+            SettingsStateCard(title: "blocking.blockedUsersTitle", message: "blocking.errorGeneric", symbol: "person.slash",
+                retryTitle: "blocking.retry", onRetry: coordinator.reload)
+                .accessibilityIdentifier("blockedUsers.loadError")
         case .loaded(let users):
-            ScrollView {
-                LazyVStack(spacing: KccSpacing.s3) {
-                    ForEach(users) { user in row(user) }
+            LazyVStack(spacing: KccSpacing.s3) {
+                ForEach(users) { user in
+                    BlockedUserCard(user: user, working: coordinator.actionStatus.isWorking,
+                        onRequestUnblock: { confirmationTarget = user })
                 }
             }
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("blockedUsers.list")
         }
     }
 
-    private func row(_ user: BlockedUser) -> some View {
-        HStack(spacing: KccSpacing.s3) {
-            VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                Text(user.displayName ?? String(localized: "blocking.unknownUser"))
-                    .font(.system(size: KccTypeScale.titleMd, weight: .medium))
-                if let blockedAt = user.blockedAt {
-                    Text(blockedAt, format: .dateTime.year().month().day())
-                        .font(.system(size: KccTypeScale.bodySm))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Button("blocking.unblock") { confirmationTarget = user }
-                .buttonStyle(.bordered)
-                .disabled(coordinator.actionStatus.isWorking)
-                .accessibilityIdentifier("blockedUsers.unblock.\(user.userId)")
-        }
-        .padding(KccSpacing.s4)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
-        .accessibilityElement(children: .contain)
-    }
-
     private var errorNotice: some View {
-        HStack {
+        SocialFlow {
             Text("blocking.errorGeneric")
-                .font(.system(size: KccTypeScale.bodySm))
+                .font(.body)
                 .foregroundStyle(.red)
-            Spacer()
-            Button("common.dismiss") { coordinator.resetActionStatus() }
-                .font(.system(size: KccTypeScale.bodySm))
+            SocialFlowSpacer()
+            Button { coordinator.resetActionStatus() } label: {
+                Text("common.dismiss").frame(minHeight: 48)
+            }.buttonStyle(.bordered)
         }
+        .kccContentCard()
         .accessibilityIdentifier("blockedUsers.actionError")
     }
 }

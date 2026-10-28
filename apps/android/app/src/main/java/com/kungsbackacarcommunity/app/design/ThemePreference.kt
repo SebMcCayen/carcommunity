@@ -5,6 +5,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.time.LocalTime
 
 /**
  * The user's app-wide light/dark choice.
@@ -14,12 +15,14 @@ import kotlinx.coroutines.flow.asStateFlow
  * deliberately *sticky*: once chosen, nothing the system does — a scheduled
  * sunset->sunrise flip, battery-saver forcing dark, or the user toggling the
  * system theme — changes the app's appearance. That stickiness is the whole
- * point of the setting, so [resolveDark] ignores `systemInDark` for those two.
+ * point of the setting. [AUTOMATIC] instead follows a fixed local-clock schedule,
+ * independent of the OS theme. Existing persisted enum names keep their meaning.
  */
 enum class ThemePreference {
     SYSTEM,
     LIGHT,
     DARK,
+    AUTOMATIC,
     ;
 
     /**
@@ -28,11 +31,12 @@ enum class ThemePreference {
      * [KccTheme], the OS bar tinting, and the map's day/night default all read
      * the result of this, so they cannot drift apart.
      */
-    fun resolveDark(systemInDark: Boolean): Boolean =
+    fun resolveDark(systemInDark: Boolean, localTime: LocalTime = LocalTime.now()): Boolean =
         when (this) {
             SYSTEM -> systemInDark
             LIGHT -> false
             DARK -> true
+            AUTOMATIC -> AutomaticThemeSchedule.isDark(localTime)
         }
 
     companion object {

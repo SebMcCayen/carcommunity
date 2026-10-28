@@ -10,6 +10,7 @@ struct ConvoyListScreen: View {
 
     var body: some View {
         content
+            .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .task { coordinator?.start() }
             .navigationDestination(for: ConvoyChatRoute.self) { route in
                 ConvoyChatScreen(
@@ -41,50 +42,35 @@ struct ConvoyListScreen: View {
     }
 
     private func list(_ grouped: ConvoyRowFormat.Grouped) -> some View {
-        List {
-            if !grouped.ongoing.isEmpty {
-                Section {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: KccSpacing.s4) {
+                if !grouped.ongoing.isEmpty {
+                    Text("chatHub.convoyOngoingHeader").font(.title3.bold()).accessibilityAddTraits(.isHeader)
                     ForEach(grouped.ongoing) { row(for: $0) }
-                } header: {
-                    Text("chatHub.convoyOngoingHeader")
                 }
-            }
-            if !grouped.past.isEmpty {
-                Section {
+                if !grouped.past.isEmpty {
+                    Text("chatHub.convoyHistoryHeader").font(.title3.bold()).accessibilityAddTraits(.isHeader)
                     ForEach(grouped.past) { row(for: $0) }
-                } header: {
-                    Text("chatHub.convoyHistoryHeader")
                 }
-            }
+            }.padding(KccSpacing.s4)
         }
-        .listStyle(.insetGrouped)
     }
 
     private func row(for convoy: ChatConvoy) -> some View {
         NavigationLink(value: ConvoyChatRoute(convoyId: convoy.convoyId, title: convoy.title)) {
-            ConvoyRow(convoy: convoy)
-        }
+            ConvoyChatRow(convoy: convoy).kccContentCard().contentShape(Rectangle())
+        }.buttonStyle(.plain)
     }
 
     private func errorState(_ coordinator: ConvoyListCoordinator) -> some View {
-        VStack(spacing: KccSpacing.s3) {
-            Text("chatHub.convoysError")
-                .multilineTextAlignment(.center)
-            Button { coordinator.reload() } label: {
-                Text("chatHub.convoysRetry")
-            }
-            .kccPrimaryAction()
+        ScrollView {
+            SettingsStateCard(title: "convoy.title", message: "chatHub.convoysError", symbol: "car.2",
+                retryTitle: "chatHub.convoysRetry", onRetry: coordinator.reload).padding(KccSpacing.s4)
         }
-        .padding(KccSpacing.s4)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func message(_ key: LocalizedStringKey) -> some View {
-        Text(key)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .padding(KccSpacing.s4)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        SocialReadingState(title: "convoy.title", message: key, symbol: "car.2")
     }
 }
 
@@ -96,22 +82,24 @@ struct ConvoyChatRoute: Hashable, Sendable {
 
 /// One convoy row: a member/name-derived title, a status badge, and a member
 /// count — mirroring Android's `ConvoyRowFormat`-built row.
-private struct ConvoyRow: View {
+struct ConvoyChatRow: View {
     let convoy: ChatConvoy
 
     var body: some View {
-        VStack(alignment: .leading, spacing: KccSpacing.s1) {
-            HStack(spacing: KccSpacing.s2) {
-                Text(rowTitle)
-                    .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
-                    .lineLimit(1)
+        VStack(alignment: .leading, spacing: KccSpacing.s3) {
+            VStack(alignment: .leading, spacing: KccSpacing.s2) {
+                HStack(alignment: .top, spacing: KccSpacing.s3) {
+                    Text(verbatim: rowTitle).font(.headline).fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(KccTheme.secondary).accessibilityHidden(true)
+                }
                 statusBadge
             }
-            Text(membersText)
-                .font(.system(size: KccTypeScale.bodySm))
-                .foregroundStyle(.secondary)
+            Text(verbatim: membersText)
+                .font(.subheadline).foregroundStyle(KccTheme.secondary)
         }
-        .padding(.vertical, KccSpacing.s1)
+        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
     }
 
     /// The row title: explicit convoy name, else a summary of member names, else
@@ -135,12 +123,9 @@ private struct ConvoyRow: View {
 
     @ViewBuilder
     private var statusBadge: some View {
-        Text(Self.statusKey(convoy.status))
-            .font(.system(size: KccTypeScale.caption))
-            .padding(.horizontal, KccSpacing.s2)
-            .padding(.vertical, KccSpacing.s1 / 2)
-            .background(KccPalette.softSand.opacity(0.6))
-            .clipShape(Capsule())
+        Text(Self.statusKey(convoy.status)).font(.footnote.weight(.semibold))
+            .foregroundStyle(KccTheme.driver).padding(KccSpacing.s2)
+            .background(KccTheme.subtle, in: Capsule())
     }
 
     private var membersText: String {

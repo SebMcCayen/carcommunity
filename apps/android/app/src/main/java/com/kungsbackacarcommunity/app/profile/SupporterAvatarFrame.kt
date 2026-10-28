@@ -2,7 +2,6 @@ package com.kungsbackacarcommunity.app.profile
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -16,18 +15,24 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.testTag
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccPalette
 
 /** Wrap the circular photo so its clip never clips the crown. No data reads. */
 @Composable
-fun SupporterAvatarFrame(visible: Boolean, content: @Composable BoxScope.() -> Unit) {
-    Box {
+fun SupporterAvatarFrame(
+    visible: Boolean,
+    clubBadge: ClubBadge? = null,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    ClubAvatarFrame(badge = clubBadge) {
         content()
         if (visible) {
             val description = stringResource(R.string.supporterBadge_accessibility)
             Canvas(
                 Modifier.align(Alignment.BottomEnd).size(28.dp)
+                    .testTag("supporter_avatar_crown")
                     .background(MaterialTheme.colorScheme.surface, CircleShape)
                     .padding(4.dp)
                     .semantics { contentDescription = description },

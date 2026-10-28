@@ -10,6 +10,7 @@ package com.kungsbackacarcommunity.app.profile
 data class LiveProfile(
     val displayName: String?,
     val avatarPath: String?,
+    val clubBadge: ClubBadge? = null,
 )
 
 /**

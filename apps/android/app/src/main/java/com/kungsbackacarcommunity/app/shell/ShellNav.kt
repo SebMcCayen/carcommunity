@@ -141,6 +141,8 @@ enum class ShellRoute {
     More,
     /** Owner drive history, reached from Profile and post-drive links. */
     MyDrives,
+    /** Shared Driver/CarCommunity club presentation and membership management. */
+    Clubs,
 }
 
 /** Outcome of a system-Back press in the shell. */

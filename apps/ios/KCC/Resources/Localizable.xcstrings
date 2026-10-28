@@ -5577,6 +5577,1502 @@
         }
       }
     },
+    "clubBadge.accessibility": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klubb: %1$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Club: %1$@"
+          }
+        }
+      }
+    },
+    "clubs.accept": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Acceptera inbjudan"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accept invitation"
+          }
+        }
+      }
+    },
+    "clubs.action": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åtgärder"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actions"
+          }
+        }
+      }
+    },
+    "clubs.attend": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anmäl klubben"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Register club"
+          }
+        }
+      }
+    },
+    "clubs.attending": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deltagande klubbar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attending clubs"
+          }
+        }
+      }
+    },
+    "clubs.back": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tillbaka till klubbar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back to clubs"
+          }
+        }
+      }
+    },
+    "clubs.block": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blockera användare"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Block user"
+          }
+        }
+      }
+    },
+    "clubs.calendar": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klubbkalender"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Club calendar"
+          }
+        }
+      }
+    },
+    "clubs.calendarEmpty": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inga kommande klubevent."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No upcoming club events."
+          }
+        }
+      }
+    },
+    "clubs.cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avbryt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "clubs.chatTab": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klubb"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Club"
+          }
+        }
+      }
+    },
+    "clubs.chooseEvent": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Välj event"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose an event"
+          }
+        }
+      }
+    },
+    "clubs.close": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stäng"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close"
+          }
+        }
+      }
+    },
+    "clubs.closed": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stängd · endast inbjudan"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Closed · invitation only"
+          }
+        }
+      }
+    },
+    "clubs.confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bekräfta"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm"
+          }
+        }
+      }
+    },
+    "clubs.conflict": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ditt konto har flera äldre klubbmedlemskap. Kontakta supporten innan du väljer en klubb."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your account has multiple legacy memberships. Contact support before choosing a club."
+          }
+        }
+      }
+    },
+    "clubs.cooldown": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du kan gå med i en klubb igen: %1$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can join a club again: %1$@"
+          }
+        }
+      }
+    },
+    "clubs.cooldownError": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du måste vänta 24 timmar efter att du lämnat eller blivit borttagen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You must wait 24 hours after leaving or being removed."
+          }
+        }
+      }
+    },
+    "clubs.create": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skapa klubb"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create club"
+          }
+        }
+      }
+    },
+    "clubs.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Presentation"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "About the club"
+          }
+        }
+      }
+    },
+    "clubs.directory": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hitta din klubb"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Find your club"
+          }
+        }
+      }
+    },
+    "clubs.disband": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avveckla klubben"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disband club"
+          }
+        }
+      }
+    },
+    "clubs.disbandConfirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klubben stängs och alla medlemmar förlorar åtkomst till chatten. Alla får 24 timmars väntetid."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The club closes and all members lose chat access. Everyone receives a 24-hour cooldown."
+          }
+        }
+      }
+    },
+    "clubs.distance": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sträcka (km)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Distance (km)"
+          }
+        }
+      }
+    },
+    "clubs.drives": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Körningar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drives"
+          }
+        }
+      }
+    },
+    "clubs.duration": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tid (h)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Time (h)"
+          }
+        }
+      }
+    },
+    "clubs.edit": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redigera"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit"
+          }
+        }
+      }
+    },
+    "clubs.empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inga klubbar ännu. Starta den första!"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No clubs yet. Start the first!"
+          }
+        }
+      }
+    },
+    "clubs.emptyChat": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Säg hej till klubben!"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Say hello to your club!"
+          }
+        }
+      }
+    },
+    "clubs.error": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det gick inte att slutföra. Kontrollera anslutningen och försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not complete the action. Check your connection and retry."
+          }
+        }
+      }
+    },
+    "clubs.hideMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ta bort meddelande"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove message"
+          }
+        }
+      }
+    },
+    "clubs.invalidForm": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ange namn (3–60 tecken), presentation (10–500) och ort (2–80)."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a name (3–60 characters), description (10–500), and location (2–80)."
+          }
+        }
+      }
+    },
+    "clubs.invitations": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klubbinbjudningar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Club invitations"
+          }
+        }
+      }
+    },
+    "clubs.invite": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bjud in"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invite"
+          }
+        }
+      }
+    },
+    "clubs.inviteFriends": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bjud in en vän"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invite a friend"
+          }
+        }
+      }
+    },
+    "clubs.inviteSent": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inbjudan skickad."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invitation sent."
+          }
+        }
+      }
+    },
+    "clubs.join": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gå med"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Join"
+          }
+        }
+      }
+    },
+    "clubs.leave": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lämna klubben"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave club"
+          }
+        }
+      }
+    },
+    "clubs.leaveConfirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Om du lämnar kan du inte gå med i eller skapa en klubb under 24 timmar. En ägare med andra medlemmar måste först överlåta ägarskapet."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leaving prevents joining or creating a club for 24 hours. An owner with other members must transfer ownership first."
+          }
+        }
+      }
+    },
+    "clubs.loading": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hämtar klubben…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading club…"
+          }
+        }
+      }
+    },
+    "clubs.location": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ort"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location"
+          }
+        }
+      }
+    },
+    "clubs.logo": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ladda upp logga"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upload logo"
+          }
+        }
+      }
+    },
+    "clubs.logoDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klubblogga för %1$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Club logo for %1$@"
+          }
+        }
+      }
+    },
+    "clubs.logoError": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bilden kunde inte förberedas. Välj en annan bild."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not prepare this image. Choose another image."
+          }
+        }
+      }
+    },
+    "clubs.logoHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loggan komprimeras och platsdata tas bort före uppladdning."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your logo is compressed and location metadata removed before upload."
+          }
+        }
+      }
+    },
+    "clubs.makeModerator": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gör till moderator"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Make moderator"
+          }
+        }
+      }
+    },
+    "clubs.manage": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hantera klubb"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage club"
+          }
+        }
+      }
+    },
+    "clubs.member": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Medlem"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Member"
+          }
+        }
+      }
+    },
+    "clubs.memberActionConfirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vill du göra denna ändring för %1$@?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply this change for %1$@?"
+          }
+        }
+      }
+    },
+    "clubs.members": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Medlemmar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Members"
+          }
+        }
+      }
+    },
+    "clubs.membersCount": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld medlemmar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld members"
+          }
+        }
+      }
+    },
+    "clubs.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skriv ett meddelande"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Write a message"
+          }
+        }
+      }
+    },
+    "clubs.messageActions": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meddelandealternativ"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message actions"
+          }
+        }
+      }
+    },
+    "clubs.moderator": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moderator"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moderator"
+          }
+        }
+      }
+    },
+    "clubs.moderatorLimit": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klubben kan ha högst tre moderatorer."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A club can have at most three moderators."
+          }
+        }
+      }
+    },
+    "clubs.monthEvent": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "clubs.more": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa fler"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show more"
+          }
+        }
+      }
+    },
+    "clubs.name": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klubbnamn"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Club name"
+          }
+        }
+      }
+    },
+    "clubs.nextMonth": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nästa månad"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next month"
+          }
+        }
+      }
+    },
+    "clubs.noAttending": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inga klubbar anmälda ännu."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No clubs registered yet."
+          }
+        }
+      }
+    },
+    "clubs.noClubChat": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gå med i en klubb via Social → Klubben för att chatta. Chatten kräver en verifierad anslutning."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Join a club in Social → Club to chat. Chat requires a verified connection."
+          }
+        }
+      }
+    },
+    "clubs.noEvents": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inga kommande event."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No upcoming events."
+          }
+        }
+      }
+    },
+    "clubs.noFriends": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inga vänner att visa. Lägg till personen som vän först."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No friends to show. Add this person as a friend first."
+          }
+        }
+      }
+    },
+    "clubs.older": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Äldre meddelanden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Older messages"
+          }
+        }
+      }
+    },
+    "clubs.open": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öppen för alla"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open to everyone"
+          }
+        }
+      }
+    },
+    "clubs.owner": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ägare"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Owner"
+          }
+        }
+      }
+    },
+    "clubs.ownershipError": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Överlåt ägarskapet till en medlem innan du lämnar."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfer ownership to a member before leaving."
+          }
+        }
+      }
+    },
+    "clubs.permissionError": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du har inte längre behörighet. Uppdatera klubben."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You no longer have permission. Refresh the club."
+          }
+        }
+      }
+    },
+    "clubs.previousMonth": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Föregående månad"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous month"
+          }
+        }
+      }
+    },
+    "clubs.publicAttendance": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klubbens namn och logga visas på eventet. Medlemmarnas namn publiceras inte."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your club name and logo appear on the event. Member names are not published."
+          }
+        }
+      }
+    },
+    "clubs.readOnly": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du kan läsa klubbens presentation. Medlemslistan och kalendern är för medlemmar."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can read the club presentation. The member list and calendar are members only."
+          }
+        }
+      }
+    },
+    "clubs.remove": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ta bort medlem"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove member"
+          }
+        }
+      }
+    },
+    "clubs.removeModerator": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ta bort moderatorroll"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove moderator role"
+          }
+        }
+      }
+    },
+    "clubs.report": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rapportera"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Report"
+          }
+        }
+      }
+    },
+    "clubs.reportConfirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skicka en rapport om detta meddelande till administratörerna?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send a report about this message to the administrators?"
+          }
+        }
+      }
+    },
+    "clubs.reportReason": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Olämpligt innehåll"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inappropriate content"
+          }
+        }
+      }
+    },
+    "clubs.reported": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rapporten har skickats."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Report sent."
+          }
+        }
+      }
+    },
+    "clubs.retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Försök igen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retry"
+          }
+        }
+      }
+    },
+    "clubs.save": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spara"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save"
+          }
+        }
+      }
+    },
+    "clubs.search": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sök namn"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search names"
+          }
+        }
+      }
+    },
+    "clubs.send": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skicka"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send"
+          }
+        }
+      }
+    },
+    "clubs.statistics": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klubbens körningar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Club drives"
+          }
+        }
+      }
+    },
+    "clubs.statsNote": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Endast sparade körningar helt inom medlemskapet, sedan klubbstatistiken aktiverades. Individuella rutter visas inte."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only saved drives entirely within membership, since club statistics were enabled. Individual routes are not shown."
+          }
+        }
+      }
+    },
+    "clubs.success": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ändringen är sparad."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change saved."
+          }
+        }
+      }
+    },
+    "clubs.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klubben"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Club"
+          }
+        }
+      }
+    },
+    "clubs.transfer": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Överlåt ägarskap"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfer ownership"
+          }
+        }
+      }
+    },
+    "clubs.unattend": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ta bort klubbens anmälan"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove club attendance"
+          }
+        }
+      }
+    },
+    "clubs.unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klubbar är inte tillgängliga just nu."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clubs are unavailable right now."
+          }
+        }
+      }
+    },
     "coachMark.a11yTour": {
       "extractionState": "manual",
       "localizations": {
@@ -8463,6 +9959,57 @@
           "stringUnit": {
             "state": "translated",
             "value": "You have already collected this reward."
+          }
+        }
+      }
+    },
+    "crownHunt.claimHistoryEmpty": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du har inte samlat några kronor ännu."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You have not collected any crowns yet."
+          }
+        }
+      }
+    },
+    "crownHunt.claimHistoryError": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kunde inte hämta din insamlingshistorik. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not load your claim history. Please try again."
+          }
+        }
+      }
+    },
+    "crownHunt.claimHistoryTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Insamlingshistorik"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claim history"
           }
         }
       }
@@ -12526,6 +14073,57 @@
           "stringUnit": {
             "state": "translated",
             "value": "Complete your Driver profile in Driver to read posts here."
+          }
+        }
+      }
+    },
+    "driver.feed.openPost": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öppna inlägget i Driver"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open this post in Driver"
+          }
+        }
+      }
+    },
+    "driver.feed.postLinkHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Om Driver saknas eller behöver uppdateras öppnas webbplatsen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If Driver is missing or needs an update, the website opens instead."
+          }
+        }
+      }
+    },
+    "driver.feed.postOpenError": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Varken Driver eller webbplatsen kunde öppnas. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neither Driver nor the website could be opened. Try again."
           }
         }
       }
@@ -26997,6 +28595,159 @@
         }
       }
     },
+    "savedDrives.driveReplay.accessDenied": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du har inte åtkomst till rutten. Kontrollera ditt konto och historiken som ingår i din prenumeration."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You do not have access to this route. Check your account and your plan's history access."
+          }
+        }
+      }
+    },
+    "savedDrives.driveReplay.corrupt": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Den sparade ruttfilen kunde inte läsas."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The saved route file could not be read."
+          }
+        }
+      }
+    },
+    "savedDrives.driveReplay.downloadFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Den fullständiga rutten kunde inte hämtas. Kontrollera anslutningen och försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not download the full route. Check your connection and try again."
+          }
+        }
+      }
+    },
+    "savedDrives.driveReplay.exactRouteEmpty": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inga fullständiga inspelade GPS-punkter finns att visa för den här körningen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No full recorded GPS points are available for this drive."
+          }
+        }
+      }
+    },
+    "savedDrives.driveReplay.missing": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ingen fullständig rutt finns lagrad för den här körningen. Om körningen nyss sparades kan du försöka igen när uppladdningen är klar. Äldre GPS-data som saknas kan inte återskapas."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No full route is stored for this drive. If this drive was just saved, try again after the upload finishes. Missing older GPS data cannot be recovered."
+          }
+        }
+      }
+    },
+    "savedDrives.driveReplay.notFound": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Körningen är inte längre tillgänglig för det här kontot."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This drive is no longer available to this account."
+          }
+        }
+      }
+    },
+    "savedDrives.driveReplay.serviceUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rutttjänsten är tillfälligt otillgänglig. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The route service is temporarily unavailable. Please try again."
+          }
+        }
+      }
+    },
+    "savedDrives.driveReplay.signInRequired": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Logga in på körningens konto för att visa rutten."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in to the drive's account to view its route."
+          }
+        }
+      }
+    },
+    "savedDrives.driveReplay.simplifiedOverview": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Förenklad sparad rutt. Exakta GPS-detaljer saknas."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Simplified saved route. Exact GPS detail is unavailable."
+          }
+        }
+      }
+    },
     "savedDrives.duration": {
       "extractionState": "manual",
       "localizations": {
@@ -30053,6 +31804,74 @@
           "stringUnit": {
             "state": "translated",
             "value": "Always light, whatever the device does"
+          }
+        }
+      }
+    },
+    "settingsMenu.themeScheduled": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatiskt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatic"
+          }
+        }
+      }
+    },
+    "settingsMenu.themeScheduledDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ljust 07:00–19:00, annars mörkt. Lokal tid, oavsett telefonens tema."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Light 07:00–19:00, dark otherwise. Local time, independent of your phone’s theme."
+          }
+        }
+      }
+    },
+    "settingsMenu.themeSystem": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System"
+          }
+        }
+      }
+    },
+    "settingsMenu.themeSystemDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Följer telefonens ljusa eller mörka tema"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Follows your phone’s light or dark theme"
           }
         }
       }

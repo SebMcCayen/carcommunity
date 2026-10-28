@@ -63,41 +63,29 @@ struct EventFormScreen: View {
                 }
 
                 Section {
-                    TextField("events.createFieldTitle", text: $title)
+                    EditorTextField(title: "events.createFieldTitle", text: $title)
                         .textInputAutocapitalization(.sentences)
-                    DatePicker(
-                        "events.createPickStart",
-                        selection: $startsAt,
-                        displayedComponents: [.date, .hourAndMinute]
-                    )
-                    TextField("events.createFieldDescription", text: $description, axis: .vertical)
-                        .lineLimit(3...8)
-                    TextField("events.createFieldAddress", text: $address)
+                    DatePicker("events.createPickStart", selection: $startsAt, displayedComponents: [.date, .hourAndMinute])
+                        .frame(minHeight: 48)
+                    EditorTextField(title: "events.createFieldDescription", text: $description, multiline: true)
+                    EditorTextField(title: "events.createFieldAddress", text: $address)
                 }
 
                 Section {
-                    if let latitude, let longitude {
-                        Text(String(format: "%.5f, %.5f", latitude, longitude))
-                            .font(.footnote.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("events.createLocationNone")
-                            .foregroundStyle(.secondary)
-                    }
-                    Button(latitude == nil ? "events.createLocationPick" : "events.createLocationEdit") {
-                        showLocationPicker = true
-                    }
+                    EventLocationSummary(latitude: latitude, longitude: longitude)
+                    Button { showLocationPicker = true } label: {
+                        Text(latitude == nil ? "events.createLocationPick" : "events.createLocationEdit").frame(minHeight: 48)
+                    }.buttonStyle(.bordered)
                     if latitude != nil {
-                        Button("events.createLocationClear", role: .destructive) {
-                            latitude = nil
-                            longitude = nil
-                        }
+                        Button(role: .destructive) { latitude = nil; longitude = nil } label: {
+                            Text("events.createLocationClear").frame(minHeight: 48)
+                        }.buttonStyle(.bordered).tint(KccPalette.errorRed)
                     }
                 }
 
                 if !isEdit {
                     Section {
-                        Toggle("events.createPublicSiteLabel", isOn: $publicSiteEnabled)
+                        Toggle("events.createPublicSiteLabel", isOn: $publicSiteEnabled).frame(minHeight: 48)
                         Text("events.createPublicSiteHelp")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -114,20 +102,19 @@ struct EventFormScreen: View {
                 }
             }
             .disabled(saving)
+            .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                Button(action: submit) {
+                    EditorSubmitLabel(title: isEdit ? (saving ? "events.editSaving" : "events.editSubmit")
+                        : (saving ? "events.createSaving" : "events.createSubmit"), saving: saving)
+                }.kccPrimaryAction().disabled(saving)
+                    .padding(KccSpacing.s4).background(KccTheme.surface)
+            }
             .navigationTitle(Text(isEdit ? "events.editTitle" : "events.createTitle"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("events.createCancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        submit()
-                    } label: {
-                        if saving { ProgressView() }
-                        else { Text(isEdit ? "events.editSubmit" : "events.createSubmit") }
-                    }
-                    .disabled(saving)
+                    Button { dismiss() } label: { Text("events.createCancel").frame(minHeight: 48) }.disabled(saving)
                 }
             }
             .sheet(isPresented: $showLocationPicker) {
@@ -146,7 +133,7 @@ struct EventFormScreen: View {
                 default: break
                 }
             }
-        }
+        }.interactiveDismissDisabled(saving)
     }
 
     private var failureKey: LocalizedStringKey? {
@@ -181,6 +168,7 @@ struct EventFormScreen: View {
 /// only Confirm commits it to the form.
 private struct EventLocationPickerScreen: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var typeSize
     let locationProvider: any LocationProvider
     let onConfirm: (Double, Double) -> Void
     private let accessToken: String?
@@ -227,9 +215,9 @@ private struct EventLocationPickerScreen: View {
                             selectedLongitude = context.cameraState.center.longitude
                         }
                 } else {
-                    Color(.secondarySystemBackground)
+                    KccTheme.subtle
                     Text("events.locationPickerUnavailable")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(KccTheme.secondary)
                 }
                 Image(systemName: "mappin.circle.fill")
                     .font(.system(size: 36))
@@ -237,18 +225,25 @@ private struct EventLocationPickerScreen: View {
                     .accessibilityLabel(Text("events.locationPickerPin"))
                     .allowsHitTesting(false)
             }
-            .navigationTitle(Text("events.locationPickerHint"))
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                VStack(spacing: KccSpacing.s3) {
+                    ScrollView {
+                        Text("events.locationPickerHint").font(.footnote).foregroundStyle(KccTheme.secondary)
+                            .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
+                    }.frame(height: typeSize.isAccessibilitySize ? 120 : 64)
+                    Button {
+                        onConfirm(selectedLatitude, selectedLongitude)
+                        dismiss()
+                    } label: { EditorSubmitLabel(title: "events.locationPickerConfirm") }
+                        .kccPrimaryAction().disabled(accessToken == nil)
+                }.padding(KccSpacing.s4).background(KccTheme.surface)
+            }
+            .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
+            .navigationTitle(Text("events.createLocationPick"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("events.locationPickerCancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("events.locationPickerConfirm") {
-                        onConfirm(selectedLatitude, selectedLongitude)
-                        dismiss()
-                    }
-                    .disabled(accessToken == nil)
+                    Button { dismiss() } label: { Text("events.locationPickerCancel").frame(minHeight: 48) }
                 }
             }
             .task { await seedFromCurrentLocationIfAvailable() }

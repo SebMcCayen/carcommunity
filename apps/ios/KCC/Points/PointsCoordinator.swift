@@ -53,7 +53,10 @@ final class PointsCoordinator {
         balanceTask = Task { [weak self] in
             for await balance in balanceStream {
                 guard !Task.isCancelled, let self else { return }
-                self.balance = balance
+                // Every emission is a completed read. A missing ledger/field
+                // is the backend's zero starting balance; only the initial
+                // absence of a snapshot should keep the UI in loading.
+                self.balance = balance ?? 0
             }
         }
         let entriesStream = repository.observeEntries(uid: uid)

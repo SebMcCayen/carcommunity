@@ -14,6 +14,18 @@ import org.junit.Test
  * exercises real values without a device.
  */
 class ForegroundStartDecisionTest {
+    @Test
+    fun `while-in-use refusal is deferred only for granted background access on Android 14 and newer`() {
+        for (sdk in listOf(26, 30, 31, 33, 34, 35)) {
+            for (foreground in listOf(false, true)) {
+                for (granted in listOf(false, true)) {
+                    val deferred = ForegroundStartDecision.isWhileInUseStartRefusal(sdk, foreground, granted)
+                    if (sdk >= 34 && !foreground && granted) assertTrue(deferred) else assertFalse(deferred)
+                }
+            }
+        }
+    }
+
 
     @Test
     fun api31plus_specificRefusalType_isRecoverable() {

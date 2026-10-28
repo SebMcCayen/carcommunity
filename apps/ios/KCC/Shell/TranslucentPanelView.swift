@@ -37,6 +37,7 @@ extension View {
             .overlay {
                 RoundedRectangle(cornerRadius: KccRadius.lg)
                     .strokeBorder(border, lineWidth: lineWidth)
+                    .allowsHitTesting(false)
             }
     }
 

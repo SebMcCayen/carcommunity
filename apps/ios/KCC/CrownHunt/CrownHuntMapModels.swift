@@ -75,7 +75,8 @@ struct CrownSpawn: Equatable, Sendable, Identifiable {
             discColorArgb: style.disc,
             iconName: style.symbol,
             glyphColorArgb: style.glyph,
-            glowColorArgb: style.glow
+            glowColorArgb: style.glow,
+            visualRank: CrownMarkerStyle.rank(for: rarity)
         )
     }
 }
@@ -99,6 +100,23 @@ enum CrownMarkerStyle {
         let glyph: UInt32
         let glow: UInt32?
         let symbol: String
+    }
+
+    static func rank(for rarity: CrownRarity) -> Int {
+        switch rarity {
+        case .common: 0
+        case .uncommon: 1
+        case .rare: 2
+        case .legendary: 3
+        }
+    }
+
+    /// Value bands for curated points; these thresholds never award points.
+    static func rank(forRewardPoints points: Int) -> Int {
+        if points >= 500 { return 3 }
+        if points >= 100 { return 2 }
+        if points >= 25 { return 1 }
+        return 0
     }
 
     static func style(for rarity: CrownRarity) -> Values {
