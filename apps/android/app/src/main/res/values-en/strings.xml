@@ -72,7 +72,7 @@
     <string name="settings_accountDeletionAcknowledgement">I understand that this deletes my entire account in this app and cannot be undone.</string>
     <string name="settings_accountDeletionError">Could not delete your account. Please try again.</string>
     <string name="settings_accountDeletionConfirmTitle">Delete your account?</string>
-    <string name="settings_accountDeletionConfirmBody">Access ends immediately. After a 30-day retention period, a bounded daily purge removes eligible account data; retries or backlog may delay completion. A deletion proof and certain moderation, audit, de-identified insight and claim, convoy ownership, event chat and RSVP records are retained.</string>
+    <string name="settings_accountDeletionConfirmBody">Access ends immediately. After a 30-day retention period, a bounded daily purge removes eligible account data; retries or backlog may delay completion. A deletion proof and certain moderation, audit, de-identified insight and claim, convoy ownership records are retained.</string>
     <string name="settings_accountDeletionAuthenticationRequired">Your session has expired. Sign in again before deleting your account.</string>
     <string name="settings_accountDeletionTemporaryError">Account deletion is temporarily unavailable. Please try again.</string>
     <string name="settings_accountDeletionUnavailable">Account deletion is not available in this build.</string>

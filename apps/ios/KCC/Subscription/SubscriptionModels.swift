@@ -95,3 +95,20 @@ private enum SHA256Digest {
     }
 }
 
+
+/// Snapshot of App Store configuration, kept separate from transactions.
+struct StoreCatalogEntry: Sendable {
+    let id: String
+    let isAutoRenewable: Bool
+    let monthlyPeriod: Int?
+    let groupID: String?
+}
+
+enum StoreCatalogPolicy {
+    static func permits(_ entries: [StoreCatalogEntry]) -> Bool {
+        entries.allSatisfy {
+            subscriptionProductIDs.contains($0.id) && $0.isAutoRenewable
+                && $0.monthlyPeriod == 1 && $0.groupID?.isEmpty == false
+        } && Set(entries.compactMap(\.groupID)).count <= 1
+    }
+}

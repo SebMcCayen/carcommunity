@@ -9,20 +9,26 @@ actor StoreKitSubscriptionStore: SubscriptionStore {
         let products = try await Product.products(for: subscriptionProductIDs)
             .sorted { subscriptionProductIDs.firstIndex(of: $0.id) ?? .max <
                 subscriptionProductIDs.firstIndex(of: $1.id) ?? .max }
+        guard StoreCatalogPolicy.permits(products.map { product in
+            StoreCatalogEntry(id: product.id, isAutoRenewable: product.type == .autoRenewable,
+                monthlyPeriod: product.subscription?.subscriptionPeriod.unit == .month
+                    ? product.subscription?.subscriptionPeriod.value : nil,
+                groupID: product.subscription?.subscriptionGroupID)
+        })
+        else {
+            productsByID = [:]
+            throw StoreKitSubscriptionError.productUnavailable
+        }
         productsByID = Dictionary(uniqueKeysWithValues: products.map { ($0.id, $0) })
         return products.map { StoreSubscriptionProduct(id: $0.id, displayPrice: $0.displayPrice) }
     }
 
     func purchase(productID: String, appAccountToken: UUID) async throws -> StorePurchaseResult {
-        let product: Product
-        if let cached = productsByID[productID] {
-            product = cached
-        } else {
-            guard let loaded = try await Product.products(for: [productID]).first else {
-                throw StoreKitSubscriptionError.productUnavailable
-            }
-            product = loaded
-            productsByID[productID] = loaded
+        // Refresh the complete catalogue: stale cached prices or an accidental
+        // App Store group/period change must not charge a different offer.
+        _ = try await products()
+        guard let product = productsByID[productID] else {
+            throw StoreKitSubscriptionError.productUnavailable
         }
 
         switch try await product.purchase(options: [.appAccountToken(appAccountToken)]) {

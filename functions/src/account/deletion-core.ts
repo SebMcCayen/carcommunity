@@ -47,11 +47,8 @@
  *   convoy's structural key (an ended convoy grants it nothing) and blanking it
  *   makes the Android parser discard the row, taking the surviving members'
  *   record of their own drive with it.
- * - EVENT chat messages and RSVPs — community-context records with
- *   denormalized author names; scrubbing them is the blocking domain's
- *   listed follow-up and is out of the 30-day purge's scope for MVP.
- *   (NOTE: community, convoy, and 1:1 DM chat ARE purged — see the chat
- *   erasure step in scheduled.ts; only EVENT chat is retained here.)
+ * Event chat and RSVP records are erased by the same retryable purge. Private
+ * moderation/audit evidence is handled by the separate retention policy above.
  *
  * Pure module — no Firebase Admin SDK imports.
  */
@@ -66,6 +63,7 @@ export const MAX_DELETION_REASON_LENGTH = 500;
 const deleteAccountInputSchema = z
   .object({
     reason: z.string().trim().min(1).max(MAX_DELETION_REASON_LENGTH).optional(),
+    expectedUid: z.string().min(1).max(128).optional(),
   })
   .strict();
 
