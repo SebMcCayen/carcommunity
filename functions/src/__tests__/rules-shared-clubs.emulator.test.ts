@@ -1,5 +1,7 @@
 /** Combined CarCommunity rules, never the Driver emulator-only subset.
- * Run serially with the shared Firebase emulator slot reserved:
+ * Run serially with the shared Firebase emulator slot reserved, or with an
+ * isolated demo GCLOUD_PROJECT and loopback FIRESTORE_EMULATOR_HOST /
+ * FIREBASE_STORAGE_EMULATOR_HOST on dedicated ports:
  * pnpm --dir functions test:emulator src/__tests__/rules-shared-clubs.emulator.test.ts
  */
 import {
@@ -40,6 +42,15 @@ let env: RulesTestEnvironment;
 let previousConfig: Record<string, unknown> | undefined;
 const logoRun = Date.now().toString();
 const root = resolve(__dirname, '../../../firebase');
+const projectId = process.env.GCLOUD_PROJECT ?? 'demo-test';
+const emulatorEndpoint = (address: string | undefined, defaultPort: number) => {
+  const url = new URL(`http://${address ?? `127.0.0.1:${defaultPort}`}`);
+  if (!['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname))
+    throw new Error('Shared-club rules tests require loopback emulators.');
+  return { host: url.hostname, port: Number(url.port) };
+};
+const firestoreEndpoint = emulatorEndpoint(process.env.FIRESTORE_EMULATOR_HOST, 8080);
+const storageEndpoint = emulatorEndpoint(process.env.FIREBASE_STORAGE_EMULATOR_HOST, 9199);
 const clubId = 'rules-shared-club';
 const clubPath = `driverClubs/${clubId}`;
 const uid = (name: string) => `rules-club-${name}`;
@@ -68,21 +79,35 @@ const activeUser = {
 };
 const enabledConfig = {
   enabled: true,
+  activatedAt: Timestamp.fromMillis(1),
   publicAttendanceReady: true,
   statsSince: Timestamp.fromMillis(1),
 };
+const futureEvent = {
+  status: 'published',
+  startsAt: Timestamp.fromMillis(Date.now() + 86400000),
+};
+const canonicalRestrictions = [
+  { name: 'stored banned', user: { banned: true }, claims: {} },
+  ...['deleted', 'suspended', 'deletionPending', 'banned'].map((status) => ({
+    name: `status ${status}`,
+    user: { status },
+    claims: {},
+  })),
+  { name: 'banned claim', user: {}, claims: { banned: true } },
+];
 
 beforeAll(async () => {
+  if (!projectId.startsWith('demo-'))
+    throw new Error('Shared-club rules tests require a demo project.');
   env = await initializeTestEnvironment({
-    projectId: 'demo-test',
+    projectId,
     firestore: {
-      host: 'localhost',
-      port: 8080,
+      ...firestoreEndpoint,
       rules: readFileSync(resolve(root, 'firestore.rules'), 'utf8'),
     },
     storage: {
-      host: 'localhost',
-      port: 9199,
+      ...storageEndpoint,
       rules: readFileSync(resolve(root, 'storage.rules'), 'utf8'),
     },
   });
@@ -163,7 +188,7 @@ beforeAll(async () => {
       joinedAt: Timestamp.fromMillis(1),
       leftAt: null,
     });
-    await setDoc(doc(db, 'events/rules-club-event'), { status: 'published' });
+    await setDoc(doc(db, 'events/rules-club-event'), futureEvent);
     await setDoc(doc(db, `events/rules-club-event/clubs/${clubId}`), {
       clubId,
       name: 'Shared club',
@@ -174,7 +199,7 @@ beforeAll(async () => {
       name: 'Archived',
       logoUrl: null,
     });
-    await setDoc(doc(db, 'events/rules-club-page-event'), { status: 'published' });
+    await setDoc(doc(db, 'events/rules-club-page-event'), futureEvent);
     for (let index = 0; index < 30; index++) {
       const id = `rules-page-club-${index.toString().padStart(3, '0')}`;
       await setDoc(doc(db, `driverClubs/${id}`), {
@@ -297,6 +322,121 @@ describe('shared clubs canonical identity and public scope', () => {
     await assertFails(read('outsider', 'driverClubs/rules-archived'));
     await assertFails(read('outsider', 'driverClubs/rules-legacy'));
   });
+  it.each([
+    undefined,
+    null,
+    false,
+    true,
+    1,
+    '2026-10-28T00:00:00Z',
+    { seconds: 1, nanoseconds: 0 },
+  ])(
+    'denies club reads with enabled true but non-Timestamp activatedAt %j',
+    async (activatedAt) => {
+      try {
+        await env.withSecurityRulesDisabled(async (context) => {
+          const config: Record<string, unknown> = { ...enabledConfig };
+          if (activatedAt === undefined) delete config.activatedAt;
+          else config.activatedAt = activatedAt;
+          await setDoc(doc(context.firestore(), 'config/sharedClubs'), config);
+        });
+        await assertSucceeds(read('member', 'config/sharedClubs'));
+        await assertSucceeds(read('member', `driverClubAccounts/${uid('member')}`));
+        for (const path of [
+          clubPath,
+          `${clubPath}/members/${uid('member')}`,
+          `${clubPath}/messages/m1`,
+          `${clubPath}/events/e1`,
+          `${clubPath}/invitations/${uid('recipient')}`,
+          `events/rules-club-event/clubs/${clubId}`,
+        ])
+          await assertFails(read('owner', path));
+        const db = dbFor('outsider');
+        await assertFails(
+          getDocsFromServer(
+            query(
+              collection(db, 'driverClubs'),
+              where('schemaVersion', '==', 2),
+              where('status', '==', 'active'),
+              limit(25),
+            ),
+          ),
+        );
+        await assertFails(
+          getDocsFromServer(
+            query(
+              collection(db, 'events/rules-club-page-event/clubs'),
+              orderBy(documentId()),
+              limit(25),
+            ),
+          ),
+        );
+        await assertFails(
+          getDocsFromServer(query(collection(dbFor('member'), `${clubPath}/messages`), limit(50))),
+        );
+      } finally {
+        await env.withSecurityRulesDisabled(async (context) => {
+          await setDoc(doc(context.firestore(), 'config/sharedClubs'), enabledConfig);
+        });
+      }
+      await assertSucceeds(read('member', `${clubPath}/messages/m1`));
+      await assertSucceeds(read('outsider', `events/rules-club-event/clubs/${clubId}`));
+    },
+  );
+  it.each(canonicalRestrictions)(
+    'denies $name only on shared-club authority',
+    async ({ user, claims }) => {
+      try {
+        await env.withSecurityRulesDisabled(async (context) => {
+          if (Object.keys(user).length)
+            await updateDoc(doc(context.firestore(), `users/${uid('member')}`), user);
+        });
+        for (const path of [
+          'config/sharedClubs',
+          clubPath,
+          `driverClubAccounts/${uid('member')}`,
+          `${clubPath}/members/${uid('member')}`,
+          `${clubPath}/messages/m1`,
+          `${clubPath}/events/e1`,
+          `events/rules-club-event/clubs/${clubId}`,
+        ])
+          await assertFails(read('member', path, { admin: true, ...claims }));
+        const db = dbFor('member', { admin: true, ...claims });
+        await assertFails(
+          getDocsFromServer(
+            query(
+              collection(db, 'driverClubs'),
+              where('schemaVersion', '==', 2),
+              where('status', '==', 'active'),
+              limit(25),
+            ),
+          ),
+        );
+        await assertFails(
+          getDocsFromServer(query(collection(db, `${clubPath}/messages`), limit(50))),
+        );
+        await assertFails(
+          getDocsFromServer(
+            query(
+              collection(db, 'events/rules-club-page-event/clubs'),
+              orderBy(documentId()),
+              limit(25),
+            ),
+          ),
+        );
+        // These new club checks must not change the existing public profile grant.
+        await assertSucceeds(read('member', `users/${uid('owner')}`, claims));
+      } finally {
+        await env.withSecurityRulesDisabled(async (context) => {
+          await updateDoc(doc(context.firestore(), `users/${uid('member')}`), {
+            banned: deleteField(),
+            status: deleteField(),
+          });
+        });
+      }
+      await assertSucceeds(read('member', `${clubPath}/messages/m1`));
+    },
+  );
   it.each([undefined, false, null, 'true', 1])(
     'fails closed on public attendance readiness %s without denying private membership',
     async (ready) => {
@@ -304,6 +444,7 @@ describe('shared clubs canonical identity and public scope', () => {
         await env.withSecurityRulesDisabled(async (context) => {
           const config: Record<string, unknown> = {
             enabled: true,
+            activatedAt: Timestamp.fromMillis(1),
             statsSince: Timestamp.fromMillis(1),
           };
           if (ready !== undefined) config.publicAttendanceReady = ready;
@@ -473,16 +614,126 @@ describe('shared clubs canonical identity and public scope', () => {
         await env.withSecurityRulesDisabled(async (context) => {
           const event = doc(context.firestore(), 'events/rules-club-page-event');
           if (status === 'missing') await deleteDoc(event);
-          else await setDoc(event, { status });
+          else await setDoc(event, { ...futureEvent, status });
         });
         await assertFails(getDocsFromServer(page(dbFor('outsider'))));
       }
     } finally {
       await env.withSecurityRulesDisabled(async (context) => {
-        await setDoc(doc(context.firestore(), 'events/rules-club-page-event'), {
-          status: 'published',
-        });
+        await setDoc(doc(context.firestore(), 'events/rules-club-page-event'), futureEvent);
       });
+    }
+  });
+  it.each([
+    undefined,
+    null,
+    false,
+    1,
+    '2099-01-01T00:00:00Z',
+    { seconds: 4070908800 },
+    Timestamp.fromMillis(1),
+  ])(
+    'denies public attendance GET and list25 for unavailable/past startsAt %j',
+    async (startsAt) => {
+      try {
+        await env.withSecurityRulesDisabled(async (context) => {
+          const event: Record<string, unknown> = { status: 'published' };
+          if (startsAt !== undefined) event.startsAt = startsAt;
+          await setDoc(doc(context.firestore(), 'events/rules-club-page-event'), event);
+        });
+        await assertFails(
+          read('outsider', 'events/rules-club-page-event/clubs/rules-page-club-000'),
+        );
+        await assertFails(
+          getDocsFromServer(
+            query(
+              collection(dbFor('outsider'), 'events/rules-club-page-event/clubs'),
+              orderBy(documentId()),
+              limit(25),
+            ),
+          ),
+        );
+        await assertSucceeds(read('member', `${clubPath}/events/e1`));
+      } finally {
+        await env.withSecurityRulesDisabled(async (context) => {
+          await setDoc(doc(context.firestore(), 'events/rules-club-page-event'), futureEvent);
+        });
+      }
+      await assertSucceeds(
+        read('outsider', 'events/rules-club-page-event/clubs/rules-page-club-000'),
+      );
+      expect(
+        (
+          await assertSucceeds(
+            getDocsFromServer(
+              query(
+                collection(dbFor('outsider'), 'events/rules-club-page-event/clubs'),
+                orderBy(documentId()),
+                limit(25),
+              ),
+            ),
+          )
+        ).size,
+      ).toBe(25);
+    },
+  );
+  it('denies past and exact-start attendance, allowing future list25 at a deterministic request-time boundary', async () => {
+    // The SDK cannot set request.time. Freeze only the production comparison's
+    // clock in a separate demo namespace; the real-clock cases above still run
+    // the unmodified rules. This proves strict > rather than a flaky wall-clock
+    // approximation that would also pass if the production operator became >=.
+    const rules = readFileSync(resolve(root, 'firestore.rules'), 'utf8');
+    const comparison = 'event.data.startsAt > request.time';
+    expect(rules.split(comparison)).toHaveLength(2);
+    const boundary = Date.UTC(2030, 0, 1);
+    const clockEnv = await initializeTestEnvironment({
+      projectId: `${projectId}-club-clock`,
+      firestore: {
+        ...firestoreEndpoint,
+        rules: rules.replace(comparison, 'event.data.startsAt > timestamp.date(2030, 1, 1)'),
+      },
+    });
+    try {
+      await clockEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        const batch = writeBatch(db);
+        batch.set(doc(db, `users/${uid('outsider')}`), activeUser);
+        batch.set(doc(db, 'config/sharedClubs'), enabledConfig);
+        batch.set(doc(db, clubPath), { schemaVersion: 2, status: 'active' });
+        for (const [id, offset] of [
+          ['past', -1],
+          ['exact', 0],
+          ['future', 1],
+        ] as const) {
+          batch.set(doc(db, `events/${id}`), {
+            status: 'published',
+            startsAt: Timestamp.fromMillis(boundary + offset),
+          });
+          for (let index = 0; index < 25; index++) {
+            const idClub = index === 0 ? clubId : `boundary-club-${index}`;
+            batch.set(doc(db, `events/${id}/clubs/${idClub}`), {
+              clubId: idClub,
+              name: 'Club',
+              logoUrl: null,
+            });
+          }
+        }
+        await batch.commit();
+      });
+      for (const id of ['past', 'exact', 'future']) {
+        const db = clockEnv.authenticatedContext(uid('outsider')).firestore();
+        const pointRead = getDocFromServer(doc(db, `events/${id}/clubs/${clubId}`));
+        if (id === 'future') await assertSucceeds(pointRead);
+        else await assertFails(pointRead);
+        const summaries = collection(db, `events/${id}/clubs`);
+        const page = getDocsFromServer(query(summaries, orderBy(documentId()), limit(25)));
+        if (id === 'future') expect((await assertSucceeds(page)).size).toBe(25);
+        else await assertFails(page);
+        await assertFails(getDocsFromServer(query(summaries, orderBy(documentId()), limit(26))));
+        await assertFails(getDocsFromServer(query(summaries, orderBy(documentId()))));
+      }
+    } finally {
+      await clockEnv.cleanup();
     }
   });
   it.each(['suspended', 'deleted', 'unfinished', 'driver-only', 'missing', 'claim-suspended'])(
@@ -811,6 +1062,33 @@ describe('shared club immutable logos', () => {
           ),
           new Uint8Array([1]),
           { contentType: 'image/jpeg' },
+        ),
+      );
+    },
+  );
+  it.each(canonicalRestrictions)(
+    'denies logo creation for $name without another document lookup',
+    async ({ name, user, claims }) => {
+      const id = `rules-logo-${name.replaceAll(' ', '-')}`;
+      await env.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await setDoc(doc(db, `users/${uid(id)}`), { ...activeUser, ...user });
+        await setDoc(doc(db, `driverClubs/${id}`), {
+          schemaVersion: 2,
+          status: 'active',
+          ownerUid: uid(id),
+        });
+      });
+      const storage = env.authenticatedContext(uid(id), { admin: true, ...claims }).storage();
+      await assertFails(
+        uploadBytes(ref(storage, `clubLogos/${id}/${uid(id)}/logo.jpg`), new Uint8Array([1]), {
+          contentType: 'image/jpeg',
+        }),
+      );
+      // Public profile reads retain their existing grant for these identities.
+      await assertSucceeds(
+        getDocFromServer(
+          doc(env.authenticatedContext(uid(id), claims).firestore(), `users/${uid('owner')}`),
         ),
       );
     },

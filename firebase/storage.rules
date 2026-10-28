@@ -65,6 +65,9 @@ service firebase.storage {
         let club = firestore.get(/databases/(default)/documents/driverClubs/$(clubId)).data;
         return user.get('onboardingCompletedAt', null) is timestamp
           && user.get('suspended', false) != true && user.get('deleted', false) != true
+          && user.get('banned', false) != true
+          && !(user.get('status', '') in ['deleted', 'suspended', 'deletionPending', 'banned'])
+          && (!('banned' in request.auth.token) || request.auth.token.banned != true)
           && club.get('schemaVersion', 0) == 2 && club.get('status', '') == 'active'
           && club.ownerUid == request.auth.uid;
       }

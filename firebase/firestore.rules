@@ -323,20 +323,32 @@ service cloud.firestore {
     function hasSharedClubAccount() {
       let user = get(/databases/$(database)/documents/users/$(request.auth.uid));
       return isAuthenticated() && isNotSuspended() && user != null
+        && (!('banned' in request.auth.token) || request.auth.token.banned != true)
         && user.data.get('onboardingCompletedAt', null) is timestamp
         && user.data.get('suspended', false) != true
-        && user.data.get('deleted', false) != true;
+        && user.data.get('deleted', false) != true
+        && user.data.get('banned', false) != true
+        && !(user.data.get('status', '') in ['deleted', 'suspended', 'deletionPending', 'banned']);
     }
 
     function sharedClubsEnabled() {
       let config = get(/databases/$(database)/documents/config/sharedClubs);
-      return config != null && config.data.get('enabled', false) == true;
+      return config != null && config.data.get('enabled', false) == true
+        && config.data.get('activatedAt', null) is timestamp;
     }
 
     function sharedClubAttendanceReady() {
       let config = get(/databases/$(database)/documents/config/sharedClubs);
       return config != null && config.data.get('enabled', false) == true
+        && config.data.get('activatedAt', null) is timestamp
         && config.data.get('publicAttendanceReady', false) == true;
+    }
+
+    function sharedClubEventIsUpcoming(eventId) {
+      let event = get(/databases/$(database)/documents/events/$(eventId));
+      return event != null && event.data.get('status', '') == 'published'
+        && event.data.get('startsAt', null) is timestamp
+        && event.data.startsAt > request.time;
     }
 
     function sharedClubIsActive(clubId) {
@@ -440,10 +452,10 @@ service cloud.firestore {
       allow get: if hasSharedClubAccount() && sharedClubAttendanceReady()
         && sharedClubIsActive(clubId)
         && validSharedClubSummary(clubId)
-        && get(/databases/$(database)/documents/events/$(eventId)).data.status == 'published';
+        && sharedClubEventIsUpcoming(eventId);
       allow list: if hasSharedClubAccount() && sharedClubAttendanceReady()
         && boundedSharedClubQuery(25)
-        && get(/databases/$(database)/documents/events/$(eventId)).data.status == 'published';
+        && sharedClubEventIsUpcoming(eventId);
     }
 
     // -------------------------------------------------------------------------
