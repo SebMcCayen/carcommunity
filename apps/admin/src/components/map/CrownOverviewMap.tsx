@@ -223,7 +223,10 @@ export function CrownOverviewMap({
     return () => {
       current = false;
       for (const marker of markers) marker.remove();
-      for (const root of roots) root.unmount();
+      // Marker roots are independent of this React tree. Dispose after its commit.
+      queueMicrotask(() => {
+        for (const root of roots) root.unmount();
+      });
     };
   }, [crownData, pointData, ready]);
   return (
