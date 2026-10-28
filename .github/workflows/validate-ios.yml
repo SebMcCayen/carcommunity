@@ -41,7 +41,8 @@ jobs:
     # Simulator tests still run in Xcode; the device build below targets arm64.
     # https://docs.github.com/en/actions/reference/runners/github-hosted-runners
     runs-on: macos-26-intel
-    timeout-minutes: 60
+    # Full simulator, SDK-emulator and device builds can exceed an hour on Intel.
+    timeout-minutes: 90
 
     steps:
       - name: Checkout
@@ -158,6 +159,7 @@ jobs:
           xcodebuild -project KCC.xcodeproj -scheme KCC \
             -configuration Release \
             -destination 'generic/platform=iOS' \
+            -derivedDataPath "${RUNNER_TEMP}/ios-tests" \
             CODE_SIGNING_ALLOWED=NO \
             build
 
