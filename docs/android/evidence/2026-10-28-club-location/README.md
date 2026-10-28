@@ -31,3 +31,16 @@ The screenshots are English-locale fixture captures; Swedish labels are generate
 from the same contract. API 26–28 execution, physical devices, TalkBack and real
 club creation/server/account permissions were not exercised in these local runs.
 The existing backend authorization and location schema are unchanged.
+
+## CI regression follow-up
+
+The first PR head exposed an older native create/leave test that still entered
+free text into the removed Location editor. The test now selects Hallands län,
+searches for Kungsbacka and asserts the existing string payload before retaining
+its create, manage, leave and 24-hour cooldown assertions.
+
+After merging main `e29354c`, debug and instrumentation APKs compiled successfully.
+The complete `ClubChatRevocationTest` plus `ClubLocationPickerInteractionTest`
+passed on Android 35: **9 tests, zero failures**, in 109.535 seconds. This includes
+revocation, membership/session changes, live history/moderation and the new picker.
+The tests use local repositories and do not write production data.
