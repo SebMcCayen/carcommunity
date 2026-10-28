@@ -168,7 +168,8 @@ final class FirebaseEmulatorIntegrationTests: XCTestCase {
                 if let error { continuation.finish(throwing: error) }
                 else if let snapshot { continuation.yield(snapshot) }
             }
-            continuation.onTermination = { _ in listener.remove() }
+            let registration = EmulatorListenerRegistrationBox(registration: listener)
+            continuation.onTermination = { _ in registration.remove() }
         }
     }
 
@@ -206,6 +207,13 @@ final class FirebaseEmulatorIntegrationTests: XCTestCase {
             return try await group.next()!
         }
     }
+}
+
+/// Immutable SDK cancellation handle; remove() is the sole cross-task operation.
+/// Matches the registration-box pattern used by the production chat repository.
+private struct EmulatorListenerRegistrationBox: @unchecked Sendable {
+    let registration: any ListenerRegistration
+    func remove() { registration.remove() }
 }
 
 /// Avoids external App Check/Installations requests. Applies only to named test apps.
