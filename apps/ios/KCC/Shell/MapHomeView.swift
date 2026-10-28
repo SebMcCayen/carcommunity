@@ -452,7 +452,7 @@ struct MapHomeView: View {
                 .accessibilityIdentifier("shell.mapPlaceholder")
                 .accessibilityValue(Text(verbatim:
                     "\(hostLifetimeID.uuidString)|\(colorScheme == .dark ? "Dark" : "Light")"))
-                .font(.system(size: KccTypeScale.titleMd, weight: KccTypeScale.medium))
+                .font(.headline)
                 .foregroundStyle(.secondary)
         }
     }
@@ -469,7 +469,7 @@ struct MapHomeView: View {
             ProgressView()
                 .controlSize(.small)
             Text("shell.loadingRoads")
-                .font(.system(size: KccTypeScale.bodySm))
+                .font(.subheadline)
         }
         .padding(.horizontal, KccSpacing.s3)
         .padding(.vertical, KccSpacing.s1 + 2)

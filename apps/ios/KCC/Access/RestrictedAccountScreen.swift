@@ -14,23 +14,24 @@ struct RestrictedAccountScreen: View {
     @State private var signOutFailed = false
 
     var body: some View {
+        ScrollView {
         VStack(spacing: KccSpacing.s4) {
             Image(systemName: "exclamationmark.shield.fill")
                 .font(.system(size: 48))
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
             Text("accountStatus.suspendedTitle")
-                .font(.system(size: KccTypeScale.headingLg, weight: .semibold))
+                .font(.title2.bold())
             Text(bodyKey)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
 
-            Button("accountStatus.supportLink") {
+            Button {
                 openURL(URL(string: "https://github.com/SebMcCayen/carcommunity/issues")!)
-            }
-            .buttonStyle(.borderedProminent)
+            } label: { Text("accountStatus.supportLink").frame(maxWidth: .infinity, minHeight: 48) }
+            .kccPrimaryAction()
 
-            HStack {
+            SocialFlow {
                 policyButton("settings.terms", urlKey: "url.terms")
                 policyButton("settings.privacyPolicy", urlKey: "url.privacy")
             }
@@ -39,9 +40,9 @@ struct RestrictedAccountScreen: View {
                 Task { await privacyCoordinator.hideMeNow() }
             } label: {
                 Label("liveLocation.hideNow", systemImage: "location.slash.fill")
-                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .frame(maxWidth: .infinity, minHeight: 48)
             }
-            .buttonStyle(.borderedProminent)
+            .kccPrimaryAction()
             .disabled(privacyCoordinator.actionStatus == .working)
 
             if privacyCoordinator.actionStatus == .failed {
@@ -54,9 +55,9 @@ struct RestrictedAccountScreen: View {
             Text("accountStatus.subscriptionManagementPlaceholder")
 
             if deletionCoordinator.isAvailable {
-                Button("settings.accountDeletion", role: .destructive) {
+                Button(role: .destructive) {
                     showsAccountDeletion = true
-                }
+                } label: { Text("settings.accountDeletion").frame(maxWidth: .infinity, minHeight: 48) }
                 .buttonStyle(.bordered)
             }
 
@@ -66,13 +67,14 @@ struct RestrictedAccountScreen: View {
                     .multilineTextAlignment(.center)
             }
 
-            Button("auth.signOut", action: attemptSignOut)
+            Button(action: attemptSignOut) { Text("auth.signOut").frame(maxWidth: .infinity, minHeight: 48) }
                 .buttonStyle(.bordered)
         }
-        .font(.system(size: KccTypeScale.bodyMd))
-        .padding(KccSpacing.s6)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.background, ignoresSafeAreaEdges: .all)
+        .font(.body)
+        .padding(KccSpacing.s4)
+        .frame(maxWidth: .infinity)
+        }
+        .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
         .task {
             privacyCoordinator.canShare = false
             privacyCoordinator.start()
@@ -98,10 +100,11 @@ struct RestrictedAccountScreen: View {
     }
 
     private func policyButton(_ title: LocalizedStringKey, urlKey: String) -> some View {
-        Button(title) {
+        Button {
             let value = String(localized: String.LocalizationValue(urlKey))
             if let url = URL(string: value), url.scheme == "https" { openURL(url) }
         }
+        label: { Text(title).frame(minHeight: 48) }
         .buttonStyle(.bordered)
     }
 }

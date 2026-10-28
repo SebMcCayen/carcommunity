@@ -7,7 +7,7 @@ struct WhatsNewScreen: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: KccSpacing.s4) {
                 Text("whatsNew.title")
-                    .font(.system(size: KccTypeScale.headingLg, weight: .semibold))
+                    .font(.title2.bold())
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 if entries.isEmpty {
@@ -27,14 +27,13 @@ struct WhatsNewScreen: View {
                             }
                         }
                     }
-                    .padding(KccSpacing.s4)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: KccRadius.lg))
+                    .kccContentCard()
                 }
             }
-            .padding(KccSpacing.s6)
+            .padding(KccSpacing.s4)
         }
-        .background(.background)
+        .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
         .navigationTitle(Text("whatsNew.title"))
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -59,7 +58,7 @@ struct WhatsNewAnnouncementSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: KccSpacing.s4) {
                     Text(verbatim: title)
-                        .font(.system(size: KccTypeScale.headingLg, weight: .semibold))
+                        .font(.title2.bold())
                     ForEach(announcement.entry.highlightKeys.prefix(Changelog.popupHighlightLimit), id: \.self) { key in
                         HStack(alignment: .firstTextBaseline, spacing: KccSpacing.s2) {
                             Text(verbatim: "•").accessibilityHidden(true)
@@ -70,15 +69,18 @@ struct WhatsNewAnnouncementSheet: View {
                         Text("whatsNew.dialogMoreVersions")
                             .foregroundStyle(.secondary)
                     }
-                    Button("whatsNew.dialogShowAll", action: onShowAll)
-                        .buttonStyle(.borderedProminent)
-                        .frame(maxWidth: .infinity)
-                    Button("whatsNew.dialogClose", action: onClose)
-                        .buttonStyle(.bordered)
+                    Button(action: onShowAll) { Text("whatsNew.dialogShowAll").frame(maxWidth: .infinity, minHeight: 48) }
+                        .kccPrimaryAction()
                         .frame(maxWidth: .infinity)
                 }
-                .padding(KccSpacing.s6)
+                .padding(KccSpacing.s4)
             }
+            .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
+            .navigationTitle(Text("whatsNew.title"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) {
+                Button(action: onClose) { Text("whatsNew.dialogClose").frame(minHeight: 48) }
+            }}
             .presentationDetents([.medium, .large])
             .interactiveDismissDisabled()
         }

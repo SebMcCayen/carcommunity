@@ -10,29 +10,28 @@ struct SignInScreen: View {
     @Bindable var coordinator: SignInCoordinator
 
     var body: some View {
+        ScrollView {
         VStack(spacing: KccSpacing.s4) {
-            Spacer()
 
             Text("auth.loginTitle")
-                .font(.system(size: KccTypeScale.headingLg, weight: .semibold))
+                .font(.title2.bold())
             Text("auth.loginSubtitle")
-                .font(.system(size: KccTypeScale.bodyMd))
+                .font(.body)
                 .foregroundStyle(.secondary)
 
-            Spacer()
 
             switch coordinator.status {
             case .inProgress:
                 ProgressView("auth.loading")
             case .failed(.unavailable):
                 Text("auth.platformUnsupported")
-                    .font(.system(size: KccTypeScale.bodySm))
+                    .font(.subheadline)
                     .foregroundStyle(KccPalette.errorRed)
                     .multilineTextAlignment(.center)
             case .failed(.generic):
                 VStack(spacing: KccSpacing.s2) {
                     Text("auth.errorGeneric")
-                        .font(.system(size: KccTypeScale.bodySm))
+                        .font(.subheadline)
                         .foregroundStyle(KccPalette.errorRed)
                         .multilineTextAlignment(.center)
                     signInButton
@@ -42,12 +41,15 @@ struct SignInScreen: View {
             }
 
             Text("auth.deleteAccountNote")
-                .font(.system(size: KccTypeScale.caption))
+                .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .padding(.top, KccSpacing.s6)
+                .padding(.top, KccSpacing.s4)
         }
-        .padding(KccSpacing.s6)
+        .frame(maxWidth: .infinity)
+        .kccContentCard()
+        .padding(KccSpacing.s4)
+        }.kccReadingSurface(pageBackground: true)
     }
 
     private var signInButton: some View {
@@ -56,10 +58,11 @@ struct SignInScreen: View {
             Task { await coordinator.signIn() }
         } label: {
             Label("auth.appleLoginButton", systemImage: "apple.logo")
-                .font(.system(size: KccTypeScale.bodyMd, weight: .semibold))
-                .frame(maxWidth: .infinity, minHeight: 44)
+                .font(.body.weight(.semibold))
+                .frame(maxWidth: .infinity, minHeight: 48)
         }
         .buttonStyle(.borderedProminent)
-        .tint(.primary)
+        .tint(KccTheme.text)
+        .foregroundStyle(KccTheme.page)
     }
 }

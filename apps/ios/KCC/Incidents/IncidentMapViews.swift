@@ -70,7 +70,7 @@ struct IncidentMapOverlay: View {
                         .foregroundStyle(.primary)
                         .padding(.horizontal, KccSpacing.s3)
                         .padding(.vertical, KccSpacing.s2)
-                        .background(.regularMaterial, in: Capsule())
+                        .background(KccTheme.surface, in: RoundedRectangle(cornerRadius: KccRadius.md))
                         .padding(KccSpacing.s4)
                         .accessibilityIdentifier("incident-trafikverket-attribution")
                         .allowsHitTesting(false)
@@ -103,14 +103,7 @@ struct IncidentReportSheet: View {
                         Button {
                             selectedType = type
                         } label: {
-                            HStack(spacing: KccSpacing.s3) {
-                                Image(systemName: type.symbolName)
-                                    .foregroundStyle(Color(argb: type.markerColorArgb))
-                                    .frame(width: 30)
-                                Text(LocalizedStringKey(type.titleKey))
-                                Spacer()
-                                if selectedType == type { Image(systemName: "checkmark") }
-                            }
+                            IncidentTypeChoice(type: type, selected: selectedType == type)
                         }
                     }
                 }
@@ -122,7 +115,7 @@ struct IncidentReportSheet: View {
                                 dismiss()
                             }
                         } label: {
-                            Label("incidents.reportLocationCurrent", systemImage: "location.fill")
+                            Label("incidents.reportLocationCurrent", systemImage: "location.fill").frame(maxWidth: .infinity, minHeight: 48)
                         }
                         .disabled(coordinator.busy)
 
@@ -130,16 +123,18 @@ struct IncidentReportSheet: View {
                             coordinator.beginMapSelection(for: selectedType)
                             dismiss()
                         } label: {
-                            Label("incidents.reportLocationPick", systemImage: "mappin.and.ellipse")
+                            Label("incidents.reportLocationPick", systemImage: "mappin.and.ellipse").frame(maxWidth: .infinity, minHeight: 48)
                         }
                         .disabled(coordinator.busy)
                     }
                 }
             }
+            .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .navigationTitle("incidents.reportTitle")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("incidents.cancel") { dismiss() }
+                    Button { dismiss() } label: { Text("incidents.cancel").frame(minHeight: 48) }
                 }
             }
         }
@@ -148,27 +143,28 @@ struct IncidentReportSheet: View {
 }
 
 struct IncidentLocationPickerControls: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     let canConfirm: Bool
     let confirm: () -> Void
     let cancel: () -> Void
 
     var body: some View {
         VStack(spacing: KccSpacing.s3) {
-            Text("incidents.pickLocationInstruction")
-                .font(.callout.weight(.semibold))
-                .padding(.horizontal, KccSpacing.s3)
-                .padding(.vertical, KccSpacing.s2)
-                .background(.regularMaterial, in: Capsule())
+            ScrollView {
+                Text("incidents.pickLocationInstruction").font(.callout.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+            }.frame(height: typeSize.isAccessibilitySize ? 112 : 64)
+                .padding(KccSpacing.s3).background(KccTheme.surface, in: RoundedRectangle(cornerRadius: KccRadius.md))
             Spacer()
-            HStack(spacing: KccSpacing.s3) {
-                Button("incidents.cancel", role: .cancel, action: cancel)
+            SocialFlow {
+                Button(role: .cancel, action: cancel) { Text("incidents.cancel").frame(minHeight: 48) }
                     .buttonStyle(.bordered)
-                Button("incidents.pickLocationConfirm", action: confirm)
-                    .buttonStyle(.borderedProminent)
+                Button(action: confirm) { Text("incidents.pickLocationConfirm").frame(minHeight: 48) }
+                    .kccPrimaryAction()
                     .disabled(!canConfirm)
             }
             .padding(KccSpacing.s4)
-            .background(.regularMaterial, in: Capsule())
+            .background(KccTheme.surface, in: RoundedRectangle(cornerRadius: KccRadius.md))
         }
         .padding(.top, KccSpacing.s12)
         .padding(.bottom, KccSpacing.s12 + KccSpacing.s12)
@@ -220,25 +216,19 @@ struct IncidentDetailsContent: View {
                 Text("incidents.stillHereQuestion").font(.headline)
                 Group {
                     if coordinator.selectedIncidentOwned {
-                        Button("incidents.removeAction", role: .destructive) {
-                            Task { await coordinator.removeSelectedIncident() }
-                        }
+                        Button(role: .destructive) { Task { await coordinator.removeSelectedIncident() } } label: { Text("incidents.removeAction").frame(maxWidth: .infinity, minHeight: 48) }.tint(KccPalette.errorRed)
                     } else if incident.isImported {
                         Text("incidents.removeImportedExplanation")
                             .foregroundStyle(.secondary)
                     } else {
-                        Button("incidents.stillHereYes") {
-                            Task { await coordinator.confirmSelectedIncident() }
-                        }
-                        Button("incidents.stillHereNo") {
-                            Task { await coordinator.clearSelectedIncident() }
-                        }
+                        Button { Task { await coordinator.confirmSelectedIncident() } } label: { Text("incidents.stillHereYes").frame(maxWidth: .infinity, minHeight: 48) }
+                        Button { Task { await coordinator.clearSelectedIncident() } } label: { Text("incidents.stillHereNo").frame(maxWidth: .infinity, minHeight: 48) }
                     }
                 }
             }
             .buttonStyle(.bordered)
             .controlSize(.large)
-            .font(.body)
+            .font(.body).foregroundStyle(KccTheme.text).tint(KccTheme.driver)
             .disabled(coordinator.busy)
         }
     }
@@ -269,22 +259,16 @@ struct PoliceDetailsContent: View {
                 Text("police.stillHereQuestion").font(.headline)
                 Group {
                     if pin.mine {
-                        Button("police.removeAction", role: .destructive) {
-                            Task { await coordinator.removeSelectedPolice() }
-                        }
+                        Button(role: .destructive) { Task { await coordinator.removeSelectedPolice() } } label: { Text("police.removeAction").frame(maxWidth: .infinity, minHeight: 48) }.tint(KccPalette.errorRed)
                     } else {
-                        Button("police.stillHereYes") {
-                            Task { await coordinator.verifySelectedPolice(confirm: true) }
-                        }
-                        Button("police.stillHereNo") {
-                            Task { await coordinator.verifySelectedPolice(confirm: false) }
-                        }
+                        Button { Task { await coordinator.verifySelectedPolice(confirm: true) } } label: { Text("police.stillHereYes").frame(maxWidth: .infinity, minHeight: 48) }
+                        Button { Task { await coordinator.verifySelectedPolice(confirm: false) } } label: { Text("police.stillHereNo").frame(maxWidth: .infinity, minHeight: 48) }
                     }
                 }
             }
             .buttonStyle(.bordered)
             .controlSize(.large)
-            .font(.body)
+            .font(.body).foregroundStyle(KccTheme.text).tint(KccTheme.driver)
             .disabled(coordinator.busy)
         }
     }
@@ -296,21 +280,21 @@ struct PoliceProximityBanner: View {
     var body: some View {
         HStack(spacing: KccSpacing.s3) {
             Image(systemName: "shield.fill")
-                .font(.title2)
+                .font(.system(size: 20)).accessibilityHidden(true)
                 .foregroundStyle(.white)
             Text("policeAlert.caption")
                 .font(.headline)
                 .foregroundStyle(.white)
             Spacer()
             Button(action: dismiss) {
-                Image(systemName: "xmark").foregroundStyle(.white)
+                Image(systemName: "xmark").font(.system(size: 20)).foregroundStyle(.white).frame(width: 48, height: 48).contentShape(Rectangle())
             }
             .accessibilityLabel(Text("incidents.close"))
         }
         .padding(KccSpacing.s4)
         .background(Color.blue.opacity(0.94), in: RoundedRectangle(cornerRadius: 16))
         .shadow(radius: 8)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityAddTraits([.isModal, .updatesFrequently])
         .onAppear {
             UIAccessibility.post(
@@ -329,5 +313,20 @@ private extension Color {
             blue: Double(argb & 0xFF) / 255,
             opacity: Double((argb >> 24) & 0xFF) / 255
         )
+    }
+}
+
+struct IncidentTypeChoice: View {
+    let type: IncidentType
+    let selected: Bool
+    var body: some View {
+        HStack(spacing: KccSpacing.s3) {
+            Image(systemName: type.symbolName).font(.system(size: 20)).foregroundStyle(Color(argb: type.markerColorArgb))
+                .frame(width: 30).accessibilityHidden(true)
+            Text(LocalizedStringKey(type.titleKey)).font(.body).fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if selected { Image(systemName: "checkmark").font(.system(size: 18, weight: .semibold)).foregroundStyle(KccTheme.driver).accessibilityHidden(true) }
+        }.frame(maxWidth: .infinity, minHeight: 48, alignment: .leading).contentShape(Rectangle())
+            .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

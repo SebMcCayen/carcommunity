@@ -34,7 +34,7 @@ struct StartDrivingSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: KccSpacing.s4) {
                     Text("shell.createChooserBody")
-                        .font(.system(size: KccTypeScale.bodyMd))
+                        .font(.body)
                         .foregroundStyle(.secondary)
 
                     vehiclePicker
@@ -48,15 +48,15 @@ struct StartDrivingSheet: View {
                             Image(systemName: "car.fill")
                             VStack(alignment: .leading, spacing: KccSpacing.s1) {
                                 Text("shell.createChooserSingle")
-                                    .font(.system(size: KccTypeScale.titleMd, weight: .semibold))
+                                    .font(.headline)
                                 Text("shell.createChooserSingleBody")
-                                    .font(.system(size: KccTypeScale.bodySm))
+                                    .font(.subheadline)
                             }
                             Spacer(minLength: 0)
                         }
                         .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .kccPrimaryAction()
                     .disabled(isStarting || !canStartSingleSession)
 
                     Button {
@@ -68,9 +68,9 @@ struct StartDrivingSheet: View {
                             Image(systemName: "person.3.fill")
                             VStack(alignment: .leading, spacing: KccSpacing.s1) {
                                 Text("shell.createChooserConvoy")
-                                    .font(.system(size: KccTypeScale.titleMd, weight: .semibold))
+                                    .font(.headline)
                                 Text("shell.createChooserConvoyBody")
-                                    .font(.system(size: KccTypeScale.bodySm))
+                                    .font(.subheadline)
                             }
                             Spacer(minLength: 0)
                         }
@@ -79,9 +79,10 @@ struct StartDrivingSheet: View {
                     .buttonStyle(.bordered)
                     .disabled(isStarting)
                 }
-                .padding(KccSpacing.s6)
+                .padding(KccSpacing.s4)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .navigationTitle("shell.createChooserTitle")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -104,7 +105,7 @@ struct StartDrivingSheet: View {
     private var vehiclePicker: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s2) {
             Text("shell.createChooserCarLabel")
-                .font(.system(size: KccTypeScale.bodySm, weight: .semibold))
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
 
             switch garage.state {
@@ -119,7 +120,7 @@ struct StartDrivingSheet: View {
                 }
             case .unavailable, .empty:
                 Text("shell.createChooserNoCars")
-                    .font(.system(size: KccTypeScale.bodySm))
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
             case .loaded:
                 ScrollViewReader { proxy in

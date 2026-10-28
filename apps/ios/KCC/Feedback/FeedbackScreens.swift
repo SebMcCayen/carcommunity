@@ -22,8 +22,9 @@ struct FeedbackScreen: View {
                     reportForm
                 }
             }
-            .padding(KccSpacing.s5)
+            .padding(KccSpacing.s4)
         }
+        .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
         .navigationTitle(Text("feedback.title"))
         .onChange(of: coordinator.status) { _, status in
             if case .submitted = status {
@@ -49,7 +50,7 @@ struct FeedbackScreen: View {
                 in: RoundedRectangle(cornerRadius: KccRadius.md)
             )
 
-            TextField("feedback.summaryLabel", text: $form.summary)
+            EditorTextField(title: "feedback.summaryLabel", text: $form.summary)
                 .textFieldStyle(.roundedBorder)
                 .onChange(of: form.summary) { _, value in
                     form.summary = FeedbackText.prefixByUTF16(
@@ -58,16 +59,7 @@ struct FeedbackScreen: View {
                     )
                 }
 
-            Text("feedback.descriptionLabel")
-                .font(.subheadline.weight(.semibold))
-            TextEditor(text: $form.description)
-                .accessibilityLabel(Text("feedback.descriptionLabel"))
-                .frame(minHeight: 150)
-                .padding(KccSpacing.s2)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(.secondary.opacity(0.35))
-                }
+            EditorTextField(title: "feedback.descriptionLabel", text: $form.description, multiline: true)
                 .onChange(of: form.description) { _, value in
                     form.description = FeedbackText.prefixByUTF16(
                         value,
@@ -100,17 +92,13 @@ struct FeedbackScreen: View {
                 }
                 Task { await coordinator.submit(form: form, context: context) }
             } label: {
-                if coordinator.status == .submitting {
-                    ProgressView().frame(maxWidth: .infinity)
-                } else {
-                    Text("feedback.submit").frame(maxWidth: .infinity)
-                }
+                EditorSubmitLabel(title: "feedback.submit", saving: coordinator.status == .submitting)
             }
-            .buttonStyle(.borderedProminent)
+            .kccPrimaryAction()
             .disabled(coordinator.status == .submitting || coordinator.status == .unavailable)
 
             if openTicketsEnabled {
-                Button("feedback.openTicketsButton", action: onOpenTickets)
+                Button(action: onOpenTickets) { Text("feedback.openTicketsButton").frame(maxWidth: .infinity, minHeight: 48) }
                     .buttonStyle(.bordered)
                     .frame(maxWidth: .infinity)
             }
@@ -136,15 +124,15 @@ struct FeedbackScreen: View {
         .background(.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
 
         if let issueURL {
-            Button("feedback.viewIssue") { openURL(issueURL) }
+            Button { openURL(issueURL) } label: { Text("feedback.viewIssue").frame(maxWidth: .infinity, minHeight: 48) }
                 .buttonStyle(.bordered)
                 .frame(maxWidth: .infinity)
         }
-        Button("feedback.close") {
+        Button {
             coordinator.reset()
             onClose()
-        }
-            .buttonStyle(.borderedProminent)
+        } label: { Text("feedback.close").frame(maxWidth: .infinity, minHeight: 48) }
+            .kccPrimaryAction()
             .frame(maxWidth: .infinity)
     }
 
@@ -158,61 +146,40 @@ struct OpenTicketsScreen: View {
     @Bindable var coordinator: OpenTicketsCoordinator
 
     var body: some View {
-        Group {
-            switch coordinator.listState {
-            case .loading:
-                ProgressView("openTickets.loading")
-            case .failed:
-                ContentUnavailableView(
-                    "openTickets.error",
-                    systemImage: "exclamationmark.triangle"
-                )
-            case .unavailable:
-                ContentUnavailableView("shell.unavailable", systemImage: "wifi.slash")
-            case .loaded(let tickets):
-                if tickets.isEmpty {
-                    ContentUnavailableView("openTickets.empty", systemImage: "checkmark.circle")
-                } else {
-                    List {
-                        ForEach(tickets) { ticket in
-                            TicketCard(
-                                ticket: ticket,
-                                state: coordinator.interactions[ticket.number] ?? TicketInteractionState(),
-                                onPlusOne: {
-                                    Task { await coordinator.plusOne(issueNumber: ticket.number) }
-                                },
-                                onComment: { text in
-                                    Task { await coordinator.comment(issueNumber: ticket.number, text: text) }
-                                },
-                                onCommentEdited: { coordinator.clearError(issueNumber: ticket.number) },
-                                onOpen: { openURL(ticket.htmlURL) }
-                            )
-                        }
-                        if coordinator.canLoadMore || coordinator.isLoadingMore {
-                            Button("openTickets.loadMore") { coordinator.loadMore() }
-                                .disabled(coordinator.isLoadingMore)
-                        }
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: KccSpacing.s4) {
+                Text("openTickets.intro").font(.subheadline).foregroundStyle(KccTheme.secondary)
+                    .fixedSize(horizontal: false, vertical: true).kccContentCard()
+                switch coordinator.listState {
+                case .loading: ProgressView("openTickets.loading")
+                case .failed: SettingsStateCard(title: "openTickets.title", message: "openTickets.error", symbol: "exclamationmark.circle")
+                case .unavailable: SettingsStateCard(title: "openTickets.title", message: "shell.unavailable", symbol: "wifi.slash")
+                case .loaded(let tickets):
+                    if tickets.isEmpty { SettingsStateCard(title: "openTickets.title", message: "openTickets.empty", symbol: "checkmark.circle") }
+                    ForEach(tickets) { ticket in
+                        TicketCard(ticket: ticket,
+                            state: coordinator.interactions[ticket.number] ?? TicketInteractionState(),
+                            onPlusOne: { Task { await coordinator.plusOne(issueNumber: ticket.number) } },
+                            onComment: { text in Task { await coordinator.comment(issueNumber: ticket.number, text: text) } },
+                            onCommentEdited: { coordinator.clearError(issueNumber: ticket.number) },
+                            onOpen: { openURL(ticket.htmlURL) })
                     }
-                    .listStyle(.insetGrouped)
+                    if coordinator.canLoadMore || coordinator.isLoadingMore {
+                        Button { coordinator.loadMore() } label: {
+                            EditorSubmitLabel(title: "openTickets.loadMore", saving: coordinator.isLoadingMore)
+                        }.buttonStyle(.bordered).disabled(coordinator.isLoadingMore)
+                    }
                 }
-            }
+            }.padding(KccSpacing.s4)
         }
+        .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
         .navigationTitle(Text("openTickets.title"))
-        .safeAreaInset(edge: .top) {
-            Text("openTickets.intro")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, KccSpacing.s4)
-                .padding(.vertical, KccSpacing.s2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.regularMaterial)
-        }
         .task { coordinator.start() }
         .onDisappear { coordinator.stop() }
     }
 }
 
-private struct TicketCard: View {
+struct TicketCard: View {
     let ticket: OpenTicket
     let state: TicketInteractionState
     let onPlusOne: () -> Void
@@ -224,25 +191,19 @@ private struct TicketCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s3) {
-            Text(ticket.title).font(.headline).lineLimit(2)
+            Text(verbatim: ticket.title).font(.headline).fixedSize(horizontal: false, vertical: true)
             if !ticket.summary.isEmpty, ticket.summary != ticket.title {
-                Text(ticket.summary).font(.subheadline).foregroundStyle(.secondary).lineLimit(3)
+                Text(verbatim: ticket.summary).font(.subheadline).foregroundStyle(KccTheme.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Text("\(count("openTickets.plusOneCount", ticket.plusOneCount))  •  \(count("openTickets.commentCount", ticket.commentCount))")
-                .font(.caption)
+                .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            HStack {
+            SocialFlow {
                 Button {
                     onPlusOne()
                 } label: {
-                    if state.submitting == .plusOne {
-                        ProgressView()
-                    } else {
-                        Text(state.plusOneDone
-                            ? LocalizedStringKey("openTickets.plusOneDone")
-                            : LocalizedStringKey("openTickets.plusOne"))
-                    }
+                    EditorSubmitLabel(title: state.plusOneDone ? "openTickets.plusOneDone" : "openTickets.plusOne", saving: state.submitting == .plusOne)
                 }
                 .buttonStyle(.bordered)
                 .disabled(!state.canPlusOne)
@@ -250,13 +211,13 @@ private struct TicketCard: View {
                     ? LocalizedStringKey("openTickets.plusOneDone")
                     : LocalizedStringKey("openTickets.plusOneDescription")))
 
-                Button("openTickets.openInGitHub", action: onOpen)
+                Button(action: onOpen) { Text("openTickets.openInGitHub").frame(minHeight: 48) }
                     .accessibilityHint(Text("openTickets.openInGitHubDescription"))
             }
 
             if state.plusOneDeliveryFailed {
                 Text("openTickets.deliveryFailed")
-                    .font(.caption)
+                    .font(.footnote)
                     .foregroundStyle(KccPalette.errorRed)
             }
 
@@ -267,9 +228,8 @@ private struct TicketCard: View {
                     .font(.subheadline)
                     .foregroundStyle(KccPalette.errorRed)
             } else {
-                Text("openTickets.publicNotice").font(.caption).foregroundStyle(.red)
-                TextField("openTickets.commentLabel", text: $comment, axis: .vertical)
-                    .lineLimit(2...6)
+                Text("openTickets.publicNotice").font(.footnote).foregroundStyle(.red)
+                EditorTextField(title: "openTickets.commentLabel", text: $comment, multiline: true)
                     .textFieldStyle(.roundedBorder)
                     .disabled(state.submitting != nil)
                     .onChange(of: comment) { _, value in
@@ -279,18 +239,18 @@ private struct TicketCard: View {
                         )
                         onCommentEdited()
                     }
-                Button("openTickets.commentSubmit") { onComment(comment) }
+                Button { onComment(comment) } label: { Text("openTickets.commentSubmit").frame(minHeight: 48) }
                     .buttonStyle(.bordered)
                     .disabled(!state.canComment || TicketComments.bound(comment).isEmpty)
             }
 
             if let error = state.error {
                 Text(error.messageKey)
-                    .font(.caption)
+                    .font(.footnote)
                     .foregroundStyle(error == .alreadyDone ? Color.secondary : Color.red)
             }
         }
-        .padding(.vertical, KccSpacing.s2)
+        .frame(maxWidth: .infinity, alignment: .leading).kccContentCard()
     }
 
     private func count(_ key: String.LocalizationValue, _ value: Int) -> String {

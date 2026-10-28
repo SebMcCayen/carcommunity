@@ -26,32 +26,33 @@ struct AccountDeletionScreen: View {
 
                     Button(role: .destructive) { confirming = true } label: {
                         if coordinator.status.isDeleting {
-                            ProgressView().frame(maxWidth: .infinity, minHeight: 44)
+                            ProgressView().frame(maxWidth: .infinity, minHeight: 48)
                         } else {
                             Text("settings.deleteAccount")
-                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .frame(maxWidth: .infinity, minHeight: 48)
                         }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.borderedProminent).tint(KccPalette.errorRed)
                     .disabled(
                         !coordinator.isAvailable || coordinator.status.isDeleting
                             || coordinator.status == .deleted
                     )
                     .accessibilityIdentifier("accountDeletion.delete")
                 }
-                .padding(KccSpacing.s6)
+                .padding(KccSpacing.s4)
             }
+            .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .navigationTitle("settings.accountDeletion")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(action: back) {
-                        Label("shell.back", systemImage: "chevron.backward")
+                        Label("shell.back", systemImage: "chevron.backward").frame(minHeight: 48)
                     }
                     .disabled(coordinator.status.isDeleting || coordinator.status == .deleted)
                 }
             }
         }
-        .background(.background, ignoresSafeAreaEdges: .all)
+        .kccReadingSurface(pageBackground: true)
         .alert("settings.accountDeletionConfirmTitle", isPresented: $confirming) {
             Button("profile.cancelButton", role: .cancel) {}
             Button("settings.deleteAccount", role: .destructive) { startDeletion() }
@@ -68,8 +69,8 @@ struct AccountDeletionScreen: View {
         if case .failed(let reason) = sessionEndState {
             VStack(alignment: .leading, spacing: KccSpacing.s3) {
                 errorText("auth.signOutError")
-                Button(retryLabel(for: reason)) { attemptSessionEnd(reason) }
-                    .buttonStyle(.borderedProminent)
+                Button { attemptSessionEnd(reason) } label: { Text(retryLabel(for: reason)).frame(minHeight: 48) }
+                    .kccPrimaryAction()
             }
         } else if sessionEndState == .succeeded {
             ProgressView()
@@ -97,7 +98,7 @@ struct AccountDeletionScreen: View {
 
     private func errorText(_ key: LocalizedStringKey) -> some View {
         Text(key)
-            .font(.system(size: KccTypeScale.bodySm))
+            .font(.subheadline)
             .foregroundStyle(KccPalette.errorRed)
     }
 

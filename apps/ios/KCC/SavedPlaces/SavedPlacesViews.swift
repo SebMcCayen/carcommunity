@@ -15,7 +15,7 @@ struct AddressSearchOverlay: View {
                 Button(action: close) {
                     Label("addressSearch.close", systemImage: "xmark")
                         .labelStyle(.iconOnly)
-                        .frame(width: 44, height: 44)
+                        .frame(width: 48, height: 48)
                 }
                 .accessibilityIdentifier("addressSearch.close")
                 TextField(
@@ -36,7 +36,7 @@ struct AddressSearchOverlay: View {
                     } label: {
                         Label("addressSearch.clearQuery", systemImage: "xmark.circle.fill")
                             .labelStyle(.iconOnly)
-                            .frame(width: 44, height: 44)
+                            .frame(width: 48, height: 48)
                     }
                 }
             }
@@ -65,7 +65,7 @@ struct AddressSearchOverlay: View {
                 },
                 onCancel: { editor = nil }
             )
-            .presentationDetents([.medium])
+            .presentationDetents([.medium, .large])
         }
         .savedPlacesPersistenceAlert(coordinator: coordinator)
     }
@@ -134,7 +134,7 @@ struct AddressSearchOverlay: View {
                     } label: {
                         Label("addressSearch.savedAdd", systemImage: "bookmark")
                             .labelStyle(.iconOnly)
-                            .frame(width: 44, height: 44)
+                            .frame(width: 48, height: 48)
                     }
                 }
                 // Keep both controls scoped to their own hit areas inside the
@@ -178,7 +178,7 @@ struct SavedPlacesScreen: View {
                     systemImage: "bookmark",
                     description: Text("savedPlaces.emptyBody")
                 )
-                Button("savedPlaces.emptyAction") { adding = true }
+                Button { adding = true } label: { Text("savedPlaces.emptyAction").frame(minHeight: 48) }.kccPrimaryAction()
             } else {
                 Section {
                     ForEach(coordinator.places) { saved in
@@ -186,10 +186,11 @@ struct SavedPlacesScreen: View {
                     }
                 }
                 Section {
-                    Button("savedPlaces.addAction") { adding = true }
+                    Button { adding = true } label: { Text("savedPlaces.addAction").frame(minHeight: 48) }.kccPrimaryAction()
                 }
             }
         }
+        .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
         .navigationTitle("savedPlaces.title")
         .sheet(isPresented: $adding) {
             AddressPlacePicker(
@@ -245,11 +246,11 @@ struct SavedPlacesScreen: View {
     private func savedRow(_ saved: SavedPlace) -> some View {
         HStack(spacing: KccSpacing.s3) {
             Image(systemName: saved.kind.systemImage)
-                .frame(width: 28)
+                .font(.system(size: 20)).foregroundStyle(KccTheme.driver).frame(width: 28).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                Text(saved.displayLabel)
+                Text(verbatim: saved.displayLabel).font(.body).fixedSize(horizontal: false, vertical: true)
                 if let address = saved.place.secondaryText {
-                    Text(address).font(.caption).foregroundStyle(.secondary)
+                    Text(verbatim: address).font(.subheadline).foregroundStyle(KccTheme.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer()
@@ -272,7 +273,7 @@ struct SavedPlacesScreen: View {
             } label: {
                 Label("savedPlaces.moreActions", systemImage: "ellipsis.circle")
                     .labelStyle(.iconOnly)
-                    .frame(width: 44, height: 44)
+                    .frame(width: 48, height: 48)
             }
             .accessibilityLabel(String.localizedStringWithFormat(
                 String(localized: "savedPlaces.moreActions"), saved.displayLabel
@@ -323,10 +324,11 @@ struct SavedPlacesPickerContent: View {
                 }
                 }
                 Button(action: onManage) {
-                Label("settingsMenu.savedPlaces", systemImage: "gearshape")
+                Label("settingsMenu.savedPlaces", systemImage: "gearshape").frame(minHeight: 48)
                 }
         }
         .buttonStyle(.bordered)
+        .tint(KccTheme.driver)
         .controlSize(.large)
     }
 }
@@ -364,12 +366,13 @@ private struct AddressPlacePicker: View {
                 get: { coordinator.query },
                 set: { coordinator.updateQuery($0, proximity: proximity) }
             ), prompt: "addressSearch.searchPlaceholder")
+            .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .navigationTitle(Text(LocalizedStringKey(
                 replacing == nil ? "savedPlaces.addAction" : "savedPlaces.changeAddress"
             )))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("savedPlaces.cancel", action: onDismiss)
+                    Button(action: onDismiss) { Text("savedPlaces.cancel").frame(minHeight: 48) }
                 }
             }
             .sheet(item: $selected) { suggestion in
@@ -400,7 +403,7 @@ private struct AddressPlacePicker: View {
     }
 }
 
-private struct SavedPlaceEditorSheet: View {
+struct SavedPlaceEditorSheet: View {
     let place: PlaceSuggestion
     let onSave: (SavedPlaceKind, String) -> Void
     let onCancel: () -> Void
@@ -430,47 +433,53 @@ private struct SavedPlaceEditorSheet: View {
                         Text(address).font(.footnote).foregroundStyle(.secondary)
                     }
                 }
-                Picker("addressSearch.savedKindLabel", selection: $kind) {
-                    ForEach(SavedPlaceKind.allCases, id: \.self) { option in
-                        Text(LocalizedStringKey(option.titleKey)).tag(option)
+                Menu {
+                    Picker("addressSearch.savedKindLabel", selection: $kind) {
+                        ForEach(SavedPlaceKind.allCases, id: \.self) { option in
+                            Text(LocalizedStringKey(option.titleKey)).tag(option)
+                        }
                     }
-                }
-                TextField("addressSearch.savedLabelHint", text: $label)
+                } label: {
+                    EditorSelectionLabel(title: "addressSearch.savedKindLabel", value: Text(LocalizedStringKey(kind.titleKey)), prompt: "addressSearch.savedKindLabel")
+                }.buttonStyle(.plain)
+                EditorTextField(title: "addressSearch.savedLabelHint", text: $label)
                     .disabled(kind != .favourite)
             }
+            .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                Button { onSave(kind, label) } label: { EditorSubmitLabel(title: "addressSearch.savedSave") }
+                    .kccPrimaryAction()
+                    .disabled(kind == .favourite && label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .padding(KccSpacing.s4).background(KccTheme.surface)
+            }
             .navigationTitle("addressSearch.savedDialogTitle")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("addressSearch.savedCancel", action: onCancel)
+                    Button(action: onCancel) { Text("addressSearch.savedCancel").frame(minHeight: 48) }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("addressSearch.savedSave") { onSave(kind, label) }
-                        .disabled(
-                            kind == .favourite
-                                && label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        )
-                }
+
             }
         }
     }
 }
 
-private struct PlaceRow: View {
+struct PlaceRow: View {
     let title: String
     let subtitle: String?
     let systemImage: String
 
     var body: some View {
         HStack(spacing: KccSpacing.s3) {
-            Image(systemName: systemImage).frame(width: 28)
+            Image(systemName: systemImage).font(.system(size: 20)).foregroundStyle(KccTheme.driver).frame(width: 28).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                Text(title).foregroundStyle(.primary)
+                Text(verbatim: title).font(.body).foregroundStyle(KccTheme.text).fixedSize(horizontal: false, vertical: true)
                 if let subtitle {
-                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                    Text(verbatim: subtitle).font(.subheadline).foregroundStyle(KccTheme.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
         .contentShape(Rectangle())
     }
 }
