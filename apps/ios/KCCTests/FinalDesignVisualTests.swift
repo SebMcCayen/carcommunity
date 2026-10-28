@@ -114,6 +114,17 @@ final class FinalDesignVisualTests: XCTestCase {
             }
             if !page.isEmpty { export(page, name: "\(name)-\(index)", dark: dark) }
         }
+        var shortPage: [(String, UIImage)] = []
+        var shortIndex = 1
+        for (label, screen) in screens where ["11-", "12-", "13-", "15-", "17-"].contains(where: label.hasPrefix) {
+            shortPage.append((label, try await capture(screen, viewport: CGSize(width: 320, height: 480),
+                size: .accessibility5, language: "sv", dark: true)))
+            if shortPage.count == 4 {
+                export(shortPage, name: "sv-dark-short-AX5-\(shortIndex)", dark: true)
+                shortPage = []; shortIndex += 1
+            }
+        }
+        if !shortPage.isEmpty { export(shortPage, name: "sv-dark-short-AX5-\(shortIndex)", dark: true) }
     }
 
     private var place: PlaceSuggestion {
@@ -153,18 +164,19 @@ final class FinalDesignVisualTests: XCTestCase {
         window.rootViewController = host
         window.makeKeyAndVisible()
         defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
-        try await Task.sleep(for: .milliseconds(80))
+        try await Task.sleep(for: .milliseconds(500))
         host.view.layoutIfNeeded()
         XCTAssertEqual(host.view.bounds.width, viewport.width, accuracy: 1, "Native proof must use the named viewport width")
+        XCTAssertEqual(host.view.bounds.height, viewport.height, accuracy: 1, "Native proof must use the named viewport height")
         if scrollToBottom {
             func scrolls(_ view: UIView) -> [UIScrollView] {
-                (view as? UIScrollView).map { [$0] } ?? view.subviews.flatMap { scrolls($0) }
+                ((view as? UIScrollView).map { [$0] } ?? []) + view.subviews.flatMap { scrolls($0) }
             }
             for scroll in scrolls(host.view) where scroll.contentSize.height > scroll.bounds.height {
                 scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x,
                     y: max(-scroll.adjustedContentInset.top, scroll.contentSize.height - scroll.bounds.height + scroll.adjustedContentInset.bottom)), animated: false)
             }
-            try await Task.sleep(for: .milliseconds(80))
+            try await Task.sleep(for: .milliseconds(250))
             host.view.layoutIfNeeded()
         }
         let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = true

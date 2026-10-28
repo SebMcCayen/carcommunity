@@ -166,10 +166,10 @@ struct SavedPlacesScreen: View {
         List {
             Section {
                 Text("savedPlaces.intro")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(KccTheme.secondary)
                 Text("savedPlaces.deviceLocalNote")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(KccTheme.secondary)
             }
 
             if coordinator.places.isEmpty {
@@ -192,6 +192,7 @@ struct SavedPlacesScreen: View {
         }
         .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
         .navigationTitle("savedPlaces.title")
+        .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $adding) {
             AddressPlacePicker(
                 coordinator: coordinator,
@@ -430,7 +431,7 @@ struct SavedPlaceEditorSheet: View {
                 Section {
                     Text(place.name)
                     if let address = place.secondaryText {
-                        Text(address).font(.footnote).foregroundStyle(.secondary)
+                        Text(address).font(.footnote).foregroundStyle(KccTheme.secondary)
                     }
                 }
                 Menu {

@@ -204,7 +204,7 @@ struct EventDetailScreen: View {
                 if event.status == .cancelled {
                     Text("events.cancelledNotice")
                         .font(.body)
-                        .foregroundStyle(KccPalette.errorRed)
+                        .foregroundStyle(KccTheme.error)
                 }
                 Text(event.title)
                     .font(.title2.weight(.semibold))
@@ -381,7 +381,7 @@ struct EventDetailScreen: View {
                         Text(finalGeofenceMiss
                              ? "events.checkInMoveBackToFinish"
                              : checkInErrorKey(error))
-                            .foregroundStyle(KccPalette.errorRed)
+                            .foregroundStyle(KccTheme.error)
                     }
             }
         }
@@ -456,7 +456,7 @@ struct EventDetailScreen: View {
             .buttonStyle(.bordered)
             .disabled(coordinator.manageState == .deleting)
             if case .failed(let reason) = coordinator.manageState {
-                Text(removeErrorKey(reason)).foregroundStyle(KccPalette.errorRed)
+                Text(removeErrorKey(reason)).foregroundStyle(KccTheme.error)
             }
         }
     }
@@ -528,7 +528,7 @@ struct EventDetailScreen: View {
             if case .failed = coordinator.rsvpState {
                 Text("events.rsvpSubmitError")
                     .font(.subheadline)
-                    .foregroundStyle(KccPalette.errorRed)
+                    .foregroundStyle(KccTheme.error)
             }
             // How many answered each way, from the server-maintained public
             // rsvpCounts tally — deliberately NEUTRAL: three equal-weight

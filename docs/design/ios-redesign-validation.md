@@ -819,3 +819,14 @@ shell tests; it does not establish physical-device Mapbox/GPS, real account/phot
 writes, Apple authorization, StoreKit purchase or full VoiceOver compliance.
 No backend/rules/workflow/token/localization change or production deploy is
 included. Optional CI artifact uploads stay disabled.
+
+First native contact sheets exposed clipped Apple glyphs in iOS 26's default
+capsule buttons at accessibility sizes, a dark disabled primary label, large
+warning/Create icons compressing long text, and insufficient marker clearance
+above the incident picker commands. The follow-up fixes medium rectangular
+button corners, honors the disabled foreground, uses stable decorative icons
+and stacked labels, and compacts map commands to labelled 48 pt icons at
+accessibility sizes. Supporting copy uses the canonical secondary role; error
+reading uses the canonical light red and platform bright dark-mode red. Capture
+settling/scroll discovery is strengthened and short 320x480 sheet viewports are
+added. Fresh final-head renders must confirm these repairs before acceptance.

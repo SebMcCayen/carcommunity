@@ -149,33 +149,48 @@ struct IncidentLocationPickerControls: View {
     let cancel: () -> Void
 
     var body: some View {
-        VStack(spacing: KccSpacing.s3) {
-            ScrollView {
-                Text("incidents.pickLocationInstruction").font(.callout.weight(.semibold))
-                    .fixedSize(horizontal: false, vertical: true)
-            }.frame(height: typeSize.isAccessibilitySize ? 112 : 64)
-                .padding(KccSpacing.s3).background(KccTheme.surface, in: RoundedRectangle(cornerRadius: KccRadius.md))
-            Spacer()
-            SocialFlow {
-                Button(role: .cancel, action: cancel) { Text("incidents.cancel").frame(minHeight: 48) }
-                    .buttonStyle(.bordered)
-                Button(action: confirm) { Text("incidents.pickLocationConfirm").frame(minHeight: 48) }
-                    .kccPrimaryAction()
-                    .disabled(!canConfirm)
+        GeometryReader { geometry in
+            let compact = typeSize.isAccessibilitySize
+            let short = geometry.size.height < 650
+            VStack(spacing: KccSpacing.s3) {
+                ScrollView {
+                    Text("incidents.pickLocationInstruction").font(.callout.weight(.semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(height: compact && short ? 56 : (typeSize.isAccessibilitySize ? 112 : 64))
+                .padding(KccSpacing.s3)
+                .background(KccTheme.surface, in: RoundedRectangle(cornerRadius: KccRadius.md))
+                Spacer(minLength: KccSpacing.s2)
+                commands(compact: compact)
             }
-            .padding(KccSpacing.s4)
-            .background(KccTheme.surface, in: RoundedRectangle(cornerRadius: KccRadius.md))
+            .padding(.top, short ? KccSpacing.s4 : KccSpacing.s12)
+            .padding(.bottom, KccSpacing.s12 + KccSpacing.s12)
+            .overlay {
+                Image(systemName: "mappin").font(.system(size: 42, weight: .bold))
+                    .foregroundStyle(KccTheme.error).shadow(color: .white, radius: 2)
+                    .offset(y: -20).allowsHitTesting(false)
+            }
         }
-        .padding(.top, KccSpacing.s12)
-        .padding(.bottom, KccSpacing.s12 + KccSpacing.s12)
-        .overlay {
-            Image(systemName: "mappin")
-                .font(.system(size: 42, weight: .bold))
-                .foregroundStyle(.red)
-                .shadow(color: .white, radius: 2)
-                .offset(y: -20)
-                .allowsHitTesting(false)
+    }
+
+    private func commands(compact: Bool) -> some View {
+        HStack(spacing: KccSpacing.s3) {
+            Button(role: .cancel, action: cancel) {
+                Group {
+                    if compact { Image(systemName: "xmark").font(.system(size: 20, weight: .semibold)) }
+                    else { Text("incidents.cancel") }
+                }.frame(minWidth: 48, minHeight: 48)
+            }.buttonStyle(.bordered).accessibilityLabel(Text("incidents.cancel"))
+            Button(action: confirm) {
+                Group {
+                    if compact { Image(systemName: "checkmark").font(.system(size: 20, weight: .semibold)) }
+                    else { Text("incidents.pickLocationConfirm") }
+                }.frame(minWidth: 48, minHeight: 48)
+            }.kccPrimaryAction().disabled(!canConfirm)
+                .accessibilityLabel(Text("incidents.pickLocationConfirm"))
         }
+        .frame(maxWidth: .infinity).padding(KccSpacing.s4)
+        .background(KccTheme.surface, in: RoundedRectangle(cornerRadius: KccRadius.md))
     }
 }
 
@@ -186,11 +201,10 @@ struct IncidentDetailsContent: View {
         if let incident = coordinator.selectedIncident {
             VStack(alignment: .leading, spacing: KccSpacing.s3) {
                 Group {
-                    Label(
-                        LocalizedStringKey(incident.type.titleKey),
-                        systemImage: incident.type.symbolName
-                    )
-                    .font(.headline)
+                    SocialFlow {
+                        Image(systemName: incident.type.symbolName).font(.system(size: 24)).accessibilityHidden(true)
+                        Text(LocalizedStringKey(incident.type.titleKey)).font(.headline).fixedSize(horizontal: false, vertical: true)
+                    }
                     if let note = incident.note, !note.isEmpty { Text(note) }
                     Text(incident.isImported ? "incidents.sourceImported" : "incidents.sourceMember")
                         .foregroundStyle(.secondary)
@@ -216,7 +230,7 @@ struct IncidentDetailsContent: View {
                 Text("incidents.stillHereQuestion").font(.headline)
                 Group {
                     if coordinator.selectedIncidentOwned {
-                        Button(role: .destructive) { Task { await coordinator.removeSelectedIncident() } } label: { Text("incidents.removeAction").frame(maxWidth: .infinity, minHeight: 48) }.tint(KccPalette.errorRed)
+                        Button(role: .destructive) { Task { await coordinator.removeSelectedIncident() } } label: { Text("incidents.removeAction").frame(maxWidth: .infinity, minHeight: 48) }.tint(KccTheme.error)
                     } else if incident.isImported {
                         Text("incidents.removeImportedExplanation")
                             .foregroundStyle(.secondary)
@@ -259,7 +273,7 @@ struct PoliceDetailsContent: View {
                 Text("police.stillHereQuestion").font(.headline)
                 Group {
                     if pin.mine {
-                        Button(role: .destructive) { Task { await coordinator.removeSelectedPolice() } } label: { Text("police.removeAction").frame(maxWidth: .infinity, minHeight: 48) }.tint(KccPalette.errorRed)
+                        Button(role: .destructive) { Task { await coordinator.removeSelectedPolice() } } label: { Text("police.removeAction").frame(maxWidth: .infinity, minHeight: 48) }.tint(KccTheme.error)
                     } else {
                         Button { Task { await coordinator.verifySelectedPolice(confirm: true) } } label: { Text("police.stillHereYes").frame(maxWidth: .infinity, minHeight: 48) }
                         Button { Task { await coordinator.verifySelectedPolice(confirm: false) } } label: { Text("police.stillHereNo").frame(maxWidth: .infinity, minHeight: 48) }

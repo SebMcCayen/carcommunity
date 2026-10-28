@@ -26,6 +26,7 @@ struct FeedbackScreen: View {
         }
         .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
         .navigationTitle(Text("feedback.title"))
+        .navigationBarTitleDisplayMode(.inline)
         .onChange(of: coordinator.status) { _, status in
             if case .submitted = status {
                 form = FeedbackReportForm()
@@ -37,16 +38,18 @@ struct FeedbackScreen: View {
     private var reportForm: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s4) {
             VStack(alignment: .leading, spacing: KccSpacing.s2) {
-                Label("feedback.publicNoticeTitle", systemImage: "exclamationmark.triangle.fill")
-                    .font(.headline)
+                SocialFlow {
+                    Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 24)).accessibilityHidden(true)
+                    Text("feedback.publicNoticeTitle").font(.headline).fixedSize(horizontal: false, vertical: true)
+                }
                 Text("feedback.publicNotice")
                     .font(.subheadline)
             }
-            .foregroundStyle(KccPalette.errorRed)
+            .foregroundStyle(KccTheme.error)
             .padding(KccSpacing.s4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                KccPalette.errorRed.opacity(0.1),
+                KccTheme.error.opacity(0.1),
                 in: RoundedRectangle(cornerRadius: KccRadius.md)
             )
 
@@ -82,7 +85,7 @@ struct FeedbackScreen: View {
             if coordinator.status == .unavailable {
                 Text("shell.unavailable")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(KccTheme.secondary)
             }
 
             Button {
@@ -174,6 +177,7 @@ struct OpenTicketsScreen: View {
         }
         .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
         .navigationTitle(Text("openTickets.title"))
+        .navigationBarTitleDisplayMode(.inline)
         .task { coordinator.start() }
         .onDisappear { coordinator.stop() }
     }
@@ -197,7 +201,7 @@ struct TicketCard: View {
             }
             Text("\(count("openTickets.plusOneCount", ticket.plusOneCount))  •  \(count("openTickets.commentCount", ticket.commentCount))")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(KccTheme.secondary)
 
             SocialFlow {
                 Button {
@@ -218,7 +222,7 @@ struct TicketCard: View {
             if state.plusOneDeliveryFailed {
                 Text("openTickets.deliveryFailed")
                     .font(.footnote)
-                    .foregroundStyle(KccPalette.errorRed)
+                    .foregroundStyle(KccTheme.error)
             }
 
             if state.commentDone {
@@ -226,7 +230,7 @@ struct TicketCard: View {
             } else if state.commentDeliveryFailed {
                 Text("openTickets.deliveryFailed")
                     .font(.subheadline)
-                    .foregroundStyle(KccPalette.errorRed)
+                    .foregroundStyle(KccTheme.error)
             } else {
                 Text("openTickets.publicNotice").font(.footnote).foregroundStyle(.red)
                 EditorTextField(title: "openTickets.commentLabel", text: $comment, multiline: true)

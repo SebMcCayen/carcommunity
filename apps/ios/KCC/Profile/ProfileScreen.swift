@@ -201,7 +201,7 @@ struct ProfileScreen: View {
 
                     if signOutFailed {
                         Text("auth.signOutError")
-                            .foregroundStyle(KccPalette.errorRed)
+                            .foregroundStyle(KccTheme.error)
                     }
 
                     Button(action: attemptSignOut) {

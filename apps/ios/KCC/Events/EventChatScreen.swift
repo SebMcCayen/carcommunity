@@ -30,7 +30,7 @@ struct EventChatScreen: View {
                 }
             } else {
                 Text("chat.accessLost")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(KccTheme.secondary)
                     .multilineTextAlignment(.center)
                     .padding(KccSpacing.s4)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -80,7 +80,7 @@ struct EventChatScreen: View {
         case .loaded(let messages):
             if messages.isEmpty {
                 Text("chat.empty")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(KccTheme.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 messageList(messages)
@@ -139,7 +139,7 @@ struct EventChatScreen: View {
         if coordinator.sendState == .failed {
             Button("chat.errorSending") { coordinator.resetSendFailure() }
                 .font(.subheadline)
-                .foregroundStyle(KccPalette.errorRed)
+                .foregroundStyle(KccTheme.error)
                 .padding(.horizontal, KccSpacing.s3)
                 .padding(.top, KccSpacing.s2)
                 .accessibilityHint(Text("events.retry"))
@@ -152,7 +152,7 @@ struct EventChatScreen: View {
         } else if coordinator.reportState == .failed {
             Button("chat.reportError") { coordinator.resetReport() }
                 .font(.subheadline)
-                .foregroundStyle(KccPalette.errorRed)
+                .foregroundStyle(KccTheme.error)
                 .padding(.horizontal, KccSpacing.s3)
                 .padding(.top, KccSpacing.s2)
         }
@@ -213,7 +213,7 @@ struct EventChatMessageRow: View {
             if !isOwn {
                 Text(displayName)
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(KccTheme.secondary)
             }
             messageBody
                 .padding(.horizontal, KccSpacing.s3)
@@ -236,12 +236,12 @@ struct EventChatMessageRow: View {
         if message.isRemoved {
             Text("chat.removedMessage")
                 .italic()
-                .foregroundStyle(.secondary)
+                .foregroundStyle(KccTheme.secondary)
         } else if message.isAutoHidden && !revealed {
             VStack(alignment: .leading, spacing: KccSpacing.s1) {
                 Text("chat.reportedHidden")
                     .italic()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(KccTheme.secondary)
                 Button("chat.showReportedMessage") { revealed = true }
                     .frame(minHeight: 48)
             }

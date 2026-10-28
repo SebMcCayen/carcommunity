@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct WelcomeScreen: View {
+    @Environment(\.locale) private var locale
     let onSeeMembership: () -> Void
     let onCompleteProfile: () -> Void
     let onAddCar: () -> Void
@@ -20,12 +21,12 @@ struct WelcomeScreen: View {
         VStack(spacing: KccSpacing.s4) {
             SocialFlow {
                 Text(String(
-                    format: String(localized: "welcome.progress"),
-                    locale: .current,
+                    format: String(localized: "welcome.progress", locale: locale),
+                    locale: locale,
                     step.position,
                     WelcomeStep.allCases.count
                 ))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(KccTheme.secondary)
                 SocialFlowSpacer()
                 Button(action: onFinish) { Text("welcome.skip").frame(minHeight: 48) }
             }
@@ -42,7 +43,7 @@ struct WelcomeScreen: View {
                         .multilineTextAlignment(.center)
                     Text(bodyKey)
                         .font(.body)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(KccTheme.secondary)
                         .multilineTextAlignment(.center)
 
                     if step == .membership {

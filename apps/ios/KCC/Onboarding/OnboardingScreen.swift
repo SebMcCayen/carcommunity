@@ -23,7 +23,7 @@ struct OnboardingScreen: View {
             VStack(alignment: .leading, spacing: KccSpacing.s4) {
                 Text("onboarding.title")
                     .font(.title2.bold())
-                Text("onboarding.subtitle").foregroundStyle(.secondary)
+                Text("onboarding.subtitle").foregroundStyle(KccTheme.secondary)
 
                 Toggle("onboarding.licenceConfirm", isOn: $licenceConfirmed)
                     .accessibilityIdentifier("onboarding.licence")
@@ -40,7 +40,7 @@ struct OnboardingScreen: View {
                     .autocorrectionDisabled()
                     .accessibilityLabel(Text("onboarding.displayNameLabel"))
                 Text("onboarding.displayNameDescription")
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(KccTheme.secondary)
                 if displayName.trimmingCharacters(in: .whitespacesAndNewlines).count
                     > OnboardingForm.displayNameMaxLength
                 {
@@ -50,10 +50,10 @@ struct OnboardingScreen: View {
                 Divider()
                 Text("privacySettings.partnerStatsTitle")
                     .font(.headline)
-                Text("privacySettings.partnerStatsExplainer").foregroundStyle(.secondary)
+                Text("privacySettings.partnerStatsExplainer").foregroundStyle(KccTheme.secondary)
                 Toggle("onboarding.partnerStatsOptIn", isOn: $partnerStatsOptIn)
                 Text("onboarding.partnerStatsNote")
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(KccTheme.secondary)
 
                 if coordinator.status == .failed {
                     Text("onboarding.error").foregroundStyle(.red)

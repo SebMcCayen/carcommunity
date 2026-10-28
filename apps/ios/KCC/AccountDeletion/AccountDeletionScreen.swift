@@ -16,11 +16,14 @@ struct AccountDeletionScreen: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: KccSpacing.s4) {
-                    Label("settings.accountDeletionWarning", systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(KccPalette.errorRed)
+                    SocialFlow {
+                        Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 24)).accessibilityHidden(true)
+                        Text("settings.accountDeletionWarning").font(.body).fixedSize(horizontal: false, vertical: true)
+                    }
+                        .foregroundStyle(KccTheme.error)
                         .padding(KccSpacing.s4)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(KccPalette.errorRed.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+                        .background(KccTheme.error.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
 
                     failureContent
 
@@ -32,7 +35,7 @@ struct AccountDeletionScreen: View {
                                 .frame(maxWidth: .infinity, minHeight: 48)
                         }
                     }
-                    .buttonStyle(.borderedProminent).tint(KccPalette.errorRed)
+                    .buttonStyle(.borderedProminent).tint(KccTheme.error)
                     .disabled(
                         !coordinator.isAvailable || coordinator.status.isDeleting
                             || coordinator.status == .deleted
@@ -99,7 +102,7 @@ struct AccountDeletionScreen: View {
     private func errorText(_ key: LocalizedStringKey) -> some View {
         Text(key)
             .font(.subheadline)
-            .foregroundStyle(KccPalette.errorRed)
+            .foregroundStyle(KccTheme.error)
     }
 
     private func startDeletion() {

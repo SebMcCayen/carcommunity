@@ -15,64 +15,64 @@ struct RestrictedAccountScreen: View {
 
     var body: some View {
         ScrollView {
-        VStack(spacing: KccSpacing.s4) {
-            Image(systemName: "exclamationmark.shield.fill")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            Text("accountStatus.suspendedTitle")
-                .font(.title2.bold())
-            Text(bodyKey)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-
-            Button {
-                openURL(URL(string: "https://github.com/SebMcCayen/carcommunity/issues")!)
-            } label: { Text("accountStatus.supportLink").frame(maxWidth: .infinity, minHeight: 48) }
-            .kccPrimaryAction()
-
-            SocialFlow {
-                policyButton("settings.terms", urlKey: "url.terms")
-                policyButton("settings.privacyPolicy", urlKey: "url.privacy")
-            }
-
-            Button {
-                Task { await privacyCoordinator.hideMeNow() }
-            } label: {
-                Label("liveLocation.hideNow", systemImage: "location.slash.fill")
-                    .frame(maxWidth: .infinity, minHeight: 48)
-            }
-            .kccPrimaryAction()
-            .disabled(privacyCoordinator.actionStatus == .working)
-
-            if privacyCoordinator.actionStatus == .failed {
-                Text("liveLocation.error")
-                    .foregroundStyle(KccPalette.errorRed)
-            }
-
-            // Subscription management remains a later production-cutover
-            // milestone. Account deletion is always reachable while suspended.
-            Text("accountStatus.subscriptionManagementPlaceholder")
-
-            if deletionCoordinator.isAvailable {
-                Button(role: .destructive) {
-                    showsAccountDeletion = true
-                } label: { Text("settings.accountDeletion").frame(maxWidth: .infinity, minHeight: 48) }
-                .buttonStyle(.bordered)
-            }
-
-            if signOutFailed {
-                Text("auth.signOutError")
-                    .foregroundStyle(KccPalette.errorRed)
+            VStack(spacing: KccSpacing.s4) {
+                Image(systemName: "exclamationmark.shield.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(KccTheme.secondary)
+                    .accessibilityHidden(true)
+                Text("accountStatus.suspendedTitle")
+                    .font(.title2.bold())
+                Text(bodyKey)
                     .multilineTextAlignment(.center)
-            }
+                    .foregroundStyle(KccTheme.secondary)
 
-            Button(action: attemptSignOut) { Text("auth.signOut").frame(maxWidth: .infinity, minHeight: 48) }
-                .buttonStyle(.bordered)
-        }
-        .font(.body)
-        .padding(KccSpacing.s4)
-        .frame(maxWidth: .infinity)
+                Button {
+                    openURL(URL(string: "https://github.com/SebMcCayen/carcommunity/issues")!)
+                } label: { Text("accountStatus.supportLink").frame(maxWidth: .infinity, minHeight: 48) }
+                .kccPrimaryAction()
+
+                SocialFlow {
+                    policyButton("settings.terms", urlKey: "url.terms")
+                    policyButton("settings.privacyPolicy", urlKey: "url.privacy")
+                }
+
+                Button {
+                    Task { await privacyCoordinator.hideMeNow() }
+                } label: {
+                    Label("liveLocation.hideNow", systemImage: "location.slash.fill")
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                }
+                .kccPrimaryAction()
+                .disabled(privacyCoordinator.actionStatus == .working)
+
+                if privacyCoordinator.actionStatus == .failed {
+                    Text("liveLocation.error")
+                        .foregroundStyle(KccTheme.error)
+                }
+
+                // Subscription management remains a later production-cutover
+                // milestone. Account deletion is always reachable while suspended.
+                Text("accountStatus.subscriptionManagementPlaceholder")
+
+                if deletionCoordinator.isAvailable {
+                    Button(role: .destructive) {
+                        showsAccountDeletion = true
+                    } label: { Text("settings.accountDeletion").frame(maxWidth: .infinity, minHeight: 48) }
+                    .buttonStyle(.bordered)
+                }
+
+                if signOutFailed {
+                    Text("auth.signOutError")
+                        .foregroundStyle(KccTheme.error)
+                        .multilineTextAlignment(.center)
+                }
+
+                Button(action: attemptSignOut) { Text("auth.signOut").frame(maxWidth: .infinity, minHeight: 48) }
+                    .buttonStyle(.bordered)
+            }
+            .font(.body)
+            .padding(KccSpacing.s4)
+            .frame(maxWidth: .infinity)
         }
         .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
         .task {
@@ -103,8 +103,7 @@ struct RestrictedAccountScreen: View {
         Button {
             let value = String(localized: String.LocalizationValue(urlKey))
             if let url = URL(string: value), url.scheme == "https" { openURL(url) }
-        }
-        label: { Text(title).frame(minHeight: 48) }
+        } label: { Text(title).frame(minHeight: 48) }
         .buttonStyle(.bordered)
     }
 }

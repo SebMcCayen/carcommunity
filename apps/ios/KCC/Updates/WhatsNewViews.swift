@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct WhatsNewScreen: View {
+    @Environment(\.locale) private var locale
     let entries: [ChangelogEntry]
 
     var body: some View {
@@ -12,7 +13,7 @@ struct WhatsNewScreen: View {
 
                 if entries.isEmpty {
                     Text("whatsNew.empty")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(KccTheme.secondary)
                 }
 
                 ForEach(entries) { entry in
@@ -40,8 +41,8 @@ struct WhatsNewScreen: View {
 
     private func entryTitle(_ entry: ChangelogEntry) -> String {
         String(
-            format: String(localized: "whatsNew.entryTitle"),
-            locale: Locale.current,
+            format: String(localized: "whatsNew.entryTitle", locale: locale),
+            locale: locale,
             entry.versionName,
             entry.releaseDate
         )
@@ -49,6 +50,7 @@ struct WhatsNewScreen: View {
 }
 
 struct WhatsNewAnnouncementSheet: View {
+    @Environment(\.locale) private var locale
     let announcement: UpdateAnnouncement
     let onShowAll: () -> Void
     let onClose: () -> Void
@@ -67,7 +69,7 @@ struct WhatsNewAnnouncementSheet: View {
                     }
                     if announcement.includesEarlierVersions {
                         Text("whatsNew.dialogMoreVersions")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(KccTheme.secondary)
                     }
                     Button(action: onShowAll) { Text("whatsNew.dialogShowAll").frame(maxWidth: .infinity, minHeight: 48) }
                         .kccPrimaryAction()
@@ -88,8 +90,8 @@ struct WhatsNewAnnouncementSheet: View {
 
     private var title: String {
         String(
-            format: String(localized: "whatsNew.dialogTitle"),
-            locale: Locale.current,
+            format: String(localized: "whatsNew.dialogTitle", locale: locale),
+            locale: locale,
             announcement.entry.versionName
         )
     }

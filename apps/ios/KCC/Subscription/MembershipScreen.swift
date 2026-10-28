@@ -37,7 +37,7 @@ struct MembershipScreen: View {
                     .buttonStyle(.bordered)
                     Text("subscription.manageBody")
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(KccTheme.secondary)
                 }
 
                 if access.isRestricted {
@@ -50,6 +50,7 @@ struct MembershipScreen: View {
         }
         .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
         .navigationTitle("subscription.screenTitle")
+        .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("membership.screen")
         .task { await coordinator.start() }
         .onChange(of: access.activeMember) { _, _ in
@@ -61,10 +62,10 @@ struct MembershipScreen: View {
         VStack(alignment: .leading, spacing: KccSpacing.s2) {
             Text("subscription.currentPlanTitle").font(.headline)
             Text(currentEntitlementKey)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(KccTheme.secondary)
             Text("subscription.memberRequiredBody")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(KccTheme.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .kccContentCard()
@@ -94,7 +95,7 @@ struct MembershipScreen: View {
             Text(title).font(.headline)
             Text(body)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(KccTheme.secondary)
             if let product {
                 Text(product.displayPrice)
                     .font(.subheadline.weight(.semibold))

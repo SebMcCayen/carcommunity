@@ -35,7 +35,7 @@ struct StartDrivingSheet: View {
                 VStack(alignment: .leading, spacing: KccSpacing.s4) {
                     Text("shell.createChooserBody")
                         .font(.body)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(KccTheme.secondary)
 
                     vehiclePicker
 
@@ -44,15 +44,15 @@ struct StartDrivingSheet: View {
                         dismiss()
                         onStart(chosen)
                     } label: {
-                        HStack(spacing: KccSpacing.s3) {
-                            Image(systemName: "car.fill")
+                        SocialFlow {
+                            Image(systemName: "car.fill").font(.system(size: 24)).accessibilityHidden(true)
                             VStack(alignment: .leading, spacing: KccSpacing.s1) {
                                 Text("shell.createChooserSingle")
                                     .font(.headline)
                                 Text("shell.createChooserSingleBody")
                                     .font(.subheadline)
                             }
-                            Spacer(minLength: 0)
+                            SocialFlowSpacer()
                         }
                         .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
                     }
@@ -64,15 +64,15 @@ struct StartDrivingSheet: View {
                         dismiss()
                         onConvoy(chosen)
                     } label: {
-                        HStack(spacing: KccSpacing.s3) {
-                            Image(systemName: "person.3.fill")
+                        SocialFlow {
+                            Image(systemName: "person.3.fill").font(.system(size: 24)).accessibilityHidden(true)
                             VStack(alignment: .leading, spacing: KccSpacing.s1) {
                                 Text("shell.createChooserConvoy")
                                     .font(.headline)
                                 Text("shell.createChooserConvoyBody")
                                     .font(.subheadline)
                             }
-                            Spacer(minLength: 0)
+                            SocialFlowSpacer()
                         }
                         .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
                     }
@@ -106,7 +106,7 @@ struct StartDrivingSheet: View {
         VStack(alignment: .leading, spacing: KccSpacing.s2) {
             Text("shell.createChooserCarLabel")
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(KccTheme.secondary)
 
             switch garage.state {
             case .loading:
@@ -121,11 +121,11 @@ struct StartDrivingSheet: View {
             case .unavailable, .empty:
                 Text("shell.createChooserNoCars")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(KccTheme.secondary)
             case .loaded:
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: KccSpacing.s3) {
+                        SocialFlow {
                             ForEach(vehicles) { vehicle in
                                 vehicleButton(vehicle)
                                     .id(vehicle.id)
@@ -156,11 +156,11 @@ struct StartDrivingSheet: View {
                     AsyncImage(url: url) { image in
                         image.resizable().scaledToFill()
                     } placeholder: {
-                        Image(systemName: "car.fill").foregroundStyle(.secondary)
+                        Image(systemName: "car.fill").font(.system(size: 24)).accessibilityHidden(true).foregroundStyle(KccTheme.secondary)
                     }
                     .clipShape(Circle())
                 } else {
-                    Image(systemName: "car.fill").foregroundStyle(.secondary)
+                    Image(systemName: "car.fill").font(.system(size: 24)).accessibilityHidden(true).foregroundStyle(KccTheme.secondary)
                 }
             }
             .frame(width: 64, height: 64)
