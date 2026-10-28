@@ -273,7 +273,11 @@ export function SpawnDiagnosticsPanel({
         {/* Why nothing is spawning */}
         <h3 className={styles.diagSectionTitle}>{t('crownHunt.diagBlockersTitle')}</h3>
         {data.blockers.length === 0 ? (
-          <p className={styles.diagNoBlockers}>{t('crownHunt.diagNoBlockers')}</p>
+          <p className={styles.diagNoBlockers}>
+            {data.candidateCellCount === 0
+              ? 'Inga områdeshinder. Inga spawn-kandidater finns i de skannade cellerna. Se cellernas status nedan.'
+              : t('crownHunt.diagNoBlockers')}
+          </p>
         ) : (
           <ul className={styles.diagBlockerList}>
             {data.blockers.map((code) => (

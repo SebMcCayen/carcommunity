@@ -199,6 +199,18 @@ describe('SpawnDiagnosticsPanel', () => {
     expect(text).toContain(t('crownHunt.osmAttribution'));
   });
 
+  it('does not promise a spawn when the scanned cells have no candidates', async () => {
+    mocks.diag.mockResolvedValue(
+      makeResponse({
+        candidateCellCount: 0,
+        cells: [cell({ eligible: false, reason: 'at_target' })],
+      }),
+    );
+    await renderPanel();
+    expect(container.textContent).toContain('Inga spawn-kandidater finns i de skannade cellerna');
+    expect(container.textContent).not.toContain(t('crownHunt.diagNoBlockers'));
+  });
+
   it('filters to candidate cells when "candidates only" is ticked', async () => {
     mocks.diag.mockResolvedValue(makeResponse());
     await renderPanel();
