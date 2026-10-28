@@ -1,11 +1,15 @@
 package com.kungsbackacarcommunity.app.convoy
 
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.*
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.friends.FriendSummary
 import com.kungsbackacarcommunity.app.friends.FriendsStatus
@@ -113,4 +117,60 @@ class CreateConvoyScreenTest {
         }
         composeTestRule.onNodeWithTag(CONVOY_CREATE_SUBMIT_TAG).assertIsNotEnabled()
     }
+    @Test
+    fun capDisablesOnlyUnselectedRowsAndSearchPreservesDeselect() {
+        val people = (1..51).map { FriendSummary("u$it", "Friend $it", null, null) }
+        composeTestRule.setContent {
+            KccTheme {
+                var selected by androidx.compose.runtime.remember {
+                    androidx.compose.runtime.mutableStateOf((1..50).map { "u$it" }.toSet())
+                }
+                CreateConvoyScreen(
+                    friendsStatus = FriendsStatus.Loaded(people, emptyList(), emptyList()),
+                    createState = CreateConvoyState.Idle, selectedUids = selected,
+                    onToggleFriend = { uid -> selected = if (uid in selected) selected - uid else selected + uid },
+                    onRetryFriends = null, onSubmit = {},
+                )
+            }
+        }
+        // The full name is intentionally also the query: hasText matches both
+        // EditableText on the enabled search field and Text on the friend row.
+        // Target the toggleable row so the cap assertion cannot hit the editor.
+        fun friendRow(name: String) = composeTestRule.onNode(
+            hasText(name) and SemanticsMatcher.keyIsDefined(SemanticsProperties.ToggleableState),
+        )
+
+        composeTestRule.onNodeWithTag(CONVOY_CREATE_SEARCH_TAG).performTextReplacement("Friend 51")
+        composeTestRule.onNodeWithTag(CONVOY_CREATE_SEARCH_TAG).assertIsEnabled().assertTextContains("Friend 51")
+        friendRow("Friend 51").assertIsOff().assertIsNotEnabled()
+        composeTestRule.onNodeWithTag(CONVOY_CREATE_SUBMIT_TAG).assertIsEnabled()
+
+        composeTestRule.onNodeWithTag(CONVOY_CREATE_SEARCH_TAG).performTextReplacement("Friend 50")
+        friendRow("Friend 50").assertIsOn().assertIsEnabled().performClick()
+        friendRow("Friend 50").assertIsOff()
+
+        composeTestRule.onNodeWithTag(CONVOY_CREATE_SEARCH_TAG).performTextReplacement("Friend 51")
+        friendRow("Friend 51").assertIsOff().assertIsEnabled().performClick()
+        friendRow("Friend 51").assertIsOn()
+
+        // Selecting the replacement restores the cap; the deselected friend is
+        // disabled again, while the hidden selections still enable submission.
+        composeTestRule.onNodeWithTag(CONVOY_CREATE_SEARCH_TAG).performTextReplacement("Friend 50")
+        friendRow("Friend 50").assertIsOff().assertIsNotEnabled()
+        composeTestRule.onNodeWithTag(CONVOY_CREATE_SUBMIT_TAG).assertIsEnabled()
+    }
+
+    @Test
+    fun staleSelectionCannotSubmitWhileFriendsAreLoadingOrUnavailable() {
+        var status by androidx.compose.runtime.mutableStateOf<FriendsStatus>(FriendsStatus.Loading)
+        composeTestRule.setContent {
+            KccTheme {
+                CreateConvoyScreen(status, CreateConvoyState.Idle, setOf("u2"), {}, null, {})
+            }
+        }
+        composeTestRule.onNodeWithTag(CONVOY_CREATE_SUBMIT_TAG).assertIsNotEnabled()
+        composeTestRule.runOnIdle { status = FriendsStatus.Error(com.kungsbackacarcommunity.app.friends.FriendActionError.Network) }
+        composeTestRule.onNodeWithTag(CONVOY_CREATE_SUBMIT_TAG).assertIsNotEnabled()
+    }
+
 }

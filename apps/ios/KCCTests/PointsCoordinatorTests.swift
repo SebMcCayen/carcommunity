@@ -8,11 +8,13 @@ final class PointsCoordinatorTests: XCTestCase {
         var snapshots: [PointsEntriesSnapshot] = []
         private(set) var balanceSubscriptions = 0
         private(set) var entrySubscriptions = 0
+        private(set) var balanceContinuation: AsyncStream<Int64?>.Continuation?
 
         func observeBalance(uid _: String) -> AsyncStream<Int64?> {
             balanceSubscriptions += 1
             let values = balances
             return AsyncStream { continuation in
+                balanceContinuation = continuation
                 values.forEach { continuation.yield($0) }
             }
         }
@@ -47,6 +49,41 @@ final class PointsCoordinatorTests: XCTestCase {
         coordinator.start()
         await wait { coordinator.balance == 120 && coordinator.recentEarnings.count == 2 }
         XCTAssertEqual(coordinator.recentEarnings.map(\.id), ["new", "old"])
+    }
+
+    @MainActor
+    func testMissingLedgerSettlesToZeroOnlyAfterBalanceSnapshotArrives() async {
+        let repository = FakeRepository()
+        repository.snapshots = [.loaded([])]
+        let coordinator = PointsCoordinator(repository: repository, uid: "uid")
+        coordinator.start()
+        await wait { coordinator.entriesState == .loaded([]) }
+        // Entries and balance are independent listeners. An empty entries
+        // result cannot settle a balance that has not arrived yet.
+        XCTAssertNil(coordinator.balance)
+        repository.balanceContinuation?.yield(nil)
+        await wait { coordinator.balance == 0 }
+        repository.balanceContinuation?.yield(75)
+        await wait { coordinator.balance == 75 }
+        XCTAssertEqual(repository.balanceSubscriptions, 1)
+    }
+
+    @MainActor
+    func testRetryKeepsKnownBalanceUntilNextSuccessfulSnapshot() async {
+        let repository = FakeRepository()
+        repository.balances = [120]
+        repository.snapshots = [.failed(code: "UNAVAILABLE")]
+        let coordinator = PointsCoordinator(repository: repository, uid: "uid")
+        coordinator.start()
+        await wait { coordinator.balance == 120 && coordinator.entriesState == .failed(code: "UNAVAILABLE") }
+        repository.balances = []
+        repository.snapshots = [.loaded([])]
+        coordinator.reload()
+        await wait { coordinator.entriesState == .loaded([]) }
+        XCTAssertEqual(coordinator.balance, 120)
+        repository.balanceContinuation?.yield(nil)
+        await wait { coordinator.balance == 0 }
+        XCTAssertEqual(repository.balanceSubscriptions, 2)
     }
 
     @MainActor

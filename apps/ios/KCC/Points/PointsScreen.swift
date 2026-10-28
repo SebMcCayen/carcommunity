@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PointsScreen: View {
     @State private var coordinator: PointsCoordinator
+    @State private var filter: PointsHistoryFilter = .all
 
     init(uid: String?) {
         _coordinator = State(initialValue: PointsCoordinator(
@@ -15,80 +16,115 @@ struct PointsScreen: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: KccSpacing.s4) {
-                balanceCard
-                Text("points.noTransfer")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                Text("points.recentTransactions")
-                    .font(.headline)
+            LazyVStack(alignment: .leading, spacing: KccSpacing.s4) {
+                PointsBalanceCard(balance: coordinator.balance)
+                Text("points.noTransfer").font(.footnote).foregroundStyle(KccTheme.secondary)
+                StatsReadingTabs(options: PointsHistoryFilter.allCases, selection: $filter,
+                    title: { $0.titleKey }, identifier: "points.filters")
+                Text("points.recentTransactions").font(.title3.bold()).accessibilityAddTraits(.isHeader)
                 entries
             }
-            .padding(KccSpacing.s6)
+            .padding(KccSpacing.s4)
         }
         .navigationTitle("points.screenTitle")
-        .background(.background)
+        .kccReadingSurface(pageBackground: true)
+        .tint(KccTheme.driver)
         .task { coordinator.start() }
-    }
-
-    private var balanceCard: some View {
-        VStack(alignment: .leading, spacing: KccSpacing.s1) {
-            Text("points.balanceLabel")
-                .font(.subheadline)
-            Text(verbatim: String(coordinator.balance ?? 0))
-                .font(.largeTitle.weight(.semibold))
-        }
-        .foregroundStyle(Color.primary)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(KccSpacing.s5)
-        .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 16))
     }
 
     @ViewBuilder private var entries: some View {
         switch coordinator.entriesState {
         case .loading:
-            ProgressView("points.loading").frame(maxWidth: .infinity)
+            ProgressView("points.loading").frame(maxWidth: .infinity).padding(KccSpacing.s4)
         case .unavailable:
-            Text("points.error").foregroundStyle(.secondary)
+            SettingsStateCard(title: "points.screenTitle", message: "points.error", symbol: "tray")
         case .failed:
-            VStack(alignment: .leading, spacing: KccSpacing.s2) {
-                Text("points.error").foregroundStyle(.red)
-                Button("points.retry") { coordinator.reload() }
-                    .buttonStyle(.bordered)
-            }
+            SettingsStateCard(title: "points.screenTitle", message: "points.error", symbol: "exclamationmark.circle",
+                retryTitle: "points.retry", onRetry: { coordinator.reload() })
         case .loaded(let entries):
-            if entries.isEmpty {
-                Text("points.empty").foregroundStyle(.secondary)
+            let visible = filter.apply(entries)
+            if visible.isEmpty {
+                SettingsStateCard(title: "points.recentTransactions", message: "points.empty", symbol: "tray")
             } else {
-                LazyVStack(spacing: KccSpacing.s3) {
-                    ForEach(entries, id: \.id) { entry in
-                        PointsEntryCard(entry: entry)
-                    }
-                }
+                ForEach(visible, id: \.id) { entry in PointsEntryCard(entry: entry) }
             }
         }
     }
 }
 
-private struct PointsEntryCard: View {
-    let entry: PointsEntry
+/// Filters only the already-bounded, owner-only snapshot. Zero corrections
+/// remain in All; no additional query, transfer or re-ranking is introduced.
+enum PointsHistoryFilter: CaseIterable, Hashable {
+    case all, credits, debits
+
+    var titleKey: LocalizedStringKey {
+        switch self {
+        case .all: "crownHunt.ledgerAll"
+        case .credits: "crownHunt.ledgerCredits"
+        case .debits: "crownHunt.ledgerDebits"
+        }
+    }
+
+    func apply(_ entries: [PointsEntry]) -> [PointsEntry] {
+        entries.filter { entry in
+            switch self {
+            case .all: true
+            case .credits: entry.amount > 0
+            case .debits: entry.amount < 0
+            }
+        }
+    }
+}
+
+struct PointsBalanceCard: View {
+    let balance: Int64?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: KccSpacing.s1) {
-            Text(verbatim: entry.amount >= 0 ? "+\(entry.amount)" : String(entry.amount))
-                .font(.headline)
-                .foregroundStyle(entry.amount >= 0 ? Color.accentColor : Color.red)
-            if !entry.description.isEmpty {
-                Text(verbatim: entry.description).foregroundStyle(.secondary)
-            }
-            if let createdAt = entry.createdAt {
-                Text(createdAt, format: .dateTime.year().month(.abbreviated).day())
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: KccSpacing.s2) {
+            Label("points.balanceLabel", systemImage: "crown.fill")
+                .font(.headline).foregroundStyle(KccTheme.driver)
+            if let balance {
+                Text(verbatim: String.localizedStringWithFormat(
+                    NSLocalizedString("crownHunt.kpValue", comment: "Actual points balance"), balance
+                ))
+                .font(.largeTitle.bold()).fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("points.loading").font(.body).foregroundStyle(KccTheme.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(KccSpacing.s4)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .kccContentCard()
+    }
+}
+
+struct PointsEntryCard: View {
+    let entry: PointsEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: KccSpacing.s2) {
+            Text(verbatim: String.localizedStringWithFormat(
+                NSLocalizedString("crownHunt.ledgerAmount", comment: "Signed points change"),
+                entry.amount >= 0 ? "+\(entry.amount)" : String(entry.amount)
+            ))
+            .font(.title3.bold())
+            .foregroundStyle(entry.amount >= 0 ? KccTheme.text : KccPalette.errorRed)
+            .fixedSize(horizontal: false, vertical: true)
+            if !entry.description.isEmpty {
+                Text(verbatim: entry.description).font(.body).fixedSize(horizontal: false, vertical: true)
+            }
+            if let createdAt = entry.createdAt {
+                Text(createdAt, format: .dateTime.year().month(.abbreviated).day().hour().minute())
+                    .font(.footnote).foregroundStyle(KccTheme.secondary)
+            }
+            if let balance = entry.balanceAfter {
+                Text(verbatim: String.localizedStringWithFormat(
+                    NSLocalizedString("crownHunt.ledgerBalanceAfter", comment: "Balance after this entry"), balance
+                ))
+                .font(.footnote).foregroundStyle(KccTheme.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .kccContentCard()
+        .accessibilityElement(children: .combine)
     }
 }

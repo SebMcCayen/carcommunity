@@ -263,7 +263,7 @@ private fun DataSnapshot.toLiveMainCar(): LiveMainCar? {
 }
 
 /** Maps the RTDB session node to the Firebase-free [LiveSessionInfo]. */
-private fun DataSnapshot.toSessionInfo(): LiveSessionInfo? {
+internal fun DataSnapshot.toSessionInfo(): LiveSessionInfo? {
     if (!exists()) return null
     val status = LiveSessionStatus.fromWire(child("status").getValue(String::class.java)) ?: return null
     val sessionId = child("id").getValue(String::class.java) ?: return null
@@ -296,5 +296,6 @@ private fun DataSnapshot.toSessionInfo(): LiveSessionInfo? {
         convoyAutoStarted,
         mainCar,
         vehicleId,
+        convoyId = child("convoyId").getValue(String::class.java)?.takeIf { it.isNotBlank() },
     )
 }

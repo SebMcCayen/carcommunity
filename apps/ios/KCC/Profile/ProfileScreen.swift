@@ -96,7 +96,7 @@ struct ProfileScreen: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: KccSpacing.s4) {
                     Text("profile.title")
-                        .font(.system(size: KccTypeScale.headingLg, weight: .semibold))
+                        .font(.title2.bold())
 
                     VStack(spacing: KccSpacing.s2) {
                         avatar
@@ -203,7 +203,7 @@ struct ProfileScreen: View {
 
                     if signOutFailed {
                         Text("auth.signOutError")
-                            .foregroundStyle(KccPalette.errorRed)
+                            .foregroundStyle(KccTheme.error)
                     }
 
                     Button(action: attemptSignOut) {
@@ -287,35 +287,35 @@ struct ProfileScreen: View {
 
     private var editForm: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s3) {
-            TextField("profile.displayNameLabel", text: $draft.displayName)
+            EditorTextField(title: "profile.displayNameLabel", text: $draft.displayName)
                 .textFieldStyle(.roundedBorder).textContentType(.nickname)
-            TextField("profile.bioLabel", text: $draft.bio, axis: .vertical)
-                .textFieldStyle(.roundedBorder).lineLimit(3...6)
+            EditorTextField(title: "profile.bioLabel", text: $draft.bio, multiline: true)
             Text("profile.social.sectionTitle").font(.headline)
             Text("profile.social.publicNotice").font(.footnote).foregroundStyle(.secondary)
+            Text("profile.social.hint").font(.footnote).foregroundStyle(KccTheme.secondary)
             socialField("profile.social.facebookLabel", text: $draft.facebook)
             socialField("profile.social.instagramLabel", text: $draft.instagram)
             socialField("profile.social.youtubeLabel", text: $draft.youtube)
             if let validationError {
                 Text(validationKey(validationError)).foregroundStyle(.red)
             }
-            HStack {
-                Button("profile.cancelButton") { editing = false; validationError = nil; editor.reset() }
+            SocialFlow {
+                Button { editing = false; validationError = nil; editor.reset() } label: { Text("profile.cancelButton").frame(minHeight: 48) }
                     .buttonStyle(.bordered)
-                Button("profile.saveButton") {
+                Button {
                     Task {
                         validationError = await editor.save(draft)
                         if validationError == nil, editor.status == .saved { editing = false }
                     }
-                }
+                } label: { EditorSubmitLabel(title: "profile.saveButton", saving: editor.status == .saving) }
                 .kccPrimaryAction()
                 .disabled(editor.status == .saving || editor.status == .uploading)
             }
-        }
+        }.kccContentCard().disabled(editor.status == .saving || editor.status == .uploading)
     }
 
     private func socialField(_ title: LocalizedStringKey, text: Binding<String>) -> some View {
-        TextField(title, text: text, prompt: Text("profile.social.hint"))
+        EditorTextField(title: title, text: text)
             .textFieldStyle(.roundedBorder).textInputAutocapitalization(.never).autocorrectionDisabled()
     }
 
@@ -395,18 +395,18 @@ struct AccountWarningsSection: View {
         Group {
             if KccFunctionsClient.createIfAvailable() != nil {
                 VStack(alignment: .leading, spacing: KccSpacing.s2) {
-                    Text("accountWarnings.title").font(.headline)
+                    Text("accountWarnings.title").font(.headline).accessibilityAddTraits(.isHeader)
                     if loading { Text("accountWarnings.loading") }
-                    if failed { Text("accountWarnings.error") }
+                    if failed { Text("accountWarnings.error").foregroundStyle(KccTheme.error) }
                     if !loading && !failed && warnings.isEmpty { Text("accountWarnings.empty") }
                     ForEach(warnings) { warning in
-                        Text(warning.reason)
+                        Text(verbatim: warning.reason).font(.body).fixedSize(horizontal: false, vertical: true)
                         if let expiry = warning.expiresAt, let date = Self.expiryDate(expiry) {
                             Text("accountWarnings.expires") + Text(" ") + Text(date, style: .date) + Text(" ") + Text(date, style: .time)
                         } else { Text("accountWarnings.untilRevoked") }
                     }
-                    if failed { Button("accountWarnings.retry") { refreshID = UUID() }.disabled(loading) }
-                    if cursor != nil && !failed { Button("accountWarnings.more") { retryAppend = true; refreshID = UUID() }.disabled(loading) }
+                    if failed { Button { refreshID = UUID() } label: { Text("accountWarnings.retry").frame(minHeight: 48) }.disabled(loading) }
+                    if cursor != nil && !failed { Button { retryAppend = true; refreshID = UUID() } label: { Text("accountWarnings.more").frame(minHeight: 48) }.disabled(loading) }
                 }
                 .kccContentCard()
                 .task(id: refreshID) { await load(append: retryAppend) }

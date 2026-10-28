@@ -257,7 +257,7 @@ struct MessageRow: View {
                 }
                 if let reply = message.replyTo {
                     Text(reply.textPreview)
-                        .font(.system(size: KccTypeScale.caption))
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
                         .padding(KccSpacing.s2)
                         .background(KccTheme.surface)
@@ -284,11 +284,11 @@ struct MessageRow: View {
         switch message.deliveryState {
         case .sending:
             Text("dm.statusSending")
-                .font(.system(size: KccTypeScale.caption))
+                .font(.footnote)
                 .foregroundStyle(.secondary)
         case .failed:
             Text(Self.sendErrorKey(message.sendError))
-                .font(.system(size: KccTypeScale.caption))
+                .font(.footnote)
                 .foregroundStyle(KccPalette.errorRed)
         case .sent:
             EmptyView()

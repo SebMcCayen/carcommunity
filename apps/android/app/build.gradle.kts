@@ -196,8 +196,8 @@ android {
         applicationId = "com.kungsbackacarcommunity.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 57
-        versionName = "1.1.2"
+        versionCode = 58
+        versionName = "1.1.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -208,6 +208,15 @@ android {
         // token-less build (which compiles the noNav stub) never advertises a
         // feature that can only reach the "navigation unavailable" stub.
         buildConfigField("boolean", "NAV_SDK_ENABLED", navSdkEnabled.toString())
+        // Owner-approved temporary website while Driver remains unpublished.
+        // This is public configuration, never a post-derived URL or credential.
+        buildConfigField(
+            "String", "DRIVER_DOWNLOAD_URL",
+            javaStringLiteral(
+                providers.gradleProperty("DRIVER_DOWNLOAD_URL")
+                    .orElse("https://kungsbackacarcommunity.se/").get(),
+            ),
+        )
 
         // The pinned Mapbox Maps SDK version, sourced from the version catalog so
         // it can never drift from the artifact actually on the classpath. Attached
@@ -484,6 +493,7 @@ dependencies {
 
     // Instrumented / Compose UI tests
     androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.test.rules) // Native provider recovery uses GrantPermissionRule.
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)

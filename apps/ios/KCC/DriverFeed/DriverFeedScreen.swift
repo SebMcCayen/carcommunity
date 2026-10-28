@@ -27,7 +27,6 @@ private struct DriverFeedSession: View {
     let repository: (any DriverFeedRepository)?
     @State private var coordinator: DriverFeedCoordinator
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.colorScheme) private var colorScheme
 
     init(uid: String?, strings: DriverFeedStrings, isActive: Bool, repository: (any DriverFeedRepository)?) {
         self.uid = uid
@@ -39,37 +38,34 @@ private struct DriverFeedSession: View {
 
     var body: some View {
         VStack(spacing: KccSpacing.s2) {
-            HStack {
+            SocialFlow {
                 if coordinator.state.selectedId != nil {
-                    Button(action: coordinator.back) { Label(strings["back"], systemImage: "chevron.left") }
+                    Button(action: coordinator.back) { Label(strings["back"], systemImage: "chevron.left").frame(minHeight: 48) }
                         .frame(minHeight: KccSpacing.s12)
                 } else {
                     Text(strings["title"]).font(.title2).accessibilityAddTraits(.isHeader)
                 }
-                Spacer()
-                Button(strings["refresh"], action: coordinator.refresh)
+                SocialFlowSpacer()
+                Button(action: coordinator.refresh) { Text(strings["refresh"]).frame(minHeight: 48) }
                     .frame(minHeight: KccSpacing.s12).disabled(coordinator.state.loading)
             }.padding(.horizontal, KccSpacing.s4)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: KccSpacing.s4) {
                     if let failure = coordinator.state.failure {
                         Text(strings[failureKey(failure)])
-                        Button(strings["retry"], action: coordinator.refresh).frame(minHeight: KccSpacing.s12)
+                        Button(action: coordinator.refresh) { Text(strings["retry"]).frame(minHeight: 48) }.kccPrimaryAction()
                     }
                     if coordinator.state.selectedId == nil {
                         ForEach(coordinator.state.posts) { post in
                             Button { coordinator.open(post.id) } label: {
-                                DriverPostBody(post: post, strings: strings)
-                                    .padding(KccSpacing.s4).frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(colorScheme == .dark ? KccDarkColors.surfaceBackground : KccLightColors.surfaceBackground,
-                                        in: RoundedRectangle(cornerRadius: KccRadius.md))
+                                DriverPostBody(post: post, strings: strings).kccContentCard()
                             }.buttonStyle(.plain)
                         }
                         if !coordinator.state.loading && coordinator.state.failure == nil && coordinator.state.posts.isEmpty {
                             Text(strings["empty"])
                         }
                     } else if let post = coordinator.state.post {
-                        DriverPostBody(post: post, strings: strings)
+                        DriverPostBody(post: post, strings: strings).kccContentCard()
                         Text(strings["comments"]).font(.headline).accessibilityAddTraits(.isHeader)
                         ForEach(coordinator.state.comments) { comment in
                             VStack(alignment: .leading, spacing: KccSpacing.s1) {
@@ -78,21 +74,20 @@ private struct DriverFeedSession: View {
                                     Text(date.formatted(date: .abbreviated, time: .shortened))
                                         .font(.caption).foregroundStyle(.secondary)
                                 }
-                                Text(comment.text).font(.body)
-                            }
+                                Text(comment.text).font(.body).fixedSize(horizontal: false, vertical: true)
+                            }.frame(maxWidth: .infinity, alignment: .leading).kccContentCard()
                         }
                         if !coordinator.state.loading && coordinator.state.comments.isEmpty { Text(strings["noComments"]) }
                     }
                     if coordinator.state.loading { ProgressView(strings["loading"]) }
                     if !coordinator.state.loading && coordinator.state.next != nil {
-                        Button(strings["more"], action: coordinator.more).frame(minHeight: KccSpacing.s12)
+                        Button(action: coordinator.more) { Text(strings["more"]).frame(minHeight: 48) }.buttonStyle(.bordered)
                     }
                 }.padding(KccSpacing.s4)
             }
         }
-        .foregroundStyle(colorScheme == .dark ? KccDarkColors.textPrimary : KccLightColors.textPrimary)
-        .tint(colorScheme == .dark ? KccDarkColors.driverActive : KccLightColors.driverActive)
-        .background(colorScheme == .dark ? KccDarkColors.pageBackground : KccLightColors.pageBackground)
+        .kccReadingSurface(pageBackground: true)
+        .tint(KccTheme.driver)
         .task(id: DriverFeedTaskIdentity(threadId: coordinator.state.selectedId, active: isActive && scenePhase == .active)) {
             guard isActive && scenePhase == .active else { coordinator.pause(); return }
             guard let uid, let repository else { coordinator.refresh(); return }
@@ -120,25 +115,32 @@ private struct DriverFeedTaskIdentity: Equatable {
     let active: Bool
 }
 
-private struct DriverPostBody: View {
+struct DriverPostBody: View {
     let post: DriverPost
     let strings: DriverFeedStrings
 
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s2) {
-            Text(post.author).font(.headline)
+            SocialMemberLabel(name: post.author)
             // Source is inline metadata, never a separate banner, logo, or chat label.
             Text([post.createdAt?.formatted(date: .abbreviated, time: .shortened), strings["source"]]
                 .compactMap { $0 }.joined(separator: " · "))
                 .font(.caption).foregroundStyle(.secondary)
             Text(post.text).font(.body).fixedSize(horizontal: false, vertical: true)
             ForEach(Array(post.mediaURLs.enumerated()), id: \.offset) { _, url in
-                AsyncImage(url: url) { image in image.resizable().scaledToFit() } placeholder: {
-                    Image(systemName: "photo").foregroundStyle(.secondary)
-                }.frame(maxWidth: .infinity).accessibilityLabel(strings["image"])
+                AsyncImage(url: url) { phase in
+                    if let image = phase.image { image.resizable().scaledToFit() }
+                    else { Image(systemName: "photo").foregroundStyle(KccTheme.secondary).frame(minHeight: 80) }
+                }
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
+                .accessibilityLabel(strings["image"])
             }
-            Text("\(strings["likes"]): \(post.likes) · \(strings["comments"]): \(post.replies)")
-                .font(.caption).foregroundStyle(.secondary)
+            SocialFlow {
+                Label("\(strings["likes"]): \(post.likes)", systemImage: "heart")
+                Label("\(strings["comments"]): \(post.replies)", systemImage: "bubble.right")
+            }
+            .font(.caption).foregroundStyle(KccTheme.secondary)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }

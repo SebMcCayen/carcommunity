@@ -86,7 +86,7 @@ struct GaragePanel: View {
                 .foregroundStyle(KccPalette.errorRed)
             Button(action: { coordinator.reload() }) {
                 Text("garage.retryButton")
-                    .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
+                    .font(.body.weight(.semibold))
                     .frame(maxWidth: .infinity, minHeight: 48)
             }
             .buttonStyle(.bordered)
@@ -153,7 +153,7 @@ struct GaragePanel: View {
             isAddPresented = true
         } label: {
             Text("garage.addVehicle")
-                .font(.system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold))
+                .font(.body.weight(.semibold))
                 .frame(maxWidth: .infinity, minHeight: 48)
         }
         .kccPrimaryAction()
@@ -270,11 +270,11 @@ struct VehicleDetailSheet: View {
                             vehicle, otherLabel: String(localized: "garage.catalogueOther")
                         )
                     )
-                    .font(.system(size: KccTypeScale.headingLg, weight: KccTypeScale.semibold))
+                    .font(.title2.bold())
 
                     if vehicle.isMainCar {
                         Text("garage.mainCarBadge")
-                            .font(.system(size: KccTypeScale.caption, weight: KccTypeScale.semibold))
+                            .font(.footnote.weight(.semibold))
                             .foregroundStyle(KccTheme.driver)
                     }
 
@@ -294,14 +294,14 @@ struct VehicleDetailSheet: View {
 
                     PhotosPicker(selection: $pickedPhoto, matching: .images) {
                         Text("garage.photoAddMore")
-                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .frame(maxWidth: .infinity, minHeight: 48)
                     }
                     .buttonStyle(.bordered)
                     .disabled(paths.count >= VehicleValidation.maxVehiclePhotos || isWorking)
 
                     if paths.count >= VehicleValidation.maxVehiclePhotos {
                         Text("garage.photoAddMoreUnavailable")
-                            .font(.system(size: KccTypeScale.bodySm))
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
                     if isWorking {
@@ -309,11 +309,11 @@ struct VehicleDetailSheet: View {
                     }
                     if photoProcessingFailed {
                         Text("garage.photoTooLarge")
-                            .font(.system(size: KccTypeScale.bodySm))
+                            .font(.subheadline)
                             .foregroundStyle(KccPalette.errorRed)
                     } else if coordinator.mutationStatus == .failed {
                         Text("garage.errorDetail")
-                            .font(.system(size: KccTypeScale.bodySm))
+                            .font(.subheadline)
                             .foregroundStyle(KccPalette.errorRed)
                     }
 
@@ -323,35 +323,31 @@ struct VehicleDetailSheet: View {
                         }
                     } label: {
                         Text(vehicle.isMainCar ? "garage.unsetMainCar" : "garage.setMainCar")
-                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .frame(maxWidth: .infinity, minHeight: 48)
                     }
                     .buttonStyle(.bordered)
                     .disabled(isWorking)
 
-                    HStack(spacing: KccSpacing.s2) {
-                        Button("garage.editVehicle") {
+                    SocialFlow {
+                        Button {
                             coordinator.resetSaveStatus()
                             isEditing = true
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .buttonStyle(.bordered)
-
-                        Button("garage.deleteVehicle", role: .destructive) {
-                            deleteConfirmation = true
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .buttonStyle(.bordered)
+                        } label: { Text("garage.editVehicle").frame(maxWidth: .infinity, minHeight: 48) }
+                            .buttonStyle(.bordered)
+                        Button(role: .destructive) { deleteConfirmation = true } label: {
+                            Text("garage.deleteVehicle").frame(maxWidth: .infinity, minHeight: 48)
+                        }.buttonStyle(.bordered).tint(KccPalette.errorRed)
                     }
                     .disabled(isWorking)
                 }
-                .padding(KccSpacing.s6)
+                .padding(KccSpacing.s4)
             }
-            .kccReadingSurface(pageBackground: true)
+            .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .navigationTitle(Text("garage.detailTitle"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("garage.cancelButton") { dismiss() }
+                    Button { dismiss() } label: { Text("garage.cancelButton").frame(minHeight: 48) }
                 }
             }
         }
@@ -420,31 +416,23 @@ struct VehicleDetailSheet: View {
                         String(localized: "garage.photoCounter"), current + 1, paths.count
                     )
                 )
-                .font(.system(size: KccTypeScale.caption))
+                .font(.footnote)
                 .foregroundStyle(.secondary)
             }
             if current == 0 {
                 Text("garage.photoCoverBadge")
-                    .font(.system(size: KccTypeScale.caption, weight: KccTypeScale.semibold))
+                    .font(.footnote.weight(.semibold))
             }
-            HStack(spacing: KccSpacing.s2) {
-                Button("garage.photoSetCover") {
+            SocialFlow {
+                Button {
                     Task {
-                        await coordinator.setCover(
-                            vehicleId: vehicle.id,
-                            photoPath: currentPath,
-                            currentPaths: paths
-                        )
+                        await coordinator.setCover(vehicleId: vehicle.id, photoPath: currentPath, currentPaths: paths)
                     }
-                }
-                .disabled(current == 0 || isWorking)
-                .frame(maxWidth: .infinity)
-                .buttonStyle(.bordered)
-
-                Button("garage.photoRemove", role: .destructive) { removalPath = currentPath }
-                    .disabled(isWorking)
-                    .frame(maxWidth: .infinity)
-                    .buttonStyle(.bordered)
+                } label: { Text("garage.photoSetCover").frame(maxWidth: .infinity, minHeight: 48) }
+                    .disabled(current == 0 || isWorking).buttonStyle(.bordered)
+                Button(role: .destructive) { removalPath = currentPath } label: {
+                    Text("garage.photoRemove").frame(maxWidth: .infinity, minHeight: 48)
+                }.disabled(isWorking).buttonStyle(.bordered).tint(KccPalette.errorRed)
             }
         }
     }
@@ -469,9 +457,9 @@ struct VehicleDetailSheet: View {
     private func infoRow(_ label: LocalizedStringKey, value: String) -> some View {
         VStack(alignment: .leading, spacing: KccSpacing.s1) {
             Text(label)
-                .font(.system(size: KccTypeScale.caption))
+                .font(.footnote)
                 .foregroundStyle(.secondary)
-            Text(verbatim: value).font(.system(size: KccTypeScale.bodyMd))
+            Text(verbatim: value).font(.body)
         }
     }
 
@@ -542,7 +530,7 @@ struct VehicleFormSheet: View {
                 if showValidation, let error = validationError {
                     Section {
                         Text(LocalizedStringKey(error.localizationKey))
-                            .font(.system(size: KccTypeScale.bodySm))
+                            .font(.subheadline)
                             .foregroundStyle(KccPalette.errorRed)
                     }
                 }
@@ -550,34 +538,27 @@ struct VehicleFormSheet: View {
                 if coordinator.saveStatus == .failed {
                     Section {
                         Text("garage.saveError")
-                            .font(.system(size: KccTypeScale.bodySm))
+                            .font(.subheadline)
                             .foregroundStyle(KccPalette.errorRed)
                     }
                 }
 
-                Section {
-                    Button(action: save) {
-                        if coordinator.saveStatus == .saving {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                        } else {
-                            Text("garage.saveVehicle")
-                                .font(
-                                    .system(size: KccTypeScale.bodyMd, weight: KccTypeScale.semibold)
-                                )
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .disabled(coordinator.saveStatus == .saving)
-                }
+            }
+            .disabled(coordinator.saveStatus == .saving)
+            .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                Button(action: save) {
+                    EditorSubmitLabel(title: "garage.saveVehicle", saving: coordinator.saveStatus == .saving)
+                }.kccPrimaryAction().disabled(coordinator.saveStatus == .saving)
+                    .padding(KccSpacing.s4).background(KccTheme.surface)
             }
             .navigationTitle(Text(vehicle == nil ? "garage.formTitleCreate" : "garage.formTitleEdit"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(action: { dismiss() }) {
-                        Text("garage.cancelButton")
-                    }
+                        Text("garage.cancelButton").frame(minHeight: 48)
+                    }.disabled(coordinator.saveStatus == .saving)
                 }
             }
             .sheet(item: $openPicker) { picker in
@@ -589,7 +570,7 @@ struct VehicleFormSheet: View {
                     dismiss()
                 }
             }
-        }
+        }.interactiveDismissDisabled(coordinator.saveStatus == .saving)
     }
 
     // MARK: - Sections
@@ -618,36 +599,21 @@ struct VehicleFormSheet: View {
     }
 
     private var powertrainSection: some View {
-        Section {
-            // Only the four SELECTABLE powertrains are offered — the retired
-            // vocabulary (plug_in_hybrid, other) is parsed and rendered but
-            // never offered for a new car.
-            Picker(selection: $form.powertrain) {
-                ForEach(VehiclePowertrain.selectable, id: \.self) { powertrain in
-                    Text(LocalizedStringKey(powertrain.localizationKey))
-                        .tag(VehiclePowertrain?.some(powertrain))
-                }
-            } label: {
-                Text("garage.powertrain")
-                    .font(.system(size: KccTypeScale.bodyMd))
-            }
-            .pickerStyle(.menu)
-        }
+        Section { VehiclePowertrainPicker(selection: $form.powertrain) }
     }
 
     private var detailsSection: some View {
         Section {
-            TextField("garage.engineDescription", text: $form.engineDescription)
-            TextField("garage.modifications", text: $form.modifications, axis: .vertical)
-                .lineLimit(3...6)
-            TextField("garage.registrationPlate", text: $form.registrationPlate)
+            EditorTextField(title: "garage.engineDescription", text: $form.engineDescription)
+            EditorTextField(title: "garage.modifications", text: $form.modifications, multiline: true)
+            EditorTextField(title: "garage.registrationPlate", text: $form.registrationPlate)
                 .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()
         } footer: {
             // The plate is DELIBERATELY PUBLIC (readable by any signed-in
             // user) — the hint copy says so; entering one is opting in.
             Text("garage.registrationPlateHint")
-                .font(.system(size: KccTypeScale.caption))
+                .font(.footnote)
         }
     }
 
@@ -658,27 +624,8 @@ struct VehicleFormSheet: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack {
-                Text(label)
-                    .font(.system(size: KccTypeScale.bodyMd))
-                    .foregroundStyle(.primary)
-                Spacer()
-                if let value {
-                    value
-                        .font(.system(size: KccTypeScale.bodyMd))
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text(prompt)
-                        .font(.system(size: KccTypeScale.bodyMd))
-                        .foregroundStyle(.tertiary)
-                }
-                Image(systemName: "chevron.forward")
-                    .font(.system(size: KccTypeScale.caption))
-                    .foregroundStyle(.secondary)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
+            EditorSelectionLabel(title: label, value: value, prompt: prompt)
+        }.buttonStyle(.plain)
     }
 
     // MARK: - Selections
@@ -767,7 +714,7 @@ struct CataloguePickerSheet: View {
                 // (the model picker under an "Other" manufacturer).
                 if !query.isEmpty, filtered.allSatisfy(\.isOther) {
                     Text("garage.pickerNoMatches")
-                        .font(.system(size: KccTypeScale.bodySm))
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
                 if groupCommonMakes, query.isEmpty {
@@ -786,12 +733,13 @@ struct CataloguePickerSheet: View {
                 }
             }
             .searchable(text: $query, prompt: Text("garage.pickerSearch"))
+            .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(action: { dismiss() }) {
-                        Text("garage.pickerClose")
+                        Text("garage.pickerClose").frame(minHeight: 48)
                     }
                 }
             }
@@ -800,21 +748,8 @@ struct CataloguePickerSheet: View {
 
     private func rows(_ options: [CatalogueOption]) -> some View {
         ForEach(options) { option in
-            Button(action: { onSelect(option) }) {
-                if option.isOther {
-                    VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                        Text("garage.catalogueOther")
-                            .font(.system(size: KccTypeScale.bodyMd))
-                        Text("garage.catalogueOtherHint")
-                            .font(.system(size: KccTypeScale.caption))
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
-                    Text(verbatim: option.name)
-                        .font(.system(size: KccTypeScale.bodyMd))
-                }
-            }
-            .buttonStyle(.plain)
+            Button(action: { onSelect(option) }) { CatalogueOptionLabel(option: option) }
+                .buttonStyle(.plain)
         }
     }
 }
@@ -831,17 +766,18 @@ struct YearPickerSheet: View {
         NavigationStack {
             List(years, id: \.self) { year in
                 Button(action: { onSelect(year) }) {
-                    Text(verbatim: String(year))
-                        .font(.system(size: KccTypeScale.bodyMd))
+                    Text(verbatim: String(year)).font(.body).frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
+            .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .navigationTitle(Text("garage.selectModelYear"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(action: { dismiss() }) {
-                        Text("garage.pickerClose")
+                        Text("garage.pickerClose").frame(minHeight: 48)
                     }
                 }
             }

@@ -16,69 +16,71 @@ struct RestrictedAccountScreen: View {
 
     var body: some View {
         ScrollView {
-        VStack(spacing: KccSpacing.s4) {
-            Image(systemName: "exclamationmark.shield.fill")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            Text(access?.blacklisted == true ? "carCommunityAccess.blacklistedTitle" : "carCommunityAccess.suspendedTitle")
-                .font(.system(size: KccTypeScale.headingLg, weight: .semibold))
-            Text(bodyKey)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-
-            if let reason = access?.restrictionReason { Text(reason).textSelection(.enabled) }
-            if let uid { AccountWarningsSection(uid: uid).id(uid) }
-
-            Button("accountStatus.supportLink") {
-                openURL(URL(string: "https://github.com/SebMcCayen/carcommunity/issues")!)
-            }
-            .buttonStyle(.borderedProminent)
-
-            HStack {
-                policyButton("settings.terms", urlKey: "url.terms")
-                policyButton("settings.privacyPolicy", urlKey: "url.privacy")
-            }
-
-            Button {
-                Task { await privacyCoordinator.hideMeNow() }
-            } label: {
-                Label("liveLocation.hideNow", systemImage: "location.slash.fill")
-                    .frame(maxWidth: .infinity, minHeight: 44)
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(privacyCoordinator.actionStatus == .working)
-
-            if privacyCoordinator.actionStatus == .failed {
-                Text("liveLocation.error")
-                    .foregroundStyle(KccPalette.errorRed)
-            }
-
-            // Subscription management remains a later production-cutover
-            // milestone. Account deletion is always reachable while suspended.
-            Text("accountStatus.subscriptionManagementPlaceholder")
-
-            if deletionCoordinator.isAvailable {
-                Button("settings.accountDeletion", role: .destructive) {
-                    showsAccountDeletion = true
-                }
-                .buttonStyle(.bordered)
-            }
-
-            if signOutFailed {
-                Text("auth.signOutError")
-                    .foregroundStyle(KccPalette.errorRed)
+            VStack(spacing: KccSpacing.s4) {
+                Image(systemName: "exclamationmark.shield.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(KccTheme.secondary)
+                    .accessibilityHidden(true)
+                Text(access?.blacklisted == true ? "carCommunityAccess.blacklistedTitle" : "carCommunityAccess.suspendedTitle")
+                    .font(.title2.bold())
+                Text(bodyKey)
                     .multilineTextAlignment(.center)
-            }
+                    .foregroundStyle(KccTheme.secondary)
 
-            Button("auth.signOut", action: attemptSignOut)
-                .buttonStyle(.bordered)
+                if let reason = access?.restrictionReason {
+                    Text(verbatim: reason).font(.body).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                }
+                if let uid { AccountWarningsSection(uid: uid).id(uid) }
+
+                Button {
+                    openURL(URL(string: "https://github.com/SebMcCayen/carcommunity/issues")!)
+                } label: { Text("accountStatus.supportLink").frame(maxWidth: .infinity, minHeight: 48) }
+                .kccPrimaryAction()
+
+                SocialFlow {
+                    policyButton("settings.terms", urlKey: "url.terms")
+                    policyButton("settings.privacyPolicy", urlKey: "url.privacy")
+                }
+
+                Button {
+                    Task { await privacyCoordinator.hideMeNow() }
+                } label: {
+                    Label("liveLocation.hideNow", systemImage: "location.slash.fill")
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                }
+                .kccPrimaryAction()
+                .disabled(privacyCoordinator.actionStatus == .working)
+
+                if privacyCoordinator.actionStatus == .failed {
+                    Text("liveLocation.error")
+                        .foregroundStyle(KccTheme.error)
+                }
+
+                // Subscription management remains a later production-cutover
+                // milestone. Account deletion is always reachable while suspended.
+                Text("accountStatus.subscriptionManagementPlaceholder")
+
+                if deletionCoordinator.isAvailable {
+                    Button(role: .destructive) {
+                        showsAccountDeletion = true
+                    } label: { Text("settings.accountDeletion").frame(maxWidth: .infinity, minHeight: 48) }
+                    .buttonStyle(.bordered)
+                }
+
+                if signOutFailed {
+                    Text("auth.signOutError")
+                        .foregroundStyle(KccTheme.error)
+                        .multilineTextAlignment(.center)
+                }
+
+                Button(action: attemptSignOut) { Text("auth.signOut").frame(maxWidth: .infinity, minHeight: 48) }
+                    .buttonStyle(.bordered)
+            }
+            .font(.body)
+            .padding(KccSpacing.s4)
+            .frame(maxWidth: .infinity)
         }
-        }
-        .font(.system(size: KccTypeScale.bodyMd))
-        .padding(KccSpacing.s6)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.background, ignoresSafeAreaEdges: .all)
+        .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
         .task {
             privacyCoordinator.canShare = false
             privacyCoordinator.start()
@@ -104,10 +106,10 @@ struct RestrictedAccountScreen: View {
     }
 
     private func policyButton(_ title: LocalizedStringKey, urlKey: String) -> some View {
-        Button(title) {
+        Button {
             let value = String(localized: String.LocalizationValue(urlKey))
             if let url = URL(string: value), url.scheme == "https" { openURL(url) }
-        }
+        } label: { Text(title).frame(minHeight: 48) }
         .buttonStyle(.bordered)
     }
 }

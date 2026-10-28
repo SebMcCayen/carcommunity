@@ -11,6 +11,9 @@ enum KccTheme {
     static let border = adaptive(KccLightColors.overlayBorder, KccDarkColors.overlayBorder)
     static let text = adaptive(KccLightColors.textPrimary, KccDarkColors.textPrimary)
     static let secondary = adaptive(KccLightColors.textSecondary, KccDarkColors.textSecondary)
+    // Use the platform bright error red on dark surfaces; retain the canonical
+    // darker red against light cards. No new brand/palette value is introduced.
+    static let error = adaptive(KccPalette.errorRed, Color(uiColor: .systemRed))
     static let driver = adaptive(KccLightColors.driverActive, KccDarkColors.driverActive)
     static let onDriver = adaptive(KccLightColors.onDriverActive, KccDarkColors.onDriverActive)
     static let onGold = adaptive(KccLightColors.onBrandPrimary, KccDarkColors.onBrandPrimary)
@@ -24,9 +27,7 @@ enum KccTheme {
 
 extension View {
     func kccPrimaryAction() -> some View {
-        buttonStyle(.borderedProminent)
-            .tint(KccPalette.crownGold)
-            .foregroundStyle(KccTheme.onGold)
+        modifier(KccPrimaryActionAppearance())
     }
 
     /// Reading card shared by the feature pages; no material blur over tiles.
@@ -37,6 +38,7 @@ extension View {
             .overlay {
                 RoundedRectangle(cornerRadius: KccRadius.lg)
                     .strokeBorder(border, lineWidth: lineWidth)
+                    .allowsHitTesting(false)
             }
     }
 
@@ -50,8 +52,19 @@ extension View {
         foregroundStyle(KccTheme.text)
             .background(pageBackground ? KccTheme.page : KccTheme.surface, ignoresSafeAreaEdges: .all)
             .scrollContentBackground(.hidden)
+            .buttonBorderShape(.roundedRectangle(radius: KccRadius.md))
             .toolbarBackground(pageBackground ? KccTheme.page : KccTheme.surface, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
+    }
+}
+
+private struct KccPrimaryActionAppearance: ViewModifier {
+    @Environment(\.isEnabled) private var enabled
+    func body(content: Content) -> some View {
+        content.buttonStyle(.borderedProminent)
+            .buttonBorderShape(.roundedRectangle(radius: KccRadius.md))
+            .tint(KccPalette.crownGold)
+            .foregroundStyle(enabled ? KccTheme.onGold : KccTheme.secondary)
     }
 }
 

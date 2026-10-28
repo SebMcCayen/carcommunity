@@ -10,9 +10,9 @@ struct CrownPerkMapControl: View {
         } label: {
             Image(systemName: active ? "bolt.shield.fill" : "bolt.shield")
                 .font(.title3.weight(.semibold))
-                .frame(width: 46, height: 46)
+                .frame(width: 48, height: 48)
                 .kccMapControl()
-                .foregroundStyle(active ? .purple : .primary)
+                .foregroundStyle(active ? KccTheme.driver : KccTheme.text)
         }
         .accessibilityLabel(Text("crownHunt.deployTitle"))
     }
@@ -92,27 +92,19 @@ struct CrownPerkDeploySheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(rows, id: \.0) { perkId, kind, title, symbol in
-                    Section {
-                        HStack {
-                            Label(LocalizedStringKey(title), systemImage: symbol)
-                            Spacer()
-                            Text(format("crownHunt.deployOwnedLabel", coordinator.inventory[perkId] ?? 0))
-                                .foregroundStyle(.secondary)
+            ScrollView {
+                VStack(alignment: .leading, spacing: KccSpacing.s4) {
+                    if coordinator.isAvailable {
+                        ForEach(rows, id: \.0) { row in
+                            perkRow(perkId: row.0, kind: row.1, title: row.2, symbol: row.3)
                         }
-                        if isActive(kind) {
-                            Label("crownHunt.deployActiveFor", systemImage: "clock.fill")
-                                .foregroundStyle(.green)
-                        }
-                        Button("crownHunt.deployActivateButton") {
-                            Task { await coordinator.deploy(perkId: perkId, kind: kind) }
-                        }
-                        .disabled((coordinator.inventory[perkId] ?? 0) <= 0 || isDeploying)
+                        statusView
+                    } else {
+                        CrownHuntMessageState(title: "crownHunt.deployTitle", message: "crownHunt.resultFeatureDisabled")
                     }
-                }
-                statusView
+                }.padding(KccSpacing.s4)
             }
+            .kccReadingSurface(pageBackground: true)
             .navigationTitle("crownHunt.deployTitle")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -124,6 +116,24 @@ struct CrownPerkDeploySheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+
+    private func perkRow(perkId: String, kind: PerkKind, title: String, symbol: String) -> some View {
+        CrownHuntCard {
+            Label(LocalizedStringKey(title), systemImage: symbol).font(.headline)
+            Text(format("crownHunt.deployOwnedLabel", coordinator.inventory[perkId] ?? 0))
+                .font(.subheadline).foregroundStyle(KccTheme.secondary)
+            if isActive(kind) {
+                Label("crownHunt.deployActiveFor", systemImage: "clock.fill").font(.subheadline)
+            }
+            Button {
+                Task { await coordinator.deploy(perkId: perkId, kind: kind) }
+            } label: {
+                Text("crownHunt.deployActivateButton").frame(maxWidth: .infinity, minHeight: 48).contentShape(Rectangle())
+            }
+            .kccPrimaryAction()
+            .disabled((coordinator.inventory[perkId] ?? 0) <= 0 || isDeploying)
+        }
     }
 
     @ViewBuilder

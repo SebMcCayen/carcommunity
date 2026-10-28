@@ -8,6 +8,7 @@ import android.os.Looper
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
 
 /**
@@ -114,6 +115,22 @@ object BackgroundLocationController {
                 // fault. Rethrow so it is not hidden.
                 throw e
             }
+        } catch (e: SecurityException) {
+            // Android 14 also rejects a location FGS while the app is off
+            // screen: while-in-use permission can still READ as granted then.
+            // Defer only that background window; genuine foreground permission
+            // or manifest faults must remain visible rather than be swallowed.
+            if (ForegroundStartDecision.isWhileInUseStartRefusal(
+                    sdkInt = Build.VERSION.SDK_INT,
+                    appIsForeground = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED),
+                    finePermissionGranted = hasFineLocationPermission(context),
+                )
+            ) {
+                pendingStartUid = uid
+                ensureForegroundObserver()
+            } else {
+                throw e
+            }
         }
     }
 
@@ -149,6 +166,12 @@ object BackgroundLocationController {
  * unit-testable without a device.
  */
 internal object ForegroundStartDecision {
+    fun isWhileInUseStartRefusal(
+        sdkInt: Int,
+        appIsForeground: Boolean,
+        finePermissionGranted: Boolean,
+    ): Boolean = sdkInt >= 34 && !appIsForeground && finePermissionGranted
+
     /**
      * @param sdkInt the running [Build.VERSION.SDK_INT].
      * @param isSpecificRefusalType whether the caught exception is the

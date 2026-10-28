@@ -383,7 +383,7 @@ private fun ChatPeekMessageRow(message: ChannelMessage) {
  * declaration order IS the left-to-right swipe order — reordering these reorders
  * both the tabs and the swipe. Pinned by `ChatTabOrderTest`.
  */
-enum class ChatTab { Community, Convoys, Friends, Notifications }
+enum class ChatTab { Community, Convoys, Friends, Notifications, Club }
 
 /**
  * The hub tab a push [target] should land on, or [ChatTab.Community] for anything
@@ -895,7 +895,7 @@ private fun ChatHubContent(
             if (!inSubScreen) {
                 ChatChannelStrip(
                     selected = selectedTab,
-                    unread = listOf(communityUnread, convoysUnread, friendsUnread, notificationsUnread),
+                    unread = listOf(communityUnread, convoysUnread, friendsUnread, notificationsUnread, false),
                     onSelect = { scope.launch { pagerState.animateScrollToPage(it.ordinal) } },
                     onBack = if (showHubBackArrow) onClose else null,
                 )
@@ -943,6 +943,8 @@ private fun ChatHubContent(
                 key = { ChatTab.entries[it] },
             ) { page ->
                 when (ChatTab.entries[page]) {
+                    ChatTab.Club -> com.kungsbackacarcommunity.app.clubs.ClubChatRoute(uid)
+
                     ChatTab.Community ->
                         if (communityChatRepository != null) {
                             CommunityChannelRoute(

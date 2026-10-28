@@ -15,6 +15,7 @@ import com.kungsbackacarcommunity.app.crownhunt.CrownHuntParticipationController
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntParticipationPreferenceStore
 import com.kungsbackacarcommunity.app.design.ThemePreference
 import com.kungsbackacarcommunity.app.design.ThemePreferenceStore
+import com.kungsbackacarcommunity.app.design.rememberResolvedDarkTheme
 import com.kungsbackacarcommunity.app.incidents.IncidentAgeFilterController
 import com.kungsbackacarcommunity.app.incidents.IncidentAgeFilterPreferenceStore
 import com.kungsbackacarcommunity.app.incidents.IncidentAgeOption
@@ -321,14 +322,10 @@ class MainActivity : ComponentActivity() {
             // OS bar tinting below, and the map's day/night default through
             // LocalKccDarkTheme.
             val themePreference by themePreferenceStore.preference.collectAsState()
-            // Only Automatic reads the system theme, so an explicit Light/Dark
-            // choice doesn't subscribe this composition to system dark-mode
-            // flips it would ignore anyway — the sticky modes stay inert (no
-            // wasted recomposition) rather than recomputing to the same value.
-            // Still routed through resolveDark so it remains the ONE place the
-            // dark/light decision is made (the Light/Dark arg is unused there).
+            // SYSTEM alone follows Android. AUTOMATIC observes the live local
+            // clock while visible; LIGHT/DARK remain explicit overrides.
             val systemInDark = if (themePreference == ThemePreference.SYSTEM) isSystemInDarkTheme() else false
-            val appDark = themePreference.resolveDark(systemInDark)
+            val appDark = rememberResolvedDarkTheme(themePreference, systemInDark, lifecycle)
 
             // Lets the Settings screen read and change the preference without
             // threading two more parameters through AuthenticatedApp and
