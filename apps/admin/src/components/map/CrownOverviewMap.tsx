@@ -76,6 +76,7 @@ export function CrownOverviewMap({
           container: node.current,
           accessToken: geometryOnly ? '' : token,
           testMode: !!geometryOnly,
+          preserveDrawingBuffer: !!geometryOnly,
           performanceMetricsCollection: !geometryOnly,
           style: geometryOnly
             ? {

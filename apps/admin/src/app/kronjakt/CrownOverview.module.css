@@ -152,7 +152,9 @@
   color: var(--text-secondary);
   line-height: 1.6;
 }
-.overview button {
+.statusBar button,
+.panel > button,
+.error button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -170,7 +172,9 @@
   width: 100%;
   margin-top: 14px;
 }
-.overview button:hover {
+.statusBar button:hover,
+.panel > button:hover,
+.error button:hover {
   border-color: var(--accent);
 }
 .panel > .primary {
