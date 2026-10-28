@@ -1,14 +1,10 @@
 package com.kungsbackacarcommunity.app.live
 
-import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.google.firebase.FirebaseApp
-import com.google.firebase.FirebaseOptions
 import com.google.firebase.database.InternalHelpers
-import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.core.Path
 import com.google.firebase.database.snapshot.IndexedNode
 import com.google.firebase.database.snapshot.NodeUtilities
-import org.junit.After
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -16,14 +12,11 @@ import org.junit.runner.RunWith
 /** Real RTDB snapshot parsing; no listener, network read or write. */
 @RunWith(AndroidJUnit4::class)
 class LiveSessionConvoyParsingTest {
-    private val app = FirebaseApp.initializeApp(
-        ApplicationProvider.getApplicationContext(),
-        FirebaseOptions.Builder().setApplicationId("1:123:android:test")
-            .setApiKey("test-api-key").setProjectId("convoy-parser-test").build(),
-        "convoy-parser",
-    )
-    private val reference = FirebaseDatabase.getInstance(app, "https://convoy-parser-test.firebaseio.com").reference
-    @After fun cleanUp() = app.delete()
+    // Immutable DataSnapshot traversal only needs a reference path. A live
+    // FirebaseApp/Repo starts asynchronous SDK work that can race app.delete()
+    // between tests. No Repo means this fixture cannot open a connection; the
+    // production parser and Firebase's Node -> value conversion stay real.
+    private val reference = InternalHelpers.createReference(null, Path("session-fixture"))
 
     private fun parse(extra: Map<String, Any?>): LiveSessionInfo? {
         val fields = mapOf("id" to "session", "status" to "active", "duration" to "6h") + extra
