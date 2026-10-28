@@ -85,6 +85,23 @@
           }
         }
       }
+    },
+    "iosStore.signedOutPrivacy": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du kan begära kontoradering i appens kontoinställningar. Läs om hur dina uppgifter används i integritetspolicyn."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can request account deletion in the app’s account settings. Read how your data is used in the privacy notice."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

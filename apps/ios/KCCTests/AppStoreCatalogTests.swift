@@ -21,7 +21,7 @@ final class AppStoreCatalogTests: XCTestCase {
         for language in ["sv", "en"] {
             let path = try XCTUnwrap(Bundle.main.path(forResource: language, ofType: "lproj"))
             let bundle = try XCTUnwrap(Bundle(path: path))
-            for key in ["iosStore.manage", "iosStore.renewal", "iosStore.deletionBilling"] {
+            for key in ["iosStore.manage", "iosStore.renewal", "iosStore.deletionBilling", "iosStore.signedOutPrivacy"] {
                 let text = bundle.localizedString(forKey: key, value: nil, table: "AppStore")
                 XCTAssertNotEqual(text, key, "Missing \(language) release disclosure")
             }

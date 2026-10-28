@@ -40,11 +40,12 @@ struct SignInScreen: View {
                     signInButton
                 }
 
-                Text("auth.deleteAccountNote")
+                Text("iosStore.signedOutPrivacy", tableName: "AppStore")
                     .font(.footnote)
                     .foregroundStyle(KccTheme.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.top, KccSpacing.s4)
+                AppStoreLegalLinks()
             }
             .frame(maxWidth: .infinity)
             .kccContentCard()
