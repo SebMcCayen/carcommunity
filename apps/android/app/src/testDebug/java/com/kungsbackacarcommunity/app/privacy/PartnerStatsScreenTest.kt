@@ -84,7 +84,7 @@ class PartnerStatsScreenTest {
                 )
             }
         }
-        composeTestRule.onNode(androidx.compose.ui.test.isToggleable()).assertIsOn()
+        composeTestRule.onNode(androidx.compose.ui.test.isToggleable()).assertIsOff()
         composeTestRule
             .onNodeWithText(str(R.string.privacySettings_saveButton))
             .performScrollTo()
