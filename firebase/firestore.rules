@@ -249,6 +249,12 @@ service cloud.firestore {
         && (!keys.hasAny(['phone']) || (data.phone is string && data.phone.size() <= 32))
         && (!keys.hasAny(['notificationPreferences']) || data.notificationPreferences is map)
         && (!keys.hasAny(['anonymousPartnerStatsOptIn']) || data.anonymousPartnerStatsOptIn is bool)
+        && (!keys.hasAny(['partnerStatsConsentVersion']) || data.partnerStatsConsentVersion in [0, 1])
+        && (!keys.hasAny(['partnerStatsConsentedAt']) || data.partnerStatsConsentedAt == null || isServerTimestamp(data.partnerStatsConsentedAt))
+        && (!(keys.hasAny(['anonymousPartnerStatsOptIn', 'partnerStatsConsentVersion', 'partnerStatsConsentedAt'])
+              && data.get('anonymousPartnerStatsOptIn', false) == true)
+            || (data.get('partnerStatsConsentVersion', 0) == 1
+                && data.get('partnerStatsConsentedAt', null) == request.time))
         && (!keys.hasAny(['leaderboardOptOut']) || data.leaderboardOptOut is bool)
         && (!keys.hasAny(['updatedAt']) || isServerTimestamp(data.updatedAt));
     }
@@ -269,7 +275,7 @@ service cloud.firestore {
     function validUserPrivateUpdate() {
       let keys = request.resource.data.diff(resource.data).affectedKeys();
       return keys.hasOnly(['email', 'phone', 'notificationPreferences',
-          'anonymousPartnerStatsOptIn', 'leaderboardOptOut', 'updatedAt'])
+          'anonymousPartnerStatsOptIn', 'partnerStatsConsentVersion', 'partnerStatsConsentedAt', 'leaderboardOptOut', 'updatedAt'])
         && validUserPrivateFields(keys);
     }
 

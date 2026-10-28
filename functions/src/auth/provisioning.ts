@@ -128,7 +128,7 @@ export function buildUserPrivateDocument(
     // a newly provisioned member contributes unless they explicitly opt out
     // (in onboarding or later under Privacy). A missing/true value means
     // contributing; only an explicit `false` opts out (see recordInteraction).
-    anonymousPartnerStatsOptIn: true,
+    anonymousPartnerStatsOptIn: false,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };

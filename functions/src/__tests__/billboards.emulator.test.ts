@@ -29,7 +29,7 @@ import {
 } from 'firebase/functions';
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
+import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const PROJECT_ID = 'demo-test';
@@ -131,6 +131,14 @@ beforeAll(async () => {
   await adminAuth.setCustomUserClaims(adminUser.uid, { admin: true });
   await adminDb.collection('users').doc(adminUser.uid).set({ role: 'admin' }, { merge: true });
   user = await createProvisionedUser('bb-user');
+  await adminDb.collection('userPrivate').doc(user.uid).set(
+    {
+      anonymousPartnerStatsOptIn: true,
+      partnerStatsConsentVersion: 1,
+      partnerStatsConsentedAt: Timestamp.now(),
+    },
+    { merge: true },
+  );
 
   await signInAs(adminUser);
   activePartnerId = (

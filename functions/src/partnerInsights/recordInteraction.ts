@@ -11,15 +11,15 @@
  * - One event per (company, type, UTC day, user): the dedupe is the
  *   deterministic document ID; duplicates return { recorded: false }.
  * - anonymous_pass_by requires the pass-by feature flag (contract default
- *   OFF). Consent is DEFAULT-ON / opt-out: the caller contributes unless
- *   anonymousPartnerStatsOptIn is explicitly `false` (missing/true both
- *   contribute). An opted-out contribution returns { recorded: false }
+ *   OFF). Consent requires a versioned affirmative choice; legacy/default values
+ *   never contribute. An opted-out contribution returns { recorded: false }
  *   silently — never an error — so opting out is unobservable from the
  *   response shape.
  * - Events carry expiresAt (+7 days) and are removed by the scheduled
  *   cleanup; only threshold-enforced aggregates persist.
  */
 
+import { hasPartnerStatsConsent } from './partner-consent';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
@@ -62,16 +62,14 @@ export const recordInteraction = onCall(
     }
     const input = parsed.input;
 
-    // anonymous_pass_by: feature flag + default-on consent. Consent is
-    // opt-out — only an explicit `false` excludes the caller (a missing or
-    // true value contributes). Opt-out is silent (recorded: false), never an
-    // error — unobservable by design.
+    // Pass-by requires its feature flag and explicit versioned consent.
+    // Exclusion remains silent and does not disable ordinary partner features.
     if (input.interactionType === 'anonymous_pass_by') {
       if (!(await isPassByEnabled())) {
         throw new HttpsError('failed-precondition', 'Anonymous pass-by collection is disabled.');
       }
       const privateSnap = await db.collection('userPrivate').doc(actor.uid).get();
-      if (privateSnap.data()?.anonymousPartnerStatsOptIn === false) {
+      if (!hasPartnerStatsConsent(privateSnap.data())) {
         return { recorded: false };
       }
     }
@@ -119,12 +117,24 @@ export async function writeInteractionEvent(
     }
   }
 
+  // This also covers manual partner/advert interactions. Opting out never
+  // prevents viewing content or following its ordinary action.
+  const consent = await db.collection('userPrivate').doc(uid).get();
+  if (!hasPartnerStatsConsent(consent.data())) return false;
+
   const now = new Date();
   const aggregationDate = startOfUtcDay(now);
   const userReferenceHash = buildScopedHash(input.companyId, uid);
   const eventRef = db
     .collection('partnerInsightsEvents')
-    .doc(interactionEventId(input.companyId, input.interactionType, aggregationDate, userReferenceHash));
+    .doc(
+      interactionEventId(
+        input.companyId,
+        input.interactionType,
+        aggregationDate,
+        userReferenceHash,
+      ),
+    );
 
   // Per-day dedupe: the deterministic ID makes the create transactional.
   return db.runTransaction(async (tx) => {

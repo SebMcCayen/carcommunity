@@ -116,6 +116,15 @@
           "type": "boolean",
           "description": "Privacy setting for anonymised partner statistics. Defaults to false (explicit opt-in); owner-editable by direct Firestore write (Security Rules enforce boolean type)."
         },
+        "partnerStatsConsentVersion": {
+          "type": "integer",
+          "enum": [0, 1],
+          "description": "Current affirmative partner/routing analysis scope. Legacy default-on values without this marker are excluded."
+        },
+        "partnerStatsConsentedAt": {
+          "$ref": "common.schema.json#/$defs/nullableIsoTimestamp",
+          "description": "Server timestamp of the affirmative choice; a new opt-in requires request.time."
+        },
         "leaderboardOptOut": {
           "type": "boolean",
           "description": "Social-leaderboard opt-OUT. Optional; ABSENT or false means the member participates (opt-out, not opt-in). When true, the scheduled leaderboard generator excludes the member from every category of the precomputed leaderboards/{scope} document (and the later public web JSON), so an opted-out member is never published. Owner-editable by direct Firestore write (Security Rules enforce boolean type); the Android settings toggle ships with the leaderboard UI PR."

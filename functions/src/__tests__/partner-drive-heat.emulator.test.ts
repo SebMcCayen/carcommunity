@@ -97,7 +97,14 @@ async function seedRide(
   await adminDb
     .collection('userPrivate')
     .doc(uid)
-    .set({ anonymousPartnerStatsOptIn: consented }, { merge: true });
+    .set(
+      {
+        anonymousPartnerStatsOptIn: consented,
+        partnerStatsConsentVersion: consented ? 1 : 0,
+        partnerStatsConsentedAt: consented ? Timestamp.now() : null,
+      },
+      { merge: true },
+    );
   await adminDb
     .collection('rides')
     .doc(rideId)

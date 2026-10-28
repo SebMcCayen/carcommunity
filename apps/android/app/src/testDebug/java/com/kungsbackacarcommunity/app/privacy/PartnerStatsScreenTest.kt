@@ -49,28 +49,28 @@ class PartnerStatsScreenTest {
     }
 
     @Test
-    fun defaultsOn_whenNoExplicitChoice() {
-        // Default-on / opt-out: a null value (no explicit choice / still loading)
-        // renders the toggle ON, and Save persists that ON choice.
+    fun defaultsOff_whenNoExplicitChoice() {
+        // Default-off / opt-in: a null value (no explicit choice / still loading)
+        // renders the toggle OFF, and saving cannot manufacture consent.
         var saved: Boolean? = null
         composeTestRule.setContent {
             KccTheme {
                 PartnerStatsScreen(
-                    consent = PartnerStatsConsentState.DefaultOn,
+                    consent = PartnerStatsConsentState.DefaultOff,
                     saveStatus = PartnerStatsSaveStatus.Idle,
                     onSave = { saved = it },
                     onBack = {},
                 )
             }
         }
-        composeTestRule.onNode(androidx.compose.ui.test.isToggleable()).assertIsOn()
+        composeTestRule.onNode(androidx.compose.ui.test.isToggleable()).assertIsOff()
         composeTestRule.onNodeWithText(str(R.string.privacySettings_saveButton)).performScrollTo().performClick()
-        assertEquals(true, saved)
+        assertEquals(false, saved)
     }
 
     @Test
     fun unknownState_disablesSave_soAReadErrorCannotOverwrite() {
-        // Unknown = still loading or a read error. The toggle shows the default-on
+        // Unknown = still loading or a read error. The toggle shows the default-off
         // value, but Save must be DISABLED so a transient error can never persist
         // the default over an explicitly opted-out member's real choice.
         var saved: Boolean? = null

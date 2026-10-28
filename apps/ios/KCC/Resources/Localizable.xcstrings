@@ -24521,13 +24521,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "På som standard. Du kan stänga av det nu, eller senare under Integritet."
+            "value": "Av som standard. Välj själv om du vill bidra. Du kan stänga av det när som helst under Integritet."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "On by default. You can turn it off now, or later under Privacy."
+            "value": "Off by default. Choose whether to contribute. You can turn it off at any time under Privacy."
           }
         }
       }
@@ -27071,13 +27071,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "När funktionen är på kan aggregerad statistik bidra till att visa hur många användare som passerar nära KCC:s företagspartner."
+            "value": "När du väljer att bidra kan vi använda dina interaktioner med partnerinnehåll och dina sparade körrutter från de senaste 90 dagarna för aggregerad besöks- och områdesstatistik. Ruttändpunkter tas bort och kartområden visas först vid minst tio bidragande personer. Företag får inte se individuella rutter eller identiteter."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "When enabled, aggregated statistics can help show how many users pass near KCC partner companies."
+            "value": "If you choose to contribute, we may use your interactions with partner content and saved driving routes from the last 90 days for aggregate visit and area statistics. Route endpoints are removed and map areas are shown only with at least ten contributors. Companies cannot see individual routes or identities."
           }
         }
       }
@@ -27088,13 +27088,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "På som standard. Du kan stänga av det när som helst."
+            "value": "Av som standard. Välj själv om du vill bidra. Du kan stänga av det när som helst under Integritet."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "On by default. You can turn it off at any time."
+            "value": "Off by default. Choose whether to contribute. You can turn it off at any time under Privacy."
           }
         }
       }

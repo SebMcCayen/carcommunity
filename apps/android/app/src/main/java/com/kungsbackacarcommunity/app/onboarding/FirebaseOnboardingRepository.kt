@@ -39,6 +39,7 @@ class FirebaseOnboardingRepository private constructor(
                 // default (ON).
                 if (anonymousPartnerStatsOptIn != null) {
                     put("anonymousPartnerStatsOptIn", anonymousPartnerStatsOptIn)
+                    if (anonymousPartnerStatsOptIn) put("partnerStatsConsentVersion", 1)
                 }
             }
         suspendCancellableCoroutine { continuation ->

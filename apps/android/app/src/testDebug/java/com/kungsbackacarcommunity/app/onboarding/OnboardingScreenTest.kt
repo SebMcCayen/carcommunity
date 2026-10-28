@@ -78,13 +78,12 @@ class OnboardingScreenTest {
             .performTextInput("Sebbe")
         composeTestRule.onNodeWithText(continueBtn).performScrollTo().assertIsEnabled().performClick()
         assertEquals(1, submitted)
-        // Anonymised partner statistics are default-on / opt-out: untouched, the
-        // step reports true.
-        assertEquals(true, submittedPartnerStats)
+        // Partner analysis is off until a deliberate affirmative choice.
+        assertEquals(false, submittedPartnerStats)
     }
 
     @Test
-    fun partnerStatsCanBeOptedOutDuringOnboarding() {
+    fun partnerStatsRequiresAnExplicitOptInDuringOnboarding() {
         var submittedPartnerStats: Boolean? = null
         composeTestRule.setContent {
             KccTheme {
@@ -101,7 +100,7 @@ class OnboardingScreenTest {
             .onNodeWithText(str(R.string.onboarding_displayNameLabel))
             .performScrollTo()
             .performTextInput("Sebbe")
-        // Turn the default-on partner-stats toggle OFF.
+        // Deliberately enable partner analysis after reading the disclosure.
         composeTestRule
             .onNodeWithText(str(R.string.onboarding_partnerStatsOptIn))
             .performScrollTo()
@@ -110,6 +109,6 @@ class OnboardingScreenTest {
             .onNodeWithText(str(R.string.onboarding_continueButton))
             .performScrollTo()
             .performClick()
-        assertEquals(false, submittedPartnerStats)
+        assertEquals(true, submittedPartnerStats)
     }
 }

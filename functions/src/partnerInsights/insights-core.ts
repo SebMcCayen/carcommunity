@@ -7,11 +7,9 @@
  * - Raw user IDs are NEVER stored on insight events: a user is represented
  *   by a partner-scoped SHA-256 hash, so events for the same user at two
  *   different partners cannot be correlated.
- * - anonymous_pass_by contributions require the pass-by feature flag
- *   (default OFF) AND default-on / opt-out consent: a user contributes
- *   unless anonymousPartnerStatsOptIn is explicitly `false` (missing/true
- *   both contribute). An opted-out contribution returns { recorded: false }
- *   silently — opting out must be unobservable.
+ * - All collection requires versioned affirmative consent. anonymous_pass_by
+ *   additionally requires its feature flag (default OFF). Legacy default-on
+ *   values never establish consent; exclusion returns { recorded: false }.
  * - Aggregates for anonymous_pass_by below the minimum-unique-contributor
  *   threshold are ZEROED (status insufficient_data, counts 0/null), not
  *   merely hidden — a small partner can never infer individuals.
@@ -87,9 +85,7 @@ export type RecordInteractionInput = z.infer<typeof recordInteractionInputSchema
 
 export type ParseResult<T> = { ok: true; input: T } | { ok: false; message: string };
 
-export function parseRecordInteractionInput(
-  data: unknown,
-): ParseResult<RecordInteractionInput> {
+export function parseRecordInteractionInput(data: unknown): ParseResult<RecordInteractionInput> {
   const result = recordInteractionInputSchema.safeParse(data ?? {});
   if (!result.success) {
     return {
@@ -118,8 +114,7 @@ export function buildScopedHash(companyId: string, userId: string): string {
 
 /** Effective threshold: configuration can only RAISE the floor (legacy). */
 export function effectiveThreshold(configured: unknown): number {
-  const value =
-    typeof configured === 'number' && Number.isSafeInteger(configured) ? configured : 0;
+  const value = typeof configured === 'number' && Number.isSafeInteger(configured) ? configured : 0;
   return Math.max(MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD, value);
 }
 

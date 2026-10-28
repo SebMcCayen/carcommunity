@@ -1,15 +1,15 @@
 import Foundation
 
 /// The two owner-controlled privacy choices stored on `userPrivate/{uid}`.
-/// Partner statistics is opt-out; an absent field is enabled to match the
-/// Android client and backend interaction gate.
+/// Partner statistics requires a versioned affirmative choice; legacy defaults
+/// and missing fields remain off in both clients and the backend.
 /// Leaderboard visibility remains opt-out, so an absent field is shown.
 struct PrivacySettingsChoices: Equatable, Sendable {
     let partnerStatsOptIn: Bool
     let leaderboardShown: Bool
 
     static let contractDefaults = PrivacySettingsChoices(
-        partnerStatsOptIn: true,
+        partnerStatsOptIn: false,
         leaderboardShown: true
     )
 
@@ -22,9 +22,9 @@ struct PrivacySettingsChoices: Equatable, Sendable {
         let partner: Bool
         if data.keys.contains("anonymousPartnerStatsOptIn") {
             guard let value = data["anonymousPartnerStatsOptIn"] as? Bool else { return nil }
-            partner = value
+            partner = value && data["partnerStatsConsentVersion"] as? Int == 1
         } else {
-            partner = true
+            partner = false
         }
 
         let leaderboardOptOut: Bool

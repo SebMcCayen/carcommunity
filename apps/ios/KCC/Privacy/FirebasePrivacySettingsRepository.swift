@@ -41,7 +41,16 @@ final class FirebasePrivacySettingsRepository: PrivacySettingsRepository, @unche
     }
 
     func setPartnerStatsOptIn(uid: String, optIn: Bool) async throws {
-        try await update(uid: uid, field: Self.partnerStatsField, value: optIn)
+        do {
+            try await firestore.collection(Self.collection).document(uid).updateData([
+                Self.partnerStatsField: optIn,
+                "partnerStatsConsentVersion": optIn ? 1 : 0,
+                "partnerStatsConsentedAt": optIn ? FieldValue.serverTimestamp() : NSNull(),
+                Self.updatedAtField: FieldValue.serverTimestamp(),
+            ])
+        } catch {
+            throw PrivacySettingsWriteError(code: FirebaseEventsRepository.firestoreStatusName(error))
+        }
     }
 
     func setLeaderboardOptOut(uid: String, optOut: Bool) async throws {

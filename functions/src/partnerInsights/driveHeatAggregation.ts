@@ -26,6 +26,7 @@
  * NOT a source: they keep no path, only a latest position.
  */
 
+import { hasPartnerStatsConsent } from './partner-consent';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
@@ -82,7 +83,7 @@ export async function runDriveHeatAggregation(now: Date): Promise<{
     let allowed = false;
     try {
       const snap = await db.collection('userPrivate').doc(uid).get();
-      allowed = snap.data()?.anonymousPartnerStatsOptIn === true;
+      allowed = hasPartnerStatsConsent(snap.data());
     } catch (error) {
       logger.warn('drive-heat: consent read failed; excluding user', { error: String(error) });
       allowed = false;

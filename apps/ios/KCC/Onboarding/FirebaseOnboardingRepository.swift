@@ -16,6 +16,7 @@ final class FirebaseOnboardingRepository: OnboardingRepository, @unchecked Senda
         ]
         if let anonymousPartnerStatsOptIn {
             payload["anonymousPartnerStatsOptIn"] = anonymousPartnerStatsOptIn
+            if anonymousPartnerStatsOptIn { payload["partnerStatsConsentVersion"] = 1 }
         }
         _ = try await functions.call("auth-completeOnboarding", payload: payload)
     }

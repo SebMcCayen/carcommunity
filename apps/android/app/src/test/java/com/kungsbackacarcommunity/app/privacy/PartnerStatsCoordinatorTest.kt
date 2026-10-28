@@ -15,7 +15,7 @@ class PartnerStatsCoordinatorTest {
         var failWith: Exception? = null
 
         override fun observeConsent(uid: String): Flow<PartnerStatsConsentState> =
-            flowOf(PartnerStatsConsentState.DefaultOn)
+            flowOf(PartnerStatsConsentState.DefaultOff)
 
         override suspend fun setOptIn(uid: String, optIn: Boolean) {
             failWith?.let { throw it }

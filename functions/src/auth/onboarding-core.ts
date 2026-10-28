@@ -36,11 +36,10 @@ const completeOnboardingInputSchema = z
     licenceConfirmed: z.literal(true),
     termsAccepted: z.literal(true),
     privacyPolicyAccepted: z.literal(true),
-    // Anonymised partner statistics are DEFAULT-ON / opt-out. The onboarding
-    // step surfaces the toggle pre-enabled; the client sends the member's
-    // choice here so it persists in the same transaction. Omitted → provisioning
-    // default (true). Only an explicit `false` opts the member out.
+    // Versioned affirmative choice; old clients may submit their default-on
+    // boolean, but cannot accidentally establish consent for the new scope.
     anonymousPartnerStatsOptIn: z.boolean().optional(),
+    partnerStatsConsentVersion: z.literal(1).optional(),
   })
   .strict();
 
@@ -124,13 +123,13 @@ export function computeOnboardingWrites(
     privateUpdate.privacyPolicyAcceptedAt = serverTimestamp();
   }
 
-  // Anonymised partner statistics (default-on / opt-out). Written only when the
-  // client sends an explicit choice from the onboarding toggle; when omitted the
-  // provisioning default (true) stands. Unlike the consent timestamps this is
-  // NOT write-once — the member can flip it here and later under Privacy, so the
-  // latest choice always wins.
+  // Omitted choices preserve existing settings; legacy default-on values never enable analysis.
   if (input.anonymousPartnerStatsOptIn !== undefined) {
-    privateUpdate.anonymousPartnerStatsOptIn = input.anonymousPartnerStatsOptIn;
+    const optedIn =
+      input.anonymousPartnerStatsOptIn === true && input.partnerStatsConsentVersion === 1;
+    privateUpdate.anonymousPartnerStatsOptIn = optedIn;
+    privateUpdate.partnerStatsConsentVersion = optedIn ? 1 : 0;
+    privateUpdate.partnerStatsConsentedAt = optedIn ? serverTimestamp() : null;
   }
 
   return { profileUpdate, privateUpdate };

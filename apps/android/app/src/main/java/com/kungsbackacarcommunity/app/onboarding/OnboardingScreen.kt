@@ -82,7 +82,7 @@ fun OnboardingScreen(
     var displayName by remember { mutableStateOf("") }
     // Default-on / opt-out: the toggle starts ON. Only meaningful when the step
     // is shown ([partnerStatsEnabled]); otherwise onSubmit is passed null.
-    var partnerStats by remember { mutableStateOf(true) }
+    var partnerStats by remember { mutableStateOf(false) }
 
     val submitting = status == OnboardingStatus.Submitting
     val canSubmit = OnboardingForm.canSubmit(licence, terms, privacy, displayName) && !submitting

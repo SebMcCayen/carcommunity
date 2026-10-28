@@ -56,7 +56,7 @@ describe('parseCompleteOnboardingInput', () => {
     expect(parseCompleteOnboardingInput({ ...validInput, role: 'admin' }).ok).toBe(false);
   });
 
-  it('accepts the optional partner-stats opt-out choice (default-on / opt-out)', () => {
+  it('accepts legacy choices but requires a version before enabling analysis', () => {
     expect(
       parseCompleteOnboardingInput({ ...validInput, anonymousPartnerStatsOptIn: false }),
     ).toStrictEqual({ ok: true, input: { ...validInput, anonymousPartnerStatsOptIn: false } });
@@ -182,7 +182,7 @@ describe('computeOnboardingWrites', () => {
     expect(optedOut.privateUpdate.anonymousPartnerStatsOptIn).toBe(false);
 
     const optedIn = computeOnboardingWrites(
-      { ...validInput, anonymousPartnerStatsOptIn: true },
+      { ...validInput, anonymousPartnerStatsOptIn: true, partnerStatsConsentVersion: 1 },
       nothingSet,
       serverTimestamp,
     );
@@ -192,5 +192,22 @@ describe('computeOnboardingWrites', () => {
   it('omits the partner-stats field when no choice is sent (provisioning default stands)', () => {
     const { privateUpdate } = computeOnboardingWrites(validInput, nothingSet, serverTimestamp);
     expect(privateUpdate).not.toHaveProperty('anonymousPartnerStatsOptIn');
+  });
+});
+
+describe('legacy onboarding cannot establish analytics consent', () => {
+  it('keeps a preselected true value off until the scope is affirmatively accepted', () => {
+    const result = computeOnboardingWrites(
+      {
+        licenceConfirmed: true,
+        termsAccepted: true,
+        privacyPolicyAccepted: true,
+        anonymousPartnerStatsOptIn: true,
+      },
+      nothingSet,
+      () => 'server-time',
+    );
+    expect(result.privateUpdate.anonymousPartnerStatsOptIn).toBe(false);
+    expect(result.privateUpdate.partnerStatsConsentVersion).toBe(0);
   });
 });

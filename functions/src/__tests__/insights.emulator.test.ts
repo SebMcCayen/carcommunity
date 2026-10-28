@@ -120,6 +120,17 @@ beforeAll(async () => {
   await adminAuth.setCustomUserClaims(adminUser.uid, { admin: true });
   await adminDb.collection('users').doc(adminUser.uid).set({ role: 'admin' }, { merge: true });
   user = await createProvisionedUser('pi-user');
+  await adminDb
+    .collection('userPrivate')
+    .doc(user.uid)
+    .set(
+      {
+        anonymousPartnerStatsOptIn: true,
+        partnerStatsConsentVersion: 1,
+        partnerStatsConsentedAt: Timestamp.now(),
+      },
+      { merge: true },
+    );
 
   await signInAs(adminUser);
   companyId = (
@@ -186,7 +197,7 @@ describe('partnerInsights-recordInteraction', () => {
     ).toBe('functions/not-found');
   });
 
-  it('pass-by requires the flag; consent is DEFAULT-ON — only an explicit opt-out is SILENTLY excluded', async () => {
+  it('pass-by requires its flag and a versioned affirmative choice', async () => {
     await signInAs(user);
     // Flag off (contract default): failed-precondition regardless of consent.
     expect(
@@ -226,8 +237,7 @@ describe('partnerInsights-recordInteraction', () => {
         ).size,
       ).toBe(0);
 
-      // No explicit choice (field absent) → DEFAULT-ON → recorded. A member who
-      // never touches the toggle contributes.
+      // Missing/legacy consent never contributes; an affirmative new choice can.
       await adminDb
         .collection('userPrivate')
         .doc(user.uid)
@@ -238,7 +248,25 @@ describe('partnerInsights-recordInteraction', () => {
           interactionType: 'anonymous_pass_by',
         })
       ).data as { recorded: boolean };
-      expect(defaultOn.recorded).toBe(true);
+      expect(defaultOn.recorded).toBe(false);
+      await adminDb
+        .collection('userPrivate')
+        .doc(user.uid)
+        .set(
+          {
+            anonymousPartnerStatsOptIn: true,
+            partnerStatsConsentVersion: 1,
+            partnerStatsConsentedAt: Timestamp.now(),
+          },
+          { merge: true },
+        );
+      const accepted = (
+        await call('partnerInsights-recordInteraction', {
+          companyId,
+          interactionType: 'anonymous_pass_by',
+        })
+      ).data as { recorded: boolean };
+      expect(accepted.recorded).toBe(true);
     } finally {
       await adminDb
         .collection('config')
@@ -252,7 +280,10 @@ describe('runInsightsAggregation — threshold enforcement', () => {
   it('zeroes below-threshold pass-by aggregates and keeps regular metrics available', async () => {
     // Pin the effective threshold to the floor (10) explicitly — the config doc
     // is shared across the emulator suite, so other tests may have raised it.
-    await adminDb.collection('config').doc('partnerInsights').set({ minThreshold: 10 }, { merge: true });
+    await adminDb
+      .collection('config')
+      .doc('partnerInsights')
+      .set({ minThreshold: 10 }, { merge: true });
 
     // Seed a dedicated company with 9 pass-by contributors (below the floor
     // of 10) and 2 profile views, directly via the Admin SDK.
@@ -307,15 +338,18 @@ describe('runInsightsAggregation — threshold enforcement', () => {
     expect(profileViews.uniqueContributorCount).toBe(2);
 
     // One more contributor reaches the floor → available with real counts.
-    await adminDb.collection('partnerInsightsEvents').doc('seed-pb-9').set({
-      companyId: seededCompany,
-      interactionType: 'anonymous_pass_by',
-      userReferenceHash: buildScopedHash(seededCompany, 'pass-by-user-9'),
-      relatedOfferId: null,
-      occurredAt: Timestamp.fromDate(day),
-      aggregationDate: Timestamp.fromDate(new Date('2026-07-01T00:00:00Z')),
-      expiresAt: Timestamp.fromDate(new Date('2026-07-08T10:00:00Z')),
-    });
+    await adminDb
+      .collection('partnerInsightsEvents')
+      .doc('seed-pb-9')
+      .set({
+        companyId: seededCompany,
+        interactionType: 'anonymous_pass_by',
+        userReferenceHash: buildScopedHash(seededCompany, 'pass-by-user-9'),
+        relatedOfferId: null,
+        occurredAt: Timestamp.fromDate(day),
+        aggregationDate: Timestamp.fromDate(new Date('2026-07-01T00:00:00Z')),
+        expiresAt: Timestamp.fromDate(new Date('2026-07-08T10:00:00Z')),
+      });
     await runInsightsAggregation(day);
     const passByAt10 = (
       await adminDb
@@ -332,32 +366,38 @@ describe('runInsightsAggregation — threshold enforcement', () => {
 describe('runInsightsCleanup — 7-day TTL', () => {
   it('deletes expired events and keeps fresh ones', async () => {
     const now = new Date('2026-07-10T00:00:00Z');
-    await adminDb.collection('partnerInsightsEvents').doc('ttl-expired').set({
-      companyId: 'ttl-co',
-      interactionType: 'map_view',
-      userReferenceHash: buildScopedHash('ttl-co', 'u-old'),
-      relatedOfferId: null,
-      occurredAt: Timestamp.fromDate(new Date('2026-07-01T00:00:00Z')),
-      aggregationDate: Timestamp.fromDate(new Date('2026-07-01T00:00:00Z')),
-      expiresAt: Timestamp.fromDate(new Date('2026-07-08T00:00:00Z')),
-    });
-    await adminDb.collection('partnerInsightsEvents').doc('ttl-fresh').set({
-      companyId: 'ttl-co',
-      interactionType: 'map_view',
-      userReferenceHash: buildScopedHash('ttl-co', 'u-new'),
-      relatedOfferId: null,
-      occurredAt: Timestamp.fromDate(new Date('2026-07-09T00:00:00Z')),
-      aggregationDate: Timestamp.fromDate(new Date('2026-07-09T00:00:00Z')),
-      expiresAt: Timestamp.fromDate(new Date('2026-07-16T00:00:00Z')),
-    });
+    await adminDb
+      .collection('partnerInsightsEvents')
+      .doc('ttl-expired')
+      .set({
+        companyId: 'ttl-co',
+        interactionType: 'map_view',
+        userReferenceHash: buildScopedHash('ttl-co', 'u-old'),
+        relatedOfferId: null,
+        occurredAt: Timestamp.fromDate(new Date('2026-07-01T00:00:00Z')),
+        aggregationDate: Timestamp.fromDate(new Date('2026-07-01T00:00:00Z')),
+        expiresAt: Timestamp.fromDate(new Date('2026-07-08T00:00:00Z')),
+      });
+    await adminDb
+      .collection('partnerInsightsEvents')
+      .doc('ttl-fresh')
+      .set({
+        companyId: 'ttl-co',
+        interactionType: 'map_view',
+        userReferenceHash: buildScopedHash('ttl-co', 'u-new'),
+        relatedOfferId: null,
+        occurredAt: Timestamp.fromDate(new Date('2026-07-09T00:00:00Z')),
+        aggregationDate: Timestamp.fromDate(new Date('2026-07-09T00:00:00Z')),
+        expiresAt: Timestamp.fromDate(new Date('2026-07-16T00:00:00Z')),
+      });
 
     const result = await runInsightsCleanup(now);
     expect(result.deletedCount).toBeGreaterThanOrEqual(1);
     expect(
       (await adminDb.collection('partnerInsightsEvents').doc('ttl-expired').get()).exists,
     ).toBe(false);
-    expect(
-      (await adminDb.collection('partnerInsightsEvents').doc('ttl-fresh').get()).exists,
-    ).toBe(true);
+    expect((await adminDb.collection('partnerInsightsEvents').doc('ttl-fresh').get()).exists).toBe(
+      true,
+    );
   });
 });

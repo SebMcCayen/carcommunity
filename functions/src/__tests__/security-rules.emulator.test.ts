@@ -2296,6 +2296,27 @@ describe('Firestore – userPrivate field validation (Phase 9a)', () => {
     );
   });
 
+  it('requires a fresh timestamp/version to enable or re-enable partner analysis', async () => {
+    const ref = doc(testEnv.authenticatedContext(OWNER).firestore(), 'userPrivate', OWNER);
+    await assertFails(updateDoc(ref, { anonymousPartnerStatsOptIn: true }));
+    await assertSucceeds(
+      updateDoc(ref, {
+        anonymousPartnerStatsOptIn: true,
+        partnerStatsConsentVersion: 1,
+        partnerStatsConsentedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(updateDoc(ref, { anonymousPartnerStatsOptIn: false }));
+    await assertFails(updateDoc(ref, { anonymousPartnerStatsOptIn: true }));
+    await assertSucceeds(
+      updateDoc(ref, {
+        anonymousPartnerStatsOptIn: true,
+        partnerStatsConsentVersion: 1,
+        partnerStatsConsentedAt: serverTimestamp(),
+      }),
+    );
+  });
+
   it('owner can update notification preferences as a map', async () => {
     const ctx = testEnv.authenticatedContext(OWNER);
     await assertSucceeds(

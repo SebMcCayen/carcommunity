@@ -131,7 +131,7 @@ describe('auth-onUserCreate trigger', () => {
     expect(priv.privacyPolicyAcceptedAt).toBeNull();
     // Default-on / opt-out consent: a newly provisioned member contributes
     // anonymised partner statistics unless they explicitly opt out.
-    expect(priv.anonymousPartnerStatsOptIn).toBe(true);
+    expect(priv.anonymousPartnerStatsOptIn).toBe(false);
   });
 });
 
