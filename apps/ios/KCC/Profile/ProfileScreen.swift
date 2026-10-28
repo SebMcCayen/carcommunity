@@ -95,7 +95,7 @@ struct ProfileScreen: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: KccSpacing.s4) {
                     Text("profile.title")
-                        .font(.system(size: KccTypeScale.headingLg, weight: .semibold))
+                        .font(.title2.bold())
 
                     VStack(spacing: KccSpacing.s2) {
                         avatar
@@ -201,7 +201,7 @@ struct ProfileScreen: View {
 
                     if signOutFailed {
                         Text("auth.signOutError")
-                            .foregroundStyle(KccPalette.errorRed)
+                            .foregroundStyle(KccTheme.error)
                     }
 
                     Button(action: attemptSignOut) {
@@ -285,35 +285,35 @@ struct ProfileScreen: View {
 
     private var editForm: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s3) {
-            TextField("profile.displayNameLabel", text: $draft.displayName)
+            EditorTextField(title: "profile.displayNameLabel", text: $draft.displayName)
                 .textFieldStyle(.roundedBorder).textContentType(.nickname)
-            TextField("profile.bioLabel", text: $draft.bio, axis: .vertical)
-                .textFieldStyle(.roundedBorder).lineLimit(3...6)
+            EditorTextField(title: "profile.bioLabel", text: $draft.bio, multiline: true)
             Text("profile.social.sectionTitle").font(.headline)
             Text("profile.social.publicNotice").font(.footnote).foregroundStyle(.secondary)
+            Text("profile.social.hint").font(.footnote).foregroundStyle(KccTheme.secondary)
             socialField("profile.social.facebookLabel", text: $draft.facebook)
             socialField("profile.social.instagramLabel", text: $draft.instagram)
             socialField("profile.social.youtubeLabel", text: $draft.youtube)
             if let validationError {
                 Text(validationKey(validationError)).foregroundStyle(.red)
             }
-            HStack {
-                Button("profile.cancelButton") { editing = false; validationError = nil; editor.reset() }
+            SocialFlow {
+                Button { editing = false; validationError = nil; editor.reset() } label: { Text("profile.cancelButton").frame(minHeight: 48) }
                     .buttonStyle(.bordered)
-                Button("profile.saveButton") {
+                Button {
                     Task {
                         validationError = await editor.save(draft)
                         if validationError == nil, editor.status == .saved { editing = false }
                     }
-                }
+                } label: { EditorSubmitLabel(title: "profile.saveButton", saving: editor.status == .saving) }
                 .kccPrimaryAction()
                 .disabled(editor.status == .saving || editor.status == .uploading)
             }
-        }
+        }.kccContentCard().disabled(editor.status == .saving || editor.status == .uploading)
     }
 
     private func socialField(_ title: LocalizedStringKey, text: Binding<String>) -> some View {
-        TextField(title, text: text, prompt: Text("profile.social.hint"))
+        EditorTextField(title: title, text: text)
             .textFieldStyle(.roundedBorder).textInputAutocapitalization(.never).autocorrectionDisabled()
     }
 
