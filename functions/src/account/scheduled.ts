@@ -516,15 +516,17 @@ export async function purgeUserData(uid: string): Promise<void> {
     try {
       await adminStorage.bucket().deleteFiles({ prefix });
     } catch (error) {
-      // Storage cleanup is best-effort per prefix; the sweep re-runs daily.
+      // Do not acknowledge erasure while media remains. Keep the request
+      // pending so the existing scheduler retries the failed prefix.
       logger.warn('Storage purge failed for prefix', { prefix, error: String(error) });
+      throw error;
     }
   }
-  await db.collection('accountPurgeProgress').doc(uid).delete();
   await adminAuth.deleteUser(uid).catch((error) => {
     // Already deleted on a previous partial run — idempotency.
     if ((error as { code?: string }).code !== 'auth/user-not-found') throw error;
   });
+  await db.collection('accountPurgeProgress').doc(uid).delete();
 }
 
 /** Processes pending requests past the retention window. */

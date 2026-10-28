@@ -37,7 +37,8 @@ import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getStorage as getAdminStorage } from 'firebase-admin/storage';
 import { getDatabase as getAdminDatabase } from 'firebase-admin/database';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { adminStorage as purgeStorage } from '../firebase';
 import { purgeUserData, runAccountPurge } from '../account/scheduled';
 import { commitLatestForActiveSession, writeDiscoveryForGeneration } from '../live/session';
 
@@ -178,6 +179,28 @@ describe('account-deleteAccount (soft delete)', () => {
 });
 
 describe('account purge (hard delete after retention)', () => {
+  it('leaves erasure retryable if a Storage prefix cannot be removed', async () => {
+    const user = await createProvisionedUser('purge-storage-retry');
+    await adminAuth.updateUser(user.uid, { disabled: true });
+    const bucket = vi.spyOn(purgeStorage, 'bucket').mockReturnValue({
+      deleteFiles: async () => {
+        throw new Error('synthetic storage outage');
+      },
+    } as unknown as ReturnType<typeof purgeStorage.bucket>);
+    try {
+      await expect(purgeUserData(user.uid)).rejects.toThrow('synthetic storage outage');
+      expect((await adminAuth.getUser(user.uid)).disabled).toBe(true);
+      expect((await adminDb.doc(`accountPurgeProgress/${user.uid}`).get()).exists).toBe(true);
+    } finally {
+      bucket.mockRestore();
+    }
+    await purgeUserData(user.uid);
+    await expect(adminAuth.getUser(user.uid)).rejects.toMatchObject({
+      code: 'auth/user-not-found',
+    });
+    expect((await adminDb.doc(`accountPurgeProgress/${user.uid}`).get()).exists).toBe(false);
+  });
+
   it('fences a held discovery update through the actual purge helper', async () => {
     const user = await createProvisionedUser('purge-live-race');
     const uid = user.uid;

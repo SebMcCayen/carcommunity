@@ -10,7 +10,8 @@ backend response retries the same bound operation without repeating successful
 Apple revocation in that route. The server independently rejects a replaced UID.
 
 The shared purge now deletes the person's event messages and RSVP documents,
-including orphaned event parents, without deleting other users' content. Existing
+including orphaned event parents, without deleting other users' content. Storage deletion failures keep erasure pending instead of marking a partial
+media purge completed. Existing
 RSVP triggers decrement surviving parent counters. Legacy RSVP rows have no UID
 field; a backend-only document-name cursor in accountPurgeProgress advances
 atomically with each page. A bounded pass reads at most 4,000 RSVP documents;

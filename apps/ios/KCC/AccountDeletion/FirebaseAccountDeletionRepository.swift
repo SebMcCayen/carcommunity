@@ -41,7 +41,7 @@ final class FirebaseAccountDeletionRepository: AccountDeletionRepository, @unche
         guard let response = raw as? [String: Any],
               response["status"] as? String == "pending",
               let requestId = response["requestId"] as? String,
-              !requestId.isEmpty
+              !requestId.isEmpty, expectedUID == nil || expectedUID == requestId
         else {
             throw KccFunctionsError(code: .unknown)
         }
