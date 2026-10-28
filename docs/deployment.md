@@ -478,3 +478,37 @@ The `main` branch must be protected with the following rules configured in **Git
 | Dependency review           | `.github/workflows/dependency-review.yml` — reviews dependency changes on every PR  |
 
 Major dependency updates are not automatically merged. Dependabot groups minor and patch updates and submits major updates as individual pull requests for manual review.
+
+## Controlled Firestore rules and index deployment
+
+`deploy-firebase-functions.yml` keeps automatic source-change deployments scoped
+to Functions. Its manual dispatch also offers **firestore:indexes** and
+**firestore:rules**, individually. All choices use the existing production
+project/environment and WIF account, and still require `refs/heads/main`.
+No new credential, IAM grant, service or billing plan is created.
+
+After the reviewed change is merged and its checks pass, choose the resource
+explicitly (the default remains Functions):
+
+```sh
+gh workflow run deploy-firebase-functions.yml --ref main -f resource=firestore:indexes
+gh workflow run deploy-firebase-functions.yml --ref main -f resource=firestore:rules
+```
+
+These are production writes and may incur costs under the existing Firebase
+plan; obtain the owner's rollout/cost approval. Do not dispatch a different
+resource to work around a permission or configuration failure. A deployment
+from a feature branch remains rejected. Target values are allowlisted, quoted,
+and never passed as arbitrary CLI arguments. Data jobs have separate concurrency
+groups so they cannot cancel/replace the pending latest Functions deployment.
+The CLI is non-interactive and never forced to remove unexpected live indexes.
+
+For the App Store fixes, publish the account-erasure `messages.authorUserId`
+collection-group index after #1244 and verify it is ready before the next daily
+purge (03:30 UTC). Publish the consent rules after #1245 and before releasing
+updated clients. The erasure sweep leaves an incomplete request pending for retry;
+it must not be treated as completed if its index is unavailable. The index dispatch waits for declared collection-group field indexes to be READY
+using read-only metadata requests (no document reads). A timeout is a failed gate,
+not successful query readiness. The read-only index drift check additionally
+covers composite declarations; inspect the Firebase console if a build is slow. Missing WIF/IAM
+permissions must be reported to the operator; do not grant extra roles silently.
