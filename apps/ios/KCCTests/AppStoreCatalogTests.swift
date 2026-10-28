@@ -20,7 +20,7 @@ final class AppStoreCatalogTests: XCTestCase {
         for bad in [entry("unknown"), entry(plusMonthlyProductID, auto: false),
                     entry(plusMonthlyProductID, months: 12), entry(plusMonthlyProductID, months: nil),
                     entry(plusMonthlyProductID, group: nil), entry(plusMonthlyProductID, group: "")] {
-            XCTAssertFalse(StoreCatalogPolicy.permits([bad]))
+            XCTAssertFalse(StoreCatalogPolicy.permits([bad, entry(supporterMonthlyProductID)]))
         }
     }
     func testReleaseDisclosuresResolveFromTheirDedicatedTableInBothLanguages() throws {
