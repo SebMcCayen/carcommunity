@@ -173,3 +173,89 @@
 .signOutButton:hover {
   color: var(--text-on-sidebar);
 }
+.primaryNav {
+  padding-bottom: 12px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+.navGroup {
+  margin-bottom: 5px;
+}
+.navGroup > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 18px;
+  cursor: pointer;
+  font-size: 14px;
+  list-style: none;
+  color: var(--text-on-sidebar-muted);
+}
+.navGroup > summary::-webkit-details-marker {
+  display: none;
+}
+.navGroup > summary:hover {
+  background: var(--bg-sidebar-accent);
+  color: var(--text-on-sidebar);
+}
+.navGroup > summary > span {
+  flex: 1;
+  min-width: 0;
+}
+.chevron {
+  transition: transform var(--motion-fast);
+}
+.navGroup[open] > .chevron,
+.navGroup[open] > summary > .chevron {
+  transform: rotate(180deg);
+}
+.subnav {
+  padding: 2px 0 10px 12px;
+}
+.subnav .navItem {
+  font-size: 13px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.account > svg {
+  color: var(--text-on-sidebar-muted);
+  flex-shrink: 0;
+}
+.account .authText {
+  min-width: 0;
+  flex: 1;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.account .signOutButton {
+  display: grid;
+  place-items: center;
+  padding: 9px;
+  border-radius: 6px;
+}
+.navItem {
+  padding: 15px 18px;
+}
+.brand {
+  min-height: 78px;
+  padding: 24px 20px;
+}
+.brandName {
+  font-size: 19px;
+}
+.brandMark {
+  flex-shrink: 0;
+}
+.nav {
+  mask-image: none;
+}
+.navIcon {
+  flex-shrink: 0;
+}
