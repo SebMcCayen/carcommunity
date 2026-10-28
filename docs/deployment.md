@@ -512,3 +512,15 @@ using read-only metadata requests (no document reads). A timeout is a failed gat
 not successful query readiness. The read-only index drift check additionally
 covers composite declarations; inspect the Firebase console if a build is slow. Missing WIF/IAM
 permissions must be reported to the operator; do not grant extra roles silently.
+
+The data dispatch creates a temporary configuration containing only its selected
+Firestore resource. This matters even with `--only firestore:indexes`: otherwise
+the Firebase CLI still compiles the rules declared in the full config and an
+index-only release requires unrelated Rules API permissions.
+
+The deployment identity needs `roles/datastore.indexAdmin` for index changes and
+`roles/firebaserules.admin` for rules compilation/publication on the existing
+project. The older Functions-only WIF bootstrap includes Datastore Viewer, which
+is not an index-writing role. An operator must approve/provision any missing
+roles; the workflow does not modify IAM. A 403 is a failed deployment, not a
+reason to grant Owner/Editor or bypass the checks.

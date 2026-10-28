@@ -126,7 +126,8 @@ jobs:
         shell: bash
         # No --force: unexpected index deletions must fail for review.
         run: |
-          ./functions/node_modules/.bin/firebase deploy --only "$FIREBASE_DEPLOY_TARGET" --project kungsbacka-car-community --non-interactive
+          node scripts/firebase-deploy-config.mjs "$FIREBASE_DEPLOY_TARGET"
+          ./functions/node_modules/.bin/firebase deploy --config .firebase-selected-deploy.json --only "$FIREBASE_DEPLOY_TARGET" --project kungsbacka-car-community --non-interactive
           if [ "$FIREBASE_DEPLOY_TARGET" = "firestore:indexes" ]; then
             node scripts/check-field-index-readiness.mjs kungsbacka-car-community
           fi
