@@ -309,6 +309,7 @@ export function MemberTools({
       )}
       {pending && (
         <ActionDialog
+          cancelDisabled={busy}
           title={pending.title}
           onCancel={() => {
             if (!busy) setPending(null);

@@ -168,6 +168,7 @@ export function AccessTools({ uid, onChanged }: { uid: string; onChanged?: () =>
       )}
       {pending && (
         <ActionDialog
+          cancelDisabled={busy}
           title={labels[pending.action]}
           onCancel={() => {
             if (!busy) setPending(null);

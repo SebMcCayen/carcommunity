@@ -5,10 +5,12 @@ export function ActionDialog({
   title,
   children,
   onCancel,
+  cancelDisabled = false,
 }: {
   title: string;
   children: ReactNode;
   onCancel: () => void;
+  cancelDisabled?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -28,7 +30,7 @@ export function ActionDialog({
       aria-label={title}
       onCancel={(event) => {
         event.preventDefault();
-        onCancel();
+        if (!cancelDisabled) onCancel();
       }}
       style={{
         width: 'min(560px, calc(100vw - 32px))',
@@ -46,7 +48,12 @@ export function ActionDialog({
       <div className={styles.content}>
         <h3>{title}</h3>
         {children}
-        <button className={styles.cancel} type="button" onClick={onCancel}>
+        <button
+          className={styles.cancel}
+          type="button"
+          onClick={onCancel}
+          disabled={cancelDisabled}
+        >
           Avbryt
         </button>
       </div>

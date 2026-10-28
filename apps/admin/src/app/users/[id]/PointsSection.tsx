@@ -288,13 +288,11 @@ export function UserPointsSection({ userId, actorUid, canAdjust = true }: UserPo
         {showConfirm && (
           <ActionDialog
             title={t('points.adjust.confirmTitle')}
+            cancelDisabled={adjustLoading}
             onCancel={() => setShowConfirm(false)}
           >
             <p>
               {userId}: {currentBalance} → {expectedBalance} KP
-            </p>
-            <p id="confirm-title" className={styles.confirmTitle}>
-              {t('points.adjust.confirmTitle')}
             </p>
             <p className={styles.meta}>{t('points.adjust.confirmDescription')}</p>
             <div className={styles.confirmActions}>
@@ -305,13 +303,6 @@ export function UserPointsSection({ userId, actorUid, canAdjust = true }: UserPo
                 aria-busy={adjustLoading}
               >
                 {adjustLoading ? t('points.adjust.submitting') : t('points.adjust.confirm')}
-              </button>
-              <button
-                className={styles.cancelButton}
-                onClick={() => setShowConfirm(false)}
-                disabled={adjustLoading}
-              >
-                {t('points.adjust.cancel')}
               </button>
             </div>
           </ActionDialog>
