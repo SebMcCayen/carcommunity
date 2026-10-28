@@ -197,7 +197,10 @@ export function CrownOverviewMap({
         const root = createRoot(element);
         root.render(<Crown size={23} fill={manual ? 'none' : 'currentColor'} strokeWidth={1.5} />);
         roots.push(root);
-        markers.push(new gl.Marker({ element }).setLngLat([longitude, latitude]).addTo(m));
+        const marker = new gl.Marker({ element }).setLngLat([longitude, latitude]).addTo(m);
+        // Mapbox defaults custom markers to role=img; keep actionable crowns as buttons.
+        if (select) element.setAttribute('role', 'button');
+        markers.push(marker);
       };
       for (const crown of JSON.parse(crownData) as OverviewCrown[])
         if (crown.latitude !== null && crown.longitude !== null)
