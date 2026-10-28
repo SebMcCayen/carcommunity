@@ -8,6 +8,7 @@ import SwiftUI
 /// config-less builds.
 struct SignInScreen: View {
     @Bindable var coordinator: SignInCoordinator
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ScrollView {
@@ -52,21 +53,36 @@ struct SignInScreen: View {
     }
 
     private var signInButton: some View {
-        Button {
+        ApprovedAppleSignInButton(dark: colorScheme == .dark) {
             coordinator.resetFailure()
             Task { await coordinator.signIn() }
-        } label: {
-            HStack(spacing: KccSpacing.s3) {
-                Image(systemName: "apple.logo").font(.system(size: 22, weight: .semibold)).accessibilityHidden(true)
-                Text("auth.appleLoginButton").font(.body.weight(.semibold))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-                .frame(maxWidth: .infinity, minHeight: 48)
         }
-        .accessibilityLabel(Text("auth.appleLoginButton"))
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.roundedRectangle(radius: KccRadius.md))
-        .tint(KccTheme.text)
-        .foregroundStyle(KccTheme.page)
+        .id(colorScheme)
+        .frame(maxWidth: .infinity)
+        .frame(height: 64)
+        .accessibilityIdentifier("auth.appleSignIn")
+    }
+}
+
+/// Apple's native artwork/proportions; activation retains the existing nonce
+/// provider rather than creating a second authorization request.
+private struct ApprovedAppleSignInButton: UIViewRepresentable {
+    let dark: Bool
+    let onTap: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onTap: onTap) }
+    func makeUIView(context: Context) -> ASAuthorizationAppleIDButton {
+        let button = ASAuthorizationAppleIDButton(type: .signIn, style: dark ? .white : .black)
+        button.cornerRadius = KccRadius.md
+        button.addTarget(context.coordinator, action: #selector(Coordinator.activate), for: .touchUpInside)
+        return button
+    }
+    func updateUIView(_ view: ASAuthorizationAppleIDButton, context: Context) {
+        context.coordinator.onTap = onTap
+    }
+    @MainActor final class Coordinator: NSObject {
+        var onTap: () -> Void
+        init(onTap: @escaping () -> Void) { self.onTap = onTap }
+        @objc func activate() { onTap() }
     }
 }

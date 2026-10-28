@@ -50,9 +50,7 @@ struct RestrictedAccountScreen: View {
                         .foregroundStyle(KccTheme.error)
                 }
 
-                // Subscription management remains a later production-cutover
-                // milestone. Account deletion is always reachable while suspended.
-                Text("accountStatus.subscriptionManagementPlaceholder")
+                AppStoreSubscriptionManagementLink()
 
                 if deletionCoordinator.isAvailable {
                     Button(role: .destructive) {
