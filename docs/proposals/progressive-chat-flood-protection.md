@@ -46,7 +46,7 @@ En emoji eller ett meddelande med flera emojis är tillåtet. Bedöm framför al
 - Efter kalibrering kan stark upprepning kosta tre budgetplatser i stället för en. Snabba identiska meddelanden i samma rum kan också få högre kostnad.
 - Räkna användarupplevda tecken med korrekt grafemsegmentering. Familjeemojis, flaggor, hudtoner och kombinerade svenska tecken får inte räknas som ett godtyckligt antal separata emojis.
 - Normalisera endast en kopia för detektering; ändra inte användarens text. Behåll nuvarande transportgränser i första etappen och dokumentera skillnaden mellan UTF-16 och kodpunkter.
-- Ett separat, godkänt UI-skydd kan fälla ihop mycket långa meddelanden bakom ”Visa hela”, så att ett enda meddelande inte fyller hela chattvyn. Det är inte ett sändningsskydd i sig.
+- Inför också en visningsgräns för mycket långa meddelanden: exempelvis högst åtta textrader i hopfällt läge och ”Visa hela” för resten. Hela texten bevaras och kan läsas; ett enda emoji-/textblock ska inte fylla hela chattvyn. Detta kompletterar sändningsskyddet.
 
 ## Server, klient och kostnadsgränser
 
@@ -64,7 +64,7 @@ Klienterna behöver ett gemensamt felkontrakt med kod och retryAfterMs. Visa exe
 
 ## Etapper efter godkännande
 
-1. Felkontrakt, event-idempotens och tydlig nedräkning i Android och delad klubbklient.
+1. Felkontrakt, event-idempotens, tydlig nedräkning och hopfällning av långa meddelanden i Android och delad klubbklient.
 2. Transaktionell grundbudget och eskalering, först med observation utan innehållsloggning och sedan bakom en serverstyrd aktiveringsflagga.
 3. Kalibrera upprepningskostnad och eventuell rumsbudget; koppla administrativa översikter till aggregerade överträdelser och befintlig moderering.
 
