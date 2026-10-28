@@ -10,6 +10,12 @@ final class AppStoreCatalogTests: XCTestCase {
             entry(plusMonthlyProductID), entry(supporterMonthlyProductID, group: "other")
         ]), "Two separately billed groups must never be offered as mutually exclusive plans")
     }
+    func testIncompleteCatalogueCannotOfferAnUnverifiedSubscriptionSwitch() {
+        for entries in [[], [entry(plusMonthlyProductID)], [entry(supporterMonthlyProductID)],
+                        [entry(plusMonthlyProductID), entry(plusMonthlyProductID)]] {
+            XCTAssertFalse(StoreCatalogPolicy.permits(entries))
+        }
+    }
     func testIncorrectStoreConfigurationCannotBeChargedAsTheMonthlyOffer() {
         for bad in [entry("unknown"), entry(plusMonthlyProductID, auto: false),
                     entry(plusMonthlyProductID, months: 12), entry(plusMonthlyProductID, months: nil),
