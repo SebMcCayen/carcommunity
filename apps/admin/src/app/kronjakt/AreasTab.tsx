@@ -38,6 +38,7 @@ import {
 } from '@/features/crown-hunt';
 import { AreaDrawMap, type AreaDrawTool } from '@/components/map/AreaDrawMap';
 import { translate } from '@/i18n';
+import { subscribeFeatureFlagRows } from '@/features/feature-flags';
 
 import { SpawnDiagnosticsPanel } from './SpawnDiagnosticsPanel';
 import styles from './page.module.css';
@@ -88,6 +89,25 @@ export function AreasTab({ onFlash }: AreasTabProps): React.ReactElement {
   const [areas, setAreas] = useState<AdminCrownSpawnArea[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [spawnFlag, setSpawnFlag] = useState<'loading' | 'enabled' | 'disabled' | 'error'>(
+    'loading',
+  );
+  const [flagAttempt, setFlagAttempt] = useState(0);
+
+  useEffect(() => {
+    setSpawnFlag('loading');
+    return subscribeFeatureFlagRows(
+      (rows, fromCache) => {
+        if (fromCache) {
+          setSpawnFlag('loading');
+          return;
+        }
+        const flag = rows.find((row) => row.key === 'crownHuntSpawn');
+        setSpawnFlag(flag ? (flag.enabled ? 'enabled' : 'disabled') : 'error');
+      },
+      () => setSpawnFlag('error'),
+    );
+  }, [flagAttempt]);
 
   // Draw panel state
   const [drawing, setDrawing] = useState(false);
@@ -270,7 +290,18 @@ export function AreasTab({ onFlash }: AreasTabProps): React.ReactElement {
   return (
     <section>
       <p className={styles.introText}>{t('crownHunt.areasIntro')}</p>
-      <div className={styles.noticeBanner}>{t('crownHunt.autoSpawnFlagNotice')}</div>
+      <div className={styles.noticeBanner} role="status">
+        {t(`crownHunt.spawnFlag_${spawnFlag}`)}{' '}
+        {spawnFlag === 'error' && (
+          <button
+            type="button"
+            className={styles.btnSmall}
+            onClick={() => setFlagAttempt((attempt) => attempt + 1)}
+          >
+            {t('crownHunt.spawnFlagRetry')}
+          </button>
+        )}
+      </div>
 
       <div className={styles.tabHeader}>
         {!drawing && (

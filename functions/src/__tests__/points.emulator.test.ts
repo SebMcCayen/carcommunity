@@ -221,6 +221,139 @@ describe('points-adminAdjust', () => {
 });
 
 describe('points-adminReverse', () => {
+  it.each([40, -25])(
+    'denies an admin reversing another owner entry (%i) without writes',
+    async (amount) => {
+      const target = await createProvisionedUser('reverse-owner');
+      await adminDb.collection('users').doc(target.uid).set({ role: 'owner' }, { merge: true });
+      await wallet(target.uid).set({ balance: 100 });
+      await wallet(target.uid)
+        .collection('entries')
+        .doc('owner-entry')
+        .set({
+          transactionType: amount > 0 ? 'adjustment_credit' : 'adjustment_debit',
+          source: 'admin_adjustment',
+          amount,
+          balanceAfter: 100,
+          description: 'Owner fixture',
+          createdAt: new Date(),
+        });
+      await signInAs(adminUser);
+      expect(
+        await callableErrorCode(
+          call('points-adminReverse', {
+            targetUid: target.uid,
+            entryId: 'owner-entry',
+            reason: 'Not authorized',
+          }),
+        ),
+      ).toBe('functions/permission-denied');
+      expect((await wallet(target.uid).get()).get('balance')).toBe(100);
+      expect((await wallet(target.uid).collection('entries').get()).size).toBe(1);
+      expect(
+        (await adminDb.collection('adminAuditEvents').where('targetId', '==', target.uid).get())
+          .empty,
+      ).toBe(true);
+    },
+  );
+
+  it('allows owner-to-owner compensation and authorized replay, but denies an admin replay', async () => {
+    const ownerActor = await createProvisionedUser('reverse-owner-actor');
+    const target = await createProvisionedUser('reverse-owner-target');
+    for (const owner of [ownerActor, target]) {
+      await adminAuth.setCustomUserClaims(owner.uid, { admin: true });
+      await adminDb.collection('users').doc(owner.uid).set({ role: 'owner' }, { merge: true });
+    }
+    await wallet(target.uid).set({ balance: 100 });
+    await wallet(target.uid)
+      .collection('entries')
+      .doc('original')
+      .set({
+        transactionType: 'adjustment_credit',
+        source: 'admin_adjustment',
+        amount: 40,
+        balanceAfter: 100,
+        description: 'fixture',
+        createdAt: new Date(),
+      });
+    await signInAs(ownerActor);
+    const input = { targetUid: target.uid, entryId: 'original', reason: 'Correction' };
+    const first = (await call('points-adminReverse', input)).data as {
+      alreadyApplied: boolean;
+      balanceAfter: number;
+    };
+    expect(first).toMatchObject({ alreadyApplied: false, balanceAfter: 60 });
+    expect((await call('points-adminReverse', input)).data).toMatchObject({
+      alreadyApplied: true,
+      balanceAfter: 60,
+    });
+    await signInAs(adminUser);
+    expect(await callableErrorCode(call('points-adminReverse', input))).toBe(
+      'functions/permission-denied',
+    );
+    expect((await wallet(target.uid).get()).get('balance')).toBe(60);
+    expect((await wallet(target.uid).collection('entries').get()).size).toBe(2);
+    expect(
+      (await adminDb.collection('adminAuditEvents').where('targetId', '==', target.uid).get()).size,
+    ).toBe(1);
+  });
+
+  it.each(['suspended', 'deleted'])(
+    'retains administrative compensation for a %s member',
+    async (restriction) => {
+      const target = await createProvisionedUser('reverse-restricted');
+      await adminDb
+        .collection('users')
+        .doc(target.uid)
+        .set({ [restriction]: true }, { merge: true });
+      await wallet(target.uid).set({ balance: 100 });
+      await wallet(target.uid)
+        .collection('entries')
+        .doc('original')
+        .set({
+          transactionType: 'adjustment_credit',
+          source: 'admin_adjustment',
+          amount: 40,
+          balanceAfter: 100,
+          description: 'fixture',
+          createdAt: new Date(),
+        });
+      await signInAs(adminUser);
+      expect(
+        (
+          await call('points-adminReverse', {
+            targetUid: target.uid,
+            entryId: 'original',
+            reason: 'Correction',
+          })
+        ).data,
+      ).toMatchObject({ alreadyApplied: false, balanceAfter: 60 });
+    },
+  );
+
+  it('does not recreate an orphan wallet when the target profile is missing', async () => {
+    const targetUid = 'orphan-reversal-fixture';
+    await wallet(targetUid).set({ balance: 100 });
+    await wallet(targetUid)
+      .collection('entries')
+      .doc('original')
+      .set({
+        transactionType: 'adjustment_credit',
+        source: 'admin_adjustment',
+        amount: 40,
+        balanceAfter: 100,
+        description: 'fixture',
+        createdAt: new Date(),
+      });
+    await signInAs(adminUser);
+    expect(
+      await callableErrorCode(
+        call('points-adminReverse', { targetUid, entryId: 'original', reason: 'Correction' }),
+      ),
+    ).toBe('functions/not-found');
+    expect((await wallet(targetUid).get()).get('balance')).toBe(100);
+  });
+
   it('reverses an entry exactly once and never reverses a reversal', async () => {
     await signInAs(adminUser);
     const credit = (

@@ -126,31 +126,19 @@ describe('points module', () => {
     });
   });
 
-  it('adapts ledger entries into the legacy envelope', async () => {
-    getDocMock.mockResolvedValue({ data: () => ({ balance: 120 }) });
-    getDocsMock.mockResolvedValue({
-      docs: [
-        {
-          id: 'e1',
-          data: () => ({
-            transactionType: 'adjustment_credit',
-            source: 'admin_adjustment',
-            amount: 20,
-            balanceAfter: 120,
-            description: 'Justering',
-            createdAt: { toDate: () => new Date('2026-07-01T10:00:00Z') },
-          }),
-        },
-      ],
+  it('passes the ledger cursor and target to the reauthorized backend', async () => {
+    const page = {
+      ok: true,
+      data: { balance: 120, transactions: [{ transactionId: 'e1', amount: 20 }] },
+      meta: { page: 2, pageSize: 20, total: 45, hasNext: true, nextCursor: 'next' },
+    };
+    callAdminMock.mockResolvedValue(page);
+    const response = await getAdminUserPointsLedger('u1', undefined, undefined, 'previous');
+    expect(callAdminMock).toHaveBeenCalledWith('admin-listPointsLedger', {
+      targetUid: 'u1',
+      cursor: 'previous',
     });
-    const response = await getAdminUserPointsLedger('u1');
-    expect(response.data.balance).toBe(120);
-    expect(response.data.transactions[0]).toMatchObject({
-      transactionId: 'e1',
-      amount: 20,
-      createdAt: '2026-07-01T10:00:00.000Z',
-    });
-    expect(response.meta.hasNext).toBe(false);
+    expect(response).toBe(page);
   });
 
   it('routes adjustments through points-adminAdjust', async () => {
@@ -538,81 +526,33 @@ describe('digital-billboards module', () => {
 describe('crown-hunt module', () => {
   const ts = (iso: string) => ({ toDate: () => new Date(iso) });
 
-  it('maps point docs into the admin point summary', async () => {
-    getDocsMock.mockResolvedValue({
-      docs: [
-        {
-          id: 'p1',
-          data: () => ({
-            title: 'Torget',
-            description: null,
-            latitude: 57.48,
-            longitude: 12.07,
-            geofenceRadiusMeters: 50,
-            rewardPoints: 100,
-            status: 'draft',
-            repeatRule: 'once',
-            availableFrom: null,
-            availableUntil: null,
-            approvedAt: null,
-            approvedByUserId: null,
-            createdByUserId: 'admin1',
-            createdAt: ts('2026-07-01T10:00:00Z'),
-            updatedAt: ts('2026-07-02T10:00:00Z'),
-          }),
-        },
-      ],
-    });
-    const response = await adminListCrownHuntPoints();
-    expect(response.data.points[0]).toMatchObject({
-      pointId: 'p1',
-      rewardPoints: 100,
-      status: 'draft',
-      repeatRule: 'once',
-      totalClaims: 0,
-    });
+  it('passes a crown-point cursor through without disguising a partial count as total', async () => {
+    const page = {
+      ok: true,
+      data: { points: [{ pointId: 'p1' }] },
+      meta: { page: 2, pageSize: 20, total: 45, hasNext: true, nextCursor: 'next' },
+    };
+    callAdminMock.mockResolvedValue(page);
+    expect(await adminListCrownHuntPoints(1, undefined, 'previous')).toBe(page);
+    expect(callAdminMock).toHaveBeenCalledWith('admin-listCrownPoints', { cursor: 'previous' });
   });
 
-  it('maps claims, joins point titles, and filters by result over the page', async () => {
-    getDocsMock.mockResolvedValue({
-      docs: [
-        {
-          id: 'cl1',
-          data: () => ({
-            pointId: 'p1',
-            userId: 'u1',
-            result: 'risk_review',
-            distanceMeters: 12,
-            claimedAt: ts('2026-07-05T10:00:00Z'),
-          }),
-        },
-        {
-          id: 'cl2',
-          data: () => ({
-            pointId: 'p1',
-            userId: 'u2',
-            result: 'awarded',
-            distanceMeters: 3,
-            claimedAt: ts('2026-07-04T10:00:00Z'),
-          }),
-        },
-      ],
-    });
-    getDocMock.mockResolvedValue({ data: () => ({ title: 'Torget' }) });
-
-    const response = await adminListCrownHuntClaims(1, 'risk_review');
-    expect(response.data.claims).toHaveLength(1);
-    expect(response.data.claims[0]).toMatchObject({
-      claimId: 'cl1',
-      pointTitle: 'Torget',
+  it('sends the risk and origin filters to the backend before pagination', async () => {
+    const page = {
+      ok: true,
+      data: { claims: [{ claimId: 'automatic:cl1', result: 'risk_review', source: 'automatic' }] },
+      meta: { total: 100, nextCursor: 'next', hasNext: true },
+    };
+    callAdminMock.mockResolvedValue(page);
+    expect(
+      await adminListCrownHuntClaims(1, 'risk_review', undefined, 'previous', 'automatic'),
+    ).toBe(page);
+    expect(callAdminMock).toHaveBeenCalledWith('admin-listCrownClaims', {
+      cursor: 'previous',
+      source: 'automatic',
       result: 'risk_review',
-      riskReasonCategories: [],
     });
-    // Titles are resolved only for the matching claim, not the filtered-out one.
-    expect(getDocMock).toHaveBeenCalledTimes(1);
-    // hasNext is based on the unfiltered fetch (2 docs < page size), not the
-    // filtered count.
-    expect(response.meta.hasNext).toBe(false);
+    expect(getDocsMock).not.toHaveBeenCalled();
   });
 
   it('activates through crownHunt-activatePoint with the safety confirmation', async () => {

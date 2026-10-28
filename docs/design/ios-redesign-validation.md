@@ -529,3 +529,113 @@ These checks do not establish real-account privacy writes, OS permission-return
 acceptance, production unblock behavior or physical-iPhone visual comparison.
 No backend, rules, workflow, token, localization or paid-service changes are
 required; native PR CI must pass before merge and records the executed result.
+
+## Partner directory, offers and application (2026-10-27)
+
+Partners now uses the shared semantic page/card roles for the directory, saved
+list, company information, public offer previews, member detail and code box.
+Directory/Saved navigation remains a local presentation choice with the same
+company/offer destination IDs. Its pinned horizontal tabs keep full Dynamic Type
+labels and 48 pt targets rather than shrinking a segmented control. Native Back
+and the existing navigation stack remain outside the reading scroller.
+
+The existing coordinator still decides paid/admin access, active-offer visibility,
+subscription revocation, expansion, private details, code reveal and saved state.
+Public previews never receive private instructions, terms or codes. Code reveal
+is still an explicit button command; shown codes retain their offer-ID guard and
+manual text selection. No automatic reveal, redemption, clipboard write, new
+listener or analytics/consent behavior is introduced. Existing validated HTTPS,
+phone and Apple Maps destinations are retained with larger native Link labels.
+Partner imagery is a local system fallback, without new logo/avatar fetches.
+
+Company/offer paging and all existing limited-dataset warnings stay intact.
+Directory offer counts remain absent until the existing exhaustive-data guard
+allows an actual count; nil is not replaced by zero. Saved-offer navigation still
+resolves its original company and focused offer. Error/retry, loading, membership,
+empty and unavailable states now use readable surfaces rather than introducing
+new destinations or unauthenticated test access.
+
+The application keeps the same form state, category choices, keyboard/content
+types, UTF-16 validation, normalization, optional-field omission, command payload,
+single-flight submission and once-per-presentation preparation guard. Fields use
+persistent visual labels and their native accessible labels; the message bounds
+only its input viewport and keeps the full bound draft. Pending fields lock while
+the immutable submitted input is in flight. Validation/duplicate/generic errors
+and the success Close callback retain their original meaning; success copy can
+scroll at large text sizes. No application is submitted by the layout tests.
+
+PartnerDesignTests measure actual public/saved/locked/member-control widgets,
+all offer-type labels, synthetic revealed-code wrapping, tabs, field viewport and
+submission labels at narrow SV/EN light/dark and largest accessibility text. The
+member-control layout fixture has no repository, signed-in UID or running session;
+it is not a runtime authorization shortcut. Existing coordinator/model/application
+tests cover access revocation, stale code results, pagination, external URL policy,
+validation and duplicate submission. The config-less shell still hides Partners
+and application routes without their configured services. These checks are not
+live paid-account/redemption/consent acceptance, real application submission or
+physical-iPhone visual comparison. No backend, rules, token, workflow, localization,
+production deploy or paid-service/artifact-upload opt-in changes are required.
+
+## Member profiles, badge wall, points history and social rankings (2026-10-27)
+
+This phase refines S63-S64 and the owner points-ledger/social-ranking routes
+associated with S28/S24. It does not replace Crown Hunt's separate season board.
+The shared semantic page/card roles, cyan selection, gold primary actions and
+Dynamic Type now apply to the public member profile, held awards, own badge
+wall, owner ledger and independent social leaderboard. Native navigation/Back
+stays outside the scrolling content. The owner's embedded wall relies on its
+parent's single scroller and no longer adds another set of side margins.
+
+Member profiles receive only the existing public projection and already-resolved
+avatar URL. Missing/failed images have a local system fallback. The permitted
+name, bio, balance, member-since date, public vehicle details and held badges
+remain the original data; no additional profile/image lookup or cosmetic,
+club/membership or unearned-award assertion is introduced. Public badge dates
+and tier medallions come from the held document and existing catalog. Unlike the
+owner wall, public awards never request private progress or display locked goals.
+Friend/request/DM actions retain the original relationship switch, request IDs,
+single-flight guards and callbacks; block/unblock/remove still require their
+existing native confirmations. Validated social-link hosts are unchanged.
+
+The own wall keeps every catalog ladder and only actually held milestones. Its
+existing fold still decides earned/locked tiers, dates, unknown counters, next
+rung and progress fractions. Labels and dates now scale and wrap; accessibility
+sizes use a single grid column. Progress rows stack their title and next tier at
+large text sizes. An unknown counter still has no invented progress bar. The
+existing earned/locked/date VoiceOver label is retained.
+
+The owner ledger keeps the initial balance in loading until its independent
+balance listener emits. A successful snapshot with a missing ledger/balance
+settles to the backend starting balance of zero; transient errors/reload retain
+the last known value. Coordinator regression tests cover the independent-listener
+ordering, a first empty ledger and retry followed by a missing-ledger result.
+The ledger preserves signed Int64 credits/debits (including zero corrections), and
+shows the optional actual post-entry balance and date/time. All/Credits/Debits
+are local filters over the existing newest-100 snapshot, preserving server
+order; they do not promise complete historical access or add reads/pagination.
+Zero corrections remain in All only. The non-transfer disclaimer, empty/error
+states and existing explicit reload remain. No point write/transfer is added.
+
+Social ranking scopes are full-sized horizontal tabs; the category remains a
+native menu limited by the existing coordinator. Long names and values wrap;
+podium tiles stack at accessibility sizes. Published rank/order/value formats,
+viewer markers, Stockholm month selection, all-time-only streak fallback and
+single-document scope subscriptions stay authoritative. Avatar resolution keeps
+the existing coordinator cache and task cancellation. Empty/unavailable/loading
+states use readable surfaces and failure adds a visible button to the existing
+reload alongside pull-to-refresh. Rank tiles are read-only, without invented
+profile navigation or privacy controls.
+
+MemberStatsDesignTests cover actual public identity/vehicle/award widgets,
+earned/locked/undated tiles, known/unknown progress counters, the full own wall,
+signed ledger rows and optional balances, all ranking value formats, podium/list
+layout, category menu and scope/filter tab geometry at 288/358 pt, SV/EN,
+light/dark, normal and largest accessibility text. Filter regression checks
+verify stable IDs/order and signed extremes/zero. Existing profile/block/social
+URL, badge-fold/coordinator, points/coordinator and ranking/model/coordinator
+tests remain in the full native CI suite. Layout fixtures are synthetic and
+have no avatar URL/path, configured repository, account writes or auth bypass.
+Physical-iPhone visual comparison, live friend/block transitions and real-account
+leaderboard/privacy/progress acceptance remain configured-device checks. No
+backend, rules, workflow, token, localization, production deploy, paid-service or
+artifact-upload opt-in change is included.
