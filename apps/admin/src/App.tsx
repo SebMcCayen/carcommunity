@@ -1,5 +1,5 @@
 import { lazy } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 
@@ -35,7 +35,7 @@ const ErrorReportsPage = lazy(() => import('@/app/error-reports/page'));
 const ModerationReportsPage = lazy(() => import('@/app/moderation-reports/page'));
 const AnnouncementsPage = lazy(() => import('@/app/announcements/page'));
 const AccountDeletionsPage = lazy(() => import('@/app/account-deletions/page'));
-const EventChatPage = lazy(() => import('@/app/event-chat/page'));
+const ModerationPage = lazy(() => import('@/app/moderation/page'));
 const LiveLocationPage = lazy(() => import('@/app/live-location/page'));
 const SupportPage = lazy(() => import('@/app/support/page'));
 const AuditLogPage = lazy(() => import('@/app/audit-log/page'));
@@ -96,7 +96,8 @@ export function App() {
         <Route path="/moderation-reports" element={<ModerationReportsPage />} />
         <Route path="/announcements" element={<AnnouncementsPage />} />
         <Route path="/account-deletions" element={<AccountDeletionsPage />} />
-        <Route path="/event-chat" element={<EventChatPage />} />
+        <Route path="/moderation" element={<ModerationPage />} />
+        <Route path="/event-chat" element={<Navigate to="/moderation" replace />} />
         <Route path="/live-location" element={<LiveLocationPage />} />
         <Route path="/support" element={<SupportPage />} />
         <Route path="/audit-log" element={<AuditLogPage />} />

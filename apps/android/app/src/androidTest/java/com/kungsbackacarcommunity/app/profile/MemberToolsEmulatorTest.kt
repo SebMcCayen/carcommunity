@@ -3,6 +3,12 @@ package com.kungsbackacarcommunity.app.profile
 import com.kungsbackacarcommunity.app.access.FirebaseCarCommunityAccessRepository
 import com.kungsbackacarcommunity.app.access.CarCommunityGateState
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.async
+import kotlinx.coroutines.CoroutineStart
+import com.google.firebase.firestore.DocumentReference
+import com.google.firebase.firestore.DocumentSnapshot
 import kotlinx.coroutines.withTimeout
 import android.os.SystemClock
 import androidx.test.platform.app.InstrumentationRegistry
@@ -81,7 +87,33 @@ class MemberToolsEmulatorTest {
                 assertEquals(false, canonical.getBoolean("suspended"))
                 assertEquals(false, canonical.getBoolean("deleted"))
             }
+            val eventUpdate = async(start = CoroutineStart.UNDISPATCHED) { awaitDocument(firestore.document("events/native-moderation/messages/native-event-message")) { it.getString("moderationState") == "removed" && it.getString("message") == "" } }
+            val publicUpdate = async(start = CoroutineStart.UNDISPATCHED) { awaitDocument(firestore.document("communityChat/global/messages/native-public-message")) { !it.exists() } }
+            val quoteUpdate = async(start = CoroutineStart.UNDISPATCHED) { awaitDocument(firestore.document("communityChat/global/messages/native-public-reply")) { it.exists() && it.get("replyTo") == null } }
+            for (source in listOf("event", "community")) {
+                val target = if (source == "event") mapOf("source" to source, "eventId" to "native-moderation", "messageId" to "native-event-message") else mapOf("source" to source, "messageId" to "native-public-message")
+                val evidence = admin.getHttpsCallable("admin-getPublicModerationCase").call(target).await().data as Map<*, *>
+                val removal = mapOf("target" to target, "expectedActorUid" to "native-admin", "expectedVersion" to evidence["version"], "action" to "remove", "reason" to "Native public moderation", "idempotencyKey" to UUID.randomUUID().toString())
+                admin.getHttpsCallable("admin-decidePublicModeration").call(removal).await()
+                admin.getHttpsCallable("admin-decidePublicModeration").call(removal).await()
+            }
+            eventUpdate.await(); publicUpdate.await(); quoteUpdate.await()
+            val removedEvent = firestore.document("events/native-moderation/messages/native-event-message").get(Source.SERVER).await()
+            assertEquals("removed", removedEvent.getString("moderationState"))
+            assertEquals("", removedEvent.getString("message"))
+            assertFalse(firestore.document("communityChat/global/messages/native-public-message").get(Source.SERVER).await().exists())
+            val preservedReply = firestore.document("communityChat/global/messages/native-public-reply").get(Source.SERVER).await()
+            assertEquals("Reply preserved", preservedReply.getString("text"))
+            assertNull(preservedReply.get("replyTo"))
             actorAuth.signOut(); memberAuth.signOut()
         } finally { memberApp.delete(); actorApp.delete() }
+    }
+    private suspend fun awaitDocument(reference: DocumentReference, predicate: (DocumentSnapshot) -> Boolean): DocumentSnapshot = withTimeout(30000) {
+        callbackFlow<DocumentSnapshot> {
+            val listener = reference.addSnapshotListener { snapshot, error ->
+                if (error != null) close(error) else if (snapshot != null) trySend(snapshot)
+            }
+            awaitClose { listener.remove() }
+        }.first { !it.metadata.isFromCache && predicate(it) }
     }
 }

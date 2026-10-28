@@ -137,7 +137,56 @@ final class FirebaseEmulatorIntegrationTests: XCTestCase {
             XCTAssertEqual(canonical.get("suspended") as? Bool, false)
             XCTAssertEqual(canonical.get("deleted") as? Bool, false)
         }
+        let eventUpdates = documentUpdates(firestore.document("events/native-moderation/messages/native-event-message"))
+        let publicUpdates = documentUpdates(firestore.document("communityChat/global/messages/native-public-message"))
+        let quoteUpdates = documentUpdates(firestore.document("communityChat/global/messages/native-public-reply"))
+        for source in ["event", "community"] {
+            let target: [String: Any] = source == "event" ? ["source": source, "eventId": "native-moderation", "messageId": "native-event-message"] : ["source": source, "messageId": "native-public-message"]
+            let evidenceResult = try await adminFunctions.httpsCallable("admin-getPublicModerationCase").call(target)
+            let evidence = try XCTUnwrap(evidenceResult.data as? [String: Any])
+            let removal: [String: Any] = ["target": target, "expectedActorUid": "native-admin", "expectedVersion": try XCTUnwrap(evidence["version"]), "action": "remove", "reason": "Native public moderation", "idempotencyKey": UUID().uuidString]
+            _ = try await adminFunctions.httpsCallable("admin-decidePublicModeration").call(removal)
+            _ = try await adminFunctions.httpsCallable("admin-decidePublicModeration").call(removal)
+        }
+        try await waitForDocument(eventUpdates) { $0.get("moderationState") as? String == "removed" && $0.get("message") as? String == "" }
+        try await waitForDocument(publicUpdates) { !$0.exists }
+        try await waitForDocument(quoteUpdates) { $0.exists && $0.get("replyTo") == nil }
+        let removedEvent = try await firestore.document("events/native-moderation/messages/native-event-message").getDocument(source: .server)
+        XCTAssertEqual(removedEvent.get("moderationState") as? String, "removed")
+        XCTAssertEqual(removedEvent.get("message") as? String, "")
+        let removedPublic = try await firestore.document("communityChat/global/messages/native-public-message").getDocument(source: .server)
+        XCTAssertFalse(removedPublic.exists)
+        let preservedReply = try await firestore.document("communityChat/global/messages/native-public-reply").getDocument(source: .server)
+        XCTAssertEqual(preservedReply.get("text") as? String, "Reply preserved")
+        XCTAssertNil(preservedReply.get("replyTo"))
         try actorAuth.signOut()
+    }
+
+    private func documentUpdates(_ reference: DocumentReference) -> AsyncThrowingStream<DocumentSnapshot, Error> {
+        AsyncThrowingStream { continuation in
+            let listener = reference.addSnapshotListener { snapshot, error in
+                if let error { continuation.finish(throwing: error) }
+                else if let snapshot { continuation.yield(snapshot) }
+            }
+            continuation.onTermination = { _ in listener.remove() }
+        }
+    }
+
+    private func waitForDocument(_ updates: AsyncThrowingStream<DocumentSnapshot, Error>, predicate: @escaping @Sendable (DocumentSnapshot) -> Bool) async throws {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                for try await snapshot in updates {
+                    if !snapshot.metadata.isFromCache && predicate(snapshot) { return }
+                }
+                throw CancellationError()
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(30))
+                throw KccFunctionsError(code: .unavailable)
+            }
+            defer { group.cancelAll() }
+            _ = try await group.next()
+        }
     }
 
     @MainActor

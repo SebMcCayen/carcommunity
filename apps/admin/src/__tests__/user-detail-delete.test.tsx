@@ -16,6 +16,8 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@/app/users/[id]/MemberMessages', () => ({ MemberMessages: () => null }));
+
 const deleteMock = vi.fn();
 const navigateMock = vi.fn();
 

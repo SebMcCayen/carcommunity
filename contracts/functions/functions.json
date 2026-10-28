@@ -1493,6 +1493,42 @@
       "appCheck": true,
       "status": "implemented",
       "source": "docs/admin/member-card.md"
+    },
+    {
+      "name": "admin.listPublicReports",
+      "domain": "admin",
+      "description": "Cursor-paginated event and public community message reports. Server status filters, strict canonical path allowlist. No DM or convoy reports.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin-public-moderation.md"
+    },
+    {
+      "name": "admin.listMemberMessages",
+      "domain": "admin",
+      "description": "Admin-only bounded member message pages across event chats and communityChat/global. No private messages, convoy or club chat.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin-public-moderation.md"
+    },
+    {
+      "name": "admin.getPublicModerationCase",
+      "domain": "admin",
+      "description": "Current message, report version, one earlier message from the same chat and safe moderation history. Strict report and canonical scope binding.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin-public-moderation.md"
+    },
+    {
+      "name": "admin.decidePublicModeration",
+      "domain": "admin",
+      "description": "Mandatory reason, reviewed version, actor binding and durable receipt. Commit-time authority, transactional message/report/audit decision; bounded resumable public quote redaction.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/admin-public-moderation.md"
     }
   ]
 }

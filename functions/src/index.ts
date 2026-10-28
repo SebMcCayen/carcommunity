@@ -1,3 +1,9 @@
+import {
+  listPublicReports,
+  listMemberMessages,
+  getPublicModerationCase,
+  decidePublicModeration,
+} from './admin/publicModeration';
 import { listMemberHistory } from './admin/memberHistory';
 import { getAccess, onAccessWrite, onIdentityWrite } from './access/carCommunity';
 import { getAccessTarget, updateAccess, listAccessBlocks } from './access/adminAccess';
@@ -310,6 +316,10 @@ export const auth = {
  * here via the Admin SDK — clients can never set or modify them.
  */
 export const admin = {
+  listPublicReports,
+  listMemberMessages,
+  getPublicModerationCase,
+  decidePublicModeration,
   listMemberHistory,
   getAccessTarget,
   listAccessBlocks,

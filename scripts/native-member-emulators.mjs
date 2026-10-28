@@ -24,7 +24,7 @@ if (process.argv[2] === 'prepare') {
   symlinkSync(resolve(root, 'functions/node_modules'), resolve(source, 'node_modules'), 'dir');
   writeFileSync(
     resolve(source, 'index.cjs'),
-    `require("firebase-admin/app").initializeApp({projectId:"demo-kcc-ios-ci",databaseURL:"https://demo-kcc-ios-ci-default-rtdb.firebaseio.com"});\nexports.auth={onUserCreate:require(${load('auth/onUserCreate.js')}).onUserCreate};\nconst warnings=require(${load('admin/warnings.js')});\nconst members=require(${load('admin/memberTools.js')});\nexports.admin={warnUser:warnings.warnUser,revokeWarning:warnings.revokeWarning,getMember:members.getMember,updateDisplayName:members.updateDisplayName};\nconst access=require(${load('access/carCommunity.js')});\nconst decisions=require(${load('access/adminAccess.js')});\nexports.carCommunityAccess={onAccessWrite:access.onAccessWrite,onIdentityWrite:access.onIdentityWrite};\nexports.admin.getAccessTarget=decisions.getAccessTarget;exports.admin.updateAccess=decisions.updateAccess;\nexports.account={listWarnings:warnings.listOwnWarnings,getAccess:access.getAccess};\nexports.points={adminAdjust:require(${load('points/adminPoints.js')}).adminAdjust};\n`,
+    `require("firebase-admin/app").initializeApp({projectId:"demo-kcc-ios-ci",databaseURL:"https://demo-kcc-ios-ci-default-rtdb.firebaseio.com"});\nexports.auth={onUserCreate:require(${load('auth/onUserCreate.js')}).onUserCreate};\nconst warnings=require(${load('admin/warnings.js')});\nconst members=require(${load('admin/memberTools.js')});\nexports.admin={warnUser:warnings.warnUser,revokeWarning:warnings.revokeWarning,getMember:members.getMember,updateDisplayName:members.updateDisplayName};\nObject.assign(exports.admin,require(${load('admin/publicModeration.js')}));\nconst access=require(${load('access/carCommunity.js')});\nconst decisions=require(${load('access/adminAccess.js')});\nexports.carCommunityAccess={onAccessWrite:access.onAccessWrite,onIdentityWrite:access.onIdentityWrite};\nexports.admin.getAccessTarget=decisions.getAccessTarget;exports.admin.updateAccess=decisions.updateAccess;\nexports.account={listWarnings:warnings.listOwnWarnings,getAccess:access.getAccess};\nexports.points={adminAdjust:require(${load('points/adminPoints.js')}).adminAdjust};\n`,
   );
   writeFileSync(
     resolve(destination, 'firebase.json'),
@@ -93,6 +93,50 @@ if (process.argv[2] === 'prepare') {
     .getDatabase(app)
     .ref('carCommunityPolicy/enforceInitialized')
     .set(true);
+  const { Timestamp } = require('firebase-admin/firestore');
+  const createdAt = Timestamp.fromMillis(Date.now() - 10000);
+  await db
+    .doc('events/native-moderation')
+    .set({
+      status: 'published',
+      title: 'Native public moderation',
+      createdByUserId: 'native-admin',
+    });
+  await db
+    .doc('events/native-moderation/participants/native-member')
+    .set({ status: 'going', userId: 'native-member' });
+  await db
+    .doc('events/native-moderation/rsvps/native-member')
+    .set({ status: 'going', userId: 'native-member' });
+  await db
+    .doc('events/native-moderation/messages/native-event-message')
+    .set({
+      authorUserId: 'native-member',
+      authorDisplayName: 'Member',
+      message: 'Event original',
+      moderationState: 'visible',
+      createdAt,
+    });
+  await db
+    .doc('communityChat/global/messages/native-public-message')
+    .set({
+      senderUid: 'native-member',
+      senderDisplayName: 'Member',
+      text: 'Public original',
+      createdAt,
+    });
+  await db
+    .doc('communityChat/global/messages/native-public-reply')
+    .set({
+      senderUid: 'native-member',
+      text: 'Reply preserved',
+      createdAt,
+      replyTo: {
+        messageId: 'native-public-message',
+        senderUid: 'native-member',
+        textPreview: 'Public original',
+      },
+    });
   console.log('Disposable native members seeded.');
   process.exit(0);
 } else throw Error('Expected prepare <new-directory> or seed');

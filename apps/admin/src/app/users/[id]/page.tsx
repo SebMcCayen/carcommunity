@@ -36,6 +36,7 @@ import { ActionDialog } from '@/components/ui/ActionDialog';
 import { MemberOverview } from './MemberOverview';
 import { MemberHistory } from './MemberHistory';
 import { AccessTools } from './AccessTools';
+import { MemberMessages } from './MemberMessages';
 import { MemberTools } from './MemberTools';
 import { UserPointsSection } from './PointsSection';
 import styles from './page.module.css';
@@ -90,7 +91,7 @@ export default function UserDetailPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<ConfirmableAction | null>(null);
 
-  const sections = ['overview', 'profile', 'warnings', 'points', 'history'] as const;
+  const sections = ['overview', 'profile', 'warnings', 'points', 'messages', 'history'] as const;
   type Section = (typeof sections)[number];
   const [section, setSection] = useState<Section>(() => {
     const value = new URLSearchParams(window.location.search).get('section');
@@ -107,6 +108,7 @@ export default function UserDetailPage() {
     warnings: 'Varningar',
     points: 'Poäng',
     history: 'Historik',
+    messages: 'Meddelanden',
   };
   const requestSequence = useRef(0);
   const actingRef = useRef(false);
@@ -534,6 +536,7 @@ export default function UserDetailPage() {
               canAdjust={detail.permissions?.canAdjustPoints}
             />
           )}
+          {section === 'messages' && <MemberMessages key={detail.uid} uid={detail.uid} />}
           {section === 'history' && <MemberHistory key={detail.uid} uid={detail.uid} />}
           {showAccess && (
             <ActionDialog

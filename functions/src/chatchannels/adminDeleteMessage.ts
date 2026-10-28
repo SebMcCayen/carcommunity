@@ -1,3 +1,4 @@
+import { redactPublicReplies } from './redactPublicReplies';
 /**
  * chatchannels.adminDeleteMessage — admin callable
  * (contracts/functions/functions.json).
@@ -28,11 +29,9 @@
  *    this callable additionally preserves the original text in the
  *    adminAuditEvents record. So the moderator keeps what they judged even though
  *    the live message is gone.
- *  - Nothing references a community message by id after the fact: inline replies
- *    snapshot their parent at post time (buildReplyToSnapshot), and community
- *    messages already carry a TTL (`expireAt`, 120 days) after which Firestore
- *    hard-deletes them anyway — so the schema already tolerates a message
- *    vanishing, and a dangling reference cannot arise.
+ *  - Inline reply snapshots are redacted in bounded resumable pages after
+ *    deletion. New reply posts re-read the parent transactionally, so a racing
+ *    send cannot restore a removed quote. The reply's own text is preserved.
  *
  * Because the write is a pure Admin-SDK delete/update, it bypasses Security
  * Rules entirely (the Admin SDK is not subject to firestore.rules) — so NO rules
@@ -45,8 +44,8 @@
  * and returns { deleted: false }.
  *
  * WRITE-COUNT SAFETY (Firestore caps a transaction/batch at 500 writes). The
- * ATOMIC, critical part — the message DELETE + the adminAuditEvents record — is
- * the ONLY thing inside the delete transaction (2 writes, always). The pending
+ * ATOMIC, critical part — the message DELETE + retry tombstone + adminAuditEvents record — is
+ * the ONLY thing inside the delete transaction (3 writes, always). The pending
  * reports are resolved AFTER the delete, in per-chunk transactions of at most
  * REPORT_RESOLVE_BATCH_SIZE (<= 500). This is deliberate: a heavily-reported
  * message (the one an admin most needs to gone) can carry hundreds of open
@@ -101,6 +100,7 @@ const OPEN_REPORT_STATUS = 'pending';
 const RESOLVED_REPORT_STATUS = 'reviewed';
 
 export interface AdminDeleteCommunityMessageResponse {
+  cleanup?: { redacted: number; hasMore: boolean };
   messageId: string;
   /** True when a message document was actually deleted by THIS call. */
   deleted: boolean;
@@ -220,7 +220,7 @@ export const adminDeleteMessage = onCall(
     const openReportRefs = await queryPendingReportRefs(messageId);
 
     // The ATOMIC critical section — message delete + audit — is the ONLY thing
-    // in the transaction (a fixed 2 writes), so it can never hit the 500-write
+    // in the transaction (a fixed 3 writes), so it can never hit the 500-write
     // cap no matter how many reports the message has.
     const deleted = await db.runTransaction(async (tx) => {
       const messageSnap = await tx.get(messageRef);
@@ -232,6 +232,9 @@ export const adminDeleteMessage = onCall(
 
       const message = messageSnap.data() ?? {};
       tx.delete(messageRef);
+      tx.set(db.collection('communityChatDeletedMessages').doc(messageId), {
+        removedAt: serverTimestamp(),
+      });
       tx.set(
         db.collection('adminAuditEvents').doc(),
         buildAdminAuditEvent(
@@ -284,6 +287,7 @@ export const adminDeleteMessage = onCall(
       messageId,
     );
 
-    return { messageId, deleted, resolvedReports };
+    const cleanup = await redactPublicReplies(messageId);
+    return { messageId, deleted, resolvedReports, cleanup };
   },
 );

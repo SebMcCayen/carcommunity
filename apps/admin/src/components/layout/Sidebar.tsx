@@ -60,7 +60,7 @@ const navGroups: NavGroup[] = [
       { label: 'Moderation Reports', href: '/moderation-reports', icon: '◬' },
       { label: 'Error Reports', href: '/error-reports', icon: '◭' },
       { label: 'Account Deletions', href: '/account-deletions', icon: '◫' },
-      { label: 'Event Chat', href: '/event-chat', icon: '◫' },
+      { label: 'Modereringskö', href: '/moderation', icon: '◫' },
       { label: 'Support', href: '/support', icon: '◐' },
       { label: 'Audit Log', href: '/audit-log', icon: '≡' },
     ],
