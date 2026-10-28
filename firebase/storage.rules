@@ -78,6 +78,31 @@ service firebase.storage {
       allow read, write: if false;
     }
 
+    // Shared logo uploads use exactly two Firestore documents (Storage's
+    // cross-service limit): the canonical account and the authoritative club.
+    // No Driver profile, global admin or subscription privilege grants access.
+    match /clubLogos/{clubId}/{ownerUid}/{fileName} {
+      function canCreateClubLogo() {
+        let user = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+        let club = firestore.get(/databases/(default)/documents/driverClubs/$(clubId)).data;
+        return user.get('onboardingCompletedAt', null) is timestamp
+          && user.get('suspended', false) != true && user.get('deleted', false) != true
+          && user.get('banned', false) != true
+          && !(user.get('status', '') in ['deleted', 'suspended', 'deletionPending', 'banned'])
+          && (!('banned' in request.auth.token) || request.auth.token.banned != true)
+          && club.get('schemaVersion', 0) == 2 && club.get('status', '') == 'active'
+          && club.ownerUid == request.auth.uid;
+      }
+      allow get: if isAuthenticated();
+      allow create: if resource == null
+        && isOwner(ownerUid) && isNotSuspended() && canCreateClubLogo()
+        && request.resource.size > 0 && request.resource.size <= 256 * 1024
+        && ((request.resource.contentType == 'image/jpeg' && fileName.matches('.+\\.(jpg|jpeg)'))
+          || (request.resource.contentType == 'image/webp' && fileName.matches('.+\\.webp')));
+      // Immutable objects: replacement uses a new filename and server-approved
+      // logoPath update. Cleanup/deletion is backend-owned, including for admins.
+    }
+
     // -------------------------------------------------------------------------
     // Profile images:  profileImages/{userId}/{imageId}
     // Owner may upload images up to 5 MB. Any authenticated user may read.
