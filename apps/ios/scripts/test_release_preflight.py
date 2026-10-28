@@ -24,10 +24,27 @@ class ReleasePreflightTests(unittest.TestCase):
         source = SCRIPT.parents[1]
         for name in ("project.yml", "KCC/Info.plist", "KCC/KCC.entitlements",
                      "KCC/Resources/PrivacyInfo.xcprivacy", "KCC/Updates/changelog.json",
-                     "KCC/Resources/Localizable.xcstrings"):
+                     "KCC/Resources/Localizable.xcstrings",
+                     "KCC/Assets.xcassets/AppIcon.appiconset/Contents.json",
+                     "KCC/Assets.xcassets/AppIcon.appiconset/AppIcon.png"):
             dest = self.root / name
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source / name, dest)
+
+    def test_missing_icon_is_rejected_before_upload(self):
+        (self.root / "KCC/Assets.xcassets/AppIcon.appiconset/AppIcon.png").unlink()
+        with self.assertRaisesRegex(preflight.PreflightError, "AppIcon"):
+            preflight.check_source(self.root)
+
+    def test_wrong_size_or_alpha_icon_is_rejected(self):
+        path = self.root / "KCC/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
+        original = path.read_bytes()
+        for index, value, message in [(19, 1, "1024x1024"), (25, 6, "alpha")]:
+            data = bytearray(original)
+            data[index] = value
+            path.write_bytes(data)
+            with self.assertRaisesRegex(preflight.PreflightError, message):
+                preflight.check_source(self.root)
 
     def test_source_checks_allow_missing_credentials_but_release_requires_them(self):
         bundle = preflight.check_source(self.root)

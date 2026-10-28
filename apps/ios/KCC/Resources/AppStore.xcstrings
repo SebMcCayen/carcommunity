@@ -1,0 +1,108 @@
+{
+  "sourceLanguage": "sv",
+  "strings": {
+    "iosStore.monthlyPrice": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ per månad"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ per month"
+          }
+        }
+      }
+    },
+    "iosStore.renewal": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abonnemanget förnyas automatiskt varje månad tills du säger upp det. Betalningen debiteras ditt Apple-konto. Hantera eller säg upp abonnemanget i App Store-inställningarna före nästa förnyelse."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your subscription renews automatically each month until cancelled. Payment is charged to your Apple Account. Manage or cancel your subscription in App Store settings before the next renewal."
+          }
+        }
+      }
+    },
+    "iosStore.deletionBilling": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Att radera kontot säger inte upp ett App Store-abonnemang. Apple kan fortsätta debitera dig. Hantera eller säg upp abonnemanget nedan. Du kan radera kontot även om du inte säger upp det."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleting your account does not cancel an App Store subscription. Apple may continue billing you. Manage or cancel your subscription below. Account deletion remains available even if you do not cancel."
+          }
+        }
+      }
+    },
+    "iosStore.manage": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hantera eller säg upp abonnemang"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage or cancel subscription"
+          }
+        }
+      }
+    },
+    "iosStore.contact": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontakta support"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contact support"
+          }
+        }
+      }
+    },
+    "iosStore.signedOutPrivacy": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du kan begära kontoradering i appens kontoinställningar. Läs om hur dina uppgifter används i integritetspolicyn."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can request account deletion in the app’s account settings. Read how your data is used in the privacy notice."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}
