@@ -99,11 +99,6 @@ fun PlaceActionsSheet(
                 onClick = onCopy,
                 testTag = PLACE_ACTIONS_COPY_TEST_TAG,
             )
-            PlaceAction(
-                icon = null,
-                text = stringResource(R.string.shell_placeMenuClose),
-                onClick = onDismiss,
-            )
         }
     }
 }
