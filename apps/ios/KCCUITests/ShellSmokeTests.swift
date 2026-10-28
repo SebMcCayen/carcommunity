@@ -512,7 +512,10 @@ final class ShellSmokeTests: XCTestCase {
             predicate: NSPredicate(format: "selected == true"),
             object: tab
         )
-        let result = XCTWaiter.wait(for: [selected], timeout: 5)
+        // Hosted runners can publish selection after the initial five seconds;
+        // failure diagnostics have then already observed selected=true. Keep the
+        // actual-state assertion, with the same bounded wait as launch readiness.
+        let result = XCTWaiter.wait(for: [selected], timeout: 15)
         if result != .completed { diagnosePrimaryControls(XCUIApplication()) }
         XCTAssertEqual(result, .completed, "Selection did not settle for \(tab.identifier)")
     }
