@@ -69,7 +69,7 @@ export function MemberOverview({
       });
     void callAdmin<{ data: { balance: number; transactions: Entry[] } }>('admin-listPointsLedger', {
       targetUid: member.uid,
-      pageSize: 5,
+      pageSize: 3,
     })
       .then((result) => {
         if (live) setLedger(result.data);
