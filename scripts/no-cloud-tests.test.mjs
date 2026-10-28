@@ -35,3 +35,11 @@ test('Functions IPC is limited to the private test directory', () => {
   );
   assert.equal(result.status, 0, result.stderr);
 });
+
+test('long system temp paths still permit short private Functions worker sockets', () => {
+  const result = run(
+    `const assert=require('node:assert/strict');const net=require('node:net');const path=require('node:path');const socket=path.join(process.env.TMPDIR,'fire_emu_0123456789abcdef.sock');assert.ok(Buffer.byteLength(socket)<100);const server=net.createServer(client=>client.end('worker')).listen(socket,()=>{const client=net.connect(socket);client.on('data',data=>{assert.equal(data.toString(),'worker');client.end();server.close();});});`,
+    { TMPDIR: '/var/folders/' + 'long-system-temp-'.repeat(8) + '/T' },
+  );
+  assert.equal(result.status, 0, result.stderr);
+});
