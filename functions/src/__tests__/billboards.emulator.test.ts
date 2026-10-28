@@ -29,7 +29,7 @@ import {
 } from 'firebase/functions';
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
+import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const PROJECT_ID = 'demo-test';

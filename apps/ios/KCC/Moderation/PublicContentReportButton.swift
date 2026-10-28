@@ -42,13 +42,15 @@ struct PublicContentReportButton: View {
     var reporter: (any PublicContentReporting)? = FirebasePublicContentReporter.createIfAvailable()
     @State private var choosing = false
     @State private var busy = false
-    @State private var status: LocalizedStringKey?
+    @State private var status: String?
     @State private var operation: Task<Void, Never>?
 
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s2) {
             Button { choosing = true } label: {
-                Label(LocalizedStringKey(target.surface == "billboard" ? "contentSafety.reportAd" : "contentSafety.report"), systemImage: "flag")
+                Label {
+                    Text(LocalizedStringKey(target.surface == "billboard" ? "contentSafety.reportAd" : "contentSafety.report"), tableName: "ContentSafety")
+                } icon: { Image(systemName: "flag") }
                     .frame(minHeight: 48)
             }.buttonStyle(.bordered).disabled(busy || reporter == nil)
             if let status { Text(status).font(.footnote).fixedSize(horizontal: false, vertical: true) }
@@ -63,9 +65,9 @@ struct PublicContentReportButton: View {
                         do {
                             try await reporter.report(target, reason: reason)
                             try Task.checkCancellation()
-                            status = "contentSafety.success"
+                            status = String(localized: "contentSafety.success", table: "ContentSafety")
                         } catch is CancellationError { }
-                        catch { if !Task.isCancelled { status = "chat.reportError" } }
+                        catch { if !Task.isCancelled { status = String(localized: "chat.reportError") } }
                     }
                 }
             }
@@ -87,7 +89,8 @@ struct DriverContentSafetyActions: View {
                     MemberProfileScreen(targetUid: authorUID, viewerUid: viewerUID,
                         friends: FirebaseFriendsRepository.createIfAvailable())
                 } label: {
-                    Label("contentSafety.profileAndBlock", systemImage: "person.crop.circle.badge.xmark")
+                    Label { Text("contentSafety.profileAndBlock", tableName: "ContentSafety") }
+                    icon: { Image(systemName: "person.crop.circle.badge.xmark") }
                         .frame(minHeight: 48)
                 }.buttonStyle(.bordered)
             }
