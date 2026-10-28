@@ -454,7 +454,7 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(app.buttons["myDrives.stats"].waitForExistence(timeout: 5))
         attach(app, name: "\(prefix)-S53-my-drives-unavailable")
         app.buttons["myDrives.stats"].tap()
-        XCTAssertTrue(app.descendants(matching: .any)["myDrives.stats.unavailable"].waitForExistence(timeout: 5))
+        XCTAssertTrue(element("myDrives.stats.unavailable", in: app).waitForExistence(timeout: 5))
         let statsClose = app.buttons["myDrives.stats.close"]
         XCTAssertTrue(statsClose.waitForExistence(timeout: 5))
         XCTAssertTrue(statsClose.isHittable)
