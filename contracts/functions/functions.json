@@ -1448,6 +1448,15 @@
       "appCheck": true,
       "status": "implemented",
       "source": "docs/admin/member-tools.md"
+    },
+    {
+      "name": "moderation.reportPublicContent",
+      "domain": "moderation",
+      "description": "Private, account-bound reporting of an active public Driver post/comment or visible sponsored billboard. Server captures only the selected content; no client-supplied snapshot. Existing admin moderationReports queue, shared rate cap, stable dedup and reviewed-case preservation. Driver content is never mutated. Deployed as moderation-reportPublicContent.",
+      "access": "signedIn",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/ios-content-moderation.md"
     }
   ]
 }
