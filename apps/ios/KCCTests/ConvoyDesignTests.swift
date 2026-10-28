@@ -5,23 +5,23 @@ import XCTest
 
 @MainActor
 final class ConvoyDesignTests: XCTestCase {
-    private let name = "En testmedlem med ett längre namn som ska visas i sin helhet"
+    private let longName = "En testmedlem med ett längre namn som ska visas i sin helhet"
 
     func testConvoyAndChatSummariesWrapTitlesStatusesAndNameFallbacks() {
         for status: ConvoyStatus in [.forming, .active, .ended] {
             let convoy = makeConvoy(status: status)
             assertWrapping(ConvoySummaryContent(convoy: convoy).kccContentCard())
             assertWrapping(ConvoySummaryContent(convoy: convoy, showsDisclosure: true).kccContentCard())
-            assertWrapping(ConvoyChatRow(convoy: ChatConvoy(convoyId: "synthetic", title: name,
+            assertWrapping(ConvoyChatRow(convoy: ChatConvoy(convoyId: "synthetic", title: longName,
                 status: status.rawValue, memberCount: 51)).kccContentCard())
         }
         assertWrapping(ConvoyChatRow(convoy: ChatConvoy(convoyId: "fallback", status: "active", memberCount: 4,
-            memberNames: [name, "En annan testmedlem", "Tredje testmedlemmen"])).kccContentCard())
+            memberNames: [longName, "En annan testmedlem", "Tredje testmedlemmen"])).kccContentCard())
     }
 
     func testFriendSelectionAndPendingCommandLabelsHaveRoomAtLargeText() {
         for selected in [true, false] {
-            assertWrapping(ConvoyFriendChoiceLabel(friend: FriendSummary(uid: "synthetic", displayName: name,
+            assertWrapping(ConvoyFriendChoiceLabel(friend: FriendSummary(uid: "synthetic", displayName: longName,
                 avatarPath: nil, friendsSince: nil), selected: selected))
         }
         for title: LocalizedStringKey in ["convoy.createSubmit", "convoy.inviteSubmit", "convoy.barLeaveEnds"] {
@@ -42,11 +42,11 @@ final class ConvoyDesignTests: XCTestCase {
     func testMemberCardsWrapOwnerInvitedDeclinedAndUnavailableLocation() {
         for role: ConvoyRole in [.owner, .member] {
             for status: ConvoyInviteStatus in [.invited, .accepted, .declined] {
-                assertWrapping(ConvoyMemberSummary(member: ConvoyMember(uid: "synthetic", displayName: name,
+                assertWrapping(ConvoyMemberSummary(member: ConvoyMember(uid: "synthetic", displayName: longName,
                     role: role, inviteStatus: status)).kccContentCard())
             }
         }
-        let accepted = ConvoyMember(uid: "member", displayName: name, role: .member, inviteStatus: .accepted)
+        let accepted = ConvoyMember(uid: "member", displayName: longName, role: .member, inviteStatus: .accepted)
         for available in [false, true] {
             assertWrapping(ConvoyMemberActionCard(member: accepted, waiting: false, locationAvailable: available,
                 onProfile: {}, onCenter: {}))
@@ -59,14 +59,14 @@ final class ConvoyDesignTests: XCTestCase {
     func testEndedRecapKeepsMissingDistanceDistinctFromActualZero() {
         for distance: Double? in [nil, 0, 12345] {
             assertWrapping(ConvoyRecapCard(recap: ConvoyRecapState(durationSeconds: 3840,
-                participants: [ConvoyMember(uid: "synthetic", displayName: name, role: .member, inviteStatus: .accepted)],
+                participants: [ConvoyMember(uid: "synthetic", displayName: longName, role: .member, inviteStatus: .accepted)],
                 participantCount: 51, distanceMeters: distance)))
         }
     }
 
     func testGroupDriveStatusAndRosterHaveScalableTextInAllStates() {
         for status: GroupDriveStatus in [.joined, .onTheWay, .arrived, .left] {
-            assertWrapping(GroupDriveParticipantRow(participant: GroupDriveParticipant(uid: "synthetic", displayName: name, status: status)))
+            assertWrapping(GroupDriveParticipantRow(participant: GroupDriveParticipant(uid: "synthetic", displayName: longName, status: status)))
         }
         for current: GroupDriveStatus? in [nil, .joined, .onTheWay, .arrived] {
             for busy in [true, false] {
@@ -77,7 +77,7 @@ final class ConvoyDesignTests: XCTestCase {
 
     func testGroupDriveUsesOnlyProvidedEventContextIncludingMissingDateAndPlace() {
         for hasSchedule in [true, false] {
-            let event = EventSummary(id: "synthetic", title: name, summary: nil,
+            let event = EventSummary(id: "synthetic", title: longName, summary: nil,
                 startsAt: hasSchedule ? Date(timeIntervalSince1970: 1_700_000_000) : nil, endsAt: nil,
                 approximateArea: nil, locationName: hasSchedule ? "En plats med ett längre namn" : nil,
                 latitude: nil, longitude: nil, isOfficial: false, status: .published, counts: RsvpCounts(going: 0, maybe: 0, notGoing: 0))
@@ -86,8 +86,8 @@ final class ConvoyDesignTests: XCTestCase {
     }
 
     private func makeConvoy(status: ConvoyStatus) -> ConvoyItem {
-        ConvoyItem(convoyId: "synthetic", title: name, status: status,
-            members: [ConvoyMember(uid: "owner", displayName: name, role: .owner, inviteStatus: .accepted)],
+        ConvoyItem(convoyId: "synthetic", title: longName, status: status,
+            members: [ConvoyMember(uid: "owner", displayName: longName, role: .owner, inviteStatus: .accepted)],
             viewer: ConvoyViewer(inviteStatus: .accepted, role: .owner), createdAt: nil)
     }
 
