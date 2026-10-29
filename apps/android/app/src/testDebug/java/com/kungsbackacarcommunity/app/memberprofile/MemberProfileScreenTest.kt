@@ -24,6 +24,7 @@ import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.friends.FriendRelationship
 import com.kungsbackacarcommunity.app.garage.Vehicle
 import com.kungsbackacarcommunity.app.garage.VehiclePowertrain
+import com.kungsbackacarcommunity.app.profile.ClubBadge
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -49,6 +50,7 @@ class MemberProfileScreenTest {
         pointsBalance: Long? = 150L,
         createdAtMillis: Long? = 1_700_000_000_000L,
         vehicles: List<Vehicle> = emptyList(),
+        clubBadge: ClubBadge? = null,
     ) = MemberProfileState.Loaded(
         profile =
             MemberProfile(
@@ -56,11 +58,47 @@ class MemberProfileScreenTest {
                 displayName = "Ada",
                 bio = "Volvo fan",
                 createdAtMillis = createdAtMillis,
+                clubBadge = clubBadge,
             ),
         vehicles = vehicles,
         badges = MemberBadges.Available(emptyList()),
         pointsBalance = pointsBalance,
     )
+
+    private val affiliation = requireNotNull(ClubBadge.fromField(
+        mapOf("clubId" to "club", "clubName" to "Östra Klubben", "logoUrl" to null),
+    ))
+
+    @Test
+    fun publicClubNameIsVisibleRegardlessOfFriendRelationship() {
+        val relationship = mutableStateOf<MemberFriendState?>(null)
+        composeTestRule.setContent {
+            KccTheme {
+                MemberProfileScreen(
+                    state = loaded(clubBadge = affiliation), onRetry = {},
+                    friendState = relationship.value,
+                    onMessage = {}, onUnfriend = {},
+                )
+            }
+        }
+        val label = InstrumentationRegistry.getInstrumentation().targetContext
+            .getString(R.string.clubBadge_accessibility, affiliation.clubName)
+        composeTestRule.onNodeWithText(label).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.friends_message)).assertDoesNotExist()
+        for (value in listOf(
+            FriendRelationship.Unknown, FriendRelationship.None, FriendRelationship.OutgoingPending,
+            FriendRelationship.IncomingPending("request"), FriendRelationship.Friends,
+        )) {
+            composeTestRule.runOnIdle { relationship.value = MemberFriendState(relationship = value) }
+            composeTestRule.onNodeWithText(label).performScrollTo().assertIsDisplayed()
+            if (value != FriendRelationship.Friends) {
+                composeTestRule.onNodeWithText(str(R.string.friends_message)).assertDoesNotExist()
+                composeTestRule.onNodeWithText(str(R.string.shell_friendsTitle)).assertDoesNotExist()
+            } else {
+                composeTestRule.onNodeWithText(str(R.string.friends_message)).performScrollTo().assertIsDisplayed()
+            }
+        }
+    }
 
     @Test
     fun friendProfileShowsPointsMemberSinceAndTheMessageUnfriendBlockActions() {
@@ -200,7 +238,7 @@ class MemberProfileScreenTest {
 
     @Test
     fun blockedTransitionWithdrawsPublicCarsAndFriendActions() {
-        val state = mutableStateOf<MemberProfileState>(loaded(vehicles = vehicles()))
+        val state = mutableStateOf<MemberProfileState>(loaded(vehicles = vehicles(), clubBadge = affiliation))
         composeTestRule.setContent {
             KccTheme {
                 MemberProfileScreen(
@@ -213,7 +251,23 @@ class MemberProfileScreenTest {
         composeTestRule.onNodeWithText(str(R.string.friends_message)).assertDoesNotExist()
         composeTestRule.onNodeWithText(str(R.string.shell_friendsTitle)).assertDoesNotExist()
         composeTestRule.onNodeWithTag(MEMBER_VEHICLES_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("profile_club_affiliation").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("club_avatar_badge").assertDoesNotExist()
         composeTestRule.onNodeWithText(str(R.string.blocking_unblock)).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun unavailableAndFailedProfilesDoNotRetainTheLastPublicAffiliation() {
+        val state = mutableStateOf<MemberProfileState>(loaded(clubBadge = affiliation))
+        composeTestRule.setContent {
+            KccTheme { MemberProfileScreen(state = state.value, onRetry = {}) }
+        }
+        composeTestRule.onNodeWithTag("profile_club_affiliation").performScrollTo().assertIsDisplayed()
+        for (hidden in listOf(MemberProfileState.Unavailable, MemberProfileState.Error, MemberProfileState.Loading)) {
+            composeTestRule.runOnIdle { state.value = hidden }
+            composeTestRule.onNodeWithTag("profile_club_affiliation").assertDoesNotExist()
+            composeTestRule.onNodeWithTag("club_avatar_badge").assertDoesNotExist()
+        }
     }
 
     @Test

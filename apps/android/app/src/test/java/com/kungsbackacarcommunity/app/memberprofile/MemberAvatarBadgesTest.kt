@@ -26,6 +26,18 @@ class MemberAvatarBadgesTest {
         }
     }
 
+    @Test fun changedPublicClubReplacesItsNameLogoAndInitialsTogether() {
+        val loaded = MemberAvatarBadges.fromFields(initial).applyTo(MemberProfile("member", "Ada", null))
+        val next = mapOf("clubId" to "new_club", "clubName" to "New Club", "logoUrl" to "https://unsafe.test/logo")
+        val updated = MemberAvatarBadges.fromFields(initial + ("clubBadge" to next)).applyTo(loaded)
+        assertEquals("new_club", updated.clubBadge?.clubId)
+        assertEquals("New Club", updated.clubBadge?.clubName)
+        assertEquals("NC", updated.clubBadge?.initials)
+        assertNull(updated.clubBadge?.logoUrl)
+        assertEquals(loaded.uid, updated.uid)
+        assertTrue(updated.supporterBadge.visible)
+    }
+
     @Test fun deniedMissingOrMalformedSnapshotClearsUnverifiedCosmetics() {
         val loaded = MemberAvatarBadges.fromFields(initial).applyTo(MemberProfile("member", "Ada", null))
         val unavailable = MemberAvatarBadges.fromFields(null).applyTo(loaded)

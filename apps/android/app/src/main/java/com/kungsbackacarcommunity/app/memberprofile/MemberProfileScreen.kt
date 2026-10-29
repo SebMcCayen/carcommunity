@@ -513,6 +513,7 @@ private fun ProfileHeader(profile: MemberProfile, pointsBalance: Long?, coverIma
             // a stats row lower down. A member with no wallet yet has a null
             // balance, rendered as 0 — they genuinely have no points.
             PointsHeadline(pointsBalance)
+            com.kungsbackacarcommunity.app.profile.ProfileClubAffiliation(profile.clubBadge)
             profile.bio?.takeIf { it.isNotBlank() }?.let { bio ->
                 Text(
                     text = bio,
