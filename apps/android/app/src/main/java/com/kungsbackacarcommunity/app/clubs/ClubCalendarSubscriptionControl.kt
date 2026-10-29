@@ -15,7 +15,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.google.firebase.functions.FirebaseFunctionsException
 import com.kungsbackacarcommunity.app.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -58,7 +57,7 @@ private fun ClubCalendarSubscriptionDialog(
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 subscription = null
-                changed = (e as? FirebaseFunctionsException)?.code == FirebaseFunctionsException.Code.ABORTED
+                changed = (e as? ClubException)?.code == "calendar-changed"
                 failed = true
             } finally { busy = false }
         }

@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.clubs
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.functions.FirebaseFunctions
+import com.google.firebase.functions.FirebaseFunctionsException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.net.URI
 import kotlin.coroutines.resume
@@ -47,7 +48,14 @@ internal class FirebaseCalendarSubscriptionRepository private constructor(
             functions.getHttpsCallable("clubCalendar-manage").call(fields).addOnCompleteListener { task ->
                 if (continuation.isActive) {
                     if (task.isSuccessful) continuation.resume(task.result.data)
-                    else continuation.resumeWithException(task.exception ?: ClubException("unavailable"))
+                    else {
+                        val error = task.exception
+                        continuation.resumeWithException(
+                            if ((error as? FirebaseFunctionsException)?.code == FirebaseFunctionsException.Code.ABORTED)
+                                ClubException("calendar-changed")
+                            else error ?: ClubException("unavailable"),
+                        )
+                    }
                 }
             }
         }

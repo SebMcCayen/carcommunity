@@ -11,7 +11,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.google.firebase.functions.FirebaseFunctionsException
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
 import org.junit.After
@@ -158,7 +157,7 @@ class ClubCalendarSubscriptionControlTest {
         val issue = request(1, "issue", 7)
         compose.runOnIdle {
             issue.result.completeExceptionally(
-                FirebaseFunctionsException("Synthetic conflict", FirebaseFunctionsException.Code.ABORTED, null),
+                ClubException("calendar-changed"),
             )
         }
         compose.onNodeWithText(text(R.string.clubCalendar_changed)).performScrollTo().assertIsDisplayed()
