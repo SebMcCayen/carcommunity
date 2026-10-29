@@ -174,7 +174,7 @@ fun NotificationsScreen(
         )
     }
 
-    AeroLazyPage(modifier = modifier) {
+    AeroLazyPage(modifier = modifier, ownerShortcutEnabled = false) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = aeroLazyContentPadding(),

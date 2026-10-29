@@ -203,7 +203,7 @@ fun DrivesListScreen(
 
     // LazyColumn so an unbounded drive history only composes visible rows
     // (mirrors NotificationsScreen for durable lists).
-    AeroLazyPage(modifier = modifier) {
+    AeroLazyPage(modifier = modifier, ownerShortcutEnabled = false) {
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize().testTag(DRIVE_HISTORY_LIST_TAG),
@@ -1072,7 +1072,10 @@ fun SavedDriveDetailScreen(
     }
     val shareSummary = driveShareText(drive, topSpeedMetersPerSecond = topSpeed)
 
-    AeroPage(title = stringResource(R.string.savedDrives_detailTitle), modifier = modifier) {
+    AeroPage(
+        title = stringResource(R.string.savedDrives_detailTitle), modifier = modifier,
+        ownerShortcutEnabled = false,
+    ) {
             // Exact recorded fixes and the authorized saved simplified polyline
             // share the real static map surface. Provenance, failure details and
             // retry remain distinct from the geometry chosen for display.
