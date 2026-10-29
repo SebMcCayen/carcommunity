@@ -109,7 +109,10 @@ private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubCha
     val visibleMessages = rawMessages.filter { it.authorUid !in ready.hiddenUids }
     val senderUids = LiveProfiles.uidsOf(visibleMessages) { it.authorUid }
     val live = key(profiles, senderUids) {
-        val source = remember(profiles, senderUids) {
+        val source = remember(profiles, senderUids, visibleMessages) {
+            // observeProfiles completes after its cached/refreshed batch. Renew on
+            // message-window changes even for the same senders; the repository's
+            // TTL still decides whether another profile read is needed.
             // A cosmetic profile failure must never terminate the live Club message stream.
             flow { emitAll(profiles.observeProfiles(senderUids)) }.catch { emit(emptyMap()) }
         }
