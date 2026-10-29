@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="clubLogo_requirements">Choose an image up to 25 MB. Crop, move and zoom before saving. The logo is saved as JPG, up to 256 KB, without location metadata.</string>
+    <string name="clubLogo_prepareError">Could not read or prepare this image. Choose an image up to 25 MB, preferably JPG, PNG or WebP. We crop and compress the logo to JPG, up to 256 KB.</string>
+    <string name="clubLogo_permissionError">Could not upload the logo. Only the current club owner can change it. Check your membership and try again.</string>
+    <string name="clubLogo_uploadError">Could not upload the logo. Check your connection and try again. No new logo has been saved.</string>
+</resources>

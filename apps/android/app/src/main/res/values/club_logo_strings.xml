@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="clubLogo_requirements">Välj en bild på högst 25 MB. Beskär, flytta och zooma innan du sparar. Loggan sparas som JPG, högst 256 KB, utan platsdata.</string>
+    <string name="clubLogo_prepareError">Bilden kunde inte läsas eller förberedas. Välj en bild på högst 25 MB, gärna JPG, PNG eller WebP. Vi beskär och komprimerar loggan till JPG, högst 256 KB.</string>
+    <string name="clubLogo_permissionError">Loggan kunde inte laddas upp. Bara klubbens aktuella ägare kan byta logga. Kontrollera ditt medlemskap och försök igen.</string>
+    <string name="clubLogo_uploadError">Loggan kunde inte laddas upp. Kontrollera anslutningen och försök igen. Ingen ny logga har sparats.</string>
+</resources>
