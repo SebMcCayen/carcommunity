@@ -1,5 +1,7 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
+import com.kungsbackacarcommunity.app.chat.ChatSendCooldowns
+import com.kungsbackacarcommunity.app.chat.rememberChatCooldownSeconds
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -68,6 +70,7 @@ fun ConvoyChannelRoute(
     val coordinator =
         remember(repository, convoyId, uid, crashTelemetry) {
             ChannelChatCoordinator(
+                cooldown = ChatSendCooldowns.forUser(uid),
                 // convoyChat-post takes no mentions; the uid list is always empty
                 // here and is dropped rather than forwarded. The clientId makes the
                 // optimistic send idempotent + reconcilable (backend uses it as the
@@ -124,6 +127,9 @@ fun ConvoyChannelRoute(
     }
 
     ChannelChatContent(
+        cooldownSeconds = rememberChatCooldownSeconds(coordinator.cooldown),
+        onSendConfirmed = { text, mentions, reply, id -> coordinator.send(text, mentions, reply, id) },
+        onRetryConfirmed = { message -> message.clientId?.let { coordinator.retry(it) } ?: false },
         messages = displayed,
         currentUid = uid,
         loading = messagesState is ChannelMessagesState.Loading,

@@ -1,5 +1,8 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
+import com.kungsbackacarcommunity.app.chat.ChatMessageBody
+import com.kungsbackacarcommunity.app.chat.rememberChatDraftSendAttempt
+import com.kungsbackacarcommunity.app.chat.ChatCooldownNotice
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -249,7 +252,13 @@ fun ChannelChatContent(
     // chooser. Null (the default, and in a config-less build with no map to move)
     // renders a location link as plain, unclickable styled text.
     onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)? = null,
+    cooldownSeconds: Int = 0,
+    onSendConfirmed: (suspend (String, List<String>, ChannelReplyTo?, String) -> Boolean)? = null,
+    onRetryConfirmed: (suspend (ChannelMessage) -> Boolean)? = null,
 ) {
+    val sendScope = rememberCoroutineScope()
+    val draftAttempt = rememberChatDraftSendAttempt()
+    var submitting by remember { mutableStateOf(false) }
     var draft by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(""))
     }
@@ -324,7 +333,27 @@ fun ChannelChatContent(
                     canLoadOlder = canLoadOlder,
                     isLoadingOlder = isLoadingOlder,
                     onLoadOlder = onLoadOlder,
-                    onRetry = onRetry,
+                    retryEnabled = cooldownSeconds == 0 && !submitting,
+                    onRetry = { message ->
+                        if (cooldownSeconds == 0 && !submitting) {
+                            val confirm = onRetryConfirmed
+                            if (confirm == null) onRetry(message) else {
+                                submitting = true
+                                sendScope.launch {
+                                    try {
+                                        if (confirm(message)) {
+                                            draftAttempt.acknowledge(message.clientId)
+                                            if (draft.text.trim() == message.text &&
+                                                MentionDraft(draft.text, mentions).sendableUids == message.mentionedUids &&
+                                                replyToId == message.replyTo?.messageId) {
+                                                draft = TextFieldValue(""); mentions = emptyList(); replyToId = null
+                                            }
+                                        }
+                                    } finally { submitting = false }
+                                }
+                            }
+                        }
+                    },
                     onViewProfile = onViewProfile,
                     ownMessageActionsEnabled = chatRepliesEnabled,
                     onShowLocationOnMap = onShowLocationOnMap,
@@ -476,9 +505,36 @@ fun ChannelChatContent(
         // One-tap emoji reactions, pinned directly above the input. Tapping one
         // sends it straight down the SAME optimistic path as the Send button — the
         // emoji is the whole message, so it carries no mentions and needs no draft.
-        // Always enabled here: the channel composer's only send gate is a non-empty
-        // draft, which a one-tap emoji doesn't need. A pending reply target is
-        // attached to it too, then cleared, so the emoji quotes what you replied to.
+        // Emoji uses the same acknowledged send path and cooldown as typed text.
+        // Production keeps the draft until acknowledgement; previews may use the legacy callback.
+        fun submit(text: String, clearDraft: Boolean) {
+            if (submitting || cooldownSeconds > 0) return
+            val submittedDraft = draft
+            val submittedMentions = mentions
+            val submittedReply = replyToId
+            val picked = if (clearDraft) MentionDraft(text, mentions).sendableUids else emptyList()
+            fun acknowledge() {
+                if (clearDraft && draft.text == submittedDraft.text && mentions == submittedMentions) {
+                    draft = TextFieldValue(""); mentions = emptyList(); atMentionCap = false
+                }
+                if (replyToId == submittedReply) replyToId = null
+            }
+            val confirm = onSendConfirmed
+            if (confirm == null) {
+                onSend(text, picked, replySnapshot)
+                acknowledge()
+            } else {
+                submitting = true
+                sendScope.launch {
+                    try {
+                        val id = draftAttempt.idFor(text, replySnapshot?.messageId, picked)
+                        if (confirm(text, picked, replySnapshot, id)) { draftAttempt.acknowledge(id); acknowledge() }
+                    }
+                    finally { submitting = false }
+                }
+            }
+        }
+        ChatCooldownNotice(cooldownSeconds)
         ChannelChatComposer(
             draft = draft,
             onValueChange = update@ { updated ->
@@ -500,26 +556,10 @@ fun ChannelChatContent(
                 }
                 draft = updated
             },
-            onSend = {
-                // Optimistic: hand the draft off and clear the input at once.
-                // The message appears immediately as a "sending" bubble; there
-                // is no in-flight disabled/spinner state to wait through. Any
-                // pending reply target rides along and is then cleared.
-                onSend(
-                    draft.text,
-                    MentionDraft(draft.text, mentions).sendableUids,
-                    replySnapshot,
-                )
-                draft = TextFieldValue("")
-                mentions = emptyList()
-                atMentionCap = false
-                replyToId = null
-            },
-            onQuickEmoji = { glyph ->
-                onSend(glyph, emptyList(), replySnapshot)
-                replyToId = null
-            },
-            canSend = ChannelThread.isSendable(draft.text),
+            onSend = { submit(draft.text, clearDraft = true) },
+            onQuickEmoji = { submit(it, clearDraft = false) },
+            canSend = ChannelThread.isSendable(draft.text) && cooldownSeconds == 0 && !submitting,
+            quickEmojiEnabled = cooldownSeconds == 0 && !submitting,
             placeholder = stringResource(R.string.channel_inputPlaceholder),
             sendLabel = stringResource(R.string.channel_send),
             inputModifier = Modifier.testTag(CHANNEL_INPUT_TEST_TAG),
@@ -668,6 +708,7 @@ internal fun ChannelMessageList(
     onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)?,
     onMessageLongPress: (ChannelMessage) -> Unit,
     modifier: Modifier = Modifier,
+    retryEnabled: Boolean = true,
 ) {
     val dates = rememberChatDateContext()
     // Day separators are inserted by pure logic over the WHOLE list (see
@@ -759,6 +800,7 @@ internal fun ChannelMessageList(
                         onViewProfile = onViewProfile,
                         onShowLocationOnMap = onShowLocationOnMap,
                         onRetry = { onRetry(item.message) },
+                        retryEnabled = retryEnabled,
                         onLongPress = { onMessageLongPress(item.message) },
                         ownMessageActionsEnabled = ownMessageActionsEnabled,
                         highlighted = item.message.id == highlightedId,
@@ -782,6 +824,7 @@ private fun ChannelMessageRow(
     ownMessageActionsEnabled: Boolean,
     highlighted: Boolean,
     onQuoteTap: (String) -> Unit,
+    retryEnabled: Boolean,
 ) {
     if (isOwn) {
         // The time sits on the line ABOVE the bubble, aligned to the bubble's own
@@ -807,7 +850,7 @@ private fun ChannelMessageRow(
             // Delivery status sits under your OWN optimistic bubbles only. A
             // delivered (server-sourced) message is [ChannelDeliveryState.Sent] and
             // shows nothing. Mirrors the DM thread's status line.
-            OwnDeliveryStatus(message = message, onRetry = onRetry)
+            OwnDeliveryStatus(message = message, onRetry = onRetry, retryEnabled = retryEnabled)
         }
         return
     }
@@ -888,7 +931,7 @@ private fun ChannelMessageRow(
  * [ChannelDeliveryState.Sent] message shows nothing. Mirrors dm/ChatScreen.
  */
 @Composable
-private fun OwnDeliveryStatus(message: ChannelMessage, onRetry: () -> Unit) {
+private fun OwnDeliveryStatus(message: ChannelMessage, onRetry: () -> Unit, retryEnabled: Boolean) {
     when (message.deliveryState) {
         ChannelDeliveryState.Sending ->
             Text(
@@ -915,7 +958,7 @@ private fun OwnDeliveryStatus(message: ChannelMessage, onRetry: () -> Unit) {
                         // clickable BEFORE padding so the whole padded area is the
                         // tap target; the resend reuses the SAME idempotency key so
                         // it never double-posts.
-                        Modifier.clickable(role = Role.Button, onClick = onRetry)
+                        Modifier.clickable(enabled = retryEnabled, role = Role.Button, onClick = onRetry)
                             .padding(vertical = KccSpacing.s2)
                     } else {
                         Modifier
@@ -1043,7 +1086,8 @@ private fun ChannelBubble(
                     onClick = { onQuoteTap(reply.messageId) },
                 )
             }
-            Text(
+            ChatMessageBody(
+                messageId = message.id,
                 text = body,
                 style = MaterialTheme.typography.bodyLarge,
                 color = textColor,

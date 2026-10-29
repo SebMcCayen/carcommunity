@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="chat_flood_paused">Sending is temporarily paused</string>
+    <plurals name="chat_flood_wait">
+        <item quantity="one">You can send again in %1$d second. Your draft is kept.</item>
+        <item quantity="other">You can send again in %1$d seconds. Your draft is kept.</item>
+    </plurals>
+    <string name="chat_flood_ready">You can send again.</string>
+    <string name="chat_flood_show_more">Show more</string>
+    <string name="chat_flood_show_less">Show less</string>
+    <string name="chat_flood_collapsed">Collapsed message</string>
+    <string name="chat_flood_expanded">Full message shown</string>
+</resources>

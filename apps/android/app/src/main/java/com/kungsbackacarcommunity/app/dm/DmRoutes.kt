@@ -1,5 +1,7 @@
 package com.kungsbackacarcommunity.app.dm
 
+import com.kungsbackacarcommunity.app.chat.ChatSendCooldowns
+import com.kungsbackacarcommunity.app.chat.rememberChatCooldownSeconds
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -197,7 +199,8 @@ fun ChatRoute(
     val coordinator =
         remember(repository, uid, otherUid, conversationId, crashTelemetry) {
             DmThreadCoordinator(
-                repository,
+                cooldown = ChatSendCooldowns.forUser(uid),
+                repository = repository,
                 selfUid = uid,
                 otherUid = otherUid,
                 conversationId = conversationId,
@@ -250,6 +253,9 @@ fun ChatRoute(
     }
 
     ChatScreen(
+        cooldownSeconds = rememberChatCooldownSeconds(coordinator.cooldown),
+        onSendConfirmed = { text, reply, id -> coordinator.send(text, reply, id) },
+        onRetryConfirmed = { message -> message.clientId?.let { coordinator.retry(it) } ?: false },
         otherName = otherName,
         messages = displayed,
         currentUid = uid,

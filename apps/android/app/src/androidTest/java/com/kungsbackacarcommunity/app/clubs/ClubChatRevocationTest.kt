@@ -397,6 +397,22 @@ class ClubChatRevocationTest {
         }
         compose.onNodeWithText(str(R.string.clubs_reported)).assertIsDisplayed()
     }
+    @Test fun chatCooldownRetainsDraftDisablesSendAndStillYieldsToRevocation() {
+        val repo = FakeClubRepository(ClubChatState.Ready(member, emptyList()))
+        repo.sendFailure = ClubException("chat-rate-limited", com.kungsbackacarcommunity.app.chat.ChatRateLimit(30_000))
+        compose.setContent { KccTheme { ClubChatRoute("cooldown-local-" + member.clubId, repo) } }
+        compose.onNodeWithTag("club-chat-input").performTextInput("Private cooldown draft 🚗")
+        compose.onNodeWithText(str(R.string.clubs_send)).performClick()
+        compose.onNodeWithText("Private cooldown draft 🚗").assertExists()
+        compose.onNodeWithTag("chat-flood-countdown").assertExists()
+        compose.onNodeWithText(str(R.string.clubs_send)).assertIsNotEnabled()
+        compose.onNodeWithTag(chatQuickEmojiTestTag("😊")).assertIsNotEnabled()
+        compose.runOnIdle { repo.messages.value = ClubChatState.Unavailable }
+        compose.onNodeWithText("Private cooldown draft 🚗").assertDoesNotExist()
+        compose.onNodeWithTag("chat-flood-countdown").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(1, repo.sendRequests.size) }
+    }
+
 }
 
 private class FakeClubRepository(initial: ClubChatState) : ClubRepository {
@@ -417,6 +433,7 @@ private class FakeClubRepository(initial: ClubChatState) : ClubRepository {
     var operation: String? = null
     var chatCalls = 0
     var sendFailuresRemaining = 0
+    var sendFailure: Exception? = null
     val sendRequests = mutableListOf<Pair<String, String>>()
     val managementRequests = mutableListOf<Pair<String, Map<String, Any?>>>()
     val blockedAuthors = mutableListOf<String>()
@@ -462,6 +479,7 @@ private class FakeClubRepository(initial: ClubChatState) : ClubRepository {
     }
     override suspend fun send(clubId: String, text: String, operationId: String) {
         sendRequests += text to operationId
+        sendFailure?.let { throw it }
         if (sendFailuresRemaining > 0) { sendFailuresRemaining--; throw ClubException("unavailable") }
         sent = text; operation = operationId
     }

@@ -38,7 +38,7 @@ sealed interface ClubChatState {
     data object Unavailable : ClubChatState
     data class Ready(val membership: ClubMembership, val messages: List<ClubMessage>, val hiddenUids: Set<String> = emptySet(), val oldestCursor: ClubMessageCursor? = null, val hasOlder: Boolean = false) : ClubChatState
 }
-class ClubException(val code: String) : Exception(code)
+class ClubException(val code: String, val cooldown: com.kungsbackacarcommunity.app.chat.ChatRateLimit? = null) : Exception(code)
 
 internal fun Any?.clubMap(): Map<String, Any?> = (this as? Map<*, *>)?.entries
     ?.mapNotNull { (k, v) -> (k as? String)?.let { it to v } }?.toMap().orEmpty()
@@ -75,3 +75,13 @@ internal fun safeClubImage(value: String?): String? = value?.takeIf {
 internal fun clubInstant(value: String?): Long? = value?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() }
 internal fun ClubRole.canRemove(viewerUid: String, target: ClubMember) = target.uid != viewerUid && target.role != ClubRole.Owner &&
     (this == ClubRole.Owner || (this == ClubRole.Moderator && target.role == ClubRole.Member))
+
+/** Callable error envelope only: session/auth denial takes precedence over cosmetic send retry UX. */
+internal fun clubCallableFailure(code: String, details: Any?, currentSession: Boolean): ClubException {
+    val normalized = code.lowercase().replace('_', '-')
+    if (!currentSession || normalized == "unauthenticated") return ClubException("unauthenticated")
+    if (normalized == "permission-denied") return ClubException("permission-denied")
+    val cooldown = com.kungsbackacarcommunity.app.chat.ChatRateLimits.parse(code, details)
+    val reason = details.clubMap().nullableText("reason")
+    return ClubException(reason ?: normalized, cooldown)
+}

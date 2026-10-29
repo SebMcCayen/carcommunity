@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.dm
 
+import com.kungsbackacarcommunity.app.firebase.chatRateLimit
 import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.DocumentSnapshot
@@ -209,8 +210,13 @@ class FirebaseDmRepository private constructor(
         text: String,
         clientId: String?,
         replyToMessageId: String?,
-    ): DmSendResult =
-        callForData(
+    ): DmSendResult {
+        val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+        val uid = auth.currentUser?.uid ?: return DmSendResult.Failed(DmSendError.SignedOut)
+        val cooldown = com.kungsbackacarcommunity.app.chat.ChatSendCooldowns.forUser(uid)
+        if (cooldown.isBlocked()) return DmSendResult.Failed(DmSendError.Generic,
+            com.kungsbackacarcommunity.app.chat.ChatRateLimit(cooldown.remainingMillis()))
+        return callForData(
             SEND_MESSAGE,
             // Only include the optional keys when present, so the payload stays
             // byte-identical to the legacy shape for a null (the strict backend
@@ -223,9 +229,18 @@ class FirebaseDmRepository private constructor(
                 if (replyToMessageId != null) put("replyToMessageId", replyToMessageId)
             },
         ).fold(
-            onSuccess = { DmResponseParser.parseSendSuccess(it) },
-            onFailure = { DmSendResult.Failed(DmErrorMapper.mapSend(it.toDmErrorCode())) },
+            onSuccess = { if (auth.currentUser?.uid == uid) DmResponseParser.parseSendSuccess(it) else DmSendResult.Failed(DmSendError.SignedOut) },
+            onFailure = {
+                if (auth.currentUser?.uid != uid) DmSendResult.Failed(DmSendError.SignedOut)
+                else {
+                    val limit = it.chatRateLimit()
+                    limit?.let(cooldown::apply)
+                    DmSendResult.Failed(DmErrorMapper.mapSend(it.toDmErrorCode()), limit)
+                }
+            },
         )
+
+    }
 
     override suspend fun loadOlder(conversationId: String, before: String): DmOlderResult =
         callForData(

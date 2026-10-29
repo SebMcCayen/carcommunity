@@ -1,5 +1,8 @@
 package com.kungsbackacarcommunity.app.clubs
 
+import com.kungsbackacarcommunity.app.chat.ChatSendCooldowns
+import com.kungsbackacarcommunity.app.chat.rememberChatCooldownSeconds
+import com.kungsbackacarcommunity.app.chat.ChatCooldownNotice
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -35,6 +38,7 @@ fun ClubChatRoute(
     uid: String,
     repository: ClubRepository? = null,
     liveProfiles: LiveProfileRepository? = null,
+    sendCooldown: com.kungsbackacarcommunity.app.chat.ChatSendCooldown? = null,
 ) {
     val context = LocalContext.current
     val repo = remember(uid, repository) { repository ?: FirebaseClubRepository.createIfAvailable(context, uid) }
@@ -55,24 +59,26 @@ fun ClubChatRoute(
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
-    if (foreground) key(uid, repo, entryEpoch) { VerifiedClubChat(uid, repo, profiles) }
+    if (foreground) key(uid, repo, entryEpoch) { VerifiedClubChat(uid, repo, profiles, sendCooldown) }
 }
 
 @Composable
-private fun VerifiedClubChat(uid: String, repo: ClubRepository?, profiles: LiveProfileRepository) {
+private fun VerifiedClubChat(uid: String, repo: ClubRepository?, profiles: LiveProfileRepository, sendCooldown: com.kungsbackacarcommunity.app.chat.ChatSendCooldown?) {
     val source = remember(repo) { repo?.chat() ?: flowOf(ClubChatState.Unavailable) }
     val state by source.collectAsState(initial = ClubChatState.Unavailable)
     val ready = state as? ClubChatState.Ready
     if (ready == null || repo == null) {
         Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) { Text(stringResource(R.string.clubs_noClubChat)) }
     } else {
-        key(uid, repo, ready.membership) { ClubChatRoom(uid, repo, ready, profiles) }
+        key(uid, repo, ready.membership) { ClubChatRoom(uid, repo, ready, profiles, sendCooldown) }
     }
 }
 
 @Composable
-private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubChatState.Ready, profiles: LiveProfileRepository) {
+private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubChatState.Ready, profiles: LiveProfileRepository, sendCooldown: com.kungsbackacarcommunity.app.chat.ChatSendCooldown?) {
     val membership = ready.membership
+    val cooldown = remember(uid, sendCooldown) { sendCooldown ?: ChatSendCooldowns.forUser(uid) }
+    val cooldownSeconds = rememberChatCooldownSeconds(cooldown)
     var pages by remember { mutableStateOf<List<ClubMessagePage>>(emptyList()) }
     var retainedLiveIds by remember { mutableStateOf<List<List<String>>>(emptyList()) }
     var pageCursor by remember { mutableStateOf<ClubMessageCursor?>(null) }
@@ -117,7 +123,7 @@ private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubCha
     }
     val messages = clubChatPresentation(visibleMessages, ready.hiddenUids, live)
     fun sendText(text: String, clearDraft: Boolean) {
-        if (busy || text.isBlank()) return
+        if (busy || text.isBlank() || cooldown.isBlocked()) return
         val id = if (clearDraft) operationId else {
             emojiOperation?.takeIf { it.first == text }?.second ?: UUID.randomUUID().toString().also {
                 emojiOperation = text to it
@@ -133,7 +139,12 @@ private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubCha
                     operationId = UUID.randomUUID().toString()
                 } else emojiOperation = null
                 error = null
-            } catch (e: CancellationException) { throw e } catch (e: Exception) { error = e }
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                val clubFailure = e as? ClubException
+                if (clubFailure?.code == "chat-rate-limited" && clubFailure.cooldown != null) {
+                    cooldown.apply(clubFailure.cooldown); error = null
+                } else error = e
+            }
             finally { busy = false }
         }
     }
@@ -178,6 +189,7 @@ private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubCha
                 modifier = Modifier.testTag("club-message-list"),
             )
         }
+        ChatCooldownNotice(cooldownSeconds)
         ChannelChatComposer(
             draft = draft,
             onValueChange = { value ->
@@ -188,7 +200,8 @@ private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubCha
             },
             onSend = { sendText(draft.text, clearDraft = true) },
             onQuickEmoji = { sendText(it, clearDraft = false) },
-            canSend = draft.text.isNotBlank(), enabled = !busy,
+            canSend = draft.text.isNotBlank() && cooldownSeconds == 0, enabled = !busy,
+            quickEmojiEnabled = !busy && cooldownSeconds == 0,
             placeholder = stringResource(R.string.channel_inputPlaceholder),
             sendLabel = stringResource(R.string.channel_send),
             inputModifier = Modifier.testTag("club-chat-input"),

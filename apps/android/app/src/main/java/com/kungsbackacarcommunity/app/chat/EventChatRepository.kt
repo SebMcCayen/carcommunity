@@ -27,6 +27,9 @@ interface EventChatRepository {
     /** events.postChatMessage — posts a plain-text message (<=1000 chars). */
     suspend fun postMessage(eventId: String, message: String)
 
+    /** Optional idempotency key. Legacy repositories retain the two-argument path. */
+    suspend fun postMessage(eventId: String, message: String, clientId: String?) = postMessage(eventId, message)
+
     /** events.reportChatMessage — reports a message for moderation. */
     suspend fun reportMessage(
         eventId: String,
@@ -34,4 +37,14 @@ interface EventChatRepository {
         reason: ChatReportReason,
         details: String?,
     )
+}
+
+/** Omit absent clientId instead of sending null to a strict callable schema. */
+internal fun eventChatPostPayload(eventId: String, message: String, clientId: String?): Map<String, Any> {
+    require(clientId == null || clientId.matches(Regex("[A-Za-z0-9_-]{1,64}")))
+    return buildMap {
+        put("eventId", eventId)
+        put("message", message.trim())
+        if (clientId != null) put("clientId", clientId)
+    }
 }

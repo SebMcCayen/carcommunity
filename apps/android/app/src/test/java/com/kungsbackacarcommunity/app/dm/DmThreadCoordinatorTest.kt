@@ -305,4 +305,22 @@ class DmThreadCoordinatorTest {
 
     private fun msg(id: String, millis: Long, sender: String = "friend") =
         DmMessage(id = id, senderUid = sender, text = id, createdAtMillis = millis, createdAtIso = null)
+
+    @Test fun `DM cooldown preserves failed content and id and never sends at expiry`() = runTest {
+        var now = 100L
+        val cooldown = com.kungsbackacarcommunity.app.chat.ChatSendCooldown { now }
+        val repo = FakeRepo().apply { sendResult = DmSendResult.Failed(DmSendError.Generic,
+            com.kungsbackacarcommunity.app.chat.ChatRateLimit(5_000)) }
+        val c = DmThreadCoordinator(repo, "me", "friend", "me__friend", idGenerator = { "same-id" }, cooldown = cooldown)
+        assertEquals(false, c.send("Draft 🚗"))
+        assertEquals(false, c.send("😊"))
+        assertEquals(false, c.retry("same-id"))
+        assertEquals(1, repo.sendCalls)
+        now += 5_000
+        assertEquals(1, repo.sendCalls)
+        repo.sendResult = DmSendResult.Sent("me__friend", "same-id")
+        assertTrue(c.send("Draft 🚗"))
+        assertEquals(listOf("same-id", "same-id"), repo.sentClientIds)
+        assertEquals(1, c.pendingMessages.value.size)
+    }
 }

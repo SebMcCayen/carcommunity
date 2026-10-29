@@ -171,7 +171,7 @@ sealed interface ChannelSendResult {
         val mentionedUids: List<String> = emptyList(),
     ) : ChannelSendResult
 
-    data class Failed(val error: ChannelSendError) : ChannelSendResult
+    data class Failed(val error: ChannelSendError, val cooldown: com.kungsbackacarcommunity.app.chat.ChatRateLimit? = null) : ChannelSendResult
 }
 
 /** A page of older messages from a `*-list` callable (newest-first within the page). */

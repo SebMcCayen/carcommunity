@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.dm
 
+import com.kungsbackacarcommunity.app.chat.ChatSendCooldown
 import com.kungsbackacarcommunity.app.diagnostics.CrashFeatures
 import com.kungsbackacarcommunity.app.diagnostics.CrashTelemetry
 import com.kungsbackacarcommunity.app.diagnostics.NoopCrashTelemetry
@@ -66,6 +67,7 @@ class DmThreadCoordinator(
      * no-op so unit tests need no Firebase.
      */
     private val crashTelemetry: CrashTelemetry = NoopCrashTelemetry,
+    val cooldown: ChatSendCooldown = ChatSendCooldown(),
 ) {
     private val pending = MutableStateFlow<List<DmMessage>>(emptyList())
 
@@ -97,23 +99,27 @@ class DmThreadCoordinator(
      * is sent as `replyToMessageId`; the server rebuilds the authoritative snapshot
      * on the delivered document.
      */
-    suspend fun send(text: String, replyTo: DmReplyTo? = null) {
-        if (!DmThread.isSendable(text)) return
+    suspend fun send(text: String, replyTo: DmReplyTo? = null, clientId: String? = null): Boolean {
+        if (!DmThread.isSendable(text) || cooldown.isBlocked()) return false
         val trimmed = text.trim()
-        val clientId = idGenerator()
+        pending.value.lastOrNull {
+            it.deliveryState == DmDeliveryState.Failed && it.sendError?.isRetryable == true &&
+                it.text == trimmed && it.replyTo?.messageId == replyTo?.messageId
+        }?.clientId?.let { return retry(it) }
+        val sendId = clientId ?: idGenerator()
         val optimistic =
             DmMessage(
-                id = clientId,
+                id = sendId,
                 senderUid = selfUid,
                 text = trimmed,
                 createdAtMillis = clock(),
                 createdAtIso = null,
-                clientId = clientId,
+                clientId = sendId,
                 deliveryState = DmDeliveryState.Sending,
                 replyTo = replyTo,
             )
         pending.update { it + optimistic }
-        dispatch(clientId, trimmed, replyTo?.messageId)
+        return dispatch(sendId, trimmed, replyTo?.messageId)
     }
 
     /**
@@ -122,11 +128,12 @@ class DmThreadCoordinator(
      * if the bubble isn't found or isn't in a failed state (e.g. already
      * re-sending), so a double-tap can't fire two resends.
      */
-    suspend fun retry(clientId: String) {
+    suspend fun retry(clientId: String): Boolean {
+        if (cooldown.isBlocked()) return false
         val target =
             pending.value.firstOrNull {
                 it.clientId == clientId && it.deliveryState == DmDeliveryState.Failed
-            } ?: return
+            } ?: return false
         // Back to Sending and clear the prior error while the resend is in flight.
         pending.update { list ->
             list.map {
@@ -139,10 +146,10 @@ class DmThreadCoordinator(
         }
         // Resend carries the SAME reply target the failed bubble held, so a retried
         // reply stays a reply.
-        dispatch(clientId, target.text, target.replyTo?.messageId)
+        return dispatch(clientId, target.text, target.replyTo?.messageId)
     }
 
-    private suspend fun dispatch(clientId: String, text: String, replyToMessageId: String?) {
+    private suspend fun dispatch(clientId: String, text: String, replyToMessageId: String?): Boolean {
         try {
             // An ordinary (non-reply) send takes the 3-arg overload verbatim, so the
             // call is byte-identical to the pre-reply path — and a repository that
@@ -163,10 +170,18 @@ class DmThreadCoordinator(
                     // Atomic: concurrent optimistic sends each resolve on their own
                     // coroutine, so a plain read-modify-write could drop increments.
                     sent.update { it + 1 }
+                    return true
                 }
                 // Keep the SPECIFIC error so the UI can explain why and offer a
                 // retry only when it could actually help ([DmSendError.isRetryable]).
-                is DmSendResult.Failed -> markFailed(clientId, result.error)
+                is DmSendResult.Failed -> {
+                    // A delivered snapshot can beat a lost callable acknowledgement.
+                    // Treat that exact ID as acknowledged so the retained draft cannot be sent twice.
+                    if (result.error == DmSendError.Generic && pending.value.none { it.clientId == clientId }) return true
+                    result.cooldown?.let(cooldown::apply)
+                    markFailed(clientId, result.error)
+                    return false
+                }
             }
         } catch (cancellation: CancellationException) {
             // Leaving the thread cancels the send; the bubble is dropped with the
@@ -182,7 +197,9 @@ class DmThreadCoordinator(
             // PII: only the stable feature path leaves the device — never the
             // message body, the conversation id, or either uid.
             crashTelemetry.recordNonFatal(CrashFeatures.DM_SEND, failure)
+            if (pending.value.none { it.clientId == clientId }) return true
             markFailed(clientId, DmSendError.Generic)
+            return false
         }
     }
 

@@ -79,8 +79,7 @@ class FirebaseClubRepository private constructor(
             return result
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (error: FirebaseFunctionsException) {
-            val reason = error.details.clubMap().nullableText("reason")
-            throw ClubException(reason ?: error.code.name.lowercase().replace('_', '-'))
+            throw clubCallableFailure(error.code.name, error.details, auth.currentUser?.uid == uid)
         }
     }
     override suspend fun directory(cursor: String?): ClubPage<Club> {

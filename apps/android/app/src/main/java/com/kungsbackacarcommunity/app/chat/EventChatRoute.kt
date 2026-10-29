@@ -48,6 +48,7 @@ fun EventChatRoute(
     eventTitle: String? = null,
 ) {
     val scope = rememberCoroutineScope()
+    val cooldown = remember(currentUid) { ChatSendCooldowns.forUser(currentUid) }
     val canParticipate = EventChat.canParticipate(passesMemberGate, eventStatus, myRsvp)
 
     // The ChatCoordinator is shared across events; clear any prior send/report
@@ -99,13 +100,15 @@ fun EventChatRoute(
             .collectAsState(initial = BlockActionStatus.Idle)
 
     EventChatScreen(
+        cooldownSeconds = rememberChatCooldownSeconds(cooldown),
+        onSendConfirmed = { text, id -> coordinator?.post(eventId, text, cooldown, id) ?: false },
         eventTitle = eventTitle,
         state = messagesState,
         currentUid = currentUid,
         canParticipate = canParticipate,
         sendStatus = sendStatus,
         reportStatus = reportStatus,
-        onSend = { text -> coordinator?.let { c -> scope.launch { c.post(eventId, text) } } },
+        onSend = { text -> coordinator?.let { c -> scope.launch { c.post(eventId, text, cooldown) } } },
         onReport = { messageId, reason ->
             coordinator?.let { c -> scope.launch { c.submitReport(eventId, messageId, reason) } }
         },

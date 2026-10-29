@@ -1,5 +1,7 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
+import com.kungsbackacarcommunity.app.chat.ChatSendCooldowns
+import com.kungsbackacarcommunity.app.chat.rememberChatCooldownSeconds
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -84,6 +86,7 @@ fun CommunityChannelRoute(
     val coordinator =
         remember(repository, uid, crashTelemetry) {
             ChannelChatCoordinator(
+                cooldown = ChatSendCooldowns.forUser(uid),
                 // The clientId makes the optimistic send idempotent + reconcilable
                 // (backend uses it as the message doc id); replyToMessageId is the
                 // inline-reply target (null for an ordinary message).
@@ -168,6 +171,9 @@ fun CommunityChannelRoute(
     }
 
     ChannelChatContent(
+        cooldownSeconds = rememberChatCooldownSeconds(coordinator.cooldown),
+        onSendConfirmed = { text, mentions, reply, id -> coordinator.send(text, mentions, reply, id) },
+        onRetryConfirmed = { message -> message.clientId?.let { coordinator.retry(it) } ?: false },
         messages = displayed,
         currentUid = uid,
         loading = messagesState is ChannelMessagesState.Loading,

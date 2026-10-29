@@ -1,5 +1,9 @@
 package com.kungsbackacarcommunity.app.dm
 
+import com.kungsbackacarcommunity.app.chat.ChatMessageBody
+import com.kungsbackacarcommunity.app.chat.rememberChatDraftSendAttempt
+import com.kungsbackacarcommunity.app.chat.ChatCooldownNotice
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -82,7 +86,6 @@ import com.kungsbackacarcommunity.app.moderation.MessageModeration
 import com.kungsbackacarcommunity.app.moderation.ReportAvailability
 import com.kungsbackacarcommunity.app.shell.AeroPage
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 /**
  * A 1:1 DM thread: own vs other message bubbles (chronological, newest at the
@@ -138,7 +141,13 @@ fun ChatScreen(
     // A shared `kccevent:` link in a message becomes a tappable "Open event" chip
     // that calls this with the event id. Null leaves such tokens as plain text.
     onOpenEvent: ((String) -> Unit)? = null,
+    cooldownSeconds: Int = 0,
+    onSendConfirmed: (suspend (String, DmReplyTo?, String) -> Boolean)? = null,
+    onRetryConfirmed: (suspend (DmMessage) -> Boolean)? = null,
 ) {
+    val sendScope = rememberCoroutineScope()
+    val draftAttempt = rememberChatDraftSendAttempt()
+    var submitting by remember { mutableStateOf(false) }
     var draft by rememberSaveable { mutableStateOf("") }
     // Held by message ID (Saveable, so the sheet survives rotation) and resolved
     // against the live list, so a sheet whose message vanished closes itself.
@@ -183,7 +192,25 @@ fun ChatScreen(
                     canLoadOlder = canLoadOlder,
                     isLoadingOlder = isLoadingOlder,
                     onLoadOlder = onLoadOlder,
-                    onRetry = onRetry,
+                    retryEnabled = cooldownSeconds == 0 && !submitting,
+                    onRetry = { message ->
+                        if (cooldownSeconds == 0 && !submitting) {
+                            val confirm = onRetryConfirmed
+                            if (confirm == null) onRetry(message) else {
+                                submitting = true
+                                sendScope.launch {
+                                    try {
+                                        if (confirm(message)) {
+                                            draftAttempt.acknowledge(message.clientId)
+                                            if (draft.trim() == message.text && replyToId == message.replyTo?.messageId) {
+                                                draft = ""; replyToId = null
+                                            }
+                                        }
+                                    } finally { submitting = false }
+                                }
+                            }
+                        }
+                    },
                     onShowLocationOnMap = onShowLocationOnMap,
                     onOpenEvent = onOpenEvent,
                     chatRepliesEnabled = chatRepliesEnabled,
@@ -261,14 +288,33 @@ fun ChatScreen(
         // One-tap emoji reactions, pinned directly above the input. Tapping one
         // sends it straight down the SAME optimistic path as the Send button — the
         // emoji is the whole message and the typed draft (if any) is left untouched.
-        // Always enabled: the DM composer's only send gate is a non-empty draft,
-        // which a one-tap emoji doesn't need. A pending reply target rides along
-        // and is then cleared, so the emoji quotes what you replied to.
+        // Emoji uses the same acknowledged send path and cooldown as typed text.
+        // The typed draft is untouched; a reply target clears only on acknowledgement.
+        fun submit(text: String, clearDraft: Boolean) {
+            if (submitting || cooldownSeconds > 0) return
+            val snapshot = draft
+            val reply = replyToId
+            fun acknowledge() {
+                if (clearDraft && draft == snapshot) draft = ""
+                if (replyToId == reply) replyToId = null
+            }
+            val confirm = onSendConfirmed
+            if (confirm == null) { onSend(text, replySnapshot); acknowledge() }
+            else {
+                submitting = true
+                sendScope.launch {
+                    try {
+                        val id = draftAttempt.idFor(text, replySnapshot?.messageId)
+                        if (confirm(text, replySnapshot, id)) { draftAttempt.acknowledge(id); acknowledge() }
+                    }
+                    finally { submitting = false }
+                }
+            }
+        }
+        ChatCooldownNotice(cooldownSeconds)
         ChatQuickEmojiRow(
-            onEmojiSelected = { glyph ->
-                onSend(glyph, replySnapshot)
-                replyToId = null
-            },
+            onEmojiSelected = { submit(it, clearDraft = false) },
+            enabled = cooldownSeconds == 0 && !submitting,
         )
 
         Row(
@@ -289,16 +335,8 @@ fun ChatScreen(
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
             )
             Button(
-                onClick = {
-                    // Optimistic: hand the draft off and clear the input at once.
-                    // The message appears immediately as a "sending" bubble; there
-                    // is no in-flight disabled/spinner state to wait through. Any
-                    // pending reply target rides along and is then cleared.
-                    onSend(draft, replySnapshot)
-                    draft = ""
-                    replyToId = null
-                },
-                enabled = DmThread.isSendable(draft),
+                onClick = { submit(draft, clearDraft = true) },
+                enabled = DmThread.isSendable(draft) && cooldownSeconds == 0 && !submitting,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -376,6 +414,7 @@ private fun MessageList(
     onOpenEvent: ((String) -> Unit)?,
     chatRepliesEnabled: Boolean,
     counterpartyName: String?,
+    retryEnabled: Boolean,
 ) {
     val dates = rememberChatDateContext()
     // Day separators are inserted by pure logic over the WHOLE list (see
@@ -474,6 +513,7 @@ private fun MessageList(
                                 { onMessageLongPress(message) }
                             },
                         onRetry = { onRetry(message) },
+                        retryEnabled = retryEnabled,
                         onShowLocationOnMap = onShowLocationOnMap,
                         onOpenEvent = onOpenEvent,
                         highlighted = message.id == highlightedId,
@@ -501,6 +541,7 @@ private fun MessageBubble(
     onQuoteTap: (String) -> Unit = {},
     currentUid: String = "",
     counterpartyName: String? = null,
+    retryEnabled: Boolean = true,
 ) {
     val bubbleColor =
         if (isOwn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
@@ -601,7 +642,8 @@ private fun MessageBubble(
                         onClick = { onQuoteTap(reply.messageId) },
                     )
                 }
-                Text(
+                ChatMessageBody(
+                    messageId = message.id,
                     text = body,
                     style = MaterialTheme.typography.bodyLarge,
                     color = textColor,
@@ -641,7 +683,7 @@ private fun MessageBubble(
                                 // is the tap target (a comfortable hit region), and
                                 // the resend reuses the SAME idempotency key so it
                                 // never double-posts.
-                                Modifier.clickable(role = Role.Button, onClick = onRetry)
+                                Modifier.clickable(enabled = retryEnabled, role = Role.Button, onClick = onRetry)
                                     .padding(vertical = KccSpacing.s2)
                             } else {
                                 Modifier

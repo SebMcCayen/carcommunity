@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
+import com.kungsbackacarcommunity.app.firebase.chatRateLimit
 import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.Timestamp
@@ -240,7 +241,7 @@ class FirebaseConvoyChatRepository private constructor(
         ).fold(
             onSuccess = { ChannelResponseParser.parsePostSuccess(it) },
             onFailure = {
-                ChannelSendResult.Failed(ChannelErrorMapper.mapSend(it.toChannelErrorCode()))
+                ChannelSendResult.Failed(ChannelErrorMapper.mapSend(it.toChannelErrorCode()), it.chatRateLimit())
             },
         )
 

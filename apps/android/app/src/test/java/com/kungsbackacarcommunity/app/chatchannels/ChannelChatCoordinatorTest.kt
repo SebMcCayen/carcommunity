@@ -522,4 +522,37 @@ class ChannelChatCoordinatorTest {
             createdAtMillis = millis,
             createdAtIso = java.time.Instant.ofEpochMilli(millis).toString(),
         )
+
+    @Test fun `tagged cooldown blocks all send entrypoints until manual retry and retains the key`() = runTest {
+        var now = 100L
+        val cooldown = com.kungsbackacarcommunity.app.chat.ChatSendCooldown { now }
+        val f = Fakes().apply { sendResult = ChannelSendResult.Failed(ChannelSendError.Generic,
+            com.kungsbackacarcommunity.app.chat.ChatRateLimit(5_000)) }
+        val c = ChannelChatCoordinator(f.sender, f.pager, "me", idGenerator = { "retry-key" }, cooldown = cooldown)
+        assertEquals(false, c.send("Hello 🚗", listOf("friend")))
+        assertEquals(false, c.send("😊"))
+        assertEquals(false, c.retry("retry-key"))
+        assertEquals(1, f.sendCalls)
+        assertEquals("Hello 🚗", c.pendingMessages.value.single().text)
+        now += 5_000
+        assertEquals(1, f.sendCalls) // expiry never sends
+        f.sendResult = ChannelSendResult.Sent("retry-key", listOf("friend"))
+        assertTrue(c.send("Hello 🚗", listOf("friend")))
+        assertEquals(listOf("retry-key", "retry-key"), f.sentClientIds)
+        assertEquals(1, c.pendingMessages.value.size)
+    }
+
+    @Test fun `live acknowledgement wins when the callable reply is lost`() = runTest {
+        val f = Fakes().apply { gate = CompletableDeferred(); sendResult = ChannelSendResult.Failed(ChannelSendError.Generic) }
+        val c = coordinator(f)
+        val ack = CompletableDeferred<Boolean>()
+        val job = launch { ack.complete(c.send("Delivered draft")) }
+        runCurrent()
+        c.onLiveMessages(c.pendingMessages.value.map { it.copy(deliveryState = ChannelDeliveryState.Sent) })
+        f.gate!!.complete(Unit)
+        job.join()
+        assertTrue(ack.await())
+        assertTrue(c.pendingMessages.value.isEmpty())
+        assertEquals(1, f.sendCalls)
+    }
 }
