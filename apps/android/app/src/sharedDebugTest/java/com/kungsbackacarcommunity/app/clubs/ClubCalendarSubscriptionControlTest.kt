@@ -43,8 +43,15 @@ class ClubCalendarSubscriptionControlTest {
         compose.setContent { KccTheme { ClubCalendarSubscriptionControl("club-a", repo) } }
     }
 
+    private fun awaitUi(condition: () -> Boolean) {
+        // A predicate over the fake alone does not synchronize Android's UI queue:
+        // the dialog's LaunchedEffect/launch may still be waiting to enter manage().
+        // Drain Compose/UI work before observing request or cancellation delivery.
+        compose.waitUntil(5_000) { compose.runOnIdle(condition) }
+    }
+
     private fun request(index: Int, action: String, version: Long?, club: String = "club-a"): CalendarFixtureRequest {
-        compose.waitUntil(5_000) { repo.requests.size > index }
+        awaitUi { repo.requests.size > index }
         return repo.requests[index].also {
             assertEquals(club, it.clubId)
             assertEquals(action, it.action)
@@ -53,7 +60,14 @@ class ClubCalendarSubscriptionControlTest {
     }
 
     private fun complete(request: CalendarFixtureRequest, state: CalendarSubscription) {
-        compose.runOnIdle { request.result.complete(state) }
+        // A server callback does not wait for UI idleness before finishing. Resolve
+        // the thread-safe deferred first, then let Compose render the response.
+        assertTrue("Each fake request must receive exactly one response", request.result.complete(state))
+        compose.waitForIdle()
+    }
+
+    private fun fail(request: CalendarFixtureRequest, error: Exception) {
+        assertTrue("Each fake request must receive exactly one response", request.result.completeExceptionally(error))
         compose.waitForIdle()
     }
 
@@ -66,6 +80,23 @@ class ClubCalendarSubscriptionControlTest {
         compose.onAllNodes(hasText(calendarFixtureToken, substring = true), useUnmergedTree = true).assertCountEquals(0)
         compose.onAllNodes(hasText(calendarFixtureUrl, substring = true), useUnmergedTree = true).assertCountEquals(0)
         compose.onAllNodes(hasContentDescription(calendarFixtureToken, substring = true), useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    @Test fun openingDialogStartsStatusWhileTheResponseIsStillPending() {
+        render()
+        tag("subscribe").performClick()
+        val status = request(0, "status", null)
+        tag("busy").assertExists()
+        tag("issue").assertDoesNotExist()
+        tag("copy").assertDoesNotExist()
+        compose.runOnIdle {
+            assertFalse(status.result.isCompleted)
+            assertEquals(listOf("status"), repo.requests.map { it.action })
+        }
+        complete(status, CalendarSubscription(false, 7))
+        tag("busy").assertDoesNotExist()
+        tag("issue").performScrollTo().assertIsEnabled()
+        compose.runOnIdle { assertEquals(1, repo.requests.size) }
     }
 
     @Test fun openingAndRefreshingStatusNeverIssueALinkImplicitly() {
@@ -126,7 +157,7 @@ class ClubCalendarSubscriptionControlTest {
         render()
         tag("subscribe").performClick()
         val status = request(0, "status", null)
-        compose.runOnIdle { status.result.completeExceptionally(ClubException("unavailable")) }
+        fail(status, ClubException("unavailable"))
         compose.onNodeWithText(text(R.string.clubCalendar_error)).performScrollTo().assertIsDisplayed()
         tag("issue").assertDoesNotExist()
         compose.onNodeWithText(text(R.string.clubs_retry)).performScrollTo().performClick()
@@ -140,7 +171,7 @@ class ClubCalendarSubscriptionControlTest {
         open()
         tag("issue").performScrollTo().performClick()
         val issue = request(1, "issue", 7)
-        compose.runOnIdle { issue.result.completeExceptionally(ClubException("unavailable")) }
+        fail(issue, ClubException("unavailable"))
         tag("copy").assertDoesNotExist()
         tag("issue").assertDoesNotExist()
         compose.onNodeWithText(text(R.string.clubs_retry)).performScrollTo().performClick()
@@ -155,11 +186,7 @@ class ClubCalendarSubscriptionControlTest {
         open()
         tag("issue").performScrollTo().performClick()
         val issue = request(1, "issue", 7)
-        compose.runOnIdle {
-            issue.result.completeExceptionally(
-                ClubException("calendar-changed"),
-            )
-        }
+        fail(issue, ClubException("calendar-changed"))
         compose.onNodeWithText(text(R.string.clubCalendar_changed)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Synthetic conflict").assertDoesNotExist()
         tag("copy").assertDoesNotExist()
@@ -179,7 +206,7 @@ class ClubCalendarSubscriptionControlTest {
         tag("revoke").performScrollTo().performClick()
         val revoke = request(2, "revoke", 8)
         tag("copy").assertDoesNotExist()
-        compose.runOnIdle { revoke.result.completeExceptionally(ClubException("unavailable")) }
+        fail(revoke, ClubException("unavailable"))
         compose.onNodeWithText(text(R.string.clubCalendar_error)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(text(R.string.clubs_retry)).performScrollTo().performClick()
         complete(request(3, "status", null), CalendarSubscription(true, 8))
@@ -211,8 +238,8 @@ class ClubCalendarSubscriptionControlTest {
         tag("issue").performScrollTo().performClick()
         val issue = request(1, "issue", 7)
         compose.onNodeWithText(text(R.string.clubs_close)).performClick()
-        compose.waitUntil(5_000) { issue.cancelled }
-        compose.runOnIdle { issue.result.complete(CalendarSubscription(true, 8, calendarFixtureUrl)) }
+        awaitUi { issue.cancelled }
+        complete(issue, CalendarSubscription(true, 8, calendarFixtureUrl))
         tag("copy").assertDoesNotExist()
         tag("subscribe").performClick()
         complete(request(2, "status", null), CalendarSubscription(true, 8))
@@ -226,12 +253,12 @@ class ClubCalendarSubscriptionControlTest {
         open()
         tag("issue").performScrollTo().performClick()
         val issue = request(1, "issue", 7)
-        compose.runOnIdle { club.value = "club-b" }
-        compose.waitUntil(5_000) { issue.cancelled }
+        compose.runOnUiThread { club.value = "club-b" }
+        awaitUi { issue.cancelled }
         tag("copy").assertDoesNotExist()
         tag("subscribe").performClick()
         complete(request(2, "status", null, "club-b"), CalendarSubscription(false, 0))
-        compose.runOnIdle { issue.result.complete(CalendarSubscription(true, 8, calendarFixtureUrl)) }
+        complete(issue, CalendarSubscription(true, 8, calendarFixtureUrl))
         tag("copy").assertDoesNotExist()
     }
 
@@ -242,14 +269,14 @@ class ClubCalendarSubscriptionControlTest {
         open()
         tag("issue").performScrollTo().performClick()
         val issue = request(1, "issue", 7)
-        compose.runOnIdle { selected.value = next }
-        compose.waitUntil(5_000) { issue.cancelled && next.requests.size == 1 }
+        compose.runOnUiThread { selected.value = next }
+        awaitUi { issue.cancelled && next.requests.size == 1 }
         compose.runOnIdle {
             assertEquals("status", next.requests.single().action)
             assertNull(next.requests.single().expectedVersion)
-            next.requests.single().result.complete(CalendarSubscription(false, 0))
-            issue.result.complete(CalendarSubscription(true, 8, calendarFixtureUrl))
         }
+        complete(next.requests.single(), CalendarSubscription(false, 0))
+        complete(issue, CalendarSubscription(true, 8, calendarFixtureUrl))
         tag("copy").assertDoesNotExist()
         assertNoBearerOnScreen()
     }
@@ -265,16 +292,16 @@ class ClubCalendarSubscriptionControlTest {
         open()
         tag("issue").performScrollTo().performClick()
         val issue = request(1, "issue", 7)
-        compose.runOnIdle { membership.value = null }
-        compose.waitUntil(5_000) { issue.cancelled }
+        compose.runOnUiThread { membership.value = null }
+        awaitUi { issue.cancelled }
         tag("subscribe").assertDoesNotExist()
         compose.runOnIdle { membership.value = ClubMembership("club-a", ClubRole.Member, "2026-10-29T11:00:00Z") }
         tag("copy").assertDoesNotExist()
         compose.runOnIdle { assertEquals(2, repo.requests.size) }
         tag("subscribe").performClick()
         val status = request(2, "status", null)
-        compose.runOnIdle { membership.value = membership.value?.copy(joinedAt = "2026-10-29T12:00:00Z") }
-        compose.waitUntil(5_000) { status.cancelled }
+        compose.runOnUiThread { membership.value = membership.value?.copy(joinedAt = "2026-10-29T12:00:00Z") }
+        awaitUi { status.cancelled }
         tag("copy").assertDoesNotExist()
         tag("subscribe").assertIsDisplayed()
     }
