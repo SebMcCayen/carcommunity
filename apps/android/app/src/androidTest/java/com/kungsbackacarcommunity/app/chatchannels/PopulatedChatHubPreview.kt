@@ -17,9 +17,9 @@ fun PopulatedChatHubPreview(onClose: () -> Unit = {}) {
     ChatHubRoute(
         uid = "local-self",
         communityChatRepository = repository, convoyChatRepository = null,
-        friendsRepository = null, dmRepository = null, notificationsRepository = null,
-        notificationsCoordinator = null,
-        communityUnread = true, convoysUnread = true, friendsUnread = true, notificationsUnread = true,
+        friendsRepository = null, dmRepository = null,
+
+        communityUnread = true, convoysUnread = true, friendsUnread = true,
         onClose = onClose, showHubBackArrow = true,
         driverContent = {
             DriverFeedContent(DriverFeedState(), driverFeedStrings(),

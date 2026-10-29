@@ -35,7 +35,8 @@
  * =============================================================================
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { logger } from 'firebase-functions';
 import { FieldPath, Timestamp } from 'firebase-admin/firestore';
 import { adminStorage, db } from '../firebase';

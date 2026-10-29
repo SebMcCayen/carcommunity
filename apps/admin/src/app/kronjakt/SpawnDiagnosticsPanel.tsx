@@ -62,12 +62,14 @@ interface SpawnDiagnosticsPanelProps {
   areaId: string;
   areaName: string;
   onClose: () => void;
+  hideClose?: boolean;
 }
 
 export function SpawnDiagnosticsPanel({
   areaId,
   areaName,
   onClose,
+  hideClose = false,
 }: SpawnDiagnosticsPanelProps): React.ReactElement {
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -271,7 +273,11 @@ export function SpawnDiagnosticsPanel({
         {/* Why nothing is spawning */}
         <h3 className={styles.diagSectionTitle}>{t('crownHunt.diagBlockersTitle')}</h3>
         {data.blockers.length === 0 ? (
-          <p className={styles.diagNoBlockers}>{t('crownHunt.diagNoBlockers')}</p>
+          <p className={styles.diagNoBlockers}>
+            {data.candidateCellCount === 0
+              ? 'Inga områdeshinder. Inga spawn-kandidater finns i de skannade cellerna. Se cellernas status nedan.'
+              : t('crownHunt.diagNoBlockers')}
+          </p>
         ) : (
           <ul className={styles.diagBlockerList}>
             {data.blockers.map((code) => (
@@ -363,9 +369,11 @@ export function SpawnDiagnosticsPanel({
           <button className={styles.btnSecondary} onClick={() => void load()} disabled={isLoading}>
             {t('crownHunt.diagRefresh')}
           </button>
-          <button className={styles.btnPrimary} onClick={onClose}>
-            {t('crownHunt.diagClose')}
-          </button>
+          {!hideClose && (
+            <button className={styles.btnPrimary} onClick={onClose}>
+              {t('crownHunt.diagClose')}
+            </button>
+          )}
         </div>
       </div>
     </div>

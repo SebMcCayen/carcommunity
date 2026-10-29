@@ -3,6 +3,7 @@
  * .run bypasses HTTP/App Check, not membership checks or Admin transactions.
  * The companion convoy-followme suite covers HTTP Auth/Functions transport.
  */
+import { localProductAccount } from './helpers/local-product-account';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -56,10 +57,12 @@ afterAll(async () => {
   vi.restoreAllMocks();
   await env?.cleanup();
   if (db) {
-    await Promise.all(ids.flatMap((id) => [
-      db.recursiveDelete(db.doc(`convoys/${id}`)),
-      ...['a', 'b', 'c'].map((suffix) => db.doc(`users/${id}-${suffix}`).delete()),
-    ]));
+    await Promise.all(
+      ids.flatMap((id) => [
+        db.recursiveDelete(db.doc(`convoys/${id}`)),
+        ...['a', 'b', 'c'].map((suffix) => db.doc(`users/${id}-${suffix}`).delete()),
+      ]),
+    );
   }
 });
 
@@ -69,16 +72,30 @@ async function fixture() {
   const uids = ['a', 'b', 'c'].map((suffix) => `${id}-${suffix}`);
   const convoy = db.doc(`convoys/${id}`);
   const trail = convoy.collection('followMe').doc('current');
-  await Promise.all(uids.map((uid) => db.doc(`users/${uid}`).set({
-    suspended: false, deleted: false, activeMember: false,
-  })));
+  await Promise.all(
+    uids.map((uid) =>
+      db.doc(`users/${uid}`).set({
+        suspended: false,
+        deleted: false,
+        activeMember: false,
+      }),
+    ),
+  );
+  await Promise.all(uids.map((uid) => localProductAccount(uid)));
   await convoy.set({
     status: 'active',
     ownerUid: uids[0],
     memberUids: uids,
-    members: Object.fromEntries(uids.map((uid, i) => [uid, {
-      uid, inviteStatus: 'accepted', role: i === 0 ? 'owner' : 'member',
-    }])),
+    members: Object.fromEntries(
+      uids.map((uid, i) => [
+        uid,
+        {
+          uid,
+          inviteStatus: 'accepted',
+          role: i === 0 ? 'owner' : 'member',
+        },
+      ]),
+    ),
   });
   const toggle = (uid: string, active: boolean) =>
     setFollowMe.run({ auth: { uid, token: {} }, data: { convoyId: id, active } } as never);
@@ -98,8 +115,12 @@ function writeCapturedTrail(
   return runTransaction(client, async (tx) => {
     const ref = doc(client, `convoys/${id}/followMe/current`);
     const snap = await tx.get(ref);
-    if (!snap.exists() || snap.data().leaderUid !== uid ||
-        (snap.data().activationId ?? null) !== activationId) return false;
+    if (
+      !snap.exists() ||
+      snap.data().leaderUid !== uid ||
+      (snap.data().activationId ?? null) !== activationId
+    )
+      return false;
     tx.update(ref, { polyline: 'CAPTURED', updatedAt: serverTimestamp() });
     return true;
   });
@@ -115,21 +136,25 @@ describe('Follow Me real-handler lifecycle races', () => {
       // BEFORE runTransaction. Only the scheduler boundary is injected; the
       // handler, parent writes, cleanup and leadership transaction are real.
       const original = db.runTransaction.bind(db);
-      const spy = vi.spyOn(db, 'runTransaction').mockImplementationOnce(async (body, options) => {
-        if (transition === 'deleted') await f.convoy.delete();
-        else if (transition === 'ended') await f.convoy.update({ status: 'ended' });
-        else await f.convoy.update({
-          memberUids: f.uids.slice(1),
-          [`members.${uid}`]: FieldValue.delete(),
+      const spy = vi
+        .spyOn(db, 'runTransaction')
+        .mockImplementationOnce((body, options) => original(body, options)) // Product identity initialization.
+        .mockImplementationOnce(async (body, options) => {
+          if (transition === 'deleted') await f.convoy.delete();
+          else if (transition === 'ended') await f.convoy.update({ status: 'ended' });
+          else
+            await f.convoy.update({
+              memberUids: f.uids.slice(1),
+              [`members.${uid}`]: FieldValue.delete(),
+            });
+          await f.trail.delete();
+          return original(body, options);
         });
-        await f.trail.delete();
-        return original(body, options);
-      });
       try {
         await expect(f.toggle(uid, true)).rejects.toMatchObject({
           code: transition === 'ended' ? 'failed-precondition' : 'not-found',
         });
-        expect(spy).toHaveBeenCalledOnce();
+        expect(spy).toHaveBeenCalledTimes(2);
         expect((await f.trail.get()).exists).toBe(false);
       } finally {
         spy.mockRestore();
@@ -154,9 +179,12 @@ describe('Follow Me real-handler lifecycle races', () => {
     const oldUid = f.uids.find((uid) => uid !== winner.leaderUid)!;
     await f.toggle(oldUid, false);
     expect((await f.trail.get()).data()).toEqual(winner);
-    await assertFails(updateDoc(doc(f.client(oldUid), f.trail.path), {
-      polyline: 'OLD', updatedAt: serverTimestamp(),
-    }));
+    await assertFails(
+      updateDoc(doc(f.client(oldUid), f.trail.path), {
+        polyline: 'OLD',
+        updatedAt: serverTimestamp(),
+      }),
+    );
   });
 });
 
@@ -228,39 +256,55 @@ describe('Follow Me activation generations and rules', () => {
     await assertSucceeds(updateDoc(ref, { polyline: 'LEGACY', updatedAt: serverTimestamp() }));
     const activationId = (await f.trail.get()).data()!.activationId;
     for (const replacement of ['OTHER', null, deleteField()]) {
-      await assertFails(updateDoc(ref, { activationId: replacement, updatedAt: serverTimestamp() }));
+      await assertFails(
+        updateDoc(ref, { activationId: replacement, updatedAt: serverTimestamp() }),
+      );
     }
     expect((await f.trail.get()).data()!.activationId).toBe(activationId);
     // Compatibility is intentional: an old writer does not carry the generation
     // it captured, so it cannot be made generation-safe by these rules alone.
     await f.toggle(uid, false);
     await f.toggle(uid, true);
-    await assertSucceeds(updateDoc(ref, { polyline: 'LEGACY-AFTER-RESTART', updatedAt: serverTimestamp() }));
+    await assertSucceeds(
+      updateDoc(ref, { polyline: 'LEGACY-AFTER-RESTART', updatedAt: serverTimestamp() }),
+    );
   });
 
   it('supports legacy docs without minting an id on noop; a new activation upgrades them', async () => {
     const f = await fixture();
     const uid = f.uids[0]!;
-    await f.trail.set({ leaderUid: uid, polyline: 'LEGACY', updatedAt: FieldValue.serverTimestamp() });
+    await f.trail.set({
+      leaderUid: uid,
+      polyline: 'LEGACY',
+      updatedAt: FieldValue.serverTimestamp(),
+    });
     await f.toggle(uid, true);
     expect((await f.trail.get()).data()!.activationId).toBeUndefined();
     const ref = doc(f.client(uid), f.trail.path);
-    await assertSucceeds(updateDoc(ref, { polyline: 'STILL-LEGACY', updatedAt: serverTimestamp() }));
+    await assertSucceeds(
+      updateDoc(ref, { polyline: 'STILL-LEGACY', updatedAt: serverTimestamp() }),
+    );
     await assertFails(updateDoc(ref, { activationId: 'FORGED', updatedAt: serverTimestamp() }));
     await f.toggle(uid, false);
     await f.toggle(uid, true);
     expect((await f.trail.get()).data()!.activationId).toEqual(expect.any(String));
   });
 
-  it.each(['forming', 'ended'])('denies direct writes on a retained trail in a %s convoy', async (status) => {
-    const f = await fixture();
-    const uid = f.uids[0]!;
-    await f.toggle(uid, true);
-    await f.convoy.update({ status });
-    await assertFails(updateDoc(doc(f.client(uid), f.trail.path), {
-      polyline: 'AFTER-END', updatedAt: serverTimestamp(),
-    }));
-  });
+  it.each(['forming', 'ended'])(
+    'denies direct writes on a retained trail in a %s convoy',
+    async (status) => {
+      const f = await fixture();
+      const uid = f.uids[0]!;
+      await f.toggle(uid, true);
+      await f.convoy.update({ status });
+      await assertFails(
+        updateDoc(doc(f.client(uid), f.trail.path), {
+          polyline: 'AFTER-END',
+          updatedAt: serverTimestamp(),
+        }),
+      );
+    },
+  );
 
   it('allows every accepted participant, including the author, to read the trail and its deletion', async () => {
     const f = await fixture();

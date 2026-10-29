@@ -11,15 +11,13 @@
  * defaults when a field is absent.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireAdminActor } from './actorContext';
 import { buildAdminAuditEvent } from './claims-core';
-import {
-  parseSetFeatureFlagInput,
-  type FeatureFlagKey,
-} from '../shared/featureFlags-core';
+import { parseSetFeatureFlagInput, type FeatureFlagKey } from '../shared/featureFlags-core';
 import { MAX_INSTANCES_ADMIN, CPU_ADMIN } from '../shared/instanceLimits';
 
 const CALLABLE_OPTS = {

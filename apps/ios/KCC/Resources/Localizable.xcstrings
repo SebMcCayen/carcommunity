@@ -3979,6 +3979,108 @@
         }
       }
     },
+    "carCommunityAccess.blacklistedTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Svartlistad i CarCommunity"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blacklisted in CarCommunity"
+          }
+        }
+      }
+    },
+    "carCommunityAccess.body": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Din åtkomst till CarCommunity är begränsad. Kontakta administratörerna om du har frågor."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your access to CarCommunity is restricted. Contact the administrators if you have questions."
+          }
+        }
+      }
+    },
+    "carCommunityAccess.checking": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontrollerar åtkomst…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking access…"
+          }
+        }
+      }
+    },
+    "carCommunityAccess.error": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åtkomsten kunde inte kontrolleras. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Access could not be verified. Please retry."
+          }
+        }
+      }
+    },
+    "carCommunityAccess.retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontrollera igen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check again"
+          }
+        }
+      }
+    },
+    "carCommunityAccess.suspendedTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åtkomsten är begränsad"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Access is restricted"
+          }
+        }
+      }
+    },
     "channel.emptyCommunity": {
       "extractionState": "manual",
       "localizations": {
@@ -5764,6 +5866,40 @@
         }
       }
     },
+    "clubs.chooseCounty": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Välj län"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose county"
+          }
+        }
+      }
+    },
+    "clubs.chooseCountyFirst": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Välj län först"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a county first"
+          }
+        }
+      }
+    },
     "clubs.chooseEvent": {
       "extractionState": "manual",
       "localizations": {
@@ -5777,6 +5913,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choose an event"
+          }
+        }
+      }
+    },
+    "clubs.chooseLocality": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Välj ort"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose locality"
           }
         }
       }
@@ -5879,6 +6032,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "You must wait 24 hours after leaving or being removed."
+          }
+        }
+      }
+    },
+    "clubs.county": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Län"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "County"
           }
         }
       }
@@ -6257,6 +6427,23 @@
         }
       }
     },
+    "clubs.localityPartOf": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ingår i %1$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Part of %1$@"
+          }
+        }
+      }
+    },
     "clubs.location": {
       "extractionState": "manual",
       "localizations": {
@@ -6270,6 +6457,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Location"
+          }
+        }
+      }
+    },
+    "clubs.locationCatalogError": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det gick inte att läsa in orterna. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not load localities. Try again."
+          }
+        }
+      }
+    },
+    "clubs.locationLoading": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Läser in orter…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading localities…"
           }
         }
       }
@@ -30947,13 +31168,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Åtkomsten avslutas direkt. Efter en lagringstid på 30 dagar rensar en begränsad daglig körning data som får tas bort; omförsök eller kö kan fördröja slutförandet. Raderingsbevis och vissa modererings-, revisions-, avidentifierade insikts- och belöningsanspråksposter, konvojers ägarnycklar samt eventchatt- och OSA-poster behålls."
+            "value": "Åtkomsten avslutas direkt. Efter en lagringstid på 30 dagar rensar en begränsad daglig körning data som får tas bort; omförsök eller kö kan fördröja slutförandet. Raderingsbevis och vissa modererings-, revisions-, avidentifierade insikts- och belöningsanspråksposter, konvojers ägarnycklar behålls."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Access ends immediately. After a 30-day retention period, a bounded daily purge removes eligible account data; retries or backlog may delay completion. A deletion proof and certain moderation, audit, de-identified insight and claim, convoy ownership, event chat and RSVP records are retained."
+            "value": "Access ends immediately. After a 30-day retention period, a bounded daily purge removes eligible account data; retries or backlog may delay completion. A deletion proof and certain moderation, audit, de-identified insight and claim, convoy ownership records are retained."
           }
         }
       }

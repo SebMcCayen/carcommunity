@@ -33,7 +33,7 @@
  * function — only per-key counts.
  */
 
-import { onCall } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import type { Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';

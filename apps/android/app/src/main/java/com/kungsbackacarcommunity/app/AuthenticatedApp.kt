@@ -1,5 +1,8 @@
 package com.kungsbackacarcommunity.app
 
+import com.kungsbackacarcommunity.app.access.CarCommunityAccessScreen
+import com.kungsbackacarcommunity.app.access.CarCommunityGateState
+import com.kungsbackacarcommunity.app.access.FirebaseCarCommunityAccessRepository
 import com.kungsbackacarcommunity.app.clubs.SharedClubRoute
 import android.Manifest
 import android.content.Intent
@@ -463,6 +466,7 @@ import com.kungsbackacarcommunity.app.shell.ShellBackResult
 import com.kungsbackacarcommunity.app.shell.MapCover
 import com.kungsbackacarcommunity.app.shell.ShellNavigation
 import com.kungsbackacarcommunity.app.shell.ShellRoute
+import com.kungsbackacarcommunity.app.shell.profileMenuEntries
 import com.kungsbackacarcommunity.app.shell.ShellTab
 import com.kungsbackacarcommunity.app.shell.TranslucentShellPanel
 import com.kungsbackacarcommunity.app.shell.GARAGE_PANEL_TEST_TAG
@@ -914,6 +918,31 @@ fun AuthenticatedApp(
     // account sweep. Failures stay inside the coordinator and never block the UI.
     LaunchedEffect(uid, loginRecordCoordinator) {
         loginRecordCoordinator?.recordLogin()
+    }
+
+    val accessContext = LocalContext.current
+    val productAccessRepository = remember(uid) { FirebaseCarCommunityAccessRepository.createIfAvailable(accessContext) }
+    val collectedProductAccess by remember(uid, productAccessRepository) { productAccessRepository?.updates(uid) ?: flowOf(CarCommunityGateState.Ready(com.kungsbackacarcommunity.app.access.CarCommunityStatus(uid, false, false))) }.collectAsState(initial = CarCommunityGateState.Loading)
+    val productAccess = if ((collectedProductAccess as? CarCommunityGateState.Ready)?.status?.uid?.let { it != uid } == true) CarCommunityGateState.Loading else collectedProductAccess
+    // Foreground refresh repairs initialization/provider changes without polling
+    // in the background. Live own-metadata changes remove the shell immediately.
+    val accessLifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(uid, productAccessRepository, accessLifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event -> if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) productAccessRepository?.refresh(uid) }
+        accessLifecycle.addObserver(observer)
+        onDispose { accessLifecycle.removeObserver(observer) }
+    }
+    val productRestricted = productAccess == CarCommunityGateState.Failed || (productAccess as? CarCommunityGateState.Ready)?.status?.restricted == true
+    LaunchedEffect(uid, productRestricted) {
+        if (productRestricted) {
+            SingleSessionRecording.clearIfNotOwnedBy(null)
+            BackgroundLocationController.stop(accessContext)
+            liveLocationCoordinator?.hideMeNow()
+        }
+    }
+    if (productAccessRepository != null && (productAccess !is CarCommunityGateState.Ready || productRestricted)) {
+        CarCommunityAccessScreen(uid, productAccess, onRetry = { productAccessRepository.refresh(uid) }, onSignOut = onSignOut, deletion = accountDeletionCoordinator)
+        return
     }
 
     val profileFlow =
@@ -1981,10 +2010,10 @@ fun AuthenticatedApp(
                 }
                     .collectAsState(initial = false)
 
-            // The map chat-bubble's red dot: true when ANYTHING in the hub is
-            // unread — community message, DM, notification, or a convoy message.
+            // Only message destinations light Chat. Notifications have their own
+            // badge on the map avatar/menu and retain their existing seen marker.
             val anyChatUnread =
-                communityChatUnread || dmUnread || notificationsUnread || anyConvoyChatUnread
+                communityChatUnread || dmUnread || anyConvoyChatUnread
 
             // Single shared vehicles stream for the garage: exactly one Firestore
             // snapshot listener while the user is on the Garage tab — and none at
@@ -6740,10 +6769,11 @@ fun AuthenticatedApp(
                                     // own full route (or signs out).
                                     moreMenuEntries =
                                         profileMenuEntries(
-                                            profileEditCoordinator = profileEditCoordinator,
-                                            friendsRepository = friendsRepository,
-                                            partnerApplicationCoordinator =
-                                                partnerApplicationCoordinator,
+                                            profileAvailable = profileEditCoordinator != null,
+                                            friendsAvailable = friendsRepository != null,
+                                            partnerApplicationAvailable = partnerApplicationCoordinator != null,
+                                            notificationsAvailable = notificationsRepository != null,
+                                            notificationsUnread = notificationsUnread,
                                             // Top-level entries from the map-home
                                             // profile popup: each starts a fresh
                                             // stack, so Back returns to the map.
@@ -6751,12 +6781,11 @@ fun AuthenticatedApp(
                                             onSignOut = onSignOut,
                                         ),
                                     // Aggregate unread red DOT: shown when there is
-                                    // any unread across the hub — a community
-                                    // message, a DM, or a notification. Cleared as
+                                    // any unread community, DM or convoy message. Cleared as
                                     // each source is read.
                                     hasUnreadChat = anyChatUnread,
                                     // The chat bubble opens the full-page chat HUB
-                                    // (Community / Convoys / Friends / Notifications)
+                                    // (Community / Convoys / Friends / Club)
                                     // as the `chatHubOpen` overlay over the map, with
                                     // the shell's bottom bar still showing. See the
                                     // chat-hub render below.
@@ -7602,16 +7631,9 @@ fun AuthenticatedApp(
                                                                     null
                                                                 },
                                                             ),
-                                                            // Notifications intentionally removed
-                                                            // from the Social menu: the inbox is
-                                                            // the chat hub's own Notifications
-                                                            // TAB, so this row was a second door
-                                                            // onto a screen the chat area already
-                                                            // carries. Only the menu ENTRY is
-                                                            // gone — ShellRoute.Notifications is
-                                                            // still routed, and a NOTIFICATIONS
-                                                            // push tap still opens it (see the
-                                                            // PushTarget handling above).
+                                                            // Notifications belongs in the map
+                                                            // avatar menu; push links retain
+                                                            // the same standalone inbox route.
                                                             HubEntry(
                                                                 stringResource(R.string.shell_socialCrownHunt),
                                                                 Icons.Filled.EmojiEvents,
@@ -8355,12 +8377,10 @@ fun AuthenticatedApp(
                             convoyChatRepository = convoyChatRepository,
                             friendsRepository = friendsRepository,
                             dmRepository = dmRepository,
-                            notificationsRepository = notificationsRepository,
-                            notificationsCoordinator = notificationsCoordinator,
                             communityUnread = communityChatUnread,
                             convoysUnread = anyConvoyChatUnread,
                             friendsUnread = dmUnread,
-                            notificationsUnread = notificationsUnread,
+
                             // System Back (via the hub's BackHandler) and the Back
                             // arrow both close the hub back to the map.
                             onClose = { selectedTab = ShellTab.Map },
@@ -8382,8 +8402,6 @@ fun AuthenticatedApp(
                             // convoy bar's chat icon) lands on that convoy's channel.
                             // Cleared on close by the effect beside `chatHubOpen`.
                             pushDeepLink = chatHubLandingLink,
-                            convoyLink = convoyNotificationLink,
-                            onOpenEvent = openEventFromNotification,
                         )
                     }
                 }
@@ -8436,7 +8454,6 @@ fun AuthenticatedApp(
         }
     }
 }
-
 
 /**
  * Height of [ShellBottomBar]'s icon row (ABOVE the system navigation-bar inset
@@ -8525,9 +8542,9 @@ internal fun ShellBottomBar(
                 androidx.compose.material3.BadgedBox(badge = {
                     if (hasUnreadChat) androidx.compose.material3.Badge()
                 }) {
-                    Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = stringResource(
-                        if (hasUnreadChat) R.string.shell_chatUnreadDot else R.string.shell_tabChat,
-                    ))
+                    Icon(Icons.AutoMirrored.Filled.Chat, contentDescription =
+                        stringResource(R.string.shell_tabChat) +
+                            if (hasUnreadChat) ", " + stringResource(R.string.chatHub_tabUnread) else "")
                 }
             },
             label = { Text(stringResource(R.string.shell_tabChat), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
@@ -9534,12 +9551,9 @@ private fun RouteHost(
                 convoyChatRepository = convoyChatRepository,
                 friendsRepository = friendsRepository,
                 dmRepository = dmRepository,
-                notificationsRepository = notificationsRepository,
-                notificationsCoordinator = notificationsCoordinator,
                 communityUnread = communityChatUnread,
                 convoysUnread = convoyChatUnread,
                 friendsUnread = dmUnread,
-                notificationsUnread = notificationsUnread,
                 onClose = onClose,
                 onViewProfile = openProfileIfWired,
                 // Tapping a shared location link leaves the hub and shows that
@@ -9552,8 +9566,6 @@ private fun RouteHost(
                 blockingRepository = blockingRepository,
                 chatRepliesEnabled = chatRepliesEnabled,
                 pushDeepLink = chatHubPushLink,
-                convoyLink = convoyNotificationLink,
-                onOpenEvent = openEventFromNotification,
             )
 
         // Migration-safe: `Badges` is the retired flat awards list. Its profile-menu
@@ -9782,97 +9794,6 @@ private fun LoadingScreen() {
         }
     }
 }
-
-/**
- * The profile/account menu shown by the map-home top-right button. Rendered by
- * [com.kungsbackacarcommunity.app.shell.MapHome] as a transparent
- * [androidx.compose.ui.window.Popup] over the map
- * (not a full-screen hub), but the entries themselves still navigate to full
- * routes via [onOpenRoute] (or sign out). Unavailable entries carry a null
- * `onClick` and are omitted by the popup / [HubScreen].
- */
-@Composable
-private fun profileMenuEntries(
-    profileEditCoordinator: ProfileEditCoordinator?,
-    friendsRepository: FriendsRepository?,
-    partnerApplicationCoordinator: PartnerApplicationCoordinator?,
-    onOpenRoute: (ShellRoute) -> Unit,
-    onSignOut: () -> Unit,
-): List<HubEntry> =
-    listOf(
-        HubEntry(
-            stringResource(R.string.shell_moreDrives),
-            Icons.Filled.History,
-            { onOpenRoute(ShellRoute.MyDrives) },
-        ),
-        HubEntry(
-            stringResource(R.string.shell_moreProfile),
-            Icons.Filled.Person,
-            if (profileEditCoordinator != null) {
-                { onOpenRoute(ShellRoute.Profile) }
-            } else {
-                null
-            },
-        ),
-        // "Messages" was removed from this menu: the map-home chat bubble is an
-        // UNCONDITIONAL right-side control (MapControlSet.rightSideStack) and the
-        // hub it opens renders the very same DM inbox (ConversationListRoute, on
-        // its "Friends" tab) behind the very same `dmRepository != null` gate
-        // this entry used — so the row was a second door onto a screen that is
-        // one tap away on the map. Every other way in survives untouched:
-        // ShellRoute.Conversations is still routed and is still where a
-        // PushTarget.DM tap with no counterpart lands; a DM push WITH a
-        // counterpart still opens the thread; and the Friends screen's "Message"
-        // button and a member profile still open a thread via openChat.
-        // Friends moved here from the Social menu: managing who you are
-        // connected to is an account concern, not a browse-the-community one.
-        // This is now the ONLY menu route to the friends list — the chat hub's
-        // "Friends" TAB is the DM inbox, a different screen — and a
-        // PushTarget.FRIENDS tap still opens it directly (see above).
-        HubEntry(
-            stringResource(R.string.shell_friendsTitle),
-            Icons.Filled.Groups,
-            if (friendsRepository != null) {
-                { onOpenRoute(ShellRoute.Friends) }
-            } else {
-                null
-            },
-        ),
-        // "Points" was removed from this menu (Seb, 2026-07-31): Kronpoäng is a
-        // profile concern and belongs on the profile page, not in the account
-        // menu beside it. The full ledger did NOT go with it — the profile's
-        // points card only summarises (balance + 4 recent, undated CREDITS)
-        // while PointsScreen is the whole statement (credits and debits, each
-        // dated), so the card was made TAPPABLE and now opens
-        // ShellRoute.Points itself (see the Profile branch of RouteHost:
-        // `onOpenPoints`). That card is the app's ONLY door to the ledger; do
-        // not add a second one here without removing that one.
-        // "Awards" (the flat BadgesScreen list) was removed from this menu: the
-        // profile screen's own ProfileBadgesSection is a strict superset of it —
-        // every rung of every ladder plus the standalone milestones, earned lit
-        // and unearned greyed, with the unlock date in each medallion's detail —
-        // so the entry was a second, poorer door onto the same trophies.
-        // ShellRoute.Badges is retired with it (see the route host).
-        HubEntry(
-            stringResource(R.string.shell_morePartnerApplication),
-            Icons.Filled.BusinessCenter,
-            if (partnerApplicationCoordinator != null) {
-                { onOpenRoute(ShellRoute.PartnerApplication) }
-            } else {
-                null
-            },
-        ),
-        HubEntry(
-            stringResource(R.string.shell_moreSettings),
-            Icons.Filled.Settings,
-            { onOpenRoute(ShellRoute.Settings) },
-        ),
-        HubEntry(
-            stringResource(R.string.shell_moreSignOut),
-            Icons.AutoMirrored.Filled.Logout,
-            onSignOut,
-        ),
-    )
 
 // The garage hub's main-car header avatar (and its mainCarImagePath derivation)
 // went away with the hub: the Garage tab now opens straight onto the vehicle

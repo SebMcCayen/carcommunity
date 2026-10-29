@@ -497,7 +497,16 @@ final class ShellSmokeTests: XCTestCase {
         for id in ["map", "chat", "create", "social", "garage"] {
             let button = app.buttons["shell.tab.\(id)"]
             let ready = XCTNSPredicateExpectation(
-                predicate: NSPredicate(format: "exists == true AND hittable == true"), object: button
+                predicate: NSPredicate { _, _ in
+                    guard button.exists else { return false }
+                    let frame = button.frame
+                    // XCTest can raise an AX error instead of returning false
+                    // for hittable while SwiftUI is still publishing a zero or
+                    // offscreen frame. Require valid on-screen geometry first.
+                    guard !frame.isEmpty, !frame.isNull, !frame.isInfinite,
+                        app.frame.contains(CGPoint(x: frame.midX, y: frame.midY)) else { return false }
+                    return button.isHittable
+                }, object: button
             )
             XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 15), .completed,
                 "Primary action \(id) was not interactive after launch")
@@ -512,7 +521,10 @@ final class ShellSmokeTests: XCTestCase {
             predicate: NSPredicate(format: "selected == true"),
             object: tab
         )
-        let result = XCTWaiter.wait(for: [selected], timeout: 5)
+        // Hosted runners can publish selection after the initial five seconds;
+        // failure diagnostics have then already observed selected=true. Keep the
+        // actual-state assertion, with the same bounded wait as launch readiness.
+        let result = XCTWaiter.wait(for: [selected], timeout: 15)
         if result != .completed { diagnosePrimaryControls(XCUIApplication()) }
         XCTAssertEqual(result, .completed, "Selection did not settle for \(tab.identifier)")
     }
@@ -523,8 +535,9 @@ final class ShellSmokeTests: XCTestCase {
         for _ in 0..<12 {
             let viewport = scroll.frame
             let frame = target.exists ? target.frame : .zero
-            if target.exists && target.isHittable && frame.height >= minimumHeight
-                && viewport.insetBy(dx: 0, dy: 1).contains(frame) { return }
+            if frame.height >= minimumHeight
+                && viewport.insetBy(dx: 0, dy: 1).contains(frame)
+                && target.isHittable { return }
             let above = !frame.isEmpty && frame.midY < viewport.midY
             // A press-and-drag can grab a switch/slider instead of scrolling.
             // Use the native scroll gesture, which also negotiates sheet detents.

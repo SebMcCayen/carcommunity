@@ -35,6 +35,7 @@ import { translate } from '@/i18n';
 import { formatDateOnly, formatDateTimeStockholm } from '@/lib/format';
 
 import styles from './page.module.css';
+import { BlacklistCases } from './BlacklistCases';
 
 const t = (key: string) => translate('sv', key);
 
@@ -131,6 +132,7 @@ export default function UsersPage() {
 
   return (
     <div className={styles.page}>
+      <BlacklistCases />
       <header className={styles.header}>
         <h1 className={styles.title}>{t('users.title')}</h1>
         <p className={styles.subtitle}>{t('users.subtitle')}</p>

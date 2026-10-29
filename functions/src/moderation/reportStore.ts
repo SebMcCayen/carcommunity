@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { toUserAccessState, isRestricted } from '../shared/access';
 /**
  * Firestore I/O for the moderation-report domain: the rate-limited,
  * deduplicating upsert shared by chatchannels.reportMessage,
@@ -134,9 +136,7 @@ export async function fileUserReport(input: {
   const reportRef = reportsCollection().doc(
     moderationUserReportId(input.reporterUserId, input.reportedUserId),
   );
-  const summaryRef = db
-    .collection(MODERATION_USER_SUMMARIES_COLLECTION)
-    .doc(input.reportedUserId);
+  const summaryRef = db.collection(MODERATION_USER_SUMMARIES_COLLECTION).doc(input.reportedUserId);
 
   await db.runTransaction(async (tx) => {
     const existing = await tx.get(reportRef);
@@ -170,5 +170,62 @@ export async function fileUserReport(input: {
     );
   });
 
+  return { reported: true };
+}
+
+/** Server-captured public content, visible in the existing private admin queue. */
+export async function filePublicContentReport(input: {
+  surface: string;
+  scopeId: string;
+  targetId: string;
+  reporterUserId: string;
+  reason: ModerationReportReason;
+  snapshot: {
+    authorUserId: string | null;
+    authorDisplayName: string | null;
+    text: string;
+    createdAt: unknown;
+  };
+}): Promise<ReportResponse> {
+  const key = createHash('sha256')
+    .update(
+      JSON.stringify([
+        input.surface,
+        input.scopeId,
+        input.targetId,
+        input.reporterUserId,
+        input.reason,
+      ]),
+    )
+    .digest('hex');
+  const ref = reportsCollection().doc(`public-${key}`);
+  const privateRef = db.collection('userPrivate').doc(input.reporterUserId);
+  await db.runTransaction(async (tx) => {
+    const snapshots = await tx.getAll(ref, db.collection('users').doc(input.reporterUserId));
+    const existing = snapshots[0]!;
+    const actor = snapshots[1]!;
+    if (!actor.exists || isRestricted(toUserAccessState(actor.data()))) {
+      throw new HttpsError('permission-denied', 'Account access changed.');
+    }
+    if (existing.exists) return; // Never reset an already reviewed case.
+    if (isModerationRateLimited(await reporterCountInWindow(tx, input.reporterUserId))) {
+      throw new HttpsError('resource-exhausted', RATE_LIMITED_MESSAGE);
+    }
+    // Serialize new reports by this actor, including reports of different items.
+    await tx.get(privateRef);
+    tx.set(privateRef, { lastPublicReportAt: FieldValue.serverTimestamp() }, { merge: true });
+    tx.set(ref, {
+      reportedBy: input.reporterUserId,
+      targetType: input.surface === 'billboard' ? 'advertisement' : 'message',
+      targetId: input.targetId,
+      scopeId: input.scopeId,
+      surface: input.surface,
+      reason: input.reason,
+      details: null,
+      snapshot: input.snapshot,
+      status: 'pending',
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  });
   return { reported: true };
 }

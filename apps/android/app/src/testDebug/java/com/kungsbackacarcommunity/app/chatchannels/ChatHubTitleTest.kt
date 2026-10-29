@@ -94,12 +94,11 @@ class ChatHubTitleTest {
                         convoyChatRepository = null,
                         friendsRepository = null,
                         dmRepository = dmRepository,
-                        notificationsRepository = null,
-                        notificationsCoordinator = null,
+
                         communityUnread = false,
                         convoysUnread = false,
                         friendsUnread = false,
-                        notificationsUnread = false,
+
                         onClose = {},
                     )
                 }

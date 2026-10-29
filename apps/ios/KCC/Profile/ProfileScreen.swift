@@ -383,7 +383,7 @@ struct AccountWarning: Identifiable, Sendable {
     }
 }
 
-private struct AccountWarningsSection: View {
+struct AccountWarningsSection: View {
     let uid: String
     @State private var warnings: [AccountWarning] = []
     @State private var cursor: String?

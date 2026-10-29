@@ -1,0 +1,40 @@
+.dialog::backdrop {
+  background: rgb(3 2 16 / 65%);
+  backdrop-filter: blur(2px);
+}
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.content h3 {
+  margin: 0;
+  font-size: 20px;
+}
+.content label {
+  display: block;
+  font-size: 14px;
+}
+.content textarea,
+.content input:not([type='checkbox']):not([type='radio']),
+.content select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.content > button {
+  align-self: flex-start;
+  min-height: 44px;
+  padding: 10px 16px;
+}
+.cancel {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.cancel:hover {
+  background: var(--bg-surface-hover);
+}

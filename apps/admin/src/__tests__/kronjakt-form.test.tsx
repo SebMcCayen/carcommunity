@@ -41,6 +41,8 @@ const mocks = vi.hoisted(() => ({
   pause: vi.fn(),
 }));
 
+vi.mock('@/app/kronjakt/CrownOverview', () => ({ CrownOverview: () => null }));
+
 vi.mock('@/features/feature-flags', () => ({ subscribeFeatureFlagRows: vi.fn() }));
 
 vi.mock('@/features/crown-hunt', () => ({
@@ -96,6 +98,7 @@ async function render() {
   await act(async () => {
     root.render(<KronjaktPage />);
   });
+  await act(async () => buttonByText('Handplacerade').click());
 }
 
 /** Sets a controlled input's value the way React's synthetic layer expects. */
@@ -124,7 +127,7 @@ function buttonContaining(label: string): HTMLButtonElement {
 
 async function openCreateForm() {
   await act(async () => {
-    buttonByText(t('crownHunt.createPoint')).click();
+    buttonByText('Skapa handplacerad krona').click();
   });
 }
 

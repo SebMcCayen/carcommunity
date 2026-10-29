@@ -34,7 +34,7 @@
  * corrupt field reads as 0 rather than a spurious bar.
  */
 
-import { onCall } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
 import { readBadgeCounters, type BadgeCounters } from './badge-tiers';

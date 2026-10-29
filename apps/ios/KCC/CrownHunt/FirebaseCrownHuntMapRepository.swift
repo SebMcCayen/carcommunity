@@ -7,7 +7,7 @@ final class FirebaseCrownHuntMapRepository: CrownHuntMapRepository, @unchecked S
     private let functions: KccFunctionsClient
     private let iso8601 = ISO8601DateFormatter()
 
-    private init(firestore: Firestore, functions: KccFunctionsClient) {
+    init(firestore: Firestore, functions: KccFunctionsClient) {
         self.firestore = firestore
         self.functions = functions
         iso8601.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

@@ -50,40 +50,13 @@ const fmt = (key: string, params: Record<string, string | number>): string =>
 const pct = (rate: number): string => `${Math.round(rate * 100)}%`;
 const na = (value: number | null): string => (value === null ? '—' : String(value));
 
-/**
- * True for a Firestore `permission-denied` — the EXPECTED transitional case for
- * perk stats: the crownHuntPerkStats rules deploy separately (deferred), so
- * these reads are denied in prod until the rules ship. We discriminate on the
- * FirebaseError `code`, never a message match. Any OTHER error (network, an
- * `unavailable`, a genuine post-deploy regression) is a REAL failure and must
- * surface — not be masked as legitimate "0" data.
- */
-function isPermissionDenied(err: unknown): boolean {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    (err as { code?: unknown }).code === 'permission-denied'
-  );
-}
-
-/**
- * Read one perk-stats scope, discriminating the outcome:
- *  - success            → the view, not failed
- *  - permission-denied  → a ZEROED view, not failed (expected pre-deploy)
- *  - any other error    → a zeroed view flagged `failed` so the UI can show a
- *                         perk-section error state instead of fake zeros.
- */
+/** Any failed read, including denied permissions, is unknown data rather than zero activity. */
 async function loadPerkScope(
   scope: string,
 ): Promise<{ view: AdminPerkStatsView; failed: boolean }> {
   try {
     return { view: await adminGetPerkStats(scope), failed: false };
   } catch (err: unknown) {
-    if (isPermissionDenied(err)) {
-      // Rules not deployed yet: absent aggregate → honest zeros (empty =
-      // expected pre-launch, matching the section copy).
-      return { view: toAdminPerkStatsView(scope, undefined), failed: false };
-    }
     console.warn(`[kronjakt] perk stats (${scope}) failed to load`, err);
     return { view: toAdminPerkStatsView(scope, undefined), failed: true };
   }
@@ -223,9 +196,7 @@ function PerkStatsSection({
   season: AdminPerkStatsView;
   hasError: boolean;
 }): React.ReactElement {
-  // A REAL read failure (not the expected permission-denied) shows an error
-  // state, NOT zeroed cards — so a genuine failure is visibly distinct from the
-  // graceful pre-deploy zeros.
+  // Missing documents have zero activity; failed or denied reads remain unknown.
   if (hasError) {
     return <p className={page.errorText}>{t('crownHunt.statPerkError')}</p>;
   }
@@ -360,7 +331,9 @@ export function StatsTab(): React.ReactElement {
     return <p className={page.emptyText}>{t('crownHunt.statNoData')}</p>;
   }
 
-  const pastSeasons = data.seasons.filter((s) => s.status === 'ended' && (s.winners?.length ?? 0) > 0);
+  const pastSeasons = data.seasons.filter(
+    (s) => s.status === 'ended' && (s.winners?.length ?? 0) > 0,
+  );
   const board = boardScope === 'season' ? data.seasonLeaderboard : data.allTimeLeaderboard;
   const rarityScope = boardScope === 'season' ? data.season : data.allTime;
 
@@ -379,7 +352,11 @@ export function StatsTab(): React.ReactElement {
 
       {/* Leaderboard with scope toggle */}
       <h3 className={styles.sectionTitle}>{t('crownHunt.statLeaderboardTitle')}</h3>
-      <div className={styles.toggleRow} role="radiogroup" aria-label={t('crownHunt.statLeaderboardTitle')}>
+      <div
+        className={styles.toggleRow}
+        role="radiogroup"
+        aria-label={t('crownHunt.statLeaderboardTitle')}
+      >
         <button
           type="button"
           role="radio"
@@ -431,7 +408,8 @@ export function StatsTab(): React.ReactElement {
             <ol className={styles.podiumList}>
               {(season.winners ?? []).map((w) => (
                 <li key={w.uid}>
-                  {w.displayName || w.uid.slice(0, 8)} — {fmt('crownHunt.statWinnerLine', {
+                  {w.displayName || w.uid.slice(0, 8)} —{' '}
+                  {fmt('crownHunt.statWinnerLine', {
                     points: w.points,
                     crowns: w.crownsCollected,
                   })}

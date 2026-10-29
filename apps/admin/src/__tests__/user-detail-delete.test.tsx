@@ -16,6 +16,8 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@/app/users/[id]/MemberMessages', () => ({ MemberMessages: () => null }));
+
 const deleteMock = vi.fn();
 const navigateMock = vi.fn();
 
@@ -44,6 +46,11 @@ vi.mock('@/features/users', () => ({
   adminSuspendUser: vi.fn(),
   adminWarnUser: vi.fn(),
 }));
+
+vi.mock('@/app/users/[id]/AccessTools', () => ({ AccessTools: () => null }));
+
+vi.mock('@/app/users/[id]/MemberOverview', () => ({ MemberOverview: () => null }));
+vi.mock('@/app/users/[id]/MemberHistory', () => ({ MemberHistory: () => null }));
 
 vi.mock('@/app/users/[id]/MemberTools', () => ({ MemberTools: () => null }));
 
@@ -104,7 +111,14 @@ async function render() {
     root.render(<UserDetailPage />);
   });
   await flush();
+  act(() => button('Profil').click());
+  await flush();
 }
+
+it('does not label a member with missing product access metadata as active', async () => {
+  await render();
+  expect(container.querySelector('[role="status"]')?.textContent).toBe('Åtkomst ej verifierad');
+});
 
 describe('User detail — delete danger zone', () => {
   it('reveals a confirm dialog naming the user only after pressing Delete user', async () => {

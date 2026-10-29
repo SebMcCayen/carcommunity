@@ -33,8 +33,8 @@ interface NotificationsRepository {
      * Live "has unseen" flag for [uid]: true while the newest notification is
      * newer than the caller's last-seen marker
      * (`userPrivate/{uid}.notificationsLastSeenAt`). Emits false once [markSeen]
-     * runs (or while the inbox is empty). Drives the aggregate map chat-bubble
-     * dot and the hub's Notifications tab dot — the exact mirror of
+     * runs (or while the inbox is empty). Drives the map avatar and its
+     * Notifications menu-row dot — the exact mirror of
      * [com.kungsbackacarcommunity.app.chatchannels.CommunityChatRepository.observeUnread].
      */
     fun observeUnread(uid: String): Flow<Boolean>

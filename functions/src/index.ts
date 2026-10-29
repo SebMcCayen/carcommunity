@@ -1,3 +1,12 @@
+import {
+  listPublicReports,
+  listMemberMessages,
+  getPublicModerationCase,
+  decidePublicModeration,
+} from './admin/publicModeration';
+import { listMemberHistory } from './admin/memberHistory';
+import { getAccess, onAccessWrite, onIdentityWrite } from './access/carCommunity';
+import { getAccessTarget, updateAccess, listAccessBlocks } from './access/adminAccess';
 /**
  * Cloud Functions entry point.
  *
@@ -237,6 +246,7 @@ import {
 import { reportMessage as chatChannelsReportMessage } from './chatchannels/reportMessage';
 import { adminDeleteMessage as chatChannelsAdminDeleteMessage } from './chatchannels/adminDeleteMessage';
 import { reportMessage as dmReportMessage } from './dm/reportMessage';
+import { reportPublicContent } from './moderation/reportPublicContent';
 import { reportUser as moderationReportUser } from './moderation/reportUser';
 
 /** Native Driver read bridge; owned by this Firebase project's default codebase. */
@@ -307,6 +317,14 @@ export const auth = {
  * here via the Admin SDK — clients can never set or modify them.
  */
 export const admin = {
+  listPublicReports,
+  listMemberMessages,
+  getPublicModerationCase,
+  decidePublicModeration,
+  listMemberHistory,
+  getAccessTarget,
+  listAccessBlocks,
+  updateAccess,
   listWarnings,
   revokeWarning,
   setWarningExpiry,
@@ -1083,6 +1101,7 @@ export const police = {
  * functions/src/account/deletion-core.ts.
  */
 export const account = {
+  getAccess,
   listWarnings: listOwnWarnings,
   deleteAccount,
   purgeDeleted,
@@ -1487,6 +1506,7 @@ export const chatchannels = {
  * admin triage. See functions/src/moderation/moderation-core.ts.
  */
 export const moderation = {
+  reportPublicContent,
   reportUser: moderationReportUser,
 };
 
@@ -1532,3 +1552,6 @@ export const finance = {
   updateRecurringCost: financeUpdateRecurringCost,
   deleteRecurringCost: financeDeleteRecurringCost,
 };
+
+/** Product-only access mirrors; no shared Auth changes. */
+export const carCommunityAccess = { onAccessWrite, onIdentityWrite };

@@ -9,7 +9,8 @@
  * authoritative policy without breaking Closed Testing installs.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import {
   FieldPath,
   Timestamp,

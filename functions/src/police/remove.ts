@@ -17,7 +17,8 @@
  * fetch; the `votes/{uid}` verify ledger is swept immediately after (best-effort).
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';

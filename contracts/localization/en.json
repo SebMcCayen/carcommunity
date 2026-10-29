@@ -83,7 +83,7 @@
     "accountDeletionAcknowledgement": "I understand that this deletes my entire account in this app and cannot be undone.",
     "accountDeletionError": "Could not delete your account. Please try again.",
     "accountDeletionConfirmTitle": "Delete your account?",
-    "accountDeletionConfirmBody": "Access ends immediately. After a 30-day retention period, a bounded daily purge removes eligible account data; retries or backlog may delay completion. A deletion proof and certain moderation, audit, de-identified insight and claim, convoy ownership, event chat and RSVP records are retained.",
+    "accountDeletionConfirmBody": "Access ends immediately. After a 30-day retention period, a bounded daily purge removes eligible account data; retries or backlog may delay completion. A deletion proof and certain moderation, audit, de-identified insight and claim, convoy ownership records are retained.",
     "accountDeletionAuthenticationRequired": "Your session has expired. Sign in again before deleting your account.",
     "accountDeletionTemporaryError": "Account deletion is temporarily unavailable. Please try again.",
     "accountDeletionUnavailable": "Account deletion is not available in this build.",
@@ -2179,6 +2179,13 @@
     "close": "Close"
   },
   "clubs": {
+    "county": "County",
+    "chooseCounty": "Choose county",
+    "chooseCountyFirst": "Choose a county first",
+    "chooseLocality": "Choose locality",
+    "localityPartOf": "Part of %1$s",
+    "locationLoading": "Loading localities…",
+    "locationCatalogError": "Could not load localities. Try again.",
     "title": "Club",
     "chatTab": "Club",
     "directory": "Find your club",
@@ -2276,5 +2283,13 @@
     "more": "Load more warnings",
     "untilRevoked": "Valid until revoked",
     "expires": "Valid until"
+  },
+  "carCommunityAccess": {
+    "checking": "Checking access…",
+    "error": "Access could not be verified. Please retry.",
+    "blacklistedTitle": "Blacklisted in CarCommunity",
+    "suspendedTitle": "Access is restricted",
+    "body": "Your access to CarCommunity is restricted. Contact the administrators if you have questions.",
+    "retry": "Check again"
   }
 }

@@ -114,6 +114,25 @@ controls remain supported. Text/icon actions retain their own native roles;
 compact chat navigation must not grow into full-width primary actions. Event
 detail secondary actions use equal-width columns with wrapping native labels.
 
+## Android chat and account navigation — 2026-10-29
+
+Android Chat contains Community, Convoys, Friends and Club. Notifications uses
+its existing standalone route from the map avatar menu, including existing push
+links, friend-request actions and seen/read semantics. Its unread dot belongs on
+the avatar and Notifications row, rather than Chat. This reuses the existing
+shell-owned unread stream and adds no backend listeners.
+
+The Android avatar menu's fixed order is Profile, Friends, My drives, Become a
+partner, Notifications, Settings, Sign out. Saved places remains directly after
+My drives to preserve its existing picker access. Availability gates still hide
+unconfigured destinations. The menu scrolls on short or large-text windows.
+
+Chat accents use the existing gold primary/onPrimary pair. Own bubbles and send
+buttons use dark ink on gold; incoming links remain underlined and use dark ink
+in light theme when gold would have insufficient text contrast. Unread dots
+contrast with both selected gold and unselected reading surfaces. Cyan remains
+the map's active-driver role. No iOS presentation or shared token changes.
+
 ## Map composition
 
 At the 390 x 844 reference size, aim to leave two thirds of the map visible

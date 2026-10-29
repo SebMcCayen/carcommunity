@@ -1,3 +1,4 @@
+import { containsObjectionableText } from '../moderation/content-filter';
 /**
  * Chat-channels domain core (pure logic): input parsing, message-document
  * builders, and client-summary mappers shared by the COMMUNITY and CONVOY chat
@@ -356,7 +357,14 @@ const clientMessageIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 
 const postCommunitySchema = z
   .object({
-    text: z.string().min(1).max(CHAT_MESSAGE_MAX_LENGTH),
+    text: z
+      .string()
+      .min(1)
+      .max(CHAT_MESSAGE_MAX_LENGTH)
+      .refine(
+        (value) => !containsObjectionableText(value),
+        'Content violates the community rules.',
+      ),
     // Client-resolved @mentions (the @-picker hands back uids, never names —
     // displayName is not unique, so the server must not resolve names itself).
     // Over the cap is a hard reject rather than a silent truncation: the picker
@@ -389,7 +397,14 @@ const markReadCommunitySchema = z.object({}).strict();
 const postConvoySchema = z
   .object({
     convoyId: idSchema,
-    text: z.string().min(1).max(CHAT_MESSAGE_MAX_LENGTH),
+    text: z
+      .string()
+      .min(1)
+      .max(CHAT_MESSAGE_MAX_LENGTH)
+      .refine(
+        (value) => !containsObjectionableText(value),
+        'Content violates the community rules.',
+      ),
     clientId: clientMessageIdSchema.optional(),
     // Inline reply target — same contract as the community channel: the client
     // sends only the parent message id, the server snapshots the parent from
@@ -422,9 +437,11 @@ function parse<T>(schema: z.ZodType<T>, data: unknown, expected: string): ParseR
 }
 
 export const POST_COMMUNITY_EXPECTED = `Expected { text, mentionedUids?, clientId?, replyToMessageId? } with text 1..${CHAT_MESSAGE_MAX_LENGTH} characters, at most ${MAX_MESSAGE_MENTIONS} mentioned uids, and clientId matching [A-Za-z0-9_-]{1,64}.`;
-export const LIST_COMMUNITY_EXPECTED = 'Expected { before? } where before is an ISO-8601 timestamp.';
+export const LIST_COMMUNITY_EXPECTED =
+  'Expected { before? } where before is an ISO-8601 timestamp.';
 export const POST_CONVOY_EXPECTED = `Expected { convoyId, text, clientId?, replyToMessageId? } with text 1..${CHAT_MESSAGE_MAX_LENGTH} characters and clientId matching [A-Za-z0-9_-]{1,64}.`;
-export const LIST_CONVOY_EXPECTED = 'Expected { convoyId, before? } where before is an ISO-8601 timestamp.';
+export const LIST_CONVOY_EXPECTED =
+  'Expected { convoyId, before? } where before is an ISO-8601 timestamp.';
 export const MARK_READ_CONVOY_EXPECTED = 'Expected { convoyId }.';
 
 export function parsePostCommunityInput(data: unknown): ParseResult<PostCommunityInput> {

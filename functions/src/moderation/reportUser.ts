@@ -31,7 +31,8 @@
  * moderationUserSummaries/{uid} aggregate, kept in the same transaction.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
 import { toUserAccessState } from '../shared/access';

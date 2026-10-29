@@ -283,8 +283,11 @@ async function outer() {
     const innerCmd = `node ${JSON.stringify(selfPath)} --inner`;
 
     const execCode = await run(
-      'firebase',
+      process.execPath,
       [
+        resolve(functionsDir, '../scripts/run-no-cloud.mjs'),
+        '--',
+        'firebase',
         'emulators:exec',
         '--only',
         'auth,functions,firestore,database,storage',

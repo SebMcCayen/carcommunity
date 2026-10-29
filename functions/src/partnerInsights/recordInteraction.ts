@@ -20,7 +20,8 @@
  *   cleanup; only threshold-enforced aggregates persist.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { readFeatureFlag } from '../shared/featureFlags';
@@ -124,7 +125,14 @@ export async function writeInteractionEvent(
   const userReferenceHash = buildScopedHash(input.companyId, uid);
   const eventRef = db
     .collection('partnerInsightsEvents')
-    .doc(interactionEventId(input.companyId, input.interactionType, aggregationDate, userReferenceHash));
+    .doc(
+      interactionEventId(
+        input.companyId,
+        input.interactionType,
+        aggregationDate,
+        userReferenceHash,
+      ),
+    );
 
   // Per-day dedupe: the deterministic ID makes the create transactional.
   return db.runTransaction(async (tx) => {

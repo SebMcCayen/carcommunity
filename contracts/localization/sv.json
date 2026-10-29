@@ -83,7 +83,7 @@
     "accountDeletionAcknowledgement": "Jag förstår att detta raderar hela mitt konto i appen och att det inte kan ångras.",
     "accountDeletionError": "Kunde inte radera ditt konto. Försök igen.",
     "accountDeletionConfirmTitle": "Ta bort ditt konto?",
-    "accountDeletionConfirmBody": "Åtkomsten avslutas direkt. Efter en lagringstid på 30 dagar rensar en begränsad daglig körning data som får tas bort; omförsök eller kö kan fördröja slutförandet. Raderingsbevis och vissa modererings-, revisions-, avidentifierade insikts- och belöningsanspråksposter, konvojers ägarnycklar samt eventchatt- och OSA-poster behålls.",
+    "accountDeletionConfirmBody": "Åtkomsten avslutas direkt. Efter en lagringstid på 30 dagar rensar en begränsad daglig körning data som får tas bort; omförsök eller kö kan fördröja slutförandet. Raderingsbevis och vissa modererings-, revisions-, avidentifierade insikts- och belöningsanspråksposter, konvojers ägarnycklar behålls.",
     "accountDeletionAuthenticationRequired": "Din session har gått ut. Logga in igen innan du tar bort kontot.",
     "accountDeletionTemporaryError": "Kontot kan inte tas bort just nu. Försök igen.",
     "accountDeletionUnavailable": "Kontoborttagning är inte tillgänglig i den här versionen.",
@@ -2179,6 +2179,13 @@
     "close": "Stäng"
   },
   "clubs": {
+    "county": "Län",
+    "chooseCounty": "Välj län",
+    "chooseCountyFirst": "Välj län först",
+    "chooseLocality": "Välj ort",
+    "localityPartOf": "Ingår i %1$s",
+    "locationLoading": "Läser in orter…",
+    "locationCatalogError": "Det gick inte att läsa in orterna. Försök igen.",
     "title": "Klubben",
     "chatTab": "Klubb",
     "directory": "Hitta din klubb",
@@ -2276,5 +2283,13 @@
     "more": "Visa fler varningar",
     "untilRevoked": "Gäller tills den återkallas",
     "expires": "Giltig till"
+  },
+  "carCommunityAccess": {
+    "checking": "Kontrollerar åtkomst…",
+    "error": "Åtkomsten kunde inte kontrolleras. Försök igen.",
+    "blacklistedTitle": "Svartlistad i CarCommunity",
+    "suspendedTitle": "Åtkomsten är begränsad",
+    "body": "Din åtkomst till CarCommunity är begränsad. Kontakta administratörerna om du har frågor.",
+    "retry": "Kontrollera igen"
   }
 }

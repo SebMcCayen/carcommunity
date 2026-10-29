@@ -23,7 +23,8 @@
  * cache + the area's poiCount), so it leaves an `adminAuditEvents` record.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { logger } from 'firebase-functions';
 import { FieldValue, type DocumentData } from 'firebase-admin/firestore';
 import { db } from '../firebase';

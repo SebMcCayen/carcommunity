@@ -14,8 +14,30 @@ service firebase.storage {
       return isAuthenticated() && request.auth.uid == uid;
     }
 
+    // One Firestore document read; private route account checks use the second.
+    // All matching UID projections are synchronized before a blacklist ack.
+    function hasCarCommunityAccess() {
+      return isAuthenticated()
+        && firestore.exists(/databases/(default)/documents/carCommunityAccess/$(request.auth.uid))
+        && carCommunityAccessStateAllows();
+    }
+    function carCommunityAccessStateAllows() {
+      let state = firestore.get(/databases/(default)/documents/carCommunityAccess/$(request.auth.uid)).data;
+      return state.get('initialized', false) == true
+        && state.get('suspended', false) != true
+        && state.get('explicitBlacklistId', null) == null
+        && state.get('inheritedBlocked', false) != true;
+    }
     function isAdmin() {
-      return isAuthenticated() && request.auth.token.admin == true;
+      return hasCarCommunityAccess() && request.auth.token.admin == true
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && currentCarCommunityAdmin();
+    }
+
+    function currentCarCommunityAdmin() {
+      let profile = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+      return profile.get('role', 'user') in ['admin', 'owner']
+        && profile.get('suspended', false) != true && profile.get('deleted', false) != true;
     }
 
     // Mirrors the Firestore rules helpers: suspension is a server-managed
@@ -28,7 +50,7 @@ service firebase.storage {
     // Legacy compatibility helper: route replay is unchanged by this release.
     // Drive saving has its own active-account guard and is free.
     function isActiveMember() {
-      return isAuthenticated() && isNotSuspended();
+      return hasCarCommunityAccess() && isNotSuspended();
     }
 
     function isImage() {
@@ -153,7 +175,7 @@ service firebase.storage {
       // Saving is free; replay keeps its existing tier gate. Both operations
       // consult stored account state so stale tokens cannot bypass restrictions.
       function hasActiveRouteAccount() {
-        return isAuthenticated() && isNotSuspended()
+        return hasCarCommunityAccess() && isNotSuspended()
           && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
           && storedRouteAccountIsUnrestricted();
       }

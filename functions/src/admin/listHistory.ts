@@ -1,6 +1,7 @@
 /** Bounded, fresh-admin-authorized history reads. No claim telemetry is returned. */
 import { FieldPath, type Query } from 'firebase-admin/firestore';
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { z } from 'zod';
 import { db } from '../firebase';
 import { requireAdminActor } from './actorContext';

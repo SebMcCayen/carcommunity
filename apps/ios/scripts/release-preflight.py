@@ -7,6 +7,7 @@ from pathlib import Path
 import plistlib
 import re
 import sys
+import struct
 from xml.parsers.expat import ExpatError
 
 
@@ -31,6 +32,25 @@ def setting(spec, key):
     values = re.findall(rf"^\s*{re.escape(key)}:\s*(\S+)\s*$", spec, re.MULTILINE)
     require(len(values) == 1, f"Expected one {key} setting in project.yml")
     return values[0]
+
+
+def check_app_icon(root):
+    icon = root / "KCC/Assets.xcassets/AppIcon.appiconset"
+    try:
+        catalog = json.loads((icon / "Contents.json").read_text())
+        images = catalog["images"]
+        require(len(images) == 1 and images[0].get("size") == "1024x1024"
+                and images[0].get("idiom") == "universal", "AppIcon must declare its universal 1024px image")
+        filename = images[0].get("filename")
+        require(isinstance(filename, str) and Path(filename).name == filename,
+                "AppIcon must use a local image filename")
+        data = (icon / filename).read_bytes()
+        require(len(data) > 33 and data[:8] == b"\x89PNG\r\n\x1a\n"
+                and data[12:16] == b"IHDR", "AppIcon must contain a valid PNG header")
+        require(struct.unpack(">II", data[16:24]) == (1024, 1024), "AppIcon must be 1024x1024 pixels")
+        require(data[25] == 2, "AppIcon must be opaque RGB without an alpha channel")
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise PreflightError("AppIcon image/catalog is missing or malformed") from error
 
 
 def check_source(root):
@@ -90,6 +110,7 @@ def check_source(root):
     collected = {entry.get("NSPrivacyCollectedDataType") for entry in privacy.get("NSPrivacyCollectedDataTypes", [])}
     require({"NSPrivacyCollectedDataTypeCrashData", "NSPrivacyCollectedDataTypeOtherDiagnosticData"} <= collected,
             "Privacy manifest lacks crash/diagnostic declarations")
+    check_app_icon(root)
     return bundle
 
 

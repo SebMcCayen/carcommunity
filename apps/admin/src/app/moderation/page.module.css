@@ -1,0 +1,324 @@
+.page {
+  max-width: 1280px;
+  min-width: 0;
+}
+.page button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  padding: 10px 14px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+  min-height: 42px;
+}
+.page button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.page button:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--bg-surface-hover);
+}
+.page h1 {
+  font-size: 30px;
+  line-height: 1.25;
+  margin: 0 0 8px;
+}
+.page h2 {
+  font-size: 20px;
+  margin: 8px 0 16px;
+}
+.page h3 {
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+.page p {
+  line-height: 1.6;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.header p,
+.muted {
+  color: var(--text-secondary);
+}
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-weight: 650;
+}
+.tabs {
+  display: flex;
+  gap: 24px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 20px;
+  overflow-x: auto;
+}
+.tabs button {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 12px 2px 15px;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+.tabs .selected {
+  color: var(--accent-text);
+  border-bottom: 2px solid var(--accent);
+}
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(270px, 0.7fr) minmax(0, 1.5fr);
+  gap: 24px;
+  align-items: start;
+}
+.queue,
+.detail {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.filters {
+  padding: 20px;
+  border-bottom: 1px solid var(--border-color);
+  display: grid;
+  gap: 16px;
+}
+.page label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.page input,
+.page select,
+.page textarea {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid var(--border-input);
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: var(--text-primary);
+  background: var(--bg-input);
+  box-sizing: border-box;
+  font: inherit;
+}
+.page select {
+  max-width: 100%;
+}
+.page textarea {
+  resize: vertical;
+}
+.page .caseRow {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  text-align: left;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--border-color);
+  border-radius: 0;
+  padding: 20px;
+  gap: 10px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  background: transparent;
+}
+.caseRow[aria-pressed='true'] {
+  box-shadow: inset 3px 0 var(--accent);
+  background: var(--bg-sidebar-accent);
+}
+.caseRow > span:not(.eyebrow) {
+  font-size: 13px;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.caseRow small {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.detail {
+  padding: 24px;
+}
+.placeholder {
+  min-height: 440px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  flex-direction: column;
+  color: var(--text-secondary);
+}
+.caseHeading {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 24px;
+  color: var(--accent-text);
+}
+.caseHeading h2 {
+  color: var(--text-primary);
+}
+.messageHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.messageHead small,
+.history small {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-top: 5px;
+}
+.messageHead a {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+.avatar {
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  background: var(--bg-inset);
+  color: var(--accent-text);
+  flex-shrink: 0;
+}
+.badge {
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  font-size: 11px;
+  padding: 5px 8px;
+  margin-left: auto;
+}
+.message {
+  white-space: pre-wrap;
+  margin: 20px 0;
+  padding: 18px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  line-height: 1.7;
+}
+.reportInfo {
+  border-left: 3px solid var(--accent);
+  padding: 10px 16px;
+  margin-bottom: 24px;
+  background: var(--bg-sidebar-accent);
+  font-size: 13px;
+}
+.reportInfo p {
+  margin: 6px 0;
+}
+.reportInfo small {
+  color: var(--text-secondary);
+}
+.context,
+.decision,
+.history {
+  padding-top: 22px;
+  margin-top: 22px;
+  border-top: 1px solid var(--border-color);
+}
+.context > div {
+  border-left: 2px solid var(--border-color);
+  padding-left: 14px;
+}
+.context small {
+  color: var(--text-secondary);
+}
+.actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+.page .danger {
+  border-color: var(--color-error);
+  color: var(--text-error);
+}
+.page .primary {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+.error {
+  color: var(--text-error);
+}
+.pager {
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pager small {
+  color: var(--text-secondary);
+}
+.empty {
+  padding: 24px;
+  color: var(--text-secondary);
+}
+@media (max-width: 1000px) {
+  .workspace {
+    grid-template-columns: minmax(230px, 0.8fr) minmax(0, 1.3fr);
+    gap: 16px;
+  }
+  .detail {
+    padding: 18px;
+  }
+}
+@media (max-width: 760px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+  .header {
+    align-items: flex-start;
+  }
+  .header h1 {
+    font-size: 26px;
+  }
+  .header > button {
+    font-size: 0;
+  }
+  .header > button svg {
+    width: 18px;
+  }
+  .detail {
+    padding: 18px;
+  }
+  .tabs {
+    gap: 20px;
+  }
+  .messageHead {
+    flex-wrap: wrap;
+  }
+  .badge {
+    margin-left: 0;
+  }
+  .actions button {
+    flex: 1 1 auto;
+  }
+}

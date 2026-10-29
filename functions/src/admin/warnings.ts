@@ -1,7 +1,9 @@
+import { onCall as essentialCall } from 'firebase-functions/v2/https';
 /** Private warning lifecycle, safe own-account projection and immutable decisions. */
 import { createHash, randomUUID } from 'node:crypto';
 import { FieldPath, FieldValue, Timestamp, type Query } from 'firebase-admin/firestore';
-import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
+import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { z } from 'zod';
 import { db, adminAuth } from '../firebase';
 import { requireAdminActor } from './actorContext';
@@ -360,7 +362,7 @@ export const listWarnings = onCall(CALLABLE_OPTS, async (request) => {
 });
 
 /** Essential own-account read: remains available under suspension/access restriction. */
-export const listOwnWarnings = onCall(CALLABLE_OPTS, async (request) => {
+export const listOwnWarnings = essentialCall(CALLABLE_OPTS, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in required.');
   const parsed = z
     .object(pageInput)

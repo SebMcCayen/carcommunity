@@ -1,3 +1,4 @@
+import { legacyAccessMigration, endLegacyAccessMigration } from './helpers/legacy-access-migration';
 /**
  * Firestore security-rules coverage for the SOCIAL GRAPH and the
  * backend-only collections that the original security-rules emulator suite
@@ -78,9 +79,11 @@ beforeAll(async () => {
       port: 8080,
     },
   });
+  await legacyAccessMigration(testEnv, false);
 });
 
 afterAll(async () => {
+  if (testEnv) await endLegacyAccessMigration(testEnv, false);
   await testEnv?.cleanup();
 });
 

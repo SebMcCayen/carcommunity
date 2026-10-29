@@ -32,7 +32,8 @@
  * ever opened has a named admin and a note attached to it.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
@@ -151,14 +152,12 @@ export const setSpawnCellApproval = onCall(
       buildAdminAuditEvent(
         {
           adminId: actor.uid,
-          action: input.approved
-            ? 'crownHunt.approveSpawnCell'
-            : 'crownHunt.revokeSpawnCell',
+          action: input.approved ? 'crownHunt.approveSpawnCell' : 'crownHunt.revokeSpawnCell',
           targetType: 'crownSpawnCell',
           targetId: cellKey,
           reason: input.approved
             ? input.approvalNote
-            : (input.reason?.trim() || 'Spawn cell revoked.'),
+            : input.reason?.trim() || 'Spawn cell revoked.',
           details: { safeAreaConfirmed: input.approved },
         },
         serverTimestamp,

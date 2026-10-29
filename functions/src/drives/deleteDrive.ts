@@ -12,7 +12,8 @@
  * not-found, matching the legacy API.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { adminStorage, db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
 import { parseDeleteDriveInput, rideStoragePrefix } from './drives-core';
@@ -51,9 +52,7 @@ export const deleteDrive = onCall(
 
     // Storage first: if this partially fails the document survives and the
     // user can retry; the reverse order would orphan the route files.
-    await adminStorage
-      .bucket()
-      .deleteFiles({ prefix: rideStoragePrefix(actor.uid, rideId) });
+    await adminStorage.bucket().deleteFiles({ prefix: rideStoragePrefix(actor.uid, rideId) });
     await rideRef.delete();
 
     return { rideId, deleted: true };
