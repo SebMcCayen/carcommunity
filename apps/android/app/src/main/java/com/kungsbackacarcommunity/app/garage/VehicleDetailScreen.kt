@@ -96,7 +96,10 @@ fun VehicleDetailScreen(
     val photoPaths = remember(vehicle) { VehicleGallery.photoPaths(vehicle) }
     var pendingDelete by remember { mutableStateOf(false) }
 
-    AeroPage(title = stringResource(R.string.garage_detailTitle), modifier = modifier) {
+    AeroPage(
+        title = stringResource(R.string.garage_detailTitle), modifier = modifier,
+        ownerShortcutEnabled = false,
+    ) {
         VehicleGalleryPager(
             photoPaths = photoPaths,
             onSetCover = onSetCover,

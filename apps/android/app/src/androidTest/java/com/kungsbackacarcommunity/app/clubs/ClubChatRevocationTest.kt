@@ -346,6 +346,98 @@ class ClubChatRevocationTest {
         compose.onNodeWithText("After profile failure").assertIsDisplayed()
     }
 
+    @Test fun finiteProfileBatchesRefreshOnNewMessagesWithSameSendersAfterCacheExpiry() {
+        val first = ClubMessage("one", "friend", "Stored friend", "First message", 1L)
+        val blocked = ClubMessage("blocked", "hidden", "Hidden member", "Blocked message", 0L)
+        val repo = FakeClubRepository(ClubChatState.Ready(member, listOf(first, blocked), setOf("hidden")))
+        val requested = mutableListOf<Set<String>>()
+        var completed = 0
+        var remoteReads = 0
+        var now = 0L
+        var expiresAt = 0L
+        var backendProfile = LiveProfile("First profile", null)
+        var cached = emptyMap<String, LiveProfile>()
+        val profiles = object : LiveProfileRepository {
+            // Mirrors Firebase's finite cache-then-refresh flow, not an always-live StateFlow.
+            override fun observeProfiles(uids: Set<String>) = flow {
+                requested += uids
+                emit(cached.filterKeys { it in uids })
+                if (now >= expiresAt) {
+                    remoteReads++
+                    cached = mapOf("friend" to backendProfile)
+                    expiresAt = now + 1_000L
+                    emit(cached.filterKeys { it in uids })
+                }
+                completed++
+            }
+            override suspend fun loadProfiles(uids: Set<String>) = emptyMap<String, LiveProfile>()
+        }
+        compose.setContent { KccTheme { ClubChatRoute("me", repo, profiles) } }
+        compose.onNodeWithText("First profile").assertIsDisplayed()
+        compose.runOnIdle {
+            assertEquals(1, completed)
+            assertEquals(1, remoteReads)
+            backendProfile = LiveProfile("Refreshed profile", null)
+            now = 999L
+            repo.messages.value = ClubChatState.Ready(member,
+                listOf(first.copy(id = "two", text = "Second message", createdAtMillis = 2L), first, blocked), setOf("hidden"))
+        }
+        compose.onAllNodesWithText("First profile").assertCountEquals(2)
+        compose.runOnIdle {
+            assertEquals(2, completed)
+            assertEquals("A fresh cache avoids another remote read", 1, remoteReads)
+            now = 1_001L
+            repo.messages.value = ClubChatState.Ready(member,
+                listOf(first.copy(id = "three", text = "Third message", createdAtMillis = 3L),
+                    first.copy(id = "two", text = "Second message", createdAtMillis = 2L), first, blocked), setOf("hidden"))
+        }
+        compose.onAllNodesWithText("Refreshed profile").assertCountEquals(3)
+        compose.onNodeWithText("First profile").assertDoesNotExist()
+        compose.onNodeWithText("Blocked message").assertDoesNotExist()
+        // Unrelated draft recomposition must not re-read profiles or restart a finite batch.
+        compose.onNodeWithTag("club-chat-input").performTextInput("Private unsent draft")
+        compose.runOnIdle {
+            assertEquals(3, completed)
+            assertEquals(2, remoteReads)
+            assertEquals(List(3) { setOf("friend") }, requested)
+        }
+        compose.runOnIdle { repo.messages.value = ClubChatState.Unavailable }
+        compose.onNodeWithText("Private unsent draft").assertDoesNotExist()
+        compose.onNodeWithText("Refreshed profile").assertDoesNotExist()
+    }
+
+    @Test fun finiteFailedProfileReadRecoversOnNextMessageWithSameSenderSet() {
+        val first = ClubMessage("one", "friend", "Stored friend", "Before recovery", 1L)
+        val repo = FakeClubRepository(ClubChatState.Ready(member, listOf(first)))
+        val requested = mutableListOf<Set<String>>()
+        var completed = 0
+        var failed = true
+        val profiles = object : LiveProfileRepository {
+            override fun observeProfiles(uids: Set<String>) = flow {
+                requested += uids
+                // Firebase's failed uncached reads return an absent entry, then complete.
+                emit(if (failed) emptyMap() else mapOf("friend" to LiveProfile("Recovered friend", null)))
+                completed++
+            }
+            override suspend fun loadProfiles(uids: Set<String>) = emptyMap<String, LiveProfile>()
+        }
+        compose.setContent { KccTheme { ClubChatRoute("me", repo, profiles) } }
+        compose.onNodeWithText("Stored friend").assertIsDisplayed()
+        compose.runOnIdle {
+            assertEquals(1, completed)
+            failed = false
+            repo.messages.value = ClubChatState.Ready(member,
+                listOf(first.copy(id = "two", text = "After recovery", createdAtMillis = 2L), first))
+        }
+        compose.onAllNodesWithText("Recovered friend").assertCountEquals(2)
+        compose.onNodeWithText("Stored friend").assertDoesNotExist()
+        compose.onNodeWithText("After recovery").assertIsDisplayed()
+        compose.runOnIdle {
+            assertEquals(2, completed)
+            assertEquals(List(2) { setOf("friend") }, requested)
+        }
+    }
+
     @Test fun moderatorCanHideOwnBubbleAndRemovedSelectionClosesActions() {
         val own = ClubMessage("own", "me", "Me", "My moderated message", 1L)
         val mod = member.copy(role = ClubRole.Moderator)

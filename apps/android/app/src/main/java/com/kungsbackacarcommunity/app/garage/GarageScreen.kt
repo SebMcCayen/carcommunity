@@ -66,6 +66,8 @@ fun GarageScreen(
         title = stringResource(R.string.garage_screenTitle),
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+        // The map already owns the profile shortcut behind this panel.
+        ownerShortcutEnabled = false,
     ) {
             when (state) {
                 GarageState.Loading ->

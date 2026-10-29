@@ -8,12 +8,14 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.Source
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
 import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.StorageException
 import com.google.firebase.storage.StorageMetadata
 import com.kungsbackacarcommunity.app.blocking.FirebaseBlockVisibilityRepository
 import kotlinx.coroutines.CancellationException
@@ -102,9 +104,15 @@ class FirebaseClubRepository private constructor(
         call("clubsManage", fields + mapOf("action" to action, "operationId" to operationId))
     override suspend fun uploadLogo(clubId: String, bytes: ByteArray): String {
         if (auth.currentUser?.uid != uid) throw ClubException("unauthenticated")
-        if (bytes.isEmpty() || bytes.size > 256 * 1024) throw ClubException("invalid-logo")
+        if (bytes.isEmpty() || bytes.size > CLUB_LOGO_UPLOAD_BYTES) throw ClubException("invalid-logo")
         val path = "clubLogos/$clubId/$uid/${UUID.randomUUID()}.jpg"
-        storage.reference.child(path).putBytes(bytes, StorageMetadata.Builder().setContentType("image/jpeg").build()).clubAwait()
+        try {
+            storage.reference.child(path).putBytes(bytes, StorageMetadata.Builder().setContentType("image/jpeg").build()).clubAwait()
+        } catch (e: CancellationException) { throw e }
+        catch (e: StorageException) {
+            throw ClubException(if (e.errorCode == StorageException.ERROR_NOT_AUTHORIZED ||
+                e.errorCode == StorageException.ERROR_NOT_AUTHENTICATED) "logo-permission-denied" else "logo-upload-failed")
+        }
         if (auth.currentUser?.uid != uid) throw ClubException("unauthenticated")
         return path
     }
@@ -201,11 +209,22 @@ class FirebaseClubRepository private constructor(
             }
         awaitClose { registration.remove() }
     }
-    override fun eventAttendance(eventId: String, clubId: String): Flow<Boolean?> =
-        observePublicAttendanceReady().flatMapLatest { ready ->
-            if (ready) document("events/$eventId/clubs/$clubId").map { if (it.confirmed) it.snapshot?.exists() == true else null }
-            else flowOf(null)
+    override fun eventAttendance(eventId: String, clubId: String): Flow<Boolean?> = managedClubEventAttendance(
+        eventId, clubId, observePublicAttendanceReady(), observeAccess(),
+    ) { path ->
+        callbackFlow {
+            val registration = db.document(path).addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
+                when {
+                    error != null -> close(if (error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED)
+                        ClubException("permission-denied") else error)
+                    auth.currentUser?.uid != uid -> close(ClubException("unauthenticated"))
+                    snapshot == null || snapshot.metadata.isFromCache || snapshot.metadata.hasPendingWrites() -> trySend(null)
+                    else -> trySend(snapshot.exists())
+                }
+            }
+            awaitClose { registration.remove() }
         }
+    }
     override suspend fun moreEventParticipants(eventId: String, afterId: String): List<Club> {
         requirePublicAttendance()
         val result = db.collection("events").document(eventId).collection("clubs").orderBy(FieldPath.documentId())

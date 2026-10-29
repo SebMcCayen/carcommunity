@@ -295,6 +295,7 @@ private fun ProfileIdentitySection(
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.align(Alignment.Start),
                 )
+                ProfileClubAffiliation(profile?.clubBadge)
                 Text(
                     text = profile?.bio?.takeIf { it.isNotBlank() }
                         ?: stringResource(R.string.profile_emptyBio),

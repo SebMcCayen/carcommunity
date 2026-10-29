@@ -73,18 +73,45 @@ private fun ClubAttendancePages(repo: ClubRepository, eventId: String, first: Li
             }
         }) { Text(stringResource(R.string.clubs_more)) }
         if (membership?.role?.managesMembers == true) {
-            // The club's private calendar is authoritative even beyond the first public page.
-            val attendanceSource = remember(membership.clubId) { repo.eventAttendance(eventId, membership.clubId) }
-            val attending by attendanceSource.collectAsState(initial = null)
-            Text(stringResource(R.string.clubs_publicAttendance), style = MaterialTheme.typography.bodySmall)
-            OutlinedButton(enabled = !busy && attending != null, onClick = {
-                busy = true; scope.launch {
-                    try { repo.setEventAttendance(membership.clubId, eventId, attending != true, UUID.randomUUID().toString()); error = null }
-                    catch (e: CancellationException) { throw e } catch (e: Exception) { error = e }
-                    finally { busy = false }
-                }
-            }) { Text(stringResource(if (attending == true) R.string.clubs_unattend else R.string.clubs_attend)) }
+            // Role/club/epoch changes discard the private observer and any in-flight action.
+            key(membership) { ClubEventAttendanceAction(repo, eventId, membership, busy) }
         }
         error?.let { Text(clubError(it), color = MaterialTheme.colorScheme.error) }
     } }
+}
+
+@Composable
+private fun ClubEventAttendanceAction(repo: ClubRepository, eventId: String, membership: ClubMembership, pagingBusy: Boolean) {
+    var attempt by remember { mutableStateOf(0) }
+    key(attempt) {
+        val source = remember { repo.eventAttendance(eventId, membership.clubId).attendanceStates() }
+        val state by source.collectAsState(initial = ClubEventAttendanceState.Loading)
+        var busy by remember { mutableStateOf(false) }
+        var mutationError by remember { mutableStateOf<Throwable?>(null) }
+        val scope = rememberCoroutineScope()
+        val current = mutationError?.let { ClubEventAttendanceState.Unavailable(it) } ?: state
+        val attending = (current as? ClubEventAttendanceState.Ready)?.attending
+        Text(stringResource(R.string.clubs_publicAttendance), style = MaterialTheme.typography.bodySmall)
+        OutlinedButton(enabled = !pagingBusy && !busy && attending != null, onClick = {
+            if (busy || attending == null) return@OutlinedButton
+            busy = true
+            scope.launch {
+                try {
+                    repo.setEventAttendance(membership.clubId, eventId, !attending, UUID.randomUUID().toString())
+                    // Require fresh status after success; never leave a stale toggle enabled.
+                    attempt++
+                } catch (e: CancellationException) { throw e }
+                catch (e: Exception) { mutationError = e }
+                finally { busy = false }
+            }
+        }) { Text(stringResource(if (attending == true) R.string.clubs_unattend else R.string.clubs_attend)) }
+        when (current) {
+            ClubEventAttendanceState.Loading -> Text(stringResource(R.string.clubs_loading))
+            is ClubEventAttendanceState.Unavailable -> {
+                Text(clubError(current.error), color = MaterialTheme.colorScheme.error)
+                TextButton(enabled = !busy && !pagingBusy, onClick = { attempt++ }) { Text(stringResource(R.string.clubs_retry)) }
+            }
+            is ClubEventAttendanceState.Ready -> Unit
+        }
+    }
 }

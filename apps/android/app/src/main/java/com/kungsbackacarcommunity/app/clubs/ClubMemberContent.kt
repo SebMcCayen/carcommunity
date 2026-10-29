@@ -14,8 +14,6 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.friends.FirebaseFriendsRepository
 import com.kungsbackacarcommunity.app.friends.FriendSummary
 import com.kungsbackacarcommunity.app.friends.FriendsResult
-import com.kungsbackacarcommunity.app.media.ImageCompressor
-import com.kungsbackacarcommunity.app.media.rememberImagePickLauncher
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -48,22 +46,6 @@ internal fun ClubMemberContent(uid: String, club: Club, membership: ClubMembersh
             finally { busy = false }
         }
     }
-    val imagePicker = rememberImagePickLauncher(maxBytes = 12L * 1024 * 1024,
-        onPickFailed = { error = ClubException("invalid-logo") }) { pick ->
-        if (pick != null && !busy) {
-            busy = true
-            try {
-                // Re-encode even when source is smaller: never upload raw EXIF-bearing picks.
-                var safe = ImageCompressor.compressForPublicUpload(pick, maxDimension = 512, quality = 80)
-                if (safe != null && safe.sizeBytes > 256 * 1024) safe = ImageCompressor.compressForPublicUpload(pick, maxDimension = 384, quality = 65)
-                if (safe == null || safe.contentType != "image/jpeg" || safe.sizeBytes > 256 * 1024) throw ClubException("invalid-logo")
-                val path = repository.uploadLogo(club.id, safe.bytes)
-                repository.manage("update", mapOf("clubId" to club.id, "logoPath" to path), UUID.randomUUID().toString())
-                error = null; onUpdated()
-            } catch (e: CancellationException) { throw e } catch (e: Exception) { error = e }
-            finally { busy = false }
-        }
-    }
     error?.let { Text(clubError(it), color = MaterialTheme.colorScheme.error) }
     if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
     Text(stringResource(R.string.clubs_statistics), style = MaterialTheme.typography.titleMedium)
@@ -78,8 +60,8 @@ internal fun ClubMemberContent(uid: String, club: Club, membership: ClubMembersh
     if (membership.role == ClubRole.Owner) {
         Text(stringResource(R.string.clubs_manage), style = MaterialTheme.typography.titleMedium)
         OutlinedButton(onClick = { error = null; edit = true }, enabled = !busy) { Text(stringResource(R.string.clubs_edit)) }
-        OutlinedButton(onClick = imagePicker::pickImage, enabled = !busy) { Text(stringResource(R.string.clubs_logo)) }
-        Text(stringResource(R.string.clubs_logoHint), style = MaterialTheme.typography.bodySmall)
+        ClubLogoControl(club.id, repository, enabled = !busy, onBusy = { busy = it },
+            onError = { error = it }, onUpdated = onUpdated)
     }
     if (membership.role.managesMembers && club.visibility == "closed") OutlinedButton(onClick = { invite = true }, enabled = !busy) { Text(stringResource(R.string.clubs_invite)) }
     Text(stringResource(R.string.clubs_members), style = MaterialTheme.typography.titleMedium)

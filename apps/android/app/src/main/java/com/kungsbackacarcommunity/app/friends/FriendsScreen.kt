@@ -117,7 +117,7 @@ fun FriendsScreen(
     // Durable list: a LazyColumn so only visible rows compose. Static sections
     // (title, add-friend, headers, banners) are `item {}` blocks; the request and
     // friend rows are keyed so recomposition/scroll state is stable.
-    AeroLazyPage(modifier = modifier) {
+    AeroLazyPage(modifier = modifier, ownerShortcutEnabled = false) {
         LazyColumn(
             modifier = Modifier.fillMaxSize().testTag("friends_list"),
             contentPadding = aeroLazyContentPadding(),
