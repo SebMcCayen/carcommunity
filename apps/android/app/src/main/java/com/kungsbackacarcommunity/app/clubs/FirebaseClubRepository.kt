@@ -8,6 +8,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.Source
@@ -209,11 +210,22 @@ class FirebaseClubRepository private constructor(
             }
         awaitClose { registration.remove() }
     }
-    override fun eventAttendance(eventId: String, clubId: String): Flow<Boolean?> =
-        observePublicAttendanceReady().flatMapLatest { ready ->
-            if (ready) document("events/$eventId/clubs/$clubId").map { if (it.confirmed) it.snapshot?.exists() == true else null }
-            else flowOf(null)
+    override fun eventAttendance(eventId: String, clubId: String): Flow<Boolean?> = managedClubEventAttendance(
+        eventId, clubId, observePublicAttendanceReady(), observeAccess(),
+    ) { path ->
+        callbackFlow {
+            val registration = db.document(path).addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
+                when {
+                    error != null -> close(if (error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED)
+                        ClubException("permission-denied") else error)
+                    auth.currentUser?.uid != uid -> close(ClubException("unauthenticated"))
+                    snapshot == null || snapshot.metadata.isFromCache || snapshot.metadata.hasPendingWrites() -> trySend(null)
+                    else -> trySend(snapshot.exists())
+                }
+            }
+            awaitClose { registration.remove() }
         }
+    }
     override suspend fun moreEventParticipants(eventId: String, afterId: String): List<Club> {
         requirePublicAttendance()
         val result = db.collection("events").document(eventId).collection("clubs").orderBy(FieldPath.documentId())
