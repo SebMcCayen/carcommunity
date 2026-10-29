@@ -32,8 +32,8 @@ if (
     emulatorKeys.some((k) => !/^127\.0\.0\.1:\d+$/.test(process.env[k] ?? '')))
 )
   throw Error('Complete loopback demo emulator stack required');
-const { initializeApp } = require('firebase-admin/app');
-initializeApp({
+const { initializeApp, deleteApp } = require('firebase-admin/app');
+const app = initializeApp({
   projectId: project,
   databaseURL,
 });
@@ -94,3 +94,6 @@ console.log(
   }),
 );
 if (verify && (missing || mismatch)) process.exitCode = 1;
+
+// Close the RTDB connection so successful verification terminates normally.
+await deleteApp(app);
