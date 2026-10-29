@@ -32,7 +32,6 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       EXPECTED_AAB_SHA256: ${{ inputs.aab_sha256 }}
       PLAY_RELEASE_MODE: ${{ inputs.mode }}
-      PLAY_RELEASE_REPORT: ${{ runner.temp }}/play-internal-result.json
     steps:
       - uses: actions/checkout@v5
         with:
@@ -44,6 +43,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          echo "PLAY_RELEASE_REPORT=$RUNNER_TEMP/play-internal-result.json" >> "$GITHUB_ENV"
           test "$GITHUB_REF" = refs/heads/main
           [[ "$EXPECTED_AAB_SHA256" =~ ^[a-f0-9]{64}$ ]]
           gh api repos/SebMcCayen/carcommunity/actions/runs/40793833224 > "$RUNNER_TEMP/approved-build.json"
