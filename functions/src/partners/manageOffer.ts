@@ -13,7 +13,8 @@
  * Member detail and codes always require verified Plus/Supporter or admin access.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
@@ -261,8 +262,7 @@ export const showOfferCode = onCall(
     return {
       offerId,
       code: (secretSnap.data()?.discountCode as string | null) ?? null,
-      redemptionInstructions:
-        (memberSnap.data()?.redemptionInstructions as string | null) ?? null,
+      redemptionInstructions: (memberSnap.data()?.redemptionInstructions as string | null) ?? null,
       expiresAt: availableUntil ? availableUntil.toDate().toISOString() : null,
     };
   },

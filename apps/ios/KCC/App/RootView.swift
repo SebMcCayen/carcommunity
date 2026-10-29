@@ -36,7 +36,10 @@ struct RootView: View {
         .task(id: signedInUid) { accessSession.bind(uid: signedInUid) }
         .task(id: signedInUid) { await subscriptionUpdates.run(uid: signedInUid) }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await accessSession.refreshFlags() } }
+            if phase == .active {
+                accessSession.refreshProductAccess()
+                Task { await accessSession.refreshFlags() }
+            }
         }
     }
 
@@ -54,9 +57,10 @@ struct RootView: View {
             DeletedAccountSessionEndView {
                 endSession(uid: uid, purgeRoutes: true)
             }
-        case .loaded(let access) where access.suspended:
+        case .loaded(let access) where access.isRestricted:
             RestrictedAccountScreen(
                 access: access,
+                uid: uid,
                 privacyCoordinator: restrictedPrivacyCoordinator,
                 onSignOut: { endSession(uid: uid) },
                 onDeleted: { endSession(uid: uid, purgeRoutes: true) },
@@ -90,6 +94,7 @@ struct RootView: View {
             // feature UI from stale or unknown account status.
             RestrictedAccountScreen(
                 access: nil,
+                uid: uid,
                 privacyCoordinator: restrictedPrivacyCoordinator,
                 onSignOut: { endSession(uid: uid) },
                 onDeleted: { endSession(uid: uid, purgeRoutes: true) },

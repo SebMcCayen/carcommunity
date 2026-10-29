@@ -39,7 +39,8 @@
  */
 
 import { logger } from 'firebase-functions';
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminStorage, db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';

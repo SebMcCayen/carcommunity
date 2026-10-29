@@ -1,0 +1,81 @@
+name: Publish approved Android 60 to Internal Testing
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Inspect access/tracks, or publish the approved bundle'
+        type: choice
+        options: [inspect, publish]
+        default: inspect
+        required: true
+      aab_sha256:
+        description: 'Reviewed SHA-256 of the signed app-release.aab from build 40793833224'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+concurrency:
+  group: play-internal-carcommunity
+  cancel-in-progress: false
+
+jobs:
+  publish-internal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_AAB_SHA256: ${{ inputs.aab_sha256 }}
+      PLAY_RELEASE_MODE: ${{ inputs.mode }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Bind publication to main and the reviewed signed build
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "PLAY_RELEASE_REPORT=$RUNNER_TEMP/play-internal-result.json" >> "$GITHUB_ENV"
+          test "$GITHUB_REF" = refs/heads/main
+          [[ "$EXPECTED_AAB_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          gh api repos/SebMcCayen/carcommunity/actions/runs/40793833224 > "$RUNNER_TEMP/approved-build.json"
+          node scripts/publish-android-internal.mjs verify-build "$RUNNER_TEMP/approved-build.json"
+          gh run download 40793833224 --repo SebMcCayen/carcommunity --name app-release-aab --dir "$RUNNER_TEMP/approved-aab"
+          test "$(find "$RUNNER_TEMP/approved-aab" -type f | wc -l)" -eq 1
+          test -f "$RUNNER_TEMP/approved-aab/app-release.aab"
+          test ! -L "$RUNNER_TEMP/approved-aab/app-release.aab"
+          echo "$EXPECTED_AAB_SHA256  $RUNNER_TEMP/approved-aab/app-release.aab" | sha256sum --check --status
+      - name: Obtain a short-lived publishing token using existing WIF
+        id: play-auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
+          access_token_lifetime: 1800s
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Inspect or publish only Internal Testing
+        env:
+          PLAY_PUBLISHING_TOKEN: ${{ steps.play-auth.outputs.access_token }}
+        run: node scripts/publish-android-internal.mjs release "$RUNNER_TEMP/approved-aab/app-release.aab"
+      - name: Retain sanitized publication receipt
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: play-internal-60-receipt
+          path: ${{ runner.temp }}/play-internal-result.json
+          retention-days: 14
+          if-no-files-found: ignore
+      - name: Remove the temporary bundle
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/approved-aab"

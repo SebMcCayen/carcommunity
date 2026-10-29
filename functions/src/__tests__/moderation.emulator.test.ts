@@ -99,6 +99,10 @@ let adminUser: TestUser;
 let target: TestUser;
 
 beforeAll(async () => {
+  await adminDb
+    .collection('carCommunityPolicy')
+    .doc('access')
+    .set({ enforceInitialized: true, rolloutState: 'ready' });
   app = initializeApp(
     { projectId: PROJECT_ID, apiKey: 'demo-api-key', appId: 'demo-app-id' },
     'moderation-emulator-client',

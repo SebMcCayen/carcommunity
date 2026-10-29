@@ -2,6 +2,18 @@ import XCTest
 @testable import KCC
 
 final class AccountAccessTests: XCTestCase {
+    func testProductRestrictionPreservesSharedAccountFields() {
+        let base = AccountAccess.unrestrictedCommunity
+        XCTAssertNil(base.withProduct([:]))
+        let blocked = base.withProduct(["initialized": true, "inheritedBlocked": true, "version": 4, "blacklistReason": "Reason"])
+        XCTAssertEqual(blocked?.blacklisted, true)
+        XCTAssertEqual(blocked?.suspended, false)
+        XCTAssertEqual(blocked?.restrictionReason, "Reason")
+        XCTAssertEqual(blocked?.isRestricted, true)
+        XCTAssertEqual(blocked?.productVersion, 4)
+        XCTAssertEqual(blocked?.canAccessAdminFeatures, false)
+    }
+
     func testDecodingUsesSafeDefaultsAndAcceptsKnownRoles() {
         XCTAssertEqual(AccountAccess.fromMap([:]), .unrestrictedCommunity)
         XCTAssertEqual(

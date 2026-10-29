@@ -38,6 +38,7 @@ struct BillboardMapOverlay: View {
                         },
                         onDismiss: coordinator.dismiss
                     )
+                    .frame(maxHeight: min(420, geometry.size.height * 0.65))
                     .padding(KccSpacing.s4)
                 }
             }
@@ -79,22 +80,27 @@ private struct BillboardMapPopup: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button(action: onDismiss) {
-                    Image(systemName: "xmark")
+                    Image(systemName: "xmark").frame(width: 48, height: 48)
                 }
                 .accessibilityLabel(Text("billboard.mapPopupClose"))
             }
-            Text(billboard.headline).font(.headline)
-            if let message = billboard.message { Text(message).foregroundStyle(.secondary) }
-            if let action {
-                Button { onAction(action) } label: {
-                    Text(LocalizedStringKey(action.labelKey))
+            ScrollView {
+                VStack(alignment: .leading, spacing: KccSpacing.s2) {
+                    PublicContentReportButton(target: PublicContentTarget(surface: "billboard", itemID: billboard.id))
+                    Text(billboard.headline).font(.headline)
+                    if let message = billboard.message { Text(message).foregroundStyle(.secondary) }
+                    if let action {
+                        Button { onAction(action) } label: {
+                            Text(LocalizedStringKey(action.labelKey))
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
                 }
-                .buttonStyle(.borderedProminent)
             }
         }
         .padding(KccSpacing.s4)
         .frame(maxWidth: 360, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .background(KccTheme.surface, in: RoundedRectangle(cornerRadius: 16))
         .shadow(radius: 6, y: 2)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("billboard-map-popup")

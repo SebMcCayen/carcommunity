@@ -1,5 +1,19 @@
 package com.kungsbackacarcommunity.app.profile
 
+import com.kungsbackacarcommunity.app.crownhunt.FirebaseCrownHuntRepository
+import com.kungsbackacarcommunity.app.crownhunt.FirebaseCrownSpawnRepository
+import com.kungsbackacarcommunity.app.crownhunt.CrownHuntPointsState
+import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnQuery
+import com.kungsbackacarcommunity.app.access.FirebaseCarCommunityAccessRepository
+import com.kungsbackacarcommunity.app.access.CarCommunityGateState
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.async
+import kotlinx.coroutines.CoroutineStart
+import com.google.firebase.firestore.DocumentReference
+import com.google.firebase.firestore.DocumentSnapshot
+import kotlinx.coroutines.withTimeout
 import android.os.SystemClock
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.firebase.FirebaseApp
@@ -58,7 +72,63 @@ class MemberToolsEmulatorTest {
             admin.getHttpsCallable("admin-revokeWarning").call(mapOf("targetUid" to "native-member", "warningId" to id, "expectedVersion" to 1, "reason" to "Native acceptance complete", "idempotencyKey" to UUID.randomUUID().toString())).await()
             val after = own.getHttpsCallable("account-listWarnings").call(emptyMap<String, Any>()).await().data as Map<*, *>
             assertEquals(0, (after["warnings"] as List<*>).size)
+            val accessRepository = FirebaseCarCommunityAccessRepository(memberAuth, own, firestore)
+            suspend fun awaitAccess(restricted: Boolean) = withTimeout(30000) {
+                accessRepository.updates("native-member").first { it is CarCommunityGateState.Ready && it.status.restricted == restricted }
+            }
+            awaitAccess(false)
+            for (action in listOf("suspend", "restore")) {
+                val reviewed = admin.getHttpsCallable("admin-getAccessTarget").call(mapOf("targetUid" to "native-member")).await().data as Map<*, *>
+                val decisionPayload = mapOf("targetUid" to "native-member", "action" to action, "expectedActorUid" to "native-admin", "expectedVersion" to reviewed["version"], "expectedBlacklistIds" to reviewed["blacklistIds"], "reason" to "Native product-only access", "idempotencyKey" to UUID.randomUUID().toString())
+                admin.getHttpsCallable("admin-updateAccess").call(decisionPayload).await()
+                admin.getHttpsCallable("admin-updateAccess").call(decisionPayload).await()
+                val status = (awaitAccess(action == "suspend") as CarCommunityGateState.Ready).status
+                assertEquals("native-member", status.uid)
+                assertFalse(status.sharedRestricted)
+                assertFalse(status.blacklisted)
+                memberAuth.currentUser!!.getIdToken(true).await()
+                val canonical = firestore.collection("users").document("native-member").get(Source.SERVER).await()
+                assertEquals(false, canonical.getBoolean("suspended"))
+                assertEquals(false, canonical.getBoolean("deleted"))
+            }
+            val eventUpdate = async(start = CoroutineStart.UNDISPATCHED) { awaitDocument(firestore.document("events/native-moderation/messages/native-event-message")) { it.getString("moderationState") == "removed" && it.getString("message") == "" } }
+            val publicUpdate = async(start = CoroutineStart.UNDISPATCHED) { awaitDocument(firestore.document("communityChat/global/messages/native-public-message")) { !it.exists() } }
+            val quoteUpdate = async(start = CoroutineStart.UNDISPATCHED) { awaitDocument(firestore.document("communityChat/global/messages/native-public-reply")) { it.exists() && it.get("replyTo") == null } }
+            for (source in listOf("event", "community")) {
+                val target = if (source == "event") mapOf("source" to source, "eventId" to "native-moderation", "messageId" to "native-event-message") else mapOf("source" to source, "messageId" to "native-public-message")
+                val evidence = admin.getHttpsCallable("admin-getPublicModerationCase").call(target).await().data as Map<*, *>
+                val removal = mapOf("target" to target, "expectedActorUid" to "native-admin", "expectedVersion" to evidence["version"], "action" to "remove", "reason" to "Native public moderation", "idempotencyKey" to UUID.randomUUID().toString())
+                admin.getHttpsCallable("admin-decidePublicModeration").call(removal).await()
+                admin.getHttpsCallable("admin-decidePublicModeration").call(removal).await()
+            }
+            eventUpdate.await(); publicUpdate.await(); quoteUpdate.await()
+            val removedEvent = firestore.document("events/native-moderation/messages/native-event-message").get(Source.SERVER).await()
+            assertEquals("removed", removedEvent.getString("moderationState"))
+            assertEquals("", removedEvent.getString("message"))
+            assertFalse(firestore.document("communityChat/global/messages/native-public-message").get(Source.SERVER).await().exists())
+            val preservedReply = firestore.document("communityChat/global/messages/native-public-reply").get(Source.SERVER).await()
+            assertEquals("Reply preserved", preservedReply.getString("text"))
+            assertNull(preservedReply.get("replyTo"))
+            val handplaced = FirebaseCrownHuntRepository(firestore, own)
+            val automatic = FirebaseCrownSpawnRepository(firestore, own)
+            val keys = listOf(CrownSpawnQuery.cellKey(57.4874, 12.0761))
+            withTimeout(30000) { handplaced.observeActivePoints().first { it is CrownHuntPointsState.Loaded && it.points.any { point -> point.id == "native-handplaced" } } }
+            assertTrue(automatic.listNearby(keys, System.currentTimeMillis()).any { it.id == "native-automatic" })
+            val handplacedRemoval = async(start = CoroutineStart.UNDISPATCHED) { withTimeout(30000) { handplaced.observeActivePoints().first { it is CrownHuntPointsState.Loaded && it.points.none { point -> point.id == "native-handplaced" } } } }
+            admin.getHttpsCallable("crownHunt-pausePoint").call(mapOf("pointId" to "native-handplaced")).await()
+            admin.getHttpsCallable("crownHunt-updateSpawnArea").call(mapOf("areaId" to "native-area", "active" to false)).await()
+            handplacedRemoval.await()
+            assertFalse(automatic.listNearby(keys, System.currentTimeMillis()).any { it.id == "native-automatic" })
+            assertEquals(117L, firestore.collection("pointsLedger").document("native-member").get(Source.SERVER).await().getLong("balance"))
             actorAuth.signOut(); memberAuth.signOut()
         } finally { memberApp.delete(); actorApp.delete() }
+    }
+    private suspend fun awaitDocument(reference: DocumentReference, predicate: (DocumentSnapshot) -> Boolean): DocumentSnapshot = withTimeout(30000) {
+        callbackFlow<DocumentSnapshot> {
+            val listener = reference.addSnapshotListener { snapshot, error ->
+                if (error != null) close(error) else if (snapshot != null) trySend(snapshot)
+            }
+            awaitClose { listener.remove() }
+        }.first { !it.metadata.isFromCache && predicate(it) }
     }
 }

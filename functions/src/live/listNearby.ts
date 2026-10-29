@@ -33,7 +33,8 @@
  *   suspended VIEWER, so even a returned uid yields no live marker for them.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { FieldPath, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
@@ -44,10 +45,7 @@ import {
   geoCellsForRadius,
   isWithinRadius,
 } from '../incidents/incidents-core';
-import {
-  isBlockedAgainstAnyPeer,
-  resolvePeerBlockPairs,
-} from '../convoy/convoy-core';
+import { isBlockedAgainstAnyPeer, resolvePeerBlockPairs } from '../convoy/convoy-core';
 import {
   LIVE_SESSION_ACTIVE_STATUS,
   parseListNearbyInput,
@@ -171,9 +169,7 @@ export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNea
   // the candidate count, not with candidate×peer.
   const candidateUids = capped.map((c) => c.uid);
   const blockPairs = await resolvePeerBlockPairs(candidateUids, [actor.uid], queryBlockedSubset);
-  const results = capped.filter(
-    (c) => !isBlockedAgainstAnyPeer(c.uid, [actor.uid], blockPairs),
-  );
+  const results = capped.filter((c) => !isBlockedAgainstAnyPeer(c.uid, [actor.uid], blockPairs));
 
   return { sessions: results };
 });

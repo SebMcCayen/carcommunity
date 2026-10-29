@@ -1,3 +1,4 @@
+import { containsObjectionableText } from '../moderation/content-filter';
 /**
  * Direct-messaging domain core (pure logic): input parsing, canonical
  * conversation-id derivation, document builders, and summary mappers for the
@@ -150,7 +151,14 @@ const clientMessageIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 const sendMessageSchema = z
   .object({
     toUid: uidSchema,
-    text: z.string().min(1).max(DM_MESSAGE_MAX_LENGTH),
+    text: z
+      .string()
+      .min(1)
+      .max(DM_MESSAGE_MAX_LENGTH)
+      .refine(
+        (value) => !containsObjectionableText(value),
+        'Content violates the community rules.',
+      ),
     clientId: clientMessageIdSchema.optional(),
     // Inline reply target: the id of the message being replied to. The client
     // sends ONLY this id — never the quoted author/text — and the server

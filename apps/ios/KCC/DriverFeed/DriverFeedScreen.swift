@@ -57,15 +57,23 @@ private struct DriverFeedSession: View {
                     }
                     if coordinator.state.selectedId == nil {
                         ForEach(coordinator.state.posts) { post in
-                            Button { coordinator.open(post.id) } label: {
-                                DriverPostBody(post: post, strings: strings).kccContentCard()
-                            }.buttonStyle(.plain)
+                            VStack(alignment: .leading, spacing: KccSpacing.s2) {
+                                Button { coordinator.open(post.id) } label: {
+                                    DriverPostBody(post: post, strings: strings)
+                                }.buttonStyle(.plain)
+                                DriverContentSafetyActions(viewerUID: uid, authorUID: post.authorUid,
+                                    target: PublicContentTarget(surface: "driver_post", itemID: post.id))
+                            }.kccContentCard()
                         }
                         if !coordinator.state.loading && coordinator.state.failure == nil && coordinator.state.posts.isEmpty {
                             Text(strings["empty"])
                         }
                     } else if let post = coordinator.state.post {
-                        DriverPostBody(post: post, strings: strings).kccContentCard()
+                        VStack(alignment: .leading, spacing: KccSpacing.s2) {
+                            DriverPostBody(post: post, strings: strings)
+                            DriverContentSafetyActions(viewerUID: uid, authorUID: post.authorUid,
+                                target: PublicContentTarget(surface: "driver_post", itemID: post.id))
+                        }.kccContentCard()
                         Text(strings["comments"]).font(.headline).accessibilityAddTraits(.isHeader)
                         ForEach(coordinator.state.comments) { comment in
                             VStack(alignment: .leading, spacing: KccSpacing.s1) {
@@ -75,6 +83,8 @@ private struct DriverFeedSession: View {
                                         .font(.caption).foregroundStyle(.secondary)
                                 }
                                 Text(comment.text).font(.body).fixedSize(horizontal: false, vertical: true)
+                                DriverContentSafetyActions(viewerUID: uid, authorUID: comment.authorUid,
+                                    target: PublicContentTarget(surface: "driver_comment", itemID: comment.id, threadID: post.id))
                             }.frame(maxWidth: .infinity, alignment: .leading).kccContentCard()
                         }
                         if !coordinator.state.loading && coordinator.state.comments.isEmpty { Text(strings["noComments"]) }

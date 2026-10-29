@@ -56,7 +56,8 @@
  *    lifetime.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { FieldValue, Timestamp, type DocumentReference } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
@@ -346,9 +347,7 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
   // message. Reusing this fan-out also avoids a second 'convoy_chat' notice that
   // would double up on the one the author is already getting.
   const hidden = await loadHiddenUids(actor.uid);
-  const recipients = acceptedConvoyMemberUids(convoy, actor.uid).filter(
-    (uid) => !hidden.has(uid),
-  );
+  const recipients = acceptedConvoyMemberUids(convoy, actor.uid).filter((uid) => !hidden.has(uid));
   const senderName = senderProfile.displayName ?? 'En medlem';
   const convoyTitle = typeof convoy.title === 'string' && convoy.title ? convoy.title : null;
   const notificationId = convoyChatNotificationId(convoyId, new Date());
@@ -380,10 +379,7 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
         // notification: a failed stamp only means this one message does not
         // pre-light the dot — the per-convoy unread window still shows it on open.
         userPrivateRef(uid)
-          .set(
-            { [CONVOY_LATEST_FIELD]: { [convoyId]: postedAt } },
-            { merge: true },
-          )
+          .set({ [CONVOY_LATEST_FIELD]: { [convoyId]: postedAt } }, { merge: true })
           .catch(() => undefined),
       ]),
     ),
@@ -478,70 +474,63 @@ export interface MarkReadConvoyResponse {
  * count, so returning it would buy a second read nobody consumes. The single read
  * this does spend is the one the eviction needs.
  */
-export const markRead = onCall(
-  CALLABLE_OPTS,
-  async (request): Promise<MarkReadConvoyResponse> => {
-    const actor = await requireActiveActor(request);
+export const markRead = onCall(CALLABLE_OPTS, async (request): Promise<MarkReadConvoyResponse> => {
+  const actor = await requireActiveActor(request);
 
-    const parsed = parseMarkReadConvoyInput(request.data);
-    if (!parsed.ok) {
-      throw new HttpsError('invalid-argument', parsed.message);
+  const parsed = parseMarkReadConvoyInput(request.data);
+  if (!parsed.ok) {
+    throw new HttpsError('invalid-argument', parsed.message);
+  }
+  const { convoyId } = parsed.input;
+
+  const ref = userPrivateRef(actor.uid);
+  const snap = await ref.get();
+  const evicted = pruneConvoyLastRead(snap.data()?.[CONVOY_LAST_READ_FIELD], convoyId, Date.now());
+
+  // Bound the parallel latest-message map the post fan-out grows, with the same
+  // cap and eviction rule as the read marker. It gains a key per convoy the
+  // member ever RECEIVES in (not just the ones they read), so without pruning it
+  // could outgrow the read map; markRead is the one place already reading this
+  // document, so the prune adds no read. The convoy just read is protected from
+  // eviction — it is the one most likely to still matter.
+  const evictedLatest = pruneConvoyLastRead(
+    snap.data()?.[CONVOY_LATEST_FIELD],
+    convoyId,
+    Date.now(),
+  );
+
+  // A nested serverTimestamp sentinel under a merge: only the ONE convoy's key
+  // is written (Firestore merges the map by field path), so a concurrent
+  // markRead for a different convoy cannot clobber this one — which writing the
+  // whole recomputed map back would. Evictions ride along as nested deletes for
+  // the same reason: a merge alone can add keys but never remove them.
+  //
+  // NOT a transaction, deliberately: two overlapping calls for different
+  // convoys can leave the map one over the cap, and the next call evicts it
+  // straight back down (pruneConvoyLastRead prunes from an over-cap map in one
+  // pass), so the map self-heals and cannot ratchet up. Wrapping this in a
+  // transaction to make the cap momentarily exact would put a retrying
+  // read-write on the hot path, and an aborted transaction is a silently
+  // failed markRead — a badge left lit on a chat the member has read. See
+  // pruneConvoyLastRead for the full reasoning.
+  const update: Record<string, unknown> = { [convoyId]: FieldValue.serverTimestamp() };
+  for (const key of evicted) {
+    update[key] = FieldValue.delete();
+  }
+  const payload: Record<string, unknown> = { [CONVOY_LAST_READ_FIELD]: update };
+
+  // Fold the latest-map evictions into the SAME merge write — nested deletes, so
+  // they remove only the over-cap keys and never touch the entries the post
+  // fan-out is still stamping. Only present when there is something to evict, so
+  // markRead stays a single write on the steady-state path.
+  if (evictedLatest.length > 0) {
+    const latestUpdate: Record<string, unknown> = {};
+    for (const key of evictedLatest) {
+      latestUpdate[key] = FieldValue.delete();
     }
-    const { convoyId } = parsed.input;
+    payload[CONVOY_LATEST_FIELD] = latestUpdate;
+  }
+  await ref.set(payload, { merge: true });
 
-    const ref = userPrivateRef(actor.uid);
-    const snap = await ref.get();
-    const evicted = pruneConvoyLastRead(
-      snap.data()?.[CONVOY_LAST_READ_FIELD],
-      convoyId,
-      Date.now(),
-    );
-
-    // Bound the parallel latest-message map the post fan-out grows, with the same
-    // cap and eviction rule as the read marker. It gains a key per convoy the
-    // member ever RECEIVES in (not just the ones they read), so without pruning it
-    // could outgrow the read map; markRead is the one place already reading this
-    // document, so the prune adds no read. The convoy just read is protected from
-    // eviction — it is the one most likely to still matter.
-    const evictedLatest = pruneConvoyLastRead(
-      snap.data()?.[CONVOY_LATEST_FIELD],
-      convoyId,
-      Date.now(),
-    );
-
-    // A nested serverTimestamp sentinel under a merge: only the ONE convoy's key
-    // is written (Firestore merges the map by field path), so a concurrent
-    // markRead for a different convoy cannot clobber this one — which writing the
-    // whole recomputed map back would. Evictions ride along as nested deletes for
-    // the same reason: a merge alone can add keys but never remove them.
-    //
-    // NOT a transaction, deliberately: two overlapping calls for different
-    // convoys can leave the map one over the cap, and the next call evicts it
-    // straight back down (pruneConvoyLastRead prunes from an over-cap map in one
-    // pass), so the map self-heals and cannot ratchet up. Wrapping this in a
-    // transaction to make the cap momentarily exact would put a retrying
-    // read-write on the hot path, and an aborted transaction is a silently
-    // failed markRead — a badge left lit on a chat the member has read. See
-    // pruneConvoyLastRead for the full reasoning.
-    const update: Record<string, unknown> = { [convoyId]: FieldValue.serverTimestamp() };
-    for (const key of evicted) {
-      update[key] = FieldValue.delete();
-    }
-    const payload: Record<string, unknown> = { [CONVOY_LAST_READ_FIELD]: update };
-
-    // Fold the latest-map evictions into the SAME merge write — nested deletes, so
-    // they remove only the over-cap keys and never touch the entries the post
-    // fan-out is still stamping. Only present when there is something to evict, so
-    // markRead stays a single write on the steady-state path.
-    if (evictedLatest.length > 0) {
-      const latestUpdate: Record<string, unknown> = {};
-      for (const key of evictedLatest) {
-        latestUpdate[key] = FieldValue.delete();
-      }
-      payload[CONVOY_LATEST_FIELD] = latestUpdate;
-    }
-    await ref.set(payload, { merge: true });
-
-    return { convoyId };
-  },
-);
+  return { convoyId };
+});

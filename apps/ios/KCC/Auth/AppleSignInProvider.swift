@@ -146,7 +146,9 @@ extension AppleSignInProvider: ASAuthorizationControllerDelegate {
         resume(with: .success(AppleIDTokenPayload(
             identityToken: identityToken,
             rawNonce: rawNonce,
-            fullName: credential.fullName
+            fullName: credential.fullName,
+            authorizationCode: credential.authorizationCode.flatMap { String(data: $0, encoding: .utf8) },
+            providerUserID: credential.user
         )))
     }
 

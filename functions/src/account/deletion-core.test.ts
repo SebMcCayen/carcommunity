@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { parseDeleteAccountInput } from './deletion-core';
 import { blockMirrorRtdbKey } from './deletion-core';
 
 describe('blockMirrorRtdbKey', () => {
@@ -35,5 +36,16 @@ describe('blockMirrorRtdbKey', () => {
     expect(blockMirrorRtdbKey('userBlocks/blocker-a/friends/blocked-b')).toBeNull();
     expect(blockMirrorRtdbKey('userBlocks/blocker-a')).toBeNull();
     expect(blockMirrorRtdbKey('userBlocks/blocker-a/blocked/blocked-b/blocked/c')).toBeNull();
+  });
+});
+
+describe('native deletion account binding', () => {
+  it('accepts an expected UID without changing the legacy empty request', () => {
+    expect(parseDeleteAccountInput({})).toEqual({ ok: true, input: {} });
+    expect(parseDeleteAccountInput({ expectedUid: 'member-a' })).toEqual({
+      ok: true,
+      input: { expectedUid: 'member-a' },
+    });
+    expect(parseDeleteAccountInput({ expectedUid: '' }).ok).toBe(false);
   });
 });

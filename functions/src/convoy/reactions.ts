@@ -33,7 +33,8 @@
  *    cooldown or re-broadcasting, so a flaky network never double-pops receivers.
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
@@ -88,88 +89,91 @@ export interface SendReactionResponse {
   reactionId: string;
 }
 
-export const sendReaction = onCall(CALLABLE_OPTS, async (request): Promise<SendReactionResponse> => {
-  const actor = await requireActiveActor(request);
+export const sendReaction = onCall(
+  CALLABLE_OPTS,
+  async (request): Promise<SendReactionResponse> => {
+    const actor = await requireActiveActor(request);
 
-  const parsed = parseSendReactionInput(request.data);
-  if (!parsed.ok) {
-    throw new HttpsError('invalid-argument', parsed.message);
-  }
-  const { convoyId, kind, clientId } = parsed.input;
+    const parsed = parseSendReactionInput(request.data);
+    if (!parsed.ok) {
+      throw new HttpsError('invalid-argument', parsed.message);
+    }
+    const { convoyId, kind, clientId } = parsed.input;
 
-  const convoy = await requireAcceptedConvoyMember(convoyId, actor.uid);
-  const senderProfile = senderProfileFrom(convoy, actor.uid);
+    const convoy = await requireAcceptedConvoyMember(convoyId, actor.uid);
+    const senderProfile = senderProfileFrom(convoy, actor.uid);
 
-  const reactionDocRef =
-    clientId !== undefined ? reactionsRef(convoyId).doc(clientId) : reactionsRef(convoyId).doc();
-  const cooldownDocRef = cooldownRef(convoyId, actor.uid);
-  const lastSentField = reactionLastSentField(kind);
+    const reactionDocRef =
+      clientId !== undefined ? reactionsRef(convoyId).doc(clientId) : reactionsRef(convoyId).doc();
+    const cooldownDocRef = cooldownRef(convoyId, actor.uid);
+    const lastSentField = reactionLastSentField(kind);
 
-  const now = new Date();
-  const nowMs = now.getTime();
-  const createdAt = Timestamp.fromDate(now);
+    const now = new Date();
+    const nowMs = now.getTime();
+    const createdAt = Timestamp.fromDate(now);
 
-  // The cooldown check and the reaction write share ONE transaction so the limit
-  // holds under concurrency: two rapid taps serialise on the cooldown doc, the
-  // first commits (writing the reaction + stamping the cooldown), and the second
-  // reads the fresh stamp and is refused. All reads precede all writes.
-  const reactionId = await db.runTransaction(async (tx) => {
-    // Idempotency: a retry with the same clientId replays the committed reaction
-    // WITHOUT bumping the cooldown or writing again — so a network retry never
-    // double-pops receivers or burns the sender's cooldown twice. A doc at this
-    // id from a DIFFERENT sender is a key collision / buggy client: surface it.
-    if (clientId !== undefined) {
-      const existing = await tx.get(reactionDocRef);
-      if (existing.exists) {
-        if (existing.data()?.senderUid !== actor.uid) {
-          throw new HttpsError('already-exists', 'Reaction id already used.');
+    // The cooldown check and the reaction write share ONE transaction so the limit
+    // holds under concurrency: two rapid taps serialise on the cooldown doc, the
+    // first commits (writing the reaction + stamping the cooldown), and the second
+    // reads the fresh stamp and is refused. All reads precede all writes.
+    const reactionId = await db.runTransaction(async (tx) => {
+      // Idempotency: a retry with the same clientId replays the committed reaction
+      // WITHOUT bumping the cooldown or writing again — so a network retry never
+      // double-pops receivers or burns the sender's cooldown twice. A doc at this
+      // id from a DIFFERENT sender is a key collision / buggy client: surface it.
+      if (clientId !== undefined) {
+        const existing = await tx.get(reactionDocRef);
+        if (existing.exists) {
+          if (existing.data()?.senderUid !== actor.uid) {
+            throw new HttpsError('already-exists', 'Reaction id already used.');
+          }
+          return reactionDocRef.id;
         }
-        return reactionDocRef.id;
       }
+
+      const cooldownSnap = await tx.get(cooldownDocRef);
+      const lastSentAt = cooldownSnap.data()?.[lastSentField] as Timestamp | undefined;
+      const lastSentAtMs = lastSentAt instanceof Timestamp ? lastSentAt.toMillis() : null;
+      if (isWithinReactionCooldown(kind, lastSentAtMs, nowMs)) {
+        // Hand the client the remaining time so its button greys for exactly the
+        // right window rather than guessing the server's policy.
+        throw new HttpsError('resource-exhausted', REACTION_RATE_LIMITED_MESSAGE, {
+          kind,
+          retryAfterMs: reactionCooldownRemainingMs(kind, lastSentAtMs, nowMs),
+        });
+      }
+
+      tx.set(
+        reactionDocRef,
+        buildReactionDocument({
+          kind: kind as ConvoyReactionKind,
+          senderUid: actor.uid,
+          senderProfile,
+          createdAt,
+          expireAt: reactionExpiry(now),
+        }),
+      );
+      tx.set(
+        cooldownDocRef,
+        {
+          convoyId,
+          uid: actor.uid,
+          [lastSentField]: createdAt,
+          expireAt: cooldownExpiry(now),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+
+      return reactionDocRef.id;
+    });
+
+    if (!reactionId) {
+      // Unreachable in practice (the transaction always returns an id or throws);
+      // narrows the type and refuses to invent a success.
+      throw new HttpsError('aborted', REACTION_NOT_DELIVERABLE_MESSAGE);
     }
 
-    const cooldownSnap = await tx.get(cooldownDocRef);
-    const lastSentAt = cooldownSnap.data()?.[lastSentField] as Timestamp | undefined;
-    const lastSentAtMs = lastSentAt instanceof Timestamp ? lastSentAt.toMillis() : null;
-    if (isWithinReactionCooldown(kind, lastSentAtMs, nowMs)) {
-      // Hand the client the remaining time so its button greys for exactly the
-      // right window rather than guessing the server's policy.
-      throw new HttpsError('resource-exhausted', REACTION_RATE_LIMITED_MESSAGE, {
-        kind,
-        retryAfterMs: reactionCooldownRemainingMs(kind, lastSentAtMs, nowMs),
-      });
-    }
-
-    tx.set(
-      reactionDocRef,
-      buildReactionDocument({
-        kind: kind as ConvoyReactionKind,
-        senderUid: actor.uid,
-        senderProfile,
-        createdAt,
-        expireAt: reactionExpiry(now),
-      }),
-    );
-    tx.set(
-      cooldownDocRef,
-      {
-        convoyId,
-        uid: actor.uid,
-        [lastSentField]: createdAt,
-        expireAt: cooldownExpiry(now),
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
-
-    return reactionDocRef.id;
-  });
-
-  if (!reactionId) {
-    // Unreachable in practice (the transaction always returns an id or throws);
-    // narrows the type and refuses to invent a success.
-    throw new HttpsError('aborted', REACTION_NOT_DELIVERABLE_MESSAGE);
-  }
-
-  return { reactionId };
-});
+    return { reactionId };
+  },
+);

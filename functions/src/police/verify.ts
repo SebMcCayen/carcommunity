@@ -30,7 +30,8 @@
  *  - No PII in logs (only the pin id + coarse types on a corrupt-doc guard).
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { logger } from 'firebase-functions';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
@@ -218,7 +219,9 @@ export const dispute = onCall(CALLABLE_OPTS, async (request): Promise<VerifyResp
  */
 async function enforceVoteRateLimit(uid: string): Promise<void> {
   const nowMs = Date.now();
-  const ref = db.collection(POLICE_VOTE_RATE_LIMIT_COLLECTION).doc(policeVoteRateLimitDocId(uid, nowMs));
+  const ref = db
+    .collection(POLICE_VOTE_RATE_LIMIT_COLLECTION)
+    .doc(policeVoteRateLimitDocId(uid, nowMs));
 
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);

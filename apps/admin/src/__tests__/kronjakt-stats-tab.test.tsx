@@ -75,7 +75,14 @@ function stats(scope: string, spawned: number, collected: number) {
   };
 }
 
-function entry(rank: number, uid: string, displayName: string, points: number, crowns: number, seasonsWon = 0) {
+function entry(
+  rank: number,
+  uid: string,
+  displayName: string,
+  points: number,
+  crowns: number,
+  seasonsWon = 0,
+) {
   return { rank, uid, displayName, points, crownsCollected: crowns, seasonsWon };
 }
 
@@ -137,8 +144,18 @@ beforeEach(() => {
   mocks.perks.mockImplementation((scope: string) =>
     Promise.resolve(
       scope === 'alltime'
-        ? perkStats('alltime', { spike_strip: 12, shield: 7, boost: 4 }, { spike_strip: 20, shield: 15, boost: 9 }, 33)
-        : perkStats(scope, { spike_strip: 3, shield: 2, boost: 1 }, { spike_strip: 5, shield: 4, boost: 2 }, 8),
+        ? perkStats(
+            'alltime',
+            { spike_strip: 12, shield: 7, boost: 4 },
+            { spike_strip: 20, shield: 15, boost: 9 },
+            33,
+          )
+        : perkStats(
+            scope,
+            { spike_strip: 3, shield: 2, boost: 1 },
+            { spike_strip: 5, shield: 4, boost: 2 },
+            8,
+          ),
     ),
   );
 });
@@ -239,32 +256,15 @@ describe('StatsTab', () => {
     expect(container.querySelector('[data-testid="heat-stub"]')).not.toBeNull();
   });
 
-  it('shows zeroed perk cards (not an error) when perk stats permission-deny', async () => {
-    // The crownHuntPerkStats rules ship separately, so these reads
-    // permission-deny in prod until deployed — the EXPECTED pre-launch case,
-    // shown as honest zeros. It must NOT crash the tab nor show an error state.
+  it('shows unknown perk statistics on permission denial while keeping other statistics', async () => {
     mocks.perks.mockReset();
     mocks.perks.mockRejectedValue({ code: 'permission-denied', message: 'Missing permissions' });
     await render();
     const text = container.textContent ?? '';
-    // The tab did NOT fall into the global error state — other sections render.
-    expect(text).not.toContain(t('crownHunt.error'));
-    expect(text).toContain('100'); // all-time spawned (spawn stats)
-    expect(text).toContain(t('crownHunt.statChampionsTitle')); // champions
-    // The perk section renders zeroed CARDS (not the error state).
-    expect(text).toContain(t('crownHunt.statPerkTitle'));
-    expect(text).not.toContain(t('crownHunt.statPerkError'));
-    for (const name of ['Spikmatta', 'Sköld', 'Dubbla Poäng']) {
-      expect(text).toContain(name);
-    }
-    const trapLogo = [...container.querySelectorAll('svg[role="img"]')].find(
-      (s) => s.querySelector('title')?.textContent === 'Spikmatta',
-    );
-    const trapCard = trapLogo?.parentElement?.parentElement as HTMLElement | undefined;
-    const usedSeasonRow = [...(trapCard?.querySelectorAll('div') ?? [])].find(
-      (d) => d.querySelector('span')?.textContent === t('crownHunt.statPerkUsedSeason'),
-    );
-    expect(usedSeasonRow?.textContent ?? '').toContain('0'); // zero fallback
+    expect(text).toContain('100');
+    expect(text).toContain(t('crownHunt.statChampionsTitle'));
+    expect(text).toContain(t('crownHunt.statPerkError'));
+    expect(container.querySelector('svg[role="img"]')).toBeNull();
   });
 
   it('shows a perk-section error state (not fake zeros) on a real perk-read failure', async () => {

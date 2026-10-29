@@ -26,6 +26,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Plus } from 'lucide-react';
+import { CrownOverview } from './CrownOverview';
 import { useCursorHistory } from '@/hooks/useCursorHistory';
 import { HistoryPager } from '@/components/ui/HistoryPager';
 
@@ -559,7 +561,6 @@ interface PointsTabProps {
   onPause: (point: AdminCrownHuntPointSummary) => void;
   onEdit: (point: AdminCrownHuntPointSummary) => void;
   onDelete: (point: AdminCrownHuntPointSummary) => void;
-  onCreateNew: () => void;
 }
 
 const PointsTab = ({
@@ -571,15 +572,8 @@ const PointsTab = ({
   onPause,
   onEdit,
   onDelete,
-  onCreateNew,
 }: PointsTabProps) => (
   <section>
-    <div className={styles.tabHeader}>
-      <button className={styles.btnPrimary} onClick={onCreateNew}>
-        {t('crownHunt.createPoint')}
-      </button>
-    </div>
-
     {isLoading && <p className={styles.loadingText}>{t('crownHunt.loading')}</p>}
     {error !== null && (
       <p className={styles.errorText}>
@@ -773,7 +767,7 @@ const ClaimsTab = ({
 // Page
 // ---------------------------------------------------------------------------
 
-type Tab = 'points' | 'claims' | 'areas' | 'stats';
+type Tab = 'overview' | 'points' | 'claims' | 'areas' | 'stats';
 
 export default function KronjaktPage() {
   const mountedRef = useRef(true);
@@ -784,14 +778,21 @@ export default function KronjaktPage() {
     };
   }, []);
 
-  const [activeTab, setActiveTab] = useState<Tab>('points');
+  const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
+  const [focusedPoint, setFocusedPoint] = useState<AdminCrownHuntPointSummary | null>(null);
 
   const [filterRiskReview, setFilterRiskReview] = useState(false);
   const [claimSource, setClaimSource] = useState<'all' | 'hand_placed' | 'automatic'>('all');
-  const readPoints = useCallback(async (cursor: string | null) => {
-    const result = await adminListCrownHuntPoints(1, undefined, cursor);
-    return { items: result.data.points, meta: result.meta };
-  }, []);
+  const readPoints = useCallback(
+    async (cursor: string | null) => {
+      if (activeTab !== 'points')
+        return { items: [] as AdminCrownHuntPointSummary[], meta: { total: 0, nextCursor: null } };
+      const result = await adminListCrownHuntPoints(1, undefined, cursor);
+      return { items: result.data.points, meta: result.meta };
+    },
+    [activeTab],
+  );
   const pointHistory = useCursorHistory(readPoints, 'pointId');
   const readClaims = useCallback(
     async (cursor: string | null) => {
@@ -810,7 +811,11 @@ export default function KronjaktPage() {
   const claims = claimHistory.items;
   const claimsLoading = claimHistory.loading;
   const claimsError = claimHistory.error;
-  const loadPoints = pointHistory.refresh;
+  const refreshPoints = pointHistory.refresh;
+  const loadPoints = useCallback(() => {
+    setFocusedPoint(null);
+    return refreshPoints();
+  }, [refreshPoints]);
   const loadClaims = claimHistory.refresh;
 
   // Form state
@@ -831,6 +836,8 @@ export default function KronjaktPage() {
 
   // Flash messages
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [pointActionError, setPointActionError] = useState<string | null>(null);
+  const pauseBusy = useRef(false);
 
   // ---------------------------------------------------------------------------
   // Form handlers
@@ -916,13 +923,19 @@ export default function KronjaktPage() {
 
   const handlePause = useCallback(
     async (point: AdminCrownHuntPointSummary) => {
+      if (pauseBusy.current) return;
+      pauseBusy.current = true;
+      setPointActionError(null);
       try {
         await adminPauseCrownHuntPoint(point.pointId);
         if (!mountedRef.current) return;
         showSuccess(t('crownHunt.pauseSuccess'));
         void loadPoints();
       } catch {
-        // Non-critical; user can retry.
+        if (mountedRef.current)
+          setPointActionError('Kronan kunde inte pausas. Uppdatera listan och försök igen.');
+      } finally {
+        pauseBusy.current = false;
       }
     },
     [loadPoints],
@@ -956,10 +969,29 @@ export default function KronjaktPage() {
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <h1 className={styles.title}>{t('crownHunt.pageTitle')}</h1>
-        <p className={styles.description}>{t('crownHunt.pageDescription')}</p>
+        <div>
+          <h1 className={styles.title}>Kronjakten</h1>
+          <p className={styles.description}>Överblick över kronor, områden och spawn.</p>
+        </div>
+        <button
+          className={styles.btnPrimary}
+          onClick={() => {
+            setActiveTab('points');
+            setEditingPoint(null);
+            setFocusedPoint(null);
+            setShowForm(true);
+            setSaveError(null);
+          }}
+        >
+          <Plus size={18} /> Skapa handplacerad krona
+        </button>
       </div>
 
+      {pointActionError && (
+        <p role="alert" className={styles.errorText}>
+          {pointActionError}
+        </p>
+      )}
       {/* Success flash */}
       {successMsg !== null && (
         <div className={styles.successBanner} role="status" aria-live="polite">
@@ -967,45 +999,74 @@ export default function KronjaktPage() {
         </div>
       )}
 
-      {/* Tab bar */}
-      <div className={styles.tabs} role="tablist">
-        <button
-          role="tab"
-          aria-selected={activeTab === 'points'}
-          className={activeTab === 'points' ? styles.tabActive : styles.tab}
-          onClick={() => setActiveTab('points')}
-        >
-          {t('crownHunt.pointsTab')}
-        </button>
-        <button
-          role="tab"
-          aria-selected={activeTab === 'claims'}
-          className={activeTab === 'claims' ? styles.tabActive : styles.tab}
-          onClick={() => setActiveTab('claims')}
-        >
-          {t('crownHunt.claimsTab')}
-        </button>
-        <button
-          role="tab"
-          aria-selected={activeTab === 'areas'}
-          className={activeTab === 'areas' ? styles.tabActive : styles.tab}
-          onClick={() => setActiveTab('areas')}
-        >
-          {t('crownHunt.areasTab')}
-        </button>
-        <button
-          role="tab"
-          aria-selected={activeTab === 'stats'}
-          className={activeTab === 'stats' ? styles.tabActive : styles.tab}
-          onClick={() => setActiveTab('stats')}
-        >
-          {t('crownHunt.statsTab')}
-        </button>
+      <div className={styles.tabs} role="tablist" aria-label="Kronjaktens verktyg">
+        {(
+          [
+            ['overview', 'Översikt'],
+            ['areas', 'Områden och spawn'],
+            ['points', 'Handplacerade'],
+            ['claims', 'Insamlingar'],
+            ['stats', 'Statistik'],
+          ] as const
+        ).map(([tab, label], index, tabs) => (
+          <button
+            key={tab}
+            role="tab"
+            id={'crown-tab-' + tab}
+            aria-controls={'crown-panel-' + tab}
+            aria-selected={activeTab === tab}
+            tabIndex={activeTab === tab ? 0 : -1}
+            className={activeTab === tab ? styles.tabActive : styles.tab}
+            onClick={() => {
+              setActiveTab(tab);
+              setShowForm(false);
+            }}
+            onKeyDown={(event) => {
+              const next =
+                event.key === 'ArrowRight'
+                  ? (index + 1) % tabs.length
+                  : event.key === 'ArrowLeft'
+                    ? (index + tabs.length - 1) % tabs.length
+                    : event.key === 'Home'
+                      ? 0
+                      : event.key === 'End'
+                        ? tabs.length - 1
+                        : null;
+              if (next !== null) {
+                event.preventDefault();
+                setActiveTab(tabs[next]![0]);
+                setShowForm(false);
+                document.getElementById('crown-tab-' + tabs[next]![0])?.focus();
+              }
+            }}
+          >
+            {label}
+          </button>
+        ))}
       </div>
-
+      {activeTab === 'overview' && (
+        <div role="tabpanel" id="crown-panel-overview" aria-labelledby="crown-tab-overview">
+          <CrownOverview
+            onManageArea={(areaId) => {
+              setSelectedAreaId(areaId);
+              setActiveTab('areas');
+            }}
+            onPoint={(point) => {
+              setFocusedPoint(point);
+              setActiveTab('points');
+              setShowForm(false);
+            }}
+          />
+        </div>
+      )}
       {/* Point create/edit form */}
       {showForm && (
-        <div className={styles.formContainer}>
+        <div
+          className={styles.formContainer}
+          role="tabpanel"
+          id="crown-panel-points"
+          aria-labelledby="crown-tab-points"
+        >
           <PointForm
             initial={editingPoint !== null ? pointToForm(editingPoint) : EMPTY_FORM}
             onSave={handleSave}
@@ -1022,9 +1083,17 @@ export default function KronjaktPage() {
 
       {/* Active tab content */}
       {activeTab === 'points' && !showForm && (
-        <>
+        <div role="tabpanel" id="crown-panel-points" aria-labelledby="crown-tab-points">
+          {focusedPoint && (
+            <p className={styles.introText}>
+              Visar vald handplacerad krona.{' '}
+              <button className={styles.linkButton} onClick={() => setFocusedPoint(null)}>
+                Visa alla handplacerade
+              </button>
+            </p>
+          )}
           <PointsTab
-            points={points}
+            points={focusedPoint ? [focusedPoint] : points}
             isLoading={pointsLoading}
             error={points.length === 0 ? pointsError : null}
             onRefresh={() => void loadPoints()}
@@ -1042,28 +1111,24 @@ export default function KronjaktPage() {
               setDeletingPoint(p);
               setDeleteError(null);
             }}
-            onCreateNew={() => {
-              setEditingPoint(null);
-              setShowForm(true);
-              setSaveError(null);
-            }}
           />
-          {((!pointHistory.loading && !pointHistory.error) || points.length > 0) && (
-            <HistoryPager
-              shown={points.length}
-              total={pointHistory.total}
-              hasNext={!!pointHistory.nextCursor}
-              loading={pointsLoading}
-              error={pointsError}
-              onMore={() => void pointHistory.loadMore()}
-              onRefresh={() => void loadPoints()}
-            />
-          )}
-        </>
+          {!focusedPoint &&
+            ((!pointHistory.loading && !pointHistory.error) || points.length > 0) && (
+              <HistoryPager
+                shown={points.length}
+                total={pointHistory.total}
+                hasNext={!!pointHistory.nextCursor}
+                loading={pointsLoading}
+                error={pointsError}
+                onMore={() => void pointHistory.loadMore()}
+                onRefresh={() => void loadPoints()}
+              />
+            )}
+        </div>
       )}
 
       {activeTab === 'claims' && (
-        <>
+        <div role="tabpanel" id="crown-panel-claims" aria-labelledby="crown-tab-claims">
           <ClaimsTab
             source={claimSource}
             onSourceChange={setClaimSource}
@@ -1085,12 +1150,20 @@ export default function KronjaktPage() {
               onRefresh={() => void loadClaims()}
             />
           )}
-        </>
+        </div>
       )}
 
-      {activeTab === 'areas' && <AreasTab onFlash={showSuccess} />}
+      {activeTab === 'areas' && (
+        <div role="tabpanel" id="crown-panel-areas" aria-labelledby="crown-tab-areas">
+          <AreasTab onFlash={showSuccess} initialAreaId={selectedAreaId} />
+        </div>
+      )}
 
-      {activeTab === 'stats' && <StatsTab />}
+      {activeTab === 'stats' && (
+        <div role="tabpanel" id="crown-panel-stats" aria-labelledby="crown-tab-stats">
+          <StatsTab />
+        </div>
+      )}
 
       {/* Activate confirmation modal */}
       {activatingPoint !== null && (

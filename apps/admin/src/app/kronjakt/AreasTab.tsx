@@ -75,9 +75,10 @@ function shapeSummary(shape: CrownSpawnAreaShape): string {
 
 interface AreasTabProps {
   onFlash: (message: string) => void;
+  initialAreaId?: string | null;
 }
 
-export function AreasTab({ onFlash }: AreasTabProps): React.ReactElement {
+export function AreasTab({ onFlash, initialAreaId }: AreasTabProps): React.ReactElement {
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -154,6 +155,11 @@ export function AreasTab({ onFlash }: AreasTabProps): React.ReactElement {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (initialAreaId && !isLoading)
+      document.getElementById('crown-area-' + initialAreaId)?.focus();
+  }, [initialAreaId, isLoading, areas]);
 
   const resetDraw = () => {
     setDrawing(false);
@@ -472,7 +478,16 @@ export function AreasTab({ onFlash }: AreasTabProps): React.ReactElement {
               const poi = areaPoiCount(area);
               const active = area.active && area.safeAreaConfirmed;
               return (
-                <tr key={area.areaId}>
+                <tr
+                  key={area.areaId}
+                  id={'crown-area-' + area.areaId}
+                  tabIndex={area.areaId === initialAreaId ? 0 : -1}
+                  aria-label={
+                    area.areaId === initialAreaId
+                      ? 'Valt område: ' + (area.name || area.areaId)
+                      : undefined
+                  }
+                >
                   <td>{area.name?.trim() ? area.name : t('crownHunt.areaUnnamed')}</td>
                   <td>{shapeSummary(area.shape)}</td>
                   <td>

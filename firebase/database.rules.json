@@ -8,7 +8,7 @@
           ".read": "auth != null && auth.uid == $uid"
         },
         "latest": {
-          ".read": "auth != null && (auth.uid == $uid || (auth.token.suspended != true && !root.child('liveLocationBlocks').child($uid).child(auth.uid).exists() && !root.child('liveLocationBlocks').child(auth.uid).child($uid).exists()))"
+          ".read": "auth != null && (auth.uid == $uid || ((auth != null && (root.child('carCommunityPolicy').child('enforceInitialized').val() == false || (root.child('carCommunityAccess').child(auth.uid).child('initialized').val() == true && root.child('carCommunityAccess').child(auth.uid).child('suspended').val() != true && !root.child('carCommunityAccess').child(auth.uid).child('explicitBlacklistId').exists() && root.child('carCommunityAccess').child(auth.uid).child('inheritedBlocked').val() != true && (!root.child('carCommunityAccess').child(auth.uid).child('googleKey').exists() || root.child('carCommunityIdentityBlocks').child(root.child('carCommunityAccess').child(auth.uid).child('googleKey').val()).child('blocked').val() != true) && (!root.child('carCommunityAccess').child(auth.uid).child('appleKey').exists() || root.child('carCommunityIdentityBlocks').child(root.child('carCommunityAccess').child(auth.uid).child('appleKey').val()).child('blocked').val() != true)))) && auth.token.suspended != true && !root.child('liveLocationBlocks').child($uid).child(auth.uid).exists() && !root.child('liveLocationBlocks').child(auth.uid).child($uid).exists()))"
         }
       }
     },
@@ -18,13 +18,31 @@
     },
     "presence": {
       "$uid": {
-        ".read": "auth != null",
-        ".write": "auth != null && auth.uid == $uid",
+        ".read": "auth != null && (root.child('carCommunityPolicy').child('enforceInitialized').val() == false || (root.child('carCommunityAccess').child(auth.uid).child('initialized').val() == true && root.child('carCommunityAccess').child(auth.uid).child('suspended').val() != true && !root.child('carCommunityAccess').child(auth.uid).child('explicitBlacklistId').exists() && root.child('carCommunityAccess').child(auth.uid).child('inheritedBlocked').val() != true && (!root.child('carCommunityAccess').child(auth.uid).child('googleKey').exists() || root.child('carCommunityIdentityBlocks').child(root.child('carCommunityAccess').child(auth.uid).child('googleKey').val()).child('blocked').val() != true) && (!root.child('carCommunityAccess').child(auth.uid).child('appleKey').exists() || root.child('carCommunityIdentityBlocks').child(root.child('carCommunityAccess').child(auth.uid).child('appleKey').val()).child('blocked').val() != true)))",
+        ".write": "(auth != null && (root.child('carCommunityPolicy').child('enforceInitialized').val() == false || (root.child('carCommunityAccess').child(auth.uid).child('initialized').val() == true && root.child('carCommunityAccess').child(auth.uid).child('suspended').val() != true && !root.child('carCommunityAccess').child(auth.uid).child('explicitBlacklistId').exists() && root.child('carCommunityAccess').child(auth.uid).child('inheritedBlocked').val() != true && (!root.child('carCommunityAccess').child(auth.uid).child('googleKey').exists() || root.child('carCommunityIdentityBlocks').child(root.child('carCommunityAccess').child(auth.uid).child('googleKey').val()).child('blocked').val() != true) && (!root.child('carCommunityAccess').child(auth.uid).child('appleKey').exists() || root.child('carCommunityIdentityBlocks').child(root.child('carCommunityAccess').child(auth.uid).child('appleKey').val()).child('blocked').val() != true)))) && auth.uid == $uid",
         ".validate": "newData.hasChildren(['online', 'lastSeen'])",
-        "online": { ".validate": "newData.isBoolean()" },
-        "lastSeen": { ".validate": "newData.isNumber()" },
-        "$other": { ".validate": false }
+        "online": {
+          ".validate": "newData.isBoolean()"
+        },
+        "lastSeen": {
+          ".validate": "newData.isNumber()"
+        },
+        "$other": {
+          ".validate": false
+        }
       }
+    },
+    "carCommunityPolicy": {
+      ".read": false,
+      ".write": false
+    },
+    "carCommunityAccess": {
+      ".read": false,
+      ".write": false
+    },
+    "carCommunityIdentityBlocks": {
+      ".read": false,
+      ".write": false
     }
   }
 }

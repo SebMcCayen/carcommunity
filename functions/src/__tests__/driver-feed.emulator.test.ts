@@ -11,13 +11,17 @@ import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { DetailResponse, ListResponse } from '../driverFeed/contract';
 
-const app = initializeApp({ projectId: 'demo-test', apiKey: 'demo-api-key', appId: 'demo-driver-feed' }, 'driver-feed-tests');
+const app = initializeApp(
+  { projectId: 'demo-test', apiKey: 'demo-api-key', appId: 'demo-driver-feed' },
+  'driver-feed-tests',
+);
 const auth = getAuth(app);
 connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
 const functions = getFunctions(app, 'europe-west1');
 connectFunctionsEmulator(functions, '127.0.0.1', 5001);
 const db = getFirestore(getApps()[0] ?? initializeAdmin({ projectId: 'demo-test' }));
-const call = async <T>(name: string, data: unknown): Promise<T> => (await httpsCallable<unknown, T>(functions, name)(data)).data;
+const call = async <T>(name: string, data: unknown): Promise<T> =>
+  (await httpsCallable<unknown, T>(functions, name)(data)).data;
 const prefix = `nativefeed_${Date.now()}`;
 const author = `${prefix}_author`;
 const threadId = `${prefix}_thread`;
@@ -26,15 +30,29 @@ const thread = db.doc(`driverThreads/${threadId}`);
 const createdAt = new Timestamp(253000000000, 1000);
 const canonical = { displayName: 'Canonical author', onboardingCompletedAt: Timestamp.now() };
 const driver = { handle: 'native_driver', onboardingComplete: true };
-const content = { authorUid: author, authorName: 'Outdated', authorHandle: 'outdated',
-  text: 'Native bridge integration', status: 'active', createdAt, mediaUrls: [], likeCount: 1, replyCount: 2 };
+const content = {
+  authorUid: author,
+  authorName: 'Outdated',
+  authorHandle: 'outdated',
+  text: 'Native bridge integration',
+  status: 'active',
+  createdAt,
+  mediaUrls: [],
+  likeCount: 1,
+  replyCount: 2,
+};
 let uid: string;
 let ratePath: string;
 
 beforeAll(async () => {
-  if (process.env.GCLOUD_PROJECT !== 'demo-test' ||
-      !process.env.FIRESTORE_EMULATOR_HOST?.startsWith('127.0.0.1:')) throw new Error('Local demo emulators required.');
-  uid = (await createUserWithEmailAndPassword(auth, `${prefix}@example.com`, 'emulator-only-password')).user.uid;
+  if (
+    process.env.GCLOUD_PROJECT !== 'demo-test' ||
+    !process.env.FIRESTORE_EMULATOR_HOST?.startsWith('127.0.0.1:')
+  )
+    throw new Error('Local demo emulators required.');
+  uid = (
+    await createUserWithEmailAndPassword(auth, `${prefix}@example.com`, 'emulator-only-password')
+  ).user.uid;
   ratePath = `driverRateLimits/${uid}_nativeFeedRead`;
   // Wait for existing auth provisioning before replacing its fixture profile.
   const deadline = Date.now() + 45_000;
@@ -57,55 +75,134 @@ beforeEach(async () => {
   batch.delete(db.doc(ratePath));
   batch.delete(db.doc(`blockVisibility/${uid}`));
   for (const path of [
-    `driverUsers/${uid}/blockedUsers/${author}`, `driverUsers/${author}/blockedUsers/${uid}`,
-    `userBlocks/${uid}/blocked/${author}`, `userBlocks/${author}/blocked/${uid}`,
-  ]) batch.delete(db.doc(path));
+    `driverUsers/${uid}/blockedUsers/${author}`,
+    `driverUsers/${author}/blockedUsers/${uid}`,
+    `userBlocks/${uid}/blocked/${author}`,
+    `userBlocks/${author}/blocked/${uid}`,
+  ])
+    batch.delete(db.doc(path));
   await batch.commit();
 });
-afterAll(async () => { await deleteApp(app); });
+afterAll(async () => {
+  await deleteApp(app);
+});
 
 describe('driverFeed-list/detail callable emulator', () => {
   it('projects canonical fields and a stable nanosecond cursor through real onCall serialization', async () => {
     const page = await call<ListResponse>('driverFeed-list', { limit: 1 });
-    expect(page.posts[0]).toMatchObject({ id: threadId, authorName: 'Canonical author', authorHandle: 'native_driver' });
-    expect(page.nextCursor).toEqual({ seconds: createdAt.seconds, nanoseconds: 1000, id: threadId });
+    expect(page.posts[0]).toMatchObject({
+      id: threadId,
+      authorName: 'Canonical author',
+      authorHandle: 'native_driver',
+    });
+    expect(page.nextCursor).toEqual({
+      seconds: createdAt.seconds,
+      nanoseconds: 1000,
+      id: threadId,
+    });
     expect((await db.doc(ratePath).get()).data()?.count).toBe(1);
   });
   it('paginates actual Firestore replies with equal timestamps by ascending ID', async () => {
     const first = await call<DetailResponse>('driverFeed-detail', { threadId, limit: 1 });
     expect(first.comments.map((c) => c.id)).toEqual(['reply_00001']);
-    const next = await call<DetailResponse>('driverFeed-detail', { threadId, limit: 1, cursor: first.nextCursor });
+    const next = await call<DetailResponse>('driverFeed-detail', {
+      threadId,
+      limit: 1,
+      cursor: first.nextCursor,
+    });
     expect(next.comments.map((c) => c.id)).toEqual(['reply_00002']);
   });
   it('fails closed when the parent is deleted between reply pages', async () => {
     const first = await call<DetailResponse>('driverFeed-detail', { threadId, limit: 1 });
     await thread.delete();
-    await expect(call('driverFeed-detail', { threadId, limit: 1, cursor: first.nextCursor }))
-      .rejects.toMatchObject({ code: 'functions/not-found', details: { reason: 'thread-unavailable' } });
+    await expect(
+      call('driverFeed-detail', { threadId, limit: 1, cursor: first.nextCursor }),
+    ).rejects.toMatchObject({
+      code: 'functions/not-found',
+      details: { reason: 'thread-unavailable' },
+    });
   });
-  it.each(['driver', 'canonical'])('honors reverse %s blocks without waiting for a mirror', async (kind) => {
-    await db.doc(kind === 'driver' ? `driverUsers/${author}/blockedUsers/${uid}` :
-      `userBlocks/${author}/blocked/${uid}`).set({});
-    const list = await call<ListResponse>('driverFeed-list', { limit: 1 });
-    expect(list.posts).toEqual([]);
-    expect(list.nextCursor?.id).toBe(threadId);
-    await expect(call('driverFeed-detail', { threadId })).rejects.toMatchObject({ code: 'functions/not-found' });
-  });
+  it.each(['driver', 'canonical'])(
+    'honors reverse %s blocks without waiting for a mirror',
+    async (kind) => {
+      await db
+        .doc(
+          kind === 'driver'
+            ? `driverUsers/${author}/blockedUsers/${uid}`
+            : `userBlocks/${author}/blocked/${uid}`,
+        )
+        .set({});
+      const list = await call<ListResponse>('driverFeed-list', { limit: 1 });
+      expect(list.posts).toEqual([]);
+      expect(list.nextCursor?.id).toBe(threadId);
+      await expect(call('driverFeed-detail', { threadId })).rejects.toMatchObject({
+        code: 'functions/not-found',
+      });
+    },
+  );
   it('rechecks Driver onboarding and suspension with stable localized reasons', async () => {
     await db.doc(`driverUsers/${uid}`).update({ onboardingComplete: false });
     await expect(call('driverFeed-list', {})).rejects.toMatchObject({
-      code: 'functions/failed-precondition', details: { reason: 'driver-onboarding-required' },
+      code: 'functions/failed-precondition',
+      details: { reason: 'driver-onboarding-required' },
     });
     await db.doc(`driverUsers/${uid}`).update({ onboardingComplete: true, status: 'suspended' });
     await expect(call('driverFeed-list', {})).rejects.toMatchObject({
-      code: 'functions/permission-denied', details: { reason: 'account-restricted' },
+      code: 'functions/permission-denied',
+      details: { reason: 'account-restricted' },
     });
   });
   it('rejects oversized requests without charging and enforces the shared page budget', async () => {
-    await expect(call('driverFeed-list', { limit: 21 })).rejects.toMatchObject({ code: 'functions/invalid-argument' });
+    await expect(call('driverFeed-list', { limit: 21 })).rejects.toMatchObject({
+      code: 'functions/invalid-argument',
+    });
     expect((await db.doc(ratePath).get()).exists).toBe(false);
     await db.doc(ratePath).set({ bucket: Math.floor(Date.now() / 3_600_000), count: 119 });
     await call('driverFeed-list', { limit: 1 });
-    await expect(call('driverFeed-detail', { threadId })).rejects.toMatchObject({ code: 'functions/resource-exhausted' });
+    await expect(call('driverFeed-detail', { threadId })).rejects.toMatchObject({
+      code: 'functions/resource-exhausted',
+    });
+  });
+});
+
+describe('private reporting of selected Driver content', () => {
+  it('captures trusted selected content and deduplicates without changing Driver data', async () => {
+    const request = { surface: 'driver_post', threadId, expectedUid: uid, reason: 'other' };
+    expect(await call('moderation-reportPublicContent', request)).toEqual({ reported: true });
+    const reports = await db.collection('moderationReports').where('reportedBy', '==', uid).get();
+    const report = reports.docs.find((doc) => doc.data().surface === 'driver_post')!;
+    expect(report.data().snapshot.text).toBe(content.text);
+    expect(report.data().snapshot.authorUserId).toBe(author);
+    expect(report.data().status).toBe('pending');
+    await report.ref.update({ status: 'reviewed' });
+    await call('moderation-reportPublicContent', request);
+    expect((await report.ref.get()).data()?.status).toBe('reviewed');
+    expect((await thread.get()).data()).toEqual(content);
+    expect(
+      await call('moderation-reportPublicContent', {
+        ...request,
+        surface: 'driver_comment',
+        commentId: 'reply_00002',
+      }),
+    ).toEqual({ reported: true });
+  });
+  it('rejects account replacement, forged snapshots and unonboarded access', async () => {
+    const request = { surface: 'driver_post', threadId, expectedUid: uid, reason: 'spam' };
+    await expect(
+      call('moderation-reportPublicContent', { ...request, expectedUid: 'another' }),
+    ).rejects.toMatchObject({ code: 'functions/permission-denied' });
+    await expect(
+      call('moderation-reportPublicContent', { ...request, snapshot: { text: 'forged' } }),
+    ).rejects.toMatchObject({ code: 'functions/invalid-argument' });
+    await db.doc(`driverUsers/${uid}`).update({ onboardingComplete: false });
+    await expect(call('moderation-reportPublicContent', request)).rejects.toMatchObject({
+      code: 'functions/failed-precondition',
+    });
+  });
+  it('filters severe external text from the native read projection without mutating the source', async () => {
+    await thread.update({ text: 'kill yourself' });
+    const page = await call<ListResponse>('driverFeed-list', { limit: 20 });
+    expect(page.posts.some((post) => post.id === threadId)).toBe(false);
+    expect((await thread.get()).data()?.text).toBe('kill yourself');
   });
 });

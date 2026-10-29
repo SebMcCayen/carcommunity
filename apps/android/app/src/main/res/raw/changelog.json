@@ -2,6 +2,23 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 60,
+      "versionName": "1.1.5",
+      "releaseDate": "2026-10-28",
+      "highlights": [
+        "Varningar med giltighetstid visas i din profil",
+        "Tydligare information när CarCommunity-åtkomsten är begränsad",
+        "Uppdaterad hantering av modererade chattmeddelanden"
+      ],
+      "changes": [
+        "Profil: se aktuella varningar, orsaken och när de slutar gälla",
+        "Profil: namn och det gemensamma saldot för XP och Kronpoäng hålls uppdaterade efter ändringar",
+        "Åtkomst: se tydlig information om en avstängning och nå varningar, support och kontoborttagning",
+        "Åtkomst: nya begränsningar gäller CarCommunity och stänger inte av den gemensamma inloggningen i andra appar",
+        "Chatt: borttagna eventmeddelanden och publika meddelanden uppdateras tillsammans med rensade citat"
+      ]
+    },
+    {
       "versionCode": 59,
       "versionName": "1.1.4",
       "releaseDate": "2026-10-28",

@@ -34,6 +34,10 @@ const fixture = vi.hoisted(() => ({
   actorRead: false,
 }));
 
+// This suite isolates the paid-gate contract for an initialized CC account.
+// Real provider identity and product restrictions are exercised in emulator acceptance.
+vi.mock('../access/carCommunity', () => ({ requireCarCommunityAccess: vi.fn(async () => {}) }));
+
 vi.mock('../shared/memberGating', () => ({
   memberGateAllows: vi.fn(() => false),
   backendGateAllows: vi.fn(() => false),

@@ -49,7 +49,8 @@
  *    NOT_ADDABLE stays opaque in both block directions (see friends-core.ts).
  */
 
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from '../access/callable';
 import { logger } from 'firebase-functions';
 import { Timestamp } from 'firebase-admin/firestore';
 import type { DocumentReference, DocumentSnapshot, QuerySnapshot } from 'firebase-admin/firestore';
@@ -191,10 +192,7 @@ async function loadProfile(uid: string): Promise<ProfileProjection | null> {
 
 /** True when either party has blocked the other (block honoured both ways). */
 async function isBlockedEitherWay(a: string, b: string): Promise<boolean> {
-  const [aBlockedB, bBlockedA] = await Promise.all([
-    blockRef(a, b).get(),
-    blockRef(b, a).get(),
-  ]);
+  const [aBlockedB, bBlockedA] = await Promise.all([blockRef(a, b).get(), blockRef(b, a).get()]);
   return aBlockedB.exists || bBlockedA.exists;
 }
 
@@ -284,10 +282,16 @@ async function resolveTarget(
   // OR a saturated page we can't prove is unique → ambiguous; the client shows
   // the candidate picker and re-calls with a resolved { toUid }.
   if (matches.length > 1 || saturated) {
-    const candidates: NicknameCandidate[] = matches.slice(0, AMBIGUOUS_CANDIDATE_LIMIT).map((doc) => {
-      const projection = toProfileProjection(doc.data());
-      return { uid: doc.id, displayName: projection.displayName, avatarPath: projection.avatarPath };
-    });
+    const candidates: NicknameCandidate[] = matches
+      .slice(0, AMBIGUOUS_CANDIDATE_LIMIT)
+      .map((doc) => {
+        const projection = toProfileProjection(doc.data());
+        return {
+          uid: doc.id,
+          displayName: projection.displayName,
+          avatarPath: projection.avatarPath,
+        };
+      });
     throw new HttpsError('failed-precondition', AMBIGUOUS_NICKNAME_MESSAGE, {
       reason: REASON_AMBIGUOUS_NICKNAME,
       candidates,
@@ -336,14 +340,18 @@ export const sendRequest = onCall(CALLABLE_OPTS, async (request): Promise<SendRe
   if (await isBlockedEitherWay(actor.uid, targetUid)) {
     // Neutral — never reveals which side blocked (privacy). The reason is the
     // same opaque NOT_ADDABLE in both directions.
-    throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE, { reason: REASON_NOT_ADDABLE });
+    throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE, {
+      reason: REASON_NOT_ADDABLE,
+    });
   }
 
   const callerProfile = await loadProfile(actor.uid);
   if (!callerProfile) {
     // The actor gate already loaded users/{caller}; a missing profile here is
     // an inconsistent state rather than a client error.
-    throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE, { reason: REASON_NOT_ADDABLE });
+    throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE, {
+      reason: REASON_NOT_ADDABLE,
+    });
   }
 
   const now = new Date();
@@ -384,9 +392,19 @@ export const sendRequest = onCall(CALLABLE_OPTS, async (request): Promise<SendRe
     // The other party already has a pending request to the caller → befriend
     // immediately instead of stacking a mirror request (no stuck state).
     if (incoming.exists && incoming.data()?.status === 'pending') {
-      tx.set(callerFriendRef, buildFriendshipDocument(targetUid, targetProfile, () => Timestamp.fromDate(now)));
-      tx.set(targetFriendRef, buildFriendshipDocument(actor.uid, callerProfile, () => Timestamp.fromDate(now)));
-      tx.set(incomingRef, { status: 'accepted', updatedAt: Timestamp.fromDate(now) }, { merge: true });
+      tx.set(
+        callerFriendRef,
+        buildFriendshipDocument(targetUid, targetProfile, () => Timestamp.fromDate(now)),
+      );
+      tx.set(
+        targetFriendRef,
+        buildFriendshipDocument(actor.uid, callerProfile, () => Timestamp.fromDate(now)),
+      );
+      tx.set(
+        incomingRef,
+        { status: 'accepted', updatedAt: Timestamp.fromDate(now) },
+        { merge: true },
+      );
       // Concurrency guard: under a "both users send at the same time" race BOTH
       // directional request docs can exist as pending. We accept the incoming
       // (target→caller) side above; the caller's own outgoing (caller→target)
@@ -397,11 +415,19 @@ export const sendRequest = onCall(CALLABLE_OPTS, async (request): Promise<SendRe
       // friendship exists. Guarded on the snapshot: in the non-race path the
       // outgoing doc doesn't exist and nothing is written.
       if (outgoing.exists) {
-        tx.set(outgoingRef, { status: 'accepted', updatedAt: Timestamp.fromDate(now) }, { merge: true });
+        tx.set(
+          outgoingRef,
+          { status: 'accepted', updatedAt: Timestamp.fromDate(now) },
+          { merge: true },
+        );
       }
       return {
         status: 'friends',
-        friend: toFriendSummary(targetUid, { displayName: targetProfile.displayName, avatarPath: targetProfile.avatarPath }, now.toISOString()),
+        friend: toFriendSummary(
+          targetUid,
+          { displayName: targetProfile.displayName, avatarPath: targetProfile.avatarPath },
+          now.toISOString(),
+        ),
       };
     }
 
@@ -415,7 +441,9 @@ export const sendRequest = onCall(CALLABLE_OPTS, async (request): Promise<SendRe
     // record — upsert to pending with a fresh timestamp.
     tx.set(
       outgoingRef,
-      buildFriendRequestDocument(actor.uid, targetUid, callerProfile, targetProfile, () => Timestamp.fromDate(now)),
+      buildFriendRequestDocument(actor.uid, targetUid, callerProfile, targetProfile, () =>
+        Timestamp.fromDate(now),
+      ),
     );
     return {
       status: 'requested',
@@ -471,126 +499,132 @@ export const sendRequest = onCall(CALLABLE_OPTS, async (request): Promise<SendRe
 // ---------------------------------------------------------------------------
 
 export type RespondRequestResult =
-  | { status: 'accepted'; friend: FriendSummary }
-  | { status: 'declined' };
+  { status: 'accepted'; friend: FriendSummary } | { status: 'declined' };
 
-export const respondRequest = onCall(CALLABLE_OPTS, async (request): Promise<RespondRequestResult> => {
-  const actor = await requireActiveActor(request);
+export const respondRequest = onCall(
+  CALLABLE_OPTS,
+  async (request): Promise<RespondRequestResult> => {
+    const actor = await requireActiveActor(request);
 
-  const parsed = parseRespondRequestInput(request.data);
-  if (!parsed.ok) {
-    throw new HttpsError('invalid-argument', parsed.message);
-  }
-  const { requestId, action } = parsed.input;
-
-  const reqRef = friendRequestRefById(requestId);
-  const now = new Date();
-
-  // The transaction additionally reports who to tell and under what name; a
-  // DECLINE reports nothing, so the requester is never told they were turned
-  // down (see the notify block below).
-  interface RespondOutcome {
-    result: RespondRequestResult;
-    notify?: { uid: string; accepterName: string | null };
-  }
-
-  const { result, notify } = await db.runTransaction<RespondOutcome>(async (tx) => {
-    const reqSnap = await tx.get(reqRef);
-    if (!reqSnap.exists) {
-      throw new HttpsError('not-found', REQUEST_NOT_FOUND_MESSAGE);
+    const parsed = parseRespondRequestInput(request.data);
+    if (!parsed.ok) {
+      throw new HttpsError('invalid-argument', parsed.message);
     }
-    const data = reqSnap.data()!;
-    // Only the addressee may respond; not-found (never permission-denied) so
-    // a request's existence can't be probed by a non-recipient.
-    if (data.toUid !== actor.uid) {
-      throw new HttpsError('not-found', REQUEST_NOT_FOUND_MESSAGE);
-    }
-    if (data.status !== 'pending') {
-      throw new HttpsError('failed-precondition', REQUEST_NOT_PENDING_MESSAGE);
+    const { requestId, action } = parsed.input;
+
+    const reqRef = friendRequestRefById(requestId);
+    const now = new Date();
+
+    // The transaction additionally reports who to tell and under what name; a
+    // DECLINE reports nothing, so the requester is never told they were turned
+    // down (see the notify block below).
+    interface RespondOutcome {
+      result: RespondRequestResult;
+      notify?: { uid: string; accepterName: string | null };
     }
 
-    const fromUid = String(data.fromUid);
+    const { result, notify } = await db.runTransaction<RespondOutcome>(async (tx) => {
+      const reqSnap = await tx.get(reqRef);
+      if (!reqSnap.exists) {
+        throw new HttpsError('not-found', REQUEST_NOT_FOUND_MESSAGE);
+      }
+      const data = reqSnap.data()!;
+      // Only the addressee may respond; not-found (never permission-denied) so
+      // a request's existence can't be probed by a non-recipient.
+      if (data.toUid !== actor.uid) {
+        throw new HttpsError('not-found', REQUEST_NOT_FOUND_MESSAGE);
+      }
+      if (data.status !== 'pending') {
+        throw new HttpsError('failed-precondition', REQUEST_NOT_PENDING_MESSAGE);
+      }
 
-    if (action === 'decline') {
-      tx.set(reqRef, { status: 'declined', updatedAt: Timestamp.fromDate(now) }, { merge: true });
-      // No notify: a decline is deliberately silent. Telling the requester they
-      // were turned down invites pressure on the decliner and leaks a choice
-      // that is nobody else's business — the request simply stops being pending.
-      return { result: { status: 'declined' } };
+      const fromUid = String(data.fromUid);
+
+      if (action === 'decline') {
+        tx.set(reqRef, { status: 'declined', updatedAt: Timestamp.fromDate(now) }, { merge: true });
+        // No notify: a decline is deliberately silent. Telling the requester they
+        // were turned down invites pressure on the decliner and leaks a choice
+        // that is nobody else's business — the request simply stops being pending.
+        return { result: { status: 'declined' } };
+      }
+
+      // action === 'accept' — read both live profiles (freshness) and the block
+      // state in BOTH directions before writing. Reads must precede writes in a
+      // Firestore transaction, so the block docs are read in the same batch.
+      const [callerSnap, fromSnap, callerBlockedFrom, fromBlockedCaller] = await Promise.all([
+        tx.get(db.collection('users').doc(actor.uid)),
+        tx.get(db.collection('users').doc(fromUid)),
+        tx.get(blockRef(actor.uid, fromUid)),
+        tx.get(blockRef(fromUid, actor.uid)),
+      ]);
+
+      // Blocking is honoured in BOTH directions: if either party has blocked the
+      // other since the request was sent, the friendship must not be created.
+      // Neutral failed-precondition (never reveals who blocked whom), matching
+      // sendRequest's block handling.
+      if (callerBlockedFrom.exists || fromBlockedCaller.exists) {
+        throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE);
+      }
+
+      // Both parties must still exist and be non-restricted (not soft-deleted or
+      // suspended) at write time — either could have been deleted/suspended
+      // between requireActiveActor and this transaction. Otherwise we would write
+      // friendship docs with null projections for a ghost/restricted account.
+      // Neutral failed-precondition (never reveals which side / why), matching the
+      // block handling above.
+      if (
+        !callerSnap.exists ||
+        !fromSnap.exists ||
+        isRestricted(toUserAccessState(callerSnap.data())) ||
+        isRestricted(toUserAccessState(fromSnap.data()))
+      ) {
+        throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE);
+      }
+
+      const callerProfile = toProfileProjection(callerSnap.data());
+      const fromProfile = toProfileProjection(fromSnap.data());
+
+      tx.set(
+        friendshipRef(actor.uid, fromUid),
+        buildFriendshipDocument(fromUid, fromProfile, () => Timestamp.fromDate(now)),
+      );
+      tx.set(
+        friendshipRef(fromUid, actor.uid),
+        buildFriendshipDocument(actor.uid, callerProfile, () => Timestamp.fromDate(now)),
+      );
+      tx.set(reqRef, { status: 'accepted', updatedAt: Timestamp.fromDate(now) }, { merge: true });
+
+      return {
+        result: {
+          status: 'accepted',
+          friend: toFriendSummary(
+            fromUid,
+            { displayName: fromProfile.displayName, avatarPath: fromProfile.avatarPath },
+            now.toISOString(),
+          ),
+        },
+        notify: { uid: fromUid, accepterName: callerProfile.displayName },
+      };
+    });
+
+    // Best-effort in-app notice for the REQUESTER that their request landed
+    // (never fails the response). Accept only — see the decline path above. The
+    // 'friend_request' preference is honored per-recipient inside
+    // writeInAppNotification, and the accept path's in-transaction block re-read
+    // means a blocked pair never reaches here.
+    if (notify) {
+      await writeInAppNotification(notify.uid, {
+        category: 'friend_request',
+        title: 'Vänförfrågan accepterad',
+        previewText: `${notify.accepterName ?? 'En medlem'} accepterade din vänförfrågan.`,
+        actionType: 'open_profile',
+        relatedEntityId: actor.uid,
+      }).catch(() => undefined);
     }
 
-    // action === 'accept' — read both live profiles (freshness) and the block
-    // state in BOTH directions before writing. Reads must precede writes in a
-    // Firestore transaction, so the block docs are read in the same batch.
-    const [callerSnap, fromSnap, callerBlockedFrom, fromBlockedCaller] = await Promise.all([
-      tx.get(db.collection('users').doc(actor.uid)),
-      tx.get(db.collection('users').doc(fromUid)),
-      tx.get(blockRef(actor.uid, fromUid)),
-      tx.get(blockRef(fromUid, actor.uid)),
-    ]);
-
-    // Blocking is honoured in BOTH directions: if either party has blocked the
-    // other since the request was sent, the friendship must not be created.
-    // Neutral failed-precondition (never reveals who blocked whom), matching
-    // sendRequest's block handling.
-    if (callerBlockedFrom.exists || fromBlockedCaller.exists) {
-      throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE);
-    }
-
-    // Both parties must still exist and be non-restricted (not soft-deleted or
-    // suspended) at write time — either could have been deleted/suspended
-    // between requireActiveActor and this transaction. Otherwise we would write
-    // friendship docs with null projections for a ghost/restricted account.
-    // Neutral failed-precondition (never reveals which side / why), matching the
-    // block handling above.
-    if (
-      !callerSnap.exists ||
-      !fromSnap.exists ||
-      isRestricted(toUserAccessState(callerSnap.data())) ||
-      isRestricted(toUserAccessState(fromSnap.data()))
-    ) {
-      throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE);
-    }
-
-    const callerProfile = toProfileProjection(callerSnap.data());
-    const fromProfile = toProfileProjection(fromSnap.data());
-
-    tx.set(
-      friendshipRef(actor.uid, fromUid),
-      buildFriendshipDocument(fromUid, fromProfile, () => Timestamp.fromDate(now)),
-    );
-    tx.set(
-      friendshipRef(fromUid, actor.uid),
-      buildFriendshipDocument(actor.uid, callerProfile, () => Timestamp.fromDate(now)),
-    );
-    tx.set(reqRef, { status: 'accepted', updatedAt: Timestamp.fromDate(now) }, { merge: true });
-
-    return {
-      result: {
-        status: 'accepted',
-        friend: toFriendSummary(fromUid, { displayName: fromProfile.displayName, avatarPath: fromProfile.avatarPath }, now.toISOString()),
-      },
-      notify: { uid: fromUid, accepterName: callerProfile.displayName },
-    };
-  });
-
-  // Best-effort in-app notice for the REQUESTER that their request landed
-  // (never fails the response). Accept only — see the decline path above. The
-  // 'friend_request' preference is honored per-recipient inside
-  // writeInAppNotification, and the accept path's in-transaction block re-read
-  // means a blocked pair never reaches here.
-  if (notify) {
-    await writeInAppNotification(notify.uid, {
-      category: 'friend_request',
-      title: 'Vänförfrågan accepterad',
-      previewText: `${notify.accepterName ?? 'En medlem'} accepterade din vänförfrågan.`,
-      actionType: 'open_profile',
-      relatedEntityId: actor.uid,
-    }).catch(() => undefined);
-  }
-
-  return result;
-});
+    return result;
+  },
+);
 
 // ---------------------------------------------------------------------------
 // friend.cancelRequest
@@ -639,42 +673,45 @@ export interface CancelRequestResult {
  * cleared by this delete, and acting on the stale notice cannot resurrect the
  * request (respondRequest not-founds it).
  */
-export const cancelRequest = onCall(CALLABLE_OPTS, async (request): Promise<CancelRequestResult> => {
-  const actor = await requireActiveActor(request);
+export const cancelRequest = onCall(
+  CALLABLE_OPTS,
+  async (request): Promise<CancelRequestResult> => {
+    const actor = await requireActiveActor(request);
 
-  const parsed = parseCancelRequestInput(request.data);
-  if (!parsed.ok) {
-    throw new HttpsError('invalid-argument', parsed.message);
-  }
-  const { toUid } = parsed.input;
+    const parsed = parseCancelRequestInput(request.data);
+    if (!parsed.ok) {
+      throw new HttpsError('invalid-argument', parsed.message);
+    }
+    const { toUid } = parsed.input;
 
-  // A self-request can never exist (sendRequest rejects it), so there is
-  // nothing to cancel — answered as the same no-op rather than an error.
-  if (toUid === actor.uid) {
-    return { cancelled: false };
-  }
-
-  const requestRef = friendRequestRef(actor.uid, toUid);
-
-  return db.runTransaction<CancelRequestResult>(async (tx) => {
-    const snap = await tx.get(requestRef);
-    if (!snap.exists) {
+    // A self-request can never exist (sendRequest rejects it), so there is
+    // nothing to cancel — answered as the same no-op rather than an error.
+    if (toUid === actor.uid) {
       return { cancelled: false };
     }
-    const data = snap.data()!;
-    // BOTH ends of the pair are re-asserted, not just fromUid. The id derivation
-    // already implies them, so this is belt-and-braces against a document whose
-    // BODY disagrees with its own id — written by some future path, or by a
-    // botched migration. Asserting only the sender would still delete a doc that
-    // is addressed to somebody else entirely, which is precisely the case this
-    // guard exists to refuse.
-    if (data.fromUid !== actor.uid || data.toUid !== toUid || data.status !== 'pending') {
-      return { cancelled: false };
-    }
-    tx.delete(requestRef);
-    return { cancelled: true };
-  });
-});
+
+    const requestRef = friendRequestRef(actor.uid, toUid);
+
+    return db.runTransaction<CancelRequestResult>(async (tx) => {
+      const snap = await tx.get(requestRef);
+      if (!snap.exists) {
+        return { cancelled: false };
+      }
+      const data = snap.data()!;
+      // BOTH ends of the pair are re-asserted, not just fromUid. The id derivation
+      // already implies them, so this is belt-and-braces against a document whose
+      // BODY disagrees with its own id — written by some future path, or by a
+      // botched migration. Asserting only the sender would still delete a doc that
+      // is addressed to somebody else entirely, which is precisely the case this
+      // guard exists to refuse.
+      if (data.fromUid !== actor.uid || data.toUid !== toUid || data.status !== 'pending') {
+        return { cancelled: false };
+      }
+      tx.delete(requestRef);
+      return { cancelled: true };
+    });
+  },
+);
 
 // ---------------------------------------------------------------------------
 // friend.remove
@@ -840,14 +877,23 @@ export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListFriendsRe
 
   const fallback = new Date(0);
   const toRequest = (doc: DocumentSnapshot): FriendRequestSummary =>
-    toFriendRequestSummary(doc.id, doc.data()!, actor.uid, isoFrom(doc.data()?.createdAt, fallback));
+    toFriendRequestSummary(
+      doc.id,
+      doc.data()!,
+      actor.uid,
+      isoFrom(doc.data()?.createdAt, fallback),
+    );
 
   const friends = friendsSnap.docs
     .map((doc) => toFriendSummary(doc.id, doc.data(), isoFrom(doc.data()?.createdAt, fallback)))
     .sort((a, b) => a.friendsSince.localeCompare(b.friendsSince));
 
-  const incoming = incomingSnap.docs.map(toRequest).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const outgoing = outgoingSnap.docs.map(toRequest).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const incoming = incomingSnap.docs
+    .map(toRequest)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const outgoing = outgoingSnap.docs
+    .map(toRequest)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   // Refresh the denormalized names/avatars from the live profiles before
   // answering. Ordering is already settled above and hydration never reorders,

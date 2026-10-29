@@ -1,0 +1,221 @@
+.overview {
+  min-width: 0;
+}
+.statusBar {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 16px 20px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 9px;
+  margin-bottom: 18px;
+  font-size: 13px;
+}
+.statusBar > span {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.statusBar strong {
+  font-weight: 550;
+}
+.statusBar svg {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.statusBar button {
+  margin-left: auto;
+}
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) minmax(285px, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+.mapWrap {
+  position: relative;
+  min-width: 0;
+}
+.layers {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  z-index: 1;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--bg-surface);
+  display: grid;
+  gap: 10px;
+}
+.layers legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.layers label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.layers input {
+  accent-color: var(--accent);
+  width: 17px;
+  height: 17px;
+}
+.layers svg {
+  color: var(--accent-text);
+}
+.panel {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 20px;
+  background: var(--bg-surface);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.panel > label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 7px;
+}
+.panel select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--border-input);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+}
+.areaHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 12px;
+}
+.areaHeading h2 {
+  font-size: 20px;
+  margin: 0;
+}
+.areaHeading span {
+  font-size: 12px;
+}
+.active {
+  color: var(--text-success);
+}
+.muted {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.facts {
+  margin: 24px 0 12px;
+  font-size: 13px;
+}
+.facts > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+.facts dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 550;
+}
+.warning {
+  display: flex;
+  gap: 10px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 14px;
+  margin: 20px 0;
+  background: var(--bg-sidebar-accent);
+  font-size: 12px;
+}
+.warning svg {
+  color: var(--accent-text);
+  flex-shrink: 0;
+}
+.warning p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.statusBar button,
+.panel > button,
+.error button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  padding: 12px 14px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+}
+.panel > button {
+  width: 100%;
+  margin-top: 14px;
+}
+.statusBar button:hover,
+.panel > button:hover,
+.error button:hover {
+  border-color: var(--accent);
+}
+.panel > .primary {
+  border-color: var(--text-primary);
+}
+.coverage {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 14px;
+  line-height: 1.7;
+}
+.error {
+  color: var(--text-error);
+}
+@media (max-width: 1100px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1.7fr) minmax(270px, 1fr);
+  }
+  .statusBar {
+    gap: 14px;
+  }
+  .statusBar > span:nth-child(2) {
+    order: 4;
+    width: 100%;
+  }
+}
+@media (max-width: 850px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+  .statusBar > span {
+    flex-wrap: wrap;
+  }
+  .layers {
+    font-size: 11px;
+    padding: 10px;
+  }
+  .panel {
+    padding: 20px;
+  }
+  .areaHeading {
+    margin-top: 16px;
+  }
+}

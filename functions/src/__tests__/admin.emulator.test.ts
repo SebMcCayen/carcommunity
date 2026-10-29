@@ -55,7 +55,11 @@ let app: FirebaseApp;
 let auth: Auth;
 let functions: Functions;
 
-beforeAll(() => {
+beforeAll(async () => {
+  await adminDb
+    .collection('carCommunityPolicy')
+    .doc('access')
+    .set({ enforceInitialized: true, rolloutState: 'ready' });
   app = initializeApp(
     { projectId: PROJECT_ID, apiKey: 'demo-api-key', appId: 'demo-app-id' },
     'admin-emulator-client',
@@ -283,7 +287,7 @@ describe('admin-setAdminRole', () => {
 });
 
 describe('admin-suspendUser / admin-restoreAccess', () => {
-  it('suspends: claim + mirrored status + moderation record + audit record', async () => {
+  it('suspends only CarCommunity with an audited decision, preserving shared identity', async () => {
     const actor = await createProvisionedUser('moderator');
     await promoteOutOfBand(actor, 'admin');
     const target = await createProvisionedUser('rule-breaker');
@@ -297,31 +301,22 @@ describe('admin-suspendUser / admin-restoreAccess', () => {
 
     // Backend-managed status mirrored to the user document.
     const profile = await adminDb.collection('users').doc(target.uid).get();
-    expect(profile.data()?.suspended).toBe(true);
+    expect(profile.data()?.suspended).toBe(false);
+    expect(
+      (await adminDb.collection('carCommunityAccess').doc(target.uid).get()).get('suspended'),
+    ).toBe(true);
 
     // Enforcement claim set and refresh tokens revoked.
     const targetUser = await adminAuth.getUser(target.uid);
-    expect(targetUser.customClaims?.suspended).toBe(true);
+    expect(targetUser.customClaims?.suspended).toBeUndefined();
+    expect(targetUser.disabled).toBe(false);
     expect(targetUser.tokensValidAfterTime).toBeTruthy();
-
-    // Moderation record.
-    const actions = await adminDb
-      .collection('moderationActions')
-      .where('targetUserId', '==', target.uid)
-      .get();
-    expect(actions.size).toBe(1);
-    // size asserted === 1 above, so docs[0] is present.
-    const action = actions.docs[0]!.data();
-    expect(action.actorUserId).toBe(actor.uid);
-    expect(action.actionType).toBe('permanent_suspension');
-    expect(action.reason).toBe('Repeated harassment');
-    expect(action.createdAt).toBeTruthy();
 
     // Audit record.
     const audit = await adminDb
       .collection('adminAuditEvents')
       .where('targetId', '==', target.uid)
-      .where('action', '==', 'user.suspend')
+      .where('action', '==', 'user.carCommunity.suspend')
       .get();
     expect(audit.size).toBe(1);
     // size asserted === 1 above, so docs[0] is present.
@@ -346,7 +341,7 @@ describe('admin-suspendUser / admin-restoreAccess', () => {
     ).toBe('functions/permission-denied');
   });
 
-  it('restores access: clears claim and mirrored status, writes records', async () => {
+  it('restores only CarCommunity and writes an audit decision', async () => {
     const actor = await createProvisionedUser('restorer');
     await promoteOutOfBand(actor, 'admin');
     const target = await createProvisionedUser('reformed');
@@ -365,9 +360,9 @@ describe('admin-suspendUser / admin-restoreAccess', () => {
     expect(targetUser.customClaims?.suspended).toBeUndefined();
 
     const actions = await adminDb
-      .collection('moderationActions')
-      .where('targetUserId', '==', target.uid)
-      .where('actionType', '==', 'restore_access')
+      .collection('adminAuditEvents')
+      .where('targetId', '==', target.uid)
+      .where('action', '==', 'user.carCommunity.restore')
       .get();
     expect(actions.size).toBe(1);
     // size asserted === 1 above, so docs[0] is present.

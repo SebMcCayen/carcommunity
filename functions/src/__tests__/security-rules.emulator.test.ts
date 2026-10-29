@@ -1,3 +1,4 @@
+import { legacyAccessMigration, endLegacyAccessMigration } from './helpers/legacy-access-migration';
 /**
  * Security rules emulator tests.
  *
@@ -69,9 +70,38 @@ beforeAll(async () => {
       port: 9199,
     },
   });
+  await legacyAccessMigration(testEnv, true);
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    for (const uid of ['storage-admin', 'offer-img-admin', 'bb-img-admin'])
+      await setDoc(doc(context.firestore(), 'users', uid), {
+        role: 'admin',
+        suspended: false,
+        deleted: false,
+      });
+  });
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    for (const uid of [
+      'storage-owner',
+      'storage-admin',
+      'offer-img-admin',
+      'bb-img-admin',
+      'route-read-restricted-false',
+      'route-read-restricted-true',
+      ...['suspended', 'deleted', 'missing'].map((state) => `profile-admin-restricted-${state}`),
+    ]) {
+      await setDoc(doc(context.firestore(), 'carCommunityAccess', uid), {
+        initialized: true,
+        suspended: false,
+        inheritedBlocked: false,
+        explicitBlacklistId: null,
+        version: 1,
+      });
+    }
+  });
 });
 
 afterAll(async () => {
+  if (testEnv) await endLegacyAccessMigration(testEnv, true);
   await testEnv?.cleanup();
 });
 
@@ -3725,6 +3755,7 @@ describe('Cloud Storage – ownership validation', () => {
           const path = `rideRoutes/${admin ? OWNER : id}/${id}-${state}/${fileName}`;
           await testEnv.withSecurityRulesDisabled(async (bypass) => {
             await setDoc(doc(bypass.firestore(), `users/${id}`), {
+              role: admin ? 'admin' : 'user',
               activeMember: false,
               suspended: false,
               deleted: false,
