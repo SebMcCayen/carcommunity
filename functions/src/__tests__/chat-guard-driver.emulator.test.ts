@@ -17,17 +17,16 @@ const enabled =
     if (!enabled) throw Error('Explicit loopback demo Firestore/Auth/Storage slot required');
     const root = process.env.CHAT_FLOOD_DRIVER_ROOT!;
     const require = createRequire(resolve(root, 'functions/package.json'));
-    const { getApps, initializeApp } =
+    const { getApp } =
       require('firebase-admin/app') as typeof import('firebase-admin/app');
     const { getFirestore, Timestamp } =
       require('firebase-admin/firestore') as typeof import('firebase-admin/firestore');
     const { getAuth } = require('firebase-admin/auth') as typeof import('firebase-admin/auth');
-    const app =
-      getApps().find((item) => item.name === '[DEFAULT]') ??
-      initializeApp({
-        projectId: 'demo-chat-flood',
-        storageBucket: 'demo-chat-flood.appspot.com',
-      });
+    // Driver owns its default app bootstrap; use that exact configured app.
+    const { driver } = await import(
+      /* @vite-ignore */ pathToFileURL(resolve(root, 'functions/src/index.ts')).href
+    );
+    const app = getApp();
     const db = getFirestore(app),
       auth = getAuth(app),
       uid = `guard_${crypto.randomUUID()}`;
@@ -47,9 +46,6 @@ const enabled =
       blockedUntilMillis: now + 5000,
     });
     const before = await guardRef.get();
-    const { driver } = await import(
-      /* @vite-ignore */ pathToFileURL(resolve(root, 'functions/src/index.ts')).href
-    );
     await driver.deleteDriverProfile.run({ auth: { uid, token: {} }, data: {} });
     await db
       .doc(`driverAccountDeletionRequests/${uid}`)
