@@ -30,7 +30,8 @@
  * 6. Cloud Storage prefixes (profileImages/, vehicleImages/,
  *    rideRoutes/ under the uid).
  * 7. The Firebase Auth user is deleted.
- * 8. The request record flips to `processed` (processedAt stamped) and
+ * 8. Shared chat send-guard state is erased only after Auth deletion succeeds.
+ * 9. The request record flips to `processed` (processedAt stamped) and
  *    is RETAINED as the proof-of-deletion record.
  *
  * This is the SINGLE purge routine for BOTH erasure paths: the
@@ -526,6 +527,10 @@ export async function purgeUserData(uid: string): Promise<void> {
     // Already deleted on a previous partial run — idempotency.
     if ((error as { code?: string }).code !== 'auth/user-not-found') throw error;
   });
+  // Keep the shared anti-abuse budget until canonical Auth is gone. In
+  // particular, Driver-only deletion must never reset it. A failure propagates
+  // so the request remains pending; a retry tolerates Auth already being absent.
+  await db.collection('chatSendGuards').doc(uid).delete();
   await db.collection('accountPurgeProgress').doc(uid).delete();
 }
 
