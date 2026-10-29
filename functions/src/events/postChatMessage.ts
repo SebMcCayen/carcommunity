@@ -7,7 +7,7 @@
  * (events/{eventId}/messages). Per backend-domain-mapping.md, messages are
  * written only through this callable: it validates membership + RSVP
  * eligibility, trims and length-checks the text, denormalizes the author's
- * display name, and enforces the legacy rate limit (~5 messages per 30
+ * display name, and atomically enforces the legacy rate limit (5 messages per 30
  * seconds per user, across all events, via a collection-group query).
  *
  * Block-list read filtering belongs to the blocking domain (Phase 9,
@@ -19,6 +19,8 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { onCall } from '../access/callable';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
+import { requireChatSender } from '../shared/chat-actor';
+import { stageChatSendGuard, throwChatRateLimited } from '../shared/chat-send-guard';
 import {
   CHAT_RATE_LIMIT_MAX_MESSAGES,
   CHAT_RATE_LIMIT_WINDOW_MS,
@@ -52,40 +54,52 @@ export const postChatMessage = onCall(
       throw new HttpsError('invalid-argument', 'Message cannot be empty.');
     }
 
-    const participant = await requireChatParticipant(request, input.eventId);
-
-    // Legacy rate limit (~5 per 30s per user, all events). Collection-group
-    // query on the composite index (authorUserId ASC, createdAt ASC).
-    // Best-effort by design, matching the legacy fastify limiter (per-process
-    // memory): concurrent invocations may briefly overshoot the cap. This is
-    // an anti-spam knob, not a security invariant — no data integrity
-    // depends on the exact count.
-    const windowStart = Timestamp.fromMillis(Date.now() - CHAT_RATE_LIMIT_WINDOW_MS);
-    const recent = await db
-      .collectionGroup('messages')
-      .where('authorUserId', '==', participant.uid)
-      .where('createdAt', '>', windowStart)
-      .count()
-      .get();
-    if (recent.data().count >= CHAT_RATE_LIMIT_MAX_MESSAGES) {
-      throw new HttpsError(
-        'resource-exhausted',
-        'Too many messages — wait a moment before posting again.',
+    // Optional keys preserve legacy callers and first-write-wins retry behavior.
+    const messageRef =
+      input.clientId === undefined
+        ? db.collection('events').doc(input.eventId).collection('messages').doc()
+        : db.collection('events').doc(input.eventId).collection('messages').doc(input.clientId);
+    const outcome = await db.runTransaction(async (tx) => {
+      const participant = await requireChatParticipant(request, input.eventId, tx);
+      await requireChatSender(tx, participant.uid);
+      const existing = await tx.get(messageRef);
+      if (existing.exists) {
+        if (existing.get('authorUserId') !== participant.uid)
+          throw new HttpsError('already-exists', 'Message id already used.');
+        return { kind: 'sent' as const };
+      }
+      const now = Date.now();
+      // Bounded legacy rolling-window query; reading/writing the SAME UID guard
+      // serializes concurrent sends even across different events. No count/write gap.
+      const recent = await tx.get(
+        db
+          .collectionGroup('messages')
+          .where('authorUserId', '==', participant.uid)
+          .where('createdAt', '>', Timestamp.fromMillis(now - CHAT_RATE_LIMIT_WINDOW_MS))
+          .orderBy('createdAt', 'desc')
+          .limit(CHAT_RATE_LIMIT_MAX_MESSAGES),
       );
-    }
-
-    const messageRef = db.collection('events').doc(input.eventId).collection('messages').doc();
-    await messageRef.set(
-      buildChatMessageDocument(
-        {
-          authorUserId: participant.uid,
-          authorDisplayName: participant.displayName,
-          message: input.message,
-        },
-        () => FieldValue.serverTimestamp(),
-      ),
-    );
-
+      if (recent.size >= CHAT_RATE_LIMIT_MAX_MESSAGES)
+        throw new HttpsError(
+          'resource-exhausted',
+          'Too many messages — wait a moment before posting again.',
+        );
+      const guard = await stageChatSendGuard(db, tx, participant.uid, now);
+      if (!guard.allowed) return { kind: 'denied' as const, guard };
+      tx.create(
+        messageRef,
+        buildChatMessageDocument(
+          {
+            authorUserId: participant.uid,
+            authorDisplayName: participant.displayName,
+            message: input.message,
+          },
+          () => FieldValue.serverTimestamp(),
+        ),
+      );
+      return { kind: 'sent' as const };
+    });
+    if (outcome.kind === 'denied') throwChatRateLimited(outcome.guard);
     return { eventId: input.eventId, messageId: messageRef.id };
   },
 );

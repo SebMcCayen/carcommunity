@@ -399,7 +399,7 @@
     {
       "name": "events.postChatMessage",
       "domain": "events",
-      "description": "Posts a plain-text message (<=1000 chars) to a published event chat. Requires an active member with a going/maybe RSVP; enforces ~5 messages/30s per user. Writes events/{eventId}/messages with denormalized author display name. Deployed via grouped export as events-postChatMessage (functions/src/events/postChatMessage.ts).",
+      "description": "Posts a plain-text message (<=1000 chars) to a published event chat. Optional clientId ([A-Za-z0-9_-]{1,64}) is the message ID and gives first-write-wins retry idempotency after authorization. Requires an active member with a going/maybe RSVP; atomically enforces 5 messages/30s across events and the shared UID-wide progressive chat budget (contracts/chat-flood-v1). Budget rejection is resource-exhausted with details.reason=chat-rate-limited and server-relative retryAfterMs; legacy event-limit errors remain compatible. Writes events/{eventId}/messages with denormalized author display name. Deployed via grouped export as events-postChatMessage (functions/src/events/postChatMessage.ts).",
       "access": "member",
       "appCheck": true,
       "status": "implemented",

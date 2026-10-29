@@ -48,6 +48,8 @@ import { onCall } from '../access/callable';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
+import { requireChatSender } from '../shared/chat-actor';
+import { stageChatSendGuard, throwChatRateLimited } from '../shared/chat-send-guard';
 import { toUserAccessState } from '../shared/access';
 import { writeInAppNotification } from '../notifications/deliver';
 import { filterHiddenAuthors } from '../blocking/block-visibility';
@@ -240,10 +242,22 @@ export const sendMessage = onCall(CALLABLE_OPTS, async (request): Promise<SendMe
   // existed) so the notification is not re-sent. Returned from the transaction
   // rather than captured in a closure variable so a Firestore retry can't leave
   // a stale value behind.
-  const { priorUnread, duplicate } = await db.runTransaction<{
-    priorUnread: number;
-    duplicate: boolean;
-  }>(async (tx) => {
+  const outcome = await db.runTransaction(async (tx) => {
+    await requireChatSender(tx, actor.uid);
+    const [friendship, sentBlock, receivedBlock, recipient] = await Promise.all([
+      tx.get(friendshipRef(actor.uid, toUid)),
+      tx.get(blockRef(actor.uid, toUid)),
+      tx.get(blockRef(toUid, actor.uid)),
+      tx.get(db.collection('users').doc(toUid)),
+    ]);
+    if (!friendship.exists) throw new HttpsError('failed-precondition', NOT_FRIENDS_MESSAGE);
+    if (
+      sentBlock.exists ||
+      receivedBlock.exists ||
+      !recipient.exists ||
+      toUserAccessState(recipient.data()).deleted
+    )
+      throw new HttpsError('failed-precondition', NOT_DELIVERABLE_MESSAGE);
     const convSnap = await tx.get(convRef);
     const unreadMap = (convSnap.data()?.unread ?? {}) as Record<string, unknown>;
     const rawUnread = unreadMap[toUid];
@@ -271,9 +285,11 @@ export const sendMessage = onCall(CALLABLE_OPTS, async (request): Promise<SendMe
         if (existing.data()?.senderUid !== actor.uid) {
           throw new HttpsError('already-exists', MESSAGE_ID_CONFLICT_MESSAGE);
         }
-        return { priorUnread: unreadBefore, duplicate: true };
+        return { kind: 'sent' as const, priorUnread: unreadBefore, duplicate: true };
       }
     }
+    const guard = await stageChatSendGuard(db, tx, actor.uid);
+    if (!guard.allowed) return { kind: 'denied' as const, guard };
     const ts = FieldValue.serverTimestamp();
 
     if (!convSnap.exists) {
@@ -318,8 +334,13 @@ export const sendMessage = onCall(CALLABLE_OPTS, async (request): Promise<SendMe
     // Keep the per-user aggregate in lock-step (owner-only readable badge source).
     tx.set(recipientAggRef, { dmUnreadTotal: FieldValue.increment(1) }, { merge: true });
 
-    return { priorUnread: unreadBefore, duplicate: false };
+    return { kind: 'sent' as const, priorUnread: unreadBefore, duplicate: false };
   });
+
+  if (outcome.kind === 'denied') {
+    throwChatRateLimited(outcome.guard);
+  }
+  const { priorUnread, duplicate } = outcome;
 
   // Best-effort in-app notification for the recipient (never fails the send).
   //

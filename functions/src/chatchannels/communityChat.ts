@@ -80,9 +80,11 @@
 
 import { HttpsError } from 'firebase-functions/v2/https';
 import { onCall } from '../access/callable';
-import { FieldValue, Timestamp, type DocumentReference } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
+import { requireChatSender } from '../shared/chat-actor';
+import { stageChatSendGuard, throwChatRateLimited } from '../shared/chat-send-guard';
 import { isRestricted, toUserAccessState } from '../shared/access';
 import { writeInAppNotification } from '../notifications/deliver';
 import { filterHiddenAuthors } from '../blocking/block-visibility';
@@ -99,7 +101,6 @@ import {
   chatMessageExpiry,
   communityMentionNotificationId,
   communityReplyNotificationId,
-  isAlreadyExistsError,
   messagePreview,
   normalizeMentionCandidates,
   parseListCommunityInput,
@@ -255,40 +256,6 @@ export interface PostCommunityResponse {
   mentionedUids: string[];
 }
 
-/**
- * The idempotent result of a keyed send that ALREADY committed, or null when
- * nothing is stored at that id (so the `create()` that just failed has nothing
- * to replay and the caller must surface that).
- *
- * Read ONLY after a `create()` lost the race, never speculatively: the write is
- * the guard, so a normal first-attempt send needs no read at all. Echoes the
- * ACCEPTED mention set already stored rather than re-resolving, so the client's
- * dropped-mention reconciliation still holds on a replay — and so a membership
- * or block change between the two attempts can't hand the caller a mention set
- * that differs from the one actually stored and notified.
- *
- * A doc at this id from a DIFFERENT sender is an (astronomically unlikely) key
- * collision or a buggy client reusing a key: it must NOT be swallowed as this
- * caller's success, so surface already-exists and let it regenerate the key.
- */
-async function replayCommittedSend(
-  messageRef: DocumentReference,
-  actorUid: string,
-): Promise<PostCommunityResponse | null> {
-  const existing = await messageRef.get();
-  if (!existing.exists) {
-    return null;
-  }
-  const data = existing.data() ?? {};
-  if (data.senderUid !== actorUid) {
-    throw new HttpsError('already-exists', 'Message id already used.');
-  }
-  const storedMentions = Array.isArray(data.mentionedUids)
-    ? (data.mentionedUids as unknown[]).filter((uid): uid is string => typeof uid === 'string')
-    : [];
-  return { messageId: messageRef.id, mentionedUids: storedMentions };
-}
-
 export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunityResponse> => {
   const actor = await requireActiveActor(request);
 
@@ -329,18 +296,47 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
   // covers convoy messages, which share the `messages` collection group).
   const expireAt = Timestamp.fromDate(chatMessageExpiry(new Date(), COMMUNITY_CHAT_RETENTION_DAYS));
 
-  // `create()`, NOT `set()`: the write IS the idempotency guard, and it is the
-  // only one. A pre-read ("does this id exist yet?") cannot be the guard — two
-  // concurrent retries of the same optimistic send both observe "missing" before
-  // either writes, so with `set()` both would commit and BOTH would fan out the
-  // mention notifications below. With `create()` Firestore arbitrates: exactly
-  // one wins, and the loser replays the winner's result — including the winner's
-  // stored mention set — with no side effects of its own. Since the guard needs
-  // an ordinary keyed post reads the deletion marker as well. Replies also
-  // read the canonical parent, serializing sends with moderation.
-  let replyTo = resolvedReply;
-  try {
-    const document = () =>
+  // Authorization and old receipts precede charging. Denials return through
+  // commit before throwing, so a newly imposed pause cannot roll back.
+  const outcome = await db.runTransaction(async (tx) => {
+    await requireChatSender(tx, actor.uid);
+    const tombstone = await tx.get(
+      db.collection('communityChatDeletedMessages').doc(messageRef.id),
+    );
+    if (tombstone.exists)
+      throw new HttpsError('failed-precondition', 'Meddelandet har tagits bort av moderator.');
+    const existing = await tx.get(messageRef);
+    if (existing.exists) {
+      if (existing.get('senderUid') !== actor.uid)
+        throw new HttpsError('already-exists', 'Message id already used.');
+      const stored = existing.get('mentionedUids') as unknown;
+      return {
+        kind: 'replay' as const,
+        result: {
+          messageId: messageRef.id,
+          mentionedUids: Array.isArray(stored)
+            ? stored.filter((uid): uid is string => typeof uid === 'string')
+            : [],
+        },
+      };
+    }
+    const parent = resolvedReply
+      ? await tx.get(communityMessagesRef().doc(resolvedReply.messageId))
+      : null;
+    const replyTo = buildReplyToSnapshot(
+      parent?.exists
+        ? {
+            messageId: parent.id,
+            senderUid: parent.get('senderUid'),
+            senderDisplayName: parent.get('senderDisplayName'),
+            text: parent.get('text'),
+          }
+        : null,
+    );
+    const guard = await stageChatSendGuard(db, tx, actor.uid);
+    if (!guard.allowed) return { kind: 'denied' as const, guard };
+    tx.create(
+      messageRef,
       buildChatMessageDocument(
         {
           senderUid: actor.uid,
@@ -352,46 +348,15 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
           ...(replyTo ? { replyTo } : {}),
         },
         () => FieldValue.serverTimestamp(),
-      );
-    if (resolvedReply || clientId !== undefined) {
-      // Serialize the quoted snapshot with moderation deleting its canonical parent.
-      // A racing retry re-reads the parent; it can never resurrect removed text.
-      await db.runTransaction(async (tx) => {
-        const tombstone = await tx.get(
-          db.collection('communityChatDeletedMessages').doc(messageRef.id),
-        );
-        if (tombstone.exists)
-          throw new HttpsError('failed-precondition', 'Meddelandet har tagits bort av moderator.');
-        const parent = resolvedReply
-          ? await tx.get(communityMessagesRef().doc(resolvedReply.messageId))
-          : null;
-        replyTo = buildReplyToSnapshot(
-          parent?.exists
-            ? {
-                messageId: parent.id,
-                senderUid: parent.get('senderUid'),
-                senderDisplayName: parent.get('senderDisplayName'),
-                text: parent.get('text'),
-              }
-            : null,
-        );
-        tx.create(messageRef, document());
-      });
-    } else await messageRef.create(document());
-  } catch (error) {
-    if (clientId === undefined || !isAlreadyExistsError(error)) {
-      throw error;
-    }
-    // Lost the race to a concurrent invocation of this same send. Whatever it
-    // committed is the authoritative result; fall through to no notifications.
-    const replay = await replayCommittedSend(messageRef, actor.uid);
-    if (replay) {
-      return replay;
-    }
-    // ALREADY_EXISTS but nothing readable there now (a TTL sweep between the two
-    // reads is the only plausible cause). Surface rather than invent a result.
-    throw new HttpsError('aborted', 'Message could not be committed, please retry.');
+      ),
+    );
+    return { kind: 'created' as const, replyTo };
+  });
+  if (outcome.kind === 'denied') {
+    throwChatRateLimited(outcome.guard);
   }
+  if (outcome.kind === 'replay') return outcome.result;
+  const replyTo = outcome.replyTo;
 
   // The ONLY 'community_chat' producer: the members this message named, and no
   // one else. A message with no mentions writes nothing — fanning out to every

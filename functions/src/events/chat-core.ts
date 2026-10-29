@@ -31,7 +31,7 @@ import type { EventStatus, RsvpStatus } from './events-core';
 export const CHAT_MESSAGE_MAX_LENGTH = 1000;
 export const CHAT_REPORT_DETAILS_MAX_LENGTH = 500;
 
-/** Legacy rate limit: ~5 messages per 30 seconds per user. */
+/** Legacy rate limit: 5 messages per 30 seconds per user. */
 export const CHAT_RATE_LIMIT_MAX_MESSAGES = 5;
 export const CHAT_RATE_LIMIT_WINDOW_MS = 30_000;
 
@@ -105,6 +105,10 @@ export function shouldAutoHide(distinctReporterCount: number): boolean {
 const postChatMessageInputSchema = z
   .object({
     eventId: z.string().trim().min(1),
+    clientId: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{1,64}$/)
+      .optional(),
     message: z
       .string()
       .min(1)

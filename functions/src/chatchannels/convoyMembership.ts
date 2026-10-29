@@ -8,6 +8,7 @@
  * problem. Mirrors events/chatParticipant.ts, which exists for the same reason.
  */
 
+import type { Transaction } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { db } from '../firebase';
 import {
@@ -28,8 +29,10 @@ import {
 export async function requireAcceptedConvoyMember(
   convoyId: string,
   uid: string,
+  tx?: Transaction,
 ): Promise<Record<string, unknown>> {
-  const snap = await db.collection('convoys').doc(convoyId).get();
+  const ref = db.collection('convoys').doc(convoyId);
+  const snap = await (tx ? tx.get(ref) : ref.get());
   if (!snap.exists) {
     throw new HttpsError('not-found', CONVOY_NOT_FOUND_MESSAGE);
   }
