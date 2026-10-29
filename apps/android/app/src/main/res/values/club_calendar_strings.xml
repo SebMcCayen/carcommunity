@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="clubCalendar_subscribe">Prenumerera på klubbkalendern</string>
+    <string name="clubCalendar_explanation">Visa klubbens event i din egen kalender. Ändringar och inställda event synkas när kalenderappen hämtar uppdateringar. Det sker inte omedelbart.</string>
+    <string name="clubCalendar_privacy">Länken är personlig och hemlig. Den som får länken kan läsa kalendern. Dela den bara med din kalenderleverantör. Länken spärras när du lämnar klubben, men redan hämtade uppgifter kan finnas kvar. Ta då bort prenumerationen i din kalender.</string>
+    <string name="clubCalendar_androidInstructions">Google Kalender: kopiera länken. Öppna Google Kalender i en datorwebbläsare och välj Andra kalendrar → Från webbadress. Kalendern synkas sedan till din Android-telefon.</string>
+    <string name="clubCalendar_appleInstructions">iPhone: öppna Kalender → Kalendrar → Lägg till kalender → Lägg till prenumerationskalender och ange länken.</string>
+    <string name="clubCalendar_active">Du har en aktiv kalenderlänk.</string>
+    <string name="clubCalendar_inactive">Du har ingen aktiv kalenderlänk.</string>
+    <string name="clubCalendar_create">Skapa personlig länk</string>
+    <string name="clubCalendar_replace">Skapa ny länk</string>
+    <string name="clubCalendar_replaceWarning">Av säkerhetsskäl visas inte en tidigare skapad länk igen. En ny länk spärrar din gamla. Uppdatera då prenumerationen i din kalender.</string>
+    <string name="clubCalendar_copy">Kopiera kalenderlänk</string>
+    <string name="clubCalendar_clipboardLabel">Personlig klubbkalender</string>
+    <string name="clubCalendar_copied">Länken är kopierad. Lägg till den i din kalender.</string>
+    <string name="clubCalendar_revoke">Spärra min kalenderlänk</string>
+    <string name="clubCalendar_changed">Länken ändrades på en annan enhet. Hämta aktuell status och försök igen.</string>
+    <string name="clubCalendar_error">Kalenderlänken kunde inte hanteras. Kontrollera anslutningen och ditt medlemskap och försök igen.</string>
+</resources>

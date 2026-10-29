@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="clubCalendar_subscribe">Subscribe to the club calendar</string>
+    <string name="clubCalendar_explanation">See club events in your own calendar. Changes and cancelled events sync when your calendar app fetches updates. This is not immediate.</string>
+    <string name="clubCalendar_privacy">This link is personal and secret. Anyone with it can read the calendar. Share it only with your calendar provider. The link stops working when you leave the club, but previously downloaded information may remain. Remove the subscription in your calendar then.</string>
+    <string name="clubCalendar_androidInstructions">Google Calendar: copy the link. Open Google Calendar in a computer web browser and choose Other calendars → From URL. The calendar then syncs to your Android phone.</string>
+    <string name="clubCalendar_appleInstructions">iPhone: open Calendar → Calendars → Add Calendar → Add Subscription Calendar and enter the link.</string>
+    <string name="clubCalendar_active">You have an active calendar link.</string>
+    <string name="clubCalendar_inactive">You have no active calendar link.</string>
+    <string name="clubCalendar_create">Create personal link</string>
+    <string name="clubCalendar_replace">Create new link</string>
+    <string name="clubCalendar_replaceWarning">For your security, a previously created link cannot be shown again. A new link revokes your old one. Update the subscription in your calendar afterwards.</string>
+    <string name="clubCalendar_copy">Copy calendar link</string>
+    <string name="clubCalendar_clipboardLabel">Personal club calendar</string>
+    <string name="clubCalendar_copied">Link copied. Add it to your calendar.</string>
+    <string name="clubCalendar_revoke">Revoke my calendar link</string>
+    <string name="clubCalendar_changed">The link changed on another device. Refresh its status and try again.</string>
+    <string name="clubCalendar_error">Could not manage the calendar link. Check your connection and membership, then try again.</string>
+</resources>
