@@ -2179,6 +2179,13 @@
     "close": "Stäng"
   },
   "clubs": {
+    "county": "Län",
+    "chooseCounty": "Välj län",
+    "chooseCountyFirst": "Välj län först",
+    "chooseLocality": "Välj ort",
+    "localityPartOf": "Ingår i %1$s",
+    "locationLoading": "Läser in orter…",
+    "locationCatalogError": "Det gick inte att läsa in orterna. Försök igen.",
     "title": "Klubben",
     "chatTab": "Klubb",
     "directory": "Hitta din klubb",

@@ -2024,6 +2024,13 @@
     <string name="moderation_reportMessage">Rapportera meddelande</string>
     <string name="moderation_reportUser">Rapportera användare</string>
     <string name="moderation_close">Stäng</string>
+    <string name="clubs_county">Län</string>
+    <string name="clubs_chooseCounty">Välj län</string>
+    <string name="clubs_chooseCountyFirst">Välj län först</string>
+    <string name="clubs_chooseLocality">Välj ort</string>
+    <string name="clubs_localityPartOf">Ingår i %1$s</string>
+    <string name="clubs_locationLoading">Läser in orter…</string>
+    <string name="clubs_locationCatalogError">Det gick inte att läsa in orterna. Försök igen.</string>
     <string name="clubs_title">Klubben</string>
     <string name="clubs_chatTab">Klubb</string>
     <string name="clubs_directory">Hitta din klubb</string>

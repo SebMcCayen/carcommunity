@@ -2024,6 +2024,13 @@
     <string name="moderation_reportMessage">Report message</string>
     <string name="moderation_reportUser">Report user</string>
     <string name="moderation_close">Close</string>
+    <string name="clubs_county">County</string>
+    <string name="clubs_chooseCounty">Choose county</string>
+    <string name="clubs_chooseCountyFirst">Choose a county first</string>
+    <string name="clubs_chooseLocality">Choose locality</string>
+    <string name="clubs_localityPartOf">Part of %1$s</string>
+    <string name="clubs_locationLoading">Loading localities…</string>
+    <string name="clubs_locationCatalogError">Could not load localities. Try again.</string>
     <string name="clubs_title">Club</string>
     <string name="clubs_chatTab">Club</string>
     <string name="clubs_directory">Find your club</string>

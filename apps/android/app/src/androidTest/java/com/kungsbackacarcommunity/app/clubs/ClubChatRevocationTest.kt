@@ -210,13 +210,25 @@ class ClubChatRevocationTest {
         compose.onNodeWithText(str(R.string.clubs_create)).performScrollTo().performClick()
         compose.onNodeWithText(str(R.string.clubs_name)).performTextInput("Västkustklubben")
         compose.onNodeWithText(str(R.string.clubs_description)).performTextInput("En klubb för alla bilintresserade")
-        compose.onNodeWithText(str(R.string.clubs_location)).performTextInput("Kungsbacka")
+        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithTag("club-county-field").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("club-county-field").performScrollTo().performClick()
+        compose.onNodeWithTag("club-county-list").performScrollToNode(hasTestTag("club-county-13"))
+        compose.onNodeWithTag("club-county-13").performClick()
+        compose.onNodeWithTag("club-locality-field").performScrollTo().performClick()
+        compose.onNodeWithTag("club-locality-search").performTextInput("Kungsbacka")
+        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        compose.onNodeWithTag("club-locality-list").performScrollToNode(hasTestTag("club-locality-1384TC117"))
+        compose.onNodeWithTag("club-locality-1384TC117").performClick()
         compose.onNodeWithText(str(R.string.clubs_save)).performClick()
         compose.onNodeWithText("Västkustklubben").assertExists()
         compose.onNodeWithText(str(R.string.clubs_manage)).assertExists()
         compose.runOnIdle {
             assertEquals("open", repo.createdPayload?.get("visibility"))
             assertEquals("Västkustklubben", repo.createdPayload?.get("name"))
+            assertEquals("Kungsbacka, Hallands län", repo.createdPayload?.get("location"))
         }
         compose.onNodeWithText(str(R.string.clubs_leave)).performScrollTo().performClick()
         compose.onNodeWithText(str(R.string.clubs_confirm)).performClick()

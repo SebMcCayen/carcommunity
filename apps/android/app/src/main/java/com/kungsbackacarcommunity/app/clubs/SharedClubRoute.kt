@@ -8,6 +8,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.shell.AeroPage
@@ -53,6 +56,7 @@ fun SharedClubRoute(uid: String, onOpenEvent: (String) -> Unit = {}, repository:
         fun runAction(action: String, fields: Map<String, Any?>, after: () -> Unit = {}) {
             if (busy || repo == null) return
             busy = true
+            error = null
             scope.launch {
                 try { repo.manage(action, fields, UUID.randomUUID().toString()); error = null; after(); refresh++ }
                 catch (e: CancellationException) { throw e } catch (e: Exception) { error = e }
@@ -75,7 +79,7 @@ fun SharedClubRoute(uid: String, onOpenEvent: (String) -> Unit = {}, repository:
                         val club = selected
                         if (club == null) {
                             Text(stringResource(R.string.clubs_directory), style = MaterialTheme.typography.titleLarge)
-                            Button(onClick = { create = true }, enabled = !busy && current.membership == null && !clubCooldownActive(current, now)) { Text(stringResource(R.string.clubs_create)) }
+                            Button(onClick = { error = null; create = true }, enabled = !busy && current.membership == null && !clubCooldownActive(current, now)) { Text(stringResource(R.string.clubs_create)) }
                             if (current.invitations.isNotEmpty()) Text(stringResource(R.string.clubs_invitations), style = MaterialTheme.typography.titleMedium)
                             current.invitations.forEach { invitation ->
                                 Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp)) {
@@ -113,7 +117,7 @@ fun SharedClubRoute(uid: String, onOpenEvent: (String) -> Unit = {}, repository:
                 }
             }
         }
-        if (create) ClubEditor(null, busy = busy, onDismiss = { create = false }, onSave = { fields ->
+        if (create) ClubEditor(null, busy = busy, error = error, onDismiss = { create = false }, onSave = { fields ->
             runAction("create", fields) { create = false }
         })
         if (confirmLeave) AlertDialog(onDismissRequest = { confirmLeave = false }, title = { Text(stringResource(R.string.clubs_leave)) },
@@ -124,19 +128,40 @@ fun SharedClubRoute(uid: String, onOpenEvent: (String) -> Unit = {}, repository:
 }
 
 @Composable
-internal fun ClubEditor(club: Club?, busy: Boolean, onDismiss: () -> Unit, onSave: (Map<String, Any?>) -> Unit) {
+internal fun ClubEditor(club: Club?, busy: Boolean, onDismiss: () -> Unit, error: Throwable? = null,
+    catalogLoader: (suspend () -> ClubLocationCatalog)? = null, onSave: (Map<String, Any?>) -> Unit) {
     var name by remember(club?.id) { mutableStateOf(club?.name.orEmpty()) }
     var description by remember(club?.id) { mutableStateOf(club?.description.orEmpty()) }
     var location by remember(club?.id) { mutableStateOf(club?.location.orEmpty()) }
+    var selection by remember(club?.id) { mutableStateOf(ClubLocationSelection()) }
+    var catalogAttempt by remember(club?.id) { mutableIntStateOf(0) }
+    val catalogLoad = if (club == null) rememberClubLocationCatalog(catalogAttempt, catalogLoader) else null
+    val catalog = (catalogLoad as? ClubCatalogLoad.Ready)?.catalog
     var closed by remember(club?.id) { mutableStateOf(club?.visibility == "closed") }
-    val valid = name.trim().length in 3..60 && description.trim().length in 10..500 && location.trim().length in 2..80
+    val fields = clubPresentationFields(name, description, if (club == null) catalog?.wireLocation(selection) else location, closed)
     AlertDialog(onDismissRequest = { if (!busy) onDismiss() }, title = { Text(stringResource(if (club == null) R.string.clubs_create else R.string.clubs_edit)) },
         text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(name, { if (it.length <= 60) name = it }, label = { Text(stringResource(R.string.clubs_name)) }, singleLine = true, enabled = !busy)
             OutlinedTextField(description, { if (it.length <= 500) description = it }, label = { Text(stringResource(R.string.clubs_description)) }, minLines = 3, enabled = !busy)
-            OutlinedTextField(location, { if (it.length <= 80) location = it }, label = { Text(stringResource(R.string.clubs_location)) }, singleLine = true, enabled = !busy)
+            if (club != null) {
+                // Existing string-only locations can be ambiguous. Keep intentional legacy
+                // editing instead of guessing a county or silently replacing stored text.
+                OutlinedTextField(location, { if (it.length <= 80) location = it }, label = { Text(stringResource(R.string.clubs_location)) }, singleLine = true, enabled = !busy)
+            } else when (catalogLoad) {
+                is ClubCatalogLoad.Ready -> ClubLocationPicker(catalogLoad.catalog, selection, busy) { selection = it }
+                ClubCatalogLoad.Failed -> {
+                    Text(stringResource(R.string.clubs_locationCatalogError), color = MaterialTheme.colorScheme.error)
+                    TextButton(enabled = !busy, onClick = { catalogAttempt++ }) { Text(stringResource(R.string.clubs_retry)) }
+                }
+                else -> {
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                    Text(stringResource(R.string.clubs_locationLoading))
+                }
+            }
             Row { Switch(closed, { closed = it }, enabled = !busy); Text(stringResource(if (closed) R.string.clubs_closed else R.string.clubs_open), Modifier.padding(12.dp)) }
-            if (!valid) Text(stringResource(R.string.clubs_invalidForm), style = MaterialTheme.typography.bodySmall)
-        } }, confirmButton = { TextButton(enabled = valid && !busy, onClick = { onSave(mapOf("name" to name.trim(), "description" to description.trim(), "location" to location.trim(), "visibility" to if (closed) "closed" else "open")) }) { Text(stringResource(R.string.clubs_save)) } },
+            if (fields == null) Text(stringResource(R.string.clubs_invalidForm), style = MaterialTheme.typography.bodySmall)
+            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            error?.let { Text(clubError(it), color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
+        } }, confirmButton = { TextButton(enabled = fields != null && !busy, onClick = { if (!busy) fields?.let(onSave) }) { Text(stringResource(R.string.clubs_save)) } },
         dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text(stringResource(R.string.clubs_cancel)) } })
 }

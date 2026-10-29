@@ -2179,6 +2179,13 @@
     "close": "Close"
   },
   "clubs": {
+    "county": "County",
+    "chooseCounty": "Choose county",
+    "chooseCountyFirst": "Choose a county first",
+    "chooseLocality": "Choose locality",
+    "localityPartOf": "Part of %1$s",
+    "locationLoading": "Loading localities…",
+    "locationCatalogError": "Could not load localities. Try again.",
     "title": "Club",
     "chatTab": "Club",
     "directory": "Find your club",

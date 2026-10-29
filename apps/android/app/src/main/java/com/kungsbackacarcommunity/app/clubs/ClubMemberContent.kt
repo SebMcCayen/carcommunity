@@ -41,6 +41,7 @@ internal fun ClubMemberContent(uid: String, club: Club, membership: ClubMembersh
     fun action(action: String, fields: Map<String, Any?> = emptyMap(), done: () -> Unit = {}) {
         if (busy) return
         busy = true
+        error = null
         scope.launch {
             try { repository.manage(action, fields + mapOf("clubId" to club.id), UUID.randomUUID().toString()); error = null; refresh++; done(); onUpdated() }
             catch (e: CancellationException) { throw e } catch (e: Exception) { error = e }
@@ -76,7 +77,7 @@ internal fun ClubMemberContent(uid: String, club: Club, membership: ClubMembersh
     ClubCalendar(repository, club.id, membership.role.managesMembers, onOpenEvent)
     if (membership.role == ClubRole.Owner) {
         Text(stringResource(R.string.clubs_manage), style = MaterialTheme.typography.titleMedium)
-        OutlinedButton(onClick = { edit = true }, enabled = !busy) { Text(stringResource(R.string.clubs_edit)) }
+        OutlinedButton(onClick = { error = null; edit = true }, enabled = !busy) { Text(stringResource(R.string.clubs_edit)) }
         OutlinedButton(onClick = imagePicker::pickImage, enabled = !busy) { Text(stringResource(R.string.clubs_logo)) }
         Text(stringResource(R.string.clubs_logoHint), style = MaterialTheme.typography.bodySmall)
     }
@@ -103,7 +104,7 @@ internal fun ClubMemberContent(uid: String, club: Club, membership: ClubMembersh
         }
     }) { Text(stringResource(R.string.clubs_more)) }
     if (membership.role == ClubRole.Owner) OutlinedButton(onClick = { disband = true }, enabled = !busy) { Text(stringResource(R.string.clubs_disband)) }
-    if (edit) ClubEditor(club, busy, { edit = false }) { fields -> action("update", fields) { edit = false } }
+    if (edit) ClubEditor(club, busy, { edit = false }, error = error) { fields -> action("update", fields) { edit = false } }
     if (invite) ClubInviteDialog(busy, { invite = false }) { target -> action("invite", mapOf("targetUid" to target)) { invite = false } }
     if (disband) AlertDialog(onDismissRequest = { disband = false }, title = { Text(stringResource(R.string.clubs_disband)) },
         text = { Text(stringResource(R.string.clubs_disbandConfirm)) }, confirmButton = { TextButton(onClick = { disband = false; action("disband") }, enabled = !busy) { Text(stringResource(R.string.clubs_confirm)) } },
