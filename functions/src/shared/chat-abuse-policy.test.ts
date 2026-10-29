@@ -12,7 +12,13 @@ const golden = JSON.parse(readFileSync('../contracts/chat-flood-v1/golden.json',
   policyVersion: number;
   collection: string;
   policySha256: string;
-  cases: { name: string; state?: unknown; now: number; expected: unknown }[];
+  cases: {
+    name: string;
+    state?: unknown;
+    now: number;
+    forceViolation?: boolean;
+    expected: unknown;
+  }[];
 };
 
 describe('shared chat flood policy v1', () => {
@@ -25,7 +31,7 @@ describe('shared chat flood policy v1', () => {
   });
   for (const row of golden.cases)
     test(row.name, () => {
-      expect(evaluateChatSend(row.state, row.now)).toEqual(row.expected);
+      expect(evaluateChatSend(row.state, row.now, row.forceViolation)).toEqual(row.expected);
     });
   test('six sends, each escalation, no extension or write during a pause', () => {
     let now = 2_000_000,
@@ -58,6 +64,31 @@ describe('shared chat flood policy v1', () => {
     expect(reset).toMatchObject({
       allowed: true,
       next: { violationLevel: 0, lastViolationMillis: 0 },
+    });
+  });
+  test('persistent stricter-quota overruns escalate despite full credit and active retries are free', () => {
+    let now = 2_000_000;
+    let state: ChatGuardState | undefined;
+    for (const duration of [5000, 30000, 120000, 600000, 600000]) {
+      const decision = evaluateChatSend(state, now, true);
+      expect(decision).toMatchObject({
+        allowed: false,
+        next: { creditMs: 12000 },
+        details: { reason: 'chat-rate-limited', retryAfterMs: duration },
+      });
+      state = decision.next!;
+      for (const tick of [0, 1, duration - 1])
+        expect(evaluateChatSend(state, now + tick, true)).toMatchObject({
+          allowed: false,
+          next: null,
+          details: { blockedUntilMillis: now + duration, retryAfterMs: duration - tick },
+        });
+      now += duration;
+    }
+    expect(evaluateChatSend(state, now + 1800000, true)).toMatchObject({
+      allowed: false,
+      next: { violationLevel: 1, creditMs: 12000 },
+      details: { retryAfterMs: 5000 },
     });
   });
   test('normal traffic does not postpone the thirty-minute violation reset', () => {

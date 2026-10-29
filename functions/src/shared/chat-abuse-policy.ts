@@ -66,7 +66,11 @@ function denied(now: number, until: number, next: ChatGuardState | null): ChatGu
  * once to a bounded ten-minute pause, never to a fresh burst or an infinite ban.
  * Logical expiry needs no TTL job. Active pauses cause no write or extension.
  */
-export function evaluateChatSend(value: unknown, now: number): ChatGuardDecision {
+export function evaluateChatSend(
+  value: unknown,
+  now: number,
+  forceViolation: boolean = false,
+): ChatGuardDecision {
   if (!integer(now) || now > Number.MAX_SAFE_INTEGER - CHAT_RESET_MS)
     throw new RangeError('Invalid server clock');
   if (value !== undefined && !valid(value, now)) {
@@ -102,7 +106,9 @@ export function evaluateChatSend(value: unknown, now: number): ChatGuardDecision
     lastViolationMillis: reset ? 0 : s.lastViolationMillis,
     blockedUntilMillis: reset ? 0 : s.blockedUntilMillis,
   };
-  if (creditMs >= CHAT_REFILL_MS)
+  // A stricter server quota overrun is a violation even with available credit.
+  // Active pauses returned above: retries never extend them or write state.
+  if (!forceViolation && creditMs >= CHAT_REFILL_MS)
     return { allowed: true, next: { ...next, creditMs: creditMs - CHAT_REFILL_MS } };
   next.violationLevel = Math.min(4, next.violationLevel + 1);
   next.lastViolationMillis = now;

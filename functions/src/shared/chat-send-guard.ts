@@ -7,6 +7,7 @@ import {
 } from './chat-abuse-policy.js';
 
 /** Call after authorization, receipt and all other reads, before message writes.
+ * forceViolation is server-derived from a stricter legacy send quota.
  * Return denials from the transaction; throwing here would roll back penalties.
  */
 export async function stageChatSendGuard(
@@ -14,10 +15,11 @@ export async function stageChatSendGuard(
   tx: Transaction,
   uid: string,
   now: number = Date.now(),
+  forceViolation: boolean = false,
 ): Promise<ChatGuardDecision> {
   const ref = db.collection(CHAT_GUARD_COLLECTION).doc(uid);
   const snapshot = await tx.get(ref);
-  const decision = evaluateChatSend(snapshot.data(), now);
+  const decision = evaluateChatSend(snapshot.data(), now, forceViolation);
   if (decision.next) tx.set(ref, decision.next);
   return decision;
 }

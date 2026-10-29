@@ -79,12 +79,13 @@ export const postChatMessage = onCall(
           .orderBy('createdAt', 'desc')
           .limit(CHAT_RATE_LIMIT_MAX_MESSAGES),
       );
-      if (recent.size >= CHAT_RATE_LIMIT_MAX_MESSAGES)
-        throw new HttpsError(
-          'resource-exhausted',
-          'Too many messages — wait a moment before posting again.',
-        );
-      const guard = await stageChatSendGuard(db, tx, participant.uid, now);
+      const guard = await stageChatSendGuard(
+        db,
+        tx,
+        participant.uid,
+        now,
+        recent.size >= CHAT_RATE_LIMIT_MAX_MESSAGES,
+      );
       if (!guard.allowed) return { kind: 'denied' as const, guard };
       tx.create(
         messageRef,

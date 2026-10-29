@@ -153,7 +153,7 @@ suite('chat flood real Firestore transactions', () => {
   }, 45000);
 
   test('event concurrency across events retains the stricter rolling five per thirty seconds and legacy no-key calls', async () => {
-    const { uid, room } = await fixture(),
+    const { uid, room, now } = await fixture(),
       second = id();
     await db.doc(`events/${second}`).set({ status: 'published' });
     await db.doc(`events/${second}/rsvps/${uid}`).set({ status: 'maybe' });
@@ -174,9 +174,40 @@ suite('chat flood real Firestore transactions', () => {
       status: 'rejected',
       reason: {
         code: 'resource-exhausted',
-        message: 'Too many messages — wait a moment before posting again.',
+        details: { reason: 'chat-rate-limited', retryAfterMs: 5000 },
       },
     });
+    expect(guard.get('violationLevel')).toBe(1);
+    const successful = results.find((row) => row.status === 'fulfilled');
+    if (successful?.status !== 'fulfilled') throw new Error('Missing accepted event send');
+    const replay = successful.value;
+    await event.postChatMessage.run(
+      request(uid, { eventId: replay.eventId, message: 'retry', clientId: replay.messageId }),
+    );
+    await expect(
+      event.postChatMessage.run(request(uid, { eventId: room, message: 'retry', clientId: id() })),
+    ).rejects.toMatchObject({ code: 'resource-exhausted', details: { retryAfterMs: 5000 } });
+    expect((await guard.ref.get()).updateTime?.isEqual(guard.updateTime!)).toBe(true);
+    vi.mocked(Date.now).mockReturnValue(now + 5000);
+    const rejectedId = id();
+    await expect(
+      event.postChatMessage.run(
+        request(uid, { eventId: room, message: 'continued', clientId: rejectedId }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'resource-exhausted',
+      details: { reason: 'chat-rate-limited', retryAfterMs: 30000 },
+    });
+    const escalated = await guard.ref.get();
+    expect(escalated.get('violationLevel')).toBe(2);
+    expect(escalated.get('creditMs')).toBe(7000); // refill, with no send charge
+    await expect(
+      event.postChatMessage.run(
+        request(uid, { eventId: room, message: 'retry', clientId: rejectedId }),
+      ),
+    ).rejects.toMatchObject({ code: 'resource-exhausted', details: { retryAfterMs: 30000 } });
+    expect((await guard.ref.get()).updateTime?.isEqual(escalated.updateTime!)).toBe(true);
+    expect((await db.doc(`events/${room}/messages/${rejectedId}`).get()).exists).toBe(false);
   }, 45000);
 
   test('Community moderation tombstones win over receipt replay and never charge again', async () => {
