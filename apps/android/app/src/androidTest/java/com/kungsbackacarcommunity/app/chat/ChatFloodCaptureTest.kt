@@ -71,7 +71,7 @@ class ChatFloodCaptureTest {
                 } }
             } }
         }
-        compose.onNodeWithTag("chat-body-toggle-wall").assertIsDisplayed()
+        compose.onNodeWithTag("chat-body-toggle-wall").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("chat-flood-countdown").assertIsDisplayed()
         compose.mainClock.advanceTimeBy(1_000)
         compose.waitForIdle()
