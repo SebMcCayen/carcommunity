@@ -327,6 +327,113 @@ test('runner uses shell-free argv, fixed project and bounded captured output', (
   assert.deepEqual(result, { ok: true });
 });
 
+test('predefined role metadata uses global scope and fixed quota project, matching real CLI semantics', () => {
+  const mock = cloudMock();
+  const output = [];
+  const errors = [];
+  const code = main([], {
+    spawn(binary, args) {
+      const roleRead = args[0] === 'iam';
+      // Regression: the real CLI rejects --project for predefined roles/... .
+      if (roleRead && args.some((arg) => arg.startsWith('--project='))) {
+        return {
+          status: 1,
+          stderr:
+            'Invalid value for [ROLE_ID]: Should not specify the project or organization for predefined roles',
+        };
+      }
+      assert.equal(args.includes(`--billing-project=${PROJECT}`), roleRead);
+      assert.equal(args.includes(`--project=${PROJECT}`), !roleRead);
+      if (roleRead) assert.deepEqual(args.slice(0, 4), ['iam', 'roles', 'describe', ROLE]);
+      return { status: 0, stdout: JSON.stringify(mock.run(args.slice(0, -4))) };
+    },
+    log: (text) => output.push(text),
+    error: (text) => errors.push(text),
+  });
+  assert.equal(code, 0);
+  assert.deepEqual(errors, []);
+  assert.equal(JSON.parse(output[0]).status, 'would-grant');
+  assert.equal(mock.calls.length, 4);
+});
+
+test('CLI failures identify safe stages and categories without outputting raw data', () => {
+  const stages = [
+    'project-metadata',
+    'bucket-metadata',
+    'predefined-role-metadata',
+    'iam-policy-preflight',
+    'iam-grant',
+    'iam-policy-readback',
+  ];
+  for (const [failedIndex, stage] of stages.entries()) {
+    const mock = cloudMock();
+    const output = [];
+    const errors = [];
+    let call = 0;
+    const code = main(failedIndex >= 4 ? ['--apply'] : [], {
+      spawn(binary, args) {
+        if (call++ === failedIndex)
+          return {
+            status: 1,
+            stderr: 'PERMISSION_DENIED synthetic-token user:synthetic-private@example.invalid',
+          };
+        return { status: 0, stdout: JSON.stringify(mock.run(args.slice(0, -4))) };
+      },
+      log: (text) => output.push(text),
+      error: (text) => errors.push(text),
+    });
+    assert.equal(code, 1);
+    assert.deepEqual(output, []);
+    assert.equal(call, failedIndex + 1);
+    assert.ok(errors[0].startsWith(`[${stage}]`));
+    assert.ok(errors[0].includes('class=permission-denied'));
+    assert.equal(errors[0].includes('synthetic-'), false);
+    assert.equal(errors[0].includes('IAM may already have changed'), failedIndex >= 4);
+  }
+});
+
+test('safe classification covers CLI argument conflict, timeout, missing executable and invalid JSON', () => {
+  for (const [result, category] of [
+    [
+      {
+        status: 1,
+        stderr:
+          'Invalid value: Should not specify the project or organization for predefined roles',
+      },
+      'predefined-role-scope',
+    ],
+    [{ status: null, error: { code: 'ETIMEDOUT' } }, 'timeout'],
+    [{ status: null, error: { code: 'ENOENT' } }, 'executable-not-found'],
+    [{ status: 1, stderr: 'INVALID_ARGUMENT synthetic-private' }, 'invalid-argument'],
+    [{ status: 1, stderr: 'UNAUTHENTICATED synthetic-private' }, 'authentication'],
+    [{ status: 1, stderr: 'NOT_FOUND synthetic-private' }, 'not-found'],
+    [{ status: 1, stderr: '409 concurrent policy changes synthetic-private' }, 'conflict'],
+    [{ status: 0, stdout: 'synthetic-private' }, 'invalid-json'],
+  ]) {
+    assert.throws(
+      () => gcloudJson('/trusted/gcloud', [], () => result),
+      (error) => {
+        assert.ok(error.message.includes(`class=${category}`));
+        assert.equal(error.message.includes('synthetic-private'), false);
+        return true;
+      },
+    );
+  }
+});
+
+test('plan and preservation failures have separate safe stage labels', () => {
+  const invalid = cloudMock();
+  invalid.f.bucket.projectNumber = '123';
+  assert.throws(() => execute({}, invalid.run), /^Error: \[plan-validation\]/);
+  const missing = cloudMock({
+    readback: (policy) => ({
+      ...policy,
+      bindings: policy.bindings.filter((binding) => binding.role !== 'roles/viewer'),
+    }),
+  });
+  assert.throws(() => execute({ apply: true }, missing.run), /^Error: \[readback-verification\]/);
+});
+
 test('runner redacts errors and malformed output including potential credentials/policy members', () => {
   const secret = 'synthetic-secret user:synthetic-private@example.invalid';
   for (const spawn of [

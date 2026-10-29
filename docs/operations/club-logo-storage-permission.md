@@ -59,6 +59,29 @@ Storage service-agent grant and a policy etag with visible conditions. Output
 contains only the fixed scope above, mode and status; full policies and CLI
 stderr stay in process memory. A missing prerequisite reports `would-grant`.
 
+The predefined-role metadata read is global: it uses
+`gcloud iam roles describe roles/firebaserules.firestoreServiceAgent` with
+`--billing-project=kungsbacka-car-community` for quota attribution and **without**
+`--project`. That command treats `--project` as the parent of a custom role and
+rejects a predefined `roles/...` ID when it is supplied. Project/bucket/IAM
+operations retain the fixed `--project=kungsbacka-car-community` flag. No CLI
+authentication or configuration is changed to make this distinction.
+
+Failures include a fixed stage label (for example `[predefined-role-metadata]`)
+and an allowlisted class such as `predefined-role-scope`, `permission-denied`,
+`invalid-argument`, `authentication`, `not-found`, `conflict`, `timeout` or
+`invalid-json`. The class is selected from captured output in memory; no raw
+excerpt is printed. Plan and readback validation have separate labels. A failure
+at `iam-grant` or later explicitly warns that IAM may already have changed.
+
+Compatibility validation on 2026-10-29: project and bucket metadata reads passed;
+the original predefined-role read failed with the CLI's argument-scope error
+(`predefined-role-scope`), because the shared flags appended `--project`. After
+using global role scope with the fixed billing project, one real **read-only**
+dry-run exited 0 with `status: "would-grant"` and `apply: false`. No grant was
+applied. The updated 22-case no-cloud suite passed, including the real CLI's
+predefined-role argument restriction and redacted stage/class reporting.
+
 After PR review/merge, the parent can execute that same audited scope explicitly:
 
 ```sh
@@ -139,6 +162,7 @@ no live IAM operation and require no emulator, Gradle or iOS changes.
 - [Firebase Rules Firestore Service Agent role](https://docs.cloud.google.com/iam/docs/roles-permissions/firebaserules)
 - [Standard project binding command and explicit condition=None](https://docs.cloud.google.com/sdk/gcloud/reference/projects/add-iam-policy-binding)
 - [Raw bucket metadata flag](https://docs.cloud.google.com/sdk/gcloud/reference/storage/buckets/describe)
+- [Global predefined-role metadata versus custom-role project scope](https://docs.cloud.google.com/sdk/gcloud/reference/iam/roles/describe)
 - [IAM policy versions and etags](https://docs.cloud.google.com/iam/docs/allow-policies)
 
 The installed SDK's `googlecloudsdk/api_lib/cloudresourcemanager/projects_api.py`

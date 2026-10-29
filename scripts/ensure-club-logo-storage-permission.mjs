@@ -10,13 +10,54 @@ export const BUCKET = `${PROJECT}.firebasestorage.app`;
 export const MEMBER = `serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-firebasestorage.iam.gserviceaccount.com`;
 export const ROLE = 'roles/firebaserules.firestoreServiceAgent';
 const STORAGE_ROLE = 'roles/firebasestorage.serviceAgent';
-const COMMON = [`--project=${PROJECT}`, '--quiet', '--verbosity=error', '--format=json'];
+const COMMON = ['--quiet', '--verbosity=error', '--format=json'];
 
 class SafeError extends Error {}
 const refuse = (message) => {
   throw new SafeError(message);
 };
 const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+function step(stage, operation) {
+  try {
+    return operation();
+  } catch (cause) {
+    const detail =
+      cause instanceof SafeError ? cause.message : 'Unexpected failure; raw output withheld.';
+    const recovery = [
+      'iam-grant',
+      'grant-response-verification',
+      'iam-policy-readback',
+      'readback-verification',
+    ].includes(stage)
+      ? ' IAM may already have changed; reread IAM before retrying.'
+      : '';
+    refuse(`[${stage}] ${detail}${recovery}`);
+  }
+}
+
+/** Inspect in memory, return only an allowlisted category; never an error excerpt. */
+function failureClass(result) {
+  if (result.error?.code === 'ETIMEDOUT') return 'timeout';
+  if (result.error?.code === 'ENOENT') return 'executable-not-found';
+  if (result.error?.code === 'ENOBUFS') return 'output-limit';
+  const stderr = typeof result.stderr === 'string' ? result.stderr : '';
+  if (/Should not specify the project or organization for predefined roles/i.test(stderr)) {
+    return 'predefined-role-scope';
+  }
+  for (const [category, pattern] of [
+    ['invalid-argument', /INVALID_ARGUMENT|invalid value|unrecognized arguments|invalid choice/i],
+    ['authentication', /UNAUTHENTICATED|invalid_grant|reauthentication|login required/i],
+    [
+      'permission-denied',
+      /PERMISSION_DENIED|\b403\b|permission denied|does not have permission|forbidden/i,
+    ],
+    ['not-found', /NOT_FOUND|\b404\b|not found|does not exist/i],
+    ['conflict', /\b409\b|ABORTED|concurrent policy changes/i],
+  ])
+    if (pattern.test(stderr)) return category;
+  return 'command-failed';
+}
 
 export function parseArgs(args) {
   const result = { apply: false, gcloud: 'gcloud', help: false };
@@ -41,26 +82,33 @@ export function gcloudJson(binary, args, spawn = spawnSync) {
     refuse('Live gcloud is disabled by the no-cloud test guard.');
   }
   let result;
+  // Predefined roles are global. --project here selects a custom-role parent
+  // and the CLI rejects roles/...; quota attribution is separate from scope.
+  const globalRoleRead =
+    args.length === 4 &&
+    args[0] === 'iam' &&
+    args[1] === 'roles' &&
+    args[2] === 'describe' &&
+    args[3] === ROLE;
+  const scope = globalRoleRead ? `--billing-project=${PROJECT}` : `--project=${PROJECT}`;
   try {
-    result = spawn(binary, [...args, ...COMMON], {
+    result = spawn(binary, [...args, scope, ...COMMON], {
       encoding: 'utf8',
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 60_000,
       maxBuffer: 16 * 1024 * 1024,
     });
-  } catch {
-    refuse('gcloud execution failed; raw output withheld.');
+  } catch (error) {
+    refuse(`gcloud failed (class=${failureClass({ error })}); raw output withheld.`);
   }
   if (result.error || result.status !== 0) {
-    refuse(
-      'gcloud failed or timed out; raw output withheld. If apply started, reread IAM before retrying.',
-    );
+    refuse(`gcloud failed (class=${failureClass(result)}); raw output withheld.`);
   }
   try {
     return JSON.parse(result.stdout);
   } catch {
-    refuse('gcloud returned invalid JSON; raw output withheld.');
+    refuse('gcloud failed (class=invalid-json); raw output withheld.');
   }
 }
 
@@ -196,11 +244,13 @@ export function verifyReadback(before, rawAfter) {
 
 export function execute({ apply = false } = {}, run) {
   if (typeof apply !== 'boolean' || typeof run !== 'function') refuse('Invalid execution options.');
-  const project = run(['projects', 'describe', PROJECT]);
-  const bucket = run(['storage', 'buckets', 'describe', `gs://${BUCKET}`, '--raw']);
-  const role = run(['iam', 'roles', 'describe', ROLE]);
-  const before = run(['projects', 'get-iam-policy', PROJECT]);
-  const status = planGrant(project, bucket, role, before);
+  const project = step('project-metadata', () => run(['projects', 'describe', PROJECT]));
+  const bucket = step('bucket-metadata', () =>
+    run(['storage', 'buckets', 'describe', `gs://${BUCKET}`, '--raw']),
+  );
+  const role = step('predefined-role-metadata', () => run(['iam', 'roles', 'describe', ROLE]));
+  const before = step('iam-policy-preflight', () => run(['projects', 'get-iam-policy', PROJECT]));
+  const status = step('plan-validation', () => planGrant(project, bucket, role, before));
   const summary = {
     project: PROJECT,
     projectNumber: PROJECT_NUMBER,
@@ -212,24 +262,28 @@ export function execute({ apply = false } = {}, run) {
 
   // gcloud rereads current policy, changes only this binding, and carries its
   // etag into setIamPolicy. Never submit our preflight snapshot with set-iam-policy.
-  const updated = run([
-    'projects',
-    'add-iam-policy-binding',
-    PROJECT,
-    `--member=${MEMBER}`,
-    `--role=${ROLE}`,
-    '--condition=None',
-  ]);
-  verifyReadback(before, updated);
-  const after = run(['projects', 'get-iam-policy', PROJECT]);
-  verifyReadback(before, after);
-  verifyReadback(updated, after);
+  const updated = step('iam-grant', () =>
+    run([
+      'projects',
+      'add-iam-policy-binding',
+      PROJECT,
+      `--member=${MEMBER}`,
+      `--role=${ROLE}`,
+      '--condition=None',
+    ]),
+  );
+  step('grant-response-verification', () => verifyReadback(before, updated));
+  const after = step('iam-policy-readback', () => run(['projects', 'get-iam-policy', PROJECT]));
+  step('readback-verification', () => {
+    verifyReadback(before, after);
+    verifyReadback(updated, after);
+  });
   return { ...summary, status: 'verified-after-apply', apply: true };
 }
 
 export function main(args, { spawn = spawnSync, log = console.log, error = console.error } = {}) {
   try {
-    const options = parseArgs(args);
+    const options = step('arguments', () => parseArgs(args));
     if (options.help) {
       log(
         'Usage: node scripts/ensure-club-logo-storage-permission.mjs [--apply] [--gcloud=/absolute/path]\nDefault: read-only production preflight and plan. --apply adds only the fixed cross-service grant.',
