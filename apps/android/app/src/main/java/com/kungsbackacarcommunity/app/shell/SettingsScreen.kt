@@ -97,7 +97,10 @@ fun SettingsScreen(
     val privacyUrl = stringResource(R.string.url_privacy)
     val termsUrl = stringResource(R.string.url_terms)
 
-    AeroPage(title = stringResource(R.string.settingsMenu_title), modifier = modifier) {
+    AeroPage(
+        title = stringResource(R.string.settingsMenu_title), modifier = modifier,
+        ownerShortcutEnabled = false,
+    ) {
         SettingsGroup(stringResource(R.string.settingsMenu_accountSection)) {
             supporterBadgeSetting()
             if (onManageSubscription != null) {

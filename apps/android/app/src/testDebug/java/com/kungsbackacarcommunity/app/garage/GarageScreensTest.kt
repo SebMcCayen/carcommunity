@@ -1,15 +1,23 @@
 package com.kungsbackacarcommunity.app.garage
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.compose.runtime.CompositionLocalProvider
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.shell.AeroBackButtonTag
+import com.kungsbackacarcommunity.app.shell.AeroOwnerAvatarTag
+import com.kungsbackacarcommunity.app.shell.AeroOwnerHeader
+import com.kungsbackacarcommunity.app.shell.LocalAeroBackAvailable
+import com.kungsbackacarcommunity.app.shell.LocalAeroOwnerHeader
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -41,6 +49,38 @@ class GarageScreensTest {
     /** The accessibility label [CatalogueSelectorField] exposes for an EMPTY selector. */
     private fun emptySelector(labelRes: Int, placeholderRes: Int) =
         "${str(labelRes)}, ${str(placeholderRes)}"
+
+    @Test
+    fun garageSuppressesInheritedOwnerShortcutWithoutSuppressingBackOrVehicleActions() {
+        var added = 0
+        var edited: Vehicle? = null
+        var opened: Vehicle? = null
+        composeTestRule.setContent {
+            KccTheme {
+                CompositionLocalProvider(
+                    LocalAeroOwnerHeader provides AeroOwnerHeader(null, true, {}),
+                    LocalAeroBackAvailable provides true,
+                ) {
+                    GarageScreen(
+                        state = GarageState.Loaded(listOf(vehicle())), vehicleLimit = 2,
+                        onAdd = { added++ }, onEdit = { edited = it }, onDelete = {},
+                        onOpen = { opened = it },
+                    )
+                }
+            }
+        }
+        composeTestRule.onNodeWithTag(AeroOwnerAvatarTag).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(AeroBackButtonTag).assertIsDisplayed().assertHasClickAction()
+        composeTestRule.onNodeWithText("Volvo 240 (1988)").performScrollTo().performClick()
+        assertEquals("v1", opened?.id)
+        composeTestRule.onNodeWithContentDescription(
+            str(R.string.savedPlaces_moreActions).format("Volvo 240 (1988)"),
+        ).performScrollTo().performClick()
+        composeTestRule.onNodeWithText(str(R.string.garage_editVehicle)).performClick()
+        assertEquals("v1", edited?.id)
+        composeTestRule.onNodeWithText(str(R.string.garage_addVehicle)).performScrollTo().performClick()
+        assertEquals(1, added)
+    }
 
     @Test
     fun emptyGarage_showsEmptyMessageAndInvokesOnAdd() {
