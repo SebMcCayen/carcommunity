@@ -3,7 +3,7 @@ import { Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { UserRecord } from 'firebase-admin/auth';
 import { describe, expect, it } from 'vitest';
 import { ClubCalendarService } from './service';
-import { LIMITS, SUBSCRIPTIONS, TOKENS, hash } from './contract';
+import { LIMITS, SUBSCRIPTIONS, TOKENS, hash, pairRevocationPath } from './contract';
 import { providerIdentityKeys } from '../access/carCommunity-core';
 import { handleFeed } from './http';
 
@@ -60,9 +60,13 @@ export class MemoryStore {
   readonly reads: string[] = [];
   writes = 0;
   failPath: string | null = null;
+  private commitIndex = 0;
   private queue = Promise.resolve();
   firestore(): Firestore {
     return this as unknown as Firestore;
+  }
+  commitVersion() {
+    return new Timestamp(Math.floor(NOW / 1000) - 1, ++this.commitIndex);
   }
   seed(path: string, value: Data) {
     this.records.set(path, clone(value));
@@ -198,9 +202,19 @@ function fixture(uid = 'member', store = new MemoryStore()) {
       projectionType: 'shared-club-event-v1',
       clubId: 'club',
       eventId,
-      createdAt: time(NOW - 5000),
+      createdAt: store.commitVersion(),
       title: 'STALE PROJECTED TITLE',
       startMillis: NOW,
+    });
+  };
+  const withdraw = (eventId = 'event') => {
+    const through = store.commitVersion();
+    store.records.delete(`driverClubs/club/events/${eventId}`);
+    store.seed(pairRevocationPath('club', eventId), {
+      schemaVersion: 1,
+      clubId: 'club',
+      eventId,
+      invalidatedThrough: through,
     });
   };
   return {
@@ -210,6 +224,7 @@ function fixture(uid = 'member', store = new MemoryStore()) {
     manage,
     issue,
     event,
+    withdraw,
     tick: (ms = 1000) => {
       now += ms;
     },
@@ -759,6 +774,131 @@ describe('dynamic content, persistent deletion journal and bounded reads', () =>
     expect(rejoined.body).toContain('STATUS:CONFIRMED');
     expect(rejoined.body).toContain('SEQUENCE:2');
     expect(rejoined.body.match(/UID:[^\r]+/)?.[0]).toBe(first.body.match(/UID:[^\r]+/)?.[0]);
+  });
+
+  it('withdrawal before start remains cancelled when the next provider poll is after start', async () => {
+    const f = fixture(),
+      link = await f.issue();
+    f.event();
+    await f.service.fetch(link.token);
+    // Driver deletes this same projection for both withdrawal and normal expiry.
+    f.store.records.delete('driverClubs/club/events/event');
+    f.store.seed('driverAuditLogs/clubEvent_withdrawal', {
+      actorUid: 'owner',
+      action: 'club.eventAttendance',
+      target: 'club',
+      clubId: 'club',
+      eventId: 'event',
+      attending: false,
+      createdAt: time(NOW + 1000),
+    });
+    f.withdraw();
+    f.tick(3600001);
+    expect((await f.service.fetch(link.token)).body).toContain('STATUS:CANCELLED');
+    expect(f.store.reads.some((path) => path.startsWith('driverAuditLogs/'))).toBe(false);
+  });
+
+  it('pair path is shared, unambiguous and independent of the viewer UID', () => {
+    expect(pairRevocationPath('club', 'event')).toBe(
+      'driverClubEventRevocations/pair_4aaad3756733b252aa037399e464bd004a59ff0f0ddd3b7955caa086ea029c1b',
+    );
+    expect(pairRevocationPath('a.b', 'c')).not.toBe(pairRevocationPath('a', 'b.c'));
+  });
+
+  it('same-millisecond reconsent survives an older marker and ordinary expiry; later withdrawal cancels completed history', async () => {
+    const f = fixture(),
+      link = await f.issue();
+    f.event();
+    const first = await f.service.fetch(link.token);
+    const firstVersion = (privateState(f.store).rows as Data[])[0]!.consentGeneration;
+    f.withdraw();
+    expect((await f.service.fetch(link.token)).body).toContain('STATUS:CANCELLED');
+    f.event(); // Same millisecond, strictly later native createdAt nanoseconds.
+    const rejoined = await f.service.fetch(link.token);
+    expect(rejoined.body).toContain('STATUS:CONFIRMED');
+    expect((privateState(f.store).rows as Data[])[0]!.consentGeneration).not.toEqual(firstVersion);
+    expect(rejoined.body.match(/UID:[^\r]+/)?.[0]).toBe(first.body.match(/UID:[^\r]+/)?.[0]);
+    f.store.records.delete('driverClubs/club/events/event'); // Scheduled expiry writes no marker.
+    f.tick(3 * 3600000);
+    expect((await f.service.fetch(link.token)).body).toContain('STATUS:CONFIRMED');
+    f.store.seed('events/event', { ...f.store.data('events/event'), status: 'completed' });
+    f.withdraw(); // Explicit withdrawal after expiry still invalidates the observed consent.
+    const cancelled = await f.service.fetch(link.token);
+    expect(cancelled.body).toContain('STATUS:CANCELLED');
+    expect(Number(cancelled.body.match(/SEQUENCE:(\d+)/)?.[1])).toBeGreaterThan(2);
+  });
+
+  it('a cutoff equal to the exact native consent generation vetoes even a stale live projection', async () => {
+    const f = fixture(),
+      link = await f.issue();
+    f.event();
+    await f.service.fetch(link.token);
+    const generation = f.store.data('driverClubs/club/events/event')!.createdAt;
+    f.store.seed(pairRevocationPath('club', 'event'), {
+      schemaVersion: 1,
+      clubId: 'club',
+      eventId: 'event',
+      invalidatedThrough: generation,
+    });
+    expect((await f.service.fetch(link.token)).body).toContain('STATUS:CANCELLED');
+  });
+
+  it('a failed pair proof read preserves the published journal instead of returning stale confirmation', async () => {
+    const f = fixture(),
+      link = await f.issue();
+    f.event();
+    await f.service.fetch(link.token);
+    const before = privateState(f.store),
+      writes = f.store.writes;
+    f.store.failPath = pairRevocationPath('club', 'event');
+    await expect(f.service.fetch(link.token)).rejects.toBeDefined();
+    expect(privateState(f.store)).toEqual(before);
+    expect(f.store.writes).toBe(writes);
+  });
+
+  it.each([
+    { schemaVersion: 1, clubId: 'other', eventId: 'event', invalidatedThrough: time(NOW) },
+    { schemaVersion: 1, clubId: 'club', eventId: 'other', invalidatedThrough: time(NOW) },
+    {
+      schemaVersion: 1,
+      clubId: 'club',
+      eventId: 'event',
+      invalidatedThrough: 'not-a-server-timestamp',
+    },
+    { clubId: 'club', eventId: 'event', invalidatedThrough: time(NOW) },
+  ])(
+    'malformed pair evidence fails closed instead of preserving or cancelling history',
+    async (marker) => {
+      const f = fixture(),
+        link = await f.issue();
+      f.event();
+      await f.service.fetch(link.token);
+      const before = privateState(f.store),
+        writes = f.store.writes;
+      f.store.seed(pairRevocationPath('club', 'event'), marker);
+      await expect(f.service.fetch(link.token)).rejects.toMatchObject({ code: 'unavailable' });
+      expect(privateState(f.store)).toEqual(before);
+      expect(f.store.writes).toBe(writes);
+    },
+  );
+
+  it('legacy past history without a native generation becomes a conservative cancellation', async () => {
+    const f = fixture(),
+      link = await f.issue();
+    f.event();
+    await f.service.fetch(link.token);
+    const state = privateState(f.store);
+    const rows = (state.rows as Data[]).map((row) => {
+      const copy = { ...row };
+      delete copy.consentGeneration;
+      return copy;
+    });
+    f.store.seed(`${SUBSCRIPTIONS}/${hash('member')}`, { ...state, rows });
+    f.store.records.delete('driverClubs/club/events/event');
+    f.tick(3 * 3600000);
+    const cancelled = await f.service.fetch(link.token);
+    expect(cancelled.body).toContain('STATUS:CANCELLED');
+    expect(Number(cancelled.body.match(/SEQUENCE:(\d+)/)?.[1])).toBeGreaterThan(0);
   });
 
   it('revocation cutoffs suppress stale private intent even when its projection remains', async () => {

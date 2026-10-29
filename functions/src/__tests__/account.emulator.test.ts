@@ -18,6 +18,7 @@ process.env.FIREBASE_STORAGE_EMULATOR_HOST ??= '127.0.0.1:9199';
 process.env.FIREBASE_DATABASE_EMULATOR_HOST ??= '127.0.0.1:9000';
 process.env.GCLOUD_PROJECT ??= 'demo-test';
 
+import { createHash } from 'node:crypto';
 import { deleteApp, FirebaseError, initializeApp, type FirebaseApp } from 'firebase/app';
 import {
   connectAuthEmulator,
@@ -179,6 +180,36 @@ describe('account-deleteAccount (soft delete)', () => {
 });
 
 describe('account purge (hard delete after retention)', () => {
+  it('erases personal calendar journals and all owner token locators while preserving another member', async () => {
+    const user = await createProvisionedUser('purge-calendar');
+    const uid = user.uid,
+      otherUid = `${uid}-other`;
+    const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+    const ownState = adminDb.doc(`clubCalendarSubscriptions/${digest(uid)}`);
+    const orphanToken = adminDb.doc(`clubCalendarTokens/${digest(`${uid}-orphan`)}`);
+    const currentToken = adminDb.doc(`clubCalendarTokens/${digest(`${uid}-current`)}`);
+    const otherState = adminDb.doc(`clubCalendarSubscriptions/${digest(otherUid)}`);
+    const otherToken = adminDb.doc(`clubCalendarTokens/${digest(`${otherUid}-token`)}`);
+    await Promise.all([
+      ownState.set({ uid, rows: [{ title: 'Private club appointment' }] }),
+      orphanToken.set({ uid, subscriptionId: 'missing-old-subscription' }),
+      currentToken.set({ uid, subscriptionId: ownState.id }),
+      otherState.set({ uid: otherUid, rows: [{ title: 'Other member appointment' }] }),
+      otherToken.set({ uid: otherUid, subscriptionId: otherState.id }),
+    ]);
+    await adminAuth.updateUser(uid, { disabled: true });
+    await adminAuth.revokeRefreshTokens(uid);
+    await adminDb.doc(`users/${uid}`).set({ deleted: true }, { merge: true });
+    await purgeUserData(uid);
+    await purgeUserData(uid); // A retry must neither orphan locators nor erase another owner.
+    expect((await ownState.get()).exists).toBe(false);
+    expect((await orphanToken.get()).exists).toBe(false);
+    expect((await currentToken.get()).exists).toBe(false);
+    expect((await otherState.get()).exists).toBe(true);
+    expect((await otherToken.get()).exists).toBe(true);
+    await Promise.all([otherState.delete(), otherToken.delete()]);
+  });
+
   it('leaves erasure retryable if a Storage prefix cannot be removed', async () => {
     const user = await createProvisionedUser('purge-storage-retry');
     await adminAuth.updateUser(user.uid, { disabled: true });

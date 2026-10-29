@@ -30,6 +30,9 @@ export const manageInput = z.discriminatedUnion('action', [
     .strict(),
 ]);
 export const hash = (value: string): string => createHash('sha256').update(value).digest('hex');
+/** Shared Driver pair-withdrawal contract. IDs contain no member identity. */
+export const pairRevocationPath = (clubId: string, eventId: string): string =>
+  `driverClubEventRevocations/pair_${hash(JSON.stringify([clubId, eventId]))}`;
 export const millis = (value: unknown): number | null =>
   value instanceof Timestamp ? value.toMillis() : null;
 export const epochTime = (value: unknown): string | null =>
@@ -55,6 +58,8 @@ export interface CalendarRow extends CalendarEvent {
   sequence: number;
   stampMillis: number;
   intentCreatedMillis: number;
+  /** Exact canonical intent.createdAt generation, preserved by reconciliation. */
+  consentGeneration?: { seconds: number; nanoseconds: number };
 }
 
 const date = z.number().finite().min(0).max(253402300799000);
@@ -69,6 +74,13 @@ export const rowSchema = z
     sequence: z.number().int().min(0).max(2147483646),
     stampMillis: date,
     intentCreatedMillis: date,
+    consentGeneration: z
+      .object({
+        seconds: z.number().int().min(0).max(253402300799),
+        nanoseconds: z.number().int().min(0).max(999999999),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 

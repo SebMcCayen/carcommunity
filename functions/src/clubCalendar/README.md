@@ -122,7 +122,7 @@ Every successful GET/HEAD, **including 304**, does all of the following:
    Respect the existing server access policy. Do not initialize access or write
    RTDB mirrors from a provider GET.
 5. Read a bounded private intent page and freshly read each relevant canonical
-   event and Driver club/event revocation marker. Never trust cached projection
+   event, Driver club/event revocation marker and durable pair-withdrawal marker. Never trust cached projection
    titles/dates or an old ETag. Apply Driver's effective-intent cutoff semantics.
 
 Auth-time precision is the Firebase Admin SDK contract, not local fetch time.
@@ -193,6 +193,28 @@ projection expiry or canonical completion; deletion/cancellation still cancels
 them. Future invalid/malformed source fields fail the fetch rather than erase a
 known appointment.
 
+An explicit withdrawal is distinguished from normal projection expiry through
+the [shared pair-marker contract](../../../docs/contracts/club-calendar-withdrawals-v1.md).
+The consumer stores native `createdAt` seconds/nanoseconds as `consentGeneration`
+and reads `driverClubEventRevocations/pair_<hash>` in the same bounded `getAll`.
+A matching v1 marker at or after that generation always cancels the row, even
+if the next provider poll is after event start/completion. A strictly later
+registration survives an older marker. No audit log or new composite index is
+used. Malformed markers or failed reads return 503 without overwriting state.
+Legacy missing-intent rows without a stored native generation become
+conservative cancellation tombstones rather than falsely confirmed history.
+Do not enable readiness until the separate Driver marker writer is deployed
+and verified; the old writer cannot supply this proof.
+
+Canonical account erasure queries both new personal collections by their stored
+owner `uid`, not their hash document ID. This removes journals and all current/
+orphan token locators through the existing bounded, retryable purge plan, after
+the canonical profile is removed and before Auth deletion. Canonical-profile
+checks and transaction retries block issue from recreating rows during purge,
+including a later Auth deletion failure. Other members' records and shared
+Driver pair markers are preserved. No Driver-only account-deletion hook is
+introduced; provider-side copies still cannot be recalled by erasing a token.
+
 Confirmed past history retires after end/start + **400 days**. Tombstones retire
 only after **both** their cancellation time and event end/start are older than
 400 days. Rotation does not shorten retention. Retirement happens during a poll;
@@ -260,7 +282,7 @@ warm instance, with no token/IP retention; it reduces database amplification but
 is not a distributed abuse or billing guarantee and resets on cold start.
 
 For N current intents, U retained union IDs and K identity keys (K <= 4), a
-successful poll costs approximately **12 + K + max(1,N) + 2U Firestore reads**, two
+successful poll costs approximately **12 + K + max(1,N) + 3U Firestore reads**, two
 Admin Auth lookups and zero/one journal write. Transaction retries are capped at
 three and can multiply reads. Field masks select only needed event fields. The
 hourly suggestion is advisory; providers choose their poll cadence. Do not claim
@@ -299,6 +321,16 @@ unchanged and passed all 65 service tests, including a real-Admin-SDK same-secon
 authentication boundary regression, through the same no-cloud runner. It did not
 call a deployed feed, install a Framework dependency, or repeat the full
 test-project typecheck that previously exhausted its heap.
+
+Final pair-consumer/lifecycle follow-up: 106 focused calendar, deletion-plan,
+App Check and instance-metadata tests passed without cloud access. The full
+backend source/test-project typecheck then passed at a 1536 MiB heap cap in
+32.39 seconds (1,025,852 KiB peak RSS). Scoped ESLint and formatting/diff checks
+passed. The real canonical account-purge regression is prepared in the existing
+account emulator suite but has not run here: it needs Auth, RTDB, Storage and
+Functions in addition to Firestore, so the granted Firestore-only slot cannot
+establish full-purge evidence. No additional emulator service or Gradle was
+started. Parent owns formal review, full CI and deployed producer/consumer QA.
 
 References: [shared club contract](../../../docs/contracts/shared-clubs-v1.md),
 [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseDeleteAccountInput } from './deletion-core';
+import { parseDeleteAccountInput, PURGE_OWNED_COLLECTIONS, PURGE_DOC_TREES } from './deletion-core';
 import { blockMirrorRtdbKey } from './deletion-core';
 
 describe('blockMirrorRtdbKey', () => {
@@ -47,5 +47,16 @@ describe('native deletion account binding', () => {
       input: { expectedUid: 'member-a' },
     });
     expect(parseDeleteAccountInput({ expectedUid: '' }).ok).toBe(false);
+  });
+});
+
+describe('personal calendar canonical erasure plan', () => {
+  it('purges both hash-keyed collections by stored owner UID, not UID document paths', () => {
+    const roots = ['clubCalendarSubscriptions', 'clubCalendarTokens'];
+    expect(PURGE_OWNED_COLLECTIONS.filter((step) => roots.includes(step.collection))).toEqual([
+      { collection: 'clubCalendarSubscriptions', userField: 'uid' },
+      { collection: 'clubCalendarTokens', userField: 'uid' },
+    ]);
+    expect(PURGE_DOC_TREES.filter((root) => roots.includes(root))).toEqual([]);
   });
 });

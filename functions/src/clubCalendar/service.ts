@@ -13,6 +13,7 @@ import {
   SUBSCRIPTIONS,
   TOKENS,
   hash,
+  pairRevocationPath,
   id,
   millis,
   epochTime,
@@ -370,7 +371,7 @@ export class ClubCalendarService {
       tx.get(this.db.doc(`driverClubEventRevocations/club_${clubId}`)),
     ]);
     if (intents.size > LIMITS.maxCurrentEvents) capacity();
-    const byId = new Map(intents.docs.map((doc) => [doc.id, doc.data()]));
+    const byId = new Map(intents.docs.map((doc) => [doc.id, doc]));
     if ([...byId.keys()].some((key) => !id.safeParse(key).success)) unavailable();
     const ids = [...new Set([...byId.keys(), ...previous.map((row) => row.id)])].sort();
     if (ids.length > LIMITS.maxRememberedEvents) capacity();
@@ -380,6 +381,7 @@ export class ClubCalendarService {
           ...ids.flatMap((eventId) => [
             this.db.doc(`events/${eventId}`),
             this.db.doc(`driverClubEventRevocations/event_${eventId}`),
+            this.db.doc(pairRevocationPath(clubId, eventId)),
           ]),
           {
             fieldMask: [
@@ -389,24 +391,49 @@ export class ClubCalendarService {
               'endsAt',
               'locationName',
               'invalidatedThrough',
+              'schemaVersion',
+              'clubId',
+              'eventId',
             ],
           },
         )
       : [];
-    const cutoff = (data: Data | undefined): number | null => {
+    const cutoff = (data: Data | undefined): Timestamp | null => {
       if (data?.invalidatedThrough == null) return null;
-      const value = millis(data.invalidatedThrough);
-      if (value === null) unavailable();
-      return value;
+      if (!(data.invalidatedThrough instanceof Timestamp)) unavailable();
+      return data.invalidatedThrough;
     };
+    const compare = (
+      a: { seconds: number; nanoseconds: number },
+      b: { seconds: number; nanoseconds: number },
+    ) => a.seconds - b.seconds || a.nanoseconds - b.nanoseconds;
     const clubCutoff = cutoff(clubRevocation.data());
     const result: CalendarRow[] = [];
     for (let index = 0; index < ids.length; index++) {
       const eventId = ids[index]!,
-        source = snapshots[index * 2]!.data();
+        source = snapshots[index * 3]!.data();
       const prior = old.get(eventId),
-        intent = byId.get(eventId);
-      const eventCutoff = cutoff(snapshots[index * 2 + 1]!.data());
+        intentDoc = byId.get(eventId),
+        intent = intentDoc?.data();
+      const eventCutoff = cutoff(snapshots[index * 3 + 1]!.data());
+      const pair = snapshots[index * 3 + 2]!.data();
+      if (
+        pair &&
+        (pair.schemaVersion !== 1 ||
+          pair.clubId !== clubId ||
+          pair.eventId !== eventId ||
+          !(pair.invalidatedThrough instanceof Timestamp))
+      )
+        unavailable();
+      const written = intent?.createdAt;
+      if (intentDoc && !(written instanceof Timestamp)) unavailable();
+      const consentGeneration = written
+        ? { seconds: written.seconds, nanoseconds: written.nanoseconds }
+        : prior?.consentGeneration;
+      const through = pair?.invalidatedThrough as Timestamp | undefined;
+      // The canonical writer makes reconsent strictly newer than every cutoff,
+      // even within the same ms. Reconciliation must preserve this generation.
+      const withdrawn = through && consentGeneration && compare(through, consentGeneration) >= 0;
       if (
         source &&
         !['published', 'completed', 'draft', 'cancelled', 'deleted'].includes(String(source.status))
@@ -425,17 +452,29 @@ export class ClubCalendarService {
       )
         unavailable();
       const effective =
-        created !== null &&
-        [clubCutoff, eventCutoff].every((value) => value === null || created > value);
+        consentGeneration &&
+        [clubCutoff, eventCutoff].every(
+          (value) => value === null || compare(consentGeneration, value) > 0,
+        );
       // Past, previously delivered appointments remain history when routine expiry
       // removes projections. Explicit cancellation/deletion still creates tombstones.
-      const completedHistory = prior?.status === 'CONFIRMED' && event && event.startMillis <= now;
+      // An unversioned legacy row cannot prove that an absent intent expired
+      // normally rather than being withdrawn. Emit a conservative tombstone.
+      const completedHistory =
+        prior?.status === 'CONFIRMED' && consentGeneration && event && event.startMillis <= now;
       const visible =
         event &&
+        !withdrawn &&
         ((effective && intent && source?.status === 'published' && event.startMillis > now) ||
           (completedHistory && (effective || source?.status === 'completed')));
       let desired: Omit<CalendarRow, 'sequence' | 'stampMillis'> | null = null;
-      if (visible) desired = { ...event, status: 'CONFIRMED', intentCreatedMillis: created! };
+      if (visible)
+        desired = {
+          ...event,
+          status: 'CONFIRMED',
+          intentCreatedMillis: created!,
+          consentGeneration: consentGeneration!,
+        };
       else if (prior)
         desired = {
           id: eventId,
@@ -445,6 +484,7 @@ export class ClubCalendarService {
           locationName: null,
           status: 'CANCELLED',
           intentCreatedMillis: prior.intentCreatedMillis,
+          ...(prior.consentGeneration ? { consentGeneration: prior.consentGeneration } : {}),
         };
       if (!desired) continue;
       if (prior) {
@@ -455,7 +495,9 @@ export class ClubCalendarService {
           prior.endMillis === desired.endMillis &&
           prior.locationName === desired.locationName &&
           prior.status === desired.status &&
-          prior.intentCreatedMillis === desired.intentCreatedMillis
+          prior.intentCreatedMillis === desired.intentCreatedMillis &&
+          prior.consentGeneration?.seconds === desired.consentGeneration?.seconds &&
+          prior.consentGeneration?.nanoseconds === desired.consentGeneration?.nanoseconds
         ) {
           result.push(prior);
           continue;
