@@ -1,7 +1,15 @@
 import test from 'node:test';
+import { mkdtemp, writeFile, symlink, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { APPROVED_BUILD, verifyBuildRun, releaseInternal } from './publish-android-internal.mjs';
+import {
+  APPROVED_BUILD,
+  verifyBuildRun,
+  releaseInternal,
+  readApprovedBundle,
+} from './publish-android-internal.mjs';
 
 const bundle = Buffer.from('inert signed-bundle fixture; never uploaded');
 const sha = createHash('sha256').update(bundle).digest('hex');
@@ -208,4 +216,22 @@ test('lost commit acknowledgement reports unknown publication instead of a false
     (error) => error.publicationCommitted === null && error.publicationState === 'unknown',
   );
   assert.equal(f.calls.filter((c) => c.url.endsWith(':commit')).length, 1);
+});
+
+test('bundle descriptor rejects links, directories and undersized files before reading', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'play-bundle-'));
+  try {
+    const regular = join(dir, 'bundle.aab');
+    const link = join(dir, 'link.aab');
+    const bytes = Buffer.alloc(2048, 1);
+    await writeFile(regular, bytes);
+    await symlink(regular, link);
+    assert.deepEqual(await readApprovedBundle(regular), bytes);
+    await assert.rejects(readApprovedBundle(link));
+    await assert.rejects(readApprovedBundle(dir));
+    await writeFile(regular, 'small');
+    await assert.rejects(readApprovedBundle(regular));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

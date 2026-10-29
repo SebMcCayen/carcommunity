@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { lstat, readFile, writeFile } from 'node:fs/promises';
+import { open, readFile, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -223,6 +224,19 @@ export async function releaseInternal({
   }
 }
 
+export async function readApprovedBundle(file) {
+  // Validate and read the same open descriptor; do not follow a substituted link.
+  const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const stat = await handle.stat();
+    if (!stat.isFile() || stat.size < 1024 || stat.size > 300_000_000)
+      throw new Error('Expected one regular, bounded signed AAB.');
+    return await handle.readFile();
+  } finally {
+    await handle.close();
+  }
+}
+
 async function main() {
   if (process.argv[2] === 'verify-build') {
     console.log(
@@ -238,11 +252,8 @@ async function main() {
   if (!process.env.PLAY_RELEASE_REPORT || !isAbsolute(process.env.PLAY_RELEASE_REPORT))
     throw new Error('An absolute receipt path is required before publication.');
   const file = process.argv[3];
-  const stat = await lstat(file);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1024 || stat.size > 300_000_000)
-    throw new Error('Expected one regular, bounded signed AAB.');
   const report = await releaseInternal({
-    bundle: await readFile(file),
+    bundle: await readApprovedBundle(file),
     expectedSha256: process.env.EXPECTED_AAB_SHA256,
     token: process.env.PLAY_PUBLISHING_TOKEN,
     publish: process.env.PLAY_RELEASE_MODE === 'publish',
@@ -269,12 +280,18 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       failed: true,
       publicationCommitted:
         error.publicationCommitted === null ? null : error.publicationCommitted === true,
-      publicationState: error.publicationState ?? 'not_committed',
-      message: error.message,
+      publicationState:
+        error.publicationCommitted === true
+          ? 'committed'
+          : error.publicationCommitted === null
+            ? 'unknown'
+            : 'not_committed',
+      message: 'Release operation failed; inspect workflow diagnostics.',
       track: 'internal',
       versionCode: 60,
     };
     console.error(JSON.stringify(result));
+    console.error(error.message);
     if (process.env.PLAY_RELEASE_REPORT) {
       try {
         await writeFile(process.env.PLAY_RELEASE_REPORT, JSON.stringify(result, null, 2) + '\n', {
