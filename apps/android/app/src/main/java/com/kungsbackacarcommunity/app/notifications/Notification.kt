@@ -120,7 +120,7 @@ object Notifications {
      * True when the inbox has something the user has not SEEN yet: the newest
      * notification post-dates the caller's last-seen marker (null marker = never
      * opened → any notification is unseen). Drives the Notifications red dot (the
-     * map chat bubble's aggregate and the hub's Notifications tab), the exact
+     * map avatar and its Notifications menu row), the exact
      * mirror of the community chat dot ([com.kungsbackacarcommunity.app.chatchannels.ChatChannels.hasUnread]).
      *
      * This is DELIBERATELY separate from [unreadCount]'s per-item [AppNotification.isRead]:

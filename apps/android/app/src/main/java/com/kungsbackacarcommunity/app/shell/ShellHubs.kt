@@ -15,6 +15,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.design.KccSpacing
@@ -26,6 +28,8 @@ data class HubEntry(
     val label: String,
     val icon: ImageVector,
     val onClick: (() -> Unit)?,
+    val id: String? = null,
+    val hasUnread: Boolean = false,
 )
 
 /**
@@ -76,7 +80,7 @@ fun HubScreen(
         entries.forEach { entry ->
             val onClick = entry.onClick
             if (onClick != null) {
-                HubRow(entry.label, entry.icon, onClick)
+                HubRow(entry.label, entry.icon, hasUnread = entry.hasUnread, onClick = onClick)
             }
         }
     }
@@ -124,9 +128,15 @@ fun SocialHub(
  * tonally-elevated surface with a leading icon and a label.
  */
 @Composable
-internal fun HubRow(label: String, icon: ImageVector, onClick: () -> Unit) {
+internal fun HubRow(
+    label: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    hasUnread: Boolean = false,
+    onClick: () -> Unit,
+) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 1.dp,
@@ -145,9 +155,16 @@ internal fun HubRow(label: String, icon: ImageVector, onClick: () -> Unit) {
             )
             Text(
                 text = label,
+                modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
+            if (hasUnread) {
+                val unreadLabel = androidx.compose.ui.res.stringResource(com.kungsbackacarcommunity.app.R.string.chatHub_tabUnread)
+                androidx.compose.material3.Badge(
+                    modifier = Modifier.semantics { contentDescription = unreadLabel },
+                )
+            }
         }
     }
 }

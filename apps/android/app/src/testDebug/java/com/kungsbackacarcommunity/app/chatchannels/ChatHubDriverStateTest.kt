@@ -36,9 +36,9 @@ class ChatHubDriverStateTest {
             KccTheme {
                 if (mounted.value) ChatHubRoute(
                     uid = uid.value, communityChatRepository = null, convoyChatRepository = null,
-                    friendsRepository = null, dmRepository = null, notificationsRepository = null,
-                    notificationsCoordinator = null, communityUnread = false, convoysUnread = false,
-                    friendsUnread = false, notificationsUnread = false, onClose = {},
+                    friendsRepository = null, dmRepository = null,
+                    communityUnread = false, convoysUnread = false,
+                    friendsUnread = false, onClose = {},
                     driverContent = { DriverFeedRoute(uid.value, DriverFeedStrings { it }, repository = repository) },
                 )
             }

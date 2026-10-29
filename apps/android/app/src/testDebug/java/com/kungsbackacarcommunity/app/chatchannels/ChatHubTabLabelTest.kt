@@ -72,7 +72,7 @@ class ChatHubTabLabelTest {
             ) {
                 KccTheme(darkTheme = current.dark) {
                     Box(Modifier.requiredWidth(current.width.dp)) {
-                        ChatChannelStrip(selected.value, List(ChatTab.entries.size) { true },
+                        ChatChannelStrip(selected.value, List(ChatTab.visibleEntries.size) { true },
                             onSelect = { selectedCallback = it; selected.value = it }, onBack = if (current.back) ({}) else null)
                     }
                 }
@@ -91,7 +91,7 @@ class ChatHubTabLabelTest {
                     applyOverrideConfiguration(config)
                 }.resources
                 val labelIds = listOf(R.string.chatHub_tabCommunity, R.string.chatHub_tabConvoys,
-                    R.string.chatHub_tabFriends, R.string.chatHub_tabNotifications, R.string.clubs_chatTab)
+                    R.string.chatHub_tabFriends, R.string.clubs_chatTab)
                 val stripNode = compose.onNodeWithTag(CHAT_CHANNEL_STRIP_TEST_TAG).fetchSemanticsNode()
                 val stripBounds = stripNode.boundsInRoot
                 assertEquals("$current fills the available width", (width - if (back) 48 else 0).toFloat(), stripBounds.width, 0.01f)
@@ -100,7 +100,7 @@ class ChatHubTabLabelTest {
                 }
                 assertFalse("$current no horizontal scrolling", stripNode.config.contains(SemanticsProperties.HorizontalScrollAxisRange))
                 var previousRight = stripBounds.left
-                for (tab in ChatTab.entries) {
+                for (tab in ChatTab.visibleEntries) {
                     val item = compose.onNodeWithTag(chatChannelTabTag(tab))
                     item.assertIsDisplayed().performTouchInput { click() }
                     item.assertIsSelected()
@@ -114,7 +114,7 @@ class ChatHubTabLabelTest {
                     assertTrue("$current $tab does not overlap previous target", bounds.left >= previousRight)
                     previousRight = bounds.right
                     val layouts = mutableListOf<TextLayoutResult>()
-                    val label = resources.getString(labelIds[tab.ordinal])
+                    val label = resources.getString(labelIds[ChatTab.visibleEntries.indexOf(tab)])
                     val labelNode = compose.onNodeWithText(label, useUnmergedTree = true)
                     labelNode.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
                     assertEquals("$current $tab layout", 1, layouts.size)

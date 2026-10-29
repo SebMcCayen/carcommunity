@@ -256,7 +256,7 @@ private fun DriverPostBody(post: DriverPost, strings: DriverFeedStrings, onOpenD
 /** The read contract has no avatar URL; show a native fallback instead of a sample portrait. */
 @Composable
 private fun DriverAuthorIcon() {
-    Box(Modifier.size(48.dp).border(1.dp, MaterialTheme.colorScheme.tertiary, CircleShape)
+    Box(Modifier.size(48.dp).border(1.dp, MaterialTheme.colorScheme.primary, CircleShape)
         .clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
         Icon(Icons.Filled.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }

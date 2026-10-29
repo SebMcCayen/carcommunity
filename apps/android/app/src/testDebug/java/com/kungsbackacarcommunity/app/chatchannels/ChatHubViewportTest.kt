@@ -74,9 +74,9 @@ class ChatHubViewportTest {
                         ChatHubRoute(
                             uid = "local-self", communityChatRepository = LocalRepository,
                             convoyChatRepository = null, friendsRepository = null, dmRepository = null,
-                            notificationsRepository = null, notificationsCoordinator = null,
+
                             communityUnread = true, convoysUnread = true,
-                            friendsUnread = true, notificationsUnread = true,
+                            friendsUnread = true,
                             onClose = { closed++ }, showHubBackArrow = true,
                             driverContent = { Text("Local Driver surface") },
                         )
@@ -93,7 +93,7 @@ class ChatHubViewportTest {
         val inputBounds = input.fetchSemanticsNode().boundsInRoot
         // Check every destination in the real populated host without scrolling;
         // the full-width strip must also preserve the existing reading budget.
-        for (tab in ChatTab.entries) {
+        for (tab in ChatTab.visibleEntries) {
             val target = compose.onNodeWithTag(chatChannelTabTag(tab))
             target.assertIsDisplayed()
             val bounds = target.fetchSemanticsNode().boundsInRoot

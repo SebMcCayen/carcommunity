@@ -64,10 +64,6 @@ import com.kungsbackacarcommunity.app.dm.DmRepository
 import com.kungsbackacarcommunity.app.driverfeed.DriverFeedSessionOwner
 import com.kungsbackacarcommunity.app.driverfeed.LocalDriverFeedSessionOwner
 import com.kungsbackacarcommunity.app.friends.FriendsRepository
-import com.kungsbackacarcommunity.app.notifications.ConvoyNotificationLink
-import com.kungsbackacarcommunity.app.notifications.NotificationsCoordinator
-import com.kungsbackacarcommunity.app.notifications.NotificationsRepository
-import com.kungsbackacarcommunity.app.notifications.NotificationsRoute
 import com.kungsbackacarcommunity.app.push.ActiveChat
 import com.kungsbackacarcommunity.app.push.ActiveChatRegistry
 import com.kungsbackacarcommunity.app.push.PushDeepLink
@@ -378,12 +374,22 @@ private fun ChatPeekMessageRow(message: ChannelMessage) {
 }
 
 /**
- * The four sections of the chat hub, in the order they appear in the tab row AND
- * in the swipe pager. The pager addresses pages by [ChatTab.ordinal], so this
- * declaration order IS the left-to-right swipe order — reordering these reorders
- * both the tabs and the swipe. Pinned by `ChatTabOrderTest`.
+ * Stable saved chat destinations. [ChatTab.visibleEntries] defines the four
+ * visible tabs and their swipe order; enum ordinals are never pager indices.
  */
-enum class ChatTab { Community, Convoys, Friends, Notifications, Club }
+enum class ChatTab {
+    Community, Convoys, Friends,
+    // Retain the old Serializable value so Android can restore state saved by
+    // earlier versions. Notifications no longer has a tab or a pager page.
+    Notifications,
+    Club;
+
+    companion object {
+        val visibleEntries: List<ChatTab> = listOf(Community, Convoys, Friends, Club)
+    }
+}
+
+internal fun chatHubPage(tab: ChatTab): Int = ChatTab.visibleEntries.indexOf(tab).coerceAtLeast(0)
 
 /**
  * The hub tab a push [target] should land on, or [ChatTab.Community] for anything
@@ -398,7 +404,7 @@ internal fun chatHubLandingTab(target: PushTarget?): ChatTab =
         PushTarget.COMMUNITY_CHAT -> ChatTab.Community
         PushTarget.CONVOY_CHAT -> ChatTab.Convoys
         PushTarget.FRIENDS -> ChatTab.Friends
-        PushTarget.NOTIFICATIONS -> ChatTab.Notifications
+        PushTarget.NOTIFICATIONS -> ChatTab.Community
         else -> ChatTab.Community
     }
 
@@ -419,12 +425,9 @@ fun ChatHubRoute(
     // channel.
     friendsRepository: FriendsRepository?,
     dmRepository: DmRepository?,
-    notificationsRepository: NotificationsRepository?,
-    notificationsCoordinator: NotificationsCoordinator?,
     communityUnread: Boolean,
     convoysUnread: Boolean,
     friendsUnread: Boolean,
-    notificationsUnread: Boolean,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     // Draw a hub-level Back arrow (top-left) wired to [onClose]. The canonical
@@ -445,12 +448,7 @@ fun ChatHubRoute(
     // Community tab. Consumed once — backing out must not re-apply it.
     // (The popup form takes the same parameter; see [ChatHubPopup].)
     pushDeepLink: PushDeepLink? = null,
-    // Lets the Notifications tab's convoy rows resolve their convoy's state and
-    // open it. Forwarded untouched; see [NotificationsRoute].
-    convoyLink: ConvoyNotificationLink? = null,
-    // Opens an event's detail from an event notification tap in the inbox tab.
-    // Forwarded untouched; see [NotificationsRoute].
-    onOpenEvent: ((String) -> Unit)? = null,
+
     // Native Driver adapter owned by the integration lane; never chat messages.
     driverContent: (@Composable () -> Unit)? = null,
 ) {
@@ -486,12 +484,9 @@ fun ChatHubRoute(
                                 convoyChatRepository = convoyChatRepository,
                                 friendsRepository = friendsRepository,
                                 dmRepository = dmRepository,
-                                notificationsRepository = notificationsRepository,
-                                notificationsCoordinator = notificationsCoordinator,
                                 communityUnread = communityUnread,
                                 convoysUnread = convoysUnread,
                                 friendsUnread = friendsUnread,
-                                notificationsUnread = notificationsUnread,
                                 onClose = onClose,
                                 applyStatusBarInset = driverContent == null,
                                 showHubBackArrow = showHubBackArrow,
@@ -500,8 +495,6 @@ fun ChatHubRoute(
                                 blockingRepository = blockingRepository,
                                 chatRepliesEnabled = chatRepliesEnabled,
                                 pushDeepLink = pushDeepLink,
-                                convoyLink = convoyLink,
-                                onOpenEvent = onOpenEvent,
                             )
                         }
                     }
@@ -563,12 +556,9 @@ fun ChatHubPopup(
     // channel.
     friendsRepository: FriendsRepository?,
     dmRepository: DmRepository?,
-    notificationsRepository: NotificationsRepository?,
-    notificationsCoordinator: NotificationsCoordinator?,
     communityUnread: Boolean,
     convoysUnread: Boolean,
     friendsUnread: Boolean,
-    notificationsUnread: Boolean,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     onViewProfile: ((String) -> Unit)? = null,
@@ -576,10 +566,7 @@ fun ChatHubPopup(
     // OWN map to that point, in-app. Same as [ChatHubRoute].
     onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)? = null,
     blockingRepository: BlockingRepository? = null,
-    convoyLink: ConvoyNotificationLink? = null,
-    // Opens an event's detail from an event notification tap in the inbox tab.
-    // Forwarded untouched; see [NotificationsRoute].
-    onOpenEvent: ((String) -> Unit)? = null,
+
     // Set when the hub was opened by an affordance that names WHERE it should
     // land, rather than by the plain chat bubble: today the map shell's convoy bar
     // chat icon, which passes a CONVOY_CHAT link for the convoy it badges so the
@@ -611,12 +598,9 @@ fun ChatHubPopup(
             convoyChatRepository = convoyChatRepository,
             friendsRepository = friendsRepository,
             dmRepository = dmRepository,
-            notificationsRepository = notificationsRepository,
-            notificationsCoordinator = notificationsCoordinator,
             communityUnread = communityUnread,
             convoysUnread = convoysUnread,
             friendsUnread = friendsUnread,
-            notificationsUnread = notificationsUnread,
             onClose = onClose,
             // The panel's card already sits below the status bar, so the content
             // must NOT add the inset again.
@@ -626,8 +610,6 @@ fun ChatHubPopup(
             blockingRepository = blockingRepository,
             chatRepliesEnabled = chatRepliesEnabled,
             pushDeepLink = pushDeepLink,
-            convoyLink = convoyLink,
-            onOpenEvent = onOpenEvent,
         )
     }
 }
@@ -635,7 +617,7 @@ fun ChatHubPopup(
 /**
  * Shared hub body: a tab row switching between the
  * COMMUNITY channel, the caller's CONVOY channels, FRIENDS (the existing 1:1 DMs),
- * and the in-app NOTIFICATIONS inbox — plus, inside a sub-screen only, a top bar
+ * and the shared CLUB channel — plus, inside a sub-screen only, a top bar
  * carrying Back and the conversation's name. Rendered inside either the
  * full-screen [ChatHubRoute] surface or the translucent [ChatHubPopup].
  *
@@ -649,7 +631,7 @@ fun ChatHubPopup(
  * Friends and Convoys have a second level (a list → a thread/channel); that
  * nested navigation is local state here, and system Back pops it before closing
  * the whole hub. Each channel/inbox is wired to its own backend via the reused
- * routes ([ConversationListRoute]/[ChatRoute], [NotificationsRoute],
+ * routes ([ConversationListRoute]/[ChatRoute],
  * [CommunityChannelRoute], [ConvoyChannelRoute]). Any repository may be null in a
  * config-less build; that tab then renders an informational placeholder.
  *
@@ -676,24 +658,18 @@ private fun ChatHubContent(
     // channel.
     friendsRepository: FriendsRepository?,
     dmRepository: DmRepository?,
-    notificationsRepository: NotificationsRepository?,
-    notificationsCoordinator: NotificationsCoordinator?,
+
     // Hoisted from AuthenticatedApp, which already collects observeUnread(uid) to
     // drive the map chat-bubble dot. Passed in (not re-subscribed here) so a
     // single Firestore listener backs both the bubble and this tab's dot.
     communityUnread: Boolean,
-    // Per-tab unread dots for the Convoys (any convoy with unread), Friends (any
-    // DM with unread) and Notifications (any unread inbox item) sections. Derived
-    // from listeners hoisted in AuthenticatedApp that run while the indicator can
-    // be seen. Note this is NOT one shared subscription per section: the Friends
-    // and Notifications PAGES (ConversationListRoute / NotificationsRoute) start
-    // their OWN inbox listeners when opened, so on those two pages the hoisted
-    // dot-listener briefly overlaps with the on-page listener. The Convoys dot is
+    // Per-tab dots reuse the shell-owned unread streams. Opening the Friends
+    // inbox starts its existing conversation listener; no Notifications stream
+    // or inbox is composed by Chat. The Convoys dot is
     // an aggregate over ONE userPrivate listener (convoyChatRepository.observeAnyUnread),
     // separate from the per-convoy count each open convoy channel shows.
     convoysUnread: Boolean,
     friendsUnread: Boolean,
-    notificationsUnread: Boolean,
     onClose: () -> Unit,
     applyStatusBarInset: Boolean,
     // When true the hub draws a Back arrow at the top-left even at HUB level (not
@@ -710,8 +686,7 @@ private fun ChatHubContent(
     // inline-reply entry point is gated end-to-end. Off = the hub behaves as before.
     chatRepliesEnabled: Boolean = false,
     pushDeepLink: PushDeepLink? = null,
-    convoyLink: ConvoyNotificationLink? = null,
-    onOpenEvent: ((String) -> Unit)? = null,
+
 ) {
     // Normalized once so this body — and therefore the full chat route — reads a
     // blank-id convoy link exactly as the peek does: as no destination (Community),
@@ -722,16 +697,23 @@ private fun ChatHubContent(
     // pager below opens on the matching page with no scroll animation). Absent a
     // link this is Community, the default. rememberSaveable so a swipe/tap survives
     // recomposition and rotation.
-    var selectedTab by rememberSaveable {
+    var savedTab by rememberSaveable {
         mutableStateOf(chatHubLandingTab(landingLink?.target))
     }
 
-    // The swipe pager over the four sections. Its page index is [ChatTab.ordinal],
+    // Old saved Notifications selection safely returns to Community; its inbox
+    // is now reached through the map profile menu or its existing push route.
+    val selectedTab = savedTab.takeIf { it in ChatTab.visibleEntries } ?: ChatTab.Community
+
+    // The swipe pager over the four sections. Its page index is [chatHubPage],
     // so page and selected tab are the same value. Seeded to the selected tab so a
     // deep link lands on its page immediately rather than animating in from
     // Community.
-    val pagerState =
-        rememberPagerState(initialPage = selectedTab.ordinal) { ChatTab.entries.size }
+    // Discard the old five-page numeric pager state; otherwise its retired page
+    // 3 could restore as Club, or its old Club page 4 could be out of bounds.
+    val pagerState = key("chat-message-pages-v2") {
+        rememberPagerState(initialPage = chatHubPage(selectedTab)) { ChatTab.visibleEntries.size }
+    }
     val scope = rememberCoroutineScope()
 
     // The pager is the single source of truth for which section is showing:
@@ -754,7 +736,7 @@ private fun ChatHubContent(
     // half-way. Scrolling from a plain coroutine instead runs to completion.
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.currentPage }.collect { page ->
-            selectedTab = ChatTab.entries[page]
+            ChatTab.visibleEntries.getOrNull(page)?.let { savedTab = it }
         }
     }
 
@@ -780,8 +762,8 @@ private fun ChatHubContent(
             // from Community. On the initial open the pager was seeded to this same
             // page, so this is a no-op; it only bites if a newer link arrives while
             // the hub is already open. selectedTab follows via the snapshotFlow.
-            if (pagerState.currentPage != landing.ordinal) {
-                pagerState.scrollToPage(landing.ordinal)
+            if (pagerState.currentPage != chatHubPage(landing)) {
+                pagerState.scrollToPage(chatHubPage(landing))
             }
             // Normalization guarantees a non-blank id for a CONVOY_CHAT link here.
             if (landingLink.target == PushTarget.CONVOY_CHAT) {
@@ -895,15 +877,15 @@ private fun ChatHubContent(
             if (!inSubScreen) {
                 ChatChannelStrip(
                     selected = selectedTab,
-                    unread = listOf(communityUnread, convoysUnread, friendsUnread, notificationsUnread, false),
-                    onSelect = { scope.launch { pagerState.animateScrollToPage(it.ordinal) } },
+                    unread = listOf(communityUnread, convoysUnread, friendsUnread, false),
+                    onSelect = { scope.launch { pagerState.animateScrollToPage(chatHubPage(it)) } },
                     onBack = if (showHubBackArrow) onClose else null,
                 )
             }
 
             // The four sections live in a HorizontalPager so the member can SWIPE
             // between them, not only tap the row above. Pages are addressed by
-            // [ChatTab.ordinal], the same order the tab row is built in, so the tab
+            // [chatHubPage], the same order the tab row is built in, so the tab
             // indicator and the pager page are the one shared index.
             //
             // Swipe is disabled while a sub-screen (an open DM thread or convoy
@@ -922,8 +904,7 @@ private fun ChatHubContent(
             // beyondViewportPageCount is deliberately left at its default of 0, so
             // ONLY the section(s) actually on screen are composed. Each section
             // subscribes as soon as it composes — CommunityChannelRoute collects
-            // observeMessages() (and fires markRead()), NotificationsRoute collects
-            // observeNotifications(), ConversationListRoute collects
+            // observeMessages() (and fires markRead()), ConversationListRoute collects
             // observeConversations(), ConvoyListRoute calls listConvoys() — so
             // prefetching a neighbour would open Firestore listeners and spend a
             // callable for tabs the member never opens, on their battery and our
@@ -940,9 +921,9 @@ private fun ChatHubContent(
                 state = pagerState,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 userScrollEnabled = !inSubScreen,
-                key = { ChatTab.entries[it] },
+                key = { ChatTab.visibleEntries[it] },
             ) { page ->
-                when (ChatTab.entries[page]) {
+                when (ChatTab.visibleEntries[page]) {
                     ChatTab.Club -> com.kungsbackacarcommunity.app.clubs.ClubChatRoute(uid)
 
                     ChatTab.Community ->
@@ -1028,25 +1009,8 @@ private fun ChatHubContent(
                             TabPlaceholder(stringResource(R.string.chatHub_unavailable))
                         }
 
-                    ChatTab.Notifications ->
-                        if (notificationsRepository != null) {
-                            NotificationsRoute(
-                                repository = notificationsRepository,
-                                coordinator = notificationsCoordinator,
-                                uid = uid,
-                                // The inbox has no Back of its own inside the hub;
-                                // closing routes through the hub's close.
-                                onBack = onClose,
-                                convoyLink = convoyLink,
-                                onOpenEvent = onOpenEvent,
-                                // The Notifications TAB above already says where
-                                // the member is; a "Notifications" header under it
-                                // would only repeat it.
-                                showTitle = false,
-                            )
-                        } else {
-                            TabPlaceholder(stringResource(R.string.chatHub_unavailable))
-                        }
+                    // Not in visibleEntries: retained only for restoring old state.
+                    ChatTab.Notifications -> Unit
                 }
             }
         }
