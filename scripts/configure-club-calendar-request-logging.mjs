@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Metadata-only planner/verifier. Logging v2 provides no sink etag CAS: never write. */
+/** Dry-run default; explicit apply can only create one independent named exclusion. */
 import { spawnSync } from 'node:child_process';
 import { existsSync, realpathSync, mkdtempSync, chmodSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
@@ -20,11 +20,9 @@ export const FILTER = [
 ].join(' AND ');
 export const PERMISSIONS = [
   'logging.sinks.list',
-  'logging.sinks.get',
-  'logging.sinks.update',
   'logging.exclusions.list',
+  'logging.exclusions.get',
   'logging.exclusions.create',
-  'logging.exclusions.update',
 ];
 const ROOT = `projects/${PROJECT}/locations/${REGION}`;
 const CONTROLS = ['driver-clubsManage', 'crownHunt-submitClaim'];
@@ -56,7 +54,7 @@ export function parseArgs(args) {
   return options;
 }
 
-/** The only POST is a permission query. There is deliberately no write route. */
+/** Metadata routes only. Creation is a separate explicitly enabled capability. */
 export function createMetadataReader(token, transport = fetch) {
   return async (kind, pageToken = '') => {
     if (process.env.KCC_TEST_NO_CLOUD === '1' && transport === fetch) fail('transport', 'no-cloud');
@@ -64,6 +62,7 @@ export function createMetadataReader(token, transport = fetch) {
       project: `https://cloudresourcemanager.googleapis.com/v1/projects/${PROJECT}`,
       sinks: `https://logging.googleapis.com/v2/projects/${PROJECT}/sinks`,
       exclusions: `https://logging.googleapis.com/v2/projects/${PROJECT}/exclusions`,
+      'managed-exclusion': `https://logging.googleapis.com/v2/projects/${PROJECT}/exclusions/${EXCLUSION_NAME}`,
       permissions: `https://cloudresourcemanager.googleapis.com/v1/projects/${PROJECT}:testIamPermissions`,
       ...Object.fromEntries(
         [...CONTROLS, FUNCTION_ID].map((id) => [
@@ -94,7 +93,7 @@ export function createMetadataReader(token, transport = fetch) {
     } catch {
       fail(kind, 'metadata-transport-failed');
     }
-    if (kind === FUNCTION_ID && response.status === 404) return null;
+    if ([FUNCTION_ID, 'managed-exclusion'].includes(kind) && response.status === 404) return null;
     if (!response.ok)
       fail(kind, response.status === 403 ? 'permission-or-api-denied' : 'metadata-http-failed');
     try {
@@ -145,11 +144,51 @@ export async function collectSnapshot(read) {
     exclusions: await pages(read, 'exclusions'),
     controls: await Promise.all(CONTROLS.map((id) => read(id))),
     feed: await read(FUNCTION_ID),
+    managed: await read('managed-exclusion'),
     permissions: { ...permissions, permissions: permissions.permissions ?? [] },
   };
 }
 
-export async function collectLive(gcloud) {
+/** No arbitrary URL, body, update, delete, retry or sink replacement is exposed. */
+export function createExclusionWriter(token, allowCreate = false, transport = fetch) {
+  return async () => {
+    if (allowCreate !== true) fail('create', 'explicit-apply-required');
+    if (process.env.KCC_TEST_NO_CLOUD === '1' && transport === fetch) fail('create', 'no-cloud');
+    let response;
+    try {
+      response = await transport(
+        `https://logging.googleapis.com/v2/projects/${PROJECT}/exclusions`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'x-goog-user-project': PROJECT,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ name: EXCLUSION_NAME, filter: FILTER, disabled: false }),
+          redirect: 'error',
+          signal: AbortSignal.timeout(40_000),
+        },
+      );
+    } catch {
+      fail('create', 'transport-failed-create-outcome-unknown');
+    }
+    // A collision is not an update opportunity. Do not read its error payload.
+    if (response.status === 409) return 'already-exists';
+    if (!response.ok)
+      fail('create', response.status === 403 ? 'permission-or-api-denied' : 'http-failed');
+    let result;
+    try {
+      result = await response.json();
+    } catch {
+      fail('create', 'invalid-json-create-outcome-unknown');
+    }
+    if (!managedMatches(result)) fail('create', 'unexpected-created-exclusion');
+    return 'created';
+  };
+}
+
+export async function openLiveSession(gcloud, allowCreate = false) {
   if (process.env.KCC_TEST_NO_CLOUD === '1') fail('auth', 'no-cloud');
   let result;
   try {
@@ -169,8 +208,13 @@ export async function collectLive(gcloud) {
   }
   if (result.error || result.status !== 0 || !result.stdout?.trim())
     fail('auth', 'credential-command-failed');
-  // Token remains in this closure, never in the snapshot or the private backup.
-  return collectSnapshot(createMetadataReader(result.stdout.trim()));
+  // Token remains in these closures, never in snapshots or private backups.
+  const read = createMetadataReader(result.stdout.trim());
+  return {
+    collect: () => collectSnapshot(read),
+    get: () => read('managed-exclusion'),
+    create: createExclusionWriter(result.stdout.trim(), allowCreate),
+  };
 }
 
 export function exclusionMatches(exclusion) {
@@ -181,6 +225,25 @@ export function exclusionMatches(exclusion) {
     exclusion.filter.replace(/\s+/g, ' ').trim() === FILTER
   );
 }
+
+const managedMatches = (exclusion) =>
+  exclusion?.name === EXCLUSION_NAME && exclusionMatches(exclusion);
+const canonical = (value) =>
+  JSON.stringify(value, function (key, entry) {
+    return object(entry)
+      ? Object.fromEntries(
+          Object.keys(entry)
+            .sort()
+            .map((name) => [name, entry[name]]),
+        )
+      : entry;
+  });
+const exclusionState = ({ name, filter, description = '', disabled = false }) => ({
+  name,
+  filter,
+  description,
+  disabled,
+});
 
 function requiredIsAuditOnly(sink) {
   if (
@@ -220,6 +283,7 @@ export function buildPlan(snapshot) {
     !Array.isArray(snapshot.sinks) ||
     !Array.isArray(snapshot.exclusions) ||
     !Array.isArray(snapshot.controls) ||
+    !Object.hasOwn(snapshot, 'managed') ||
     !Array.isArray(snapshot.permissions?.permissions) ||
     snapshot.permissions.permissions.some((permission) => typeof permission !== 'string')
   )
@@ -254,6 +318,13 @@ export function buildPlan(snapshot) {
     )
       fail('plan', 'unexpected-exclusion-metadata');
   }
+  for (const exclusions of [
+    snapshot.exclusions,
+    ...snapshot.sinks.map((sink) => sink.exclusions ?? []),
+  ]) {
+    if (new Set(exclusions.map((item) => item.name)).size !== exclusions.length)
+      fail('plan', 'duplicate-exclusion-name');
+  }
   const required = snapshot.sinks.find((sink) => sink.name === '_Required');
   const defaultSink = snapshot.sinks.find((sink) => sink.name === '_Default');
   if (!requiredIsAuditOnly(required)) blockers.push('required-audit-filter-unverified');
@@ -266,6 +337,10 @@ export function buildPlan(snapshot) {
   if (snapshot.feed !== null && !feedMappingVerified)
     blockers.push('feed-function-mapping-mismatch');
   const targets = snapshot.sinks.filter((sink) => sink.name !== '_Required');
+  // Atomic project exclusion creation affects only _Default. Never attempt to
+  // fix or assume safety of custom/ancestor routes, even disabled ones.
+  if (targets.some((sink) => sink.name !== '_Default'))
+    blockers.push('additional-sinks-require-review');
   let conflicts = 0;
   const targetPlans = targets.map((sink, index) => {
     const exclusions = sink.exclusions ?? [];
@@ -273,25 +348,38 @@ export function buildPlan(snapshot) {
     return {
       sink: sink.name === '_Default' ? '_Default' : `custom-${index + 1}`,
       disabled: sink.disabled === true,
-      covered: exclusions.some(exclusionMatches),
+      covered: exclusions.some(managedMatches),
     };
   });
   if (conflicts) blockers.push('managed-exclusion-name-conflict');
-  const defaultCoverage = (defaultSink?.exclusions ?? []).some(exclusionMatches);
-  if (defaultCoverage !== snapshot.exclusions.some(exclusionMatches))
+  const defaultExclusions = defaultSink?.exclusions ?? [];
+  const byName = (items) => items.map(exclusionState).sort((a, b) => a.name.localeCompare(b.name));
+  if (canonical(byName(defaultExclusions)) !== canonical(byName(snapshot.exclusions)))
     blockers.push('default-exclusion-inventory-mismatch');
-  const needsChange = targetPlans.some((target) => !target.covered);
+  const named = snapshot.exclusions.find((item) => item.name === EXCLUSION_NAME) ?? null;
+  if (
+    (named !== null && !managedMatches(named)) ||
+    (snapshot.managed !== null && !managedMatches(snapshot.managed))
+  )
+    blockers.push('managed-exclusion-name-conflict');
+  if (
+    canonical(named && exclusionState(named)) !==
+    canonical(snapshot.managed && exclusionState(snapshot.managed))
+  ) {
+    blockers.push('named-exclusion-readback-mismatch');
+  }
+  const needsChange = !managedMatches(named);
+  if (needsChange && snapshot.exclusions.length >= 10) blockers.push('default-exclusion-capacity');
   const granted = new Set(snapshot.permissions.permissions);
-  const missingReadPermissions = ['logging.sinks.list', 'logging.exclusions.list'].filter(
-    (permission) => !granted.has(permission),
-  );
+  const missingReadPermissions = [
+    'logging.sinks.list',
+    'logging.exclusions.list',
+    'logging.exclusions.get',
+  ].filter((permission) => !granted.has(permission));
   const missingWritePermissions =
-    needsChange && !granted.has('logging.sinks.update') ? ['logging.sinks.update'] : [];
+    needsChange && !granted.has('logging.exclusions.create') ? ['logging.exclusions.create'] : [];
   if (missingReadPermissions.length || missingWritePermissions.length)
     blockers.push('insufficient-existing-permissions');
-  // LogSink/LogExclusion expose no etag. sinks.update exposes no conditional
-  // precondition. Even a synthetic etag in a response does not enable CAS.
-  if (needsChange) blockers.push('sink-etag-cas-unavailable');
   const loggingCoverageVerified = blockers.length === 0 && targets.length > 0 && !needsChange;
   return {
     project: PROJECT,
@@ -301,16 +389,50 @@ export function buildPlan(snapshot) {
     proposedExclusion: { name: EXCLUSION_NAME, filter: FILTER, disabled: false },
     nonRequiredSinkCount: targets.length,
     targets: targetPlans,
-    blockers,
+    blockers: [...new Set(blockers)],
     missingPermissions: [...missingReadPermissions, ...missingWritePermissions],
     controlMappingsVerified,
     feedMappingVerified,
     loggingCoverageVerified,
     activationReady: false,
     sinkEtagCasSupported: false,
-    writeImplemented: false,
-    status: loggingCoverageVerified ? 'covered-metadata-snapshot' : 'blocked',
+    writeImplemented: true,
+    strategy: 'atomic-create-only',
+    canCreate: blockers.length === 0 && needsChange,
+    status: blockers.length
+      ? 'blocked'
+      : loggingCoverageVerified
+        ? 'covered-metadata-snapshot'
+        : 'would-create',
   };
+}
+
+/** Creation cannot overwrite existing exclusions. Detect any unrelated drift without rollback. */
+export function verifyPreserved(before, after) {
+  if (canonical(before.project) !== canonical(after.project))
+    fail('verify', 'project-or-parent-changed');
+  const beforeNames = before.sinks.map((sink) => sink.name).sort();
+  if (canonical(beforeNames) !== canonical(after.sinks.map((sink) => sink.name).sort()))
+    fail('verify', 'sink-inventory-changed');
+  for (const sink of before.sinks) {
+    const next = after.sinks.find((item) => item.name === sink.name);
+    const settings = (item) =>
+      Object.fromEntries(
+        Object.entries(item).filter(
+          ([key]) => key !== 'exclusions' && !(item.name === '_Default' && key === 'updateTime'),
+        ),
+      );
+    if (canonical(settings(sink)) !== canonical(settings(next)))
+      fail('verify', 'sink-settings-changed');
+    for (const existing of sink.exclusions ?? []) {
+      if (!(next.exclusions ?? []).some((item) => canonical(item) === canonical(existing)))
+        fail('verify', 'existing-sink-exclusion-changed');
+    }
+  }
+  for (const existing of before.exclusions) {
+    if (!after.exclusions.some((item) => canonical(item) === canonical(existing)))
+      fail('verify', 'existing-project-exclusion-changed');
+  }
 }
 
 /** Backups can contain private filters/destinations; never write them in any Git checkout. */
@@ -344,38 +466,73 @@ export function writePrivateBackup(snapshot, base = '/tmp') {
 export async function main(
   args,
   {
-    collect = collectLive,
+    open = openLiveSession,
+    collect,
+    create,
+    get,
     backup = writePrivateBackup,
     log = console.log,
     error = console.error,
   } = {},
 ) {
+  let createAttempted = false;
   try {
     const options = parseArgs(args);
     if (options.help) {
       log(
-        'Usage: node scripts/configure-club-calendar-request-logging.mjs [--verify | --apply] [--gcloud=/absolute/path] [--backup-dir=/private/existing/directory]\nDefault: read-only metadata plan. Logging v2 has no sink etag CAS; --apply cannot write.',
+        'Usage: node scripts/configure-club-calendar-request-logging.mjs [--verify | --apply] [--gcloud=/absolute/path] [--backup-dir=/private/existing/directory]\nDefault: read-only plan. --apply may only create the fixed independent _Default exclusion after complete preflight.',
       );
       return 0;
     }
-    const snapshot = await collect(options.gcloud);
-    const plan = buildPlan(snapshot);
+    const session = collect ? { collect, create, get } : await open(options.gcloud, options.apply);
+    const snapshot = await session.collect();
+    let plan = buildPlan(snapshot);
     const backupDirectory = backup(snapshot, options.backupDir);
+    let outcome =
+      options.apply && plan.loggingCoverageVerified ? 'already-present' : 'not-attempted';
+    let precreateBackupDirectory;
+    if (options.apply && plan.canCreate) {
+      // Re-inventory immediately before the independent create. No saved sink
+      // snapshot is ever sent to Logging, and no existing resource is modified.
+      const fresh = await session.collect();
+      verifyPreserved(snapshot, fresh);
+      plan = buildPlan(fresh);
+      precreateBackupDirectory = backup(fresh, options.backupDir);
+      if (plan.blockers.length) fail('precreate', 'inventory-no-longer-safe');
+      if (plan.canCreate) {
+        if (typeof session.create !== 'function' || typeof session.get !== 'function')
+          fail('create', 'unavailable-capability');
+        createAttempted = true;
+        outcome = await session.create();
+        if (!managedMatches(await session.get()))
+          fail('verify', 'created-or-conflicting-resource-not-exact');
+        const after = await session.collect();
+        verifyPreserved(snapshot, after);
+        verifyPreserved(fresh, after);
+        plan = buildPlan(after);
+        if (!plan.loggingCoverageVerified) fail('verify', 'all-sink-coverage-not-confirmed');
+      } else outcome = 'already-present-on-refresh';
+    }
     log(
       JSON.stringify({
         ...plan,
-        mode: options.apply ? 'apply-refused-or-noop' : options.verify ? 'verify' : 'dry-run',
+        mode: options.apply ? 'apply' : options.verify ? 'verify' : 'dry-run',
+        outcome,
         backupDirectory,
+        ...(precreateBackupDirectory ? { precreateBackupDirectory } : {}),
       }),
     );
-    if (options.apply && !plan.loggingCoverageVerified)
-      error('[apply] safe-sink-cas-unavailable-or-coverage-blocked; no configuration was changed.');
-    return plan.loggingCoverageVerified ? 0 : 2;
+    if (options.apply && plan.blockers.length)
+      error('[apply] coverage-or-preflight-blocked; no create was attempted.');
+    return plan.blockers.length || (options.verify && !plan.loggingCoverageVerified) ? 2 : 0;
   } catch (cause) {
     error(
-      cause instanceof SafeError
+      (cause instanceof SafeError
         ? cause.message
-        : '[metadata] unexpected-failure; raw output withheld.',
+        : '[metadata] unexpected-failure; raw output withheld.') +
+        (createAttempted
+          ? ' Create may have committed; rerun --verify. No rollback or automatic retry.'
+          : ''),
     );
     return 1;
   }

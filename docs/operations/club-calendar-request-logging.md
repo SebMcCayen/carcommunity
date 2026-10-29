@@ -1,24 +1,33 @@
 # Personal club calendar request-log prerequisite
 
-**Current result: blocked. No Logging mutation is implemented or executed.**
-Cloud Logging v2's `LogSink` and `LogExclusion` have no etag. The sink update
-method exposes an update mask, but no documented conditional-write/CAS
-precondition. An update mask is not concurrency protection. Reading `updateTime`
-twice is not CAS, and synthesizing an `If-Match` header is not a documented fix.
-The requested sink-etag preservation guarantee therefore cannot be implemented
-with this API. The planner refuses to weaken it or overwrite sink exclusions.
+The helper defaults to a read-only metadata plan. After PR review/merge, the
+parent can use explicit `--apply` to create **one independent named exclusion**
+on project `_Default`, provided the entire owner/sink inventory is safe. No live
+apply is performed by this implementation task.
 
-Necessary safe shared-club Firebase operations are already authorized. This is
-a technical concurrency blocker, not a request for redundant user approval.
-Parent review/PR merge must precede any future operational configuration change.
+`projects.exclusions.create` requires a name not already used in its parent.
+Creating this independent resource does not read/replace a sink's exclusions
+array or modify any existing exclusion. The server arbitrates name uniqueness;
+HTTP 409 leads to exact named-resource verification, never update or overwrite.
+Sink etag CAS is unnecessary for this additive operation. This supersedes the
+initial planner's overly broad `sink-etag-cas-unavailable` blocker. Existing
+resources still have no documented etag update protection, so updating/deleting
+an exclusion or rewriting a sink remains forbidden here.
 
-## Exact proposed exclusion
+Necessary safe shared-club Firebase operations remain authorized. Parent
+review/merge precedes production execution; this procedure adds no redundant
+approval request. The worker must not execute live `--apply`.
 
-Function registry: `clubCalendar.feed`; deployed callable/function ID:
-`clubCalendar-feed`; expected Cloud Run service: `clubcalendar-feed`, region
-`europe-west1`, project `kungsbacka-car-community` (`187456469503`). The HTTP feed
-is not a Firebase callable; `clubCalendar-manage` is separate and must remain
-logged normally.
+## Exact exclusion and scope
+
+- Project: `kungsbacka-car-community`, number `187456469503`.
+- Region: `europe-west1`.
+- Function registry: `clubCalendar.feed`; deployed function ID `clubCalendar-feed`.
+- Expected Cloud Run service: `clubcalendar-feed`.
+- New exclusion name: `club-calendar-feed-request-url`.
+
+The HTTP feed is separate from the `clubCalendar-manage` callable. Its enabled
+exclusion uses this fixed predicate:
 
 ```text
 logName="projects/kungsbacka-car-community/logs/run.googleapis.com%2Frequests"
@@ -28,124 +37,140 @@ AND resource.labels.location="europe-west1"
 AND resource.labels.service_name="clubcalendar-feed"
 ```
 
-Proposed exclusion name: `club-calendar-feed-request-url`, enabled. Apply the
-same exact predicate to **every non-`_Required` sink**, not just `_Default`.
-The predicate never needs a token, token length, URL value, response status,
-severity, revision, path, sampling function or request method. It covers future
-revisions and DEBUG through ERROR/CRITICAL request records, including rejected
-and failed requests, because those URLs can carry the bearer too.
+No token, URL, path, status, method, severity or sampling condition is needed.
+All future revisions and all statuses/severities of this feed's request stream
+are covered. Application stdout/stderr errors/events, audit/system logs, calendar
+management and other functions are unaffected. Keeping ERROR request records
+would keep their secret URLs. Application code must independently avoid logging
+request/token/error objects.
 
-This removes only this service's **request-log stream**. It retains application
-stdout/stderr errors and events, system/container logs, Cloud Audit logs and all
-other functions, including calendar management. Keeping the feed's ERROR request
-records would retain their secret URLs; that exception must not be added.
-Application code must independently avoid logging URL/token/error objects.
+## Observations and current acceptance limits
 
-## Read-only evidence on 2026-10-29
+Read-only inspection on 2026-10-29 found the correct active project, no parent,
+only `_Required` and `_Default`, and zero exclusions. No other project exports
+were returned; pagination completed. Existing control metadata verified
+`driver-clubsManage` → `driver-clubsmanage`, `driver-clubsGet` → `driver-clubsget`,
+and `crownHunt-submitClaim` → `crownhunt-submitclaim`. These establish the mixed-case
+mapping pattern; the feed itself was not deployed. Verify its actual
+`serviceConfig.service` after deployment before activation.
 
-- Project is active, correct number, no organization/folder parent.
-- Two sinks: `_Required` and `_Default`; zero exclusions. No other project sinks
-  or exports were returned and pagination was complete. Destinations/filters
-  were inspected only in memory and are not reproduced here.
-- Metadata verifies `driver-clubsManage` → `driver-clubsmanage`,
-  `driver-clubsGet` → `driver-clubsget`, and
-  `crownHunt-submitClaim` → `crownhunt-submitclaim`. The mixed-case prefix/suffix
-  examples support the expected lower-case calendar service mapping. The feed
-  itself returns metadata 404 because it is not deployed; verify its actual
-  `serviceConfig.service` after deployment before any readiness decision.
-- Existing credentials report `logging.sinks.list/get/update` and
-  `logging.exclusions.list/create/update`. The blocker is unsupported sink CAS,
-  not a missing role. No IAM change or API enablement is needed or attempted.
-- Public Logging discovery schema confirms no sink/exclusion etag and no etag
-  update parameter. Live sinks have neither etag nor `updateTime`. These dated
-  observations must be refreshed; they are not permanent rollout guarantees.
-- The real planner dry-run completed with exit 2, the sole blocker
-  `sink-etag-cas-unavailable`, zero missing permissions, verified control mappings
-  and one uncovered non-required sink (`_Default`). Private backup creation
-  succeeded. This expected fail-closed result is not an applied exclusion.
+Those dated facts are not future guarantees: the helper rereads all metadata.
+Initial checks found relevant Logging permissions, but create-only execution
+specifically requires `logging.exclusions.create`, plus metadata permissions
+`logging.sinks.list`, `logging.exclusions.list` and `logging.exclusions.get`.
+It never needs sink update, exclusion update/delete, IAM modification or API
+enablement. Missing permissions are reported, not repaired.
 
-No log entry, request URL, calendar bearer, user image/text, log content or secret
-URL was read. Authentication output stayed in process memory.
+No log entries, request URLs, user content or calendar bearer are read by this
+procedure. No real feed tokens were active in the inspected rollout; there is no
+history deletion/cleanup step. Exclusions do not erase historical entries.
 
-## Planner and private backup
+On 2026-10-30 local time, the create-only helper's real **read-only** dry-run
+exited 0 with `would-create`, `canCreate:true`, no blockers or missing permissions,
+verified control mappings and an undeployed feed. A private backup was created;
+no exclusion was applied. Mock-based apply/conflict/preservation tests are a
+separate evidence layer and do not claim live create or provider acceptance.
+
+## Plan, verify, and parent-only apply
+
+From the reviewed checkout:
 
 ```sh
 node scripts/configure-club-calendar-request-logging.mjs \
   --gcloud=/home/sebmccayen/google-cloud-sdk/bin/gcloud
 ```
 
-Default mode performs only metadata reads, plus the read-only
-`projects:testIamPermissions` query. It paginates all project sinks/exclusions
-(bounded at 20 pages), verifies project identity, known deployment mappings,
-`_Required`'s documented audit-only predicate and every non-required sink.
-An ancestor, unreadable/incomplete inventory, mapping drift, name collision,
-disabled/partial/sampled exclusion, inconsistent `_Default` inventory or missing
-permission blocks verification. Disabled custom sinks also require coverage, so
-simply enabling one later cannot silently bypass this inventory's exclusion.
+A safe missing exclusion reports `would-create`, exit 0, with
+`loggingCoverageVerified:false`. `--verify` requires complete existing coverage
+and returns exit 2 if missing or blocked. Exit 1 indicates an operational or
+verification failure. Full configuration, export destinations, identities and
+API error bodies are never echoed. Custom sinks receive ordinal labels.
 
-The planner checks every export without echoing its name, destination, filter,
-writer identity or error response. Custom sinks receive anonymous ordinal labels.
-It accepts only the exact proposed predicate as proof of coverage; it does not
-attempt to prove arbitrary Logging filter logic safe. Existing configuration is
-preserved because the program has no mutation routes.
+Only the parent, after reviewed PR merge, may execute:
 
-Each successful inventory produces an exclusive private metadata backup under
-`/tmp/cc-club-calendar-logging-*`: directory mode `0700`, `metadata.json` mode
-`0600`. `--backup-dir=/absolute/existing/directory` selects another private
-location. All Git checkouts and symlink paths resolving inside one are rejected.
-The printed path is for the operator; never attach the raw backup to a PR or
-commit it. Backups contain private export configuration but no access token or
-log entries. They support review, not blind policy restoration.
+```sh
+node scripts/configure-club-calendar-request-logging.mjs \
+  --gcloud=/home/sebmccayen/google-cloud-sdk/bin/gcloud --apply
+```
 
-`--verify` repeats the complete inventory and all-sink coverage check. Exit codes:
-0 = covered metadata snapshot; 2 = known safety/coverage blocker; 1 = failed
-metadata/argument/backup check. `--apply` currently **refuses** missing coverage
-with exit 2 and performs no writes. If all exclusions already match, it is a
-verification-only no-op. Even synthetic/newly exposed etag fields cannot unlock
-an unimplemented CAS write path.
+The only possible configuration write is:
 
-`loggingCoverageVerified` attests only to that snapshot. `feedMappingVerified`
-requires the deployed feed's exact resource mapping. `activationReady` remains
-false: upstream proxies/load balancers and disposable-token acceptance are
-outside this metadata-only check. Parent/Zeno own
-`config/sharedClubs.calendarSubscriptionsReady`; keep it default false.
+```text
+POST https://logging.googleapis.com/v2/projects/kungsbacka-car-community/exclusions
+{"name":"club-calendar-feed-request-url","filter":"<the exact fixed predicate above>","disabled":false}
+```
 
-## Remaining operational design decision
+The wrapper constructs the actual full predicate; it accepts no project, sink,
+name, predicate, body or destination override. Use the wrapper, not a manually
+constructed request containing credentials. Access tokens remain in memory.
+No sink PATCH/PUT, exclusion update/delete, bulk policy write, rollback or
+automatic POST retry is exposed.
 
-Do not deploy the feed until the URL-retention prerequisite has a reviewed,
-supported solution. Adding an exclusion through `gcloud logging sinks update`
-rewrites the exclusions field without documented etag protection; a private
-backup and readback do not make it race-safe. Creating a project exclusion is a
-different, potentially reviewable create-only operation for `_Default`, but it
-does **not** cover custom/ancestor exports and must not silently substitute for
-the requested all-sink CAS operation. This revision implements neither workaround.
+Apply requires all of the following:
 
-The parent must resolve the concurrency design in the reviewed operational PR,
-or retain the deployment/readiness blocker. Do not add IAM, disable Logging
-project-wide, change destinations/retention, create paid infrastructure, relax
-App Check or replace existing configuration. A future solution must preserve all
-existing exclusions, protect every retaining route, verify unchanged unrelated
-settings, and re-inventory after application. No exclusion erases old logs.
+1. Exact active project ID/number and no organization/folder parent. Parent
+   presence is blocked because ancestor aggregate exports need separate review.
+2. A complete paginated inventory containing only `_Required` and `_Default`,
+   including `_Required`'s documented audit-only predicate. **Any extra sink,
+   including disabled sinks or apparently covered exports, blocks automatic
+   create**. Creating a project exclusion cannot protect another sink.
+3. Matching project exclusion-list, `_Default` exclusion-list and named-resource
+   GET inventories, and the existing metadata/create permissions. The documented
+   exclusion capacity must permit addition.
+4. An exclusive private backup, a fresh pre-create inventory, unchanged project
+   ownership/sink settings and preservation of every old exclusion. If another
+   actor already created the exact named exclusion, return a verified no-op.
+5. At most one independent create. A same-name disabled/different exclusion
+   blocks without modification. On 409, GET must show the exact enabled name and
+   predicate; existence alone is never success.
+6. Fresh named GET and complete post-create inventory. Every prior sink setting,
+   destination, writer identity and old exclusion must survive. `_Default`'s
+   output-only update time may change because its child exclusion was added.
+   Independent concurrent exclusion additions are retained. New exports, changed
+   parents/settings or edited/removed old exclusions cause verification failure.
 
-## Focused no-cloud checks
+If create commits but a concurrent hierarchy/config change is observed, stop
+without claiming verified coverage and **do not roll back**. The new exclusion
+may remain; nothing is deleted. If POST times out, errors or returns unexpected
+JSON, do not retry automatically: run `--verify` and inspect metadata privately.
+Re-running apply is idempotent when the exact resource already exists.
+
+## Private backup and readiness
+
+Metadata backups are stored outside repositories under
+`/tmp/cc-club-calendar-logging-*`: directory `0700`, `metadata.json` `0600`.
+`--backup-dir=/absolute/existing/private/directory` selects another location.
+Git checkouts and symlink paths resolving inside them are rejected. The original
+and immediate pre-create snapshots each receive a private backup before POST.
+Never attach raw backups to a PR, print them or restore a whole saved config.
+They contain private export configuration but no access token or log entries.
+
+`loggingCoverageVerified` confirms only that metadata snapshot and narrow Logging
+route coverage. `feedMappingVerified` requires the deployed feed's actual service
+mapping. `activationReady` remains false: the parent/Zeno own
+`config/sharedClubs.calendarSubscriptionsReady` and must complete upstream
+proxy/load-balancer and disposable-token acceptance before activating it.
+No automatic readiness/config write is part of this helper.
+
+## Focused no-cloud validation
 
 ```sh
 node scripts/run-no-cloud.mjs -- node --test scripts/configure-club-calendar-request-logging.test.mjs
 ```
 
-Synthetic fixtures cover exact stream boundaries at all statuses/severities,
-other functions and audit/error streams, all exports including disabled sinks,
-pagination, metadata permissions/mapping drift, false CAS evidence, private
-backup modes/path guards, redaction and refusal/no-op behavior. No emulator,
-Gradle, production write, new service or live log-content test is involved.
+Synthetic tests cover stream boundaries across statuses/severities, the exact
+POST/body/explicit-apply boundary, 409 match and conflict, preservation of existing
+exclusions and unrelated settings, concurrent additions/parents/exports, missing
+permissions, pagination, private backups, redaction and uncertain-outcome handling.
+No production apply, emulator, Gradle, new paid infrastructure, broad logging
+change or history deletion is part of validation.
 
-## Official references verified 2026-10-29
+## Official references
 
-- [Cloud Run request logs and resource/service labels](https://docs.cloud.google.com/run/docs/logging)
-- [LogSink schema: no etag](https://docs.cloud.google.com/logging/docs/reference/v2/rest/v2/projects.sinks)
-- [Sink update parameters: updateMask, no CAS precondition](https://docs.cloud.google.com/logging/docs/reference/v2/rest/v2/projects.sinks/update)
-- [LogExclusion schema: no etag](https://docs.cloud.google.com/logging/docs/reference/v2/rest/v2/projects.exclusions)
-- [Project exclusion creation covers only Default](https://docs.cloud.google.com/logging/docs/reference/v2/rest/v2/projects.exclusions/create)
-- [Sink routing and immutable Required audit predicate](https://docs.cloud.google.com/logging/docs/routing/overview)
-- [Sink inventory scopes and pagination](https://docs.cloud.google.com/logging/docs/reference/v2/rest/v2/projects.sinks/list)
-- [Public API discovery schema](https://logging.googleapis.com/$discovery/rest?version=v2)
+- [Independent project exclusion creation in Default](https://docs.cloud.google.com/logging/docs/reference/v2/rest/v2/projects.exclusions/create)
+- [Create request requires a name unused in its parent](https://docs.cloud.google.com/java/docs/reference/google-cloud-logging/latest/com.google.cloud.logging.v2.ConfigClient)
+- [Named exclusion GET](https://docs.cloud.google.com/logging/docs/reference/v2/rest/v2/projects.exclusions/get)
+- [LogExclusion schema](https://docs.cloud.google.com/logging/docs/reference/v2/rest/v2/projects.exclusions)
+- [Cloud Run request stream and service labels](https://docs.cloud.google.com/run/docs/logging)
+- [Independent sink routing and Required audit predicate](https://docs.cloud.google.com/logging/docs/routing/overview)
+- [Sink inventory scopes/pagination](https://docs.cloud.google.com/logging/docs/reference/v2/rest/v2/projects.sinks/list)

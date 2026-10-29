@@ -13,10 +13,12 @@ import {
   PERMISSIONS,
   parseArgs,
   createMetadataReader,
+  createExclusionWriter,
   collectSnapshot,
   buildPlan,
   exclusionMatches,
   writePrivateBackup,
+  verifyPreserved,
   main,
 } from './configure-club-calendar-request-logging.mjs';
 
@@ -46,6 +48,7 @@ function fixture(covered = false) {
     exclusions: covered ? [exclusion()] : [],
     controls: [metadata('driver-clubsManage'), metadata('crownHunt-submitClaim')],
     feed: null,
+    managed: covered ? exclusion() : null,
     permissions: { permissions: [...PERMISSIONS] },
   };
 }
@@ -55,6 +58,7 @@ function readFixture(snapshot = fixture()) {
     if (kind === 'driver-clubsManage') return snapshot.controls[0];
     if (kind === 'crownHunt-submitClaim') return snapshot.controls[1];
     if (kind === FUNCTION_ID) return snapshot.feed;
+    if (kind === 'managed-exclusion') return snapshot.managed;
     return snapshot[kind];
   };
 }
@@ -127,15 +131,16 @@ test('filter targets exact feed service request stream across statuses and sever
   );
 });
 
-test('current missing exclusion is blocked by unsupported CAS even with synthetic etags', () => {
+test('current Default-only topology allows independent creation without a sink etag', () => {
   const f = fixture();
   f.sinks.forEach((sink) => {
     sink.etag = 'synthetic';
   });
   const plan = buildPlan(f);
-  assert.equal(plan.status, 'blocked');
-  assert.deepEqual(plan.blockers, ['sink-etag-cas-unavailable']);
-  assert.equal(plan.writeImplemented, false);
+  assert.equal(plan.status, 'would-create');
+  assert.deepEqual(plan.blockers, []);
+  assert.equal(plan.writeImplemented, true);
+  assert.equal(plan.canCreate, true);
   assert.equal(plan.sinkEtagCasSupported, false);
   assert.equal(plan.activationReady, false);
   assert.equal(JSON.stringify(plan).includes(PRIVATE), false);
@@ -160,7 +165,8 @@ test('all non-required sinks including disabled exports must carry exact exclusi
     sink.exclusions = [exclusion()];
   });
   plan = buildPlan(f);
-  assert.equal(plan.loggingCoverageVerified, true);
+  assert.equal(plan.loggingCoverageVerified, false);
+  assert.ok(plan.blockers.includes('additional-sinks-require-review'));
   assert.equal(plan.feedMappingVerified, false);
   assert.equal(plan.activationReady, false);
 });
@@ -253,7 +259,10 @@ test('wrong project, duplicate/foreign sink and malformed exclusions fail closed
 test('permission gaps and Default inventory disagreement are reported, never repaired', () => {
   const f = fixture();
   f.permissions.permissions = ['logging.sinks.list', 'logging.exclusions.list'];
-  assert.deepEqual(buildPlan(f).missingPermissions, ['logging.sinks.update']);
+  assert.deepEqual(buildPlan(f).missingPermissions, [
+    'logging.exclusions.get',
+    'logging.exclusions.create',
+  ]);
   assert.ok(buildPlan(f).blockers.includes('insufficient-existing-permissions'));
   const mismatch = fixture(true);
   mismatch.exclusions = [];
@@ -305,7 +314,8 @@ test('empty permission-query response is an explicit insufficient-permissions pl
   assert.deepEqual(plan.missingPermissions, [
     'logging.sinks.list',
     'logging.exclusions.list',
-    'logging.sinks.update',
+    'logging.exclusions.get',
+    'logging.exclusions.create',
   ]);
 });
 
@@ -372,8 +382,8 @@ test('backup is private, exclusive and outside Git checkouts, including symlink 
   }
 });
 
-test('CLI default/verify/apply are metadata-only; unsafe apply refuses and hides destinations', async () => {
-  for (const args of [[], ['--verify'], ['--apply']]) {
+test('CLI default and verify never create, and summaries hide destinations', async () => {
+  for (const args of [[], ['--verify']]) {
     const output = [];
     const errors = [];
     let backups = 0;
@@ -386,13 +396,13 @@ test('CLI default/verify/apply are metadata-only; unsafe apply refuses and hides
       log: (value) => output.push(value),
       error: (value) => errors.push(value),
     });
-    assert.equal(code, 2);
+    assert.equal(code, args.includes('--verify') ? 2 : 0);
     assert.equal(backups, 1);
     const plan = JSON.parse(output[0]);
-    assert.equal(plan.writeImplemented, false);
+    assert.equal(plan.writeImplemented, true);
     assert.equal(plan.activationReady, false);
     assert.equal(output.join('').includes(PRIVATE), false);
-    assert.equal(errors.length, args.includes('--apply') ? 1 : 0);
+    assert.equal(errors.length, 0);
   }
 });
 
@@ -408,6 +418,230 @@ test('CLI already-covered --apply is verification-only no-op, never writes', asy
     0,
   );
   assert.equal(JSON.parse(output[0]).loggingCoverageVerified, true);
+  assert.equal(JSON.parse(output[0]).outcome, 'already-present');
+});
+
+function applyFixture({
+  collision = false,
+  conflict = false,
+  mutateFresh,
+  mutateAfter,
+  failCreate = false,
+} = {}) {
+  const initial = fixture();
+  const old = {
+    name: 'synthetic-existing',
+    filter: 'resource.type="gce_instance"',
+    disabled: false,
+    description: 'synthetic-private-existing-description',
+  };
+  initial.sinks[1].exclusions.push(structuredClone(old));
+  initial.exclusions.push(structuredClone(old));
+  const current = structuredClone(initial);
+  const calls = { collect: 0, create: 0, get: 0, backups: 0 };
+  const output = [];
+  const errors = [];
+  const dependencies = {
+    collect: async () => {
+      calls.collect++;
+      if (calls.collect === 2) mutateFresh?.(current);
+      if (calls.collect === 3) mutateAfter?.(current);
+      return structuredClone(current);
+    },
+    create: async () => {
+      calls.create++;
+      if (failCreate) throw Error(PRIVATE);
+      const record = conflict ? { ...exclusion(), filter: 'severity>=ERROR' } : exclusion();
+      current.sinks[1].exclusions.push(structuredClone(record));
+      current.exclusions.push(structuredClone(record));
+      current.managed = record;
+      return collision ? 'already-exists' : 'created';
+    },
+    get: async () => {
+      calls.get++;
+      return structuredClone(current.managed);
+    },
+    backup: () => {
+      calls.backups++;
+      return '/tmp/synthetic-backup';
+    },
+    log: (value) => output.push(value),
+    error: (value) => errors.push(value),
+  };
+  return { initial, current, calls, output, errors, dependencies };
+}
+
+test('apply independently creates once after refresh/backups and verifies all readback', async () => {
+  const f = applyFixture();
+  assert.equal(await main(['--apply'], f.dependencies), 0);
+  assert.deepEqual(f.calls, { collect: 3, create: 1, get: 1, backups: 2 });
+  const result = JSON.parse(f.output[0]);
+  assert.equal(result.outcome, 'created');
+  assert.equal(result.loggingCoverageVerified, true);
+  assert.equal(result.activationReady, false);
+  assert.deepEqual(f.errors, []);
+  assert.equal(f.output.join('').includes(PRIVATE), false);
+  assert.doesNotThrow(() => verifyPreserved(f.initial, f.current));
+});
+
+test('409 never updates: exact named readback succeeds, differing predicate fails without rollback', async () => {
+  for (const conflict of [false, true]) {
+    const f = applyFixture({ collision: true, conflict });
+    assert.equal(await main(['--apply'], f.dependencies), conflict ? 1 : 0);
+    assert.equal(f.calls.create, 1);
+    assert.equal(f.calls.get, 1);
+    if (conflict) {
+      assert.deepEqual(f.output, []);
+      assert.ok(f.errors[0].includes('Create may have committed'));
+      assert.equal(f.current.managed.filter, 'severity>=ERROR');
+    } else assert.equal(JSON.parse(f.output[0]).outcome, 'already-exists');
+  }
+});
+
+test('another creator completing before refresh becomes a verified no-op', async () => {
+  const f = applyFixture({
+    mutateFresh: (current) => {
+      current.managed = exclusion();
+      current.exclusions.push(exclusion());
+      current.sinks[1].exclusions.push(exclusion());
+    },
+  });
+  assert.equal(await main(['--apply'], f.dependencies), 0);
+  assert.equal(f.calls.create, 0);
+  assert.equal(JSON.parse(f.output[0]).outcome, 'already-present-on-refresh');
+});
+
+test('private backup failure prevents a create even with otherwise safe metadata', async () => {
+  const f = applyFixture();
+  f.dependencies.backup = () => {
+    throw Error(PRIVATE);
+  };
+  assert.equal(await main(['--apply'], f.dependencies), 1);
+  assert.equal(f.calls.create, 0);
+  assert.equal(f.errors.join('').includes(PRIVATE), false);
+});
+
+test('fresh parent/sink/settings drift stops before create; post-create drift stops without rollback', async () => {
+  for (const when of ['mutateFresh', 'mutateAfter']) {
+    for (const change of [
+      (current) => {
+        current.project.parent = { type: 'organization', id: 'synthetic' };
+      },
+      (current) => {
+        current.sinks.push({ name: 'synthetic-export', destination: PRIVATE });
+      },
+      (current) => {
+        current.sinks[1].destination = 'synthetic-other-destination';
+      },
+      (current) => {
+        current.exclusions[0].filter = 'severity>=ERROR';
+      },
+    ]) {
+      const f = applyFixture({ [when]: change });
+      assert.equal(await main(['--apply'], f.dependencies), 1);
+      assert.equal(f.calls.create, when === 'mutateFresh' ? 0 : 1);
+      assert.deepEqual(f.output, []);
+      if (when === 'mutateAfter') assert.ok(f.current.managed, 'must not roll back new exclusion');
+    }
+  }
+});
+
+test('extra sinks, ancestors, collisions and missing permissions block apply without creating', async () => {
+  for (const change of [
+    (f) => {
+      f.project.parent = { type: 'folder', id: 'synthetic' };
+    },
+    (f) => {
+      f.sinks.push({ name: 'synthetic-export', destination: PRIVATE, disabled: true });
+    },
+    (f) => {
+      f.permissions.permissions = [];
+    },
+    (f) => {
+      f.exclusions = [{ ...exclusion(), disabled: true }];
+      f.sinks[1].exclusions = f.exclusions;
+      f.managed = f.exclusions[0];
+    },
+  ]) {
+    const initial = fixture();
+    change(initial);
+    let creates = 0;
+    const code = await main(['--apply'], {
+      collect: async () => initial,
+      create: () => {
+        creates++;
+        assert.fail('must not create');
+      },
+      backup: () => '/tmp/synthetic',
+      log() {},
+      error() {},
+    });
+    assert.equal(code, 2);
+    assert.equal(creates, 0);
+  }
+});
+
+test('independent concurrent exclusion additions survive while old exclusion mutations are detected', async () => {
+  const f = applyFixture({
+    mutateAfter: (current) => {
+      const extra = { name: 'synthetic-concurrent', filter: 'resource.type="gce_instance"' };
+      current.exclusions.push(extra);
+      current.sinks[1].exclusions.push(extra);
+    },
+  });
+  assert.equal(await main(['--apply'], f.dependencies), 0);
+  assert.equal(f.current.exclusions.length, 3);
+  assert.doesNotThrow(() => verifyPreserved(f.initial, f.current));
+  const changed = structuredClone(f.current);
+  changed.sinks[1].exclusions[0].description = 'changed';
+  assert.throws(() => verifyPreserved(f.initial, changed), /existing-sink-exclusion-changed/);
+});
+
+test('create timeout/failure is not retried and never claims verification', async () => {
+  const f = applyFixture({ failCreate: true });
+  assert.equal(await main(['--apply'], f.dependencies), 1);
+  assert.equal(f.calls.create, 1);
+  assert.deepEqual(f.output, []);
+  assert.ok(f.errors[0].includes('No rollback or automatic retry'));
+  assert.equal(f.errors[0].includes(PRIVATE), false);
+});
+
+test('writer requires explicit apply and uses only fixed independent POST with exact body', async () => {
+  let calls = 0;
+  const transport = async (url, options) => {
+    calls++;
+    assert.equal(url, `https://logging.googleapis.com/v2/projects/${PROJECT}/exclusions`);
+    assert.equal(options.method, 'POST');
+    assert.equal(options.redirect, 'error');
+    assert.deepEqual(JSON.parse(options.body), exclusion());
+    assert.equal(options.headers.Authorization, 'Bearer synthetic-token');
+    return { ok: true, status: 200, json: async () => exclusion() };
+  };
+  await assert.rejects(
+    () => createExclusionWriter('synthetic-token', false, transport)(),
+    /explicit-apply-required/,
+  );
+  assert.equal(calls, 0);
+  assert.equal(await createExclusionWriter('synthetic-token', true, transport)(), 'created');
+  assert.equal(calls, 1);
+  const conflict = createExclusionWriter('synthetic-token', true, async () => ({
+    status: 409,
+    json: () => assert.fail('never inspect raw conflict payload'),
+  }));
+  assert.equal(await conflict(), 'already-exists');
+});
+
+test('named coverage must agree across GET, exclusion list and Default sink; capacity blocks create', () => {
+  const mismatch = fixture(true);
+  mismatch.managed = null;
+  assert.ok(buildPlan(mismatch).blockers.includes('named-exclusion-readback-mismatch'));
+  const full = fixture();
+  full.exclusions = Array.from({ length: 10 }, (_, i) => ({
+    name: `synthetic-${i}`,
+    filter: 'severity=DEBUG',
+  }));
+  full.sinks[1].exclusions = structuredClone(full.exclusions);
+  assert.ok(buildPlan(full).blockers.includes('default-exclusion-capacity'));
 });
 
 test('CLI exceptions and invalid options never print raw errors or contact metadata', async () => {
