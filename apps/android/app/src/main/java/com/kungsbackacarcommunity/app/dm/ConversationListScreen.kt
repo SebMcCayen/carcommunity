@@ -30,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.chat.chatAccentTextColor
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.chattime.MessageTimeText
 import com.kungsbackacarcommunity.app.chattime.ChatDateContext
@@ -105,7 +107,12 @@ fun ConversationListScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.error,
                             )
-                            TextButton(onClick = onRetry) {
+                            TextButton(
+                                onClick = onRetry,
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.chatAccentTextColor(MaterialTheme.colorScheme.background),
+                                ),
+                            ) {
                                 Text(stringResource(R.string.dm_retry))
                             }
                         }
@@ -217,7 +224,7 @@ private fun UnreadBadge(count: Int) {
             Modifier
                 .defaultMinSize(minWidth = 24.dp, minHeight = 24.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.tertiary)
+                .background(MaterialTheme.colorScheme.primary)
                 .padding(horizontal = KccSpacing.s2)
                 .clearAndSetSemantics { contentDescription = description },
         contentAlignment = Alignment.Center,
@@ -225,7 +232,7 @@ private fun UnreadBadge(count: Int) {
         Text(
             text = if (count > 99) "99+" else count.toString(),
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onTertiary,
+            color = MaterialTheme.colorScheme.onPrimary,
         )
     }
 }
@@ -238,7 +245,7 @@ private fun MemberAvatar(avatarPath: String?) {
         modifier =
             Modifier
                 .size(56.dp)
-                .border(1.dp, MaterialTheme.colorScheme.tertiary, CircleShape)
+                .border(1.dp, MaterialTheme.colorScheme.primary, CircleShape)
                 .padding(3.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surfaceVariant),

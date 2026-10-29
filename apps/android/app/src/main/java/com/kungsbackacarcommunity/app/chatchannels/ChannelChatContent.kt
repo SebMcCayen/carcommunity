@@ -80,6 +80,7 @@ import com.kungsbackacarcommunity.app.chat.KeepPinnedToNewest
 import com.kungsbackacarcommunity.app.chat.RepinToNewestOnImeRise
 import com.kungsbackacarcommunity.app.chat.ReplyComposerChip
 import com.kungsbackacarcommunity.app.chat.WebLinks
+import com.kungsbackacarcommunity.app.chat.chatAccentTextColor
 import com.kungsbackacarcommunity.app.chattime.ChatDateContext
 import com.kungsbackacarcommunity.app.chattime.ChatTimeline
 import com.kungsbackacarcommunity.app.chattime.ChatTimelineItem
@@ -371,7 +372,7 @@ fun ChannelChatContent(
             Text(
                 text = stringResource(R.string.blocking_blockSuccess),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.chatAccentTextColor(MaterialTheme.colorScheme.background),
             )
         }
 
@@ -390,7 +391,7 @@ fun ChannelChatContent(
             Text(
                 text = stringResource(R.string.chat_reportSubmitted),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.chatAccentTextColor(MaterialTheme.colorScheme.background),
                 modifier = Modifier.testTag(CHANNEL_REPORT_STATUS_TEST_TAG),
             )
         }
@@ -539,8 +540,10 @@ fun ChannelChatContent(
                     replyToId = null
                 },
                 enabled = ChannelThread.isSendable(draft.text),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary,
-                    contentColor = MaterialTheme.colorScheme.onTertiary),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
             ) {
                 Text(stringResource(R.string.channel_send))
             }
@@ -754,7 +757,12 @@ private fun ChannelMessageList(
                     if (isLoadingOlder) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp))
                     } else {
-                        TextButton(onClick = onLoadOlder) {
+                        TextButton(
+                            onClick = onLoadOlder,
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.chatAccentTextColor(MaterialTheme.colorScheme.background),
+                            ),
+                        ) {
                             Text(stringResource(R.string.channel_loadOlder))
                         }
                     }
@@ -874,7 +882,7 @@ private fun ChannelMessageRow(
                 Text(
                     text = senderName,
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.tertiary,
+                    color = MaterialTheme.colorScheme.chatAccentTextColor(MaterialTheme.colorScheme.background),
                     modifier =
                         if (openProfile != null) {
                             Modifier.clickable(role = Role.Button, onClick = openProfile)
@@ -954,19 +962,19 @@ private fun ChannelBubble(
     onQuoteTap: (String) -> Unit = {},
 ) {
     val bubbleColor =
-        if (isOwn) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.surface
+        if (isOwn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
     val textColor =
-        if (isOwn) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onSurface
+        if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     // Highlight from the message's OWN stored mentionedUids — the set the server
     // ACCEPTED. A uid it dropped isn't in there, so its text renders plain, which
     // is exactly what it now is.
     val mentionColor =
-        if (isOwn) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.tertiary
+        if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.chatAccentTextColor()
     // A shared `geo:` link renders as a single tappable chip. Coloured like a
     // mention (so it reads as "special" against the bubble) but UNDERLINED, so it
     // reads as tappable rather than merely emphasised.
     val linkColor =
-        if (isOwn) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.tertiary
+        if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.chatAccentTextColor()
     val linkLabel = stringResource(R.string.channel_locationLink)
     // Detection depends only on WHETHER a map-move handler exists, so the body is
     // keyed on that boolean rather than the lambda's (per-recomposition) identity —
@@ -1018,7 +1026,11 @@ private fun ChannelBubble(
                 // a quote header, so the reader's eye lands on the original.
                 .then(
                     if (highlighted) {
-                        Modifier.border(2.dp, MaterialTheme.colorScheme.primary, bubbleShape)
+                        Modifier.border(
+                            2.dp,
+                            if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+                            bubbleShape,
+                        )
                     } else {
                         Modifier
                     },

@@ -19,6 +19,8 @@ import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
@@ -132,6 +134,7 @@ class MapFirstShellTest {
         appUpdateSource: AppUpdateSource? = null,
         drivesRepository: DrivesRepository? = null,
         driveHistoryRepository: DriveHistoryRepository? = null,
+        notificationsRepository: com.kungsbackacarcommunity.app.notifications.NotificationsRepository? = null,
         contentHost: ((@Composable () -> Unit) -> Unit)? = null,
     ) {
         val render: ((@Composable () -> Unit) -> Unit) = contentHost ?: { composeTestRule.setContent(it) }
@@ -156,7 +159,7 @@ class MapFirstShellTest {
                     leaderboardRepository = null,
                     partnersRepository = null,
                     offerCodeCoordinator = null,
-                    notificationsRepository = null,
+                    notificationsRepository = notificationsRepository,
                     notificationsCoordinator = null,
                     notificationSettingsRepository = null,
                     notificationSettingsCoordinator = null,
@@ -256,14 +259,21 @@ class MapFirstShellTest {
     }
 
     /** Writes rendered pixels from the host window; no Firebase or Mapbox config. */
-    private fun captureRedesignScreen(name: String) {
+    private fun captureRedesignScreen(name: String, contentTag: String? = null) {
         composeTestRule.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         instrumentation.uiAutomation.waitForIdle(500, 5000)
         val blockedByAnr = instrumentation.uiAutomation.rootInActiveWindow
             ?.findAccessibilityNodeInfosByViewId("android:id/aerr_close")?.isNotEmpty() == true
         check(!blockedByAnr) { "An Android ANR dialog covers the capture; recover the emulator before visual QA." }
-        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        // Component capture synchronizes with Compose's draw before reading pixels.
+        // Used for the new chat presentation, which replaces the map in one frame.
+        val bitmap = if (contentTag != null) {
+            composeTestRule.onNodeWithTag(contentTag).captureToImage().asAndroidBitmap()
+                .copy(android.graphics.Bitmap.Config.ARGB_8888, false)
+        } else {
+            checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        }
         val variant = InstrumentationRegistry.getArguments().getString("redesignCaptureVariant") ?: "default"
         require(variant.matches(Regex("[a-zA-Z0-9_-]+")))
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -547,9 +557,6 @@ class MapFirstShellTest {
         // (ShellNavigation.onBack), rather than being swallowed by the map.
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
     }
-
-
-
 
     // ── Startup update gate ─────────────────────────────────────────────────
 
@@ -1065,7 +1072,7 @@ class MapFirstShellTest {
             assertEquals(1, surface.contentCompositions)
             assertFalse(surface.isActive)
         }
-        // All five complete labels must be visible together. A scroll action
+        // All four complete labels must be visible together. A scroll action
         // would both contradict that contract and fail on the fixed-width strip.
         val strip = composeTestRule.onNodeWithTag(CHAT_CHANNEL_STRIP_TEST_TAG).fetchSemanticsNode()
         assertFalse("Chat destinations must not scroll horizontally",
@@ -1077,9 +1084,9 @@ class MapFirstShellTest {
                 stripBounds.top >= hubBounds.top && stripBounds.bottom <= hubBounds.bottom)
         val minimumTargetPx = with(composeTestRule.density) { 48.dp.roundToPx().toFloat() }
         val labelIds = listOf(R.string.chatHub_tabCommunity, R.string.chatHub_tabConvoys,
-            R.string.chatHub_tabFriends, R.string.chatHub_tabNotifications, R.string.clubs_chatTab)
+            R.string.chatHub_tabFriends, R.string.clubs_chatTab)
         var previousRight = stripBounds.left
-        for (tab in ChatTab.entries) {
+        for (tab in ChatTab.visibleEntries) {
             val target = composeTestRule.onNodeWithTag(chatChannelTabTag(tab))
             target.assertIsDisplayed()
             val bounds = target.fetchSemanticsNode().boundsInRoot
@@ -1091,7 +1098,7 @@ class MapFirstShellTest {
             assertTrue("$tab does not overlap the previous target", bounds.left >= previousRight)
             previousRight = bounds.right
 
-            val label = str(labelIds[tab.ordinal])
+            val label = str(labelIds[ChatTab.visibleEntries.indexOf(tab)])
             val labelNode = composeTestRule.onNodeWithText(label, useUnmergedTree = true)
             labelNode.assertIsDisplayed()
             val layouts = mutableListOf<TextLayoutResult>()
@@ -1252,6 +1259,112 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithTag(SAVED_PLACES_PICKER_SHEET_TEST_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(MAP_HOME_MORE_POPUP_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertIsDisplayed()
+    }
+
+    @Test
+    fun notifications_moveToAvatarMenu_andOpeningInboxClearsOnlyItsBadge() {
+        val repository = MenuNotificationsRepository()
+        setShell(notificationsRepository = repository)
+        composeTestRule.onNodeWithTag(MAP_HOME_NOTIFICATIONS_UNREAD_TAG).assertIsDisplayed()
+        // Notification-only unread must not label the Chat button as unread.
+        composeTestRule.onNodeWithContentDescription(
+            str(R.string.shell_tabChat) + ", " + str(R.string.chatHub_tabUnread),
+            useUnmergedTree = true,
+        ).assertDoesNotExist()
+        tabNode(R.string.shell_tabChat).performClick()
+        composeTestRule.onNodeWithTag("chat_channel_Notifications").assertDoesNotExist()
+        composeTestRule.onNodeWithTag(chatChannelTabTag(ChatTab.Club)).assertIsDisplayed()
+        composeTestRule.runOnIdle { assertEquals(0, repository.inboxSubscriptions) }
+        captureRedesignScreen("S29-four-message-tabs-gold")
+        composeTestRule.onNodeWithContentDescription(str(R.string.chatHub_back)).performClick()
+
+        composeTestRule.onNodeWithTag(MAP_HOME_MORE_TAG).performClick()
+        val inbox = composeTestRule.onNodeWithTag("profile_menu_Notifications")
+        inbox.performScrollTo().assertIsDisplayed()
+        inbox.performClick()
+        composeTestRule.onNodeWithText(str(R.string.notifications_title)).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(MAP_HOME_MORE_POPUP_TAG).assertDoesNotExist()
+        composeTestRule.runOnIdle {
+            assertEquals(1, repository.inboxSubscriptions)
+            assertEquals(1, repository.seenCalls)
+        }
+        androidx.test.espresso.Espresso.pressBack()
+        // System Back schedules the Activity's transition outside Compose's
+        // clock; wait for the actual visible destination rather than retrying
+        // the entire test when that transition has not drawn yet.
+        composeTestRule.waitUntil(timeoutMillis = 5_000) {
+            runCatching {
+                composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertIsDisplayed()
+                true
+            }.getOrDefault(false)
+        }
+        composeTestRule.onNodeWithTag(MAP_HOME_NOTIFICATIONS_UNREAD_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun profileMenuAndPopulatedChat_captureGoldPresentation() {
+        // All destinations enabled here are a presentation fixture. The test
+        // above separately verifies the actual shell/repository/seen flow.
+        val showChat = androidx.compose.runtime.mutableStateOf(false)
+        val dark = androidx.compose.runtime.mutableStateOf(true)
+        val surface = StubMapSurface()
+        composeTestRule.setContent {
+            KccTheme(darkTheme = dark.value) {
+                if (showChat.value) {
+                    com.kungsbackacarcommunity.app.chatchannels.PopulatedChatHubPreview()
+                } else {
+                    MapHome(
+                        mapSurface = surface, isLiveSharing = false, participantCount = 0,
+                        userLabel = "Local presentation fixture", onSearch = {},
+                        onOpenSavedPlaces = {},
+                        moreMenuEntries = profileMenuEntries(true, true, true, true, true, {}, {}),
+                    )
+                }
+            }
+        }
+        composeTestRule.onNodeWithTag(MAP_HOME_MORE_TAG).performClick()
+        var previousBottom = 0f
+        for (id in listOf("Profile", "Friends", "MyDrives", "saved_places", "PartnerApplication", "Notifications", "Settings", "sign_out")) {
+            val row = composeTestRule.onNodeWithTag("profile_menu_$id")
+            row.assertIsDisplayed()
+            val bounds = row.fetchSemanticsNode().boundsInRoot
+            assertTrue("Menu order: $id", bounds.top >= previousBottom)
+            previousBottom = bounds.bottom
+        }
+        captureRedesignScreen("S01-profile-menu-notifications")
+        androidx.test.espresso.Espresso.pressBack()
+        composeTestRule.runOnIdle { showChat.value = true }
+        composeTestRule.onNodeWithTag(CHAT_CHANNEL_STRIP_TEST_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag("chat_channel_Notifications").assertDoesNotExist()
+        captureRedesignScreen("S29-populated-chat-gold-dark", CHAT_HUB_TEST_TAG)
+        composeTestRule.runOnIdle { dark.value = false }
+        composeTestRule.waitForIdle()
+        captureRedesignScreen("S29-populated-chat-gold-light", CHAT_HUB_TEST_TAG)
+    }
+
+    private class MenuNotificationsRepository : com.kungsbackacarcommunity.app.notifications.NotificationsRepository {
+        val unread = kotlinx.coroutines.flow.MutableStateFlow(true)
+        var inboxSubscriptions = 0
+        var seenCalls = 0
+        override fun observeNotifications(uid: String): kotlinx.coroutines.flow.Flow<com.kungsbackacarcommunity.app.notifications.NotificationsState> {
+            inboxSubscriptions++
+            return kotlinx.coroutines.flow.flowOf(
+                com.kungsbackacarcommunity.app.notifications.NotificationsState.Loaded(listOf(
+                    com.kungsbackacarcommunity.app.notifications.AppNotification(
+                        id = "local-inbox-item",
+                        category = com.kungsbackacarcommunity.app.notifications.NotificationCategory.SYSTEM_NOTICE,
+                        title = "Local notification fixture", previewText = null, body = null,
+                        isRead = false, createdAtMillis = 1792936800000L,
+                    ),
+                )),
+            )
+        }
+        override fun observeUnread(uid: String): kotlinx.coroutines.flow.Flow<Boolean> = unread
+        override suspend fun markSeen() { seenCalls++; unread.value = false }
+        override suspend fun markRead(notificationId: String) = Unit
+        override suspend fun markAllRead() = Unit
+        override suspend fun deleteNotification(notificationId: String) = Unit
+        override suspend fun deleteAll() = Unit
     }
 
     @Test

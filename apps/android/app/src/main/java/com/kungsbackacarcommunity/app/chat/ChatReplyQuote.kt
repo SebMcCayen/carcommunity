@@ -94,12 +94,12 @@ fun ChatQuoteHeader(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
 ) {
-    val accent = if (isOwn) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.tertiary
+    val accent = if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
     val authorColor =
-        if (isOwn) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.tertiary
+        if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.chatAccentTextColor()
     val previewColor =
         if (isOwn) {
-            MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.85f)
+            MaterialTheme.colorScheme.onPrimary
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant
         }
@@ -198,7 +198,7 @@ fun ReplyComposerChip(
                 Text(
                     text = stringResource(R.string.chat_replyComposerReplyingTo, authorName),
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.chatAccentTextColor(MaterialTheme.colorScheme.surfaceVariant),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

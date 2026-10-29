@@ -102,6 +102,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -679,13 +680,15 @@ fun MapHome(
                 // The profile/account menu popup is composed next to the profile
                 // button (inside SearchBarRow) so the Popup anchors to the
                 // button's real measured bounds instead of a hard-coded offset.
-                moreMenuEntries = listOf(
+                moreMenuEntries = withSavedPlacesEntry(
+                    moreMenuEntries,
                     HubEntry(
                         stringResource(R.string.shell_savedPlacesButton),
                         Icons.Filled.Place,
                         onOpenSavedPlaces,
+                        id = "saved_places",
                     ),
-                ) + moreMenuEntries,
+                ),
                 moreMenuOpen = moreOpen,
                 onDismissMore = { moreOpen = false },
             )
@@ -1585,7 +1588,11 @@ private fun ProfileMenuPopup(
                 entries.forEach { entry ->
                     val onClick = entry.onClick
                     if (onClick != null) {
-                        HubRow(entry.label, entry.icon) {
+                        HubRow(
+                            entry.label, entry.icon,
+                            modifier = if (entry.id != null) Modifier.testTag("profile_menu_${entry.id}") else Modifier,
+                            hasUnread = entry.hasUnread,
+                        ) {
                             onClick()
                             onDismiss()
                         }
@@ -1598,6 +1605,7 @@ private fun ProfileMenuPopup(
 
 /** Test tag on the top-right profile/account menu button. */
 const val MAP_HOME_MORE_TAG = "map_home_more"
+const val MAP_HOME_NOTIFICATIONS_UNREAD_TAG = "map_home_notifications_unread"
 
 /** Test tag on the floating chat control (bubble). */
 const val MAP_HOME_CHAT_TAG = "map_home_chat"
@@ -1620,7 +1628,7 @@ internal fun ChatCircleControl(
 ) {
     val description =
         if (hasUnread) {
-            stringResource(R.string.shell_chatUnreadDot)
+            stringResource(R.string.shell_chat) + ", " + stringResource(R.string.chatHub_tabUnread)
         } else {
             stringResource(R.string.shell_chat)
         }
@@ -1810,6 +1818,7 @@ private fun SearchBarRow(
     liveSessionBar: (@Composable () -> Unit)? = null,
 ) {
     val haptics = LocalHapticFeedback.current
+    val unreadMenuLabel = stringResource(R.string.chatHub_tabUnread)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
@@ -1959,6 +1968,10 @@ private fun SearchBarRow(
         // PopupPositionProvider, so the menu tracks the button wherever the
         // search row lays it out (font scaling, insets, future layout changes).
         Box {
+            val hasUnreadNotifications = moreMenuEntries.any { it.hasUnread && it.onClick != null }
+            BadgedBox(badge = {
+                if (hasUnreadNotifications) Badge(Modifier.testTag(MAP_HOME_NOTIFICATIONS_UNREAD_TAG).clearAndSetSemantics {})
+            }) {
             com.kungsbackacarcommunity.app.profile.ClubAvatarFrame(badge = clubBadge) {
             Surface(
                 shape = CircleShape,
@@ -1970,6 +1983,9 @@ private fun SearchBarRow(
                     Modifier
                         .size(KccSpacing.s12)
                         .testTag(MAP_HOME_MORE_TAG)
+                        .semantics {
+                            if (hasUnreadNotifications) stateDescription = unreadMenuLabel
+                        }
                         .coachMarkAnchor(CoachMarkStep.Explore)
                         .coachMarkAnchor(CoachMarkStep.History),
             ) {
@@ -2004,6 +2020,7 @@ private fun SearchBarRow(
                         )
                     }
                 }
+            }
             }
             }
             // Profile/account menu: a transparent Popup (no dimming scrim, the map

@@ -81,12 +81,11 @@ class ChatHubInsetsTest {
                         convoyChatRepository = null,
                         friendsRepository = null,
                         dmRepository = null,
-                        notificationsRepository = null,
-                        notificationsCoordinator = null,
+
                         communityUnread = false,
                         convoysUnread = false,
                         friendsUnread = false,
-                        notificationsUnread = false,
+
                         onClose = {},
                     )
                 }
@@ -147,12 +146,11 @@ class ChatHubInsetsTest {
                         convoyChatRepository = null,
                         friendsRepository = null,
                         dmRepository = null,
-                        notificationsRepository = null,
-                        notificationsCoordinator = null,
+
                         communityUnread = false,
                         convoysUnread = false,
                         friendsUnread = false,
-                        notificationsUnread = false,
+
                         onClose = {},
                     )
                     // Composed in the same window the hub now lives in, so this reads

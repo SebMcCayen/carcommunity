@@ -37,6 +37,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.chat.chatUnreadIndicatorColor
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 
@@ -52,7 +53,7 @@ internal fun ChatChannelStrip(
     onBack: (() -> Unit)?,
 ) {
     val labels = listOf(R.string.chatHub_tabCommunity, R.string.chatHub_tabConvoys,
-        R.string.chatHub_tabFriends, R.string.chatHub_tabNotifications, R.string.clubs_chatTab)
+        R.string.chatHub_tabFriends, R.string.clubs_chatTab)
     val labelTexts = labels.map { stringResource(it) }
     val labelStyle = MaterialTheme.typography.labelMedium
     val measurer = rememberTextMeasurer()
@@ -94,24 +95,24 @@ internal fun ChatChannelStrip(
                 horizontalArrangement = Arrangement.spacedBy(KccSpacing.s1),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ChatTab.entries.forEach { tab ->
+                ChatTab.visibleEntries.forEachIndexed { index, tab ->
                     val active = selected == tab
                     val shape = RoundedCornerShape(KccRadius.xl)
                     Surface(
-                        modifier = Modifier.weight(tabWidths[tab.ordinal].value).fillMaxHeight()
+                        modifier = Modifier.weight(tabWidths[index].value).fillMaxHeight()
                             .heightIn(min = 48.dp).clip(shape)
                             .selectable(selected = active, role = Role.Tab, onClick = { onSelect(tab) })
                             .testTag(chatChannelTabTag(tab)),
                         shape = shape,
-                        color = MaterialTheme.colorScheme.background,
-                        contentColor = if (active) MaterialTheme.colorScheme.tertiary
+                        color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.background,
+                        contentColor = if (active) MaterialTheme.colorScheme.onPrimary
                             else MaterialTheme.colorScheme.onSurfaceVariant,
-                        border = BorderStroke(1.dp, if (active) MaterialTheme.colorScheme.tertiary
+                        border = BorderStroke(1.dp, if (active) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.outlineVariant),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
-                                labelTexts[tab.ordinal],
+                                labelTexts[index],
                                 // Equal space above AND below keeps the rendered
                                 // text centred. The top lane holds the unread dot;
                                 // multiline/scaled labels grow the target with it.
@@ -124,11 +125,11 @@ internal fun ChatChannelStrip(
                                     .fillMaxWidth().height(KccSpacing.s2),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                if (unread.getOrElse(tab.ordinal) { false }) {
+                                if (unread.getOrElse(index) { false }) {
                                     Badge(
                                         modifier = Modifier.semantics { contentDescription = unreadLabel },
-                                        containerColor = MaterialTheme.colorScheme.tertiary,
-                                        contentColor = MaterialTheme.colorScheme.onTertiary,
+                                        containerColor = MaterialTheme.colorScheme.chatUnreadIndicatorColor(active),
+                                        contentColor = MaterialTheme.colorScheme.onPrimary,
                                     )
                                 }
                             }

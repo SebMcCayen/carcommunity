@@ -298,7 +298,7 @@ fun EventChatScreen(
                 Text(
                     text = stringResource(R.string.chat_reportSubmitted),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.chatAccentTextColor(MaterialTheme.colorScheme.background),
                 )
             }
             if (blockStatus == BlockActionStatus.Failed) {
@@ -312,7 +312,7 @@ fun EventChatScreen(
                 Text(
                     text = stringResource(R.string.blocking_blockSuccess),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.chatAccentTextColor(MaterialTheme.colorScheme.background),
                 )
             }
 
@@ -347,8 +347,10 @@ fun EventChatScreen(
                         onSend(draft)
                     },
                     enabled = sendStatus != ChatSendStatus.Sending && EventChat.isSendable(draft),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary,
-                        contentColor = MaterialTheme.colorScheme.onTertiary),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
                 ) {
                     Text(text = stringResource(R.string.chat_sendButton))
                 }
@@ -439,8 +441,8 @@ private fun MessageRow(
     // id so a reveal never leaks onto a different message reusing this row, and
     // rememberSaveable so it survives rotation without being persisted anywhere.
     var revealed by rememberSaveable(message.id) { mutableStateOf(false) }
-    val contentColor = MaterialTheme.colorScheme.onSurface
-    val accentColor = MaterialTheme.colorScheme.tertiary
+    val contentColor = if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val accentColor = if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.chatAccentTextColor()
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Surface(
             shape = CircleShape,
@@ -471,7 +473,7 @@ private fun MessageRow(
                 MessageTimeText(message.createdAtMillis, dates)
             }
             Card(
-                colors = CardDefaults.cardColors(containerColor = if (isOwn) MaterialTheme.colorScheme.primaryContainer
+                colors = CardDefaults.cardColors(containerColor = if (isOwn) MaterialTheme.colorScheme.primary
                     else MaterialTheme.colorScheme.surface),
                 border = if (isOwn) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
                 modifier =
@@ -516,6 +518,7 @@ private fun MessageRow(
                             )
                             TextButton(
                                 onClick = { revealed = true },
+                                colors = ButtonDefaults.textButtonColors(contentColor = accentColor),
                                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
                             ) {
                                 Text(text = stringResource(R.string.chat_showReportedMessage))

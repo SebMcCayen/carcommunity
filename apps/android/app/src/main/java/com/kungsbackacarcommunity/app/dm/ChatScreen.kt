@@ -61,6 +61,7 @@ import com.kungsbackacarcommunity.app.chat.KeepPinnedToNewest
 import com.kungsbackacarcommunity.app.chat.RepinToNewestOnImeRise
 import com.kungsbackacarcommunity.app.chat.ReplyComposerChip
 import com.kungsbackacarcommunity.app.chat.WebLinks
+import com.kungsbackacarcommunity.app.chat.chatAccentTextColor
 import com.kungsbackacarcommunity.app.chattime.ChatDateContext
 import com.kungsbackacarcommunity.app.chattime.ChatTimeline
 import com.kungsbackacarcommunity.app.chattime.ChatTimelineItem
@@ -222,7 +223,7 @@ fun ChatScreen(
             Text(
                 text = stringResource(R.string.blocking_blockSuccess),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.chatAccentTextColor(MaterialTheme.colorScheme.background),
             )
         }
 
@@ -298,8 +299,10 @@ fun ChatScreen(
                     replyToId = null
                 },
                 enabled = DmThread.isSendable(draft),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary,
-                    contentColor = MaterialTheme.colorScheme.onTertiary),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
             ) {
                 Text(stringResource(R.string.dm_send))
             }
@@ -439,7 +442,12 @@ private fun MessageList(
                     if (isLoadingOlder) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp))
                     } else {
-                        TextButton(onClick = onLoadOlder) {
+                        TextButton(
+                            onClick = onLoadOlder,
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.chatAccentTextColor(MaterialTheme.colorScheme.background),
+                            ),
+                        ) {
                             Text(stringResource(R.string.dm_loadOlder))
                         }
                     }
@@ -495,10 +503,10 @@ private fun MessageBubble(
     counterpartyName: String? = null,
 ) {
     val bubbleColor =
-        if (isOwn) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.surface
+        if (isOwn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
     val textColor =
         if (isOwn) {
-            MaterialTheme.colorScheme.onTertiary
+            MaterialTheme.colorScheme.onPrimary
         } else {
             MaterialTheme.colorScheme.onSurface
         }
@@ -506,7 +514,7 @@ private fun MessageBubble(
     // coloured against the bubble and underlined so it reads as tappable. Detection
     // is keyed on WHETHER a map-move handler exists (not the lambda identity) so the
     // AnnotatedString is not rebuilt every recompose. Mirrors the group channels.
-    val linkColor = if (isOwn) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.tertiary
+    val linkColor = if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.chatAccentTextColor()
     val linkLabel = stringResource(R.string.channel_locationLink)
     val eventLinkLabel = stringResource(R.string.events_shareEventLinkLabel)
     val canShowLocation = onShowLocationOnMap != null
@@ -552,7 +560,11 @@ private fun MessageBubble(
                     // of a quote header, so the reader's eye lands on the original.
                     .then(
                         if (highlighted) {
-                            Modifier.border(2.dp, MaterialTheme.colorScheme.primary, bubbleShape)
+                            Modifier.border(
+                                2.dp,
+                                if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+                                bubbleShape,
+                            )
                         } else {
                             Modifier
                         },
