@@ -41,13 +41,30 @@ describe('public app information', () => {
     });
   }
 
+  it('uses the confirmed individual operator and contact in both languages', () => {
+    for (const route of ['privacy', 'terms', 'support']) {
+      const document = new DOMParser().parseFromString(
+        readFileSync(resolve(publicRoot, route, 'index.html'), 'utf8'),
+        'text/html',
+      );
+      expect(document.querySelector('main')?.textContent?.replace(/\s+/g, ' ')).toContain(
+        'Sebastian Stegrin',
+      );
+      expect(document.querySelector('#english')?.textContent?.replace(/\s+/g, ' ')).toContain(
+        'Sebastian Stegrin',
+      );
+      expect(document.querySelector('.draft')?.textContent).toContain('18');
+      expect(document.querySelectorAll('a[href*="carcommuninty"]').length).toBe(0);
+    }
+  });
+
   it('keeps the unresolved owner decisions explicit until reviewed', () => {
     for (const route of ['privacy', 'terms', 'support']) {
       const document = new DOMParser().parseFromString(
         readFileSync(resolve(publicRoot, route, 'index.html'), 'utf8'),
         'text/html',
       );
-      expect(document.querySelector('.draft')?.textContent).toContain('Pre-release draft');
+      expect(document.querySelector('.draft')?.textContent).toContain('Publication draft');
       expect(document.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe(
         'noindex',
       );
