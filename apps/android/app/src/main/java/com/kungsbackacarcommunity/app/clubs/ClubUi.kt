@@ -25,7 +25,9 @@ internal fun clubError(error: Throwable): String = stringResource(when ((error a
     "owner-transfer-required", "owner-must-transfer" -> R.string.clubs_ownershipError
     "feature-disabled" -> R.string.clubs_unavailable
     "legacy-conflict" -> R.string.clubs_conflict
-    "invalid-logo" -> R.string.clubs_logoError
+    "invalid-logo" -> R.string.clubLogo_prepareError
+    "logo-permission-denied" -> R.string.clubLogo_permissionError
+    "logo-upload-failed" -> R.string.clubLogo_uploadError
     "permission-denied", "not-member" -> R.string.clubs_permissionError
     else -> R.string.clubs_error
 })

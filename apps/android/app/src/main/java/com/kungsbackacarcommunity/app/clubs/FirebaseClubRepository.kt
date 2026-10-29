@@ -14,6 +14,7 @@ import com.google.firebase.firestore.Source
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
 import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.StorageException
 import com.google.firebase.storage.StorageMetadata
 import com.kungsbackacarcommunity.app.blocking.FirebaseBlockVisibilityRepository
 import kotlinx.coroutines.CancellationException
@@ -103,9 +104,15 @@ class FirebaseClubRepository private constructor(
         call("clubsManage", fields + mapOf("action" to action, "operationId" to operationId))
     override suspend fun uploadLogo(clubId: String, bytes: ByteArray): String {
         if (auth.currentUser?.uid != uid) throw ClubException("unauthenticated")
-        if (bytes.isEmpty() || bytes.size > 256 * 1024) throw ClubException("invalid-logo")
+        if (bytes.isEmpty() || bytes.size > CLUB_LOGO_UPLOAD_BYTES) throw ClubException("invalid-logo")
         val path = "clubLogos/$clubId/$uid/${UUID.randomUUID()}.jpg"
-        storage.reference.child(path).putBytes(bytes, StorageMetadata.Builder().setContentType("image/jpeg").build()).clubAwait()
+        try {
+            storage.reference.child(path).putBytes(bytes, StorageMetadata.Builder().setContentType("image/jpeg").build()).clubAwait()
+        } catch (e: CancellationException) { throw e }
+        catch (e: StorageException) {
+            throw ClubException(if (e.errorCode == StorageException.ERROR_NOT_AUTHORIZED ||
+                e.errorCode == StorageException.ERROR_NOT_AUTHENTICATED) "logo-permission-denied" else "logo-upload-failed")
+        }
         if (auth.currentUser?.uid != uid) throw ClubException("unauthenticated")
         return path
     }
