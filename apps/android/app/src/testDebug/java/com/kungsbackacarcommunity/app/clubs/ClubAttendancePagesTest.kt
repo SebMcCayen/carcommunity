@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -43,6 +42,187 @@ class ClubAttendancePagesTest {
         compose.onNodeWithText(compose.activity.getString(R.string.clubs_more))
             .performScrollTo().performClick()
         compose.waitForIdle()
+    }
+
+    private fun action(attending: Boolean = false) = compose.onNodeWithText(compose.activity.getString(
+        if (attending) R.string.clubs_unattend else R.string.clubs_attend,
+    ))
+
+    private fun retry() {
+        compose.onNodeWithText(compose.activity.getString(R.string.clubs_retry)).performScrollTo().performClick()
+        compose.waitForIdle()
+    }
+
+    private fun managerRepository(role: ClubRole = ClubRole.Owner) = AttendanceRepository().apply {
+        first.value = emptyList()
+        access.value = ClubAccess.Member(ClubMembership("managed", role, "2026-10-29T10:00:00Z"))
+    }
+
+    private fun registersMissingIntent(role: ClubRole) {
+        val repo = managerRepository(role)
+        show(repo)
+        action().assertIsEnabled().performScrollTo().performClick()
+        action(true).assertIsEnabled()
+        compose.runOnIdle {
+            val call = repo.mutations.single()
+            assertEquals("managed", call.clubId)
+            assertEquals("event", call.eventId)
+            assertTrue(call.attending)
+            assertTrue(call.operationId.length >= 16)
+            assertEquals(1, repo.activeAttendanceReaders)
+        }
+    }
+
+    @Test fun ownerRegistersClubOnNewEventWithNoAttendanceDocument() = registersMissingIntent(ClubRole.Owner)
+
+    @Test fun moderatorRegistersClubOnNewEventWithNoAttendanceDocument() = registersMissingIntent(ClubRole.Moderator)
+
+    @Test fun publicClubIdentityOrdinaryMembershipAndNoClubNeverGrantManagement() {
+        val repo = managerRepository(ClubRole.Member)
+        // A public participant can even name the viewer as owner; only access is authoritative.
+        repo.first.value = attendanceClubs(1..1).map { it.copy(id = "managed", ownerUid = "viewer") }
+        show(repo)
+        action().assertDoesNotExist()
+        compose.runOnIdle { repo.access.value = ClubAccess.None }
+        action().assertDoesNotExist()
+        compose.runOnIdle { repo.access.value = ClubAccess.Unverified }
+        action().assertDoesNotExist()
+        compose.runOnIdle { assertTrue(repo.attendanceRequests.isEmpty()) }
+    }
+
+    @Test fun privateStatusOutsidePublicFirstPageAllowsWithdrawalAndReregistration() {
+        val repo = managerRepository()
+        repo.first.value = attendanceClubs(1..25) // The managed club is not on this page.
+        repo.attendance.value = true
+        show(repo)
+        action(true).assertIsEnabled().performScrollTo().performClick()
+        action().assertIsEnabled().performScrollTo().performClick()
+        action(true).assertIsEnabled()
+        compose.runOnIdle {
+            assertEquals(listOf(false, true), repo.mutations.map { it.attending })
+            assertEquals(2, repo.mutations.map { it.operationId }.distinct().size)
+        }
+    }
+
+    @Test fun permissionDeniedReadShowsErrorAndRetryAttachesFreshListener() {
+        val repo = managerRepository()
+        repo.attendanceFailures += ClubException("permission-denied")
+        show(repo)
+        action().assertIsNotEnabled()
+        compose.onNodeWithText(compose.activity.getString(R.string.clubs_permissionError)).assertExists()
+        retry()
+        action().assertIsEnabled()
+        compose.runOnIdle {
+            assertEquals(2, repo.attendanceRequests.size)
+            assertEquals(1, repo.activeAttendanceReaders)
+            assertTrue(repo.mutations.isEmpty())
+        }
+    }
+
+    @Test fun cacheOnlyStatusIsExplicitlyUnavailableAndRetryWaitsForServer() {
+        val repo = managerRepository()
+        repo.attendance.value = null
+        show(repo)
+        action().assertIsNotEnabled()
+        compose.onNodeWithText(compose.activity.getString(R.string.clubs_error)).assertExists()
+        retry()
+        action().assertIsNotEnabled()
+        compose.runOnIdle { repo.attendance.value = false }
+        action().assertIsEnabled()
+        // Losing freshness must revoke the old false just as it revokes true.
+        compose.runOnIdle { repo.attendance.value = null }
+        action().assertIsNotEnabled()
+        compose.onNodeWithText(compose.activity.getString(R.string.clubs_retry)).assertExists()
+        compose.runOnIdle { assertTrue(repo.mutations.isEmpty()) }
+    }
+
+    @Test fun failedMutationBlocksOldToggleUntilRetryReconfirmsStatus() {
+        val repo = managerRepository()
+        repo.mutationFailure = ClubException("unavailable")
+        show(repo)
+        action().performScrollTo().performClick()
+        action().assertIsNotEnabled()
+        compose.onNodeWithText(compose.activity.getString(R.string.clubs_error)).assertExists()
+        compose.runOnIdle { repo.mutationFailure = null; repo.attendance.value = null }
+        retry()
+        action().assertIsNotEnabled()
+        compose.runOnIdle { repo.attendance.value = false }
+        action().assertIsEnabled().performScrollTo().performClick()
+        action(true).assertIsEnabled()
+        compose.runOnIdle { assertEquals(listOf(true, true), repo.mutations.map { it.attending }) }
+    }
+
+    @Test fun membershipRevocationCancelsPendingWriteAndPrivateReadBeforeLateResult() {
+        val repo = managerRepository()
+        val late = CompletableDeferred<Unit>()
+        repo.delayedMutation = late
+        show(repo)
+        action().performScrollTo().performClick()
+        compose.runOnIdle { repo.access.value = ClubAccess.None }
+        action().assertDoesNotExist()
+        compose.runOnIdle {
+            assertEquals(0, repo.activeAttendanceReaders)
+            assertEquals(1, repo.cancelledMutations)
+            late.complete(Unit)
+            repo.delayedMutation = null
+            repo.attendance.value = null
+            repo.access.value = ClubAccess.Member(ClubMembership("other", ClubRole.Moderator, "new-epoch"))
+        }
+        action().assertIsNotEnabled()
+        compose.runOnIdle {
+            assertEquals("other", repo.attendanceRequests.last().second)
+            assertEquals(1, repo.mutations.size)
+            repo.attendance.value = false
+        }
+        action().assertIsEnabled()
+    }
+
+    @Test fun downgradeAndSameClubRejoinDiscardPreviouslyVerifiedAttendance() {
+        val repo = managerRepository()
+        repo.attendance.value = true
+        show(repo)
+        action(true).assertIsEnabled()
+        compose.runOnIdle {
+            repo.access.value = ClubAccess.Member(ClubMembership("managed", ClubRole.Member, "same-epoch"))
+        }
+        action(true).assertDoesNotExist()
+        compose.runOnIdle {
+            assertEquals(0, repo.activeAttendanceReaders)
+            repo.attendance.value = null
+            repo.access.value = ClubAccess.Member(ClubMembership("managed", ClubRole.Owner, "rejoined"))
+        }
+        action().assertIsNotEnabled()
+        compose.runOnIdle { assertEquals(2, repo.attendanceRequests.size) }
+    }
+
+    @Test fun readinessClosureRemovesActionAndReopeningRequiresFreshAttendance() {
+        val repo = managerRepository()
+        show(repo)
+        action().assertIsEnabled()
+        compose.runOnIdle { repo.ready.value = false }
+        action().assertDoesNotExist()
+        compose.runOnIdle {
+            assertEquals(0, repo.activeAttendanceReaders)
+            repo.attendance.value = null
+            repo.ready.value = true
+        }
+        action().assertIsNotEnabled()
+        retry()
+        compose.runOnIdle { repo.attendance.value = false }
+        action().assertIsEnabled()
+    }
+
+    @Test fun eventChangeDiscardsOldStatusAndObservesNewEvent() {
+        val repo = managerRepository()
+        val eventId = mutableStateOf("first-event")
+        compose.setContent { KccTheme { ClubEventAttendanceSection("viewer", eventId.value, repo) } }
+        action().assertIsEnabled()
+        compose.runOnIdle { repo.attendance.value = null; eventId.value = "second-event" }
+        action().assertIsNotEnabled()
+        compose.runOnIdle {
+            assertEquals(listOf("first-event", "second-event"), repo.attendanceRequests.map { it.first })
+            assertEquals(1, repo.activeAttendanceReaders)
+        }
     }
 
     @Test fun loadedPagesObserveWithdrawalsAndRenamesWithoutFirstPageChanges() {
@@ -160,9 +340,19 @@ private fun attendanceClubs(numbers: IntRange) = numbers.map { number ->
 }
 
 private data class AttendanceObservation(val eventId: String, val ids: List<String>)
+private data class AttendanceMutation(val clubId: String, val eventId: String, val attending: Boolean, val operationId: String)
 
 private class AttendanceRepository : ClubRepository {
     val ready = MutableStateFlow(true)
+    val access = MutableStateFlow<ClubAccess>(ClubAccess.None)
+    val attendance = MutableStateFlow<Boolean?>(false)
+    val attendanceFailures = mutableListOf<Throwable>()
+    val attendanceRequests = mutableListOf<Pair<String, String>>()
+    val mutations = mutableListOf<AttendanceMutation>()
+    var mutationFailure: Throwable? = null
+    var delayedMutation: CompletableDeferred<Unit>? = null
+    var cancelledMutations = 0
+    var activeAttendanceReaders = 0
     val first = MutableStateFlow(attendanceClubs(1..25))
     val results = mutableMapOf(clubId(25) to attendanceClubs(26..50))
     val delayed = mutableMapOf<String, CompletableDeferred<List<Club>>>()
@@ -176,7 +366,7 @@ private class AttendanceRepository : ClubRepository {
 
     override fun observeEnabled(): Flow<Boolean> = ready
     override fun observePublicAttendanceReady(): Flow<Boolean> = ready
-    override fun observeAccess(): Flow<ClubAccess> = flowOf(ClubAccess.None)
+    override fun observeAccess(): Flow<ClubAccess> = access
     override fun eventParticipants(eventId: String): Flow<List<Club>> = flow {
         firstReaders++
         try { emitAll(first) } finally { firstReaders-- }
@@ -199,7 +389,12 @@ private class AttendanceRepository : ClubRepository {
             try { emitAll(rows) } finally { active -= page }
         }
     }
-    override fun eventAttendance(eventId: String, clubId: String): Flow<Boolean?> = flowOf(null)
+    override fun eventAttendance(eventId: String, clubId: String): Flow<Boolean?> = flow {
+        attendanceRequests += eventId to clubId
+        if (attendanceFailures.isNotEmpty()) throw attendanceFailures.removeAt(0)
+        activeAttendanceReaders++
+        try { emitAll(attendance) } finally { activeAttendanceReaders-- }
+    }
     override suspend fun directory(cursor: String?): ClubPage<Club> = error("unused")
     override suspend fun state(): ClubState = error("unused")
     override suspend fun get(clubId: String): Club = error("unused")
@@ -211,6 +406,13 @@ private class AttendanceRepository : ClubRepository {
     override fun observeMessageRows(clubId: String, messageIds: List<String>): Flow<List<ClubMessage>> = error("unused")
     override suspend fun send(clubId: String, text: String, operationId: String) = error("unused")
     override suspend fun events(clubId: String, cursor: String?): ClubPage<ClubEvent> = error("unused")
-    override suspend fun setEventAttendance(clubId: String, eventId: String, attending: Boolean, operationId: String) = error("unused")
+    override suspend fun setEventAttendance(clubId: String, eventId: String, attending: Boolean, operationId: String) {
+        mutations += AttendanceMutation(clubId, eventId, attending, operationId)
+        try {
+            delayedMutation?.await()
+            mutationFailure?.let { throw it }
+            attendance.value = attending
+        } catch (cancelled: CancellationException) { cancelledMutations++; throw cancelled }
+    }
     override suspend fun blockAuthor(uid: String) = error("unused")
 }
