@@ -512,6 +512,12 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   // expose that gap on Finance rather than silently counting these reads as free.
   'driverFeed.list': 'uncosted',
   'driverFeed.detail': 'uncosted',
+  // Free club feature, member-driven (not a paid-tier gate): bounded canonical/
+  // CC authority reads and one personal record. Calendar-domain issue writes
+  // at most two docs + one old-locator delete; revoke one update + one delete.
+  // The shared authority wrapper retains its projection/mirror initialization.
+  // The separate provider HTTP feed's bounded reads are documented in its README.
+  'clubCalendar.manage': 'variable-member',
   'auth.completeOnboarding': 'variable-member',
   'auth.recordLogin': 'variable-member',
   'subscription.verify': 'variable-member',

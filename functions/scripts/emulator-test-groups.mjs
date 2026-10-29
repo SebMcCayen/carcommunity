@@ -56,6 +56,7 @@ export const GROUPS = [
       'driver-shared-identity',
       'auth',
       'account',
+      'club-calendar',
       'featureflags',
       'admin*',
       'purge-never-onboarded',

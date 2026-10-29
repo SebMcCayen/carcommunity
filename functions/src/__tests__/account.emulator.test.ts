@@ -18,7 +18,6 @@ process.env.FIREBASE_STORAGE_EMULATOR_HOST ??= '127.0.0.1:9199';
 process.env.FIREBASE_DATABASE_EMULATOR_HOST ??= '127.0.0.1:9000';
 process.env.GCLOUD_PROJECT ??= 'demo-test';
 
-import { createHash } from 'node:crypto';
 import { deleteApp, FirebaseError, initializeApp, type FirebaseApp } from 'firebase/app';
 import {
   connectAuthEmulator,
@@ -184,12 +183,13 @@ describe('account purge (hard delete after retention)', () => {
     const user = await createProvisionedUser('purge-calendar');
     const uid = user.uid,
       otherUid = `${uid}-other`;
-    const digest = (value: string) => createHash('sha256').update(value).digest('hex');
-    const ownState = adminDb.doc(`clubCalendarSubscriptions/${digest(uid)}`);
-    const orphanToken = adminDb.doc(`clubCalendarTokens/${digest(`${uid}-orphan`)}`);
-    const currentToken = adminDb.doc(`clubCalendarTokens/${digest(`${uid}-current`)}`);
-    const otherState = adminDb.doc(`clubCalendarSubscriptions/${digest(otherUid)}`);
-    const otherToken = adminDb.doc(`clubCalendarTokens/${digest(`${otherUid}-token`)}`);
+    // Fixed hash-shaped IDs deliberately differ from UIDs: erasure must query
+    // ownership fields, including orphan locators, rather than rebuild keys.
+    const ownState = adminDb.doc(`clubCalendarSubscriptions/${'a'.repeat(64)}`);
+    const orphanToken = adminDb.doc(`clubCalendarTokens/${'b'.repeat(64)}`);
+    const currentToken = adminDb.doc(`clubCalendarTokens/${'c'.repeat(64)}`);
+    const otherState = adminDb.doc(`clubCalendarSubscriptions/${'d'.repeat(64)}`);
+    const otherToken = adminDb.doc(`clubCalendarTokens/${'e'.repeat(64)}`);
     await Promise.all([
       ownState.set({ uid, rows: [{ title: 'Private club appointment' }] }),
       orphanToken.set({ uid, subscriptionId: 'missing-old-subscription' }),

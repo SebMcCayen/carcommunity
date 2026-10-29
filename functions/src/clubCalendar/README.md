@@ -11,7 +11,9 @@ control. The feed suggests one hour; changes are not instant push updates.
 
 Region `europe-west1`, default CarCommunity Functions codebase, Firebase callable
 name **`clubCalendar-manage`** (registry `clubCalendar.manage`). Firebase Auth and
-production App Check are required. Payloads reject additional fields:
+production App Check are required. Every manage action uses the standard fresh
+CarCommunity authority wrapper, including projection initialization and current
+product/identity restrictions. Payloads reject additional fields:
 
 | Request                                              | Success response                                            |
 | ---------------------------------------------------- | ----------------------------------------------------------- |
@@ -50,14 +52,17 @@ Callable errors contain fixed messages, never SDK errors or document contents:
 | `resource-exhausted`  | Revision capacity exceeded.                                     |
 | `unavailable`         | Temporary backend failure or corrupt subscription state.        |
 
-Revoke is an authenticated owner cleanup operation and deliberately does not
-require still being a club member or the shared feature remaining enabled. It
+Revoke is an authenticated, CC-authorized owner cleanup operation and deliberately
+does not require still being a club member or the shared feature remaining enabled. It
 returns no calendar data. Disabled/deleted Auth accounts and revoked sign-in
 sessions still fail. Issuing and status require current canonical membership and
 `config/sharedClubs.calendarSubscriptionsReady === true`. Until operator readiness
 is verified, the UI should show feature unavailable on `failed-precondition` and
 allow retry. No additional client flag, new request field, or response shape is
-needed; the callable remains authoritative.
+needed; the callable remains authoritative. A CC-blocked account cannot invoke
+manage, including revoke; the feed independently denies that account on each
+fetch. This product wrapper is not bypassed for blocked-app link management.
+Canonical account deletion remains the separate lifecycle erasure path.
 
 ## Subscription HTTP endpoint
 
