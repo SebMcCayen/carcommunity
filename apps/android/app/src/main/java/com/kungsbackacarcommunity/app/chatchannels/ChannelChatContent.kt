@@ -26,12 +26,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
-import com.kungsbackacarcommunity.app.design.KccButton as Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -87,8 +85,6 @@ import com.kungsbackacarcommunity.app.chattime.ChatTimelineItem
 import com.kungsbackacarcommunity.app.chattime.DaySeparatorRow
 import com.kungsbackacarcommunity.app.chattime.MessageTimeText
 import com.kungsbackacarcommunity.app.chattime.rememberChatDateContext
-import com.kungsbackacarcommunity.app.design.ChatComposerKeyboardOptions
-import com.kungsbackacarcommunity.app.design.ChatQuickEmojiRow
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.location.GeoLinks
@@ -330,7 +326,7 @@ fun ChannelChatContent(
                     onLoadOlder = onLoadOlder,
                     onRetry = onRetry,
                     onViewProfile = onViewProfile,
-                    chatRepliesEnabled = chatRepliesEnabled,
+                    ownMessageActionsEnabled = chatRepliesEnabled,
                     onShowLocationOnMap = onShowLocationOnMap,
                     // Long-press opens the shared context menu. It opens whenever
                     // there is ANY action to offer: Reply (on any message, incl.
@@ -483,71 +479,51 @@ fun ChannelChatContent(
         // Always enabled here: the channel composer's only send gate is a non-empty
         // draft, which a one-tap emoji doesn't need. A pending reply target is
         // attached to it too, then cleared, so the emoji quotes what you replied to.
-        ChatQuickEmojiRow(
-            onEmojiSelected = { glyph ->
+        ChannelChatComposer(
+            draft = draft,
+            onValueChange = update@ { updated ->
+                if (updated.text.length > CHANNEL_MESSAGE_MAX_LENGTH) return@update
+                // Re-anchor the recorded uids against the edited text BEFORE
+                // accepting it. A mention only survives while the exact text
+                // the picker inserted still stands where it was inserted; an
+                // edit that touches (or might have touched) it drops it back
+                // to plain text rather than let the uid drift onto whatever
+                // the user typed there instead.
+                if (updated.text != draft.text) {
+                    mentions =
+                        DraftMentions.onTextChanged(
+                            draft = MentionDraft(draft.text, mentions),
+                            newText = updated.text,
+                        ).mentions
+                    atMentionCap = false
+                    if (droppedMentionCount > 0) onDismissDroppedMentions()
+                }
+                draft = updated
+            },
+            onSend = {
+                // Optimistic: hand the draft off and clear the input at once.
+                // The message appears immediately as a "sending" bubble; there
+                // is no in-flight disabled/spinner state to wait through. Any
+                // pending reply target rides along and is then cleared.
+                onSend(
+                    draft.text,
+                    MentionDraft(draft.text, mentions).sendableUids,
+                    replySnapshot,
+                )
+                draft = TextFieldValue("")
+                mentions = emptyList()
+                atMentionCap = false
+                replyToId = null
+            },
+            onQuickEmoji = { glyph ->
                 onSend(glyph, emptyList(), replySnapshot)
                 replyToId = null
             },
+            canSend = ChannelThread.isSendable(draft.text),
+            placeholder = stringResource(R.string.channel_inputPlaceholder),
+            sendLabel = stringResource(R.string.channel_send),
+            inputModifier = Modifier.testTag(CHANNEL_INPUT_TEST_TAG),
         )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            OutlinedTextField(
-                value = draft,
-                onValueChange = { updated ->
-                    if (updated.text.length > CHANNEL_MESSAGE_MAX_LENGTH) return@OutlinedTextField
-                    // Re-anchor the recorded uids against the edited text BEFORE
-                    // accepting it. A mention only survives while the exact text
-                    // the picker inserted still stands where it was inserted; an
-                    // edit that touches (or might have touched) it drops it back
-                    // to plain text rather than let the uid drift onto whatever
-                    // the user typed there instead.
-                    if (updated.text != draft.text) {
-                        mentions =
-                            DraftMentions.onTextChanged(
-                                draft = MentionDraft(draft.text, mentions),
-                                newText = updated.text,
-                            ).mentions
-                        atMentionCap = false
-                        if (droppedMentionCount > 0) onDismissDroppedMentions()
-                    }
-                    draft = updated
-                },
-                placeholder = { Text(stringResource(R.string.channel_inputPlaceholder)) },
-                modifier = Modifier.weight(1f).testTag(CHANNEL_INPUT_TEST_TAG),
-                keyboardOptions = ChatComposerKeyboardOptions,
-                singleLine = false,
-                maxLines = 5,
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-            )
-            Button(
-                onClick = {
-                    // Optimistic: hand the draft off and clear the input at once.
-                    // The message appears immediately as a "sending" bubble; there
-                    // is no in-flight disabled/spinner state to wait through. Any
-                    // pending reply target rides along and is then cleared.
-                    onSend(
-                        draft.text,
-                        MentionDraft(draft.text, mentions).sendableUids,
-                        replySnapshot,
-                    )
-                    draft = TextFieldValue("")
-                    mentions = emptyList()
-                    atMentionCap = false
-                    replyToId = null
-                },
-                enabled = ChannelThread.isSendable(draft.text),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                ),
-            ) {
-                Text(stringResource(R.string.channel_send))
-            }
-        }
     }
 
     // Resolve the long-pressed message against the LIVE list, so a sheet whose
@@ -677,8 +653,9 @@ private fun MentionPicker(
     }
 }
 
+/** Shared chronological presentation; callers retain their own authorization and send/paging contracts. */
 @Composable
-private fun ChannelMessageList(
+internal fun ChannelMessageList(
     messages: List<ChannelMessage>,
     currentUid: String,
     mentionDisplayNames: Map<String, String>,
@@ -687,9 +664,10 @@ private fun ChannelMessageList(
     onLoadOlder: () -> Unit,
     onRetry: (ChannelMessage) -> Unit,
     onViewProfile: ((String) -> Unit)?,
-    chatRepliesEnabled: Boolean,
+    ownMessageActionsEnabled: Boolean,
     onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)?,
     onMessageLongPress: (ChannelMessage) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val dates = rememberChatDateContext()
     // Day separators are inserted by pure logic over the WHOLE list (see
@@ -748,7 +726,7 @@ private fun ChannelMessageList(
 
     LazyColumn(
         state = listState,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
     ) {
         if (canLoadOlder || isLoadingOlder) {
@@ -782,7 +760,7 @@ private fun ChannelMessageList(
                         onShowLocationOnMap = onShowLocationOnMap,
                         onRetry = { onRetry(item.message) },
                         onLongPress = { onMessageLongPress(item.message) },
-                        chatRepliesEnabled = chatRepliesEnabled,
+                        ownMessageActionsEnabled = ownMessageActionsEnabled,
                         highlighted = item.message.id == highlightedId,
                         onQuoteTap = onQuoteTap,
                     )
@@ -801,7 +779,7 @@ private fun ChannelMessageRow(
     onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)?,
     onRetry: () -> Unit,
     onLongPress: () -> Unit,
-    chatRepliesEnabled: Boolean,
+    ownMessageActionsEnabled: Boolean,
     highlighted: Boolean,
     onQuoteTap: (String) -> Unit,
 ) {
@@ -815,16 +793,14 @@ private fun ChannelMessageRow(
             horizontalAlignment = Alignment.End,
         ) {
             MessageTimeText(millis = message.createdAtMillis, dates = dates)
-            // Your own bubble now carries a long-press too — but only for Reply,
-            // and only while that feature is on (you can quote yourself). Block and
-            // report never applied to your own message and still don't; with
-            // replies off, an own bubble stays inert exactly as before.
+            // Own bubbles expose long-press only when the route offers an action:
+            // channel replies, or Club's moderator-only hide action.
             ChannelBubble(
                 message = message,
                 isOwn = true,
                 mentionDisplayNames = mentionDisplayNames,
                 onShowLocationOnMap = onShowLocationOnMap,
-                onLongPress = onLongPress.takeIf { chatRepliesEnabled },
+                onLongPress = onLongPress.takeIf { ownMessageActionsEnabled },
                 highlighted = highlighted,
                 onQuoteTap = onQuoteTap,
             )
