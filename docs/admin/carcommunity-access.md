@@ -53,6 +53,13 @@ Nothing in this PR deploys or changes production data. Missing policy defaults t
 5. Deploy/verify the new rules, set RTDB initialization enforcement true, then set Firestore policy `enforceInitialized:true, rolloutState:'ready'`. Only this state enables access decisions. Verify ordinary accounts, suspended accounts, Google/Apple same-identity re-registration and Driver in staging before production release approval.
 6. If delivery fails after a committed decision, keep strict authority and repair mirrors/retry the original operation. Never roll back to a permissive policy as a way to undo a blacklist. Product restore/unlist are the audited recovery actions; preserve identity records/cases/receipts.
 
+The owner's later staged-release instruction permits bounded migration and
+admin-only Hosting publication before their manual app upload, within about
+SEK 10 extra cost. Keep both enforcement flags false during that stage; the
+admin's access mutations remain disabled. This changes preparation order only:
+strict activation still waits for compatible Production clients and the
+mandatory-update policy. See the [current handoff](manual-android-and-activation.md#remaining-activation-gates).
+
 ## Verification layers
 
 The local emulator integration uses real Firebase Auth/Functions/Firestore SDKs, exercises Google and Apple, erases the original account, re-registers the same identity, proves CarCommunity denial and Driver/shared-auth continuity, and tests independent suspension/unlisting and stale reviewed decisions. Dedicated native SDK CI tests instantiate the production Android and iOS access repositories, observe suspension/restoration, retry decisions, and verify unchanged canonical shared restriction fields. Rule regression suites also cover the explicit pre-cutover phase; those are separate from strict access tests.

@@ -32,6 +32,13 @@ on:
       - '.npmrc'
       - 'tsconfig.base.json'
   workflow_dispatch:
+    inputs:
+      target:
+        description: 'Reviewed Hosting scope; admin excludes the unrelated public events site'
+        type: choice
+        options: [admin, all]
+        default: admin
+        required: true
 
 permissions:
   contents: read
@@ -45,6 +52,9 @@ jobs:
     concurrency:
       group: deploy-hosting-production
       cancel-in-progress: false
+    env:
+      # Preserve existing push behavior. Manual admin releases touch one site.
+      HOSTING_DEPLOY_TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'admin' && 'hosting:admin' || 'hosting' }}
 
     steps:
       - name: Checkout
@@ -159,4 +169,6 @@ jobs:
 
       - name: Deploy Firebase Hosting
         # Run from the repo root so firebase-tools auto-discovers ./firebase.json.
-        run: ./functions/node_modules/.bin/firebase deploy --only hosting --project kungsbacka-car-community --non-interactive
+        run: |
+          case "$HOSTING_DEPLOY_TARGET" in hosting:admin|hosting) ;; *) exit 1 ;; esac
+          ./functions/node_modules/.bin/firebase deploy --only "$HOSTING_DEPLOY_TARGET" --project kungsbacka-car-community --non-interactive

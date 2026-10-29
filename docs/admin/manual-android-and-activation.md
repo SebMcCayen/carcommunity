@@ -72,12 +72,22 @@ Its dry-run `mirrorMismatches` counter is not a mirror-verification result: only
 
 ## Remaining activation gates
 
-1. Confirm compatible Android availability for affected Production users and the
+The owner subsequently authorized completing migration and admin publication
+before returning to upload apps, with at most about SEK 10 extra cost. Perform
+the bounded backfill while both enforcement flags remain false. The admin web
+can be published in that preparation state: its existing access controls remain
+disabled until policy is ready. Keep strict rule/policy cutover and the mandatory
+Android update gate pending compatible Production availability. No additional
+Play grants or agent store publication are authorized. Do not start new cloud
+test resources or a repeated backend rebuild; use the existing backend and
+admin-only Hosting target.
+
+1. Before strict activation, confirm compatible Android availability for affected Production users and the
    reviewed mandatory-update policy. No iOS version has been distributed, even
    through TestFlight, so there are no installed iOS clients to upgrade. Retain
    Android/iOS SDK, emulator/simulator and build evidence; first iOS distribution
    remains a separate release decision.
-2. Obtain separate approval for the concrete migration window. Refresh the
+2. Under the recorded bounded migration approval, refresh the
    inventory immediately before apply, review unavailable Auth accounts and
    existing restrictions, build Functions from the reviewed source, and use the
    guarded `--apply` command described in [the access rollout](carcommunity-access.md#controlled-rollout--manual-release-gates).
@@ -91,8 +101,11 @@ Its dry-run `mirrorMismatches` counter is not a mirror-verification result: only
    RTDB and Storage rules. Set RTDB initialization enforcement to true before
    Firestore `enforceInitialized:true, rolloutState:'ready'`. Stop on a failed
    prerequisite; do not make policy permissive to bypass a failed decision.
-5. With separate Hosting publication approval and all prior gates satisfied,
-   publish the reviewed web build. Record the source, deployed Hosting version
+5. Under the recorded admin publication approval, publish the reviewed web build
+   with the manual Hosting workflow's `target=admin`. This excludes the unrelated
+   public events site. Publication may precede app upload and strict cutover
+   while preparation flags remain false and access mutations remain disabled.
+   Record the source, deployed Hosting version
    and previous release. Confirm the public Firebase/App Check configuration and
    the intended admin URL before calling the new admin page live.
 
