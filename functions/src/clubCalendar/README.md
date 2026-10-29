@@ -71,9 +71,31 @@ Origin comes from trusted runtime project configuration, never the inbound Host
 header or client input. `webcalUrl` is a convenience scheme variant; HTTPS is the
 canonical transport. There is no HTML page, redirect, embedded source/token URL,
 analytics, organizer identity, attendee list, coordinates, address or description.
-Plaintext application requests are rejected. The Google Functions Framework
-trusts its platform proxy when deriving `request.protocol`; verify that contract
-in separately authorized deployed acceptance.
+Plaintext application requests are rejected. The strict `request.protocol`
+check is retained; there is no manual `X-Forwarded-Proto` fallback.
+
+Proxy/path source verification: the official
+[Functions Framework server](https://github.com/GoogleCloudPlatform/functions-framework-nodejs/blob/main/src/server.ts)
+explicitly enables Express `trust proxy`. Google's
+[Functions header contract](https://cloud.google.com/functions/docs/reference/headers)
+states that its load balancer terminates TLS and adds `X-Forwarded-Proto` based on
+the client's protocol. Firebase's
+[HTTP routing contract](https://firebase.google.com/docs/functions/http-events#invoke_an_http_function)
+adds the function name as the external prefix to app routes. For this managed
+alias, `/clubCalendar-feed/calendar.ics` therefore routes to the app's
+`/calendar.ics`, with `request.protocol === 'https'`. The locally installed
+`firebase-functions` 7.4.0 `onRequest` wrapper passes the request through without
+rewriting this path. The local Firebase emulator runtime also enables `trust
+proxy`, but emulator code is not evidence of deployed edge behavior.
+
+The cloud-injected Framework package is not installed locally, and the deployed
+runtime version/edge has not been inspected or called here. These are source and
+official-platform contract checks, not deployed end-to-end acceptance. An
+unknown-token 404 cannot distinguish an early HTTPS/path rejection from reaching
+the service. A future authorized valid-token 200/304/revocation check is still
+required after logging readiness. Do not reuse this proxy assumption on a
+self-hosted/directly exposed container or a different reverse proxy; its trusted
+ingress configuration would need separate verification.
 
 The provider cannot supply Firebase Auth/App Check: its 256-bit random URL bearer
 is intentionally the authentication mechanism for this endpoint. Do not weaken
@@ -102,6 +124,19 @@ Every successful GET/HEAD, **including 304**, does all of the following:
 5. Read a bounded private intent page and freshly read each relevant canonical
    event and Driver club/event revocation marker. Never trust cached projection
    titles/dates or an old ETag. Apply Driver's effective-intent cutoff semantics.
+
+Auth-time precision is the Firebase Admin SDK contract, not local fetch time.
+The locally inspected Admin SDK 13.10.0 floors refresh-token revocation
+`validSince` to UTC seconds (`auth-api-request.js`), constructs
+`tokensValidAfterTime` from `parseInt(validSince, 10) * 1000`
+(`user-record.js`), and rejects an ID token only when
+`auth_time * 1000 < Date.parse(tokensValidAfterTime)` (`base-auth.js`). This
+service uses the same strict comparison: equal-second newly authenticated tokens
+remain valid even when issue happens at, for example, `second + 999 ms`. It does
+not compare the JWT's whole-second `auth_time` against a millisecond local clock.
+The focused regression uses the real SDK UserRecord wire constructor. As with
+Admin SDK revocation itself, authentication before/after revocation inside the
+same second cannot be distinguished at finer precision; do not promise that.
 
 `publicAttendanceReady` gates public attendance summaries; it is not an extra
 grant to private calendar data. This endpoint reads private member intents,
@@ -249,7 +284,7 @@ authorization-before-304. This does not replace the parent's heavy emulator
 slot, actual Firestore transaction/rules verification, deployment metadata,
 managed request-log verification or real provider synchronization acceptance.
 
-Local evidence for this patch: 80 focused calendar/App Check tests and nine
+Local evidence before the proxy/Auth-precision follow-up: 80 focused calendar/App Check tests and nine
 structural deployed-instance metadata tests (89 total) passed through `run-no-cloud.mjs`
 with one worker and a 384 MiB Node heap. Production TypeScript build, strict
 calendar-only source/test typecheck, scoped ESLint, formatting and diff checks
@@ -258,6 +293,12 @@ capped 512 MiB heap; it was not retried with a larger heap on the shared host.
 The parent's full CI/security review and heavy emulator/Android/provider QA remain
 separate gates. No deployment, live Firebase call, log-sink configuration or
 Gradle invocation was performed.
+
+The source/docs-only proxy/Auth-precision follow-up retained production code
+unchanged and passed all 65 service tests, including a real-Admin-SDK same-second
+authentication boundary regression, through the same no-cloud runner. It did not
+call a deployed feed, install a Framework dependency, or repeat the full
+test-project typecheck that previously exhausted its heap.
 
 References: [shared club contract](../../../docs/contracts/shared-clubs-v1.md),
 [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545),

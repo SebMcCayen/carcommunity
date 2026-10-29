@@ -1,6 +1,6 @@
 /** Test-only in-memory transactional adapter; no Firebase bootstrap or network. */
 import { Timestamp, type Firestore } from 'firebase-admin/firestore';
-import type { UserRecord } from 'firebase-admin/auth';
+import { UserRecord } from 'firebase-admin/auth';
 import { describe, expect, it } from 'vitest';
 import { ClubCalendarService } from './service';
 import { LIMITS, SUBSCRIPTIONS, TOKENS, hash } from './contract';
@@ -309,6 +309,44 @@ describe('personal club calendar lifecycle', () => {
     });
     f.auth.tokensValidAfterTime = new Date(NOW + 1000).toUTCString();
     await expect(f.manage('issue', { expectedVersion: 0 })).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
+  });
+
+  it('accepts a newly authenticated token in the revocation second, matching real Admin SDK precision', async () => {
+    const f = fixture();
+    const subsecondNow = NOW + 999,
+      authTime = Math.floor(subsecondNow / 1000);
+    // Exercise the real SDK model's internal wire-response constructor, not a
+    // fake millisecond ISO value that Admin Auth never returns for validSince.
+    const auth = Reflect.construct(UserRecord, [
+      {
+        localId: 'member',
+        validSince: String(authTime),
+        providerUserInfo: [{ providerId: 'google.com', rawId: 'google-subject' }],
+      },
+    ]) as UserRecord;
+    expect(Date.parse(auth.tokensValidAfterTime!)).toBe(NOW);
+    const service = new ClubCalendarService(
+      f.store.firestore(),
+      async () => auth,
+      'demo-calendar',
+      () => subsecondNow,
+    );
+    const request = (seconds: number, action = 'status') =>
+      ({
+        auth: { uid: 'member', token: { auth_time: seconds } },
+        data:
+          action === 'issue'
+            ? { action, clubId: 'club', expectedVersion: 0 }
+            : { action, clubId: 'club' },
+      }) as Parameters<ClubCalendarService['manage']>[0];
+    expect(await service.manage(request(authTime))).toMatchObject({ active: false, version: 0 });
+    expect(await service.manage(request(authTime, 'issue'))).toMatchObject({
+      active: true,
+      version: 1,
+    });
+    await expect(service.manage(request(authTime - 1))).rejects.toMatchObject({
       code: 'permission-denied',
     });
   });
