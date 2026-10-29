@@ -333,7 +333,7 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
           }
         : null,
     );
-    const guard = await stageChatSendGuard(db, tx, actor.uid);
+    const guard = await stageChatSendGuard(db, tx, actor.uid, Date.now);
     if (!guard.allowed) return { kind: 'denied' as const, guard };
     tx.create(
       messageRef,

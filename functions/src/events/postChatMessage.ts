@@ -83,7 +83,7 @@ export const postChatMessage = onCall(
         db,
         tx,
         participant.uid,
-        now,
+        Date.now,
         recent.size >= CHAT_RATE_LIMIT_MAX_MESSAGES,
       );
       if (!guard.allowed) return { kind: 'denied' as const, guard };

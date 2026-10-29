@@ -263,7 +263,7 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
         throw new HttpsError('already-exists', 'Message id already used.');
       return { kind: 'replay' as const };
     }
-    const guard = await stageChatSendGuard(db, tx, actor.uid);
+    const guard = await stageChatSendGuard(db, tx, actor.uid, Date.now);
     if (!guard.allowed) return { kind: 'denied' as const, guard };
     tx.create(
       messageRef,

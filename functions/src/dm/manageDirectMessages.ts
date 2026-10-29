@@ -288,7 +288,7 @@ export const sendMessage = onCall(CALLABLE_OPTS, async (request): Promise<SendMe
         return { kind: 'sent' as const, priorUnread: unreadBefore, duplicate: true };
       }
     }
-    const guard = await stageChatSendGuard(db, tx, actor.uid);
+    const guard = await stageChatSendGuard(db, tx, actor.uid, Date.now);
     if (!guard.allowed) return { kind: 'denied' as const, guard };
     const ts = FieldValue.serverTimestamp();
 
