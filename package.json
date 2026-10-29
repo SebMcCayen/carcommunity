@@ -45,7 +45,9 @@
     "hono@<4.13.13": "4.13.13",
     "morgan@<1.12.1": "1.12.1",
     "qs@<6.16.1": "6.16.1",
-    "@grpc/grpc-js": "1.13.6"
+    "@grpc/grpc-js": "1.13.6",
+    "re2js": "2.9.1",
+    "@hono/node-server": "2.1.5"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -78,7 +80,9 @@
       "hono@<4.13.13": "4.13.13",
       "morgan@<1.12.1": "1.12.1",
       "qs@<6.16.1": "6.16.1",
-      "@grpc/grpc-js@<1.13.6": "1.13.6"
+      "@grpc/grpc-js@<1.13.6": "1.13.6",
+      "re2js": "2.9.1",
+      "@hono/node-server": "2.1.5"
     }
   },
   "engines": {
