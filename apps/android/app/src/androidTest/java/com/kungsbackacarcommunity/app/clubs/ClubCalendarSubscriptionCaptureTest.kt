@@ -47,8 +47,29 @@ class ClubCalendarSubscriptionCaptureTest {
     private fun capture(stage: String, variant: Variant) {
         compose.waitForIdle()
         noTokenInUi()
-        // A dialog is another window. Capture its root, not the obscured launcher root.
-        val bitmap = compose.onAllNodes(isRoot()).onLast().captureToImage().asAndroidBitmap()
+        val captureNode = if (stage == "baseline") {
+            compose.onAllNodes(isDialog()).assertCountEquals(0)
+            compose.onRoot().assertIsDisplayed()
+                .assert(hasAnyDescendant(hasTestTag("club_calendar_subscribe")))
+        } else {
+            // Window/root enumeration order does not identify the modal. Select
+            // its dialog semantics explicitly so a dimmed Activity cannot pass.
+            compose.onAllNodes(isDialog()).assertCountEquals(1)
+            val dialog = compose.onNode(isDialog()).assertIsDisplayed()
+                .assert(hasAnyDescendant(hasText(text(R.string.clubCalendar_subscribe))))
+                .assert(hasAnyDescendant(hasText(text(R.string.clubs_close))))
+            val expectedStage = when (stage) {
+                "instructions" -> hasText(text(R.string.clubCalendar_androidInstructions))
+                "revocation" -> hasTestTag("club_calendar_revoke")
+                "issued-copy-action" -> hasTestTag("club_calendar_copy")
+                "revoked" -> hasText(text(R.string.clubCalendar_inactive))
+                else -> error("Unknown calendar capture stage: $stage")
+            }
+            dialog.assert(hasAnyDescendant(expectedStage))
+            compose.onNode(expectedStage and hasAnyAncestor(isDialog())).assertIsDisplayed()
+            dialog
+        }
+        val bitmap = captureNode.captureToImage().asAndroidBitmap()
         val file = File(compose.activity.getExternalFilesDir(null), "calendar-subscription-$stage-${variant.suffix}.png")
         file.outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
     }
