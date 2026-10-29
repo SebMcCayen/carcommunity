@@ -22,6 +22,12 @@ Security: the formal moderation diff scan covers immutable head `7aeafe2e1a008ec
 
 ## Owner-controlled production sequence
 
+The owner now handles Android uploads manually. Follow the
+[manual Android handoff and activation gates](manual-android-and-activation.md)
+for the approved signed artifact, publication evidence, mandatory-update policy
+and the confirmed absence of existing iOS distributions. Do not treat an upload
+as availability or resume the API publisher without a new request to use it.
+
 **Merging this candidate is a production action.** Main's independent `deploy-firebase-functions.yml` and `deploy-firebase-hosting.yml` workflows automatically deploy matching changes. Hosting does not wait for Functions or indexes. Their `production` environment configuration/reviewer protections have not been verified by a live cloud test. Do not rely on them to supply missing approval or deployment ordering.
 
 1. Obtain the owner's explicit production approval for the exact release revision, resource changes, compatible app releases and migration window. Record the previous workflow states, known-good Hosting release, Functions revision and rule versions. Pause both the Functions and Hosting deployment workflows before merging the candidate: independent main-push deployments must not start either a strict backend before preparation or Hosting before backend/index readiness. This document does not change those controls.
