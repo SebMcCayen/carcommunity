@@ -82,6 +82,7 @@ function fixture(options = {}) {
     if (path.endsWith(':commit') && init.method === 'POST') {
       committed = true;
       internal = pending;
+      if (options.commitResponseLost) throw new Error('Connection lost after commit');
       return json({ id: 'committed' });
     }
     throw new Error(`Unexpected mock operation ${init.method} ${path}`);
@@ -198,4 +199,13 @@ test('provider bodies and tokens are excluded from error messages', async () => 
       (error) => !error.message.includes('secret') && !error.message.includes('inert-token'),
     );
   }
+});
+
+test('lost commit acknowledgement reports unknown publication instead of a false negative', async () => {
+  const f = fixture({ commitResponseLost: true });
+  await assert.rejects(
+    f.invoke(true),
+    (error) => error.publicationCommitted === null && error.publicationState === 'unknown',
+  );
+  assert.equal(f.calls.filter((c) => c.url.endsWith(':commit')).length, 1);
 });

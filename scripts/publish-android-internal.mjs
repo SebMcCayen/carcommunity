@@ -69,6 +69,7 @@ export async function releaseInternal({
   if (!token) throw new Error('A short-lived Play publishing token is required.');
   let activeEdit = null;
   let committed = false;
+  let commitAttempted = false;
   async function call(method, path, body, upload = false) {
     const response = await fetchImpl((upload ? UPLOAD : API) + path, {
       method,
@@ -177,6 +178,7 @@ export async function releaseInternal({
     };
     await call('PUT', `${root}/tracks/${target}`, { track: target, releases: [release] });
     await call('POST', `${root}:validate`, {});
+    commitAttempted = true;
     await call('POST', `${root}:commit`, {});
     committed = true;
     activeEdit = null;
@@ -202,7 +204,12 @@ export async function releaseInternal({
       productionUnchanged: true,
     };
   } catch (error) {
-    error.publicationCommitted = committed;
+    error.publicationCommitted = committed ? true : commitAttempted ? null : false;
+    error.publicationState = committed
+      ? 'committed'
+      : commitAttempted
+        ? 'unknown'
+        : 'not_committed';
     throw error;
   } finally {
     if (activeEdit) {
@@ -248,7 +255,10 @@ async function main() {
   } catch {
     throw Object.assign(
       new Error('Release operation finished, but its receipt could not be written.'),
-      { publicationCommitted: report.published === true },
+      {
+        publicationCommitted: report.published === true,
+        publicationState: report.published === true ? 'committed' : 'not_committed',
+      },
     );
   }
   console.log(JSON.stringify(result));
@@ -257,7 +267,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   main().catch(async (error) => {
     const result = {
       failed: true,
-      publicationCommitted: error.publicationCommitted === true,
+      publicationCommitted:
+        error.publicationCommitted === null ? null : error.publicationCommitted === true,
+      publicationState: error.publicationState ?? 'not_committed',
       message: error.message,
       track: 'internal',
       versionCode: 60,
