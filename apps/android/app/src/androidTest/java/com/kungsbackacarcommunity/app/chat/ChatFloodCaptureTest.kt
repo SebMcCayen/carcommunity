@@ -59,7 +59,11 @@ class ChatFloodCaptureTest {
                                     override fun chat() = flowOf<ClubChatState>(ClubChatState.Ready(clubChatDesignMembership,
                                         listOf(ClubMessage("wall", "local-other", "Testmedlem", wall, 1792936800000L))))
                                 } }
-                                val gate = remember { ChatSendCooldown { 0L }.apply { apply(ChatRateLimit(30_000)) } }
+                                val gate = remember {
+                                    val cooldown = ChatSendCooldown { 0L }
+                                    cooldown.apply(ChatRateLimit(30_000))
+                                    cooldown
+                                }
                                 ClubChatRoute("local-self", repo, sendCooldown = gate)
                             }
                         }
