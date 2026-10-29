@@ -117,7 +117,11 @@ export class ClubCalendarService {
       (user.status != null && !['active', 'warned'].includes(String(user.status)))
     )
       deny();
-    if (config?.enabled !== true || !(config.activatedAt instanceof Timestamp))
+    if (
+      config?.enabled !== true ||
+      !(config.activatedAt instanceof Timestamp) ||
+      config.calendarSubscriptionsReady !== true
+    )
       throw new HttpsError('failed-precondition', 'Shared clubs are unavailable.');
     if (
       club?.status !== 'active' ||

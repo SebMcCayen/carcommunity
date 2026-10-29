@@ -40,20 +40,24 @@ access. Reopen a dialog through status; a new link requires explicit issue.
 
 Callable errors contain fixed messages, never SDK errors or document contents:
 
-| Code                  | Meaning                                                      |
-| --------------------- | ------------------------------------------------------------ |
-| `unauthenticated`     | Sign in first.                                               |
-| `invalid-argument`    | Invalid/extra fields, IDs or missing issue version.          |
-| `permission-denied`   | Account/session/access/membership cannot be verified.        |
-| `failed-precondition` | Shared clubs are not enabled and activated.                  |
-| `aborted`             | Supplied version is stale, or transaction retries exhausted. |
-| `resource-exhausted`  | Revision capacity exceeded.                                  |
-| `unavailable`         | Temporary backend failure or corrupt subscription state.     |
+| Code                  | Meaning                                                         |
+| --------------------- | --------------------------------------------------------------- |
+| `unauthenticated`     | Sign in first.                                                  |
+| `invalid-argument`    | Invalid/extra fields, IDs or missing issue version.             |
+| `permission-denied`   | Account/session/access/membership cannot be verified.           |
+| `failed-precondition` | Shared clubs or calendar-subscription readiness is unavailable. |
+| `aborted`             | Supplied version is stale, or transaction retries exhausted.    |
+| `resource-exhausted`  | Revision capacity exceeded.                                     |
+| `unavailable`         | Temporary backend failure or corrupt subscription state.        |
 
 Revoke is an authenticated owner cleanup operation and deliberately does not
 require still being a club member or the shared feature remaining enabled. It
 returns no calendar data. Disabled/deleted Auth accounts and revoked sign-in
-sessions still fail. Issuing and status require current canonical membership.
+sessions still fail. Issuing and status require current canonical membership and
+`config/sharedClubs.calendarSubscriptionsReady === true`. Until operator readiness
+is verified, the UI should show feature unavailable on `failed-precondition` and
+allow retry. No additional client flag, new request field, or response shape is
+needed; the callable remains authoritative.
 
 ## Subscription HTTP endpoint
 
@@ -85,7 +89,8 @@ Every successful GET/HEAD, **including 304**, does all of the following:
    Auth read after building closes an Auth revocation during the fetch.
 3. In the same consistent Firestore snapshot, verify canonical `users/{uid}`
    onboarding Timestamp, restriction flags/status; sharedClubs enabled and native
-   activation Timestamp; active v2 club; current lock/member/role/ownership;
+   activation Timestamp and `calendarSubscriptionsReady === true`; active v2 club;
+   current lock/member/role/ownership;
    exact native joinedAt seconds/nanoseconds and current open membership history
    interval. Rejoining the same club creates a different epoch and cannot revive
    an old URL. Claims cannot override these checks. No Driver-only account mirror
@@ -182,14 +187,34 @@ the path/query, and an upstream proxy/load balancer can log it too. A query
 parameter does not prevent that exposure. `no-referrer`, no HTML/analytics and a
 fixed HTTPS origin reduce propagation; they do not redact managed request logs.
 
-Before activation, the operator must explicitly approve and deploy a narrowly
-scoped log exclusion/redaction design covering this feed route/service and every
+Before activation, execute the reviewed, narrowly scoped log exclusion/redaction
+plan covering this feed route/service and every
 applicable sink/proxy, review log-reader access/retention, then verify with a
 disposable token. Exclusions on a sink do not erase historical logs or protect
-other sinks. No such config/IAM/Firebase change is authorized or performed here.
-Until verified, treat raw URL exposure to platform log readers as a deployment
-blocker, never promise zero raw-token logging. Do not include real links in bug
+other sinks. This backend patch performs no config/IAM/Firebase change; the
+separately reviewed operational plan governs rollout. Until verified, keep
+`calendarSubscriptionsReady` false or absent and treat raw URL exposure to platform
+log readers as an activation blocker. Function deployment can proceed with the
+gate closed. Never promise zero raw-token logging. Do not include real links in bug
 reports, screenshots, terminal commands, telemetry or security scan context.
+
+### Server-side activation gate
+
+Automatic function deployment is fail closed: the new server-only field
+`config/sharedClubs.calendarSubscriptionsReady` must be the literal boolean
+`true`. Missing, false, null, strings or numbers deny status, issue and every
+provider GET/HEAD (including a matching ETag). The field is checked in the same
+transactional config read as existing activation, adding no document read. An
+old valid bearer does not bypass a closed gate. Revoke remains an authenticated,
+idempotent cleanup action while the gate is off. No Firestore grant or Driver
+flag is widened or repurposed.
+
+After review/merge and verification of the scoped request-log mitigation, the
+operator may separately activate this gate with a transactional compare-and-swap
+update to the existing config document, preserving its other fields/history and
+rechecking the approved preconditions. Do not replace or seed the whole config
+document. This patch performs no configuration write or activation; the gate
+stays default closed until that explicitly approved operation succeeds.
 
 ## Cost and validation
 
@@ -224,8 +249,8 @@ authorization-before-304. This does not replace the parent's heavy emulator
 slot, actual Firestore transaction/rules verification, deployment metadata,
 managed request-log verification or real provider synchronization acceptance.
 
-Local evidence for this patch: 74 focused calendar/App Check tests and nine
-structural deployed-instance metadata tests passed through `run-no-cloud.mjs`
+Local evidence for this patch: 80 focused calendar/App Check tests and nine
+structural deployed-instance metadata tests (89 total) passed through `run-no-cloud.mjs`
 with one worker and a 384 MiB Node heap. Production TypeScript build, strict
 calendar-only source/test typecheck, scoped ESLint, formatting and diff checks
 passed. The full repository test-project typecheck reached its deliberately

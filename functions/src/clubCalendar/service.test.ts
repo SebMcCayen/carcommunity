@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { ClubCalendarService } from './service';
 import { LIMITS, SUBSCRIPTIONS, TOKENS, hash } from './contract';
 import { providerIdentityKeys } from '../access/carCommunity-core';
+import { handleFeed } from './http';
 
 type Data = Record<string, unknown>;
 function clone<T>(value: T): T {
@@ -143,7 +144,11 @@ function fixture(uid = 'member', store = new MemoryStore()) {
   const joined = time(NOW - 10000),
     intervalId = `interval-${uid}`;
   store
-    .seed('config/sharedClubs', { enabled: true, activatedAt: time(1) })
+    .seed('config/sharedClubs', {
+      enabled: true,
+      activatedAt: time(1),
+      calendarSubscriptionsReady: true,
+    })
     .seed(`users/${uid}`, { onboardingCompletedAt: time(1), status: 'active' })
     .seed('driverClubs/club', { status: 'active', schemaVersion: 2, ownerUid: 'owner' })
     .seed(`driverClubs/club/members/${uid}`, { role: 'member', joinedAt: joined })
@@ -309,6 +314,99 @@ describe('personal club calendar lifecycle', () => {
   });
 });
 
+describe('server readiness gate protects automatic deployment', () => {
+  it.each([undefined, false, null, 'true', 1])(
+    'readiness %s denies status, issue and feed without writes; revoke remains idempotent',
+    async (ready) => {
+      const f = fixture(),
+        link = await f.issue();
+      f.event();
+      await f.service.fetch(link.token);
+      const config: Data = { enabled: true, activatedAt: time(1) };
+      if (ready !== undefined) config.calendarSubscriptionsReady = ready;
+      f.store.seed('config/sharedClubs', config);
+      const state = privateState(f.store),
+        writes = f.store.writes;
+      await expect(f.manage('status')).rejects.toMatchObject({ code: 'failed-precondition' });
+      await expect(f.issue(1)).rejects.toMatchObject({ code: 'failed-precondition' });
+      await expect(f.service.fetch(link.token)).rejects.toMatchObject({
+        code: 'failed-precondition',
+      });
+      expect(privateState(f.store)).toEqual(state);
+      expect(f.store.writes).toBe(writes);
+      expect(await f.manage('revoke', { expectedVersion: 1 })).toEqual({
+        active: false,
+        version: 2,
+      });
+      const revokedWrites = f.store.writes;
+      expect(await f.manage('revoke', { expectedVersion: 2 })).toEqual({
+        active: false,
+        version: 2,
+      });
+      expect(f.store.writes).toBe(revokedWrites);
+    },
+  );
+
+  it('revoking readiness defeats a matching ETag; restoring true still requires all existing proofs', async () => {
+    const f = fixture(),
+      link = await f.issue();
+    f.event();
+    const first = await f.service.fetch(link.token),
+      writes = f.store.writes;
+    const request = {
+      method: 'GET',
+      path: '/calendar.ics',
+      protocol: 'https',
+      query: { token: link.token },
+      get: (_name: string) => first.etag,
+    };
+    const response = () => ({
+      code: 0,
+      headers: {} as Record<string, string>,
+      body: '',
+      set(name: string, value: string) {
+        this.headers[name] = value;
+        return this;
+      },
+      status(code: number) {
+        this.code = code;
+        return this;
+      },
+      send(body: string) {
+        this.body = body;
+      },
+      end() {},
+    });
+    f.store.seed('config/sharedClubs', {
+      enabled: true,
+      activatedAt: time(1),
+      calendarSubscriptionsReady: false,
+    });
+    const closed = response();
+    await handleFeed(f.service, request, closed);
+    expect(closed.code).toBe(404);
+    expect(closed.body).toBe('Not found.');
+    expect(closed.headers['Cache-Control']).toBe('no-store');
+    expect(closed.headers.ETag).toBeUndefined();
+    expect(f.store.writes).toBe(writes);
+    f.store.seed('config/sharedClubs', {
+      enabled: true,
+      activatedAt: time(1),
+      calendarSubscriptionsReady: true,
+    });
+    const reopened = response();
+    await handleFeed(f.service, request, reopened);
+    expect(reopened.code).toBe(304);
+    expect(f.store.writes).toBe(writes);
+    expect(await f.manage('status')).toMatchObject({ active: true, version: 1 });
+    f.store.records.delete('driverClubs/club/members/member');
+    const noMembership = response();
+    await handleFeed(f.service, request, noMembership);
+    expect(noMembership.code).toBe(404);
+    expect(noMembership.headers.ETag).toBeUndefined();
+  });
+});
+
 describe('fail closed canonical authorization on every fetch', () => {
   const restrictions: [string, (f: ReturnType<typeof fixture>) => void][] = [
     ...['suspended', 'deleted', 'banned'].map(
@@ -354,12 +452,26 @@ describe('fail closed canonical authorization on every fetch', () => {
     ],
     [
       'feature disabled',
-      (f) => f.store.seed('config/sharedClubs', { enabled: false, activatedAt: time(1) }),
+      (f) =>
+        f.store.seed('config/sharedClubs', {
+          enabled: false,
+          activatedAt: time(1),
+          calendarSubscriptionsReady: true,
+        }),
     ],
-    ['activation missing', (f) => f.store.seed('config/sharedClubs', { enabled: true })],
+    [
+      'activation missing',
+      (f) =>
+        f.store.seed('config/sharedClubs', { enabled: true, calendarSubscriptionsReady: true }),
+    ],
     [
       'activation malformed',
-      (f) => f.store.seed('config/sharedClubs', { enabled: true, activatedAt: 'today' }),
+      (f) =>
+        f.store.seed('config/sharedClubs', {
+          enabled: true,
+          activatedAt: 'today',
+          calendarSubscriptionsReady: true,
+        }),
     ],
     [
       'club archived',
