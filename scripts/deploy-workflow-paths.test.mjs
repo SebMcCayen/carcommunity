@@ -98,3 +98,14 @@ test('shared deployment configuration and lockfiles trigger both targets', () =>
   // GitHub triggers a mixed commit when any changed path matches.
   assert.ok(['apps/ios/KCC/App.swift', 'functions/src/index.ts'].some(functions));
 });
+
+test('legal compatibility pages deploy Hosting without redeploying Functions', () => {
+  for (const path of [
+    'apps/admin/public/privacy/index.html',
+    'apps/admin/public/terms/index.html',
+    'apps/admin/public/support/index.html',
+  ]) {
+    assert.equal(hosting(path), true, path);
+    assert.equal(functions(path), false, path);
+  }
+});
