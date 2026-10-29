@@ -74,7 +74,8 @@ private fun ClubCalendarSubscriptionDialog(
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().testTag("club_calendar_busy"))
             if (failed) {
                 Text(stringResource(if (changed) R.string.clubCalendar_changed else R.string.clubCalendar_error), color = MaterialTheme.colorScheme.error)
-                TextButton(onClick = { request("status") }, enabled = !busy) { Text(stringResource(R.string.clubs_retry)) }
+                TextButton(onClick = { request("status") }, enabled = !busy,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)) { Text(stringResource(R.string.clubs_retry)) }
             }
             subscription?.let { current ->
                 Text(stringResource(if (current.active) R.string.clubCalendar_active else R.string.clubCalendar_inactive))
@@ -98,9 +99,11 @@ private fun ClubCalendarSubscriptionDialog(
                     if (copied) Text(stringResource(R.string.clubCalendar_copied), modifier = Modifier.testTag("club_calendar_copied"))
                 }
                 if (current.active) TextButton(onClick = { request("revoke") }, enabled = !busy,
-                    modifier = Modifier.testTag("club_calendar_revoke")) { Text(stringResource(R.string.clubCalendar_revoke)) }
+                    modifier = Modifier.testTag("club_calendar_revoke"),
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text(stringResource(R.string.clubCalendar_revoke)) }
             }
         } },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.clubs_close)) } },
+        confirmButton = { TextButton(onClick = onDismiss,
+            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)) { Text(stringResource(R.string.clubs_close)) } },
     )
 }
