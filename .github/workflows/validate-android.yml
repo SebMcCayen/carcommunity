@@ -1,6 +1,15 @@
 name: Validate Android
 
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.source_only && 'Android source checks without APK or AAB' || 'Validate Android' }}
+
 on:
+  workflow_dispatch:
+    inputs:
+      source_only:
+        description: 'Compile, unit-test and lint only; no APK/AAB or device tests'
+        type: boolean
+        default: true
+        required: true
   push:
     branches: [main]
     paths:
@@ -72,14 +81,21 @@ jobs:
         uses: gradle/actions/setup-gradle@v6.4.0
 
       - name: Unit tests
+        if: github.event_name != 'workflow_dispatch' || !inputs.source_only
         working-directory: apps/android
         run: ./gradlew --no-daemon test
+
+      - name: Debug source compilation and unit tests without packaging
+        if: github.event_name == 'workflow_dispatch' && inputs.source_only
+        working-directory: apps/android
+        run: ./gradlew --no-daemon :app:compileDebugKotlin :app:testDebugUnitTest
 
       - name: Android Lint
         working-directory: apps/android
         run: ./gradlew --no-daemon lintDebug
 
       - name: Assemble debug APK
+        if: github.event_name != 'workflow_dispatch' || !inputs.source_only
         working-directory: apps/android
         run: ./gradlew --no-daemon assembleDebug
 
@@ -100,19 +116,32 @@ jobs:
       # either. The unsigned release APK is deliberately NOT uploaded as an
       # artifact (this is only a build gate, and release artifacts stay private).
       - name: Assemble release APK (R8 shrink gate)
+        if: github.event_name != 'workflow_dispatch' || !inputs.source_only
         working-directory: apps/android
         run: ./gradlew --no-daemon :app:assembleRelease
 
       - name: Verify 16 KB native-library alignment
+        if: github.event_name != 'workflow_dispatch' || !inputs.source_only
         working-directory: apps/android
         run: bash scripts/check-16kb-elf-alignment.sh
 
       - name: Upload debug APK artifact
+        if: github.event_name != 'workflow_dispatch' || !inputs.source_only
         uses: actions/upload-artifact@v7
         with:
           name: app-debug-apk
           path: apps/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
+
+      - name: Require no APK or AAB in source-only mode
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.source_only
+        shell: bash
+        run: |
+          package_artifact=$(find apps/android/app/build -type f \( -name '*.apk' -o -name '*.aab' \) -print -quit)
+          if [ -n "$package_artifact" ]; then
+            echo "::error::Source-only validation produced a package: $package_artifact"
+            exit 1
+          fi
 
   nav-variant-compile:
     name: nav-variant-compile (Mapbox Navigation SDK)
@@ -233,6 +262,7 @@ jobs:
           echo "NAV_SDK_ENABLED = true — app/src/nav was compiled."
 
   instrumented-tests:
+    if: github.event_name != 'workflow_dispatch' || !inputs.source_only
     name: instrumented-tests (Compose UI)
     # Pinned (not ubuntu-latest) so the runner image can't drift between OS
     # versions under us — a moving image is itself an emulator-boot flake source,
@@ -374,6 +404,7 @@ jobs:
           retention-days: 14
 
   native-member-acceptance:
+    if: github.event_name != 'workflow_dispatch' || !inputs.source_only
     name: Native member tools (Firebase SDK)
     runs-on: ubuntu-24.04
     timeout-minutes: 35
