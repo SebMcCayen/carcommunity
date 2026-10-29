@@ -7,6 +7,10 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.design.CHAT_QUICK_EMOJI_ROW_TEST_TAG
+import com.kungsbackacarcommunity.app.design.chatQuickEmojiTestTag
+import com.kungsbackacarcommunity.app.profile.LiveProfile
+import com.kungsbackacarcommunity.app.profile.LiveProfileRepository
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,7 +31,7 @@ class ClubChatRevocationTest {
         val repo = FakeClubRepository(ClubChatState.Ready(member, listOf(ClubMessage("one", "friend", "Friend", "Private club message", 1L))))
         compose.setContent { KccTheme { ClubChatRoute("me", repo) } }
         compose.onNodeWithText("Private club message").assertIsDisplayed()
-        compose.onNodeWithText(str(R.string.clubs_message)).performTextInput("Unsent private draft")
+        compose.onNodeWithTag("club-chat-input").performTextInput("Unsent private draft")
         compose.runOnIdle { repo.messages.value = ClubChatState.Unavailable }
         compose.onNodeWithText("Private club message").assertDoesNotExist()
         compose.onNodeWithText("Unsent private draft").assertDoesNotExist()
@@ -43,12 +47,12 @@ class ClubChatRevocationTest {
         repo.historical.value = listOf(ClubMessage("old1", "friend", "Friend", "Moderated remotely", 90000L))
         repo.pageResults = listOf(ClubMessagePage((1..25).map { "old$it" }, next, true), ClubMessagePage(emptyList(), null, false))
         compose.setContent { KccTheme { ClubChatRoute("me", repo) } }
-        compose.onNodeWithText(str(R.string.clubs_older)).performClick()
+        compose.onNodeWithText(str(R.string.channel_loadOlder)).performClick()
         compose.onNodeWithText("Moderated remotely").assertExists()
         compose.runOnIdle { repo.historical.value = emptyList() }
         compose.onNodeWithText("Moderated remotely").assertDoesNotExist()
         // Query exhaustion comes from 25 raw rows, not the now-zero visible rows.
-        compose.onNodeWithText(str(R.string.clubs_older)).performClick()
+        compose.onNodeWithText(str(R.string.channel_loadOlder)).performClick()
         compose.waitUntil { repo.cursorRequests.size == 2 }
         compose.runOnIdle { assertEquals(listOf(start, next), repo.cursorRequests) }
     }
@@ -74,12 +78,12 @@ class ClubChatRevocationTest {
                 raw.filterNot { it.id in repo.redactedIds.value }, hidden, cursor(boundary.toInt()), raw.size == 25)
         }
         fun show(text: String) {
-            compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText(text))
+            compose.onNodeWithTag("club-message-list").performScrollToNode(hasText(text))
             compose.onNodeWithText(text).assertIsDisplayed()
         }
         fun loadOlder() {
-            show(str(R.string.clubs_older))
-            compose.onNodeWithText(str(R.string.clubs_older)).performClick()
+            show(str(R.string.channel_loadOlder))
+            compose.onNodeWithText(str(R.string.channel_loadOlder)).performClick()
             compose.waitForIdle()
         }
         publishLatest(75)
@@ -125,7 +129,7 @@ class ClubChatRevocationTest {
         show("Message 102")
         loadOlder()
         compose.runOnIdle { assertEquals(listOf(cursor(51), cursor(26), cursor(1)), repo.cursorRequests) }
-        compose.onNodeWithText(str(R.string.clubs_older)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.channel_loadOlder)).assertDoesNotExist()
     }
     @Test fun arrivalsDuringPageLoadStayCoveredAndRevocationDisposesPinnedIds() {
         val initial = (1..25).map { ClubMessage("m$it", "friend", "Friend", "Message $it", it * 1000L) }
@@ -136,8 +140,8 @@ class ClubChatRevocationTest {
         repo.pageGate = gate
         repo.pageResults = listOf(ClubMessagePage(listOf("older"), ClubMessageCursor("older", 0, 123), false))
         compose.setContent { KccTheme { ClubChatRoute("me", repo) } }
-        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText(str(R.string.clubs_older)))
-        compose.onNodeWithText(str(R.string.clubs_older)).performClick()
+        compose.onNodeWithTag("club-message-list").performScrollToNode(hasText(str(R.string.channel_loadOlder)))
+        compose.onNodeWithText(str(R.string.channel_loadOlder)).performClick()
         compose.waitUntil { repo.cursorRequests.size == 1 }
         compose.runOnIdle {
             val arriving = ClubMessage("new", "friend", "Friend", "New arrival", 26000L)
@@ -145,11 +149,11 @@ class ClubChatRevocationTest {
             repo.messages.value = ClubChatState.Ready(member, listOf(arriving) + initial.drop(1).reversed(),
                 oldestCursor = ClubMessageCursor("m2", 2, 456), hasOlder = true)
         }
-        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Message 1"))
+        compose.onNodeWithTag("club-message-list").performScrollToNode(hasText("Message 1"))
         compose.onNodeWithText("Message 1").assertIsDisplayed()
         compose.runOnIdle { gate.complete(Unit) }
         compose.waitForIdle()
-        compose.onNodeWithText(str(R.string.clubs_message)).performTextInput("Private paged draft")
+        compose.onNodeWithTag("club-chat-input").performTextInput("Private paged draft")
         compose.runOnIdle {
             assertEquals(listOf(boundary), repo.cursorRequests)
             assertTrue(repo.activeRowIds().containsAll(initial.map { it.id } + "older" + "new"))
@@ -171,7 +175,7 @@ class ClubChatRevocationTest {
             repo.historical.value = initial.map { it.copy(text = "Late private snapshot") } +
                 ClubMessage("fresh-history", "friend", "Friend", "Fresh history", 0L)
         }
-        compose.onNodeWithText(str(R.string.clubs_older)).performClick()
+        compose.onNodeWithText(str(R.string.channel_loadOlder)).performClick()
         compose.onNodeWithText("Fresh history").assertIsDisplayed()
         compose.onNodeWithText("Late private snapshot").assertDoesNotExist()
         compose.onNodeWithText("Private paged draft").assertDoesNotExist()
@@ -196,7 +200,7 @@ class ClubChatRevocationTest {
     @Test fun backgroundReturnRequiresFreshProofAndDiscardsDraft() {
         val repo = FakeClubRepository(ClubChatState.Ready(member, listOf(ClubMessage("one", "friend", "Friend", "Before background", 1L))))
         compose.setContent { KccTheme { ClubChatRoute("me", repo) } }
-        compose.onNodeWithText(str(R.string.clubs_message)).performTextInput("Private unsent text")
+        compose.onNodeWithTag("club-chat-input").performTextInput("Private unsent text")
         compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
         repo.messages.value = ClubChatState.Unavailable
         compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
@@ -238,7 +242,7 @@ class ClubChatRevocationTest {
     @Test fun textAndEmojiAreSentWithoutTransformation() {
         val repo = FakeClubRepository(ClubChatState.Ready(member, emptyList()))
         compose.setContent { KccTheme { ClubChatRoute("me", repo) } }
-        compose.onNodeWithText(str(R.string.clubs_message)).performTextInput("Hej klubben 🚗👋")
+        compose.onNodeWithTag("club-chat-input").performTextInput("Hej klubben 🚗👋")
         compose.onNodeWithText(str(R.string.clubs_send)).performClick()
         compose.waitUntil { repo.sent != null }
         compose.runOnIdle { assertEquals("Hej klubben 🚗👋", repo.sent); assertTrue(repo.operation!!.length >= 16) }
@@ -250,6 +254,148 @@ class ClubChatRevocationTest {
         compose.onNodeWithText("Blocked text").assertIsDisplayed()
         compose.runOnIdle { repo.messages.value = ClubChatState.Ready(member, listOf(message), setOf("hidden")) }
         compose.onNodeWithText("Blocked text").assertDoesNotExist()
+    }
+
+    @Test fun failedSendKeepsDraftAndIdUntilSuccessfulAcknowledgement() {
+        val repo = FakeClubRepository(ClubChatState.Ready(member, emptyList()))
+        repo.sendFailuresRemaining = 1
+        compose.setContent { KccTheme { ClubChatRoute("me", repo) } }
+        compose.onNodeWithTag("club-chat-input").performTextInput("Keep this draft 🚗")
+        compose.onNodeWithText(str(R.string.clubs_send)).performClick()
+        compose.waitUntil { repo.sendRequests.size == 1 }
+        compose.onNodeWithText("Keep this draft 🚗").assertIsDisplayed()
+        compose.onNodeWithText(str(R.string.clubs_send)).performClick()
+        compose.waitUntil { repo.sendRequests.size == 2 }
+        compose.runOnIdle {
+            assertEquals(repo.sendRequests[0], repo.sendRequests[1])
+            assertEquals("Keep this draft 🚗", repo.sent)
+        }
+        compose.onNodeWithText("Keep this draft 🚗").assertDoesNotExist()
+        compose.onNodeWithTag("club-chat-input").performTextInput("Another message")
+        compose.onNodeWithText(str(R.string.clubs_send)).performClick()
+        compose.waitUntil { repo.sendRequests.size == 3 }
+        compose.runOnIdle { assertNotEquals(repo.sendRequests[1].second, repo.sendRequests[2].second) }
+    }
+
+    @Test fun quickEmojiRetriesSameOperationAndNeverConsumesTypedDraft() {
+        val repo = FakeClubRepository(ClubChatState.Ready(member, emptyList()))
+        repo.sendFailuresRemaining = 1
+        compose.setContent { KccTheme { ClubChatRoute("me", repo) } }
+        compose.onNodeWithTag("club-chat-input").performTextInput("Unsent typed message")
+        compose.onNodeWithTag(CHAT_QUICK_EMOJI_ROW_TEST_TAG).assertExists()
+        compose.onNodeWithTag(chatQuickEmojiTestTag("😊")).performClick()
+        compose.waitUntil { repo.sendRequests.size == 1 }
+        compose.onNodeWithText("Unsent typed message").assertIsDisplayed()
+        compose.onNodeWithTag(chatQuickEmojiTestTag("😊")).performClick()
+        compose.waitUntil { repo.sendRequests.size == 2 }
+        compose.runOnIdle {
+            assertEquals(repo.sendRequests[0], repo.sendRequests[1])
+            assertEquals("😊", repo.sent)
+        }
+        compose.onNodeWithText("Unsent typed message").assertIsDisplayed()
+    }
+
+    @Test fun profileOverlayIsDistinctFilteredAndDisposedWhenMembershipIsRevoked() {
+        val visible = ClubMessage("one", "friend", "Stored friend", "Visible message", 1L)
+        val hidden = ClubMessage("hidden", "blocked", "Blocked friend", "Hidden body", 2L)
+        val repo = FakeClubRepository(ClubChatState.Ready(member, listOf(visible, visible.copy(id = "two"), hidden), setOf("blocked")))
+        val requested = mutableListOf<Set<String>>()
+        var active = 0
+        val live = MutableStateFlow(mapOf("friend" to LiveProfile("Current friend", null)))
+        val profiles = object : LiveProfileRepository {
+            override fun observeProfiles(uids: Set<String>) = flow {
+                requested += uids; active++
+                try { emitAll(live) } finally { active-- }
+            }
+            override suspend fun loadProfiles(uids: Set<String>) = emptyMap<String, LiveProfile>()
+        }
+        compose.setContent { KccTheme { ClubChatRoute("me", repo, profiles) } }
+        compose.onAllNodesWithText("Current friend").assertCountEquals(2)
+        compose.onNodeWithText("Hidden body").assertDoesNotExist()
+        compose.runOnIdle {
+            assertEquals(listOf(setOf("friend")), requested)
+            assertEquals(1, active)
+            live.value = mapOf("friend" to LiveProfile("Changed friend", null))
+        }
+        compose.onAllNodesWithText("Changed friend").assertCountEquals(2)
+        compose.runOnIdle { repo.messages.value = ClubChatState.Unavailable }
+        compose.onNodeWithText("Visible message").assertDoesNotExist()
+        compose.onNodeWithText("Changed friend").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(0, active) }
+        compose.runOnIdle { repo.messages.value = ClubChatState.Ready(member, listOf(visible)) }
+        compose.onNodeWithText("Changed friend").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(1, active) }
+        compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        repo.messages.value = ClubChatState.Unavailable
+        compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        compose.onNodeWithText("Changed friend").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(0, active) }
+    }
+
+    @Test fun profileFailureKeepsReceivingClubMessages() {
+        val repo = FakeClubRepository(ClubChatState.Ready(member,
+            listOf(ClubMessage("one", "friend", "Stored friend", "Before profile failure", 1L))))
+        val profiles = object : LiveProfileRepository {
+            override fun observeProfiles(uids: Set<String>): Flow<Map<String, LiveProfile>> = flow { error("Local profile failure") }
+            override suspend fun loadProfiles(uids: Set<String>) = emptyMap<String, LiveProfile>()
+        }
+        compose.setContent { KccTheme { ClubChatRoute("me", repo, profiles) } }
+        compose.onNodeWithText("Stored friend").assertIsDisplayed()
+        compose.runOnIdle { repo.messages.value = ClubChatState.Ready(member,
+            listOf(ClubMessage("two", "friend", "Stored friend", "After profile failure", 2L))) }
+        compose.onNodeWithText("After profile failure").assertIsDisplayed()
+    }
+
+    @Test fun moderatorCanHideOwnBubbleAndRemovedSelectionClosesActions() {
+        val own = ClubMessage("own", "me", "Me", "My moderated message", 1L)
+        val mod = member.copy(role = ClubRole.Moderator)
+        val repo = FakeClubRepository(ClubChatState.Ready(mod, listOf(own)))
+        compose.setContent { KccTheme { ClubChatRoute("me", repo) } }
+        compose.onNodeWithText(own.text).performTouchInput { longClick() }
+        compose.onNodeWithText(str(R.string.clubs_report)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.clubs_block)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.clubs_hideMessage)).performClick()
+        compose.waitUntil { repo.managementRequests.isNotEmpty() }
+        compose.runOnIdle {
+            assertEquals("removeMessage", repo.managementRequests.single().first)
+            assertEquals("own", repo.managementRequests.single().second["messageId"])
+        }
+        compose.onNodeWithText(own.text).performTouchInput { longClick() }
+        compose.onNodeWithText(str(R.string.clubs_hideMessage)).assertIsDisplayed()
+        compose.runOnIdle { repo.messages.value = ClubChatState.Ready(mod, emptyList()) }
+        compose.onNodeWithText(str(R.string.clubs_hideMessage)).assertDoesNotExist()
+        compose.onNodeWithText(own.text).assertDoesNotExist()
+    }
+
+    @Test fun memberCanBlockOtherSenderFromBubbleAndBlockingClosesSelection() {
+        val other = ClubMessage("other", "friend", "Friend", "Selected incoming message", 1L)
+        val repo = FakeClubRepository(ClubChatState.Ready(member, listOf(other)))
+        compose.setContent { KccTheme { ClubChatRoute("me", repo) } }
+        compose.onNodeWithText(other.text).performTouchInput { longClick() }
+        compose.onNodeWithText(str(R.string.clubs_report)).assertIsDisplayed()
+        compose.onNodeWithText(str(R.string.clubs_hideMessage)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.clubs_block)).performClick()
+        compose.waitUntil { repo.blockedAuthors == listOf("friend") }
+        compose.runOnIdle { repo.messages.value = ClubChatState.Ready(member, listOf(other), setOf("friend")) }
+        compose.onNodeWithText(other.text).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.clubs_report)).assertDoesNotExist()
+    }
+
+    @Test fun reportFromBubbleRetainsDriverReasonAndSelectedMessageIdentity() {
+        val other = ClubMessage("reported-message", "friend", "Friend", "Report this message", 1L)
+        val repo = FakeClubRepository(ClubChatState.Ready(member, listOf(other)))
+        compose.setContent { KccTheme { ClubChatRoute("me", repo) } }
+        compose.onNodeWithText(other.text).performTouchInput { longClick() }
+        compose.onNodeWithText(str(R.string.clubs_report)).performClick()
+        compose.onNodeWithText(str(R.string.chat_reportReasonHateOrAbuse)).performClick()
+        compose.waitUntil { repo.managementRequests.isNotEmpty() }
+        compose.runOnIdle {
+            val (action, fields) = repo.managementRequests.single()
+            assertEquals("reportMessage", action)
+            assertEquals(mapOf("clubId" to member.clubId, "messageId" to other.id, "reason" to "hate"), fields)
+            assertTrue(repo.blockedAuthors.isEmpty())
+        }
+        compose.onNodeWithText(str(R.string.clubs_reported)).assertIsDisplayed()
     }
 }
 
@@ -270,6 +416,10 @@ private class FakeClubRepository(initial: ClubChatState) : ClubRepository {
     var sent: String? = null
     var operation: String? = null
     var chatCalls = 0
+    var sendFailuresRemaining = 0
+    val sendRequests = mutableListOf<Pair<String, String>>()
+    val managementRequests = mutableListOf<Pair<String, Map<String, Any?>>>()
+    val blockedAuthors = mutableListOf<String>()
     override fun chat(): Flow<ClubChatState> { chatCalls++; return messages }
     override fun observeEnabled() = flowOf(true)
     override fun observePublicAttendanceReady() = flowOf(true)
@@ -279,6 +429,7 @@ private class FakeClubRepository(initial: ClubChatState) : ClubRepository {
     override suspend fun get(clubId: String): Club = error("unused")
     override suspend fun members(clubId: String, cursor: String?): ClubPage<ClubMember> = ClubPage(emptyList(), null)
     override suspend fun manage(action: String, fields: Map<String, Any?>, operationId: String): Map<String, Any?> {
+        managementRequests += action to fields
         when (action) {
             "create" -> {
                 createdPayload = fields
@@ -309,12 +460,16 @@ private class FakeClubRepository(initial: ClubChatState) : ClubRepository {
             emitAll(combine(historical, redactedIds) { rows, redacted -> rows.filter { it.id in messageIds && it.id !in redacted } })
         } finally { activeRows.remove(messageIds) }
     }
-    override suspend fun send(clubId: String, text: String, operationId: String) { sent = text; operation = operationId }
+    override suspend fun send(clubId: String, text: String, operationId: String) {
+        sendRequests += text to operationId
+        if (sendFailuresRemaining > 0) { sendFailuresRemaining--; throw ClubException("unavailable") }
+        sent = text; operation = operationId
+    }
     override suspend fun events(clubId: String, cursor: String?): ClubPage<ClubEvent> = ClubPage(emptyList(), null)
     override fun eventParticipants(eventId: String): Flow<List<Club>> = flowOf(emptyList())
     override fun observeEventParticipants(eventId: String, clubIds: List<String>): Flow<List<Club>> = flowOf(emptyList())
     override fun eventAttendance(eventId: String, clubId: String): Flow<Boolean?> = flowOf(false)
     override suspend fun moreEventParticipants(eventId: String, afterId: String): List<Club> = emptyList()
     override suspend fun setEventAttendance(clubId: String, eventId: String, attending: Boolean, operationId: String) = Unit
-    override suspend fun blockAuthor(uid: String) = Unit
+    override suspend fun blockAuthor(uid: String) { blockedAuthors += uid }
 }
