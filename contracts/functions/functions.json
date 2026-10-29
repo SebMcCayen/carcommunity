@@ -1538,6 +1538,15 @@
       "appCheck": true,
       "status": "implemented",
       "source": "docs/ios-content-moderation.md"
+    },
+    {
+      "name": "clubCalendar.manage",
+      "domain": "clubCalendar",
+      "description": "Member-specific dynamic ICS subscriptions. Deployed as clubCalendar-manage in europe-west1. Actions status/issue/revoke with clubId; issue requires expectedVersion and rotates only the caller link. Current canonical membership/account/epoch and CarCommunity access are rechecked; only token hashes persist. Provider HTTP feed is separately bearer-authorized on every request, including conditional GET.",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "functions/src/clubCalendar/README.md"
     }
   ]
 }
