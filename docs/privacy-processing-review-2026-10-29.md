@@ -1,8 +1,43 @@
 # Privacy processing review — 2026-10-29
 
-Status: evidence and proposed decisions for draft PR #1248. Not publication,
-production verification or approval of the legal bases for historical processing.
+Status: dated evidence and proposed decisions, followed by the canonical-source
+correction below. Not production verification or approval of historical processing.
 No Android/iOS implementation, data migration, cloud configuration or release is changed.
+
+## Canonical-source correction — 2026-10-29
+
+The homepage already publishes privacy, terms, community rules, account-deletion
+and support information. Earlier descriptions that all this information was
+missing were too broad. The correction reuses those pages in
+`SebMcCayen/kungsbacka-car-community-homepage`, updates them in one place and routes
+existing Firebase links there instead of publishing another set of draft pages.
+See [the current routing plan](app-store-public-information.md).
+
+The owner explicitly confirmed **18 for both CarCommunity and Driver**. The
+homepage's old 13+ wording is inconsistent with that decision. Current subscriptions
+are already offered on Android; the old future-only text is also stale. A published
+90-day backup claim is not established by the source audit and must not be copied
+as a guarantee. The existing location-sharing consent basis remains the published
+baseline; the proposal table below is not an instruction to reclassify historical
+processing silently. #1245 is closed and unmerged, so its new default-off consent
+must not be described as active merely to make a page look complete.
+
+A focused cross-app audit pinned Driver `eb916671187748546c37b6f12bf579d2951aa9ce`
+and CarCommunity `9332b0d7003cfd91c38052f64dd39f93af339489`: whole-account deletion
+sets the shared deleted marker, and Driver's profile-sync hook then queues its own
+content cleanup immediately. Driver-only deletion waits seven days. CarCommunity's
+separate permanent purge becomes eligible after 30 days; Driver data can be cleaned
+earlier. The two workers do not establish one guaranteed completion deadline;
+Driver's hook also depends on an existing Driver profile. Shared clubs have their
+own deletion hooks. Code evidence: Driver `functions/src/index.ts:276–320,1389–1548`,
+`functions/src/shared-clubs.ts:555–640,715–740`; CC `account/deleteAccount.ts:63–80`
+and `account/scheduled.ts:487–582`. These are code facts, not deployed-job checks.
+
+Remaining retention/provider/reacceptance questions below are tracked operational
+follow-ups. Removing a false published assurance and fixing a broken app link do
+not imply those controls have been implemented or certify complete compliance.
+The new CarCommunity diff adds static navigation pages/documentation/tests, not Android,
+iOS, Driver policy-version constants or backend behaviour.
 
 ## Owner-confirmed information
 

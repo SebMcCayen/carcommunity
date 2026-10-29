@@ -1,20 +1,22 @@
-# Privacy notice source
+# Public privacy information
 
-The old Android-only policy draft has been superseded by the bilingual public
-app information in `apps/admin/public/privacy/index.html`, with terms and support
-in adjacent directories. It covers the planned iOS and Android release.
+The canonical privacy policy for CarCommunity, Driver and the homepage is:
 
-**It is still a pre-release draft.** Do not submit or publish it until the
-operator information, legal bases, retention, provider safeguards and deployment
-requirements in `docs/app-store-public-information.md` have been completed.
-The public contact mailbox currently used by the app is
-`kontakt@kungsbackacarcommunity.se`; the owner must confirm the legal operator.
+**https://kungsbackacarcommunity.se/integritetspolicy.html**
 
-Existing app URLs:
+Related pages:
 
-- https://kungsbacka-car-community.web.app/privacy
-- https://kungsbacka-car-community.web.app/terms
-- https://kungsbacka-car-community.web.app/support
+- Terms: https://kungsbackacarcommunity.se/anvandarvillkor.html
+- Account deletion: https://kungsbackacarcommunity.se/radera-konto.html
+- Support: https://kungsbackacarcommunity.se/support.html
+- Community rules: https://kungsbackacarcommunity.se/community-regler.html
 
-Merging the web change triggers the existing production Hosting deployment and
-therefore requires the owner's prior cost/rollout approval.
+Edit that single public source in `SebMcCayen/kungsbacka-car-community-homepage`.
+Do not copy another editable policy into the admin app. Existing Firebase
+`/privacy`, `/terms` and `/support` links are retained through small, script-free compatibility
+pages in the existing Hosting output so installed apps can reach the same information without a new build.
+
+See [routing/rollout](../app-store-public-information.md) and the
+[code-backed review](../privacy-processing-review-2026-10-29.md) for source facts,
+remaining operational follow-ups and the separation of local testing from actual
+production deployment. Updating text does not implement the controls it describes.
