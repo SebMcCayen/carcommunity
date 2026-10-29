@@ -2,6 +2,24 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 61,
+      "versionName": "1.1.6",
+      "releaseDate": "2026-10-29",
+      "highlights": [
+        "Mer plats i chatten och guldfärgad design",
+        "Notiser och sparade platser i profilmenyn",
+        "Välj län och stad för din klubb"
+      ],
+      "changes": [
+        "Chatt: centrerade flikar och färre menyval ger mer plats åt meddelandena",
+        "Chatt: guldfärgad design och bättre kontrast i ljust och mörkt läge",
+        "Profilmeny: notiser och sparade platser samlas i menyn vid profilbilden på kartan",
+        "Profilmeny: uppdaterad ordning för profil, vänner, körningar, sparade platser och övriga menyval",
+        "Klubbar: välj först län och sök sedan efter rätt stad eller ort när du skapar eller redigerar klubben",
+        "Information: länkar till integritetspolicy, användarvillkor och support leder till hemsidans gemensamma informationssidor"
+      ]
+    },
+    {
       "versionCode": 60,
       "versionName": "1.1.5",
       "releaseDate": "2026-10-28",
