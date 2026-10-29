@@ -11,10 +11,12 @@ The controller/operator is **Sebastian Stegrin**, acting as an individual under
 Minimum service age is **18**. App administrators handle moderation; review
 requests go by email. These facts are now included in both languages.
 
-The owner requests an Android-1.0 effective date. The in-app catalogue records
-1.0.0 on 2026-09-02, but public Play availability on that date is not verified.
-Record the actual launch separately from this new text's publication/revision and
-effective dates. Do not backdate new disclosures, acceptance or consent.
+The owner confirmed on 2026-10-29 that Android 1.0 became publicly available on
+**2026-09-02**, matching the in-app release catalogue. This is the owner-confirmed
+service launch date, not a verification from the Play Console. The owner requests
+that the original terms relate to that launch. Keep this revised text's
+publication/revision and effective dates separate; do not backdate new disclosures,
+acceptance or consent.
 
 The owner supplied an email contact address, not a postal address. No address or
 organisation number is invented. Confirm any postal/trader-contact requirements

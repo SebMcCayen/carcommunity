@@ -14,12 +14,13 @@ No Android/iOS implementation, data migration, cloud configuration or release is
   dates: current Android onboarding confirms a driving licence, terms and privacy,
   and does not ask a separate age question.
 - App administrators handle moderation. Review requests go to the contact email.
-- Owner wants the terms to apply from Android version 1.0. The in-app release
-  catalogue records 1.0.0 / versionCode 51 on **2026-09-02**, but actual Play public
-  availability is not established by that catalogue or a build/merge timestamp.
-  The revised policy has its own draft revision date, **2026-10-29**. Its publication
-  and effective dates remain to be recorded when approved. Do not backdate new
-  consent or claim this new information was delivered to earlier users.
+- The owner confirmed on **2026-10-29** that the Android 1.0 public launch was
+  **2026-09-02**, matching the catalogue entry for 1.0.0 / versionCode 51. This
+  confirmation comes from the owner; no Play Console publication check was made.
+  The owner wants the original terms to relate to that launch. The revised policy
+  has its own draft revision date, **2026-10-29**. Its publication and effective
+  dates remain to be recorded when approved. Do not backdate new consent or claim
+  this new information was delivered to earlier users.
 - The response to the contact-address question supplied an email address. No
   postal address was supplied or added. GDPR Article 13 requires controller
   identity/contact details; storefront trader/contact obligations are a separate
@@ -106,7 +107,7 @@ Base URL for every path: [audited source](https://github.com/SebMcCayen/carcommu
   `feedback/feedback-core.ts:267–283`, `notifications/email.ts:31–44`: support IDs,
   unimplemented email delivery.
 - `apps/android/app/src/main/res/raw/changelog.json:178–189`, release PR #1071:
-  recorded version date does not prove production publication.
+  catalogue evidence plus the owner's explicit launch-date confirmation above.
 - `apps/android/app/src/main/java/com/kungsbackacarcommunity/app/onboarding/FirebaseOnboardingRepository.kt:27–35`,
   `functions/src/auth/onboarding-core.ts:120–125`: timestamp-only policy acceptance.
 
