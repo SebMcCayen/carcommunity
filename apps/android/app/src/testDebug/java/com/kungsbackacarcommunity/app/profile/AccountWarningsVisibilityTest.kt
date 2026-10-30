@@ -13,6 +13,10 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
 /** Exercises the production section with local auth/signal/callable boundaries; no Firebase. */
 @RunWith(AndroidJUnit4::class)
@@ -43,11 +47,15 @@ class AccountWarningsVisibilityTest {
 
     @Test fun actualWarningsShowReasonsAndExpiryIncludingUntilRevoked() {
         val source = start()
-        reply(source, 0, page(warning(), warning("permanent", deadline = null, expiry = null)))
+        val expiring = warning()
+        reply(source, 0, page(expiring, warning("permanent", deadline = null, expiry = null)))
         compose.onNodeWithText(str(R.string.accountWarnings_title)).assertIsDisplayed()
         compose.onNodeWithText(REASON).assertIsDisplayed()
         compose.onNodeWithText("Reason permanent").assertIsDisplayed()
-        compose.onNodeWithText(str(R.string.accountWarnings_expires), substring = true).assertIsDisplayed()
+        val expiry = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM)
+            .withZone(ZoneId.systemDefault()).format(Instant.parse(expiring.expiresAt!!))
+        // In English, "Valid until" also prefixes "Valid until revoked"; match the dated row exactly.
+        compose.onNodeWithText("${str(R.string.accountWarnings_expires)} $expiry").assertIsDisplayed()
         compose.onNodeWithText(str(R.string.accountWarnings_untilRevoked)).assertIsDisplayed()
         compose.onNodeWithText(str(R.string.accountWarnings_empty)).assertDoesNotExist()
     }
