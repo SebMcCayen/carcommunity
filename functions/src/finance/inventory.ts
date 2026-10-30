@@ -241,6 +241,23 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     note: 'Downgrade-only integrity backstop: re-converges entitlement claim/flag to the authoritative subscriptions record. Provider-gated (inert while off).',
   },
   {
+    id: 'subscription-refreshMapRings',
+    source: 'subscription/map-ring-scheduled.ts:refreshMapRings',
+    label: 'Private paid map-ring expiry',
+    schedule: 'every 5 minutes',
+    runsPerDay: 288,
+    // Most queries are empty (minimum one read). Budget two reads/run and
+    // ~173 writes/month for a <=50-member deployment; actual due repairs read
+    // the subscription + profile and write only changed cosmetics/private due
+    // metadata. Bounded at 200 due records; never a historical receipt scan.
+    writesPerRun: 0.02,
+    readsPerRun: 2,
+    deletesPerRun: 0,
+    avgSeconds: 2,
+    memoryGiB: 0.25,
+    note: 'Cosmetic-only private deadline sweep; 288 bounded queries/day, usually empty. Due repairs preserve claims, receipt fields and owner visibility. Per-run estimates assume <=50 members; tune after telemetry.',
+  },
+  {
     id: 'badges-evaluateBacklog',
     source: 'badges/scheduled.ts:evaluateBacklog',
     label: 'Badge progress sweep',
