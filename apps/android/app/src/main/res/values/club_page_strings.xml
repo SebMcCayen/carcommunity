@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="clubPage_openProfile">Öppna profilen för %1$s</string>
+    <string name="clubPage_memberActions">Åtgärder för %1$s</string>
+    <string name="clubPage_intro">Om klubben</string>
+    <string name="clubPage_noMembers">Inga medlemmar kunde visas.</string>
+</resources>

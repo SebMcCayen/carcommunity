@@ -25,7 +25,7 @@ import java.util.UUID
 
 /** State is keyed to the authenticated UID and is never saved across accounts. */
 @Composable
-fun SharedClubRoute(uid: String, onOpenEvent: (String) -> Unit = {}, repository: ClubRepository? = null) {
+fun SharedClubRoute(uid: String, onOpenEvent: (String) -> Unit = {}, repository: ClubRepository? = null, onOpenProfile: (String) -> Unit = {}) {
     val context = LocalContext.current
     val repo = remember(uid, repository) { repository ?: FirebaseClubRepository.createIfAvailable(context, uid) }
     key(uid, repo) {
@@ -125,7 +125,7 @@ fun SharedClubRoute(uid: String, onOpenEvent: (String) -> Unit = {}, repository:
                             } else {
                                 // Losing proof disposes every private child, including rosters/calendar/drafts.
                                 key(membership) {
-                                    ClubMemberContent(uid, club, membership, repo, onOpenEvent, onUpdated = { refresh++ })
+                                    ClubMemberContent(uid, club, membership, repo, onOpenEvent, onUpdated = { refresh++ }, onOpenProfile = onOpenProfile)
                                 }
                                 OutlinedButton(onClick = { confirmLeave = true }, enabled = !busy) { Text(stringResource(R.string.clubs_leave)) }
                             }

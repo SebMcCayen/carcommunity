@@ -21,7 +21,9 @@ data class ClubState(
     val joinAllowedAt: String? = null, val invitations: List<ClubInvitation> = emptyList(),
     val legacyConflict: Boolean = false,
 )
-data class ClubMember(val uid: String, val displayName: String, val role: ClubRole, val avatarUrl: String? = null)
+data class ClubMember(val uid: String, val displayName: String, val role: ClubRole, val avatarUrl: String? = null, val avatarPath: String? = null)
+/** A present value, including both nulls, overrides the callable copy. */
+data class ClubMemberAvatar(val avatarPath: String?, val avatarUrl: String?)
 data class ClubEvent(val eventId: String, val title: String, val startMillis: Long, val endMillis: Long?, val locationName: String?)
 data class ClubMessage(val id: String, val authorUid: String, val authorName: String?, val text: String, val createdAtMillis: Long?)
 data class ClubMessageCursor(val id: String, val seconds: Long, val nanoseconds: Int)

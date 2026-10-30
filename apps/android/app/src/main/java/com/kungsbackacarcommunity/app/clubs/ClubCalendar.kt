@@ -11,7 +11,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -38,7 +37,7 @@ internal fun clubCalendarDays(month: YearMonth): List<LocalDate?> {
 
 @Composable
 internal fun ClubCalendar(repository: ClubRepository, clubId: String, canManage: Boolean, onOpenEvent: (String) -> Unit) {
-    val locale = LocalLocale.current.platformLocale
+    val locale = clubLocale()
     var month by remember { mutableStateOf(YearMonth.now(clubZone)) }
     var page by remember { mutableStateOf(ClubPage<ClubEvent>(emptyList(), null)) }
     var error by remember { mutableStateOf<Throwable?>(null) }
@@ -52,7 +51,7 @@ internal fun ClubCalendar(repository: ClubRepository, clubId: String, canManage:
     }
     Text(stringResource(R.string.clubs_calendar), style = MaterialTheme.typography.titleMedium)
     ClubCalendarSubscriptionControl(clubId)
-    Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Card(Modifier.fillMaxWidth(), colors = clubCardColors()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { month = month.minusMonths(1) }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, stringResource(R.string.clubs_previousMonth)) }
             Text(month.format(DateTimeFormatter.ofPattern("MMMM yyyy", locale)), Modifier.weight(1f), textAlign = TextAlign.Center)
@@ -62,7 +61,7 @@ internal fun ClubCalendar(repository: ClubRepository, clubId: String, canManage:
         val dates = page.items.groupBy { Instant.ofEpochMilli(it.startMillis).atZone(clubZone).toLocalDate() }
         clubCalendarDays(month).chunked(7).forEach { week ->
             Row(Modifier.fillMaxWidth()) { week.forEach { date ->
-                Surface(Modifier.weight(1f).padding(2.dp), color = if (dates.containsKey(date)) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surface) {
+                Surface(Modifier.weight(1f).padding(2.dp), color = if (dates.containsKey(date)) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.onSurface) {
                     Text(date?.dayOfMonth?.toString().orEmpty(), Modifier.padding(vertical = 8.dp), textAlign = TextAlign.Center)
                 }
             } }
@@ -70,8 +69,8 @@ internal fun ClubCalendar(repository: ClubRepository, clubId: String, canManage:
         val monthEvents = page.items.filter { YearMonth.from(Instant.ofEpochMilli(it.startMillis).atZone(clubZone)) == month }
         if (monthEvents.isEmpty()) Text(stringResource(R.string.clubs_calendarEmpty))
         monthEvents.forEach { event ->
-            TextButton(onClick = { onOpenEvent(event.eventId) }) { Text(stringResource(R.string.clubs_monthEvent, clubDate(event.startMillis), event.title)) }
-            if (canManage) TextButton(enabled = !busy, onClick = {
+            TextButton(onClick = { onOpenEvent(event.eventId) }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)) { Text(stringResource(R.string.clubs_monthEvent, clubDate(event.startMillis), event.title)) }
+            if (canManage) TextButton(enabled = !busy, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error), onClick = {
                 busy = true; scope.launch {
                     try { repository.setEventAttendance(clubId, event.eventId, false, UUID.randomUUID().toString()); refresh++ }
                     catch (e: CancellationException) { throw e } catch (e: Exception) { error = e }
