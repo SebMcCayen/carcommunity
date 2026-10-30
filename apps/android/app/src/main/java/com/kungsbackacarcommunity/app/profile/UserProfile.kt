@@ -58,6 +58,8 @@ data class UserProfile(
     val supporterBadge: SupporterBadge = SupporterBadge(),
     /** Server-managed public affiliation; never part of a profile edit. */
     val clubBadge: ClubBadge? = null,
+    /** Public server entitlement + owner-only map cosmetic preference. */
+    val membershipMapRing: MembershipMapRing = MembershipMapRing(),
 )
 
 /** Observed state of the profile document. */

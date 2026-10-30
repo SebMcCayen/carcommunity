@@ -39,4 +39,9 @@ interface ProfileRepository {
 
     /** Owner preference only; never writes eligibility or subscription data. */
     suspend fun updateShowSupporterBadge(uid: String, show: Boolean)
+
+    /** Writes only the owner preference; never the eligibility/expiry projection. */
+    suspend fun updateShowMembershipMapRing(uid: String, show: Boolean) {
+        throw UnsupportedOperationException("Map ring preference unavailable")
+    }
 }

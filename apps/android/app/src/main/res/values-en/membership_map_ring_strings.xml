@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="membershipMapRing_settingTitle">Show gold ring on the map</string>
+    <string name="membershipMapRing_settingBody">Show a gold ring on your car photo while your Plus or Supporter membership is valid.</string>
+    <string name="membershipMapRing_saveFailed">Could not save this setting. Try again.</string>
+    <string name="membershipMapRing_accessibility">Membership gold ring</string>
+</resources>
