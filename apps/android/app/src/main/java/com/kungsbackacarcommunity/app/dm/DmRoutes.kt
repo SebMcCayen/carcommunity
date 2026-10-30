@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -185,7 +186,9 @@ fun ChatRoute(
     // The `chatReplies` flag, threaded down from the hub. Gates the inline-reply
     // entry point; off, the thread behaves exactly as before.
     chatRepliesEnabled: Boolean = false,
-) {
+) = key(uid, otherUid) {
+    // The shell can replace a peer without leaving Chat. Dispose the whole private
+    // composition (including pending send coroutines), not just its coordinator.
     val scope = rememberCoroutineScope()
     val conversationId = remember(uid, otherUid) { dmPairId(uid, otherUid) }
     val blockingCoordinator =

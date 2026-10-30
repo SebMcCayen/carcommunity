@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -73,7 +74,8 @@ fun CommunityChannelRoute(
     // entry point (the long-press "Svara" row + the composer quote chip); off, the
     // screen behaves exactly as before.
     chatRepliesEnabled: Boolean = false,
-) {
+) = key(uid) {
+    // The room is global, but its private composer and pending work are account-owned.
     val scope = rememberCoroutineScope()
     val blockingCoordinator =
         remember(blockingRepository) { blockingRepository?.let { BlockingCoordinator(it) } }
