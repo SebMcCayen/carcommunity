@@ -103,6 +103,7 @@ import com.kungsbackacarcommunity.app.push.FirebasePushTokenSource
 import com.kungsbackacarcommunity.app.push.KccMessagingService
 import com.kungsbackacarcommunity.app.push.PushNavigator
 import com.kungsbackacarcommunity.app.push.PushRegistrationCoordinator
+import com.kungsbackacarcommunity.app.push.SystemNotifications
 import com.kungsbackacarcommunity.app.subscription.FirebaseSubscriptionVerifier
 import com.kungsbackacarcommunity.app.subscription.FirebaseSubscriptionStateRepository
 import com.kungsbackacarcommunity.app.shell.LiveSessionAnchor
@@ -670,6 +671,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        SystemNotifications.dismissOnAppOpen(applicationContext)
         lifecycleScope.launch { featureFlagsStore.refresh() }
     }
 
