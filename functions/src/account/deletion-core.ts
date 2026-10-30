@@ -122,6 +122,11 @@ export const PURGE_OWNED_COLLECTIONS: ReadonlyArray<{
 }> = [
   { collection: 'vehicles', userField: 'userId' },
   { collection: 'rides', userField: 'userId' },
+  // Personal subscription IDs/token locators are hashes, not raw UID paths.
+  // Both retain owner uid so canonical erasure also reaches orphan locators;
+  // use the existing bounded/retryable query purge, never a Driver-only hook.
+  { collection: 'clubCalendarSubscriptions', userField: 'uid' },
+  { collection: 'clubCalendarTokens', userField: 'uid' },
   // Backend-only per-month leaderboard buckets, one document per (month, member)
   // at `memberMonthlyStats/{YYYY-MM}__{uid}` (functions/src/leaderboard). Each
   // bucket carries a `uid` field precisely so this owned-query purge reaches
