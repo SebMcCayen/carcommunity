@@ -450,7 +450,11 @@ struct AccountWarningsSection: View {
         loading = true
         let started = ContinuousClock().now
         do {
-            let response = try await client.call("account-listWarnings", payload: ["cursor": append ? (cursor as Any? ?? NSNull()) : NSNull()])
+            // Keep actor-owned state in a Sendable value before the callable's
+            // untyped JSON conversion. An absent cursor requests the first page.
+            let requestCursor = append ? cursor : nil
+            let payload: [String: String] = requestCursor.map { ["cursor": $0] } ?? [:]
+            let response = try await client.call("account-listWarnings", payload: payload)
             try Task.checkCancellation()
             guard let page = response as? [String: Any], page["userId"] as? String == uid,
                 let rows = page["warnings"] as? [[String: Any]], let meta = page["meta"] as? [String: Any]
