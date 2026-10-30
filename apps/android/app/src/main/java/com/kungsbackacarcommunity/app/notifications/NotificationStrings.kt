@@ -20,6 +20,7 @@ fun NotificationCategory.labelRes(): Int =
         NotificationCategory.COMMUNITY_CHAT -> R.string.notifications_categoryCommunityChat
         NotificationCategory.CONVOY_CHAT -> R.string.notifications_categoryConvoyChat
         NotificationCategory.FRIEND_REQUEST -> R.string.notifications_categoryFriendRequest
+        NotificationCategory.CLUB_INVITE -> R.string.notifications_categoryClubInvite
         NotificationCategory.CONVOY_INVITE -> R.string.notifications_categoryConvoyInvite
         NotificationCategory.CONVOY_UPDATE -> R.string.notifications_categoryConvoyUpdate
         NotificationCategory.WAVE -> R.string.notifications_categoryWave

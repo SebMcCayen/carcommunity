@@ -1413,6 +1413,7 @@ fun AuthenticatedApp(
                         openRootRoute(ShellRoute.Convoys)
                     }
                     PushTarget.FRIENDS -> openRootRoute(ShellRoute.Friends)
+                    PushTarget.CLUBS -> openRootRoute(ShellRoute.Clubs)
                     PushTarget.EVENT -> {
                         // The backend sends the reminder's event id as entityId;
                         // open that event directly. Null (unknown event) falls
@@ -9396,6 +9397,7 @@ private fun RouteHost(
                     friendsRepository = friendsRepository,
                     convoyLink = convoyNotificationLink,
                     onOpenEvent = openEventFromNotification,
+                    onOpenClub = { onOpenRoute(ShellRoute.Clubs) },
                 )
             } else {
                 LoadingScreen()

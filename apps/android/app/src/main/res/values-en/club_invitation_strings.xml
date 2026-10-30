@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="clubs_decline_invitation">Decline invitation</string>
+    <string name="clubs_invitation_expires">Valid until %1$s</string>
+    <string name="notifications_categoryClubInvite">Club invitations</string>
+</resources>

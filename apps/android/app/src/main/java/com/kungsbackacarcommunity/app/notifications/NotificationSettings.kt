@@ -55,6 +55,7 @@ object NotificationCategories {
             "convoy_chat",
             "friend_request",
             "convoy_invite",
+            "club_invite",
             "convoy_update",
             "wave",
             "account_warning",
@@ -73,6 +74,7 @@ object NotificationCategories {
             "convoy_chat",
             "friend_request",
             "convoy_invite",
+            "club_invite",
             "convoy_update",
             "wave",
         )

@@ -1559,3 +1559,6 @@ export const finance = {
 
 /** Product-only access mirrors; no shared Auth changes. */
 export const carCommunityAccess = { onAccessWrite, onIdentityWrite };
+
+/** Canonical shared-club invitation delivery; Driver remains the invitation writer. */
+export { onInvitationWritten as onClubInvitationWritten } from './clubInvitations';

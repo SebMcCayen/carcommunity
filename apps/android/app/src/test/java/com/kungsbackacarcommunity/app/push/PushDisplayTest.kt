@@ -8,6 +8,19 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PushDisplayTest {
+    @Test fun `club invitation push opens club page on cold and warm handoff`() {
+        val model = PushDisplay.fromMessage(mapOf("category" to "club_invite", "title" to "Klubbinbjudan", "target" to "clubs", "entityId" to "west"))
+        assertEquals(NotificationCategory.CLUB_INVITE, model.category)
+        assertEquals(PushChannel.SOCIAL.id, model.channelId)
+        PushNavigator.clear()
+        PushNavigator.publish(model.deepLink)
+        assertEquals(PushDeepLink(PushTarget.CLUBS, "west"), PushNavigator.consume())
+        assertNull(PushNavigator.consume())
+        PushNavigator.publish(model.deepLink)
+        PushNavigator.clear()
+        assertNull(PushNavigator.consume())
+    }
+
 
     @Test
     fun `full data message maps every field`() {
@@ -72,6 +85,7 @@ class PushDisplayTest {
                 "convoy_chat",
                 "convoys",
                 "friends",
+                "clubs",
                 "event",
                 "subscription",
                 "notifications",
@@ -166,6 +180,7 @@ class PushDisplayTest {
                 NotificationCategory.CONVOY_CHAT to PushChannel.SOCIAL,
                 NotificationCategory.FRIEND_REQUEST to PushChannel.SOCIAL,
                 NotificationCategory.CONVOY_INVITE to PushChannel.SOCIAL,
+                NotificationCategory.CLUB_INVITE to PushChannel.SOCIAL,
                 NotificationCategory.CONVOY_UPDATE to PushChannel.SOCIAL,
                 NotificationCategory.WAVE to PushChannel.SOCIAL,
             )

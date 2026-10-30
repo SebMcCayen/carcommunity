@@ -77,6 +77,7 @@ export const GROUPS = [
       'chat-guard-driver',
       'communityDigest',
       'notifications*',
+      'club-invitation-notifications',
       'block*',
       'moderation*',
     ],

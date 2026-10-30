@@ -31,6 +31,7 @@ enum class NotificationCategory(val wire: String) {
     CONVOY_CHAT("convoy_chat"),
     FRIEND_REQUEST("friend_request"),
     CONVOY_INVITE("convoy_invite"),
+    CLUB_INVITE("club_invite"),
 
     /**
      * Convoy MEMBERSHIP / LIFECYCLE notices: somebody left the convoy you are
