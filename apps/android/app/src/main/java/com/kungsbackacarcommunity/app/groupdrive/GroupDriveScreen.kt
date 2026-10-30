@@ -61,7 +61,11 @@ fun GroupDriveScreen(
     val participating = GroupDrive.isParticipating(myStatus)
     val activeCount = GroupDrive.activeParticipants(participants).size
 
-    AeroPage(title = event?.title ?: stringResource(R.string.groupDrive_screenTitle), modifier = modifier) {
+    AeroPage(
+        title = event?.title ?: stringResource(R.string.groupDrive_screenTitle),
+        modifier = modifier,
+        ownerShortcutEnabled = false,
+    ) {
         if (event != null) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
                 EventDateBadge(event.startsAtMillis)

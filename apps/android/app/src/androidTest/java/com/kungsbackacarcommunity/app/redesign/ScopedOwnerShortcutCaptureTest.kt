@@ -18,10 +18,13 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Density
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.crownhunt.CrownHuntInstructionsButtonTag
 import com.kungsbackacarcommunity.app.friends.FriendsCataloguePreview
 import com.kungsbackacarcommunity.app.leaderboard.LeaderboardCategory
 import com.kungsbackacarcommunity.app.leaderboard.LeaderboardCategoryBoard
@@ -56,7 +59,7 @@ class ScopedOwnerShortcutCaptureTest {
         val args = InstrumentationRegistry.getArguments()
         val screens = listOf(
             "garage", "vehicle-detail", "friends", "settings", "notifications", "drive-history", "drive-detail",
-            "crown", "events", "event-detail", "leaderboard", "partners", "partners-saved-locked", "partner-detail", "map",
+            "crown", "events", "event-detail", "event-group-drive", "leaderboard", "partners", "partners-saved-locked", "partner-detail", "map",
         )
         val selected = mutableStateOf(screens.first())
         val dark = args.getString("redesignTheme") != "light"
@@ -87,6 +90,7 @@ class ScopedOwnerShortcutCaptureTest {
                                     onMarkRead = {}, onMarkAllRead = {}, onBack = {},
                                 )
                                 "crown", "events", "event-detail" -> Wave2SocialPreview(selected.value)
+                                "event-group-drive" -> EventDesignPreview(selected.value)
                                 "partners" -> Pass3SettingsFixture("S65")
                                 "partners-saved-locked" -> Pass3SettingsFixture("S65-saved-locked")
                                 "partner-detail" -> Pass3SettingsFixture("S66")
@@ -123,6 +127,17 @@ class ScopedOwnerShortcutCaptureTest {
             val output = File(compose.activity.getExternalFilesDir(null), "owner-shortcut-$variant-$fontScale-$screen.png")
             output.outputStream().use { stream ->
                 check(compose.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, stream))
+            }
+            if (screen == "crown") {
+                compose.onNodeWithTag(CrownHuntInstructionsButtonTag).performScrollTo().performClick()
+                compose.onNodeWithTag(AeroOwnerAvatarTag).assertDoesNotExist()
+                compose.onNodeWithTag(AeroBackButtonTag).assertIsDisplayed()
+                val instructions = File(compose.activity.getExternalFilesDir(null), "owner-shortcut-$variant-$fontScale-crown-instructions.png")
+                instructions.outputStream().use { stream ->
+                    check(compose.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, stream))
+                }
+                compose.onNodeWithTag(AeroBackButtonTag).performClick()
+                compose.onNodeWithTag(CrownHuntInstructionsButtonTag).performScrollTo().assertIsDisplayed()
             }
         }
     }
