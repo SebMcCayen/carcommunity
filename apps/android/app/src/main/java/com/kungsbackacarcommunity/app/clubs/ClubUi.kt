@@ -50,19 +50,31 @@ internal fun ClubLogo(club: Club, modifier: Modifier = Modifier) {
     }
 }
 
+/** Explicit reading colors avoid Material Card's gold onPrimaryContainer inheritance. */
+@Composable
+internal fun clubCardColors() = CardDefaults.cardColors(
+    containerColor = MaterialTheme.colorScheme.surface,
+    contentColor = MaterialTheme.colorScheme.onSurface,
+)
+
+@Composable
+internal fun clubLocale(): Locale = LocalLocale.current.platformLocale
+
 @Composable
 internal fun ClubCard(club: Club, onOpen: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit = {}) {
-    Card(Modifier.fillMaxWidth()) {
+    Card(Modifier.fillMaxWidth(), colors = clubCardColors()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 ClubLogo(club)
                 Column(Modifier.weight(1f)) {
                     Text(club.name, style = MaterialTheme.typography.titleMedium)
-                    Text(club.location, style = MaterialTheme.typography.bodySmall)
-                    Text(stringResource(R.string.clubs_membersCount, club.memberCount), style = MaterialTheme.typography.bodySmall)
+                    Text(club.location, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.clubs_membersCount, club.memberCount), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            Text(club.description)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Text(stringResource(R.string.clubPage_intro), style = MaterialTheme.typography.titleSmall)
+            Text(club.description, style = MaterialTheme.typography.bodyLarge)
             Text(stringResource(if (club.visibility == "closed") R.string.clubs_closed else R.string.clubs_open), style = MaterialTheme.typography.labelMedium)
             if (onOpen != null) TextButton(onClick = onOpen) { Text(stringResource(R.string.clubs_title)) }
             content()
@@ -72,7 +84,7 @@ internal fun ClubCard(club: Club, onOpen: (() -> Unit)? = null, content: @Compos
 
 internal val clubZone: ZoneId = ZoneId.of("Europe/Stockholm")
 @Composable
-internal fun clubDate(millis: Long): String = DateTimeFormatter.ofPattern("d MMM yyyy HH:mm", LocalLocale.current.platformLocale)
+internal fun clubDate(millis: Long): String = DateTimeFormatter.ofPattern("d MMM yyyy HH:mm", clubLocale())
     .withZone(clubZone).format(Instant.ofEpochMilli(millis))
 internal fun clubCooldownActive(state: ClubState, nowMillis: Long) =
     state.legacyConflict || (clubInstant(state.joinAllowedAt)?.let { it > nowMillis } == true)

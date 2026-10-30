@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="clubPage_openProfile">Open profile for %1$s</string>
+    <string name="clubPage_memberActions">Actions for %1$s</string>
+    <string name="clubPage_intro">About the club</string>
+    <string name="clubPage_noMembers">No members could be displayed.</string>
+</resources>
