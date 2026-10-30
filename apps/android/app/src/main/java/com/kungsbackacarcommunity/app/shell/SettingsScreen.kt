@@ -91,6 +91,7 @@ fun SettingsScreen(
     onWhatsNew: () -> Unit,
     modifier: Modifier = Modifier,
     supporterBadgeSetting: @Composable () -> Unit = {},
+    membershipMapRingSetting: @Composable () -> Unit = {},
 ) {
     val context = LocalContext.current
     val instagramUrl = stringResource(R.string.url_instagram)
@@ -103,6 +104,7 @@ fun SettingsScreen(
     ) {
         SettingsGroup(stringResource(R.string.settingsMenu_accountSection)) {
             supporterBadgeSetting()
+            membershipMapRingSetting()
             if (onManageSubscription != null) {
                 SettingsDestinationRow(
                     stringResource(R.string.settingsMenu_manageSubscription),

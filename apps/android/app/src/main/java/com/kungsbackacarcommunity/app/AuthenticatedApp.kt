@@ -74,6 +74,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -5300,6 +5301,29 @@ fun AuthenticatedApp(
                         nearbySharerCount = nearbyLiveMarkers.size,
                     )
 
+                // A single public-cosmetic observer for the already-authorized
+                // markers drawn by either map. Separate source keys prevent an
+                // old map's disposal from clearing the navigation map's roster.
+                val markerAppearanceRepository = remember(uid, context) {
+                    com.kungsbackacarcommunity.app.live.FirebaseLiveMarkerAppearanceRepository
+                        .createIfAvailable(context)
+                }
+                val drawnMarkerSources = remember(uid) {
+                    mutableStateMapOf<String, Set<String>>()
+                }
+                val authorizedMarkerUids = remember(convoyMemberPositions, nearbyLiveMarkers) {
+                    convoyMemberPositions.map { it.uid }.toSet() + nearbyLiveMarkers.map { it.uid }
+                }
+                val appearanceMapVisible = mapCover != MapCover.Opaque || navDestination != null
+                val drawnAppearanceUids = if (appearanceMapVisible) {
+                    drawnMarkerSources.values.flatten().toSet().intersect(authorizedMarkerUids)
+                } else emptySet()
+                val markerAppearances = com.kungsbackacarcommunity.app.live.rememberLiveMarkerAppearances(
+                    repository = markerAppearanceRepository,
+                    viewerKey = uid,
+                    drawnUids = drawnAppearanceUids,
+                )
+
                 // Composes nothing at all unless there is somebody to draw, so a
                 // convoy where nobody is sharing yet adds no layer to the map.
                 // Declared here rather than beside the convoy roster above so all
@@ -5312,6 +5336,8 @@ fun AuthenticatedApp(
                                 mapSurface = mapSurface,
                                 members = convoyMemberPositions,
                                 focusFitActive = convoyFitActive,
+                                appearances = markerAppearances,
+                                onDrawnUidsChanged = { drawnMarkerSources["map-convoy"] = it },
                             )
                         }
                     } else {
@@ -5327,6 +5353,8 @@ fun AuthenticatedApp(
                                 mapSurface = mapSurface,
                                 sharers = nearbyLiveMarkers,
                                 onSharerTap = { selectedLiveSharer = it },
+                                appearances = markerAppearances,
+                                onDrawnUidsChanged = { drawnMarkerSources["map-nearby"] = it },
                             )
                         }
                     } else {
@@ -5354,6 +5382,8 @@ fun AuthenticatedApp(
                                     mapSurface = projection,
                                     members = convoyMemberPositions,
                                     focusFitActive = convoyFitActive,
+                                    appearances = markerAppearances,
+                                    onDrawnUidsChanged = { drawnMarkerSources["navigation-convoy"] = it },
                                 )
                             }
                             if (liveLayerPlan.nearby) {
@@ -5361,6 +5391,8 @@ fun AuthenticatedApp(
                                     mapSurface = projection,
                                     sharers = nearbyLiveMarkers,
                                     onSharerTap = { selectedLiveSharer = it },
+                                    appearances = markerAppearances,
+                                    onDrawnUidsChanged = { drawnMarkerSources["navigation-nearby"] = it },
                                 )
                             }
                         }
@@ -9691,6 +9723,11 @@ private fun RouteHost(
                 supporterBadgeSetting = {
                     profileRepository?.let {
                         com.kungsbackacarcommunity.app.profile.SupporterBadgeSetting(it, uid)
+                    }
+                },
+                membershipMapRingSetting = {
+                    profileRepository?.let {
+                        com.kungsbackacarcommunity.app.profile.MembershipMapRingSetting(it, uid)
                     }
                 },
                 onManageSubscription =

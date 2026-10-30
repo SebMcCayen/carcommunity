@@ -1,14 +1,10 @@
 package com.kungsbackacarcommunity.app.live
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
@@ -20,13 +16,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -34,13 +26,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.diagnostics.rememberClientErrorReporter
 import com.kungsbackacarcommunity.app.map.ConvoyEdgeGeometry
 import com.kungsbackacarcommunity.app.map.MapAwarenessDiagnostics
 import com.kungsbackacarcommunity.app.map.MapAwarenessReport
-import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.shell.MapProjection
 import com.kungsbackacarcommunity.app.shell.MapScreenPoint
 import kotlin.math.roundToInt
@@ -86,6 +76,8 @@ fun NearbyLiveOverlay(
     // decorative — the pre-existing behaviour — so a caller with no profile
     // navigation to offer is unchanged.
     onSharerTap: ((LiveMarker) -> Unit)? = null,
+    appearances: Map<String, LiveMarkerAppearance> = emptyMap(),
+    onDrawnUidsChanged: (Set<String>) -> Unit = {},
 ) {
     val camera by mapSurface.cameraSnapshot.collectAsState()
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
@@ -174,6 +166,7 @@ fun NearbyLiveOverlay(
             }
 
         val onScreen = evaluation.first
+        ReportDrawnLiveMarkerUids(onScreen.map { it.first.uid }.toSet(), onDrawnUidsChanged)
 
         // Feed this settled frame's verdicts to the diagnostics log; escalate one
         // aggregate report the first time faulty projections cross the threshold.
@@ -217,6 +210,7 @@ fun NearbyLiveOverlay(
         onScreen.forEach { (sharer, point) ->
             NearbySharerChip(
                 imagePath = sharer.mainCar?.imagePath,
+                appearance = appearances[sharer.uid] ?: LiveMarkerAppearance(),
                 centreX = point.x,
                 centreY = point.y,
                 contentDescription =
@@ -246,6 +240,7 @@ private fun LiveMarker.spokenName(): String =
 @Composable
 private fun NearbySharerChip(
     imagePath: String?,
+    appearance: LiveMarkerAppearance,
     centreX: Float,
     centreY: Float,
     contentDescription: String,
@@ -264,7 +259,6 @@ private fun NearbySharerChip(
     // tertiary — deliberately NOT the convoy overlay's primary — so a nearby
     // public sharer reads as a different kind of marker from a convoy member.
     val accent = MaterialTheme.colorScheme.tertiary
-    val url = rememberStorageImageUrl(LocalContext.current, imagePath)
 
     Box(
         modifier =
@@ -298,37 +292,12 @@ private fun NearbySharerChip(
                 .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier =
-                Modifier
-                    .size(PHOTO_SIZE)
-                    .clip(CircleShape)
-                    .background(accent)
-                    .padding(2.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (url != null) {
-                AsyncImage(
-                    model = url,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().clip(CircleShape),
-                )
-            } else {
-                // No resolved photo (none set, or still loading / failed to
-                // resolve): a recognisable generic side-profile car, not a
-                // broadcast glyph, so a photoless live sharer still reads as a
-                // car on the map.
-                Icon(
-                    painter = painterResource(R.drawable.ic_generic_car),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(PHOTO_SIZE * 0.62f),
-                )
-            }
-        }
+        LiveCarPhotoBadge(
+            imagePath = imagePath,
+            appearance = appearance,
+            ringColor = accent,
+            modifier = Modifier.size(PHOTO_SIZE),
+        )
     }
 }
 

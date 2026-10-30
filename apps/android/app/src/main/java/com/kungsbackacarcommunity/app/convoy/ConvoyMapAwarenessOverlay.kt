@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,13 +28,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -44,8 +40,10 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.live.LiveCarPhotoBadge
+import com.kungsbackacarcommunity.app.live.LiveMarkerAppearance
+import com.kungsbackacarcommunity.app.live.ReportDrawnLiveMarkerUids
 import com.kungsbackacarcommunity.app.diagnostics.rememberClientErrorReporter
 import com.kungsbackacarcommunity.app.location.LivePositionRejectionReport
 import com.kungsbackacarcommunity.app.map.ConvoyArrowPlanner
@@ -56,7 +54,6 @@ import com.kungsbackacarcommunity.app.map.ConvoyMemberPlacement
 import com.kungsbackacarcommunity.app.map.ConvoyMemberPosition
 import com.kungsbackacarcommunity.app.map.LiveMarkerSmoother
 import com.kungsbackacarcommunity.app.map.LiveMarkerSmoothing
-import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.shell.MapProjection
 import kotlin.math.roundToInt
 
@@ -111,6 +108,8 @@ fun ConvoyMapAwarenessOverlay(
     modifier: Modifier = Modifier,
     nowMillis: () -> Long = { System.currentTimeMillis() },
     focusFitActive: Boolean = false,
+    appearances: Map<String, LiveMarkerAppearance> = emptyMap(),
+    onDrawnUidsChanged: (Set<String>) -> Unit = {},
 ) {
     val camera by mapSurface.cameraSnapshot.collectAsState()
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
@@ -260,9 +259,14 @@ fun ConvoyMapAwarenessOverlay(
             }
         }
 
+        ReportDrawnLiveMarkerUids(
+            (placements.onScreen.map { it.member.uid } + placements.offScreen.map { it.member.uid }).toSet(),
+            onDrawnUidsChanged,
+        )
         placements.onScreen.forEach { placement ->
             ConvoyMemberChip(
                 member = placement.member,
+                appearance = appearances[placement.member.uid] ?: LiveMarkerAppearance(),
                 centreX = placement.point.x,
                 centreY = placement.point.y,
                 arrowAngleDegrees = null,
@@ -279,6 +283,7 @@ fun ConvoyMapAwarenessOverlay(
         placements.offScreen.forEach { placement ->
             ConvoyMemberChip(
                 member = placement.member,
+                appearance = appearances[placement.member.uid] ?: LiveMarkerAppearance(),
                 centreX = placement.point.x,
                 centreY = placement.point.y,
                 arrowAngleDegrees = placement.angleDegrees,
@@ -443,6 +448,7 @@ internal fun clockPositionOf(angleDegrees: Double): Int {
 @Composable
 private fun ConvoyMemberChip(
     member: ConvoyMemberPosition,
+    appearance: LiveMarkerAppearance,
     centreX: Float,
     centreY: Float,
     arrowAngleDegrees: Double?,
@@ -476,8 +482,9 @@ private fun ConvoyMemberChip(
             }
         }
 
-        ConvoyMemberPhoto(
+        LiveCarPhotoBadge(
             imagePath = member.imagePath,
+            appearance = appearance,
             ringColor = accent,
             modifier = Modifier.size(PHOTO_SIZE),
         )
@@ -501,51 +508,6 @@ private fun ConvoyMemberChip(
                     fontSize = 10.sp,
                 )
             }
-        }
-    }
-}
-
-/**
- * The member's garage main-car photo — the same identity the live marker
- * already carries — in a circular ring. Falls back to the generic side-profile
- * car glyph whenever the main-car photo URL is unavailable — no photo set, the
- * Storage URL still resolving, or resolution failed.
- */
-@Composable
-private fun ConvoyMemberPhoto(
-    imagePath: String?,
-    ringColor: Color,
-    modifier: Modifier = Modifier,
-) {
-    val url = rememberStorageImageUrl(LocalContext.current, imagePath)
-    Box(
-        modifier =
-            modifier
-                .clip(CircleShape)
-                .background(ringColor)
-                .padding(2.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (url != null) {
-            AsyncImage(
-                model = url,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().clip(CircleShape),
-            )
-        } else {
-            // No resolved photo (none set, or still loading / failed to
-            // resolve): a recognisable generic side-profile car rather than the
-            // Material front-on default, so a photoless convoy member still
-            // reads as a car on the map.
-            Icon(
-                painter = painterResource(R.drawable.ic_generic_car),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(PHOTO_SIZE * 0.68f),
-            )
         }
     }
 }

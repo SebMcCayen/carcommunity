@@ -48,6 +48,10 @@ class FirebaseProfileRepository private constructor(
                                 snapshot.getBoolean("suspended") == true ||
                                     snapshot.getBoolean("deleted") == true,
                             clubBadge = ClubBadge.fromField(snapshot.get("clubBadge")),
+                            membershipMapRing = MembershipMapRing.fromFields(
+                                snapshot.get("membershipMapRingEligible"),
+                                snapshot.get("showMembershipMapRing"),
+                            ),
                             supporterBadge = SupporterBadge.fromFields(
                                 snapshot.get("supporterBadgeEligible"), snapshot.get("showSupporterBadge"),
                             ),
@@ -110,6 +114,10 @@ class FirebaseProfileRepository private constructor(
 
     override suspend fun updateShowSupporterBadge(uid: String, show: Boolean) {
         writeUser(uid, mapOf("showSupporterBadge" to show, "updatedAt" to FieldValue.serverTimestamp()))
+    }
+
+    override suspend fun updateShowMembershipMapRing(uid: String, show: Boolean) {
+        writeUser(uid, mapOf("showMembershipMapRing" to show, "updatedAt" to FieldValue.serverTimestamp()))
     }
 
     /** Owner update of a whitelisted subset of users/{uid} fields. */

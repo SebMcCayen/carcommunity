@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="membershipMapRing_settingTitle">Visa guldring på kartan</string>
+    <string name="membershipMapRing_settingBody">Visa din guldring på bilbilden medan ditt Plus- eller Supporter-medlemskap gäller.</string>
+    <string name="membershipMapRing_saveFailed">Inställningen kunde inte sparas. Försök igen.</string>
+    <string name="membershipMapRing_accessibility">Guldring för medlemskap</string>
+</resources>
