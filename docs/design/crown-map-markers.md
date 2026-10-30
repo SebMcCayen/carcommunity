@@ -6,8 +6,9 @@ Crown Hunt rewards, claim eligibility, limits, flags or backend collections.
 
 ## Appearance
 
-Use an opaque navy rounded-square tile, one fine accent border and ONE draw of
-the existing licensed crown vector. Do not trace the crown repeatedly, add
+Use an opaque rounded-square tile, one fine accent border and ONE draw of
+the existing licensed crown vector. Night maps retain the navy surface; day maps
+use the light distant palette below. Do not trace the crown repeatedly, add
 concentric rings, blur/glow or run idle animations. These details previously
 merged into a smudge on a busy map. Crowns remain below incidents/navigation.
 
@@ -25,15 +26,44 @@ server data, never tiny map text or a speculative reward. Curated points have no
 spawn rarity: their actual reward chooses the corresponding visual value band;
 this must not be described as a new rarity or change their reward policy.
 
-Colours come from `contracts/design-tokens/tokens.json`; generate native outputs.
-The navy reading surface and bright glyph/border work on light and dark maps.
+The existing night/ready colours come from `contracts/design-tokens/tokens.json`;
+generate native outputs rather than editing them by hand.
+
+### Android day-map distant palette — approved 2026-10-30
+
+The selected “Ljusa värdefärger” colour proposal changes only distant/unknown-position
+crowns on a day map. Keep the licensed vectors, tile size, corner radius, stroke
+width, rank bars and animation unchanged. The map's effective `MapMode` controls
+this palette, including manual map overrides; do not read the phone theme directly.
+
+| Value band | Distant day fill | Crown, border and bars | Foreground/fill contrast |
+| ---------- | ---------------- | ---------------------- | -----------------------: |
+| Common     | `#ECE9E3`        | `#5B6168`              |                    5.17:1 |
+| Uncommon   | `#E6F3EB`        | `#1B6E4B`              |                    5.44:1 |
+| Rare       | `#EEE7FA`        | `#6640A0`              |                    6.22:1 |
+| Legendary  | `#FFF0CC`        | `#946000`              |                    4.73:1 |
+
+These paired colours are local Android map-component values in `CrownMarkerBitmaps`;
+the global generated palette, detail/list colours and iOS files are unchanged.
+Curated points use the same reward-band mapping already described above. Night,
+ready and legacy collected-badge pixels retain their previous colours. In range,
+the stronger solid accent fill remains the proximity cue in both map modes.
+
+A day/night change wakes the existing single crown render effect once, preserves
+its animator/annotation state and swaps the cached appearance of settled crowns.
+The image key and bitmap use the same per-frame mode snapshot. Only distant day
+images need a separate key; identical ready/night/collected images remain reusable.
+This avoids stale dark icons after switching the map to day mode without adding
+an idle frame loop or replaying spawn animations.
+
 Legacy disc/glow inputs are state adapters only, not instructions to paint the
 old incident-style disc or a halo. All appearance metadata participates in the
 style-image cache key. No bitmap generation happens in the animation frame loop.
 
 ## State and motion
 
-- Distant/unknown position: navy tile with accent glyph, border and rank bars.
+- Distant/unknown position: light paired colours on day maps, navy tile with bright
+  accent glyph, border and rank bars on night maps.
   Missing position must never look ready. Preserve the existing range calculation.
 - Within geographic collection radius: solid accent fill with navy glyph/bars
   and one light border. No perpetual pulse across dozens of crowns. This indicates

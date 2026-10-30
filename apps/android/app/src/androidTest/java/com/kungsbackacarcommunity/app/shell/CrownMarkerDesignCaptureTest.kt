@@ -107,7 +107,8 @@ class CrownMarkerDesignCaptureTest {
                         val size = kotlin.math.ceil(side + 2 * density).toInt()
                         val left = (centre - size / 2f).toInt()
                         val sampleX = left + (size / 2f - side / 2 + 3 * density).toInt()
-                        assertEquals("$rarity distant fill", KccPalette.nightOverlay.toArgb(),
+                        val distantFill = if (index == 0) CrownMarkerBitmaps.lightSurface(tier) else KccPalette.nightOverlay.toArgb()
+                        assertEquals("$rarity distant fill", distantFill,
                             panel.getPixel(sampleX, (60 * density).toInt() + size / 2))
                         assertEquals("$rarity ready fill", accent(rarity),
                             panel.getPixel(sampleX, (114 * density).toInt() + size / 2))
@@ -135,6 +136,7 @@ private class CrownTilePanel(context: Context, private val dark: Boolean) : View
                 context, crownGlyphRes(rarity), appearance.discColorArgb,
                 appearance.glyphColorArgb, appearance.glowColorArgb,
                 rarity = rarity,
+                mapMode = if (dark) MapMode.Night else MapMode.Day,
             ))
         }
     }
