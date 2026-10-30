@@ -5,8 +5,9 @@ final result: passed
 Signed off for the accepted local native fixture states, including the previously
 reviewed 2.0 font reflow. No actionable P0/P1/P2 product mismatch remains in
 those accepted states. The capture discrepancy is resolved for visual comparison
-by complete native evidence; some diagnostic outputs remain incomplete and are
-explicitly rejected below. No production UI code changed during this diagnosis.
+by complete native evidence. The earlier explicit rejection of the adb members
+image is withdrawn following the verified pixel comparison below. No production
+UI code changed during this diagnosis.
 
 ## Comparison evidence
 
@@ -52,9 +53,9 @@ normal-scale state set uses the following exact filenames (all suffixes
 
 The table abbreviates the full directory names above. Committed after images
 are unmodified settled-window identity-dark and members-upper-dark. The requested
-adb members candidate is not substituted silently: it is rejected because its
-banner/back arrow and part of Invite's outline remain absent. The settled-window
-members capture is complete and is the accepted representative instead.
+adb members image also corroborates the state: the earlier missing-banner/back
+claim was unsupported and is withdrawn. The selected representative remains the
+settled-window members capture; this selection does not reject the adb image.
 
 State: the current production `SharedClubRoute` with local owner/closed-club
 fixture, four members including one moderator, aggregate statistics and two
@@ -65,28 +66,39 @@ BEFORE caption intentionally. Capture invocations do not execute mutations.
 
 ### Resolved P2 evidence blocker: complete native comparison states obtained
 
-The initial normal-scale Compose exports omitted dates 1–29 in dark Calendar,
-plus back/heading content in light Statistics and dark Members. The first audit
-correctly held acceptance; source and semantic tests alone were insufficient.
+The first image-preview review raised a concern about dates/navigation/heading
+content in normal-scale Calendar, Statistics and Members. That audit held
+acceptance until native evidence was available; source and semantic tests alone
+were insufficient for a visual sign-off.
 
 Parent added test-only native-window capture, a 250ms real compositor settle,
 and optional eight-second named-state pauses for independent adb screenshots.
 The app implementation and local fixture content did not change. The accepted
-adb Statistics/Calendar and native-window Members now visibly contain the missing
-content at the same scroll positions. This resolves a persistent layout/color
-regression as the explanation for those missing elements in the original images;
+native states show the complete date grid, headings and back navigation. The
+initial concern is resolved for this fixture; no product UI bug was found and
 no speculative recoloring or production UI fix was made.
 
-Capture limitation remains: not all diagnostic PNGs are complete. Reject
-`adb-paused-20261030/04-members-upper-dark-sv-1_0.png` (missing banner/back and
-partial Invite outline), `settled-window-20261030/02-statistics-light-sv-1_0.png`
-(missing banner/back), and `settled-window-20261030/03-calendar-dark-sv-1_0.png`
-(missing banner/back and part of heading, with compressed date drawing).
-Each has a complete same-state counterpart in the accepted table above. These
-files must not be presented as accepted screenshots or proof of uniform capture
-reliability. The evidence supports capture/compositor timing as a limitation of
-this instrumented run; it does not identify the underlying graphics mechanism or
-certify absence of transient rendering outside the accepted captures.
+Correction to the earlier adb members rejection: the RGB pixel crop at native
+coordinates `(15,140,1050,410)` is byte-identical in these three files:
+
+- `native-window-20261030/04-members-upper-dark-sv-1_0.png`
+- `adb-paused-20261030/04-members-upper-dark-sv-1_0.png`
+- `settled-window-20261030/04-members-upper-dark-sv-1_0.png`
+
+Locally recomputed SHA-256 of the RGB crop bytes for each:
+`655a6644c98736842bbb79620bb9059229c4c28731c426c01559a684377445ac`.
+The PNG encodings have different channel modes (RGB/RGBA), so the comparison
+explicitly normalizes each crop to RGB before hashing. This header-region
+comparison supports withdrawing the missing-banner/back claim; it is not a
+whole-image identity claim. The earlier partial-outline rejection is also
+withdrawn as unsupported. The adb image is corroborating evidence; settled-window
+remains the chosen committed representative.
+
+The initial image-viewing ambiguity does not establish persistent capture
+corruption, intermittent product rendering failure or a particular compositor
+mechanism. No further negative claims about the diagnostic files are made from
+those previews alone. The sign-off covers the observed fixture states; capture
+tool reliability and rendering stability outside them were not established.
 
 ### Existing outlined-button treatment, not a demonstrated regression
 
@@ -114,7 +126,7 @@ reading text implements the approved brief without removing the brand tokens.
 | Surface | Result in readable/complete captures |
 | --- | --- |
 | Typography | Existing native family/type scale retained. Name/value hierarchy is clearer; white dark names/body and muted roles/labels separate reading priorities. At 2.0 long names wrap, overflow remains beside the row, and metric values stack without horizontal collision. No new font asset or measured font-metric equivalence is claimed. |
-| Spacing/layout | Existing page margins, radii and back chrome remain the target. Identity/intro are separated; three metrics share one card; the four-member roster is compact; club management follows it. More vertical scrolling at 2.0 and partial top rows in lower-roster scroll states are expected. Accepted native states restore the missing chrome/date evidence; rejected outputs are excluded. |
+| Spacing/layout | Existing page margins, radii and back chrome remain the target. Identity/intro are separated; three metrics share one card; the four-member roster is compact; club management follows it. More vertical scrolling at 2.0 and partial top rows in lower-roster scroll states are expected. Accepted native states establish complete chrome/date content; the earlier adb rejection is withdrawn after the RGB comparison. |
 | Color/tokens | White/ink reading text on navy/white surfaces replaces inherited gold body text. Event-day tint retains a gold accent; destructive calendar/club actions use the existing error token. Gray outlined actions predate this patch. No automated contrast certification was performed. |
 | Images/icons | Existing fixture drawables render in circular member images; three-dot overflow stays aligned. No generated/new asset or custom replacement icon was introduced. Some white fixture artwork has weak contrast against the pale light avatar/logo backing; this local asset choice does not prove live profile-photo contrast or production Storage hydration. |
 | Copy/content | Name, introduction, closed state, roles, aggregate privacy explanation, calendar entries and logo guidance remain readable where fully captured. Swedish resources coexist with English month/day formatting and number separators in this fixture; this existed in baseline and is not full locale certification. |
@@ -146,14 +158,17 @@ to Android docs/evidence.
 
 1. Baseline audit identified gold reading text, absent avatars and persistent
    management rows. Implementation and avatar follow-up are committed and tested.
-2. First matched after audit was blocked by inconsistent scrolled exports.
+2. First matched after audit held acceptance pending native verification of
+   perceived missing content in scrolled image previews.
 3. Parent produced native-window/independent adb evidence with test-only timing
-   diagnostics. All thirteen new PNGs were inspected; complete counterparts for
-   each suspect state are identified above. No product UI fix was needed.
+   diagnostics. All thirteen new PNGs were inspected; accepted states are
+   identified above. No product UI fix was needed.
 4. Accepted identity-dark and members-dark copies are committed with this report;
-   copied bytes match their native-window sources. The originally requested adb
-   members copy is deliberately excluded as incomplete.
+   copied bytes match their native-window sources. The adb members image remains
+   corroborating evidence; its earlier rejection is withdrawn after verifying
+   identical RGB header crops across all three capture sources.
 5. Final static visual comparison passes within the stated fixture scope. No
    additional product code change is requested. Keep inherited outlined-button
    affordance polish separate; keep opening each future capture before accepting
-   it. No claim is made that the complete diagnostic run is artifact-free.
+   it. No claim of persistent capture corruption or a specific graphics cause
+   is supported by this audit.

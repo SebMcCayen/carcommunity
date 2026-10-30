@@ -25,11 +25,13 @@ They are 1080x2400 full-window captures including Android system bars; before
 files are 1080x2200 Compose content. Compare app content, not system chrome.
 The before caption intentionally changes to neutral local-test-data copy after.
 
-The requested independent adb members candidate was inspected and rejected:
-it still lacks the banner/back arrow and part of Invite's outline. The complete
-settled-window members image is used instead. Independently captured adb light
-statistics and dark calendar show complete content and resolve those states.
-Not all diagnostic outputs are accepted; see [design-qa.md](design-qa.md).
+The independent adb members image is valid corroborating evidence. The earlier
+claim that its banner/back arrow were missing is withdrawn: the native-coordinate
+RGB crop `(15,140,1050,410)` is byte-identical across native-window, adb-paused and
+settled-window members images. The selected representative remains settled-window.
+Independent adb statistics/calendar and native members states resolve the initial
+capture concern; no product UI bug was found. No persistent capture corruption or
+specific graphics cause is established; see [design-qa.md](design-qa.md).
 
 Parent validation: 131/131 filtered JVM, eleven actual native behavior tests,
 lint/debug/test APKs; twenty original 1.0/2.0 captures plus the narrow native

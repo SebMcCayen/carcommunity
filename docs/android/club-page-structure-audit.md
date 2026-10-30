@@ -86,10 +86,11 @@ Final visual QA: **passed within the local fixture limits**. Reviewed the ten
 settled native-window captures plus three independently captured adb pause
 images. Complete light statistics and dark calendar states appear in adb;
 complete dark members appears in the settled native window. These resolve the
-initial missing-content concern without any production UI change. Not every
-output is valid: the adb members image and settled light-statistics/dark-calendar
-images retain partial drawing and are excluded from accepted evidence. Capture
-completion alone must never substitute for opening the saved PNG.
+initial missing-content concern without any production UI change. The earlier
+rejection of the adb members image is withdrawn: its RGB header crop matches
+both native-window members captures exactly. Differences perceived in tool image
+previews do not establish missing source pixels or persistent capture corruption.
+The two committed after images remain the selected settled-window representatives.
 
 Parent's test-only diagnostic change adds `clubPageCaptureMode=window`, a 250ms
 real compositor settle and optional eight-second named-state pause. Reviewed and
@@ -99,9 +100,11 @@ capture passed one test (`/tmp/carcommunity-club-settled-native-20261030.log`).
 The independent XML exports were not parseable and provide no semantic proof.
 
 See [the final visual QA report](evidence/2026-10-30-club-page/design-qa.md) for
-accepted/rejected paths, comparison history, inherited outlined-button treatment
-and limits. Intermittent capture/compositor timing is a diagnostic limitation;
-this audit does not certify rendering stability outside these accepted states.
+selected paths, comparison history, the verified crop comparison, inherited
+outlined-button treatment and limits. No product rendering bug was found in
+these accepted native states; the exact cause of the initial preview/capture
+concern is not established. Rendering stability outside this fixture is not
+certified.
 
 ## Canonical member avatar follow-up
 
