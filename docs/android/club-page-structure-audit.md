@@ -30,19 +30,20 @@ proof and disposal, invitations, owner/moderator permissions, three-moderator ca
 server authority, error/busy states and pagination. Profile navigation is a
 callback to the existing parent route host; it grants no new data access.
 
-Limits: screenshots show appearance at scale 1.0 with local data, not TalkBack
-behavior, actual permission enforcement, large-font reflow, network/cache races,
-or physical-device readiness. The parent owns all Gradle/emulator work. Updated
-UI still needs matched light/dark captures, 2x-font interaction checks, and
-comparison against these same baseline states before visual QA can pass.
+Baseline limits: these captures show appearance at scale 1.0 with local data.
+The final code validation and after-capture audit are recorded below; neither
+screenshot evidence nor fake-repository interaction tests certify production
+permissions, live profile Storage data, TalkBack or physical-device readiness.
 
 ## Parent integration and QA
 
 `SharedClubRoute` gains an additive named `onOpenProfile: (String) -> Unit`
 parameter with a no-op default, passed to the current member content/rows.
-Parent owns `AuthenticatedApp.kt` / route-host wiring. No edits there, nor to
-profile/map/settings/backend/iOS, generated resources, tokens, versions or release
-configuration, belong to this branch.
+Parent supplied and explicitly authorized the one RouteHost wiring change in
+`d2b880684e0e7c57d4c7567ba7b829bebc645553`: `onOpenProfile =
+onOpenMemberProfile`, preserving `onOpenEvent = openEventFromNotification`.
+That wiring is committed. No profile/map/settings/backend/iOS, token, version or
+release configuration changes are part of this club-page work.
 
 ## Implementation and handoff checks
 
@@ -66,9 +67,25 @@ Added test classes:
   current implementation via a fresh after captureRun, both light/dark.
 
 Agent verification: localized XML parses, Swedish/English key sets match,
-git diff --check passes. No agent Gradle/emulator run. Parent build/JVM/lint,
-production profile routing integration and matched native after captures remain
-pending; no final visual QA pass or physical-device certification is claimed.
+git diff --check passes. No agent Gradle/emulator run.
+
+Parent validated code `4f7d48efb612084780d3921dd047a11b7e2d101d`:
+
+- 131/131 filtered JVM tests, including eleven avatar cases and roster tests;
+  `lintDebug`, `assembleDebug` and `assembleDebugAndroidTest` passed. Log:
+  `/tmp/carcommunity-live-club-final-20261030.log` (BUILD SUCCESSFUL).
+- Actual native `ClubPageStructureTest`: 11/11 passed. Log:
+  `/tmp/carcommunity-club-structure-native-20261030.log` (OK, 11 tests).
+- Two native capture invocations passed, one each at font scales 1.0 and 2.0,
+  producing twenty light/dark PNGs. Logs:
+  `/tmp/carcommunity-club-after-1.0-20261030.log` and
+  `/tmp/carcommunity-club-after-2.0-20261030.log` (each OK, 1 test).
+
+A successful capture invocation proves completion and its fixture assertions;
+it does not prove every exported pixel is valid. The visual comparison found
+incomplete content in some scrolled normal-scale images. Final visual sign-off
+is **blocked** pending a narrow rendering/capture check, detailed in
+[evidence/design-qa.md](evidence/2026-10-30-club-page/design-qa.md).
 
 ## Canonical member avatar follow-up
 
@@ -103,5 +120,7 @@ persistence, AuthenticatedApp or authorization contracts is involved.
   that an explicit click adds exactly one profile navigation, allowing Android's
   normal click fallback on long-press; no-menu/no-mutation assertions remain.
 
-Parent is validating these changes separately from the already-built d2b8806
-source. No agent Gradle/emulator runs; updated build/test outcomes remain pending.
+These changes are included in the parent-validated `4f7d48e` code above.
+The local drawable avatars in captures demonstrate image placement/cropping,
+not a production Firebase/Storage round trip. The eleven avatar tests provide
+separate mapping, batching, removal and account/access-fence evidence.
