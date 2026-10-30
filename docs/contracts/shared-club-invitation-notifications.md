@@ -235,6 +235,7 @@ functions/src/__tests__/notifications-core.test.ts
 functions/src/__tests__/club-invitation-notifications.emulator.test.ts
 functions/scripts/backfill-club-invitations.mjs
 functions/scripts/backfill-club-invitations.test.mjs
+functions/scripts/emulator-test-groups.mjs
 functions/vitest.config.ts
 functions/src/clubInvitations/index.test.ts
 functions/src/clubInvitations/index.ts
@@ -248,5 +249,6 @@ functions/src/notifications/sendPush.ts
 packages/shared/src/notifications.ts
 ```
 
-The ordinary Functions Vitest configuration includes `scripts/**/*.test.mjs`, so
+The ordinary Functions Vitest configuration includes
+`scripts/backfill-club-invitations.test.mjs`, so
 the bounded harness tests also run in the standard unit-test CI gate.
