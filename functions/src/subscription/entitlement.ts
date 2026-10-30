@@ -19,6 +19,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { adminAuth, db } from '../firebase';
 import { applyPrivilegeChange, computeUpdatedClaims } from '../admin/claims-core';
 import { supporterBadgeEligible } from './supporter-badge-core';
+import { membershipMapRingProjection } from './map-ring-core';
 import {
   buildSubscriptionDocument,
   grantsLegacyActiveMember,
@@ -49,16 +50,21 @@ export async function applyEntitlement(
       }
     },
     commitRecords: async () => {
+      const ring = membershipMapRingProjection(input, new Date(), input.userId);
       const batch = db.batch();
       batch.set(
         db.collection('subscriptions').doc(input.userId),
-        buildSubscriptionDocument(input, () => FieldValue.serverTimestamp()),
+        {
+          ...buildSubscriptionDocument(input, () => FieldValue.serverTimestamp()),
+          ...(ring.refreshAt ? { mapRingRefreshAt: ring.refreshAt } : {}),
+        },
       );
       batch.set(
         db.collection('users').doc(input.userId),
         {
           activeMember: active,
           supporterBadgeEligible: supporterBadgeEligible(input, new Date()),
+          membershipMapRingEligible: ring.membershipMapRingEligible,
           updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true },
