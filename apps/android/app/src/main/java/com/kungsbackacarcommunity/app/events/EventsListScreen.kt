@@ -91,7 +91,11 @@ fun EventsListScreen(
     // existing test/preview callers and any config-less caller unchanged).
     onSelectDistanceBand: ((DistanceBand) -> Unit)? = null,
 ) {
-    AeroPage(title = stringResource(R.string.events_title), modifier = modifier) {
+    AeroPage(
+        title = stringResource(R.string.events_title),
+        modifier = modifier,
+        ownerShortcutEnabled = false,
+    ) {
             Text(
                 text = stringResource(
                     if (tab == EventsListTab.UPCOMING) R.string.events_screenSubtitle else R.string.events_pastSubtitle,

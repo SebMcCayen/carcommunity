@@ -77,7 +77,10 @@ fun LeaderboardScreen(
     state: LeaderboardUiState,
 ) {
     var selectedCategory by rememberSaveable { mutableStateOf(LeaderboardCategory.CROWN_POINTS) }
-    AeroPage(title = stringResource(R.string.leaderboard_title)) {
+    AeroPage(
+        title = stringResource(R.string.leaderboard_title),
+        ownerShortcutEnabled = false,
+    ) {
         val boards = (state as? LeaderboardUiState.Loaded)?.categories.orEmpty()
         val activeBoard = boards.firstOrNull { it.category == selectedCategory } ?: boards.firstOrNull()
         if (activeBoard != null) {

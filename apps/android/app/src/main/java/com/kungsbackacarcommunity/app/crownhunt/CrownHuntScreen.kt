@@ -132,7 +132,11 @@ fun CrownHuntScreen(
         return
     }
 
-    AeroPage(title = stringResource(R.string.crownHunt_screenTitle), modifier = modifier) {
+    AeroPage(
+        title = stringResource(R.string.crownHunt_screenTitle),
+        modifier = modifier,
+        ownerShortcutEnabled = false,
+    ) {
         if (!passesMemberGate) {
             InfoCard(
                 title = stringResource(R.string.subscription_teaserTitle),
@@ -318,7 +322,11 @@ private fun CrownHuntInstructionsScreen(
     modifier: Modifier = Modifier,
     liveShareScoringEnabled: Boolean = false,
 ) {
-    AeroPage(title = stringResource(R.string.crownHunt_instrTitle), modifier = modifier) {
+    AeroPage(
+        title = stringResource(R.string.crownHunt_instrTitle),
+        modifier = modifier,
+        ownerShortcutEnabled = false,
+    ) {
         InstructionSection(
             title = stringResource(R.string.crownHunt_instrIntroTitle),
             body = stringResource(R.string.crownHunt_instrIntroBody),
