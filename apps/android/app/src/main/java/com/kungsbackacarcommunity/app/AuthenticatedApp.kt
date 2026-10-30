@@ -9734,7 +9734,11 @@ private fun RouteHost(
                 onWhatsNew = { onOpenRoute(ShellRoute.WhatsNew) },
             )
 
-        ShellRoute.Clubs -> SharedClubRoute(uid = uid, onOpenEvent = openEventFromNotification)
+        ShellRoute.Clubs -> SharedClubRoute(
+            uid = uid,
+            onOpenEvent = openEventFromNotification,
+            onOpenProfile = onOpenMemberProfile,
+        )
 
         ShellRoute.WhatsNew -> WhatsNewRoute()
 
