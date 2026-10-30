@@ -5314,8 +5314,10 @@ fun AuthenticatedApp(
                 val authorizedMarkerUids = remember(convoyMemberPositions, nearbyLiveMarkers) {
                     convoyMemberPositions.map { it.uid }.toSet() + nearbyLiveMarkers.map { it.uid }
                 }
-                val drawnAppearanceUids = drawnMarkerSources.values
-                    .flatten().toSet().intersect(authorizedMarkerUids)
+                val appearanceMapVisible = mapCover != MapCover.Opaque || navDestination != null
+                val drawnAppearanceUids = if (appearanceMapVisible) {
+                    drawnMarkerSources.values.flatten().toSet().intersect(authorizedMarkerUids)
+                } else emptySet()
                 val markerAppearances = com.kungsbackacarcommunity.app.live.rememberLiveMarkerAppearances(
                     repository = markerAppearanceRepository,
                     viewerKey = uid,
