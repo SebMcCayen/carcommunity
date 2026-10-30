@@ -48,6 +48,20 @@ Without those files the release build is **unsigned** with a blank-map token —
 
 This rule is **enforced**, not just documented — `whatsnew/ChangelogReleaseCoverageTest.kt` fails CI if the shipping `versionCode` has no entry (also catching gaps below it, and notes accidentally added ahead of their release). That guard exists because the rule was documented but unenforced from the start and was missed for four consecutive releases: `changelog.json` stopped at versionCode 7 (0.4.0) while the app shipped 8, 9, 10 and 11, so every user who updated to 0.5.0–0.8.0 silently got no "Vad är nytt" popup. Nothing failed, because `Changelog.announcementFor` correctly stays silent when there is nothing to announce.
 
+## Delivered system notifications
+
+`MainActivity.onResume` dismisses the app's already-delivered, dismissible Android
+notifications through `SystemNotifications`. This covers launcher entry, notification
+taps and returning to the existing activity. Cancellation uses both tag and ID,
+including tagged legacy/SDK notifications. Foreground-service, ongoing and
+non-clearable status notifications are preserved, including live-location sharing.
+
+This operation is local to Android: it does not delete or mark the in-app inbox as
+read, change notification-channel preferences or disable future pushes. It clears
+a single snapshot rather than suppressing delivery while the app is open. Supporting launchers derive
+their notification badge from active system notifications; no separate unread count
+or third-party badge API is written. See [Android notification badges](https://developer.android.com/develop/ui/views/notifications/badges).
+
 ## Localization
 
 `res/values/strings.xml` (Swedish, default) and `res/values-en/strings.xml` are **generated** from the canonical contracts:
