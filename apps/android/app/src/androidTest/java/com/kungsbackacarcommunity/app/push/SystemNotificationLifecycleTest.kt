@@ -1,12 +1,14 @@
 package com.kungsbackacarcommunity.app.push
 
 import android.Manifest
+import android.accessibilityservice.AccessibilityService
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.os.Build
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
@@ -34,7 +36,9 @@ import org.junit.runner.RunWith
  * fixture. A configured APK is skipped before any Activity is launched.
  *
  * "Cold" means a fresh Activity, not process death: instrumentation shares the app process.
- * Notification entry sends the actual content PendingIntent, without automating System UI.
+ * Notification entry taps the real System UI notification, including Android's user-interaction
+ * authorization for launching a background app. Directly sending its PendingIntent from a stopped
+ * test app would correctly be blocked by Android's background-activity-launch protections.
  * FLAG_ONGOING_EVENT and FLAG_NO_CLEAR are checked after the system accepts each fixture.
  * FLAG_FOREGROUND_SERVICE is deliberately not forged: Android may strip that bit from an ordinary
  * notify() call. These fixtures cannot certify live GPS/FGS continuity or launcher badge rendering;
@@ -52,11 +56,13 @@ class SystemNotificationLifecycleTest {
     private val regularChannel = "${namespace}_regular"
     private val statusChannel = "${namespace}_status"
     private val baseId = (namespace.hashCode() and 0x3fffffff) + 10_000
+    private val tappableTitle = "Open notification ${namespace.takeLast(8)}"
     private val fixtureKeys = mutableSetOf<NoticeKey>()
     private val fixtureChannels = mutableListOf<String>()
     private val fixtureIntents = mutableListOf<PendingIntent>()
     private var scenario: ActivityScenario<MainActivity>? = null
     private var ownedDeepLink: PushDeepLink? = null
+    private var openedShade = false
 
     @Before
     fun prepareIsolatedConfiglessFixtures() {
@@ -88,6 +94,9 @@ class SystemNotificationLifecycleTest {
         try {
             scenario?.close()
         } finally {
+            if (openedShade && instrumentation.uiAutomation.rootInActiveWindow?.packageName == "com.android.systemui") {
+                instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
+            }
             // Never cancelAll(): ids/tags/channels are unique to this test instance.
             fixtureKeys.forEach { manager.cancel(it.tag, it.id) }
             fixtureIntents.forEach(PendingIntent::cancel)
@@ -143,7 +152,12 @@ class SystemNotificationLifecycleTest {
 
     @Test
     fun notificationPendingIntentResumesExistingActivityAndKeepsItsPushDeepLink() {
-        val activity = launchLauncher()
+        // ActivityScenario filters lifecycle callbacks by Intent.filterEquals.
+        // Match the production notification's bare component intent so its
+        // onNewIntent/setIntent does not detach the scenario's lifecycle tracker.
+        // The other two cases independently exercise ACTION_MAIN launcher entry.
+        val activity = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
+            .also { scenario = it }
         val original = AtomicReference<MainActivity>()
         activity.onActivity { original.set(it) }
         activity.moveToState(Lifecycle.State.CREATED)
@@ -164,12 +178,11 @@ class SystemNotificationLifecycleTest {
         val status = postPersistentStatus()
         awaitFixtureKeys(regular + status)
 
-        val tapped = manager.activeNotifications.first {
-            it.tag == "${namespace}_tag_a" && it.id == baseId
-        }
-        requireNotNull(tapped.notification.contentIntent).send()
+        tapSystemNotification()
         awaitStable("PendingIntent must resume MainActivity and publish its queued deep link") {
-            activity.state == Lifecycle.State.RESUMED && PushNavigator.pending.value == link
+            // ActivityScenario.state rejects its transient STARTED stage. The
+            // Activity lifecycle itself remains readable throughout the resume.
+            original.get().lifecycle.currentState == Lifecycle.State.RESUMED && PushNavigator.pending.value == link
         }
         activity.onActivity {
             assertSame("singleTop notification entry must reuse MainActivity", original.get(), it)
@@ -229,13 +242,38 @@ class SystemNotificationLifecycleTest {
         fixtureKeys += key
         val notice = Notification.Builder(context, if (flags == 0) regularChannel else statusChannel)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Local notification lifecycle fixture")
+            .setContentTitle(if (key.tag == "${namespace}_tag_a" && contentIntent != null) tappableTitle else "Local notification lifecycle fixture")
+            // Keep the tap target visible instead of folding it into an auto-group summary.
+            .setGroup("${namespace}_${key.tag ?: "untagged"}")
             .setOnlyAlertOnce(true)
             .setOngoing(flags and Notification.FLAG_ONGOING_EVENT != 0)
             .setAutoCancel(flags == 0)
             .apply { contentIntent?.let { setContentIntent(it) } }
             .build().apply { this.flags = this.flags or flags }
         manager.notify(key.tag, key.id, notice)
+    }
+
+    private fun tapSystemNotification() {
+        openedShade = true
+        assertTrue(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS))
+        var clicked = false
+        awaitStable("The actual notification row must be clickable in System UI") {
+            if (!clicked) {
+                val nodes = ArrayDeque<AccessibilityNodeInfo>()
+                instrumentation.uiAutomation.rootInActiveWindow?.let(nodes::add)
+                while (nodes.isNotEmpty()) {
+                    val node = nodes.removeFirst()
+                    if (node.text?.toString() == tappableTitle) {
+                        var target: AccessibilityNodeInfo? = node
+                        while (target != null && !target.isClickable) target = target.parent
+                        clicked = target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
+                        break
+                    }
+                    for (index in 0 until node.childCount) node.getChild(index)?.let(nodes::add)
+                }
+            }
+            clicked
+        }
     }
 
     private fun assertStatusFlags(keys: Set<NoticeKey>) {
