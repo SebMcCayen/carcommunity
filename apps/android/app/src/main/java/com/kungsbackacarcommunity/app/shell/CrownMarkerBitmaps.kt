@@ -31,9 +31,12 @@ internal object CrownMarkerBitmaps {
         collectedBadge: Boolean = false,
         rarity: CrownRarity? = null,
         rewardPoints: Int? = null,
+        mapMode: MapMode = MapMode.Night,
     ): String =
-        "kcc-crown-tile-v3-$iconRes-$discColorArgb-$glyphColorArgb-${glowColorArgb ?: 0}" +
-            "-rank${rank(rarity, rewardPoints)}" + if (collectedBadge) "-collected" else ""
+        "kcc-crown-tile-v4-$iconRes-$discColorArgb-$glyphColorArgb-${glowColorArgb ?: 0}" +
+            "-rank${rank(rarity, rewardPoints)}" +
+            (if (usesLightSurface(mapMode, discColorArgb, collectedBadge)) "-day" else "-night") +
+            if (collectedBadge) "-collected" else ""
 
     /** Curated points use their actual reward's band, never a fabricated rarity. */
     internal fun rank(rarity: CrownRarity?, rewardPoints: Int?): Int =
@@ -51,6 +54,25 @@ internal object CrownMarkerBitmaps {
         2 -> KccPalette.crownRare.toArgb()
         else -> KccPalette.crownGold.toArgb()
     }
+
+    // Android map-only light palette. Keep global/generated tokens and night/ready
+    // colours intact; these paired surfaces/inks are the approved light variant.
+    internal fun lightSurface(rank: Int): Int = when (rank) {
+        0 -> 0xFFECE9E3.toInt()
+        1 -> 0xFFE6F3EB.toInt()
+        2 -> 0xFFEEE7FA.toInt()
+        else -> 0xFFFFF0CC.toInt()
+    }
+
+    internal fun lightAccent(rank: Int): Int = when (rank) {
+        0 -> 0xFF5B6168.toInt()
+        1 -> 0xFF1B6E4B.toInt()
+        2 -> 0xFF6640A0.toInt()
+        else -> 0xFF946000.toInt()
+    }
+
+    private fun usesLightSurface(mapMode: MapMode, discColorArgb: Int, collectedBadge: Boolean): Boolean =
+        mapMode == MapMode.Day && discColorArgb == CrownMarkerStyle.OUT_OF_RANGE_DISC && !collectedBadge
 
     /** Accent adapter also used by existing crown detail/list components. */
     internal fun ringAccent(legacyDisc: Int): Int = when (legacyDisc) {
@@ -73,6 +95,7 @@ internal object CrownMarkerBitmaps {
         collectedBadge: Boolean = false,
         rarity: CrownRarity? = null,
         rewardPoints: Int? = null,
+        mapMode: MapMode = MapMode.Night,
     ): Bitmap? {
         val glyph = runCatching { ContextCompat.getDrawable(context, iconRes)?.mutate() }
             .getOrNull() ?: return null
@@ -100,15 +123,24 @@ internal object CrownMarkerBitmaps {
         val colour = accent(rank)
         val inRange = discColorArgb != CrownMarkerStyle.OUT_OF_RANGE_DISC && !collectedBadge
         val ink = KccPalette.nightOverlay.toArgb()
-        val foreground = if (inRange) ink else colour
+        val lightDistant = usesLightSurface(mapMode, discColorArgb, collectedBadge)
+        val foreground = when {
+            inRange -> ink
+            lightDistant -> lightAccent(rank)
+            else -> colour
+        }
 
-        // A single opaque reading surface keeps the source glyph crisp on both
-        // day and night maps. Ready uses a solid accent, distant uses navy.
-        paint.color = if (inRange) colour else ink
+        // Only distant crowns on a day map use the light paired palette.
+        // Ready, night and legacy collected appearances retain their old pixels.
+        paint.color = when {
+            inRange -> colour
+            lightDistant -> lightSurface(rank)
+            else -> ink
+        }
         canvas.drawRoundRect(left, top, right, bottom, corner, corner, paint)
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = px(if (inRange) 1.5f else 1f)
-        paint.color = if (inRange) KccPalette.warmIvory.toArgb() else colour
+        paint.color = if (inRange) KccPalette.warmIvory.toArgb() else foreground
         canvas.drawRoundRect(
             left + paint.strokeWidth / 2f, top + paint.strokeWidth / 2f,
             right - paint.strokeWidth / 2f, bottom - paint.strokeWidth / 2f,

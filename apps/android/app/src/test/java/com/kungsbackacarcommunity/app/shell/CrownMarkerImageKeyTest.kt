@@ -25,7 +25,7 @@ class CrownMarkerImageKeyTest {
     @Test
     fun `compact crown renderer invalidates cached ring images`() {
         val key = CrownMarkerBitmaps.imageId(1, 2, 3, null)
-        assertTrue(key.startsWith("kcc-crown-tile-v3-"))
+        assertTrue(key.startsWith("kcc-crown-tile-v4-"))
         assertNotEquals("kcc-crown-ring-v2-1-2-3-0", key)
     }
 
@@ -53,6 +53,33 @@ class CrownMarkerImageKeyTest {
                 CrownMarkerBitmaps.accent(rank), ink,
             )
             assertTrue("rank $rank contrast $ratio", ratio >= 4.5)
+        }
+    }
+
+    @Test
+    fun `day and night reuse ready and collected images but swap distant crowns`() {
+        for (rarity in CrownRarity.entries) {
+            fun key(mode: MapMode, ready: Boolean = false, collected: Boolean = false): String {
+                val appearance = CrownMarkerStyle.spawnMarkerAppearance(rarity, ready, collected)
+                return CrownMarkerBitmaps.imageId(1, appearance.discColorArgb,
+                    appearance.glyphColorArgb, appearance.glowColorArgb,
+                    collectedBadge = collected, rarity = rarity, mapMode = mode)
+            }
+            assertNotEquals(key(MapMode.Day), key(MapMode.Night))
+            org.junit.Assert.assertEquals(key(MapMode.Day, ready = true), key(MapMode.Night, ready = true))
+            org.junit.Assert.assertEquals(key(MapMode.Day, collected = true), key(MapMode.Night, collected = true))
+        }
+    }
+
+    @Test
+    fun `approved light rarity pairs maintain legible crown and rim contrast`() {
+        val fills = intArrayOf(0xFFECE9E3.toInt(), 0xFFE6F3EB.toInt(), 0xFFEEE7FA.toInt(), 0xFFFFF0CC.toInt())
+        val inks = intArrayOf(0xFF5B6168.toInt(), 0xFF1B6E4B.toInt(), 0xFF6640A0.toInt(), 0xFF946000.toInt())
+        for (rank in 0..3) {
+            org.junit.Assert.assertEquals(fills[rank], CrownMarkerBitmaps.lightSurface(rank))
+            org.junit.Assert.assertEquals(inks[rank], CrownMarkerBitmaps.lightAccent(rank))
+            assertTrue(com.kungsbackacarcommunity.app.incidents.IncidentMarkerStyle.contrastRatio(
+                CrownMarkerBitmaps.lightAccent(rank), CrownMarkerBitmaps.lightSurface(rank)) >= 4.5)
         }
     }
 

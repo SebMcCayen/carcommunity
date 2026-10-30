@@ -1517,7 +1517,7 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
         // per-frame loop. Keyed on the crown set, the manager becoming ready, AND
         // the redraw nonce (bumped by forceRedrawCrowns), so it re-runs whenever
         // crowns change, a style (re)load recreates the manager, OR a drift repair
-        // asks for a redraw. Each re-run feeds the current set into the pure
+        // asks for a redraw, or the day/night palette changes. Each re-run feeds the current set into the pure
         // [CrownMarkerAnimator] and then ticks once per display frame — updating
         // each annotation's size/rotation/opacity — until nothing is animating, at
         // which point it idles (no busy loop over a settled, static layer).
@@ -1526,7 +1526,7 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
         // previous run (and its loop) before starting the next: there is only ever
         // one ticker. The animator is a field, so in-flight spawns/despawns carry
         // across a restart rather than resetting.
-        LaunchedEffect(crowns, crownManagerReady, crownRedrawTick) {
+        LaunchedEffect(crowns, crownManagerReady, crownRedrawTick, mapMode) {
             if (!crownManagerReady) return@LaunchedEffect
             syncCrownMarkers(crowns, SystemClock.uptimeMillis())
             while (isActive) {
@@ -2698,6 +2698,8 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
         val manager = crownMarkerManager ?: return true
         val style = mapViewRef?.mapboxMap?.style
         val context = appContext
+        // A single mode snapshot keeps each image key and its bitmap in sync.
+        val mapMode = mapModeFlow.value
         val states = crownAnimator.frame(nowMs)
         val liveIds = HashSet<String>(states.size)
 
@@ -2706,16 +2708,16 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
             val marker = crownMarkerById[state.id] ?: continue
             val annotation =
                 crownAnnotationsById[state.id]
-                    ?: createCrownAnnotation(state.id, marker, manager, style, context)
+                    ?: createCrownAnnotation(state.id, marker, manager, style, context, mapMode)
                     ?: continue
             // Refresh the BITMAP if this crown's appearance changed while its id
             // stayed the same (collected-by-you flip, in-range recolour). The
             // transforms below never touch iconImage, so without this the marker
             // would stay stuck on its old bitmap. Only swap when the key actually
             // differs — no per-frame bitmap churn.
-            val newImageId = crownImageId(marker)
+            val newImageId = crownImageId(marker, mapMode)
             if (crownRenderedImageById[state.id] != newImageId) {
-                val registered = ensureCrownImage(newImageId, marker, style, context)
+                val registered = ensureCrownImage(newImageId, marker, style, context, mapMode)
                 if (registered != null) {
                     runCatching { annotation.iconImage = registered }
                     crownRenderedImageById[state.id] = registered
@@ -2762,8 +2764,9 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
         manager: PointAnnotationManager,
         style: com.mapbox.maps.Style?,
         context: android.content.Context?,
+        mapMode: MapMode,
     ): PointAnnotation? {
-        val imageId = ensureCrownImage(crownImageId(marker), marker, style, context) ?: return null
+        val imageId = ensureCrownImage(crownImageId(marker, mapMode), marker, style, context, mapMode) ?: return null
         return runCatching {
             val annotation =
                 manager.create(
@@ -2789,7 +2792,7 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
      * per-frame appearance-change check in [renderCrownFrame] agree by construction
      * (and a JVM test can pin that a state change yields a different key).
      */
-    private fun crownImageId(marker: MapCrownMarker): String =
+    private fun crownImageId(marker: MapCrownMarker, mapMode: MapMode): String =
         CrownMarkerBitmaps.imageId(
             iconRes = marker.iconRes,
             discColorArgb = marker.discColorArgb,
@@ -2798,6 +2801,7 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
             collectedBadge = marker.collectedByYou,
             rarity = marker.rarity,
             rewardPoints = marker.rewardPoints,
+            mapMode = mapMode,
         )
 
     /**
@@ -2813,6 +2817,7 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
         marker: MapCrownMarker,
         style: com.mapbox.maps.Style?,
         context: android.content.Context?,
+        mapMode: MapMode,
     ): String? {
         if (imageId in registeredCrownImages) return imageId
         val bitmap =
@@ -2826,6 +2831,7 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
                     collectedBadge = marker.collectedByYou,
                     rarity = marker.rarity,
                     rewardPoints = marker.rewardPoints,
+                    mapMode = mapMode,
                 )
             } else {
                 null

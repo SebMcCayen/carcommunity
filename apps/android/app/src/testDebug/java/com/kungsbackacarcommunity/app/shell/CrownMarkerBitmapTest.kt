@@ -216,17 +216,49 @@ class CrownMarkerBitmapTest {
         }
     }
 
+    @Test
+    fun dayChangesOnlyDistantPalette_andPreservesGeometryReadyAndCollectedRasters() {
+        for (dpi in densityDpis) for (rarity in CrownRarity.entries) {
+            val context = contextAt(dpi)
+            val density = context.resources.displayMetrics.density
+            val night = render(context, rarity, false, mapMode = MapMode.Night)
+            val day = render(context, rarity, false, mapMode = MapMode.Day)
+            val readyNight = render(context, rarity, true, mapMode = MapMode.Night)
+            val readyDay = render(context, rarity, true, mapMode = MapMode.Day)
+            val collectedNight = render(context, rarity, false, collected = true, mapMode = MapMode.Night)
+            val collectedDay = render(context, rarity, false, collected = true, mapMode = MapMode.Day)
+            try {
+                assertEquals(night.width, day.width)
+                assertEquals(night.height, day.height)
+                for (y in 0 until day.height) for (x in 0 until day.width) {
+                    assertEquals("$rarity silhouette at $dpi dpi ($x,$y)",
+                        Color.alpha(night.getPixel(x, y)), Color.alpha(day.getPixel(x, y)))
+                }
+                val x = (day.width / 2f - (26 + 2 * rarity.ordinal) * density / 2 + 3 * density).toInt()
+                assertEquals(CrownMarkerBitmaps.lightSurface(rarity.ordinal), day.getPixel(x, day.height / 2))
+                val pixels = IntArray(day.width * day.height)
+                day.getPixels(pixels, 0, day.width, 0, 0, day.width, day.height)
+                assertTrue("$rarity dark foreground", pixels.count { it == CrownMarkerBitmaps.lightAccent(rarity.ordinal) } > 10 * density * density)
+                assertFalse("Distant palette changes", day.sameAs(night))
+                assertTrue("Ready pixels stay identical in day/night", readyDay.sameAs(readyNight))
+                assertTrue("Legacy collected pixels stay identical in day/night", collectedDay.sameAs(collectedNight))
+            } finally {
+                listOf(night, day, readyNight, readyDay, collectedNight, collectedDay).forEach(Bitmap::recycle)
+            }
+        }
+    }
+
     private fun contextAt(dpi: Int): Context {
         val base = InstrumentationRegistry.getInstrumentation().targetContext
         return base.createConfigurationContext(Configuration(base.resources.configuration).apply { densityDpi = dpi })
     }
 
-    private fun render(context: Context, rarity: CrownRarity, inRange: Boolean, collected: Boolean = false): Bitmap {
+    private fun render(context: Context, rarity: CrownRarity, inRange: Boolean, collected: Boolean = false, mapMode: MapMode = MapMode.Night): Bitmap {
         val appearance = CrownMarkerStyle.spawnMarkerAppearance(rarity, inRange, collected)
         return requireNotNull(CrownMarkerBitmaps.create(
             context, crownGlyphRes(rarity), appearance.discColorArgb,
             appearance.glyphColorArgb, appearance.glowColorArgb,
-            collectedBadge = appearance.collectedBadge, rarity = rarity,
+            collectedBadge = appearance.collectedBadge, rarity = rarity, mapMode = mapMode,
         ))
     }
 
