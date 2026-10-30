@@ -54,7 +54,7 @@ beforeAll(async () => {
   await firebase.db
     .collection('users')
     .doc(uid)
-    .set({ displayName: 'Supporter', activeMember: false, showSupporterBadge: false });
+    .set({ displayName: 'Supporter', activeMember: false, showSupporterBadge: false, showMembershipMapRing: false });
 });
 afterAll(async () => {
   await env?.cleanup();
@@ -79,7 +79,12 @@ describe('Supporter badge persistence and security', () => {
         supporterBadgeEligible: eligible,
         activeMember: active,
         showSupporterBadge: false,
+        showMembershipMapRing: false,
+        membershipMapRingEligible: active,
       });
+      expect(profile?.membershipMapRingUntil?.toMillis?.() ?? null).toBe(
+        active ? input.expiresAt?.getTime() : null,
+      );
       expect((await firebase.adminAuth.getUser(uid)).customClaims?.activeMember === true).toBe(
         active,
       );
@@ -89,9 +94,13 @@ describe('Supporter badge persistence and security', () => {
   it('backfills missing eligibility and repairs stale downgrades without touching preference or claims', async () => {
     const profile = firebase.db.collection('users').doc(uid);
     const { FieldValue } = await import('firebase-admin/firestore');
-    await profile.update({ supporterBadgeEligible: FieldValue.delete() });
+    await profile.update({ supporterBadgeEligible: FieldValue.delete(), membershipMapRingEligible: FieldValue.delete(), membershipMapRingUntil: FieldValue.delete() });
     await reconcile(uid);
     expect((await profile.get()).get('supporterBadgeEligible')).toBe(true);
+    expect((await profile.get()).get('membershipMapRingEligible')).toBe(true);
+    const unchangedTime = (await profile.get()).updateTime;
+    await reconcile(uid);
+    expect((await profile.get()).updateTime?.isEqual(unchangedTime!)).toBe(true);
     const claims = (await firebase.adminAuth.getUser(uid)).customClaims;
     await firebase.db.collection('subscriptions').doc(uid).update({ tier: 'plus' });
     await reconcile(uid);
@@ -99,6 +108,8 @@ describe('Supporter badge persistence and security', () => {
       activeMember: true,
       supporterBadgeEligible: false,
       showSupporterBadge: false,
+      showMembershipMapRing: false,
+      membershipMapRingEligible: true,
     });
     expect((await firebase.adminAuth.getUser(uid)).customClaims).toEqual(claims);
     await reconcile(uid);
@@ -109,6 +120,29 @@ describe('Supporter badge persistence and security', () => {
       .update({ tier: 'supporter', status: 'cancelled', expiresAt: new Date(0) });
     await reconcile(uid);
     expect((await profile.get()).get('supporterBadgeEligible')).toBe(false);
+    expect((await profile.get()).get('membershipMapRingEligible')).toBe(false);
+    expect((await profile.get()).get('membershipMapRingUntil')).toBeNull();
+  });
+
+  it('allows only an owner boolean ring preference, never public eligibility/deadline forgery', async () => {
+    const owner = env.authenticatedContext(uid).firestore();
+    const other = env.authenticatedContext('ring-viewer').firestore();
+    const profile = doc(owner, 'users', uid);
+    for (const value of [true, false]) {
+      await assertSucceeds(updateDoc(profile, { showMembershipMapRing: value, updatedAt: serverTimestamp() }));
+    }
+    for (const value of ['true', 1, null, deleteField()]) {
+      await assertFails(updateDoc(profile, { showMembershipMapRing: value }));
+    }
+    for (const actor of [owner, other, env.authenticatedContext('ring-admin', { admin: true }).firestore()]) {
+      await assertFails(updateDoc(doc(actor, 'users', uid), { membershipMapRingEligible: true }));
+      await assertFails(updateDoc(doc(actor, 'users', uid), { membershipMapRingUntil: new Date('2099-01-01T00:00:00Z') }));
+      await assertFails(updateDoc(doc(actor, 'users', uid), { membershipMapRingEligible: deleteField() }));
+    }
+    await assertFails(updateDoc(doc(other, 'users', uid), { showMembershipMapRing: true }));
+    await assertFails(updateDoc(doc(env.authenticatedContext(uid, { suspended: true }).firestore(), 'users', uid), { showMembershipMapRing: true }));
+    await assertSucceeds(getDoc(doc(other, 'users', uid)));
+    await assertFails(getDoc(doc(other, 'subscriptions', uid)));
   });
 
   it('allows boolean owner preference but forbids eligibility forgery, deletion and cross-user changes', async () => {

@@ -19,6 +19,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { adminAuth, db } from '../firebase';
 import { applyPrivilegeChange, computeUpdatedClaims } from '../admin/claims-core';
 import { supporterBadgeEligible } from './supporter-badge-core';
+import { membershipMapRingProjection } from './map-ring-core';
 import {
   buildSubscriptionDocument,
   grantsLegacyActiveMember,
@@ -59,6 +60,7 @@ export async function applyEntitlement(
         {
           activeMember: active,
           supporterBadgeEligible: supporterBadgeEligible(input, new Date()),
+          ...membershipMapRingProjection(input, new Date(), input.userId),
           updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true },

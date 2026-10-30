@@ -251,6 +251,7 @@ service cloud.firestore {
         && (!keys.hasAny(['instagram']) || validInstagramHandle(data))
         && (!keys.hasAny(['youtube']) || validYoutubeHandle(data))
         && (!keys.hasAny(['showSupporterBadge']) || data.showSupporterBadge is bool)
+        && (!keys.hasAny(['showMembershipMapRing']) || data.showMembershipMapRing is bool)
         && (!keys.hasAny(['updatedAt']) || isServerTimestamp(data.updatedAt));
     }
 
@@ -264,7 +265,7 @@ service cloud.firestore {
       return keys.hasOnly([
           'displayName', 'avatarPath', 'bio',
           'facebook', 'instagram', 'youtube',
-          'updatedAt', 'showSupporterBadge'
+          'updatedAt', 'showSupporterBadge', 'showMembershipMapRing'
         ])
         && validUserProfileFields(keys, uid);
     }

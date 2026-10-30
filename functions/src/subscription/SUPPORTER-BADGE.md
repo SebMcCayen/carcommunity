@@ -5,6 +5,9 @@ Cosmetic projection: `users/{uid}.supporterBadgeEligible` is backend-owned;
 means false. These fields are visible to authenticated profile readers; hiding
 the crown is a display preference, not concealment of subscription eligibility.
 No billing dates, tokens or private subscription reads are added to profiles.
+The separate Plus/Supporter live-map ring now adds a public cosmetic display
+deadline and its own visibility preference; see [MAP-RING.md](MAP-RING.md).
+The existing repair transaction maintains both cosmetic projections together.
 
 `applyEntitlement` writes eligibility with the subscription in the same batch
 on purchase, RTDN update, manual grant, expiry and revoke. It recomputes on
