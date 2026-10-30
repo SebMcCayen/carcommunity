@@ -132,9 +132,15 @@ class ClubPageStructureTest {
         profile().performScrollTo().performTouchInput { longClick() }
         menu(ClubMemberAction.RemoveMember).assertDoesNotExist()
         menu(ClubMemberAction.PromoteModerator).assertDoesNotExist()
+        val afterLongPress = compose.runOnIdle { openedProfiles.size }
         profile().performClick()
         compose.onNodeWithText(text(R.string.clubs_edit)).assertDoesNotExist()
-        compose.runOnIdle { assertEquals(listOf("target"), openedProfiles); assertTrue(repo.mutations.isEmpty()) }
+        compose.runOnIdle {
+            assertEquals(afterLongPress + 1, openedProfiles.size)
+            assertEquals("target", openedProfiles.last())
+            assertTrue(openedProfiles.all { it == "target" })
+            assertTrue(repo.mutations.isEmpty())
+        }
     }
 
     @Test fun accessRevocationDisposesPrivateRosterAndAnyOpenMemberMenu() {

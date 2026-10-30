@@ -19,6 +19,8 @@ import com.google.firebase.storage.StorageException
 import com.google.firebase.storage.StorageMetadata
 import com.kungsbackacarcommunity.app.blocking.FirebaseBlockVisibilityRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -39,6 +41,7 @@ class FirebaseClubRepository private constructor(
     private val functions: FirebaseFunctions, private val storage: FirebaseStorage,
     private val auth: FirebaseAuth, private val context: Context,
 ) : ClubRepository {
+    private val avatarReads = Semaphore(2)
     private data class ServerDocument(val confirmed: Boolean, val snapshot: DocumentSnapshot?)
     private fun document(path: String): Flow<ServerDocument> = callbackFlow {
         val registration = db.document(path).addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
@@ -104,6 +107,37 @@ class FirebaseClubRepository private constructor(
             }
         }, data.nullableText("nextCursor"))
     }
+    override suspend fun memberAvatars(clubId: String, uids: Set<String>): Map<String, ClubMemberAvatar> = avatarReads.withPermit {
+        loadClubMemberAvatars(uid, uids, currentUid = { auth.currentUser?.uid }, read = { ids ->
+            // At most three bounded public-user queries for a 25-member page;
+            // no per-row listener/RPC and no dependency on Storage URL I/O.
+            val result = mutableMapOf<String, Map<String, Any?>>()
+            ids.chunked(10).forEach { chunk ->
+                if (auth.currentUser?.uid != uid) throw ClubException("unauthenticated")
+                val snapshot = db.collection("users").whereIn(FieldPath.documentId(), chunk)
+                    .limit(10).get(Source.SERVER).clubAwait()
+                snapshot.documents.forEach { doc -> result[doc.id] = doc.data.orEmpty() }
+            }
+            result
+        }, requireCurrentAccess = { requireRosterAccess(clubId) })
+    }
+
+    private suspend fun requireRosterAccess(clubId: String) {
+        val config = db.document("config/sharedClubs").get(Source.SERVER).clubAwait()
+        val account = db.document("driverClubAccounts/$uid").get(Source.SERVER).clubAwait()
+        val member = db.document("driverClubs/$clubId/members/$uid").get(Source.SERVER).clubAwait()
+        val club = db.document("driverClubs/$clubId").get(Source.SERVER).clubAwait()
+        val role = ClubRole.parse(member.getString("role"))
+        val joined = member.getTimestamp("joinedAt")
+        if (auth.currentUser?.uid != uid || config.getBoolean("enabled") != true ||
+            config.getTimestamp("activatedAt") == null || account.getString("activeClubId") != clubId ||
+            account.getBoolean("deletionRevoked") == true || !member.exists() ||
+            club.getLong("schemaVersion") != 2L || club.getString("status") != "active" ||
+            role == null || role.wire != account.getString("role") || joined == null ||
+            joined != account.getTimestamp("joinedAt") ||
+            (role == ClubRole.Owner) != (club.getString("ownerUid") == uid)) throw ClubException("permission-denied")
+    }
+
     override suspend fun manage(action: String, fields: Map<String, Any?>, operationId: String) =
         call("clubsManage", fields + mapOf("action" to action, "operationId" to operationId))
     override suspend fun uploadLogo(clubId: String, bytes: ByteArray): String {

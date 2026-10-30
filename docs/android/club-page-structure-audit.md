@@ -69,3 +69,39 @@ Agent verification: localized XML parses, Swedish/English key sets match,
 git diff --check passes. No agent Gradle/emulator run. Parent build/JVM/lint,
 production profile routing integration and matched native after captures remain
 pending; no final visual QA pass or physical-device certification is claimed.
+
+## Canonical member avatar follow-up
+
+Driver's current roster callable supplies only `users.avatarUrl`; CC profile
+uploads store `users.avatarPath`. The Android roster therefore renders immediately
+from the existing callable, then hydrates each newly loaded page asynchronously
+from the public `users` documents. No change to Driver, Firebase backend, profile
+persistence, AuthenticatedApp or authorization contracts is involved.
+
+- `ClubMember.avatarPath` is additive. The public-avatar projection retains field
+  presence: a present CC path wins; an explicit null/invalid CC path clears any
+  stored legacy URL. If that field is absent, the current public Driver avatarUrl
+  is used. A removed/missing avatar URL on an existing document clears the image;
+  an unavailable/missing profile is no opinion and preserves the callable copy.
+- A page requests at most 25 distinct UIDs, in at most three document-ID queries
+  (chunks of 10), with at most two avatar-page reads in flight per repository.
+  There are no per-row Firestore RPCs/listeners, timers or unbounded profile scan.
+  Each page checks the current auth UID and revalidates four fresh fixed documents
+  (config/account/member/club) after the public reads. Failed profile I/O does not
+  hide the roster; revoked access/account changes cannot return an overlay.
+- Image paths resolve through the existing `rememberStorageImageUrl` and shared
+  download-URL cache. Storage work never delays the roster/page. A path-owned image
+  does not fall back to an old Driver URL while resolving. Avatar image failure
+  state resets when its path/model changes; explicit removal renders the native
+  fallback, without resurrecting a denormalized image.
+- Full roster refreshes advance a generation and stale results are discarded.
+  Membership/club/account-keyed composition disposal cancels avatar jobs; an
+  explicit post-await cancellation check prevents even a non-cooperative late
+  loader from painting a replacement composition.
+- `ClubMemberAvatarHydrationTest` adds eleven focused mapping/batch/scope/removal
+  and cancellation cases. The ordinary-member long-press behavior test now checks
+  that an explicit click adds exactly one profile navigation, allowing Android's
+  normal click fallback on long-press; no-menu/no-mutation assertions remain.
+
+Parent is validating these changes separately from the already-built d2b8806
+source. No agent Gradle/emulator runs; updated build/test outcomes remain pending.

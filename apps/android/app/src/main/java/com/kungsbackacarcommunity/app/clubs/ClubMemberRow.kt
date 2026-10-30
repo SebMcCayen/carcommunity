@@ -12,12 +12,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 
 @Composable
 internal fun ClubMemberRow(
@@ -88,11 +90,15 @@ internal fun ClubMemberAction.label(): String = stringResource(when (this) {
 
 @Composable
 private fun ClubMemberAvatar(member: ClubMember) {
-    var failed by remember(member.avatarUrl) { mutableStateOf(false) }
+    val storageUrl = rememberStorageImageUrl(LocalContext.current, member.avatarPath)
+    // A canonical path owns the image even while resolving: never flash a stale
+    // Driver URL underneath a new/deleted CC avatar.
+    val image = if (member.avatarPath != null) storageUrl else member.avatarUrl
+    var failed by remember(member.avatarPath, image) { mutableStateOf(false) }
     Surface(Modifier.size(48.dp).clip(CircleShape).testTag("club-member-avatar-${member.uid}"),
         color = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant) {
-        if (member.avatarUrl != null && !failed) AsyncImage(
-            model = member.avatarUrl, contentDescription = null, modifier = Modifier.fillMaxSize(),
+        if (image != null && !failed) AsyncImage(
+            model = image, contentDescription = null, modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop, onError = { failed = true },
         ) else Box(contentAlignment = Alignment.Center) {
             Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(24.dp))

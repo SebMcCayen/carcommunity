@@ -22,6 +22,8 @@ internal fun ClubMemberContent(uid: String, club: Club, membership: ClubMembersh
     onOpenEvent: (String) -> Unit, onUpdated: () -> Unit, onOpenProfile: (String) -> Unit = {}) {
     var members by remember { mutableStateOf(ClubPage<ClubMember>(emptyList(), null)) }
     var refresh by remember { mutableIntStateOf(0) }
+    var avatarGeneration by remember { mutableIntStateOf(0) }
+    var avatars by remember { mutableStateOf<Map<String, ClubMemberAvatar>>(emptyMap()) }
     var loadingMembers by remember { mutableStateOf(true) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<Throwable?>(null) }
@@ -30,9 +32,30 @@ internal fun ClubMemberContent(uid: String, club: Club, membership: ClubMembersh
     var disband by remember { mutableStateOf(false) }
     var confirmation by remember { mutableStateOf<Pair<ClubMemberAction, ClubMember>?>(null) }
     val scope = rememberCoroutineScope()
+    fun hydrateAvatars(page: ClubPage<ClubMember>, generation: Int) {
+        val ids = page.items.map { it.uid }.toSet()
+        if (ids.isEmpty()) return
+        scope.launch {
+            try {
+                val loaded = currentClubAvatarPage(
+                    request = { repository.memberAvatars(club.id, ids) },
+                    isCurrent = { generation == avatarGeneration },
+                )
+                if (loaded != null) avatars = avatars + loaded
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { /* Avatar failure cannot hide the already-loaded roster. */ }
+        }
+    }
     LaunchedEffect(club.id, refresh) {
         loadingMembers = true
-        try { members = repository.members(club.id); error = null }
+        avatarGeneration++
+        val generation = avatarGeneration
+        try {
+            members = repository.members(club.id)
+            avatars = avatars.filterKeys { key -> members.items.any { it.uid == key } }
+            error = null
+            hydrateAvatars(members, generation)
+        }
         catch (e: CancellationException) { throw e } catch (e: Exception) { error = e }
         finally { loadingMembers = false }
     }
@@ -62,7 +85,7 @@ internal fun ClubMemberContent(uid: String, club: Club, membership: ClubMembersh
             members.items.forEachIndexed { index, member ->
                 if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
                 key(member.uid) {
-                    ClubMemberRow(member, uid, membership.role, club.moderatorCount, busy,
+                    ClubMemberRow(member.withAvatar(avatars), uid, membership.role, club.moderatorCount, busy,
                         onOpenProfile = onOpenProfile, onAction = { operation, target -> confirmation = operation to target })
                 }
             }
@@ -70,7 +93,7 @@ internal fun ClubMemberContent(uid: String, club: Club, membership: ClubMembersh
     }
     if (members.nextCursor != null) TextButton(enabled = !busy, onClick = {
         busy = true; scope.launch {
-            try { val page = repository.members(club.id, members.nextCursor); members = ClubPage((members.items + page.items).distinctBy { it.uid }, page.nextCursor) }
+            try { val page = repository.members(club.id, members.nextCursor); members = ClubPage((members.items + page.items).distinctBy { it.uid }, page.nextCursor); hydrateAvatars(page, avatarGeneration) }
             catch (e: CancellationException) { throw e } catch (e: Exception) { error = e }
             finally { busy = false }
         }
