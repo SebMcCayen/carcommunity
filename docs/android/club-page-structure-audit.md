@@ -54,7 +54,8 @@ with event-day accent; compact avatar/name/role rows; profile callback; accessib
 confirmations; cap/busy rechecks before confirm; management after the roster.
 The capture fixture always renders current production SharedClubRoute and now
 uses a neutral local-test-data banner, with captureRun separating before/after.
-Only two representative baseline PNGs are in the evidence folder.
+Two representative baseline and two accepted after PNGs are in the evidence
+folder. After images are unmodified native-window captures, not Compose exports.
 
 Added test classes:
 
@@ -81,11 +82,26 @@ Parent validated code `4f7d48efb612084780d3921dd047a11b7e2d101d`:
   `/tmp/carcommunity-club-after-1.0-20261030.log` and
   `/tmp/carcommunity-club-after-2.0-20261030.log` (each OK, 1 test).
 
-A successful capture invocation proves completion and its fixture assertions;
-it does not prove every exported pixel is valid. The visual comparison found
-incomplete content in some scrolled normal-scale images. Final visual sign-off
-is **blocked** pending a narrow rendering/capture check, detailed in
-[evidence/design-qa.md](evidence/2026-10-30-club-page/design-qa.md).
+Final visual QA: **passed within the local fixture limits**. Reviewed the ten
+settled native-window captures plus three independently captured adb pause
+images. Complete light statistics and dark calendar states appear in adb;
+complete dark members appears in the settled native window. These resolve the
+initial missing-content concern without any production UI change. Not every
+output is valid: the adb members image and settled light-statistics/dark-calendar
+images retain partial drawing and are excluded from accepted evidence. Capture
+completion alone must never substitute for opening the saved PNG.
+
+Parent's test-only diagnostic change adds `clubPageCaptureMode=window`, a 250ms
+real compositor settle and optional eight-second named-state pause. Reviewed and
+included unchanged with explicit parent authorization. Test APK build passed in
+38s (`/tmp/carcommunity-club-window-settle-build-20261030.log`); settled native
+capture passed one test (`/tmp/carcommunity-club-settled-native-20261030.log`).
+The independent XML exports were not parseable and provide no semantic proof.
+
+See [the final visual QA report](evidence/2026-10-30-club-page/design-qa.md) for
+accepted/rejected paths, comparison history, inherited outlined-button treatment
+and limits. Intermittent capture/compositor timing is a diagnostic limitation;
+this audit does not certify rendering stability outside these accepted states.
 
 ## Canonical member avatar follow-up
 

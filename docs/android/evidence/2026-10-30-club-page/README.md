@@ -1,30 +1,48 @@
 # Club page evidence
 
-Local fixture data only, native production SharedClubRoute, source baseline
-6756e8f. Two representative accepted baseline images are committed here;
-the complete ten-image baseline was inspected at the parent-provided Downloads
-location recorded in ../../club-page-structure-audit.md. The rejected first-run
-light identity image is not evidence. Parent recovered a cold-boot System UI ANR
-before the successful one-test native capture run.
+Final visual QA: **passed within the one-emulator local fixture limits**.
+The fixture renders the actual production `SharedClubRoute`; no handcrafted
+page preview, production account or new image asset is used.
 
-- before-identity-dark.png: gold reading text across identity and statistics.
-- before-members-dark.png: no avatars, persistent per-member management rows.
+| Section | Before | Accepted after |
+| --- | --- | --- |
+| Identity | [before-identity-dark.png](before-identity-dark.png): gold reading text | [after-identity-dark.png](after-identity-dark.png): separated identity/intro and neutral reading text |
+| Members | [before-members-dark.png](before-members-dark.png): no avatars, persistent management rows | [after-members-dark.png](after-members-dark.png): compact avatar/name/role rows with contextual overflow |
 
-![Before: identity and statistics](before-identity-dark.png)
+![Before: identity](before-identity-dark.png)
 
-![Before: member rows](before-members-dark.png)
+![After: identity](after-identity-dark.png)
 
-After implementation, the capture fixture still calls the actual production
-route and uses a neutral local-test-data banner. Use a fresh clubPageCaptureRun
-such as after-20261030 to keep captures separate; light/dark and font-scale
-arguments remain available. Parent owns builds, native tests and screenshots.
-Parent completed code QA at `4f7d48efb612084780d3921dd047a11b7e2d101d`:
-131/131 filtered JVM tests, lint/debug/test APKs, eleven native behavior tests,
-and two successful capture invocations (twenty images at scales 1.0/2.0).
+![Before: members](before-members-dark.png)
 
-The after-image review found incomplete drawing in some scrolled normal-scale
-captures, despite correct content in other captures of the same calendar/roster.
-See [the visual QA report](design-qa.md) for exact paths, the inherited gray-button
-assessment and the narrow follow-up. Visual sign-off is blocked; representative
-after PNGs have not been promoted into this accepted evidence set yet.
-No production, TalkBack, physical-device or two-device certification is implied.
+![After: members](after-members-dark.png)
+
+Baseline code is `6756e8f`, app implementation is
+`4f7d48efb612084780d3921dd047a11b7e2d101d`. Both after files are byte-for-byte
+copies from `/home/sebmccayen/Downloads/CarCommunity-live-club-qa-20261030/settled-window-20261030/`:
+`01-identity-dark-sv-1_0.png` and `04-members-upper-dark-sv-1_0.png`.
+They are 1080x2400 full-window captures including Android system bars; before
+files are 1080x2200 Compose content. Compare app content, not system chrome.
+The before caption intentionally changes to neutral local-test-data copy after.
+
+The requested independent adb members candidate was inspected and rejected:
+it still lacks the banner/back arrow and part of Invite's outline. The complete
+settled-window members image is used instead. Independently captured adb light
+statistics and dark calendar show complete content and resolve those states.
+Not all diagnostic outputs are accepted; see [design-qa.md](design-qa.md).
+
+Parent validation: 131/131 filtered JVM, eleven actual native behavior tests,
+lint/debug/test APKs; twenty original 1.0/2.0 captures plus the narrow native
+window diagnostic. The final diagnostic test APK built in 38s; settled capture
+passed one test. No agent Gradle/emulator run.
+
+The fixture supports `clubPageCaptureRun`, `clubPageLocale`, `clubPageFontScale`,
+`clubPageCaptureMode=window` (default is Compose export), and optional comma-separated
+`clubPagePauseAt` state names. Native mode waits 250ms for the compositor; named
+pauses write `club-page-paused.txt` under app external files and wait eight seconds
+for parent's independent adb capture. These seams exist only in androidTest.
+
+No production Firebase/Storage round trip, TalkBack, physical phone, second
+device or release/deployment certification is claimed. External XML files were
+not parseable and are not semantic evidence. Parent recovered a cold-boot System
+UI ANR before the accepted baseline; the rejected first light identity is excluded.

@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.os.Build
+import android.os.SystemClock
 import android.provider.MediaStore
 import android.view.ContextThemeWrapper
 import androidx.activity.ComponentActivity
@@ -161,7 +162,24 @@ class ClubPageBaselineCaptureTest {
         compose.mainClock.advanceTimeBy(1_000)
         compose.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
+        // Compare the Compose export with Android's actual composited window.
+        // The native mode is diagnostic evidence, not a replacement production UI.
+        val nativeWindow = InstrumentationRegistry.getArguments()
+            .getString("clubPageCaptureMode") == "window"
+        if (nativeWindow) {
+            instrumentation.waitForIdleSync()
+            SystemClock.sleep(250) // allow the real Android compositor to present settled frames
+            val pausedStates = InstrumentationRegistry.getArguments()
+                .getString("clubPagePauseAt")?.split(',').orEmpty()
+            if (name in pausedStates) {
+                File(instrumentation.targetContext.getExternalFilesDir(null), "club-page-paused.txt")
+                    .writeText(name)
+                SystemClock.sleep(8_000) // test thread only: parent captures the actual screen via adb
+            }
+        }
+        val bitmap = if (nativeWindow) {
+            checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        } else compose.onRoot().captureToImage().asAndroidBitmap()
         try {
             instrumentation.waitForIdleSync()
             check(instrumentation.uiAutomation.rootInActiveWindow
