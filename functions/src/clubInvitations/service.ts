@@ -132,6 +132,7 @@ export class ClubInvitationNotifications {
     const now = Timestamp.fromMillis(this.now());
     if (
       config?.enabled !== true ||
+      config.invitationNotificationsReady !== true ||
       !(config.activatedAt instanceof Timestamp) ||
       compare(config.activatedAt, now) > 0 ||
       !invite ||

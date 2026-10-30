@@ -1,8 +1,10 @@
 # Canonical shared-club invitation notifications
 
 Backend-only implementation. Driver remains the sole writer of invitations and
-membership. No deployment, configuration change, migration, or cloud backfill is
-part of this change. Android integration is owned separately; no iOS changes.
+membership. The narrow staged Firebase rollout and bounded backfill are within
+the already approved shared-club task, after review and merge. This coding run
+does not execute production actions. Android integration is owned separately;
+no iOS changes.
 
 ## Client and preference contract
 
@@ -32,7 +34,8 @@ part of this change. Android integration is owned separately; no iOS changes.
 `onClubInvitationWritten` is an `onDocumentWritten` trigger on
 `driverClubs/{clubId}/invitations/{recipientUid}`. Only a genuine new pending
 creation/generation qualifies. A well-shaped but superseded candidate costs
-only four document reads (receipt plus config/invitation/club) and no writes. Status-only edits, deleting a document, the same
+only four document reads (receipt plus config/invitation/club) and no writes.
+Status-only edits, deleting a document, the same
 createdAt, backwards timestamps, and replacing an unexpired pending generation
 with a later createdAt do not qualify. A declined/cancelled/accepted generation
 can be followed by a genuinely later invitation; an expired pending generation
@@ -41,7 +44,8 @@ can likewise be replaced.
 The event is only a candidate. A transaction rereads the current invitation and
 checks exact native Timestamp generation/expiry and inviter. It requires:
 
-- `config/sharedClubs.enabled === true` and native, nonfuture `activatedAt`;
+- `config/sharedClubs.enabled === true`, native, nonfuture `activatedAt`, and
+  additive `invitationNotificationsReady === true` (missing/false fails closed);
 - current schema-v2, active, closed club;
 - pending invitation with matching path club/recipient, a different valid inviter,
   native nonfuture createdAt, and unexpired expiresAt after createdAt, at most 7 days;
@@ -99,69 +103,138 @@ push guard costs 17 reads. A moderator with four distinct identity keys is the
 recipient only. Trigger: minInstances 0, ordinary trigger ceiling 20, CPU 0.5,
 concurrency 1, 256 MiB, timeout 60 seconds.
 
-## Existing pending invitations: bounded, idempotent rollout backfill
+## Approved staged operator rollout
 
-A trigger deployment does **not** notify invitations that already exist. Keep the
-canonical invitations UI/listener working independently, and schedule a separately
-reviewed operator backfill if historical notifications are desired. No automatic
-startup sweep, rewritten invitation timestamp, or mass touch is permitted.
+1. Complete the current backend/Driver/Android reviews, merge, and run the focused
+   integration test below. No new permission flow is required for the narrow
+   rollout already authorized by the user.
+2. Deploy the two exact selectors while `invitationNotificationsReady` is absent
+   or false. Both producer and queued-push guard default off without changing
+   club access or Android invitations UI/listeners:
 
-Use this bounded procedure for a separately approved harness:
+   ```text
+   firebase deploy --project <project-id> --only functions:onClubInvitationWritten,functions:notifications-onNotificationCreated
+   ```
 
-1. Prepare a reviewed manifest of at most 25 active closed club IDs per run. Stop
-   at that cap; do not scan every collection implicitly. For each club, page its
-   direct `invitations` subcollection by document ID using `limit(25)` and
-   `startAfter(lastDocument)`, at most four pages (100 rows) per run in total,
-   across the entire manifest. Persist a
-   per-club cursor and the manifest position; reaching a cap means incomplete,
-   never successful completion. No new composite index is needed.
-2. Default to dry-run: perform only reads. Parse candidates with the exported
-   `invitationGeneration` helper and use `ClubInvitationNotifications.canPush`
-   only for already-delivered rows; do not use canPush as a pre-delivery probe
-   (it intentionally requires a delivered receipt). Report aggregate counts,
-   cursors, and candidate path/createdAt only in the private reviewed manifest,
-   never public logs. Dry-run selection is not an authorization certificate.
-3. Apply only with separately approved explicit project, manifest and bounded
-   page budget. For each candidate call
-   `ClubInvitationNotifications.process(clubId, recipientUid, snapshot.data())`
-   sequentially through the existing writer. It revalidates all current state,
-   preferences and generation in a transaction and creates the same deterministic
-   receipt/ID as live delivery. Do not use direct notification writes.
-4. Save a cursor only after the page's candidates finish. A crash/restart or live
-   trigger overlapping the run is safe: receipts prevent duplicates, including
-   inbox deletions. Stop on infrastructure failure, retain the current cursor,
-   and resume it after recovery. Never force-deliver malformed, cancelled,
-   expired, blocked, opted-out, or superseded invitations.
-5. Re-running the same manifest/cursors is safe. New invitations inserted behind
-   a saved cursor are handled by the live trigger; a second bounded manifest pass
-   can check any rollout overlap. Retain receipts; no destructive migration.
+3. Verify the deployed selectors and inactive readiness behavior. The operator
+   then updates **only** `config/sharedClubs.invitationNotificationsReady` to true
+   using a field update/transaction. Preserve every other field, including the
+   existing enabled state and native Timestamp activatedAt; do not replace the
+   config document. Setting this same field false pauses producer/push again
+   without deleting functions or disabling shared clubs. This adds no producer
+   or push-guard reads: current() already reads the config document.
+4. Run the bounded existing-pending backfill below. Driver's pending dedupe means
+   re-inviting an already-pending recipient does not create a fresh generation,
+   so this backfill supplies notifications missing at rollout.
 
-A dry run must not call `process`, since it writes. This document defines the
-operator procedure; it does not execute or install a cloud backfill harness.
+No rules deployment is necessary: preferences, owner-only account revision reads,
+and default denial of delivery receipts are already covered. Do not use a bare
+`--only functions`, change other feature gates, or build/release a mobile package
+as a side effect.
 
-## Deployment selectors (future separately approved operation only)
+## Existing pending invitations: bounded operator harness
 
-After the backend and Android changes are integrated and tested, deploy only the
-producer and changed push function, with the explicit approved project:
+`functions/scripts/backfill-club-invitations.mjs` is a manual CLI only. There is
+no startup hook, schedule, invitation rewrite, direct inbox write, or collection
+group query. Every apply candidate goes through the exact compiled
+`ClubInvitationNotifications.process` with its native Firestore snapshot. Build
+Functions first so `lib/` matches the reviewed source.
+
+Run from `functions/`, using an existing private directory **outside the repo**:
 
 ```text
-firebase deploy --project <approved-project> --only functions:onClubInvitationWritten,functions:notifications-onNotificationCreated
+node scripts/backfill-club-invitations.mjs --project <project-id> --state /private-operator-directory/invites-dry.json --manifest /private-operator-directory/invites-dry-manifest.jsonl
+node scripts/backfill-club-invitations.mjs --project <project-id> --apply --state /private-operator-directory/invites-apply.json --manifest /private-operator-directory/invites-apply-manifest.jsonl
 ```
 
-No rules deployment is necessary for this backend change. The new receipt
-collection is already denied by default, preferences are already supported, and
-Driver owns the account revision and invitation mutation engine. Do not use a
-bare `--only functions`, enable the sharedClubs gate, build a release, or run the
-backfill as a side effect of deploying these two functions.
+- Explicit `--project` and absolute `--state` are mandatory; no environment
+  project fallback. Conflicting SDK project configuration fails closed. The
+  already approved operator runs dry-run/apply after current reviews/merge.
+- No `--apply` means zero Firestore writes and no Auth lookup. Dry-run reports
+  current-shaped, unexpired pending candidates, not a promise of eligibility or
+  delivery. Private local cursor/optional manifest files are its only writes.
+- Hard caps per invocation: 25 fetched club documents and 100 fetched invitation
+  documents, including inactive clubs/nonpending invitation rows. Invitations
+  page at 25 by document ID; every query has a limit. No extra sentinel document
+  is read beyond either cap. An exact full page is conservatively incomplete.
+- Club discovery itself is bounded by 25; no unbounded discovery precedes the
+  caps. Private cursors retain the last completed club and, when needed, the
+  current club/last invitation. Rerun with the same state file to continue.
+  State is checkpointed only after a whole invitation page completes. A failure
+  replays the partial page safely through generation receipts.
+- Dry-run and apply state scopes are distinct and project-bound: passing a
+  dry-run state to apply fails instead of skipping candidates. Keep using the
+  apply state for subsequent bounded apply passes. After a readiness pause or
+  for a fresh verification pass, use a **new** apply state file and walk again;
+  receipt dedupe makes this safe even after inbox deletion. Never delete receipts.
+- Apply first requires shared-club and notification readiness. It then rechecks
+  all eligibility per candidate through the service transaction. If readiness
+  changes during a pass, ineligible candidates may be skipped; after resuming,
+  start a fresh bounded pass as above. Maximum backend writes: two per processed
+  eligible generation, at most 200 per run; dry-run writes none.
+- Stdout is one aggregate JSON summary (counts, dryRun, incomplete). Cursor
+  values, candidate paths/UIDs, credentials, and raw error details are never
+  printed. `--manifest` is optional and exclusively creates a new 0600 file;
+  choose a fresh manifest filename for each continuation. State/checkpoints and
+  the exclusive state lock are also 0600; shared/symlinked state is refused.
+- State/manifest files are private operational data and must stay outside Git.
+  No notification content or raw Auth/provider credentials are recorded.
+- Demo execution requires explicit `--emulator`, a demo-* project, loopback
+  FIRESTORE_EMULATOR_HOST, and the repository no-cloud transport preload. Cloud
+  credentials are rejected in that mode, and Auth identity is fake there only.
+  Production apply uses the real Auth lookup. Neither production mode nor
+  emulator mode is inferred implicitly.
+
+A cursor completed at `incomplete: false` covers that pass's key range. Live
+triggers cover newly created generations, including keys inserted behind a saved
+cursor. A fresh bounded pass can verify rollout overlap; existing generation
+receipts make overlapping live delivery/backfill idempotent.
+
+## Focused verification
+
+The real Firestore test imports the service and actual writer directly; it does
+not mock transactions or create Auth users. Only identity lookup is fake. It
+seeds unique fixture IDs, restores config/policy, and deletes exact owned paths.
+The backfill apply test restricts its club query to its own fixture. No database
+flush or automatic emulator startup is performed.
+
+With the parent's Firestore emulator already running, from `functions/`:
+
+```bash
+GCLOUD_PROJECT=demo-test FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 \
+node ../scripts/run-no-cloud.mjs -- ./node_modules/.bin/vitest run \
+  --config vitest.emulator.config.ts \
+  src/__tests__/club-invitation-notifications.emulator.test.ts --maxWorkers=1
+```
+
+This proves inbox/receipt commit timestamps and rollback on a real transaction,
+parallel/replayed generation dedupe after deletion, opt-out receipts, a preference
+change before writer eligibility reads, obsolete/declined generations, readiness
+pause/resume, and idempotent existing-pending harness apply. It does not test FCM
+transport or device notification display.
+
+Focused harness unit tests (no emulator/network), from `functions/`:
+
+```bash
+node ../scripts/run-no-cloud.mjs -- node --test --test-concurrency=1 scripts/backfill-club-invitations.test.mjs
+```
+
+For a guarded demo CLI run, use that same no-cloud runner with
+`node scripts/backfill-club-invitations.mjs --project demo-test --emulator`, an
+explicit absolute private `--state` path and optional `--apply`. Set the loopback
+Firestore host as above. No production action is run by the test commands.
 
 ## Backend file manifest
 
-Repository-relative paths for the backend commit (Android files are owned separately):
+Repository-relative backend files (Android files are owned separately):
 
 ```text
 contracts/schemas/notifications.schema.json
 docs/contracts/shared-club-invitation-notifications.md
 functions/src/__tests__/notifications-core.test.ts
+functions/src/__tests__/club-invitation-notifications.emulator.test.ts
+functions/scripts/backfill-club-invitations.mjs
+functions/scripts/backfill-club-invitations.test.mjs
 functions/src/clubInvitations/index.test.ts
 functions/src/clubInvitations/index.ts
 functions/src/clubInvitations/service.test.ts

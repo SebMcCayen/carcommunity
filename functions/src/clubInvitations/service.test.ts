@@ -109,7 +109,11 @@ class Store {
 }
 function setup() {
   const store = new Store()
-    .seed('config/sharedClubs', { enabled: true, activatedAt: JOINED })
+    .seed('config/sharedClubs', {
+      enabled: true,
+      invitationNotificationsReady: true,
+      activatedAt: JOINED,
+    })
     .seed(path, invite())
     .seed('driverClubs/club', {
       schemaVersion: 2,
@@ -268,8 +272,26 @@ describe('canonical club invitation notifications', () => {
   });
 
   const suppressed: [string, string, Data | null][] = [
-    ['disabled feature', 'config/sharedClubs', { enabled: false, activatedAt: JOINED }],
-    ['missing activation', 'config/sharedClubs', { enabled: true }],
+    [
+      'missing notification readiness',
+      'config/sharedClubs',
+      { enabled: true, activatedAt: JOINED },
+    ],
+    [
+      'disabled notification readiness',
+      'config/sharedClubs',
+      { enabled: true, invitationNotificationsReady: false, activatedAt: JOINED },
+    ],
+    [
+      'disabled feature',
+      'config/sharedClubs',
+      { enabled: false, invitationNotificationsReady: true, activatedAt: JOINED },
+    ],
+    [
+      'missing activation',
+      'config/sharedClubs',
+      { enabled: true, invitationNotificationsReady: true },
+    ],
     [
       'archived club',
       'driverClubs/club',
