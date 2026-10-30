@@ -14,7 +14,6 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.firebase.await
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import java.time.Instant
@@ -32,67 +31,82 @@ data class AccountWarning(val id: String, val reason: String, val expiresAt: Str
     }
 }
 
-/** Own profile only. A response from a previous auth session is discarded. */
+/** Own profile only. No placeholder or title is rendered without a confirmed active warning. */
 @Composable
 fun AccountWarningsSection(uid: String) {
     val context = LocalContext.current
     val configured = remember { FirebaseApp.getApps(context).isNotEmpty() }
     if (!configured) return
-    key(uid) {
+    val source = remember { FirebaseAccountWarningsSource() }
+    AccountWarningsContent(uid, source)
+}
+
+@Composable
+internal fun AccountWarningsContent(
+    uid: String,
+    source: AccountWarningsSource,
+    now: () -> Long = { SystemClock.elapsedRealtime() },
+) {
+    key(uid, source) {
         val changes = remember { Channel<Unit>(Channel.CONFLATED) }
-        var warnings by remember { mutableStateOf(emptyList<AccountWarning>()) }
-        var cursor by remember { mutableStateOf<String?>(null) }
-        var loading by remember { mutableStateOf(true) }
-        var failed by remember { mutableStateOf(false) }
-        var more by remember { mutableStateOf(false) }
-        val auth = remember { FirebaseAuth.getInstance() }
-        DisposableEffect(uid) {
-            val registration = FirebaseFirestore.getInstance().collection("accountWarningSignals").document(uid)
-                .addSnapshotListener { snapshot, error ->
-                    if (error == null && snapshot?.metadata?.isFromCache == false) { more = false; changes.trySend(Unit) }
-                }
-            onDispose { registration.remove(); changes.close() }
+        val presentation = remember { AccountWarningPresentation(uid, source, now) }
+        DisposableEffect(uid, source) {
+            val stop = source.observe(uid, { currentUid ->
+                presentation.authChanged(currentUid)
+                changes.trySend(Unit)
+            }, { changes.trySend(Unit) })
+            onDispose { stop(); changes.close() }
         }
-        LaunchedEffect(uid) {
+        LaunchedEffect(uid, source) {
             changes.trySend(Unit)
-            for (ignored in changes) {
-                loading = true
-                val append = more
-                more = false
-                val started = SystemClock.elapsedRealtime()
-                try {
-                    if (auth.currentUser?.uid != uid) { warnings = emptyList(); break }
-                    val data = FirebaseFunctions.getInstance("europe-west1").getHttpsCallable("account-listWarnings")
-                        .call(mapOf("cursor" to if (append) cursor else null)).await().data as? Map<*, *> ?: error("Invalid warning response")
-                    if (auth.currentUser?.uid != uid || data["userId"] != uid) { warnings = emptyList(); break }
-                    val rows = (data["warnings"] as? List<*>)?.mapNotNull { (it as? Map<*, *>)?.let { row -> AccountWarning.decode(row, started) } } ?: error("Invalid warnings")
-                    warnings = ((if (append) warnings else emptyList()) + rows).distinctBy { it.id }.filter { it.active(SystemClock.elapsedRealtime()) }
-                    cursor = (data["meta"] as? Map<*, *>)?.get("nextCursor") as? String
-                    failed = false
-                } catch (error: Exception) {
-                    if (error is CancellationException) throw error
-                    // Failed refresh must not keep showing a possibly revoked reason.
-                    if (!append) warnings = emptyList()
-                    failed = true
-                    more = append // retry the same cursor when a later page fails
-                } finally { loading = false }
+            for (ignored in changes) presentation.refresh()
+        }
+        LaunchedEffect(uid, source) {
+            while (true) { delay(1000); presentation.expire() }
+        }
+        AccountWarningsView(presentation, onRetry = { changes.trySend(Unit) })
+    }
+}
+
+@Composable
+internal fun AccountWarningsView(presentation: AccountWarningPresentation, onRetry: () -> Unit) {
+    if (presentation.warnings.isEmpty()) return
+    Column {
+        Text(stringResource(R.string.accountWarnings_title), style = MaterialTheme.typography.titleMedium)
+        for (warning in presentation.warnings) {
+            Text(warning.reason)
+            val expiry = warning.expiresAt?.let { runCatching { java.time.format.DateTimeFormatter.ofLocalizedDateTime(java.time.format.FormatStyle.MEDIUM).withZone(java.time.ZoneId.systemDefault()).format(Instant.parse(it)) }.getOrDefault(it) }
+            Text(if (expiry == null) stringResource(R.string.accountWarnings_untilRevoked) else "${stringResource(R.string.accountWarnings_expires)} $expiry")
+        }
+        if (presentation.loading) Text(stringResource(R.string.accountWarnings_loading))
+        if (presentation.failed) {
+            Text(stringResource(R.string.accountWarnings_error))
+            Button(onClick = onRetry, enabled = !presentation.loading) { Text(stringResource(R.string.accountWarnings_retry)) }
+        }
+    }
+}
+
+private class FirebaseAccountWarningsSource : AccountWarningsSource {
+    private val auth = FirebaseAuth.getInstance()
+    override val currentUid: String? get() = auth.currentUser?.uid
+
+    override fun observe(uid: String, onAuthChanged: (String?) -> Unit, onChanged: () -> Unit): () -> Unit {
+        val authListener = FirebaseAuth.AuthStateListener { onAuthChanged(it.currentUser?.uid) }
+        auth.addAuthStateListener(authListener)
+        val registration = FirebaseFirestore.getInstance().collection("accountWarningSignals").document(uid)
+            .addSnapshotListener { snapshot, error ->
+                if (error == null && snapshot?.metadata?.isFromCache == false) onChanged()
             }
-        }
-        LaunchedEffect(uid) {
-            while (true) { delay(1000); warnings = warnings.filter { it.active(SystemClock.elapsedRealtime()) } }
-        }
-        Column {
-            Text(stringResource(R.string.accountWarnings_title), style = MaterialTheme.typography.titleMedium)
-            if (loading) Text(stringResource(R.string.accountWarnings_loading))
-            if (failed) Text(stringResource(R.string.accountWarnings_error))
-            if (!loading && !failed && warnings.isEmpty()) Text(stringResource(R.string.accountWarnings_empty))
-            for (warning in warnings) {
-                Text(warning.reason)
-                val expiry = warning.expiresAt?.let { runCatching { java.time.format.DateTimeFormatter.ofLocalizedDateTime(java.time.format.FormatStyle.MEDIUM).withZone(java.time.ZoneId.systemDefault()).format(Instant.parse(it)) }.getOrDefault(it) }
-                Text(if (expiry == null) stringResource(R.string.accountWarnings_untilRevoked) else "${stringResource(R.string.accountWarnings_expires)} $expiry")
-            }
-            if (failed) Button(onClick = { changes.trySend(Unit) }, enabled = !loading) { Text(stringResource(R.string.accountWarnings_retry)) }
-            if (cursor != null && !failed) Button(onClick = { more = true; changes.trySend(Unit) }, enabled = !loading) { Text(stringResource(R.string.accountWarnings_more)) }
-        }
+        return { auth.removeAuthStateListener(authListener); registration.remove() }
+    }
+
+    override suspend fun load(cursor: String?, requestStarted: Long): AccountWarningPage {
+        val data = FirebaseFunctions.getInstance("europe-west1").getHttpsCallable("account-listWarnings")
+            .call(mapOf("cursor" to cursor)).await().data as? Map<*, *> ?: error("Invalid warning response")
+        val userId = data["userId"] as? String ?: error("Invalid warning owner")
+        val rows = (data["warnings"] as? List<*>)?.mapNotNull {
+            (it as? Map<*, *>)?.let { row -> AccountWarning.decode(row, requestStarted) }
+        } ?: error("Invalid warnings")
+        return AccountWarningPage(userId, rows, (data["meta"] as? Map<*, *>)?.get("nextCursor") as? String)
     }
 }
