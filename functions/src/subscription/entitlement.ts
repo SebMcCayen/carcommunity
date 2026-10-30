@@ -50,17 +50,21 @@ export async function applyEntitlement(
       }
     },
     commitRecords: async () => {
+      const ring = membershipMapRingProjection(input, new Date(), input.userId);
       const batch = db.batch();
       batch.set(
         db.collection('subscriptions').doc(input.userId),
-        buildSubscriptionDocument(input, () => FieldValue.serverTimestamp()),
+        {
+          ...buildSubscriptionDocument(input, () => FieldValue.serverTimestamp()),
+          ...(ring.refreshAt ? { mapRingRefreshAt: ring.refreshAt } : {}),
+        },
       );
       batch.set(
         db.collection('users').doc(input.userId),
         {
           activeMember: active,
           supporterBadgeEligible: supporterBadgeEligible(input, new Date()),
-          ...membershipMapRingProjection(input, new Date(), input.userId),
+          membershipMapRingEligible: ring.membershipMapRingEligible,
           updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true },

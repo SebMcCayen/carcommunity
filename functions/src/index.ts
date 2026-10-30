@@ -167,6 +167,7 @@ import { grantEntitlement, verify as verifySubscription } from './subscription/v
 import { expireLapsed as expireLapsedSubscriptions } from './subscription/scheduled';
 import { handleRtdn as handleSubscriptionRtdn } from './subscription/rtdn';
 import { reconcileEntitlements as reconcileSubscriptionEntitlements } from './subscription/reconcile';
+import { refreshMapRings } from './subscription/map-ring-scheduled';
 import {
   join as joinGroupDrive,
   leave as leaveGroupDrive,
@@ -1214,6 +1215,8 @@ export const subscription = {
   // NOT re-query Play per subscription (that needs the raw token, which is
   // never stored) — see reconcile-core.ts and the PR body.
   reconcileEntitlements: reconcileSubscriptionEntitlements,
+  // Cosmetic-only expiry, using a private due field; no billing date is public.
+  refreshMapRings,
 };
 
 /**
