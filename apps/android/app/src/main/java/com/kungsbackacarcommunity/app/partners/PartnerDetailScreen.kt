@@ -70,6 +70,7 @@ fun PartnerDetailScreen(
     AeroPage(
         title = headerCompany?.name ?: stringResource(R.string.partners_detailTitle),
         modifier = modifier,
+        ownerShortcutEnabled = false,
     ) {
         when (companyState) {
             CompanyState.Loading -> {

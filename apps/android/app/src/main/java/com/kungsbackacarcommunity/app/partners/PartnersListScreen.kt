@@ -58,7 +58,11 @@ fun PartnersRootScreen(
     isLoadingMoreCompanies: Boolean = false,
     didFailLoadingMoreCompanies: Boolean = false,
 ) {
-    AeroPage(title = stringResource(R.string.partners_screenTitle), modifier = modifier) {
+    AeroPage(
+        title = stringResource(R.string.partners_screenTitle),
+        modifier = modifier,
+        ownerShortcutEnabled = false,
+    ) {
         TabRow(selectedTabIndex = section.ordinal) {
             Tab(
                 selected = section == PartnersRootSection.DIRECTORY,
@@ -111,7 +115,11 @@ fun PartnersListScreen(
     // Re-invokes the companies load; when null the error state shows no retry.
     onRetry: (() -> Unit)? = null,
 ) {
-    AeroPage(title = stringResource(R.string.partners_screenTitle), modifier = modifier) {
+    AeroPage(
+        title = stringResource(R.string.partners_screenTitle),
+        modifier = modifier,
+        ownerShortcutEnabled = false,
+    ) {
         PartnersDirectoryContent(state, offersState, onOpenCompany, onRetry)
     }
 }

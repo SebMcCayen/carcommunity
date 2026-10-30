@@ -192,7 +192,11 @@ fun EventDetailScreen(
     // id so switching events in place dismisses it rather than leaving a stale
     // confirmation targeting the previous event.
     var showRemoveDialog by rememberSaveable(event?.id) { mutableStateOf(false) }
-    AeroPage(title = event?.title ?: stringResource(R.string.events_title), modifier = modifier) {
+    AeroPage(
+        title = event?.title ?: stringResource(R.string.events_title),
+        modifier = modifier,
+        ownerShortcutEnabled = false,
+    ) {
             if (event == null) {
                 Text(
                     text =

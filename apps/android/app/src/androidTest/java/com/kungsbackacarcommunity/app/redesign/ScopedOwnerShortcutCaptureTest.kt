@@ -23,6 +23,12 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.friends.FriendsCataloguePreview
+import com.kungsbackacarcommunity.app.leaderboard.LeaderboardCategory
+import com.kungsbackacarcommunity.app.leaderboard.LeaderboardCategoryBoard
+import com.kungsbackacarcommunity.app.leaderboard.LeaderboardEntry
+import com.kungsbackacarcommunity.app.leaderboard.LeaderboardScope
+import com.kungsbackacarcommunity.app.leaderboard.LeaderboardScreen
+import com.kungsbackacarcommunity.app.leaderboard.LeaderboardUiState
 import com.kungsbackacarcommunity.app.notifications.AppNotification
 import com.kungsbackacarcommunity.app.notifications.NotificationCategory
 import com.kungsbackacarcommunity.app.notifications.NotificationsScreen
@@ -48,7 +54,10 @@ class ScopedOwnerShortcutCaptureTest {
 
     @Test fun captureScopedScreensAndMapControl() {
         val args = InstrumentationRegistry.getArguments()
-        val screens = listOf("garage", "vehicle-detail", "friends", "settings", "notifications", "drive-history", "drive-detail", "map")
+        val screens = listOf(
+            "garage", "vehicle-detail", "friends", "settings", "notifications", "drive-history", "drive-detail",
+            "crown", "events", "event-detail", "leaderboard", "partners", "partners-saved-locked", "partner-detail", "map",
+        )
         val selected = mutableStateOf(screens.first())
         val dark = args.getString("redesignTheme") != "light"
         val fontScale = args.getString("shortcutFontScale")?.toFloat() ?: 1f
@@ -76,6 +85,21 @@ class ScopedOwnerShortcutCaptureTest {
                                         isRead = false, createdAtMillis = null,
                                     ))),
                                     onMarkRead = {}, onMarkAllRead = {}, onBack = {},
+                                )
+                                "crown", "events", "event-detail" -> Wave2SocialPreview(selected.value)
+                                "partners" -> Pass3SettingsFixture("S65")
+                                "partners-saved-locked" -> Pass3SettingsFixture("S65-saved-locked")
+                                "partner-detail" -> Pass3SettingsFixture("S66")
+                                "leaderboard" -> LeaderboardScreen(
+                                    scope = LeaderboardScope.ALL_TIME,
+                                    onScopeChange = {},
+                                    state = LeaderboardUiState.Loaded(
+                                        scope = LeaderboardScope.ALL_TIME,
+                                        categories = listOf(LeaderboardCategoryBoard(
+                                            LeaderboardCategory.CROWN_POINTS,
+                                            listOf(LeaderboardEntry(1, "local-member", "Lokal testmedlem", null, 1250.0, false)),
+                                        )),
+                                    ),
                                 )
                                 "map" -> {
                                     val surface = remember { StubMapSurface(MapLoadState.Loaded, autoLoad = false) }
