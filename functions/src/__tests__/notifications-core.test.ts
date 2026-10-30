@@ -105,6 +105,7 @@ describe('notifications-core social categories', () => {
       'community_chat',
       'convoy_chat',
       'friend_request',
+      'club_invite',
       'convoy_invite',
       // Convoy membership/lifecycle notices (someone left, leadership moved,
       // the convoy ended) — social, and independently silenceable from invites.

@@ -59,6 +59,7 @@ export const NOTIFICATION_CATEGORIES = [
   'community_chat',
   'convoy_chat',
   'friend_request',
+  'club_invite',
   'convoy_invite',
   'convoy_update',
   'wave',

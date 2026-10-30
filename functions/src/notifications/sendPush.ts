@@ -35,6 +35,7 @@ import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions';
 import { getMessaging, type TokenMessage } from 'firebase-admin/messaging';
 import { db } from '../firebase';
+import { clubInvitationNotifications } from '../clubInvitations';
 import { toUserAccessState } from '../shared/access';
 import { readFeatureFlag } from '../shared/featureFlags';
 import {
@@ -198,6 +199,16 @@ export const onNotificationCreated = onDocumentCreated(
       logger.debug('Push suppressed', { category, reason: decision.reason });
       return;
     }
+
+    if (
+      category === 'club_invite' &&
+      !(await clubInvitationNotifications.canPush(
+        toStringOrNull(data?.relatedEntityId) ?? '',
+        uid,
+        notificationId,
+      ))
+    )
+      return;
 
     const payload = buildPushPayload({
       category,

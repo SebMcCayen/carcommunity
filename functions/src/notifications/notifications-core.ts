@@ -80,6 +80,8 @@ import { isRestricted, type UserAccessState } from '../shared/access';
  *                      different noise with different urgency.
  *  - direct_message  — dm/manageDirectMessages.ts (sendMessage; first message
  *                      of an unread run only)
+ *  - club_invite     — clubInvitations (a genuine canonical Driver invitation
+ *                      generation; optional, shared-clubs gated)
  *  - friend_request  — friends/manageFriends.ts (new request → invitee;
  *                      accept → requester; a decline is silent)
  *  - wave            — live/sendWave.ts (a NON-convoy wave to a nearby live
@@ -110,6 +112,7 @@ export const NOTIFICATION_CATEGORIES = [
   'community_chat',
   'convoy_chat',
   'friend_request',
+  'club_invite',
   'convoy_invite',
   'convoy_update',
   'wave',
@@ -125,6 +128,7 @@ export const SOCIAL_NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
   'community_chat',
   'convoy_chat',
   'friend_request',
+  'club_invite',
   'convoy_invite',
   'convoy_update',
   'wave',
@@ -407,6 +411,7 @@ export const PUSH_DEEP_LINK_TARGETS = [
   'convoy_chat',
   'convoys',
   'friends',
+  'clubs',
   'event',
   'subscription',
   'notifications',
@@ -480,6 +485,8 @@ export function buildPushDeepLink(
       // or a "someone left" / "convoy ended" notice — open THAT convoy rather
       // than dumping the member on the convoy list.
       return { target: 'convoys', entityId: entityIdOrNull(relatedEntityId) };
+    case 'club_invite':
+      return { target: 'clubs', entityId: entityIdOrNull(relatedEntityId) };
     case 'friend_request':
       return { target: 'friends', entityId: entityIdOrNull(relatedEntityId) };
     case 'wave':
