@@ -23,6 +23,7 @@ import { onRequest } from 'firebase-functions/v2/https';
 import { list as driverFeedList, detail as driverFeedDetail } from './driverFeed';
 import { handleHealth } from './health';
 import { eventPage } from './public/eventPage';
+import { manage as manageClubCalendar, feed as clubCalendarFeed } from './clubCalendar';
 import { completeOnboarding } from './auth/completeOnboarding';
 import { onUserCreate } from './auth/onUserCreate';
 import { recordLogin } from './auth/recordLogin';
@@ -286,6 +287,9 @@ export const health = onRequest(
 export const publicweb = {
   eventPage,
 };
+
+/** Member-specific private ICS subscriptions; independent of Driver deployment. */
+export const clubCalendar = { manage: manageClubCalendar, feed: clubCalendarFeed };
 
 /**
  * Auth domain (grouped export → deployed as `auth-completeOnboarding` and

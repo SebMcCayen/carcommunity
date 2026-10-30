@@ -51,6 +51,7 @@ internal fun ClubCalendar(repository: ClubRepository, clubId: String, canManage:
         catch (e: CancellationException) { throw e } catch (e: Exception) { error = e }
     }
     Text(stringResource(R.string.clubs_calendar), style = MaterialTheme.typography.titleMedium)
+    ClubCalendarSubscriptionControl(clubId)
     Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { month = month.minusMonths(1) }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, stringResource(R.string.clubs_previousMonth)) }

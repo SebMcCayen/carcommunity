@@ -179,6 +179,37 @@ describe('account-deleteAccount (soft delete)', () => {
 });
 
 describe('account purge (hard delete after retention)', () => {
+  it('erases personal calendar journals and all owner token locators while preserving another member', async () => {
+    const user = await createProvisionedUser('purge-calendar');
+    const uid = user.uid,
+      otherUid = `${uid}-other`;
+    // Fixed hash-shaped IDs deliberately differ from UIDs: erasure must query
+    // ownership fields, including orphan locators, rather than rebuild keys.
+    const ownState = adminDb.doc(`clubCalendarSubscriptions/${'a'.repeat(64)}`);
+    const orphanToken = adminDb.doc(`clubCalendarTokens/${'b'.repeat(64)}`);
+    const currentToken = adminDb.doc(`clubCalendarTokens/${'c'.repeat(64)}`);
+    const otherState = adminDb.doc(`clubCalendarSubscriptions/${'d'.repeat(64)}`);
+    const otherToken = adminDb.doc(`clubCalendarTokens/${'e'.repeat(64)}`);
+    await Promise.all([
+      ownState.set({ uid, rows: [{ title: 'Private club appointment' }] }),
+      orphanToken.set({ uid, subscriptionId: 'missing-old-subscription' }),
+      currentToken.set({ uid, subscriptionId: ownState.id }),
+      otherState.set({ uid: otherUid, rows: [{ title: 'Other member appointment' }] }),
+      otherToken.set({ uid: otherUid, subscriptionId: otherState.id }),
+    ]);
+    await adminAuth.updateUser(uid, { disabled: true });
+    await adminAuth.revokeRefreshTokens(uid);
+    await adminDb.doc(`users/${uid}`).set({ deleted: true }, { merge: true });
+    await purgeUserData(uid);
+    await purgeUserData(uid); // A retry must neither orphan locators nor erase another owner.
+    expect((await ownState.get()).exists).toBe(false);
+    expect((await orphanToken.get()).exists).toBe(false);
+    expect((await currentToken.get()).exists).toBe(false);
+    expect((await otherState.get()).exists).toBe(true);
+    expect((await otherToken.get()).exists).toBe(true);
+    await Promise.all([otherState.delete(), otherToken.delete()]);
+  });
+
   it('leaves erasure retryable if a Storage prefix cannot be removed', async () => {
     const user = await createProvisionedUser('purge-storage-retry');
     await adminAuth.updateUser(user.uid, { disabled: true });
