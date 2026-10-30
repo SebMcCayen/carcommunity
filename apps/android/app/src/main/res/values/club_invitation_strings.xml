@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="clubs_decline_invitation">Neka inbjudan</string>
+    <string name="clubs_invitation_expires">Gäller till %1$s</string>
+    <string name="notifications_categoryClubInvite">Klubbinbjudningar</string>
+</resources>

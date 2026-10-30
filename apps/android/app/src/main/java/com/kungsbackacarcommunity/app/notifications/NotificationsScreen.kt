@@ -156,6 +156,7 @@ fun NotificationsScreen(
     // the other event categories). Null when the host cannot navigate — the row
     // then keeps its old mark-read-only behaviour. See [EventNotifications].
     onOpenEvent: ((String) -> Unit)? = null,
+    onOpenClub: (() -> Unit)? = null,
 ) {
     var confirmDeleteAll by remember { mutableStateOf(false) }
     // Zone, locale and the device's 12/24-hour setting, resolved ONCE for the
@@ -265,6 +266,7 @@ fun NotificationsScreen(
                             val eventId = EventNotifications.eventId(item)
                             val onOpen: (() -> Unit)? =
                                 when {
+                                    item.category == NotificationCategory.CLUB_INVITE && onOpenClub != null -> onOpenClub
                                     eventId != null && onOpenEvent != null -> ({
                                             onOpenEvent(eventId)
                                         })
@@ -525,6 +527,7 @@ private fun NotificationCard(
                             NotificationCategory.CONVOY_CHAT -> Icons.Filled.ChatBubbleOutline
                             NotificationCategory.FRIEND_REQUEST,
                             NotificationCategory.CONVOY_INVITE,
+                            NotificationCategory.CLUB_INVITE,
                             NotificationCategory.CONVOY_UPDATE -> Icons.Filled.Group
                             NotificationCategory.ACCOUNT_WARNING,
                             NotificationCategory.ACCOUNT_SUSPENSION -> Icons.Filled.Security

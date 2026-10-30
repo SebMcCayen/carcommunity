@@ -30,6 +30,9 @@ enum class PushTarget(val wire: String) {
     /** Friends, including incoming requests. */
     FRIENDS("friends"),
 
+    /** Canonical club page, where pending invitations are accepted/declined. */
+    CLUBS("clubs"),
+
     /** The events list. [PushDeepLink.entityId] is the event id when known. */
     EVENT("event"),
 

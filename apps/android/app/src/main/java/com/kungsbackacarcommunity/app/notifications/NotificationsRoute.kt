@@ -62,6 +62,7 @@ fun NotificationsRoute(
     // Opens an event's detail from an event notification tap. Null in a
     // config-less build (no navigation host); the row then only marks read.
     onOpenEvent: ((String) -> Unit)? = null,
+    onOpenClub: (() -> Unit)? = null,
     // Standalone inbox shows its own heading. Compact hosts can opt out;
     // the chat hub no longer embeds the inbox.
     showTitle: Boolean = true,
@@ -152,6 +153,7 @@ fun NotificationsRoute(
             onDismissDeleteError = actions.onDismissDeleteError,
             convoyLink = convoyLink,
             onOpenEvent = onOpenEvent,
+            onOpenClub = onOpenClub,
         )
         return
     }
@@ -165,6 +167,7 @@ fun NotificationsRoute(
         deleteActions = actions,
         convoyLink = convoyLink,
         onOpenEvent = onOpenEvent,
+        onOpenClub = onOpenClub,
         showTitle = showTitle,
     )
 }
@@ -200,6 +203,7 @@ private fun FriendAwareNotificationsInbox(
     deleteActions: InboxDeleteActions,
     convoyLink: ConvoyNotificationLink?,
     onOpenEvent: ((String) -> Unit)?,
+    onOpenClub: (() -> Unit)?,
     showTitle: Boolean,
 ) {
     val context = LocalContext.current
@@ -245,6 +249,7 @@ private fun FriendAwareNotificationsInbox(
         onDismissDeleteError = deleteActions.onDismissDeleteError,
         convoyLink = convoyLink,
         onOpenEvent = onOpenEvent,
+        onOpenClub = onOpenClub,
     )
 }
 

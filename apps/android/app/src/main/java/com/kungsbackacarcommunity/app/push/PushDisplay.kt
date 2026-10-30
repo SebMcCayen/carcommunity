@@ -94,6 +94,7 @@ object PushDisplay {
             NotificationCategory.CONVOY_CHAT,
             NotificationCategory.FRIEND_REQUEST,
             NotificationCategory.CONVOY_INVITE,
+            NotificationCategory.CLUB_INVITE,
             // Somebody left the convoy / leadership moved / the convoy ended:
             // member-to-member activity, so it belongs on the social channel with
             // the rest of it rather than reading as a system announcement.

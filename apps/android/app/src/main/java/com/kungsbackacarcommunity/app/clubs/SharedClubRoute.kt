@@ -12,6 +12,10 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.shell.AeroPage
 import kotlinx.coroutines.CancellationException
@@ -29,6 +33,8 @@ fun SharedClubRoute(uid: String, onOpenEvent: (String) -> Unit = {}, repository:
         val enabled by enabledSource.collectAsState(initial = false)
         val accessSource = remember(repo) { repo?.observeAccess() ?: kotlinx.coroutines.flow.flowOf(ClubAccess.Unverified) }
         val access by accessSource.collectAsState(initial = ClubAccess.Unverified)
+        val invitationSource = remember(repo) { repo?.observeInvitationsRevision() ?: kotlinx.coroutines.flow.flowOf(null) }
+        val invitationsRevision by invitationSource.collectAsStateWithLifecycle(initialValue = null)
         var state by remember { mutableStateOf<ClubState?>(null) }
         var directory by remember { mutableStateOf(ClubPage<Club>(emptyList(), null)) }
         var selected by remember { mutableStateOf<Club?>(null) }
@@ -40,7 +46,15 @@ fun SharedClubRoute(uid: String, onOpenEvent: (String) -> Unit = {}, repository:
         var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
         val scope = rememberCoroutineScope()
         LaunchedEffect(Unit) { while (true) { now = System.currentTimeMillis(); delay(30_000) } }
-        LaunchedEffect(repo, enabled, access, refresh) {
+        val lifecycleOwner = LocalLifecycleOwner.current
+        DisposableEffect(lifecycleOwner) {
+            val observer = object : DefaultLifecycleObserver {
+                override fun onResume(owner: LifecycleOwner) { refresh++; now = System.currentTimeMillis() }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+        LaunchedEffect(repo, enabled, access, invitationsRevision, refresh) {
             if (!enabled || repo == null) { state = null; selected = null; directory = ClubPage(emptyList(), null); return@LaunchedEffect }
             try {
                 state = repo.state()
@@ -76,18 +90,21 @@ fun SharedClubRoute(uid: String, onOpenEvent: (String) -> Unit = {}, repository:
                         clubInstant(current.joinAllowedAt)?.takeIf { it > now }?.let {
                             Text(stringResource(R.string.clubs_cooldown, clubDate(it)))
                         }
+                        ClubInvitations(
+                            invitations = current.invitations,
+                            now = now,
+                            busy = busy || invitationsRevision == null || access == ClubAccess.Unverified,
+                            canAccept = current.membership == null && access == ClubAccess.None &&
+                                !current.legacyConflict && !clubCooldownActive(current, now),
+                            onRespond = { invitation, accept ->
+                                runAction(if (accept) "acceptInvitation" else "declineInvitation",
+                                    mapOf("clubId" to invitation.clubId))
+                            },
+                        )
                         val club = selected
                         if (club == null) {
                             Text(stringResource(R.string.clubs_directory), style = MaterialTheme.typography.titleLarge)
                             Button(onClick = { error = null; create = true }, enabled = !busy && current.membership == null && !clubCooldownActive(current, now)) { Text(stringResource(R.string.clubs_create)) }
-                            if (current.invitations.isNotEmpty()) Text(stringResource(R.string.clubs_invitations), style = MaterialTheme.typography.titleMedium)
-                            current.invitations.forEach { invitation ->
-                                Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp)) {
-                                    Text(invitation.clubName)
-                                    Button(onClick = { runAction("acceptInvitation", mapOf("clubId" to invitation.clubId)) },
-                                        enabled = !busy && !clubCooldownActive(current, now) && current.membership == null) { Text(stringResource(R.string.clubs_accept)) }
-                                } }
-                            }
                             if (directory.items.isEmpty()) Text(stringResource(R.string.clubs_empty))
                             directory.items.forEach { item -> ClubCard(item, onOpen = { selected = item }) }
                             if (directory.nextCursor != null) TextButton(enabled = !busy, onClick = {

@@ -7,6 +7,8 @@ interface ClubRepository {
     fun observeEnabled(): Flow<Boolean>
     fun observePublicAttendanceReady(): Flow<Boolean>
     fun observeAccess(): Flow<ClubAccess>
+    /** Owner-only revision; null means no fresh server proof. */
+    fun observeInvitationsRevision(): Flow<Long?> = kotlinx.coroutines.flow.flowOf(0L)
     suspend fun directory(cursor: String? = null): ClubPage<Club>
     suspend fun state(): ClubState
     suspend fun get(clubId: String): Club
