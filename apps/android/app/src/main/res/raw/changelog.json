@@ -2,6 +2,28 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 62,
+      "versionName": "1.1.7",
+      "releaseDate": "2026-10-30",
+      "highlights": [
+        "Skydd mot spam i alla chattar",
+        "Prenumerera på klubbens kalender",
+        "Förbättrade klubbfunktioner och renare sidor"
+      ],
+      "changes": [
+        "Chatt: tillfälliga skrivpauser som blir längre vid upprepad spam, utan att vanliga emojier blockeras",
+        "Chatt: utkast bevaras vid avvisade meddelanden och hålls åtskilda när du byter chatt eller konto",
+        "Chatt: långa meddelanden kan fällas ut för att läsa hela texten",
+        "Klubbkalender: skapa, kopiera eller återkalla en personlig prenumerationslänk till klubbens event",
+        "Klubbkalender: ändrade och borttagna event följer med när din kalender uppdaterar prenumerationen",
+        "Klubblogga: beskär, flytta och anpassa bilden före uppladdning, med tydligare information om bildkrav",
+        "Event: förbättrad hantering när klubbägare och moderatorer anmäler klubben till ett event",
+        "Klubbchatt: samma grunddesign som Community-chatten, med namn och profilbilder vid meddelandena",
+        "Profil: klubbens namn och logga visas för andra användare när du tillhör en klubb",
+        "Renare sidor: de extra profilbilderna har tagits bort från garage, fordonsinfo, vänner, inställningar, notiser och körhistorik"
+      ]
+    },
+    {
       "versionCode": 61,
       "versionName": "1.1.6",
       "releaseDate": "2026-10-29",
