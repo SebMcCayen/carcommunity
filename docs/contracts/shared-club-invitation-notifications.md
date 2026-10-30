@@ -216,7 +216,7 @@ transport or device notification display.
 Focused harness unit tests (no emulator/network), from `functions/`:
 
 ```bash
-node ../scripts/run-no-cloud.mjs -- node --test --test-concurrency=1 scripts/backfill-club-invitations.test.mjs
+node ../scripts/run-no-cloud.mjs -- ./node_modules/.bin/vitest run scripts/backfill-club-invitations.test.mjs --maxWorkers=1
 ```
 
 For a guarded demo CLI run, use that same no-cloud runner with
@@ -235,6 +235,7 @@ functions/src/__tests__/notifications-core.test.ts
 functions/src/__tests__/club-invitation-notifications.emulator.test.ts
 functions/scripts/backfill-club-invitations.mjs
 functions/scripts/backfill-club-invitations.test.mjs
+functions/vitest.config.ts
 functions/src/clubInvitations/index.test.ts
 functions/src/clubInvitations/index.ts
 functions/src/clubInvitations/service.test.ts
@@ -246,3 +247,6 @@ functions/src/notifications/push-core.test.ts
 functions/src/notifications/sendPush.ts
 packages/shared/src/notifications.ts
 ```
+
+The ordinary Functions Vitest configuration includes `scripts/**/*.test.mjs`, so
+the bounded harness tests also run in the standard unit-test CI gate.
