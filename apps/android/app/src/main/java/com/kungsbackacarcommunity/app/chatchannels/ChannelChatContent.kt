@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.chatchannels
 
 import com.kungsbackacarcommunity.app.chat.ChatMessageBody
 import com.kungsbackacarcommunity.app.chat.rememberChatDraftSendAttempt
+import com.kungsbackacarcommunity.app.chat.rememberChatSendAcknowledgement
 import com.kungsbackacarcommunity.app.chat.ChatCooldownNotice
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -40,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.Saver
@@ -180,9 +182,9 @@ internal val MentionSpansSaver: Saver<List<MentionSpan>, Any> =
  * draft. Unlike the DM [ChatScreen] this is NOT wrapped in the Aero page chrome —
  * it fills whatever container the chat hub gives it (below the hub's tab row).
  *
- * Send is OPTIMISTIC (mirrors the DM thread): on tap the draft clears immediately
- * and the message appears at once as a "sending" bubble — there is no wait for the
- * `*-post` round-trip. A bubble that fails to send shows a tappable "tap to retry"
+ * Bubbles appear optimistically without waiting for the `*-post` round-trip;
+ * the draft clears only on the matching delivery acknowledgement. A failed
+ * bubble shows a tappable "tap to retry"
  * affordance ([onRetry]); the user's text is never lost. The caller merges its own
  * pending bubbles into [messages] via [ChannelThread.mergeWithPending].
  *
@@ -259,6 +261,11 @@ fun ChannelChatContent(
     val sendScope = rememberCoroutineScope()
     val draftAttempt = rememberChatDraftSendAttempt()
     var submitting by remember { mutableStateOf(false) }
+    var draftRevision by rememberSaveable { mutableLongStateOf(0L) }
+    val acknowledgement = rememberChatSendAcknowledgement(
+        messages.filter { it.senderUid == currentUid && it.deliveryState == ChannelDeliveryState.Sent }
+            .mapTo(mutableSetOf()) { it.id },
+    )
     var draft by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(""))
     }
@@ -339,16 +346,22 @@ fun ChannelChatContent(
                             val confirm = onRetryConfirmed
                             if (confirm == null) onRetry(message) else {
                                 submitting = true
+                                val revision = draftRevision
+                                val ownsDraft = draftAttempt.owns(message.clientId)
                                 sendScope.launch {
                                     try {
-                                        if (confirm(message)) {
-                                            draftAttempt.acknowledge(message.clientId)
-                                            if (draft.text.trim() == message.text &&
+                                        val id = message.clientId
+                                        if (id != null) acknowledgement.track(id) {
+                                            draftAttempt.acknowledge(id)
+                                            if (ownsDraft && draftRevision == revision &&
+                                                draft.text.trim() == message.text &&
                                                 MentionDraft(draft.text, mentions).sendableUids == message.mentionedUids &&
                                                 replyToId == message.replyTo?.messageId) {
                                                 draft = TextFieldValue(""); mentions = emptyList(); replyToId = null
+                                                atMentionCap = false
                                             }
                                         }
+                                        if (confirm(message) && id != null) acknowledgement.acknowledge(id)
                                     } finally { submitting = false }
                                 }
                             }
@@ -457,6 +470,7 @@ fun ChannelChatContent(
                             )
                     ) {
                         is MentionInsertResult.Inserted -> {
+                            draftRevision++
                             mentions = result.draft.mentions
                             draft =
                                 TextFieldValue(
@@ -498,7 +512,7 @@ fun ChannelChatContent(
                     replyTarget.senderDisplayName
                         ?: stringResource(R.string.channel_unknownSender),
                 preview = replySnapshot?.textPreview.orEmpty(),
-                onCancel = { replyToId = null },
+                onCancel = { draftRevision++; replyToId = null },
             )
         }
 
@@ -510,10 +524,12 @@ fun ChannelChatContent(
         fun submit(text: String, clearDraft: Boolean) {
             if (submitting || cooldownSeconds > 0) return
             val submittedDraft = draft
+            val revision = draftRevision
             val submittedMentions = mentions
             val submittedReply = replyToId
             val picked = if (clearDraft) MentionDraft(text, mentions).sendableUids else emptyList()
             fun acknowledge() {
+                if (draftRevision != revision) return
                 if (clearDraft && draft.text == submittedDraft.text && mentions == submittedMentions) {
                     draft = TextFieldValue(""); mentions = emptyList(); atMentionCap = false
                 }
@@ -528,7 +544,8 @@ fun ChannelChatContent(
                 sendScope.launch {
                     try {
                         val id = draftAttempt.idFor(text, replySnapshot?.messageId, picked)
-                        if (confirm(text, picked, replySnapshot, id)) { draftAttempt.acknowledge(id); acknowledge() }
+                        acknowledgement.track(id) { draftAttempt.acknowledge(id); acknowledge() }
+                        if (confirm(text, picked, replySnapshot, id)) acknowledgement.acknowledge(id)
                     }
                     finally { submitting = false }
                 }
@@ -546,6 +563,7 @@ fun ChannelChatContent(
                 // to plain text rather than let the uid drift onto whatever
                 // the user typed there instead.
                 if (updated.text != draft.text) {
+                    draftRevision++
                     mentions =
                         DraftMentions.onTextChanged(
                             draft = MentionDraft(draft.text, mentions),
@@ -579,6 +597,7 @@ fun ChannelChatContent(
             preview = MessageActionsPreview(actionsMessage.senderDisplayName, actionsMessage.text),
             canReply = chatRepliesEnabled,
             onReply = {
+                draftRevision++
                 replyToId = actionsMessage.id
                 actionsMessageId = null
             },

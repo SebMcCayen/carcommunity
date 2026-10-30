@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.dm
 
 import com.kungsbackacarcommunity.app.chat.ChatMessageBody
 import com.kungsbackacarcommunity.app.chat.rememberChatDraftSendAttempt
+import com.kungsbackacarcommunity.app.chat.rememberChatSendAcknowledgement
 import com.kungsbackacarcommunity.app.chat.ChatCooldownNotice
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -35,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -92,9 +94,8 @@ import kotlinx.coroutines.delay
  * bottom), an optional "load earlier" affordance at the top, and a text input +
  * send. Stateless apart from the message draft.
  *
- * Send is optimistic: on tap the draft clears immediately and the message
- * appears at once as a "sending" bubble (the caller-side [DmMessage] already
- * carries [DmDeliveryState]) — there is no wait for the network round-trip. A
+ * The bubble appears optimistically, but the private draft clears only after a
+ * successful callable response or the matching own delivered row. A
  * bubble that fails to send shows a tappable "tap to retry" affordance ([onRetry]);
  * the user's text is never lost.
  *
@@ -149,6 +150,11 @@ fun ChatScreen(
     val draftAttempt = rememberChatDraftSendAttempt()
     var submitting by remember { mutableStateOf(false) }
     var draft by rememberSaveable { mutableStateOf("") }
+    var draftRevision by rememberSaveable { mutableLongStateOf(0L) }
+    val acknowledgement = rememberChatSendAcknowledgement(
+        messages.filter { it.senderUid == currentUid && it.deliveryState == DmDeliveryState.Sent }
+            .mapTo(mutableSetOf()) { it.id },
+    )
     // Held by message ID (Saveable, so the sheet survives rotation) and resolved
     // against the live list, so a sheet whose message vanished closes itself.
     var actionsMessageId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -198,14 +204,19 @@ fun ChatScreen(
                             val confirm = onRetryConfirmed
                             if (confirm == null) onRetry(message) else {
                                 submitting = true
+                                val revision = draftRevision
+                                val ownsDraft = draftAttempt.owns(message.clientId)
                                 sendScope.launch {
                                     try {
-                                        if (confirm(message)) {
-                                            draftAttempt.acknowledge(message.clientId)
-                                            if (draft.trim() == message.text && replyToId == message.replyTo?.messageId) {
+                                        val id = message.clientId
+                                        if (id != null) acknowledgement.track(id) {
+                                            draftAttempt.acknowledge(id)
+                                            if (ownsDraft && draftRevision == revision &&
+                                                draft.trim() == message.text && replyToId == message.replyTo?.messageId) {
                                                 draft = ""; replyToId = null
                                             }
                                         }
+                                        if (confirm(message) && id != null) acknowledgement.acknowledge(id)
                                     } finally { submitting = false }
                                 }
                             }
@@ -281,7 +292,7 @@ fun ChatScreen(
                     (replySnapshot?.senderDisplayName ?: otherName)
                         ?: stringResource(R.string.dm_unknownMember),
                 preview = replySnapshot?.textPreview.orEmpty(),
-                onCancel = { replyToId = null },
+                onCancel = { draftRevision++; replyToId = null },
             )
         }
 
@@ -293,8 +304,10 @@ fun ChatScreen(
         fun submit(text: String, clearDraft: Boolean) {
             if (submitting || cooldownSeconds > 0) return
             val snapshot = draft
+            val revision = draftRevision
             val reply = replyToId
             fun acknowledge() {
+                if (draftRevision != revision) return
                 if (clearDraft && draft == snapshot) draft = ""
                 if (replyToId == reply) replyToId = null
             }
@@ -305,7 +318,8 @@ fun ChatScreen(
                 sendScope.launch {
                     try {
                         val id = draftAttempt.idFor(text, replySnapshot?.messageId)
-                        if (confirm(text, replySnapshot, id)) { draftAttempt.acknowledge(id); acknowledge() }
+                        acknowledgement.track(id) { draftAttempt.acknowledge(id); acknowledge() }
+                        if (confirm(text, replySnapshot, id)) acknowledgement.acknowledge(id)
                     }
                     finally { submitting = false }
                 }
@@ -325,7 +339,10 @@ fun ChatScreen(
             OutlinedTextField(
                 value = draft,
                 onValueChange = {
-                    if (it.length <= DM_MESSAGE_MAX_LENGTH) draft = it
+                    if (it.length <= DM_MESSAGE_MAX_LENGTH) {
+                        if (it != draft) draftRevision++
+                        draft = it
+                    }
                 },
                 placeholder = { Text(stringResource(R.string.dm_inputPlaceholder)) },
                 modifier = Modifier.weight(1f),
@@ -365,6 +382,7 @@ fun ChatScreen(
             preview = MessageActionsPreview(actionsAuthorName, actionsMessage.text),
             canReply = chatRepliesEnabled,
             onReply = {
+                draftRevision++
                 replyToId = actionsMessage.id
                 actionsMessageId = null
             },

@@ -14,6 +14,7 @@ class ChatDraftSendAttempt private constructor(private var signature: String?, p
         if (next != signature || clientId == null) { signature = next; clientId = UUID.randomUUID().toString() }
         return checkNotNull(clientId)
     }
+    fun owns(id: String?): Boolean = id != null && id == clientId
     fun acknowledge(id: String?) { if (id != null && id == clientId) { signature = null; clientId = null } }
     companion object {
         val saver = Saver<ChatDraftSendAttempt, List<String>>(

@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.chat
 
 import com.kungsbackacarcommunity.app.chat.rememberChatDraftSendAttempt
+import com.kungsbackacarcommunity.app.chat.rememberChatSendAcknowledgement
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -46,6 +47,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -126,8 +128,14 @@ fun EventChatScreen(
 ) {
     val dates = rememberChatDateContext()
     var draft by rememberSaveable { mutableStateOf("") }
+    var draftRevision by rememberSaveable { mutableLongStateOf(0L) }
+    val acknowledgement = rememberChatSendAcknowledgement(
+        (state as? ChatMessagesState.Loaded)?.messages.orEmpty()
+            .filter { it.authorUserId == currentUid }.mapTo(mutableSetOf()) { it.id },
+    )
     var awaitingSend by rememberSaveable { mutableStateOf(false) }
     var submittedText by rememberSaveable { mutableStateOf<String?>(null) }
+    var submittedRevision by rememberSaveable { mutableLongStateOf(-1L) }
     var submitting by remember { mutableStateOf(false) }
     val sendScope = rememberCoroutineScope()
     val draftAttempt = rememberChatDraftSendAttempt()
@@ -141,7 +149,7 @@ fun EventChatScreen(
     // Clear the draft only once a post actually succeeds; keep it on failure.
     LaunchedEffect(sendStatus) {
         if (onSendConfirmed == null && awaitingSend && sendStatus == ChatSendStatus.Idle) {
-            if (draft == submittedText) draft = ""
+            if (draftRevision == submittedRevision && draft == submittedText) draft = ""
             awaitingSend = false
         } else if (sendStatus == ChatSendStatus.Failed) {
             awaitingSend = false
@@ -333,20 +341,23 @@ fun EventChatScreen(
             fun submit(text: String, clearDraft: Boolean) {
                 if (submitting || cooldownSeconds > 0 || sendStatus == ChatSendStatus.Sending) return
                 val snapshot = draft
+                val revision = draftRevision
                 val confirm = onSendConfirmed
                 if (confirm == null) {
                     awaitingSend = clearDraft
                     submittedText = if (clearDraft) snapshot else null
+                    submittedRevision = revision
                     onSend(text)
                 } else {
                     submitting = true
                     sendScope.launch {
                         try {
                             val id = draftAttempt.idFor(text)
-                            if (confirm(text, id)) {
+                            acknowledgement.track(id) {
                                 draftAttempt.acknowledge(id)
-                                if (clearDraft && draft == snapshot) draft = ""
+                                if (clearDraft && draftRevision == revision && draft == snapshot) draft = ""
                             }
+                            if (confirm(text, id)) acknowledgement.acknowledge(id)
                         }
                         finally { submitting = false }
                     }
@@ -365,7 +376,12 @@ fun EventChatScreen(
             ) {
                 OutlinedTextField(
                     value = draft,
-                    onValueChange = { if (it.length <= EventChat.MESSAGE_MAX_LENGTH) draft = it },
+                    onValueChange = {
+                        if (it.length <= EventChat.MESSAGE_MAX_LENGTH) {
+                            if (it != draft) draftRevision++
+                            draft = it
+                        }
+                    },
                     placeholder = { Text(text = stringResource(R.string.chat_inputPlaceholder)) },
                     modifier = Modifier.weight(1f),
                     keyboardOptions = ChatComposerKeyboardOptions,
