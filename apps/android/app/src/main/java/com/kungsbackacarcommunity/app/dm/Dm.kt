@@ -192,7 +192,7 @@ val DmSendError.isRetryable: Boolean
 sealed interface DmSendResult {
     data class Sent(val conversationId: String, val messageId: String) : DmSendResult
 
-    data class Failed(val error: DmSendError) : DmSendResult
+    data class Failed(val error: DmSendError, val cooldown: com.kungsbackacarcommunity.app.chat.ChatRateLimit? = null) : DmSendResult
 }
 
 /** A page of older messages from `dm-getMessages` (newest-first within the page). */

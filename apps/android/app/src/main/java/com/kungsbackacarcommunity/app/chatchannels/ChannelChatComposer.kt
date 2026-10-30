@@ -28,8 +28,9 @@ internal fun ColumnScope.ChannelChatComposer(
     sendLabel: String,
     enabled: Boolean = true,
     inputModifier: Modifier = Modifier,
+    quickEmojiEnabled: Boolean = enabled,
 ) {
-    ChatQuickEmojiRow(onEmojiSelected = onQuickEmoji, enabled = enabled)
+    ChatQuickEmojiRow(onEmojiSelected = onQuickEmoji, enabled = quickEmojiEnabled)
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),

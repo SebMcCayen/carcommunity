@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
+import com.kungsbackacarcommunity.app.chat.ChatDraftSendAttempt
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
@@ -185,6 +186,84 @@ class ChannelChatCoordinatorTest {
         c.retry("nope")
         c.retry("cid-1") // exists but is Sent, not Failed
         assertEquals(1, f.sendCalls)
+    }
+
+    @Test
+    fun `unchanged retained draft after terminal refusal keeps one display key and never retries`() = runTest {
+        for (error in ChannelSendError.entries.filterNot { it.isRetryable }) {
+            val f = Fakes().apply { sendResult = ChannelSendResult.Failed(error) }
+            val c = coordinator(f)
+            val draft = ChatDraftSendAttempt()
+            val id = draft.idFor("Keep @Friend 🚗", mentions = listOf("friend"))
+            assertEquals(false, c.send("Keep @Friend 🚗", listOf("friend"), clientId = id))
+            val failed = c.pendingMessages.value.single()
+
+            f.sendResult = ChannelSendResult.Sent(id, listOf("friend"))
+            repeat(3) {
+                assertEquals(id, draft.idFor("  Keep @Friend 🚗  ", mentions = listOf("friend")))
+                assertEquals(false, c.send("  Keep @Friend 🚗  ", listOf("friend"), clientId = id))
+            }
+            assertEquals(false, c.retry(id))
+            assertEquals(listOf(id), f.sentClientIds)
+            assertEquals(listOf(failed), c.pendingMessages.value)
+            assertEquals(error, failed.sendError)
+            assertEquals(0, c.sentCount.value)
+            val displayed = ChannelThread.mergeWithPending(emptyList(), emptyList(), c.pendingMessages.value)
+            assertEquals(listOf("msg-$id"), displayed.map { "msg-${it.id}" })
+        }
+    }
+
+    @Test
+    fun `manual resend of a retryable retained id updates the existing bubble`() = runTest {
+        val f = Fakes().apply { sendResult = ChannelSendResult.Failed(ChannelSendError.Generic) }
+        val c = coordinator(f)
+        assertEquals(false, c.send("Retry @Friend", listOf("friend"), clientId = "retained-id"))
+        f.sendResult = ChannelSendResult.Sent("retained-id", listOf("friend"))
+
+        assertTrue(c.send("  Retry @Friend  ", listOf("friend", "friend"), clientId = "retained-id"))
+        assertEquals(listOf("retained-id", "retained-id"), f.sentClientIds)
+        assertEquals("retained-id", c.pendingMessages.value.single().id)
+        assertEquals(ChannelDeliveryState.Sent, c.pendingMessages.value.single().deliveryState)
+        assertEquals(listOf("friend"), f.lastSendMentions)
+        assertEquals(1, c.sentCount.value)
+    }
+
+    @Test
+    fun `same id while sending or awaiting the listener cannot append or dispatch again`() = runTest {
+        val f = Fakes().apply { gate = CompletableDeferred() }
+        val c = coordinator(f)
+        val job = launch { c.send("One draft", clientId = "retained-id") }
+        runCurrent()
+        assertEquals(false, c.send("One draft", clientId = "retained-id"))
+        assertEquals(1, c.pendingMessages.value.size)
+        assertEquals(ChannelDeliveryState.Sending, c.pendingMessages.value.single().deliveryState)
+
+        f.gate!!.complete(Unit)
+        job.join()
+        assertEquals(false, c.send("One draft", clientId = "retained-id"))
+        assertEquals(listOf("retained-id"), f.sentClientIds)
+        assertEquals(1, c.pendingMessages.value.size)
+        assertEquals(ChannelDeliveryState.Sent, c.pendingMessages.value.single().deliveryState)
+        assertEquals(1, c.sentCount.value)
+    }
+
+    @Test
+    fun `existing id cannot silently retry another payload or override a new draft id`() = runTest {
+        val f = Fakes().apply { sendResult = ChannelSendResult.Failed(ChannelSendError.Generic) }
+        val c = coordinator(f)
+        assertEquals(false, c.send("Original", clientId = "old-id"))
+        val failed = c.pendingMessages.value.single()
+        assertEquals(false, c.send("Edited", clientId = "old-id"))
+        assertEquals(false, c.send("Original", listOf("friend"), clientId = "old-id"))
+        assertEquals(false, c.send("Original", replyTo = ChannelReplyTo("parent", "friend", null, "Quote"), clientId = "old-id"))
+        assertEquals(listOf("old-id"), f.sentClientIds)
+        assertEquals(listOf(failed), c.pendingMessages.value)
+
+        f.sendResult = ChannelSendResult.Sent("new-id")
+        assertTrue(c.send("Original", clientId = "new-id"))
+        assertEquals(listOf("old-id", "new-id"), f.sentClientIds)
+        assertEquals(listOf("old-id", "new-id"), c.pendingMessages.value.map { it.id })
+        assertEquals(failed, c.pendingMessages.value.first())
     }
 
     @Test
@@ -522,4 +601,37 @@ class ChannelChatCoordinatorTest {
             createdAtMillis = millis,
             createdAtIso = java.time.Instant.ofEpochMilli(millis).toString(),
         )
+
+    @Test fun `tagged cooldown blocks all send entrypoints until manual retry and retains the key`() = runTest {
+        var now = 100L
+        val cooldown = com.kungsbackacarcommunity.app.chat.ChatSendCooldown { now }
+        val f = Fakes().apply { sendResult = ChannelSendResult.Failed(ChannelSendError.Generic,
+            com.kungsbackacarcommunity.app.chat.ChatRateLimit(5_000)) }
+        val c = ChannelChatCoordinator(f.sender, f.pager, "me", idGenerator = { "retry-key" }, cooldown = cooldown)
+        assertEquals(false, c.send("Hello 🚗", listOf("friend")))
+        assertEquals(false, c.send("😊"))
+        assertEquals(false, c.retry("retry-key"))
+        assertEquals(1, f.sendCalls)
+        assertEquals("Hello 🚗", c.pendingMessages.value.single().text)
+        now += 5_000
+        assertEquals(1, f.sendCalls) // expiry never sends
+        f.sendResult = ChannelSendResult.Sent("retry-key", listOf("friend"))
+        assertTrue(c.send("Hello 🚗", listOf("friend")))
+        assertEquals(listOf("retry-key", "retry-key"), f.sentClientIds)
+        assertEquals(1, c.pendingMessages.value.size)
+    }
+
+    @Test fun `live acknowledgement wins when the callable reply is lost`() = runTest {
+        val f = Fakes().apply { gate = CompletableDeferred(); sendResult = ChannelSendResult.Failed(ChannelSendError.Generic) }
+        val c = coordinator(f)
+        val ack = CompletableDeferred<Boolean>()
+        val job = launch { ack.complete(c.send("Delivered draft")) }
+        runCurrent()
+        c.onLiveMessages(c.pendingMessages.value.map { it.copy(deliveryState = ChannelDeliveryState.Sent) })
+        f.gate!!.complete(Unit)
+        job.join()
+        assertTrue(ack.await())
+        assertTrue(c.pendingMessages.value.isEmpty())
+        assertEquals(1, f.sendCalls)
+    }
 }

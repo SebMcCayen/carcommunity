@@ -73,6 +73,8 @@ export const GROUPS = [
       'driver-feed',
       'user-search',
       'chatchannels*',
+      'chat-flood',
+      'chat-guard-driver',
       'communityDigest',
       'notifications*',
       'block*',

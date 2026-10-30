@@ -1,5 +1,8 @@
 package com.kungsbackacarcommunity.app.chat
 
+import com.kungsbackacarcommunity.app.chat.rememberChatDraftSendAttempt
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -118,10 +121,16 @@ fun EventChatScreen(
     onViewProfile: ((String) -> Unit)? = null,
     // The route may supply the real event title. No inferred member/reaction count.
     eventTitle: String? = null,
+    cooldownSeconds: Int = 0,
+    onSendConfirmed: (suspend (String, String) -> Boolean)? = null,
 ) {
     val dates = rememberChatDateContext()
     var draft by rememberSaveable { mutableStateOf("") }
     var awaitingSend by rememberSaveable { mutableStateOf(false) }
+    var submittedText by rememberSaveable { mutableStateOf<String?>(null) }
+    var submitting by remember { mutableStateOf(false) }
+    val sendScope = rememberCoroutineScope()
+    val draftAttempt = rememberChatDraftSendAttempt()
     // The long-pressed message, held by ID: Saveable (the sheet survives rotation)
     // and resolved against the live list, so a sheet whose message left the stream
     // (author blocked, message moderated away) closes itself.
@@ -131,8 +140,8 @@ fun EventChatScreen(
 
     // Clear the draft only once a post actually succeeds; keep it on failure.
     LaunchedEffect(sendStatus) {
-        if (awaitingSend && sendStatus == ChatSendStatus.Idle) {
-            draft = ""
+        if (onSendConfirmed == null && awaitingSend && sendStatus == ChatSendStatus.Idle) {
+            if (draft == submittedText) draft = ""
             awaitingSend = false
         } else if (sendStatus == ChatSendStatus.Failed) {
             awaitingSend = false
@@ -280,7 +289,7 @@ fun EventChatScreen(
                     }
             }
 
-            if (sendStatus == ChatSendStatus.Failed) {
+            if (sendStatus == ChatSendStatus.Failed && cooldownSeconds == 0) {
                 Text(
                     text = stringResource(R.string.chat_errorSending),
                     style = MaterialTheme.typography.bodySmall,
@@ -321,9 +330,32 @@ fun EventChatScreen(
             // typed draft is left untouched (unlike the button, this doesn't set
             // awaitingSend, so a successful emoji send never clears the draft).
             // Disabled while a send is already in flight, mirroring the Send button.
+            fun submit(text: String, clearDraft: Boolean) {
+                if (submitting || cooldownSeconds > 0 || sendStatus == ChatSendStatus.Sending) return
+                val snapshot = draft
+                val confirm = onSendConfirmed
+                if (confirm == null) {
+                    awaitingSend = clearDraft
+                    submittedText = if (clearDraft) snapshot else null
+                    onSend(text)
+                } else {
+                    submitting = true
+                    sendScope.launch {
+                        try {
+                            val id = draftAttempt.idFor(text)
+                            if (confirm(text, id)) {
+                                draftAttempt.acknowledge(id)
+                                if (clearDraft && draft == snapshot) draft = ""
+                            }
+                        }
+                        finally { submitting = false }
+                    }
+                }
+            }
+            ChatCooldownNotice(cooldownSeconds)
             ChatQuickEmojiRow(
-                onEmojiSelected = { glyph -> onSend(glyph) },
-                enabled = sendStatus != ChatSendStatus.Sending,
+                onEmojiSelected = { submit(it, clearDraft = false) },
+                enabled = sendStatus != ChatSendStatus.Sending && cooldownSeconds == 0 && !submitting,
             )
 
             Row(
@@ -342,11 +374,8 @@ fun EventChatScreen(
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
                 )
                 Button(
-                    onClick = {
-                        awaitingSend = true
-                        onSend(draft)
-                    },
-                    enabled = sendStatus != ChatSendStatus.Sending && EventChat.isSendable(draft),
+                    onClick = { submit(draft, clearDraft = true) },
+                    enabled = sendStatus != ChatSendStatus.Sending && EventChat.isSendable(draft) && cooldownSeconds == 0 && !submitting,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -538,7 +567,8 @@ private fun MessageRow(
                                         ChatUrlOpener.open(context, url)
                                     }
                                 }
-                            Text(
+                            ChatMessageBody(
+                                messageId = message.id,
                                 text = body,
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = contentColor,

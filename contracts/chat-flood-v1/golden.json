@@ -1,0 +1,246 @@
+{
+  "policyVersion": 1,
+  "collection": "chatSendGuards",
+  "policySha256": "cefa5819c78b16828ae6c90809a0274bfc27ba8f535955ce1bd5085996f9ab8f",
+  "cases": [
+    {
+      "name": "new UID",
+      "now": 2000000,
+      "expected": {
+        "allowed": true,
+        "next": {
+          "policyVersion": 1,
+          "creditMs": 10000,
+          "lastRefillMillis": 2000000,
+          "violationLevel": 0,
+          "lastViolationMillis": 0,
+          "blockedUntilMillis": 0
+        }
+      }
+    },
+    {
+      "name": "fractional refill retained",
+      "now": 2001999,
+      "state": {
+        "policyVersion": 1,
+        "creditMs": 0,
+        "lastRefillMillis": 2000000,
+        "violationLevel": 0,
+        "lastViolationMillis": 0,
+        "blockedUntilMillis": 0
+      },
+      "expected": {
+        "allowed": false,
+        "next": {
+          "policyVersion": 1,
+          "creditMs": 1999,
+          "lastRefillMillis": 2001999,
+          "violationLevel": 1,
+          "lastViolationMillis": 2001999,
+          "blockedUntilMillis": 2006999
+        },
+        "details": {
+          "reason": "chat-rate-limited",
+          "retryAfterMs": 5000,
+          "blockedUntilMillis": 2006999,
+          "serverNowMillis": 2001999
+        }
+      }
+    },
+    {
+      "name": "exact refill boundary",
+      "now": 2002000,
+      "state": {
+        "policyVersion": 1,
+        "creditMs": 0,
+        "lastRefillMillis": 2000000,
+        "violationLevel": 0,
+        "lastViolationMillis": 0,
+        "blockedUntilMillis": 0
+      },
+      "expected": {
+        "allowed": true,
+        "next": {
+          "policyVersion": 1,
+          "creditMs": 0,
+          "lastRefillMillis": 2002000,
+          "violationLevel": 0,
+          "lastViolationMillis": 0,
+          "blockedUntilMillis": 0
+        }
+      }
+    },
+    {
+      "name": "active penalty makes no write",
+      "now": 2000001,
+      "state": {
+        "policyVersion": 1,
+        "creditMs": 0,
+        "lastRefillMillis": 2000000,
+        "violationLevel": 1,
+        "lastViolationMillis": 2000000,
+        "blockedUntilMillis": 2005000
+      },
+      "expected": {
+        "allowed": false,
+        "next": null,
+        "details": {
+          "reason": "chat-rate-limited",
+          "retryAfterMs": 4999,
+          "blockedUntilMillis": 2005000,
+          "serverNowMillis": 2000001
+        }
+      }
+    },
+    {
+      "name": "penalty expires exactly",
+      "now": 2005000,
+      "state": {
+        "policyVersion": 1,
+        "creditMs": 0,
+        "lastRefillMillis": 2000000,
+        "violationLevel": 1,
+        "lastViolationMillis": 2000000,
+        "blockedUntilMillis": 2005000
+      },
+      "expected": {
+        "allowed": true,
+        "next": {
+          "policyVersion": 1,
+          "creditMs": 3000,
+          "lastRefillMillis": 2005000,
+          "violationLevel": 1,
+          "lastViolationMillis": 2000000,
+          "blockedUntilMillis": 2005000
+        }
+      }
+    },
+    {
+      "name": "third violation",
+      "now": 2000000,
+      "state": {
+        "policyVersion": 1,
+        "creditMs": 0,
+        "lastRefillMillis": 2000000,
+        "violationLevel": 2,
+        "lastViolationMillis": 1970000,
+        "blockedUntilMillis": 2000000
+      },
+      "expected": {
+        "allowed": false,
+        "next": {
+          "policyVersion": 1,
+          "creditMs": 0,
+          "lastRefillMillis": 2000000,
+          "violationLevel": 3,
+          "lastViolationMillis": 2000000,
+          "blockedUntilMillis": 2120000
+        },
+        "details": {
+          "reason": "chat-rate-limited",
+          "retryAfterMs": 120000,
+          "blockedUntilMillis": 2120000,
+          "serverNowMillis": 2000000
+        }
+      }
+    },
+    {
+      "name": "logical reset without TTL deletion",
+      "now": 3800000,
+      "state": {
+        "policyVersion": 1,
+        "creditMs": 0,
+        "lastRefillMillis": 2000000,
+        "violationLevel": 4,
+        "lastViolationMillis": 2000000,
+        "blockedUntilMillis": 2600000
+      },
+      "expected": {
+        "allowed": true,
+        "next": {
+          "policyVersion": 1,
+          "creditMs": 10000,
+          "lastRefillMillis": 3800000,
+          "violationLevel": 0,
+          "lastViolationMillis": 0,
+          "blockedUntilMillis": 0
+        }
+      }
+    },
+    {
+      "name": "legacy cap with full tokens",
+      "now": 2000000,
+      "forceViolation": true,
+      "expected": {
+        "allowed": false,
+        "next": {
+          "policyVersion": 1,
+          "creditMs": 12000,
+          "lastRefillMillis": 2000000,
+          "violationLevel": 1,
+          "lastViolationMillis": 2000000,
+          "blockedUntilMillis": 2005000
+        },
+        "details": {
+          "reason": "chat-rate-limited",
+          "retryAfterMs": 5000,
+          "blockedUntilMillis": 2005000,
+          "serverNowMillis": 2000000
+        }
+      }
+    },
+    {
+      "name": "legacy cap during active pause",
+      "now": 2000001,
+      "forceViolation": true,
+      "expected": {
+        "allowed": false,
+        "next": null,
+        "details": {
+          "reason": "chat-rate-limited",
+          "retryAfterMs": 4999,
+          "blockedUntilMillis": 2005000,
+          "serverNowMillis": 2000001
+        }
+      },
+      "state": {
+        "policyVersion": 1,
+        "creditMs": 12000,
+        "lastRefillMillis": 2000000,
+        "violationLevel": 1,
+        "lastViolationMillis": 2000000,
+        "blockedUntilMillis": 2005000
+      }
+    },
+    {
+      "name": "legacy cap at pause expiry escalates",
+      "now": 2005000,
+      "forceViolation": true,
+      "expected": {
+        "allowed": false,
+        "next": {
+          "policyVersion": 1,
+          "creditMs": 12000,
+          "lastRefillMillis": 2005000,
+          "violationLevel": 2,
+          "lastViolationMillis": 2005000,
+          "blockedUntilMillis": 2035000
+        },
+        "details": {
+          "reason": "chat-rate-limited",
+          "retryAfterMs": 30000,
+          "blockedUntilMillis": 2035000,
+          "serverNowMillis": 2005000
+        }
+      },
+      "state": {
+        "policyVersion": 1,
+        "creditMs": 12000,
+        "lastRefillMillis": 2000000,
+        "violationLevel": 1,
+        "lastViolationMillis": 2000000,
+        "blockedUntilMillis": 2005000
+      }
+    }
+  ]
+}

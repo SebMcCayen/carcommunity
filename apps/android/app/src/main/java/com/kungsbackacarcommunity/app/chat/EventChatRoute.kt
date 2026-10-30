@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
@@ -46,8 +47,11 @@ fun EventChatRoute(
     // Optional title from the caller's existing event snapshot. This route only
     // observes messages; it never fetches an event to manufacture a heading.
     eventTitle: String? = null,
-) {
+) = key(currentUid, eventId) {
+    // EventsRoute can select another event while chat stays open. Cancel old
+    // sends and dispose every private composer state before showing that event.
     val scope = rememberCoroutineScope()
+    val cooldown = remember(currentUid) { ChatSendCooldowns.forUser(currentUid) }
     val canParticipate = EventChat.canParticipate(passesMemberGate, eventStatus, myRsvp)
 
     // The ChatCoordinator is shared across events; clear any prior send/report
@@ -99,13 +103,15 @@ fun EventChatRoute(
             .collectAsState(initial = BlockActionStatus.Idle)
 
     EventChatScreen(
+        cooldownSeconds = rememberChatCooldownSeconds(cooldown),
+        onSendConfirmed = { text, id -> coordinator?.post(eventId, text, cooldown, id) ?: false },
         eventTitle = eventTitle,
         state = messagesState,
         currentUid = currentUid,
         canParticipate = canParticipate,
         sendStatus = sendStatus,
         reportStatus = reportStatus,
-        onSend = { text -> coordinator?.let { c -> scope.launch { c.post(eventId, text) } } },
+        onSend = { text -> coordinator?.let { c -> scope.launch { c.post(eventId, text, cooldown) } } },
         onReport = { messageId, reason ->
             coordinator?.let { c -> scope.launch { c.submitReport(eventId, messageId, reason) } }
         },

@@ -1,9 +1,12 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
+import com.kungsbackacarcommunity.app.chat.ChatSendCooldowns
+import com.kungsbackacarcommunity.app.chat.rememberChatCooldownSeconds
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -71,7 +74,8 @@ fun CommunityChannelRoute(
     // entry point (the long-press "Svara" row + the composer quote chip); off, the
     // screen behaves exactly as before.
     chatRepliesEnabled: Boolean = false,
-) {
+) = key(uid) {
+    // The room is global, but its private composer and pending work are account-owned.
     val scope = rememberCoroutineScope()
     val blockingCoordinator =
         remember(blockingRepository) { blockingRepository?.let { BlockingCoordinator(it) } }
@@ -84,6 +88,7 @@ fun CommunityChannelRoute(
     val coordinator =
         remember(repository, uid, crashTelemetry) {
             ChannelChatCoordinator(
+                cooldown = ChatSendCooldowns.forUser(uid),
                 // The clientId makes the optimistic send idempotent + reconcilable
                 // (backend uses it as the message doc id); replyToMessageId is the
                 // inline-reply target (null for an ordinary message).
@@ -168,6 +173,9 @@ fun CommunityChannelRoute(
     }
 
     ChannelChatContent(
+        cooldownSeconds = rememberChatCooldownSeconds(coordinator.cooldown),
+        onSendConfirmed = { text, mentions, reply, id -> coordinator.send(text, mentions, reply, id) },
+        onRetryConfirmed = { message -> message.clientId?.let { coordinator.retry(it) } ?: false },
         messages = displayed,
         currentUid = uid,
         loading = messagesState is ChannelMessagesState.Loading,

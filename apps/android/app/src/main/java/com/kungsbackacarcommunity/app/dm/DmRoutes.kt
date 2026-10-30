@@ -1,5 +1,7 @@
 package com.kungsbackacarcommunity.app.dm
 
+import com.kungsbackacarcommunity.app.chat.ChatSendCooldowns
+import com.kungsbackacarcommunity.app.chat.rememberChatCooldownSeconds
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -15,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -183,7 +186,9 @@ fun ChatRoute(
     // The `chatReplies` flag, threaded down from the hub. Gates the inline-reply
     // entry point; off, the thread behaves exactly as before.
     chatRepliesEnabled: Boolean = false,
-) {
+) = key(uid, otherUid) {
+    // The shell can replace a peer without leaving Chat. Dispose the whole private
+    // composition (including pending send coroutines), not just its coordinator.
     val scope = rememberCoroutineScope()
     val conversationId = remember(uid, otherUid) { dmPairId(uid, otherUid) }
     val blockingCoordinator =
@@ -197,7 +202,8 @@ fun ChatRoute(
     val coordinator =
         remember(repository, uid, otherUid, conversationId, crashTelemetry) {
             DmThreadCoordinator(
-                repository,
+                cooldown = ChatSendCooldowns.forUser(uid),
+                repository = repository,
                 selfUid = uid,
                 otherUid = otherUid,
                 conversationId = conversationId,
@@ -250,6 +256,9 @@ fun ChatRoute(
     }
 
     ChatScreen(
+        cooldownSeconds = rememberChatCooldownSeconds(coordinator.cooldown),
+        onSendConfirmed = { text, reply, id -> coordinator.send(text, reply, id) },
+        onRetryConfirmed = { message -> message.clientId?.let { coordinator.retry(it) } ?: false },
         otherName = otherName,
         messages = displayed,
         currentUid = uid,

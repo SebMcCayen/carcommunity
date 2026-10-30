@@ -95,4 +95,25 @@ class ChatCoordinatorTest {
         coordinator.submitReport("e1", "m1", ChatReportReason.OTHER)
         assertEquals(ChatReportStatus.Failed, coordinator.reportStatus.value)
     }
+
+    @Test fun `event retry uses the same optional client id after a cooldown and keeps legacy fakes compatible`() = runTest {
+        var now = 100L
+        var refused = true
+        val ids = mutableListOf<String?>()
+        val cooldown = ChatSendCooldown { now }
+        val repo = object : EventChatRepository by FakeRepo() {
+            override suspend fun postMessage(eventId: String, message: String, clientId: String?) {
+                ids += clientId
+                if (refused) throw ChatRateLimitedException(ChatRateLimit(5_000))
+            }
+        }
+        val c = ChatCoordinator(repo, idGenerator = { "event-retry-key" })
+        assertEquals(false, c.post("event", "Keep 🚗", cooldown))
+        assertEquals(false, c.post("event", "😊", cooldown))
+        now += 5_000
+        assertEquals(1, ids.size)
+        refused = false
+        assertTrue(c.post("event", "Keep 🚗", cooldown))
+        assertEquals(listOf("event-retry-key", "event-retry-key"), ids)
+    }
 }

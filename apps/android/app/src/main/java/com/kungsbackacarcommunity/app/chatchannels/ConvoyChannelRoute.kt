@@ -1,9 +1,12 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
+import com.kungsbackacarcommunity.app.chat.ChatSendCooldowns
+import com.kungsbackacarcommunity.app.chat.rememberChatCooldownSeconds
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -55,7 +58,9 @@ fun ConvoyChannelRoute(
     // The `chatReplies` flag, threaded down from the hub. Gates the inline-reply
     // entry point; off, the screen behaves exactly as before.
     chatRepliesEnabled: Boolean = false,
-) {
+) = key(uid, convoyId) {
+    // A new landing link can replace this room in place. Private drafts, reply
+    // targets and send coroutines must belong to exactly one account and convoy.
     val scope = rememberCoroutineScope()
     val blockingCoordinator =
         remember(blockingRepository) { blockingRepository?.let { BlockingCoordinator(it) } }
@@ -68,6 +73,7 @@ fun ConvoyChannelRoute(
     val coordinator =
         remember(repository, convoyId, uid, crashTelemetry) {
             ChannelChatCoordinator(
+                cooldown = ChatSendCooldowns.forUser(uid),
                 // convoyChat-post takes no mentions; the uid list is always empty
                 // here and is dropped rather than forwarded. The clientId makes the
                 // optimistic send idempotent + reconcilable (backend uses it as the
@@ -124,6 +130,9 @@ fun ConvoyChannelRoute(
     }
 
     ChannelChatContent(
+        cooldownSeconds = rememberChatCooldownSeconds(coordinator.cooldown),
+        onSendConfirmed = { text, mentions, reply, id -> coordinator.send(text, mentions, reply, id) },
+        onRetryConfirmed = { message -> message.clientId?.let { coordinator.retry(it) } ?: false },
         messages = displayed,
         currentUid = uid,
         loading = messagesState is ChannelMessagesState.Loading,

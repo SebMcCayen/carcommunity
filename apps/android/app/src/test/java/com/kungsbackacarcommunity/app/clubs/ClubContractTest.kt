@@ -55,4 +55,18 @@ class ClubContractTest {
         assertNull(state.club)
         assertTrue(state.invitations.isEmpty())
     }
+
+    @Test fun `chat cooldown details survive Club mapping while auth and session denial win`() {
+        val fields = mapOf("reason" to "chat-rate-limited", "retryAfterMs" to 30_000L,
+            "blockedUntilMillis" to 100_000L, "serverNowMillis" to 70_000L)
+        val failure = clubCallableFailure("RESOURCE_EXHAUSTED", fields, true)
+        assertEquals("chat-rate-limited", failure.code)
+        assertEquals(30_000L, failure.cooldown?.retryAfterMs)
+        assertEquals(100_000L, failure.cooldown?.blockedUntilMillis)
+        for ((code, current) in listOf("UNAUTHENTICATED" to true, "PERMISSION_DENIED" to true, "RESOURCE_EXHAUSTED" to false)) {
+            val denied = clubCallableFailure(code, fields, current)
+            assertNull(denied.cooldown)
+            assertTrue(denied.code in setOf("unauthenticated", "permission-denied"))
+        }
+    }
 }

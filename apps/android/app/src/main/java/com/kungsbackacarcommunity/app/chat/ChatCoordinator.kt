@@ -32,6 +32,7 @@ sealed interface ChatReportStatus {
  */
 class ChatCoordinator(
     private val repository: EventChatRepository,
+    private val idGenerator: () -> String = { java.util.UUID.randomUUID().toString() },
 ) {
     private val send = MutableStateFlow<ChatSendStatus>(ChatSendStatus.Idle)
     val sendStatus: StateFlow<ChatSendStatus> = send.asStateFlow()
@@ -39,18 +40,30 @@ class ChatCoordinator(
     private val report = MutableStateFlow<ChatReportStatus>(ChatReportStatus.Idle)
     val reportStatus: StateFlow<ChatReportStatus> = report.asStateFlow()
 
-    suspend fun post(eventId: String, message: String) {
-        if (send.value == ChatSendStatus.Sending) return
-        if (!EventChat.isSendable(message)) return
+    private val localCooldown = ChatSendCooldown()
+    private var retryAttempt: Triple<String, String, String>? = null
+    private var retryOwner: ChatSendCooldown? = null
+
+    suspend fun post(eventId: String, message: String, cooldown: ChatSendCooldown = localCooldown, clientId: String? = null): Boolean {
+        if (send.value == ChatSendStatus.Sending || cooldown.isBlocked()) return false
+        if (!EventChat.isSendable(message)) return false
+        if (retryOwner !== cooldown) { retryAttempt = null; retryOwner = cooldown }
+        val text = message.trim()
+        val id = clientId ?: retryAttempt?.takeIf { it.first == eventId && it.second == text }?.third ?: idGenerator()
+        retryAttempt = Triple(eventId, text, id)
         send.value = ChatSendStatus.Sending
         try {
-            repository.postMessage(eventId, message)
+            repository.postMessage(eventId, message, id)
+            retryAttempt = null
             send.value = ChatSendStatus.Idle
+            return true
         } catch (cancellation: CancellationException) {
             send.value = ChatSendStatus.Idle
             throw cancellation
         } catch (failure: Exception) {
+            (failure as? ChatRateLimitedException)?.rateLimit?.let(cooldown::apply)
             send.value = ChatSendStatus.Failed
+            return false
         }
     }
 

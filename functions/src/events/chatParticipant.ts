@@ -7,6 +7,7 @@
  * source of truth — client-supplied claims are only a fast-reject.
  */
 
+import type { Transaction } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import type { CallableRequest } from 'firebase-functions/v2/https';
 import { db } from '../firebase';
@@ -28,6 +29,7 @@ export interface ChatParticipant {
 export async function requireChatParticipant(
   request: CallableRequest,
   eventId: string,
+  tx?: Transaction,
 ): Promise<ChatParticipant> {
   const auth = request.auth;
   if (!auth) {
@@ -35,10 +37,15 @@ export async function requireChatParticipant(
   }
   const uid = auth.uid;
 
+  const refs = [
+    db.collection('users').doc(uid),
+    db.collection('events').doc(eventId),
+    db.collection('events').doc(eventId).collection('rsvps').doc(uid),
+  ] as const;
   const [userSnap, eventSnap, rsvpSnap] = await Promise.all([
-    db.collection('users').doc(uid).get(),
-    db.collection('events').doc(eventId).get(),
-    db.collection('events').doc(eventId).collection('rsvps').doc(uid).get(),
+    tx ? tx.get(refs[0]) : refs[0].get(),
+    tx ? tx.get(refs[1]) : refs[1].get(),
+    tx ? tx.get(refs[2]) : refs[2].get(),
   ]);
 
   if (!eventSnap.exists) {
@@ -56,7 +63,9 @@ export async function requireChatParticipant(
   }
 
   const displayName =
-    typeof userSnap.data()?.displayName === 'string' ? (userSnap.data()!.displayName as string) : '';
+    typeof userSnap.data()?.displayName === 'string'
+      ? (userSnap.data()!.displayName as string)
+      : '';
 
   return { uid, state, displayName };
 }

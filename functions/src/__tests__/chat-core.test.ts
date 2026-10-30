@@ -43,6 +43,15 @@ describe('chat-core input parsing', () => {
     expect(parsePostChatMessageInput({ eventId: 'e1', message: 'hi', extra: 1 }).ok).toBe(false);
   });
 
+  it('accepts optional event retry keys without changing legacy or emoji input', () => {
+    const data = { eventId: 'e1', message: '🚗👨‍👩‍👧‍👦🇸🇪' };
+    expect(parsePostChatMessageInput(data).ok).toBe(true);
+    expect(parsePostChatMessageInput({ ...data, clientId: 'retry_id-1' }).ok).toBe(true);
+    expect(parsePostChatMessageInput({ ...data, clientId: 'a'.repeat(64) }).ok).toBe(true);
+    for (const clientId of ['', 'a'.repeat(65), '/', '.', 1, null])
+      expect(parsePostChatMessageInput({ ...data, clientId }).ok).toBe(false);
+  });
+
   it('validates report reason enum and details length', () => {
     expect(
       parseReportChatMessageInput({ eventId: 'e1', messageId: 'm1', reason: 'spam' }).ok,

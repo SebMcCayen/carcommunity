@@ -58,9 +58,11 @@
 
 import { HttpsError } from 'firebase-functions/v2/https';
 import { onCall } from '../access/callable';
-import { FieldValue, Timestamp, type DocumentReference } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
+import { requireChatSender } from '../shared/chat-actor';
+import { stageChatSendGuard, throwChatRateLimited } from '../shared/chat-send-guard';
 import { requireAcceptedConvoyMember } from './convoyMembership';
 import { toUserAccessState } from '../shared/access';
 import { writeInAppNotification } from '../notifications/deliver';
@@ -77,7 +79,6 @@ import {
   buildReplyToSnapshot,
   chatMessageExpiry,
   convoyChatNotificationId,
-  isAlreadyExistsError,
   messagePreview,
   parseListConvoyInput,
   parseMarkReadConvoyInput,
@@ -200,34 +201,6 @@ export interface PostConvoyResponse {
   messageId: string;
 }
 
-/**
- * The idempotent result of a keyed send that ALREADY committed, or null when
- * nothing is stored at that id (so the `create()` that just failed has nothing
- * to replay and the caller must surface that).
- *
- * Read ONLY after a `create()` lost the race, never speculatively: the write is
- * the guard, so a normal first-attempt send needs no read at all, and a retry —
- * whether it arrives after the original committed or alongside it — resolves
- * through this one path.
- *
- * A doc at this id from a DIFFERENT sender is an (astronomically unlikely) key
- * collision or a buggy client reusing a key: it must NOT be swallowed as this
- * caller's success, so surface already-exists and let it regenerate the key.
- */
-async function replayCommittedSend(
-  messageRef: DocumentReference,
-  actorUid: string,
-): Promise<PostConvoyResponse | null> {
-  const existing = await messageRef.get();
-  if (!existing.exists) {
-    return null;
-  }
-  if (existing.data()?.senderUid !== actorUid) {
-    throw new HttpsError('already-exists', 'Message id already used.');
-  }
-  return { messageId: messageRef.id };
-}
-
 export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyResponse> => {
   const actor = await requireActiveActor(request);
 
@@ -240,7 +213,7 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
     throw new HttpsError('invalid-argument', EMPTY_MESSAGE_MESSAGE);
   }
 
-  const convoy = await requireAcceptedConvoyMember(convoyId, actor.uid);
+  await requireAcceptedConvoyMember(convoyId, actor.uid);
 
   const senderProfile = await loadProfile(actor.uid);
   if (!senderProfile) {
@@ -281,16 +254,19 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
     chatMessageExpiry(postedAt.toDate(), CONVOY_CHAT_RETENTION_DAYS),
   );
 
-  // `create()`, NOT `set()`: the write IS the idempotency guard, and it is the
-  // only one. A pre-read ("does this id exist yet?") cannot be the guard — two
-  // concurrent retries of the same optimistic send both observe "missing" before
-  // either writes, so with `set()` both would commit and BOTH would run the
-  // notification fan-out below. With `create()` Firestore arbitrates: exactly one
-  // wins, and the loser replays the winner's result with no side effects of its
-  // own. Since the guard needs no read, the send costs a single write on the
-  // normal path and only pays for a read when it actually loses a race.
-  try {
-    await messageRef.create(
+  const outcome = await db.runTransaction(async (tx) => {
+    await requireChatSender(tx, actor.uid);
+    const convoy = await requireAcceptedConvoyMember(convoyId, actor.uid, tx);
+    const existing = await tx.get(messageRef);
+    if (existing.exists) {
+      if (existing.get('senderUid') !== actor.uid)
+        throw new HttpsError('already-exists', 'Message id already used.');
+      return { kind: 'replay' as const };
+    }
+    const guard = await stageChatSendGuard(db, tx, actor.uid, Date.now);
+    if (!guard.allowed) return { kind: 'denied' as const, guard };
+    tx.create(
+      messageRef,
       buildChatMessageDocument(
         {
           senderUid: actor.uid,
@@ -298,30 +274,18 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
           senderProfile,
           expireAt,
           clientId,
-          // Persisted only when non-null (an actual reply with a resolvable
-          // parent); buildChatMessageDocument omits the field otherwise.
           ...(replyTo ? { replyTo } : {}),
         },
-        // The fixed logical time captured above, NOT a server sentinel: the
-        // aggregate stamp below reuses this exact value so it equals the message's
-        // createdAt (see the postedAt comment for the race this closes).
         () => postedAt,
       ),
     );
-  } catch (error) {
-    if (clientId === undefined || !isAlreadyExistsError(error)) {
-      throw error;
-    }
-    // Lost the race to a concurrent invocation of this same send. Whatever it
-    // committed is the authoritative result; fall through to no notifications.
-    const replay = await replayCommittedSend(messageRef, actor.uid);
-    if (replay) {
-      return replay;
-    }
-    // ALREADY_EXISTS but nothing readable there now (a TTL sweep between the two
-    // reads is the only plausible cause). Surface rather than invent a result.
-    throw new HttpsError('aborted', 'Message could not be committed, please retry.');
+    return { kind: 'created' as const, convoy };
+  });
+  if (outcome.kind === 'denied') {
+    throwChatRateLimited(outcome.guard);
   }
+  if (outcome.kind === 'replay') return { messageId: messageRef.id };
+  const convoy = outcome.convoy;
 
   // Best-effort in-app fan-out to the OTHER accepted members (never fails the
   // post). The member list comes off the convoy doc the membership gate already

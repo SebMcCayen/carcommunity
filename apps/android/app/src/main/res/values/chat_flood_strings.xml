@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="chat_flood_paused">Meddelanden är tillfälligt pausade</string>
+    <plurals name="chat_flood_wait">
+        <item quantity="one">Du kan skicka igen om %1$d sekund. Ditt utkast finns kvar.</item>
+        <item quantity="other">Du kan skicka igen om %1$d sekunder. Ditt utkast finns kvar.</item>
+    </plurals>
+    <string name="chat_flood_ready">Du kan skicka igen.</string>
+    <string name="chat_flood_show_more">Visa mer</string>
+    <string name="chat_flood_show_less">Visa mindre</string>
+    <string name="chat_flood_collapsed">Förkortat meddelande</string>
+    <string name="chat_flood_expanded">Hela meddelandet visas</string>
+</resources>

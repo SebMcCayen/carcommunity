@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
+import com.kungsbackacarcommunity.app.chat.ChatSendCooldown
 import com.kungsbackacarcommunity.app.chat.ChatReportReason
 import com.kungsbackacarcommunity.app.diagnostics.CrashFeatures
 import com.kungsbackacarcommunity.app.diagnostics.CrashTelemetry
@@ -90,6 +91,7 @@ class ChannelChatCoordinator(
      * no-op so unit tests need no Firebase.
      */
     private val crashTelemetry: CrashTelemetry = NoopCrashTelemetry,
+    val cooldown: ChatSendCooldown = ChatSendCooldown(),
 ) {
     private val pending = MutableStateFlow<List<ChannelMessage>>(emptyList())
 
@@ -200,14 +202,26 @@ class ChannelChatCoordinator(
         text: String,
         mentionedUids: List<String> = emptyList(),
         replyTo: ChannelReplyTo? = null,
-    ) {
-        if (!ChannelThread.isSendable(text)) return
+        clientId: String? = null,
+    ): Boolean {
+        if (!ChannelThread.isSendable(text) || cooldown.isBlocked()) return false
         val trimmed = text.trim()
-        val clientId = idGenerator()
         val picked = mentionedUids.distinct()
+        val sendId = clientId ?: pending.value.lastOrNull {
+            it.deliveryState == ChannelDeliveryState.Failed && it.sendError?.isRetryable == true &&
+                it.text == trimmed && it.mentionedUids == picked && it.replyTo?.messageId == replyTo?.messageId
+        }?.clientId ?: idGenerator()
+        // A retained draft reuses its ID even after a terminal refusal. Never
+        // append that ID twice, and never use it for a different payload.
+        pending.value.firstOrNull { it.clientId == sendId }?.let { existing ->
+            if (existing.text != trimmed || existing.mentionedUids != picked ||
+                existing.replyTo?.messageId != replyTo?.messageId
+            ) return false
+            return retry(sendId)
+        }
         val optimistic =
             ChannelMessage(
-                id = clientId,
+                id = sendId,
                 senderUid = selfUid,
                 text = trimmed,
                 // Own bubbles render no sender header (isOwn), so no self profile
@@ -219,25 +233,27 @@ class ChannelChatCoordinator(
                 // Optimistically highlight the picked mentions; the accepted set
                 // reconciles them on the delivered doc via the listener.
                 mentionedUids = picked,
-                clientId = clientId,
+                clientId = sendId,
                 deliveryState = ChannelDeliveryState.Sending,
                 replyTo = replyTo,
             )
         pending.update { it + optimistic }
-        dispatch(clientId, trimmed, picked, replyTo?.messageId)
+        return dispatch(sendId, trimmed, picked, replyTo?.messageId)
     }
 
     /**
      * Re-attempts a previously [ChannelDeliveryState.Failed] bubble, resending the
      * SAME clientId so the backend stays exactly-once (no double post). A no-op if
-     * the bubble isn't found or isn't in a failed state, so a double-tap can't fire
-     * two resends.
+     * the bubble isn't found or isn't a retryable failure, so a terminal refusal
+     * or a double-tap can't fire another write.
      */
-    suspend fun retry(clientId: String) {
+    suspend fun retry(clientId: String): Boolean {
+        if (cooldown.isBlocked()) return false
         val target =
             pending.value.firstOrNull {
-                it.clientId == clientId && it.deliveryState == ChannelDeliveryState.Failed
-            } ?: return
+                it.clientId == clientId && it.deliveryState == ChannelDeliveryState.Failed &&
+                    it.sendError?.isRetryable == true
+            } ?: return false
         pending.update { list ->
             list.map {
                 if (it.clientId == clientId) {
@@ -249,7 +265,7 @@ class ChannelChatCoordinator(
         }
         // Resend carries the SAME reply target the failed bubble held, so a retried
         // reply stays a reply.
-        dispatch(clientId, target.text, target.mentionedUids, target.replyTo?.messageId)
+        return dispatch(clientId, target.text, target.mentionedUids, target.replyTo?.messageId)
     }
 
     private suspend fun dispatch(
@@ -257,7 +273,7 @@ class ChannelChatCoordinator(
         text: String,
         mentionedUids: List<String>,
         replyToMessageId: String?,
-    ) {
+    ): Boolean {
         try {
             when (val result = sender(text, mentionedUids, clientId, replyToMessageId)) {
                 is ChannelSendResult.Sent -> {
@@ -277,10 +293,18 @@ class ChannelChatCoordinator(
                     // whichever ack happens to land last decide the note — including
                     // a mention-free send zeroing a drop the user hasn't seen.
                     if (droppedHere > 0) dropped.update { it + droppedHere }
+                    return true
                 }
                 // Keep the SPECIFIC error so the UI can explain why and offer a
                 // retry only when it could actually help ([ChannelSendError.isRetryable]).
-                is ChannelSendResult.Failed -> markFailed(clientId, result.error)
+                is ChannelSendResult.Failed -> {
+                    // A delivered snapshot can beat a lost callable acknowledgement.
+                    // Treat that exact ID as acknowledged so the retained draft cannot be sent twice.
+                    if (result.error == ChannelSendError.Generic && pending.value.none { it.clientId == clientId }) return true
+                    result.cooldown?.let(cooldown::apply)
+                    markFailed(clientId, result.error)
+                    return false
+                }
             }
         } catch (cancellation: CancellationException) {
             // Leaving the channel cancels the send; the bubble is dropped with the
@@ -294,7 +318,9 @@ class ChannelChatCoordinator(
             // the stable feature path leaves the device, never the message body,
             // channel id, or any uid.
             crashTelemetry.recordNonFatal(CrashFeatures.CHANNEL_SEND, failure)
+            if (pending.value.none { it.clientId == clientId }) return true
             markFailed(clientId, ChannelSendError.Generic)
+            return false
         }
     }
 

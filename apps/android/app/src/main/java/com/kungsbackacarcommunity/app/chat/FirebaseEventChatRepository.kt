@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.chat
 
+import com.kungsbackacarcommunity.app.firebase.chatRateLimit
 import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.DocumentSnapshot
@@ -74,7 +75,16 @@ class FirebaseEventChatRepository private constructor(
     }
 
     override suspend fun postMessage(eventId: String, message: String) {
-        call(POST_MESSAGE, mapOf("eventId" to eventId, "message" to message.trim()))
+        postMessage(eventId, message, null)
+    }
+
+    override suspend fun postMessage(eventId: String, message: String, clientId: String?) {
+        try { call(POST_MESSAGE, eventChatPostPayload(eventId, message, clientId)) }
+        catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (failure: Exception) {
+            failure.chatRateLimit()?.let { throw ChatRateLimitedException(it) }
+            throw failure
+        }
     }
 
     override suspend fun reportMessage(
