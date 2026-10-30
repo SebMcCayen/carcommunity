@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.dm
 
+import com.kungsbackacarcommunity.app.chat.ChatDraftSendAttempt
 import com.kungsbackacarcommunity.app.diagnostics.CrashFeatures
 import com.kungsbackacarcommunity.app.diagnostics.CrashTelemetry
 import com.kungsbackacarcommunity.app.diagnostics.NoopCrashTelemetry
@@ -208,6 +209,84 @@ class DmThreadCoordinatorTest {
         c.retry("cid-1") // not in Failed state
         c.retry("does-not-exist")
         assertEquals(1, repo.sendCalls) // only the original send
+    }
+
+    @Test
+    fun `unchanged retained draft after terminal refusal keeps one display key and never retries`() = runTest {
+        for (error in DmSendError.entries.filterNot { it.isRetryable }) {
+            val repo = FakeRepo().apply { sendResult = DmSendResult.Failed(error) }
+            val c = coordinator(repo)
+            val draft = ChatDraftSendAttempt()
+            val id = draft.idFor("Keep this draft 🚗")
+            assertEquals(false, c.send("Keep this draft 🚗", clientId = id))
+            val failed = c.pendingMessages.value.single()
+
+            // Even if a later write would succeed, this terminal attempt must
+            // stay terminal until the user creates a different draft attempt.
+            repo.sendResult = DmSendResult.Sent("me__friend", id)
+            repeat(3) {
+                assertEquals(id, draft.idFor("  Keep this draft 🚗  "))
+                assertEquals(false, c.send("  Keep this draft 🚗  ", clientId = id))
+            }
+            assertEquals(false, c.retry(id))
+            assertEquals(listOf(id), repo.sentClientIds)
+            assertEquals(listOf(failed), c.pendingMessages.value)
+            assertEquals(error, failed.sendError)
+            assertEquals(0, c.sentCount.value)
+            val displayed = DmThread.mergeWithPending(emptyList(), emptyList(), c.pendingMessages.value)
+            assertEquals(listOf("msg-$id"), displayed.map { "msg-${it.id}" })
+        }
+    }
+
+    @Test
+    fun `manual resend of a retryable retained id updates the existing bubble`() = runTest {
+        val repo = FakeRepo().apply { sendResult = DmSendResult.Failed(DmSendError.Generic) }
+        val c = coordinator(repo)
+        assertEquals(false, c.send("Retry this draft", clientId = "retained-id"))
+        repo.sendResult = DmSendResult.Sent("me__friend", "retained-id")
+
+        assertTrue(c.send("  Retry this draft  ", clientId = "retained-id"))
+        assertEquals(listOf("retained-id", "retained-id"), repo.sentClientIds)
+        assertEquals("retained-id", c.pendingMessages.value.single().id)
+        assertEquals(DmDeliveryState.Sent, c.pendingMessages.value.single().deliveryState)
+        assertEquals(1, c.sentCount.value)
+    }
+
+    @Test
+    fun `same id while sending or awaiting the listener cannot append or dispatch again`() = runTest {
+        val repo = FakeRepo().apply { gate = CompletableDeferred() }
+        val c = coordinator(repo)
+        val job = launch { c.send("One draft", clientId = "retained-id") }
+        runCurrent()
+        assertEquals(false, c.send("One draft", clientId = "retained-id"))
+        assertEquals(1, c.pendingMessages.value.size)
+        assertEquals(DmDeliveryState.Sending, c.pendingMessages.value.single().deliveryState)
+
+        repo.gate!!.complete(Unit)
+        job.join()
+        assertEquals(false, c.send("One draft", clientId = "retained-id"))
+        assertEquals(listOf("retained-id"), repo.sentClientIds)
+        assertEquals(1, c.pendingMessages.value.size)
+        assertEquals(DmDeliveryState.Sent, c.pendingMessages.value.single().deliveryState)
+        assertEquals(1, c.sentCount.value)
+    }
+
+    @Test
+    fun `existing id cannot silently retry another payload or override a new draft id`() = runTest {
+        val repo = FakeRepo().apply { sendResult = DmSendResult.Failed(DmSendError.Generic) }
+        val c = coordinator(repo)
+        assertEquals(false, c.send("Original", clientId = "old-id"))
+        val failed = c.pendingMessages.value.single()
+        assertEquals(false, c.send("Edited", clientId = "old-id"))
+        assertEquals(false, c.send("Original", replyTo = DmReplyTo("parent", "friend", null, "Quote"), clientId = "old-id"))
+        assertEquals(listOf("old-id"), repo.sentClientIds)
+        assertEquals(listOf(failed), c.pendingMessages.value)
+
+        repo.sendResult = DmSendResult.Sent("me__friend", "new-id")
+        assertTrue(c.send("Original", clientId = "new-id"))
+        assertEquals(listOf("old-id", "new-id"), repo.sentClientIds)
+        assertEquals(listOf("old-id", "new-id"), c.pendingMessages.value.map { it.id })
+        assertEquals(failed, c.pendingMessages.value.first())
     }
 
     @Test

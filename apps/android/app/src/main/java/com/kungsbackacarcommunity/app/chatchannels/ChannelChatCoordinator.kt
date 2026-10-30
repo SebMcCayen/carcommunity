@@ -207,11 +207,18 @@ class ChannelChatCoordinator(
         if (!ChannelThread.isSendable(text) || cooldown.isBlocked()) return false
         val trimmed = text.trim()
         val picked = mentionedUids.distinct()
-        pending.value.lastOrNull {
+        val sendId = clientId ?: pending.value.lastOrNull {
             it.deliveryState == ChannelDeliveryState.Failed && it.sendError?.isRetryable == true &&
                 it.text == trimmed && it.mentionedUids == picked && it.replyTo?.messageId == replyTo?.messageId
-        }?.clientId?.let { return retry(it) }
-        val sendId = clientId ?: idGenerator()
+        }?.clientId ?: idGenerator()
+        // A retained draft reuses its ID even after a terminal refusal. Never
+        // append that ID twice, and never use it for a different payload.
+        pending.value.firstOrNull { it.clientId == sendId }?.let { existing ->
+            if (existing.text != trimmed || existing.mentionedUids != picked ||
+                existing.replyTo?.messageId != replyTo?.messageId
+            ) return false
+            return retry(sendId)
+        }
         val optimistic =
             ChannelMessage(
                 id = sendId,
@@ -237,14 +244,15 @@ class ChannelChatCoordinator(
     /**
      * Re-attempts a previously [ChannelDeliveryState.Failed] bubble, resending the
      * SAME clientId so the backend stays exactly-once (no double post). A no-op if
-     * the bubble isn't found or isn't in a failed state, so a double-tap can't fire
-     * two resends.
+     * the bubble isn't found or isn't a retryable failure, so a terminal refusal
+     * or a double-tap can't fire another write.
      */
     suspend fun retry(clientId: String): Boolean {
         if (cooldown.isBlocked()) return false
         val target =
             pending.value.firstOrNull {
-                it.clientId == clientId && it.deliveryState == ChannelDeliveryState.Failed
+                it.clientId == clientId && it.deliveryState == ChannelDeliveryState.Failed &&
+                    it.sendError?.isRetryable == true
             } ?: return false
         pending.update { list ->
             list.map {

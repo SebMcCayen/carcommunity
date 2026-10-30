@@ -102,11 +102,16 @@ class DmThreadCoordinator(
     suspend fun send(text: String, replyTo: DmReplyTo? = null, clientId: String? = null): Boolean {
         if (!DmThread.isSendable(text) || cooldown.isBlocked()) return false
         val trimmed = text.trim()
-        pending.value.lastOrNull {
+        val sendId = clientId ?: pending.value.lastOrNull {
             it.deliveryState == DmDeliveryState.Failed && it.sendError?.isRetryable == true &&
                 it.text == trimmed && it.replyTo?.messageId == replyTo?.messageId
-        }?.clientId?.let { return retry(it) }
-        val sendId = clientId ?: idGenerator()
+        }?.clientId ?: idGenerator()
+        // A retained draft reuses its ID even after a terminal refusal. Never
+        // append that ID twice, and never use it for a different payload.
+        pending.value.firstOrNull { it.clientId == sendId }?.let { existing ->
+            if (existing.text != trimmed || existing.replyTo?.messageId != replyTo?.messageId) return false
+            return retry(sendId)
+        }
         val optimistic =
             DmMessage(
                 id = sendId,
@@ -125,14 +130,15 @@ class DmThreadCoordinator(
     /**
      * Re-attempts a previously [DmDeliveryState.Failed] bubble, resending the
      * SAME clientId so the backend stays exactly-once (no double post). A no-op
-     * if the bubble isn't found or isn't in a failed state (e.g. already
-     * re-sending), so a double-tap can't fire two resends.
+     * if the bubble isn't found or isn't a retryable failure (e.g. a terminal
+     * refusal or already re-sending), so a double-tap can't fire two resends.
      */
     suspend fun retry(clientId: String): Boolean {
         if (cooldown.isBlocked()) return false
         val target =
             pending.value.firstOrNull {
-                it.clientId == clientId && it.deliveryState == DmDeliveryState.Failed
+                it.clientId == clientId && it.deliveryState == DmDeliveryState.Failed &&
+                    it.sendError?.isRetryable == true
             } ?: return false
         // Back to Sending and clear the prior error while the resend is in flight.
         pending.update { list ->
