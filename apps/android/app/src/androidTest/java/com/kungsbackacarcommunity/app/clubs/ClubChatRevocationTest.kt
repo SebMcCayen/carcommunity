@@ -1,7 +1,9 @@
 package com.kungsbackacarcommunity.app.clubs
 
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.Lifecycle
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
@@ -20,24 +22,57 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Rule
 import org.junit.Test
+import org.junit.Before
 import org.junit.Assert.*
 
 /** Security UX: membership loss must dispose history AND unsent drafts, not just disable send. */
 class ClubChatRevocationTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+    @Before fun matchProductionImeWindow() {
+        compose.activityRule.scenario.onActivity { it.enableEdgeToEdge() }
+    }
     private fun str(id: Int) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
+    private fun assertDraft(text: String) {
+        assertEquals(text, compose.onNodeWithTag("club-chat-input")
+            .fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
+    }
     private val member = ClubMembership("first", ClubRole.Member, "2026-10-27T10:00:00Z")
     @Test fun revokedMembershipClearsHistoryAndDraftBeforeAnotherClubOpens() {
         val repo = FakeClubRepository(ClubChatState.Ready(member, listOf(ClubMessage("one", "friend", "Friend", "Private club message", 1L))))
+        val gate = CompletableDeferred<Unit>()
+        repo.sendGate = gate
         compose.setContent { KccTheme { ClubChatRoute("me", repo) } }
         compose.onNodeWithText("Private club message").assertIsDisplayed()
+        compose.onNodeWithTag("club-chat-input").performTextInput("Private outgoing message")
+        compose.onNodeWithText(str(R.string.clubs_send)).performClick()
+        compose.waitUntil { compose.runOnIdle { repo.sendRequests.size == 1 } }
+        assertDraft("")
+        compose.onNodeWithText("Private outgoing message").assertIsDisplayed()
+        compose.onNodeWithText(str(R.string.channel_statusSending)).assertIsDisplayed()
         compose.onNodeWithTag("club-chat-input").performTextInput("Unsent private draft")
-        compose.runOnIdle { repo.messages.value = ClubChatState.Unavailable }
+        assertDraft("Unsent private draft")
+        compose.runOnIdle {
+            assertFalse(gate.isCompleted)
+            assertNull(repo.sent)
+            repo.messages.value = ClubChatState.Unavailable
+        }
         compose.onNodeWithText("Private club message").assertDoesNotExist()
+        compose.onNodeWithText("Private outgoing message").assertDoesNotExist()
         compose.onNodeWithText("Unsent private draft").assertDoesNotExist()
-        compose.runOnIdle { repo.messages.value = ClubChatState.Ready(member.copy(clubId = "second"), emptyList()) }
+        compose.onNodeWithTag("club-chat-input").assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.channel_statusSending)).assertDoesNotExist()
+        compose.runOnIdle {
+            repo.messages.value = ClubChatState.Ready(member.copy(clubId = "second"), emptyList())
+        }
+        assertDraft("")
+        // A late response from the disposed room must not repopulate the new club.
+        compose.runOnIdle { gate.complete(Unit) }
         compose.onNodeWithText("Unsent private draft").assertDoesNotExist()
+        compose.onNodeWithText("Private outgoing message").assertDoesNotExist()
         compose.onNodeWithText("Private club message").assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).assertDoesNotExist()
+        assertDraft("")
+        compose.runOnIdle { assertEquals(1, repo.sendRequests.size) }
     }
     @Test fun olderPagesTrackRemoteRemovalAndAdvancePastRedactedRows() {
         val start = ClubMessageCursor("recent", 100, 123)
@@ -256,25 +291,69 @@ class ClubChatRevocationTest {
         compose.onNodeWithText("Blocked text").assertDoesNotExist()
     }
 
-    @Test fun failedSendKeepsDraftAndIdUntilSuccessfulAcknowledgement() {
+    @Test fun failedSendClearsComposerRetainsBubbleAndRetriesSameIdWithoutConsumingNextDraft() {
         val repo = FakeClubRepository(ClubChatState.Ready(member, emptyList()))
         repo.sendFailuresRemaining = 1
+        val firstGate = CompletableDeferred<Unit>()
+        val retryGate = CompletableDeferred<Unit>()
+        repo.sendGate = firstGate
         compose.setContent { KccTheme { ClubChatRoute("me", repo) } }
         compose.onNodeWithTag("club-chat-input").performTextInput("Keep this draft 🚗")
         compose.onNodeWithText(str(R.string.clubs_send)).performClick()
-        compose.waitUntil { repo.sendRequests.size == 1 }
+        compose.waitUntil { compose.runOnIdle { repo.sendRequests.size == 1 } }
+        assertDraft("")
         compose.onNodeWithText("Keep this draft 🚗").assertIsDisplayed()
-        compose.onNodeWithText(str(R.string.clubs_send)).performClick()
-        compose.waitUntil { repo.sendRequests.size == 2 }
+        compose.onNodeWithText(str(R.string.channel_statusSending)).assertIsDisplayed()
+        compose.runOnIdle {
+            assertFalse(firstGate.isCompleted)
+            assertNull(repo.sent)
+            firstGate.complete(Unit)
+        }
+        // An ambiguous failure retains the outgoing bubble, not a restored input.
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).assertIsDisplayed()
+        compose.onNodeWithText(str(R.string.channel_statusSending)).assertDoesNotExist()
+        assertDraft("")
+        compose.onAllNodesWithText("Keep this draft 🚗").assertCountEquals(1)
+        compose.onNodeWithText(str(R.string.clubs_send)).assertIsNotEnabled()
+        compose.onNodeWithTag("club-chat-input").performTextInput("Another message")
+        compose.runOnIdle { repo.sendGate = retryGate }
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).performClick()
+        compose.waitUntil { compose.runOnIdle { repo.sendRequests.size == 2 } }
+        assertDraft("Another message")
+        compose.onAllNodesWithText("Keep this draft 🚗").assertCountEquals(1)
+        compose.onNodeWithText(str(R.string.channel_statusSending)).assertIsDisplayed()
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.clubs_send)).assertIsNotEnabled()
+        compose.onNodeWithTag("club-chat-input").performTextReplacement("Edited next draft 🚙")
         compose.runOnIdle {
             assertEquals(repo.sendRequests[0], repo.sendRequests[1])
-            assertEquals("Keep this draft 🚗", repo.sent)
+            assertEquals("Keep this draft 🚗", repo.sendRequests[0].first)
+            assertTrue(repo.sendRequests[0].second.length >= 16)
+            assertFalse(retryGate.isCompleted)
+            assertNull(repo.sent)
+            retryGate.complete(Unit)
         }
-        compose.onNodeWithText("Keep this draft 🚗").assertDoesNotExist()
-        compose.onNodeWithTag("club-chat-input").performTextInput("Another message")
+        assertDraft("Edited next draft 🚙")
+        compose.onNodeWithText(str(R.string.channel_statusSending)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).assertDoesNotExist()
+        compose.onAllNodesWithText("Keep this draft 🚗").assertCountEquals(1)
+        compose.runOnIdle {
+            assertEquals("Keep this draft 🚗", repo.sent)
+            repo.messages.value = ClubChatState.Ready(member, listOf(ClubMessage(
+                clubPendingMessageId("me", repo.sendRequests[0].second), "me", "Me", "Keep this draft 🚗", 1L,
+            )))
+            repo.sendGate = null
+        }
+        compose.onAllNodesWithText("Keep this draft 🚗").assertCountEquals(1)
+        assertDraft("Edited next draft 🚙")
         compose.onNodeWithText(str(R.string.clubs_send)).performClick()
-        compose.waitUntil { repo.sendRequests.size == 3 }
-        compose.runOnIdle { assertNotEquals(repo.sendRequests[1].second, repo.sendRequests[2].second) }
+        compose.waitUntil { compose.runOnIdle { repo.sendRequests.size == 3 } }
+        assertDraft("")
+        compose.onNodeWithText("Edited next draft 🚙").assertIsDisplayed()
+        compose.runOnIdle {
+            assertNotEquals(repo.sendRequests[1].second, repo.sendRequests[2].second)
+            assertEquals("Edited next draft 🚙", repo.sent)
+        }
     }
 
     @Test fun quickEmojiRetriesSameOperationAndNeverConsumesTypedDraft() {
@@ -490,19 +569,48 @@ class ClubChatRevocationTest {
         compose.onNodeWithText(str(R.string.clubs_reported)).assertIsDisplayed()
     }
     @Test fun chatCooldownRetainsDraftDisablesSendAndStillYieldsToRevocation() {
-        val repo = FakeClubRepository(ClubChatState.Ready(member, emptyList()))
+        val repo = FakeClubRepository(ClubChatState.Ready(member,
+            listOf(ClubMessage("one", "friend", "Friend", "Private cooldown history", 1L))))
+        val cooldown = com.kungsbackacarcommunity.app.chat.ChatSendCooldown { 0L }
+        val gate = CompletableDeferred<Unit>()
+        repo.sendGate = gate
         repo.sendFailure = ClubException("chat-rate-limited", com.kungsbackacarcommunity.app.chat.ChatRateLimit(30_000))
-        compose.setContent { KccTheme { ClubChatRoute("cooldown-local-" + member.clubId, repo) } }
+        compose.setContent { KccTheme { ClubChatRoute("cooldown-local-" + member.clubId, repo, sendCooldown = cooldown) } }
+        compose.onNodeWithText("Private cooldown history").assertIsDisplayed()
         compose.onNodeWithTag("club-chat-input").performTextInput("Private cooldown draft 🚗")
         compose.onNodeWithText(str(R.string.clubs_send)).performClick()
-        compose.onNodeWithText("Private cooldown draft 🚗").assertExists()
+        compose.waitUntil { compose.runOnIdle { repo.sendRequests.size == 1 } }
+        assertDraft("")
+        compose.onNodeWithText("Private cooldown draft 🚗").assertIsDisplayed()
+        compose.onNodeWithText(str(R.string.channel_statusSending)).assertIsDisplayed()
+        compose.runOnIdle {
+            assertFalse(gate.isCompleted)
+            assertNull(repo.sent)
+            gate.complete(Unit)
+        }
+        assertDraft("Private cooldown draft 🚗")
+        compose.onAllNodes(hasText("Private cooldown draft 🚗") and !hasSetTextAction()).assertCountEquals(1)
         compose.onNodeWithTag("chat-flood-countdown").assertExists()
         compose.onNodeWithText(str(R.string.clubs_send)).assertIsNotEnabled()
         compose.onNodeWithTag(chatQuickEmojiTestTag("😊")).assertIsNotEnabled()
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).assertIsNotEnabled()
         compose.runOnIdle { repo.messages.value = ClubChatState.Unavailable }
         compose.onNodeWithText("Private cooldown draft 🚗").assertDoesNotExist()
+        compose.onNodeWithText("Private cooldown history").assertDoesNotExist()
+        compose.onNodeWithTag("club-chat-input").assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).assertDoesNotExist()
         compose.onNodeWithTag("chat-flood-countdown").assertDoesNotExist()
-        compose.runOnIdle { assertEquals(1, repo.sendRequests.size) }
+        compose.runOnIdle { repo.messages.value = ClubChatState.Ready(member.copy(clubId = "second"), emptyList()) }
+        assertDraft("")
+        compose.onNodeWithText("Private cooldown draft 🚗").assertDoesNotExist()
+        compose.onNodeWithText("Private cooldown history").assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).assertDoesNotExist()
+        compose.onNodeWithTag("chat-flood-countdown").assertExists()
+        compose.runOnIdle {
+            assertTrue(cooldown.isBlocked())
+            assertEquals(1, repo.sendRequests.size)
+            assertNull(repo.sent)
+        }
     }
 
 }
@@ -526,6 +634,7 @@ private class FakeClubRepository(initial: ClubChatState) : ClubRepository {
     var chatCalls = 0
     var sendFailuresRemaining = 0
     var sendFailure: Exception? = null
+    var sendGate: CompletableDeferred<Unit>? = null
     val sendRequests = mutableListOf<Pair<String, String>>()
     val managementRequests = mutableListOf<Pair<String, Map<String, Any?>>>()
     val blockedAuthors = mutableListOf<String>()
@@ -571,6 +680,7 @@ private class FakeClubRepository(initial: ClubChatState) : ClubRepository {
     }
     override suspend fun send(clubId: String, text: String, operationId: String) {
         sendRequests += text to operationId
+        sendGate?.await()
         sendFailure?.let { throw it }
         if (sendFailuresRemaining > 0) { sendFailuresRemaining--; throw ClubException("unavailable") }
         sent = text; operation = operationId

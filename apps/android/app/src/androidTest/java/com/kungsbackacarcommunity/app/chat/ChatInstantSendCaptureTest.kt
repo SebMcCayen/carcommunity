@@ -15,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -33,7 +34,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Native-window captures of the real composer/coordinator using local test data only.
+/** Native Compose-root captures of the real composer/coordinator using local test data only.
  * Optional instrumentation argument: redesignTheme=dark|light (default dark).
  * Writes only externalFilesDir/chat-instant-send/community-<theme>-<state>.png.
  */
@@ -104,7 +105,7 @@ class ChatInstantSendCaptureTest {
             assertFalse("Capture must precede the fake server response", first.response.isCompleted)
             assertEquals(ChannelDeliveryState.Sending, f.coordinator.pendingMessages.value.single().deliveryState)
         }
-        screenshotUiAutomation("community-$theme-pending", first.clientId)
+        screenshotComposeRoot("community-$theme-pending", first.clientId)
 
         // Start a different draft while the first callable is still suspended,
         // then reject that callable. Its failed bubble must retain the old text.
@@ -122,7 +123,7 @@ class ChatInstantSendCaptureTest {
         compose.onNodeWithTag("chat-body-${first.clientId}", useUnmergedTree = true)
             .assertTextEquals(SENT_TEXT).assertIsDisplayed()
         compose.runOnIdle { assertEquals(1, f.attempts.size) }
-        screenshotUiAutomation("community-$theme-failed-next-draft", first.clientId)
+        screenshotComposeRoot("community-$theme-failed-next-draft", first.clientId)
     }
 
     private fun input() = compose.onNodeWithTag(CHANNEL_INPUT_TEST_TAG)
@@ -131,24 +132,26 @@ class ChatInstantSendCaptureTest {
     }
     private fun status(id: Int) = compose.onNodeWithText(compose.activity.getString(id))
 
-    private fun screenshotUiAutomation(name: String, messageId: String) {
+    private fun screenshotComposeRoot(name: String, messageId: String) {
         compose.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         instrumentation.waitForIdleSync()
         compose.mainClock.advanceTimeByFrame()
         compose.waitForIdle()
         val bodyNode = compose.onNodeWithTag("chat-body-$messageId", useUnmergedTree = true)
-        // Semantics/layout can settle before the software GPU presents its text
-        // layer. Accept only a native frame that actually contains the dark ink
-        // inside the outgoing body; never save an incomplete blank bubble.
+        val root = compose.onRoot()
+        // PixelCopy captures the Compose window itself. UiAutomation's display
+        // screenshot can use a different origin while the IME resizes the window,
+        // so its coordinates cannot safely be mixed with boundsInWindow here.
+        // Keep the rendered-ink guard and use root-relative coordinates throughout.
         var accepted: Bitmap? = null
         compose.waitUntil(5_000) {
-            val node = bodyNode.fetchSemanticsNode()
-            val bounds = node.boundsInWindow
-            val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+            val bounds = bodyNode.fetchSemanticsNode().boundsInRoot
+            val origin = root.fetchSemanticsNode().boundsInRoot.topLeft
+            val bitmap = root.captureToImage().asAndroidBitmap()
             var ink = 0
-            for (y in bounds.top.toInt().coerceAtLeast(0) until bounds.bottom.toInt().coerceAtMost(bitmap.height)) {
-                for (x in bounds.left.toInt().coerceAtLeast(0) until bounds.right.toInt().coerceAtMost(bitmap.width)) {
+            for (y in (bounds.top - origin.y).toInt().coerceAtLeast(0) until (bounds.bottom - origin.y).toInt().coerceAtMost(bitmap.height)) {
+                for (x in (bounds.left - origin.x).toInt().coerceAtLeast(0) until (bounds.right - origin.x).toInt().coerceAtMost(bitmap.width)) {
                     val pixel = bitmap.getPixel(x, y)
                     if (android.graphics.Color.red(pixel) < 64 && android.graphics.Color.green(pixel) < 64 &&
                         android.graphics.Color.blue(pixel) < 64) ink++

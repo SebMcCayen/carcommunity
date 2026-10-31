@@ -35,7 +35,7 @@ room-isolation suites. `ChatInstantSendTest` runs on both JVM and Android.
 `ChatInstantSendCaptureTest` renders the real Community composer and coordinator
 with a deliberately suspended local repository response. Its `redesignTheme`
 instrumentation argument accepts `dark` or `light`. It writes pending/empty-input
-and failure/new-draft native-window PNGs under the test app's external-files
+and failure/new-draft native Compose-root PNGs under the test app's external-files
 `chat-instant-send` directory. These captures contain labelled local fixture data;
 the user's original screenshot and real account data are not committed.
 
