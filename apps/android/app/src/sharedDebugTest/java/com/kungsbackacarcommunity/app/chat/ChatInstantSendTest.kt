@@ -48,6 +48,8 @@ class ChatInstantSendTest {
 
     @Test fun communityFailureAndBubbleRetryPreserveNextDraftAndReuseClientId() = failedWithNextDraft(Surface.Community)
     @Test fun dmFailureAndBubbleRetryPreserveNextDraftAndReuseClientId() = failedWithNextDraft(Surface.Dm)
+    @Test fun communityMultilineNextDraftKeepsPendingAndFailedStatusVisibleThroughRetry() = multilineNextDraft(Surface.Community)
+    @Test fun dmMultilineNextDraftKeepsPendingAndFailedStatusVisibleThroughRetry() = multilineNextDraft(Surface.Dm)
     @Test fun communityFailedBubbleRetryPreservesIdenticalNewDraft() = retryWithIdenticalNewDraft(Surface.Community)
     @Test fun dmFailedBubbleRetryPreservesIdenticalNewDraft() = retryWithIdenticalNewDraft(Surface.Dm)
     @Test fun communityFailedBubbleRetryPreservesIdenticalNewDraftAfterRestoration() = retryWithIdenticalNewDraft(Surface.Community, recreate = true)
@@ -211,6 +213,58 @@ class ChatInstantSendTest {
         assertAttemptCount(f, 2)
     }
 
+    private fun multilineNextDraft(surface: Surface) {
+        // A full timeline makes this exercise the newest-row anchor, rather than
+        // allowing an otherwise empty list to absorb the composer's growth.
+        val f = start(surface, withHistory = true)
+        val first = submit(f)
+        assertDraft("")
+        assertBody(first)
+        sending(f).assertEventuallyDisplayed()
+        assertPending(f, first, 1)
+        val emptyInputHeight = input().fetchSemanticsNode().boundsInRoot.height
+
+        // The callable is still suspended while the independently owned draft
+        // grows the composer and shrinks the message viewport (also at 320x640).
+        input().performTextInput(MULTILINE_NEXT_DRAFT)
+        assertDraft(MULTILINE_NEXT_DRAFT)
+        compose.waitUntil(5_000) {
+            input().fetchSemanticsNode().boundsInRoot.height > emptyInputHeight
+        }
+        assertBody(first)
+        sending(f).assertEventuallyDisplayed()
+        val sendingHeight = sending(f).fetchSemanticsNode().boundsInRoot.height
+        assertPending(f, first, 1)
+
+        // Failure expands the SAME last row with a padded, potentially wrapped
+        // retry status. Neither assertion may scroll that row into view.
+        complete(first, false)
+        assertDraft(MULTILINE_NEXT_DRAFT)
+        assertBody(first)
+        sending(f).assertDoesNotExist()
+        retry(f).assertEventuallyDisplayed().assertIsEnabled()
+        assertTrue(
+            "Failure status must exercise row growth",
+            retry(f).fetchSemanticsNode().boundsInRoot.height > sendingHeight,
+        )
+        assertAttemptCount(f, 1)
+
+        retry(f).performClick()
+        val retried = attempt(f, 2)
+        assertSamePayload(first, retried)
+        assertDraft(MULTILINE_NEXT_DRAFT)
+        assertBody(first) // Exactly one bubble retains the original client ID.
+        sending(f).assertEventuallyDisplayed()
+        retry(f).assertDoesNotExist()
+        assertPending(f, retried, 2)
+        complete(retried, true)
+        assertDraft(MULTILINE_NEXT_DRAFT)
+        assertBody(first)
+        sending(f).assertDoesNotExist()
+        retry(f).assertDoesNotExist()
+        assertAttemptCount(f, 2)
+    }
+
     private fun retryWithIdenticalNewDraft(surface: Surface, recreate: Boolean = false) {
         val f = Fixture(surface)
         val restoration = StateRestorationTester(compose)
@@ -315,8 +369,9 @@ class ChatInstantSendTest {
         assertAttemptCount(f, 1)
     }
 
-    private fun start(surface: Surface): Fixture {
+    private fun start(surface: Surface, withHistory: Boolean = false): Fixture {
         val f = Fixture(surface)
+        if (withHistory) f.seedHistory()
         compose.setContent { KccTheme { f.Route() } }
         input().performTextInput(FIRST_DRAFT)
         return f
@@ -436,6 +491,25 @@ class ChatInstantSendTest {
             }
         }
 
+        fun seedHistory() {
+            val history = List(24) { index ->
+                ChannelMessage(
+                    id = "$uid-history-$index", senderUid = PEER,
+                    text = "Lokalt historikmeddelande $index",
+                    senderDisplayName = "Lokal testmedlem", senderAvatarPath = null,
+                    createdAtMillis = 1_792_936_800_000L + index * 60_000L,
+                    createdAtIso = null,
+                )
+            }
+            communityMessages.value = ChannelMessagesState.Loaded(history)
+            dmMessages.value = DmThreadState.Loaded(history.map {
+                DmMessage(
+                    id = it.id, senderUid = it.senderUid, text = it.text,
+                    createdAtMillis = it.createdAtMillis, createdAtIso = null,
+                )
+            })
+        }
+
         fun publish(attempt: Attempt) {
             communityMessages.value = ChannelMessagesState.Loaded(listOf(ChannelMessage(
                 id = attempt.clientId, senderUid = uid, text = attempt.text,
@@ -454,6 +528,7 @@ class ChatInstantSendTest {
     private companion object {
         const val FIRST_DRAFT = "Första lokala meddelandet 🚗"
         const val NEXT_DRAFT = "Nästa utkast är mitt 🚙"
+        const val MULTILINE_NEXT_DRAFT = "Nästa utkast 🚙\nRad två finns kvar\nRad tre är min"
         const val EMOJI = "😊"
         const val PEER = "local-instant-send-peer"
     }

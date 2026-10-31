@@ -98,8 +98,8 @@ class ChatInstantSendCaptureTest {
         val first = compose.runOnIdle { f.attempts.single() }
         assertDraft("")
         compose.onNodeWithTag("chat-body-${first.clientId}", useUnmergedTree = true)
-            .assertTextEquals(SENT_TEXT).assertIsDisplayed()
-        status(R.string.channel_statusSending).assertIsDisplayed()
+            .assertTextEquals(SENT_TEXT).awaitDisplayed()
+        status(R.string.channel_statusSending).awaitDisplayed()
         status(R.string.channel_statusFailedRetry).assertDoesNotExist()
         compose.runOnIdle {
             assertFalse("Capture must precede the fake server response", first.response.isCompleted)
@@ -118,10 +118,10 @@ class ChatInstantSendCaptureTest {
         }
         assertDraft(NEXT_DRAFT)
         status(R.string.channel_statusSending).assertDoesNotExist()
-        status(R.string.channel_statusFailedRetry).assertIsDisplayed().assertIsEnabled()
+        status(R.string.channel_statusFailedRetry).awaitDisplayed().assertIsEnabled()
         compose.onAllNodesWithTag("chat-body-${first.clientId}", useUnmergedTree = true).assertCountEquals(1)
         compose.onNodeWithTag("chat-body-${first.clientId}", useUnmergedTree = true)
-            .assertTextEquals(SENT_TEXT).assertIsDisplayed()
+            .assertTextEquals(SENT_TEXT).awaitDisplayed()
         compose.runOnIdle { assertEquals(1, f.attempts.size) }
         screenshotComposeRoot("community-$theme-failed-next-draft", first.clientId)
     }
@@ -131,6 +131,15 @@ class ChatInstantSendCaptureTest {
         assertEquals(expected, input().fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
     }
     private fun status(id: Int) = compose.onNodeWithText(compose.activity.getString(id))
+    private fun SemanticsNodeInteraction.awaitDisplayed(): SemanticsNodeInteraction {
+        // KeepPinnedToNewest and the platform IME resize settle asynchronously.
+        // Composer clearing above is immediate; visibility must settle naturally,
+        // without scrolling the test to hide a real pinning/layout regression.
+        compose.waitUntil(5_000) {
+            compose.onAllNodes(isRoot()).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() && isDisplayed()
+        }
+        return assertIsDisplayed()
+    }
 
     private fun screenshotComposeRoot(name: String, messageId: String) {
         compose.waitForIdle()
@@ -157,7 +166,11 @@ class ChatInstantSendCaptureTest {
                         android.graphics.Color.blue(pixel) < 64) ink++
                 }
             }
-            if (ink > 300) { accepted = bitmap; true } else { bitmap.recycle(); false }
+            // Coverage is density-independent: CI uses 320x640 at 160 dpi,
+            // whereas phone previews have roughly nine times as many pixels.
+            // A blank gold body still has zero ink at either resolution.
+            val requiredInk = maxOf(16, (bounds.width * bounds.height * 0.02f).toInt())
+            if (ink >= requiredInk) { accepted = bitmap; true } else { bitmap.recycle(); false }
         }
         val bitmap = checkNotNull(accepted)
         try {

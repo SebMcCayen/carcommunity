@@ -53,3 +53,12 @@ Visibility assertions require rows on screen without test-driven scrolling;
 composer clearing is asserted before the suspended response completes. The
 capture fixture also checks rendered dark text pixels inside the outgoing body
 before saving a native frame, so a screenshot cannot pass with a blank bubble.
+The ink check uses body-area coverage rather than an absolute pixel count, so it
+also works at CI's 320x640/160-dpi resolution. Visibility waits for natural list
+pinning and IME resizing; no test-driven scrolling is used.
+
+Small-screen verification also covers a multiline next draft and a wrapped failure
+status. The shared list retains an existing bottom anchor when its viewport shrinks
+or its last row grows without a new message ID. Resizing never interrupts a reader
+dragging/flinging or browsing older history; new-message/pagination behavior keeps
+its existing rules.

@@ -18,6 +18,16 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+/** Geometry of one measured list frame, independent of the IME's own inset. */
+internal data class ChatListResizeSnapshot(
+    val viewportHeight: Int,
+    val itemCount: Int,
+    val newestKey: Any?,
+    val newestHeight: Int,
+    val atBottom: Boolean,
+    val userScrolling: Boolean,
+)
+
 /**
  * The one keyboard/scroll interaction shared by every chat surface — the group
  * channels ([com.kungsbackacarcommunity.app.chatchannels.ChannelChatContent]),
@@ -32,6 +42,19 @@ import kotlinx.coroutines.launch
  * different scroll behaviours.
  */
 object ChatListPinning {
+    /** Preserve an existing bottom anchor when an input or delivery row grows. */
+    internal fun shouldRepinAfterResize(
+        previous: ChatListResizeSnapshot,
+        current: ChatListResizeSnapshot,
+    ): Boolean {
+        if (!previous.atBottom || current.atBottom || previous.userScrolling || current.userScrolling) return false
+        if (current.itemCount <= 0 || current.itemCount != previous.itemCount) return false
+        if (previous.viewportHeight <= 0 || current.viewportHeight <= 0) return false
+        return current.viewportHeight < previous.viewportHeight ||
+            (current.newestKey != null && current.newestKey == previous.newestKey &&
+                current.newestHeight > previous.newestHeight)
+    }
+
     /**
      * Should the list jump back to the newest item now that the viewport shrank?
      *
@@ -209,6 +232,34 @@ fun KeepPinnedToNewest(
     // new-message follow below consults it to leave a fast upward flick alone
     // without suppressing the programmatic burst-follow. See #870.
     val isUserScrolling = rememberIsUserScrolling(listState)
+
+    // IME rise is only one way the viewport changes. A multiline next draft can
+    // shrink it while the keyboard is already open, and a failed-delivery label
+    // can grow the SAME last row without changing newestMessageId. Retain a real
+    // bottom anchor in those cases, but never move a reader browsing history.
+    LaunchedEffect(listState) {
+        var previous: ChatListResizeSnapshot? = null
+        snapshotFlow {
+            val layout = listState.layoutInfo
+            val newest = layout.visibleItemsInfo.lastOrNull()?.takeIf { it.index == layout.totalItemsCount - 1 }
+            ChatListResizeSnapshot(
+                viewportHeight = layout.viewportSize.height,
+                itemCount = layout.totalItemsCount,
+                newestKey = newest?.key,
+                newestHeight = newest?.size ?: 0,
+                atBottom = !listState.canScrollForward,
+                userScrolling = isUserScrolling.value,
+            )
+        }.collect { current ->
+            val before = previous
+            previous = current
+            if (before != null && ChatListPinning.shouldRepinAfterResize(before, current)) {
+                // Schedule the next layout rather than competing with the IME's
+                // scroll coroutine in MutatorMutex (which could cancel it).
+                listState.requestScrollToItem(current.itemCount - 1)
+            }
+        }
+    }
 
     // ON OPEN: wait for the first real layout, then JUMP (no animation) to the last
     // row — once. snapshotFlow.first { it > 0 } is the fix for the async-load race:
