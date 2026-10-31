@@ -1,15 +1,14 @@
 package com.kungsbackacarcommunity.app.chat
 
 import android.graphics.Bitmap
-import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
-import android.view.WindowManager
 import androidx.core.view.WindowCompat
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -45,10 +44,6 @@ class ChatInstantSendCaptureTest {
     @Before fun matchProductionImeWindow() {
         compose.activityRule.scenario.onActivity {
             it.enableEdgeToEdge()
-            // This generic test Activity otherwise applies legacy resizing in
-            // addition to the composer's explicit IME insets. Production owns
-            // IME movement through insets; disable legacy movement in the host.
-            it.window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
             val light = InstrumentationRegistry.getArguments().getString("redesignTheme") == "light"
             WindowCompat.getInsetsController(it.window, it.window.decorView).apply {
                 isAppearanceLightStatusBars = light
@@ -64,7 +59,7 @@ class ChatInstantSendCaptureTest {
         compose.setContent {
             KccTheme(darkTheme = theme == "dark") {
                 Surface(Modifier.fillMaxSize()) {
-                    Column(Modifier.fillMaxSize()) {
+                    Column(Modifier.fillMaxSize().statusBarsPadding()) {
                         Text(
                             "REGRESSIONSPREVIEW · LOKALA TESTDATA",
                             Modifier.padding(8.dp),
@@ -101,7 +96,6 @@ class ChatInstantSendCaptureTest {
         compose.waitUntil(5_000) { compose.runOnIdle { f.attempts.size == 1 } }
         val first = compose.runOnIdle { f.attempts.single() }
         assertDraft("")
-        screenshotUiAutomation("community-$theme-pending-diagnostic")
         compose.onNodeWithTag("chat-body-${first.clientId}", useUnmergedTree = true)
             .assertTextEquals(SENT_TEXT).assertIsDisplayed()
         status(R.string.channel_statusSending).assertIsDisplayed()
@@ -110,7 +104,7 @@ class ChatInstantSendCaptureTest {
             assertFalse("Capture must precede the fake server response", first.response.isCompleted)
             assertEquals(ChannelDeliveryState.Sending, f.coordinator.pendingMessages.value.single().deliveryState)
         }
-        screenshotUiAutomation("community-$theme-pending")
+        screenshotUiAutomation("community-$theme-pending", first.clientId)
 
         // Start a different draft while the first callable is still suspended,
         // then reject that callable. Its failed bubble must retain the old text.
@@ -128,7 +122,7 @@ class ChatInstantSendCaptureTest {
         compose.onNodeWithTag("chat-body-${first.clientId}", useUnmergedTree = true)
             .assertTextEquals(SENT_TEXT).assertIsDisplayed()
         compose.runOnIdle { assertEquals(1, f.attempts.size) }
-        screenshotUiAutomation("community-$theme-failed-next-draft")
+        screenshotUiAutomation("community-$theme-failed-next-draft", first.clientId)
     }
 
     private fun input() = compose.onNodeWithTag(CHANNEL_INPUT_TEST_TAG)
@@ -137,22 +131,39 @@ class ChatInstantSendCaptureTest {
     }
     private fun status(id: Int) = compose.onNodeWithText(compose.activity.getString(id))
 
-    private fun screenshotUiAutomation(name: String) {
+    private fun screenshotUiAutomation(name: String, messageId: String) {
         compose.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         instrumentation.waitForIdleSync()
-        // Let Android present the settled Compose frame before taking the native window.
-        SystemClock.sleep(250)
-        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
+        val bodyNode = compose.onNodeWithTag("chat-body-$messageId", useUnmergedTree = true)
+        // Semantics/layout can settle before the software GPU presents its text
+        // layer. Accept only a native frame that actually contains the dark ink
+        // inside the outgoing body; never save an incomplete blank bubble.
+        var accepted: Bitmap? = null
+        compose.waitUntil(5_000) {
+            val node = bodyNode.fetchSemanticsNode()
+            val bounds = node.boundsInWindow
+            val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+            var ink = 0
+            for (y in bounds.top.toInt().coerceAtLeast(0) until bounds.bottom.toInt().coerceAtMost(bitmap.height)) {
+                for (x in bounds.left.toInt().coerceAtLeast(0) until bounds.right.toInt().coerceAtMost(bitmap.width)) {
+                    val pixel = bitmap.getPixel(x, y)
+                    if (android.graphics.Color.red(pixel) < 64 && android.graphics.Color.green(pixel) < 64 &&
+                        android.graphics.Color.blue(pixel) < 64) ink++
+                }
+            }
+            if (ink > 300) { accepted = bitmap; true } else { bitmap.recycle(); false }
+        }
+        val bitmap = checkNotNull(accepted)
         try {
             val output = File(checkNotNull(instrumentation.targetContext.getExternalFilesDir(null)), "chat-instant-send")
             check(output.mkdirs() || output.isDirectory)
             File(output, "$name.png").outputStream().use {
                 check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
             }
-        } finally {
-            bitmap.recycle()
-        }
+        } finally { bitmap.recycle() }
     }
 
     private data class CaptureAttempt(

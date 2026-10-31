@@ -135,11 +135,7 @@ private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubCha
     val latestDeliveredIds by rememberUpdatedState(deliveredIds)
     val localRows = pending.filterNot { it.messageId in deliveredIds }
     LaunchedEffect(deliveredIds) { pending = pending.filterNot { it.messageId in deliveredIds } }
-    val messages = clubChatPresentation(visibleMessages, ready.hiddenUids, live) + localRows.map {
-        ChannelMessage("pending:${it.messageId}", uid, it.text.trim(), null, null, null, null,
-            clientId = it.operationId,
-            deliveryState = if (it.accepted) ChannelDeliveryState.Sent else if (it.failed) ChannelDeliveryState.Failed else ChannelDeliveryState.Sending)
-    }
+    val messages = clubMessagesWithPending(clubChatPresentation(visibleMessages, ready.hiddenUids, live), pending, uid)
     fun sendText(text: String, clearDraft: Boolean, retryId: String? = null) {
         if (busy || text.isBlank() || cooldown.isBlocked()) return
         val id = retryId ?: if (clearDraft) operationId else {
@@ -155,7 +151,8 @@ private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubCha
         }
         val revision = draftRevision
         val messageId = clubPendingMessageId(uid, id)
-        val attempt = ClubPendingSend(id, messageId, text)
+        val attempt = pending.firstOrNull { it.operationId == id }?.copy(failed = false, accepted = false)
+            ?: ClubPendingSend(id, messageId, text)
         pending = if (pending.any { it.operationId == id }) pending.map { if (it.operationId == id) attempt else it }
             else pending + attempt
         busy = true
@@ -314,13 +311,29 @@ internal fun clubReportReason(reason: com.kungsbackacarcommunity.app.chat.ChatRe
     else -> reason.wire
 }
 
-private data class ClubPendingSend(
+internal data class ClubPendingSend(
     val operationId: String,
     val messageId: String,
     val text: String,
     val failed: Boolean = false,
     val accepted: Boolean = false,
+    val submittedAtMillis: Long = System.currentTimeMillis(),
 )
+
+/** Match Channel/DM ordering while reconciling only the caller's own server echo. */
+internal fun clubMessagesWithPending(
+    delivered: List<ChannelMessage>,
+    pending: List<ClubPendingSend>,
+    uid: String,
+): List<ChannelMessage> {
+    val ownDeliveredIds = delivered.filter { it.senderUid == uid }.mapTo(mutableSetOf()) { it.id }
+    val local = pending.filterNot { it.messageId in ownDeliveredIds }.map {
+        ChannelMessage("pending:${it.messageId}", uid, it.text.trim(), null, null, it.submittedAtMillis, null,
+            clientId = it.operationId,
+            deliveryState = if (it.accepted) ChannelDeliveryState.Sent else if (it.failed) ChannelDeliveryState.Failed else ChannelDeliveryState.Sending)
+    }
+    return (delivered + local).sortedWith(compareBy<ChannelMessage> { it.createdAtMillis ?: Long.MAX_VALUE }.thenBy { it.id })
+}
 
 /** Driver shared-clubs uses sha256(uid + "_" + sha256(operationId)) as the document ID. */
 internal fun clubPendingMessageId(uid: String, operationId: String): String {
@@ -329,10 +342,10 @@ internal fun clubPendingMessageId(uid: String, operationId: String): String {
     return sha256(uid + "_" + sha256(operationId))
 }
 
-private val clubPendingSendSaver = listSaver<List<ClubPendingSend>, String>(
-    save = { rows -> rows.flatMap { listOf(it.operationId, it.messageId, it.text, it.accepted.toString()) } },
-    restore = { values -> values.chunked(4).map {
+internal val clubPendingSendSaver = listSaver<List<ClubPendingSend>, String>(
+    save = { rows -> rows.flatMap { listOf(it.operationId, it.messageId, it.text, it.accepted.toString(), it.submittedAtMillis.toString()) } },
+    restore = { values -> values.chunked(5).map {
         val accepted = it[3].toBoolean()
-        ClubPendingSend(it[0], it[1], it[2], failed = !accepted, accepted = accepted)
+        ClubPendingSend(it[0], it[1], it[2], failed = !accepted, accepted = accepted, submittedAtMillis = it[4].toLong())
     } },
 )

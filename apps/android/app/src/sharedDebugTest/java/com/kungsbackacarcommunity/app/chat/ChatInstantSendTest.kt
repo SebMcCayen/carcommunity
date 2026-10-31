@@ -2,7 +2,6 @@ package com.kungsbackacarcommunity.app.chat
 
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
-import android.view.WindowManager
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
@@ -21,9 +20,6 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.*
-import org.junit.After
-import java.io.File
-import android.graphics.Bitmap
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -39,21 +35,7 @@ class ChatInstantSendTest {
     @Before fun matchProductionImeWindow() {
         compose.activityRule.scenario.onActivity {
             it.enableEdgeToEdge()
-            // This generic test Activity otherwise applies legacy resizing in
-            // addition to the composer's explicit IME insets. Production owns
-            // IME movement through insets; disable legacy movement in the host.
-            it.window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
         }
-    }
-
-    @After fun captureRequestedNativeWindow() {
-        val name = InstrumentationRegistry.getArguments().getString("chatInstantSnapshot") ?: return
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
-        val output = File(instrumentation.targetContext.getExternalFilesDir(null), "chat-instant-send")
-        check(output.mkdirs() || output.isDirectory)
-        File(output, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        bitmap.recycle()
     }
 
     @Test fun communityClearsComposerAndShowsSendingBeforeNetworkReturns() = pending(Surface.Community)

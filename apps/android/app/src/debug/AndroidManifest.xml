@@ -1,3 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:networkSecurityConfig="@xml/debug_network_security" />
+    <application android:networkSecurityConfig="@xml/debug_network_security">
+        <!-- The Compose test host must declare the production Activity's initial
+             keyboard policy before its window attaches. Setting this later can
+             leave Android's legacy pan offset active beside Compose IME insets. -->
+        <activity
+            android:name="androidx.activity.ComponentActivity"
+            android:windowSoftInputMode="adjustResize" />
+    </application>
 </manifest>

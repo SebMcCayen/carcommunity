@@ -42,10 +42,14 @@ the user's original screenshot and real account data are not committed.
 Execution results belong to the PR's validation record. Source coverage alone
 must not be presented as a completed emulator or physical-device test.
 
-The native fixture explicitly gives the Compose composer sole ownership of IME
-movement (`enableEdgeToEdge` plus `ADJUST_NOTHING` on the generic test Activity).
-The production Activity already owns keyboard movement through edge-to-edge
-insets. A default test Activity can additionally resize/pan the whole window,
-which hides otherwise valid rows above the viewport and is not a valid visual
-comparison. Visibility assertions still require rows on screen without test-driven
-scrolling; composer clearing is asserted before the suspended response completes.
+The native fixture uses edge-to-edge rendering and the debug-only Compose host
+now declares `adjustResize` in its manifest, matching MainActivity's initial
+keyboard policy. Setting a mode only after Activity startup did not remove the
+platform's existing pan offset. A default test Activity could therefore pan the
+whole window in addition to Compose's IME insets, moving rows off screen. The
+release manifest and production keyboard policy are unchanged.
+
+Visibility assertions require rows on screen without test-driven scrolling;
+composer clearing is asserted before the suspended response completes. The
+capture fixture also checks rendered dark text pixels inside the outgoing body
+before saving a native frame, so a screenshot cannot pass with a blank bubble.

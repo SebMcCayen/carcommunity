@@ -137,9 +137,7 @@ fun EventChatScreen(
     val deliveredIds = delivered.filter { it.authorUserId == currentUid }.mapTo(mutableSetOf()) { it.id }
     val latestDeliveredIds by rememberUpdatedState(deliveredIds)
     val localRows = pending.filterNot { it.id in deliveredIds }
-    val displayMessages = delivered + localRows.map {
-        ChatMessage(it.id, currentUid, null, it.text.trim(), false, createdAtMillis = null)
-    }
+    val displayMessages = eventMessagesWithPending(delivered, pending, currentUid)
     var submitting by remember { mutableStateOf(false) }
     var legacyAttempt by remember { mutableStateOf<EventPendingSend?>(null) }
     var legacyWasSending by remember { mutableStateOf(false) }
@@ -164,7 +162,9 @@ fun EventChatScreen(
         if (clearDraft) { draft = ""; draftRevision++ }
         val revision = draftRevision
         val id = retryId ?: draftAttempt.idFor(text)
-        val attempt = EventPendingSend(id, text, originalDraft = snapshot.takeIf { clearDraft }, revision = revision)
+        val attempt = pending.firstOrNull { it.id == id }?.copy(
+            failed = false, accepted = false, originalDraft = snapshot.takeIf { clearDraft }, revision = revision,
+        ) ?: EventPendingSend(id, text, originalDraft = snapshot.takeIf { clearDraft }, revision = revision)
         val confirm = onSendConfirmed
         // Mutate composer and pending state before launching any backend work.
         submitting = true
@@ -715,21 +715,35 @@ private fun InfoCard(title: String, body: String) {
 }
 
 /** Local-only row. Only a successful callable or an own server echo confirms acceptance. */
-private data class EventPendingSend(
+internal data class EventPendingSend(
     val id: String,
     val text: String,
     val failed: Boolean = false,
     val originalDraft: String? = null,
     val revision: Long = -1L,
     val accepted: Boolean = false,
+    val submittedAtMillis: Long = System.currentTimeMillis(),
 )
 
-private val eventPendingSendSaver = listSaver<List<EventPendingSend>, String>(
-    save = { rows -> rows.flatMap { listOf(it.id, it.text, it.originalDraft.orEmpty(), it.revision.toString(), it.accepted.toString()) } },
+/** Match Channel/DM ordering: oldest first, unknown legacy times last, then stable ID. */
+internal fun eventMessagesWithPending(
+    delivered: List<ChatMessage>,
+    pending: List<EventPendingSend>,
+    currentUid: String,
+): List<ChatMessage> {
+    val ownDeliveredIds = delivered.filter { it.authorUserId == currentUid }.mapTo(mutableSetOf()) { it.id }
+    val local = pending.filterNot { it.id in ownDeliveredIds }.map {
+        ChatMessage(it.id, currentUid, null, it.text.trim(), false, createdAtMillis = it.submittedAtMillis)
+    }
+    return (delivered + local).sortedWith(compareBy<ChatMessage> { it.createdAtMillis ?: Long.MAX_VALUE }.thenBy { it.id })
+}
+
+internal val eventPendingSendSaver = listSaver<List<EventPendingSend>, String>(
+    save = { rows -> rows.flatMap { listOf(it.id, it.text, it.originalDraft.orEmpty(), it.revision.toString(), it.accepted.toString(), it.submittedAtMillis.toString()) } },
     // A restored composition cannot resume the old coroutine. Offer explicit retry,
     // using the original ID, rather than silently sending or leaving a stuck spinner.
-    restore = { values -> values.chunked(5).map {
+    restore = { values -> values.chunked(6).map {
         val accepted = it[4].toBoolean()
-        EventPendingSend(it[0], it[1], !accepted, it[2].ifEmpty { null }, it[3].toLong(), accepted)
+        EventPendingSend(it[0], it[1], !accepted, it[2].ifEmpty { null }, it[3].toLong(), accepted, it[5].toLong())
     } },
 )
