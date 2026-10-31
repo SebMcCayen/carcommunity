@@ -2,6 +2,26 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 65,
+      "versionName": "1.1.10",
+      "releaseDate": "2026-10-31",
+      "highlights": [
+        "Förbättrad klubbsida och tydligare klubbinbjudningar",
+        "Guldring och klubblogga på kartans livebilder",
+        "Rättningar för chatt, profil och Android-notiser"
+      ],
+      "changes": [
+        "Chatt: skrivfältet töms när ett meddelande har skickats, utan att nya utkast går förlorade",
+        "Klubbinbjudningar visas i notiser och på klubbsidan, där du kan tacka ja eller nej",
+        "Klubbsidan har tydligare avsnitt för presentation, statistik, kalender och medlemmar",
+        "Klubbens medlemslista visar profilbilder och öppnar medlemmarnas profiler; administrationsval finns i en separat meny",
+        "Plus och Supporter kan visa en guldring runt sin bild på livekartan och dölja den i Inställningar; ringen gäller tills den betalda perioden löper ut",
+        "Klubbens logga visas på medlemmarnas bilder på livekartan",
+        "Varningsrutan på profilen visas bara när du har en aktiv varning",
+        "Vanliga Android-notiser rensas när du öppnar eller återgår till appen; historiken inne i appen och statusnotisen för en pågående live-session finns kvar"
+      ]
+    },
+    {
       "versionCode": 64,
       "versionName": "1.1.9",
       "releaseDate": "2026-10-30",
