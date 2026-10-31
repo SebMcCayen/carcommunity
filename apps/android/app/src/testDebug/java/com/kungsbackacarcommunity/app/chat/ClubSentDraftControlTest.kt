@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.chat
 
+import androidx.compose.runtime.saveable.SaverScope
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -7,15 +8,22 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.clubs.*
+import com.kungsbackacarcommunity.app.chatchannels.ChannelMessage
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.profile.LiveProfileRepository
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.CancellationException
+import androidx.compose.ui.test.junit4.StateRestorationTester
+import com.kungsbackacarcommunity.app.design.chatQuickEmojiTestTag
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowSystemClock
+import java.time.Duration
 
 /** Club uses its existing repository acknowledgement, not the shared callable composer. */
 @RunWith(AndroidJUnit4::class)
@@ -23,29 +31,53 @@ import org.robolectric.annotation.Config
 class ClubSentDraftControlTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun clubSuccessClearsDraftWithoutChangingTheRoute() {
+    @Test fun clubClearsImmediatelyAndKeepsNewDraftThroughSuccessAndEcho() {
         val repo = start()
         send().performClick()
         awaitAttempts(repo, 1)
-        draft(TEXT)
-        input().assertIsNotEnabled() // Club deliberately locks the input during send.
-        compose.runOnIdle { repo.attempts.single().ack.complete(true) }
         draft("")
-        input().performTextInput(TEXT)
+        input().assertIsEnabled().performTextInput("Next draft")
+        send().assertIsNotEnabled()
+        compose.onNodeWithText(str(R.string.channel_statusSending)).assertIsDisplayed()
+        compose.runOnIdle { repo.echo(0) }
+        compose.onNodeWithText(str(R.string.channel_statusSending)).assertDoesNotExist()
+        compose.runOnIdle { repo.attempts.single().ack.complete(true) }
+        draft("Next draft")
+        compose.onAllNodesWithText(TEXT).assertCountEquals(1)
         send().performClick()
         awaitAttempts(repo, 2)
         compose.runOnIdle { assertNotEquals(repo.attempts[0].id, repo.attempts[1].id) }
     }
 
-    @Test fun clubFailureKeepsDraftAndOperationUntilSuccess() {
+    @Test fun clubRpcSuccessStopsSendingBeforeListenerEcho() {
         val repo = start()
         send().performClick()
         awaitAttempts(repo, 1)
+        compose.runOnIdle { repo.attempts.single().ack.complete(true) }
+        draft("")
+        compose.onNodeWithText(str(R.string.channel_statusSending)).assertDoesNotExist()
+        retry().assertDoesNotExist()
+        compose.onNodeWithText(TEXT).assertIsDisplayed()
+        compose.runOnIdle { repo.echo(0) }
+        compose.onAllNodesWithText(TEXT).assertCountEquals(1)
+    }
+
+    @Test fun clubMessageIdMatchesDriverDoubleHashContract() {
+        assertEquals("072829468747d3b0f656a700d9b3499d02a2b27bcf2dc243b11b24d5d1c7f876",
+            clubPendingMessageId("club-draft-self", "00000000-0000-0000-0000-000000000001"))
+    }
+
+    @Test fun clubDefiniteRejectionRestoresUneditedDraftAndReusesOperation() {
+        val repo = start()
+        repo.failure = ClubException("invalid-argument")
+        send().performClick()
+        awaitAttempts(repo, 1)
+        draft("")
         compose.runOnIdle { repo.attempts.single().ack.complete(false) }
         draft(TEXT)
-        send().assertIsEnabled()
         send().performClick()
         awaitAttempts(repo, 2)
+        draft("")
         compose.runOnIdle {
             assertEquals(repo.attempts[0].id, repo.attempts[1].id)
             assertEquals(listOf(TEXT, TEXT), repo.attempts.map { it.text })
@@ -53,6 +85,160 @@ class ClubSentDraftControlTest {
         }
         draft("")
     }
+
+    @Test fun clubNewDraftSurvivesFailureAndBubbleRetryUsesOriginalOperation() {
+        val repo = start()
+        send().performClick()
+        awaitAttempts(repo, 1)
+        input().performTextInput("Keep this")
+        compose.runOnIdle { repo.attempts.single().ack.complete(false) }
+        draft("Keep this")
+        retry().performClick()
+        awaitAttempts(repo, 2)
+        compose.runOnIdle {
+            assertEquals(repo.attempts[0].id, repo.attempts[1].id)
+            repo.attempts[1].ack.complete(true)
+        }
+        draft("Keep this")
+    }
+
+    @Test fun clubEditedThenEmptiedDraftIsNotRestored() {
+        val repo = start()
+        repo.failure = ClubException("permission-denied")
+        send().performClick()
+        awaitAttempts(repo, 1)
+        input().performTextInput("Changed")
+        input().performTextClearance()
+        compose.runOnIdle { repo.attempts.single().ack.complete(false) }
+        draft("")
+        retry().assertIsDisplayed()
+    }
+
+    @Test fun clubQuickEmojiPreservesTypedDraftOnSuccessAndFailure() {
+        val repo = start()
+        compose.onNodeWithTag(chatQuickEmojiTestTag("😊")).performClick()
+        awaitAttempts(repo, 1)
+        draft(TEXT)
+        compose.runOnIdle { repo.attempts.single().ack.complete(false) }
+        draft(TEXT)
+        retry().performClick()
+        awaitAttempts(repo, 2)
+        compose.runOnIdle {
+            assertEquals("😊", repo.attempts[0].text)
+            assertEquals(repo.attempts[0].id, repo.attempts[1].id)
+            repo.attempts[1].ack.complete(true)
+        }
+        draft(TEXT)
+    }
+
+    @Test fun clubEchoBeforeLateFailureDoesNotRestoreOrDuplicate() {
+        val repo = start()
+        send().performClick()
+        awaitAttempts(repo, 1)
+        compose.runOnIdle { repo.echo(0) }
+        compose.waitForIdle()
+        compose.runOnIdle { repo.attempts.single().ack.complete(false) }
+        draft("")
+        retry().assertDoesNotExist()
+        compose.onAllNodesWithText(TEXT).assertCountEquals(1)
+    }
+
+    @Test fun clubCancellationRetainsRecoverableBubbleAndNewDraft() {
+        val repo = start()
+        send().performClick()
+        awaitAttempts(repo, 1)
+        input().performTextInput("Keep this")
+        compose.runOnIdle { repo.attempts.single().ack.completeExceptionally(CancellationException("cancel")) }
+        draft("Keep this")
+        retry().performClick()
+        awaitAttempts(repo, 2)
+        compose.runOnIdle { assertEquals(repo.attempts[0].id, repo.attempts[1].id) }
+    }
+
+    @Test fun clubRotationRestoresExplicitRetryWithoutAutoSend() {
+        val restoration = StateRestorationTester(compose)
+        val repo = Repository()
+        val cooldown = ChatSendCooldown()
+        restoration.setContent { KccTheme {
+            ClubChatRoute("club-draft-self", repo, LiveProfileRepository.EMPTY, cooldown)
+        } }
+        input().performTextInput(TEXT)
+        send().performClick()
+        awaitAttempts(repo, 1)
+        input().performTextInput("Next draft")
+        restoration.emulateSavedInstanceStateRestore()
+        draft("Next draft")
+        retry().assertIsDisplayed().performClick()
+        awaitAttempts(repo, 2)
+        compose.runOnIdle { assertEquals(repo.attempts[0].id, repo.attempts[1].id) }
+    }
+
+    @Test fun clubFailedMessageStaysBeforeNewIncomingThroughRestorationAndRetry() {
+        val restoration = StateRestorationTester(compose)
+        val repo = Repository()
+        val cooldown = ChatSendCooldown()
+        restoration.setContent { KccTheme {
+            ClubChatRoute("club-draft-self", repo, LiveProfileRepository.EMPTY, cooldown)
+        } }
+        input().performTextInput(TEXT)
+        send().performClick()
+        awaitAttempts(repo, 1)
+        compose.runOnIdle { repo.attempts.single().ack.complete(false) }
+        retry().assertIsDisplayed()
+        compose.runOnIdle {
+            repo.incoming(System.currentTimeMillis() + 1L)
+            ShadowSystemClock.advanceBy(Duration.ofSeconds(1))
+        }
+        assertBeforeIncoming()
+        restoration.emulateSavedInstanceStateRestore()
+        assertBeforeIncoming()
+        compose.runOnIdle { assertEquals(1, repo.attempts.size) }
+        retry().performClick()
+        awaitAttempts(repo, 2)
+        assertBeforeIncoming()
+        compose.runOnIdle { assertEquals(repo.attempts[0].id, repo.attempts[1].id) }
+    }
+
+    @Test fun clubSavedSubmissionTimeKeepsIncomingNewestDuringRetryAndOwnEchoDeduplicates() {
+        val pending = ClubPendingSend("operation-a", "a", TEXT, failed = true, submittedAtMillis = 1_000L)
+        val scope = object : SaverScope { override fun canBeSaved(value: Any) = true }
+        val payload = with(clubPendingSendSaver) { scope.save(listOf(pending)) }!!
+        val restored = clubPendingSendSaver.restore(payload)!!.single()
+        assertEquals(pending, restored)
+        val incoming = ChannelMessage("b", "other", "Incoming B", "Other", null, 2_000L, null)
+        val retry = restored.copy(failed = false)
+        for (attempt in listOf(pending, restored, retry)) {
+            val merged = clubMessagesWithPending(listOf(incoming), listOf(attempt), "self")
+            assertEquals(listOf("pending:a", "b"), merged.map { it.id })
+            assertEquals("b", merged.last().id) // KeepPinnedToNewest's input.
+            assertEquals(1_000L, merged.first().createdAtMillis)
+        }
+        val echo = ChannelMessage("a", "self", TEXT, "Me", null, 1_000L, null)
+        assertEquals(listOf(echo, incoming), clubMessagesWithPending(listOf(incoming, echo), listOf(retry), "self"))
+        assertEquals(3, clubMessagesWithPending(listOf(incoming, echo.copy(senderUid = "other")), listOf(retry), "self").size)
+        val acceptedPayload = with(clubPendingSendSaver) { scope.save(listOf(pending.copy(accepted = true, failed = false))) }!!
+        assertEquals(pending.copy(accepted = true, failed = false), clubPendingSendSaver.restore(acceptedPayload)!!.single())
+    }
+
+    @Test fun clubMergeUsesStableIdTiesAndPlacesUnknownLegacyTimestampsLast() {
+        val local = ClubPendingSend("operation-a", "a", TEXT, submittedAtMillis = 1_000L)
+        val delivered = listOf(
+            ChannelMessage("legacy-z", "other", "Unknown Z", null, null, null, null),
+            ChannelMessage("a", "other", "Same time", null, null, 1_000L, null),
+            ChannelMessage("legacy-a", "other", "Unknown A", null, null, null, null),
+        )
+        assertEquals(listOf("a", "pending:a", "legacy-a", "legacy-z"),
+            clubMessagesWithPending(delivered, listOf(local), "self").map { it.id })
+    }
+
+    private fun assertBeforeIncoming() {
+        val older = compose.onNode(hasText(TEXT) and !hasSetTextAction()).fetchSemanticsNode().boundsInRoot
+        val newer = compose.onNodeWithText("Incoming B").fetchSemanticsNode().boundsInRoot
+        assertTrue("Failed A must stay above incoming B", older.bottom <= newer.top)
+    }
+
+    private fun str(id: Int) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
+    private fun retry() = compose.onNodeWithText(str(R.string.channel_statusFailedRetry))
 
     private fun start(): Repository {
         val repo = Repository()
@@ -76,13 +262,26 @@ class ClubSentDraftControlTest {
     private data class Attempt(val text: String, val id: String, val ack: CompletableDeferred<Boolean> = CompletableDeferred())
     private class Repository : ClubRepository {
         val attempts = mutableListOf<Attempt>()
+        var failure: Exception = ClubException("unavailable")
         private val member = ClubMembership("draft-club", ClubRole.Member, "2026-10-30T00:00:00Z")
-        override fun chat() = flowOf(ClubChatState.Ready(member, emptyList()))
+        private val rows = MutableStateFlow<ClubChatState>(ClubChatState.Ready(member, emptyList()))
+        override fun chat() = rows
+        fun echo(index: Int) {
+            val attempt = attempts[index]
+            rows.value = ClubChatState.Ready(member, listOf(ClubMessage(
+                clubPendingMessageId("club-draft-self", attempt.id), "club-draft-self", "Me", attempt.text, 0L,
+            )))
+        }
+        fun incoming(createdAtMillis: Long) {
+            rows.value = ClubChatState.Ready(member, listOf(
+                ClubMessage("incoming-b", "other", "Other", "Incoming B", createdAtMillis),
+            ))
+        }
         override suspend fun send(clubId: String, text: String, operationId: String) {
             assertEquals(member.clubId, clubId)
             val attempt = Attempt(text, operationId)
             attempts += attempt
-            if (!attempt.ack.await()) throw ClubException("unavailable")
+            if (!attempt.ack.await()) throw failure
         }
         override fun observeEnabled() = flowOf(true)
         override fun observePublicAttendanceReady() = flowOf(true)

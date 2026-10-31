@@ -1,7 +1,6 @@
 package com.kungsbackacarcommunity.app.chat
 
 import com.kungsbackacarcommunity.app.chat.rememberChatDraftSendAttempt
-import com.kungsbackacarcommunity.app.chat.rememberChatSendAcknowledgement
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -49,7 +48,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.platform.testTag
+import kotlinx.coroutines.CancellationException
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
@@ -129,16 +132,74 @@ fun EventChatScreen(
     val dates = rememberChatDateContext()
     var draft by rememberSaveable { mutableStateOf("") }
     var draftRevision by rememberSaveable { mutableLongStateOf(0L) }
-    val acknowledgement = rememberChatSendAcknowledgement(
-        (state as? ChatMessagesState.Loaded)?.messages.orEmpty()
-            .filter { it.authorUserId == currentUid }.mapTo(mutableSetOf()) { it.id },
-    )
-    var awaitingSend by rememberSaveable { mutableStateOf(false) }
-    var submittedText by rememberSaveable { mutableStateOf<String?>(null) }
-    var submittedRevision by rememberSaveable { mutableLongStateOf(-1L) }
+    var pending by rememberSaveable(stateSaver = eventPendingSendSaver) { mutableStateOf(emptyList<EventPendingSend>()) }
+    val delivered = (state as? ChatMessagesState.Loaded)?.messages.orEmpty()
+    val deliveredIds = delivered.filter { it.authorUserId == currentUid }.mapTo(mutableSetOf()) { it.id }
+    val latestDeliveredIds by rememberUpdatedState(deliveredIds)
+    val localRows = pending.filterNot { it.id in deliveredIds }
+    val displayMessages = eventMessagesWithPending(delivered, pending, currentUid)
     var submitting by remember { mutableStateOf(false) }
+    var legacyAttempt by remember { mutableStateOf<EventPendingSend?>(null) }
+    var legacyWasSending by remember { mutableStateOf(false) }
     val sendScope = rememberCoroutineScope()
     val draftAttempt = rememberChatDraftSendAttempt()
+    LaunchedEffect(deliveredIds) {
+        // A negative response may have restored this attempt before its server row
+        // arrived. Consume only that untouched restoration, never a newer draft.
+        if (pending.any {
+                it.id in deliveredIds && it.failed && it.originalDraft != null &&
+                    draftRevision == it.revision && draft == it.originalDraft
+            }) {
+            draft = ""
+            draftRevision++
+        }
+        pending = pending.filterNot { it.id in deliveredIds }
+        deliveredIds.forEach(draftAttempt::acknowledge)
+    }
+    fun submit(text: String, clearDraft: Boolean, retryId: String? = null) {
+        if (submitting || cooldownSeconds > 0 || sendStatus == ChatSendStatus.Sending || !EventChat.isSendable(text)) return
+        val snapshot = draft
+        if (clearDraft) { draft = ""; draftRevision++ }
+        val revision = draftRevision
+        val id = retryId ?: draftAttempt.idFor(text)
+        val attempt = pending.firstOrNull { it.id == id }?.copy(
+            failed = false, accepted = false, originalDraft = snapshot.takeIf { clearDraft }, revision = revision,
+        ) ?: EventPendingSend(id, text, originalDraft = snapshot.takeIf { clearDraft }, revision = revision)
+        val confirm = onSendConfirmed
+        // Mutate composer and pending state before launching any backend work.
+        submitting = true
+        if (confirm == null) {
+            legacyAttempt = attempt.copy(originalDraft = snapshot.takeIf { clearDraft }, revision = revision)
+            legacyWasSending = false
+            // Legacy callbacks have no awaited result and may never leave Idle.
+            // Keep their existing status guard, but release the local synchronous lock.
+            try { onSend(text) } finally { submitting = false }
+            return
+        }
+        pending = if (pending.any { it.id == id }) pending.map { if (it.id == id) attempt else it }
+            else pending + attempt
+        sendScope.launch {
+            try {
+                val accepted = confirm(text, id)
+                if (accepted || id in latestDeliveredIds) {
+                    draftAttempt.acknowledge(id)
+                    pending = pending.map { if (it.id == id) it.copy(accepted = true, failed = false) else it }
+                } else {
+                    pending = pending.map { if (it.id == id) it.copy(failed = true) else it }
+                    if (clearDraft && draftRevision == revision && draft.isEmpty()) draft = snapshot
+                }
+            } catch (cancelled: CancellationException) {
+                // Cancellation has no delivery verdict. Keep the same-ID recovery row;
+                // retry is explicit and safe even if the original request reached the server.
+                pending = pending.map { if (it.id == id && id !in latestDeliveredIds) it.copy(failed = true) else it }
+                throw cancelled
+            } catch (_: Exception) {
+                if (id in latestDeliveredIds) return@launch
+                pending = pending.map { if (it.id == id) it.copy(failed = true) else it }
+                // Unknown transport outcome stays in the retry bubble with the same ID.
+            } finally { submitting = false }
+        }
+    }
     // The long-pressed message, held by ID: Saveable (the sheet survives rotation)
     // and resolved against the live list, so a sheet whose message left the stream
     // (author blocked, message moderated away) closes itself.
@@ -146,13 +207,17 @@ fun EventChatScreen(
     var reportingMessageId by rememberSaveable { mutableStateOf<String?>(null) }
     var blockingUserId by rememberSaveable { mutableStateOf<String?>(null) }
 
-    // Clear the draft only once a post actually succeeds; keep it on failure.
     LaunchedEffect(sendStatus) {
-        if (onSendConfirmed == null && awaitingSend && sendStatus == ChatSendStatus.Idle) {
-            if (draftRevision == submittedRevision && draft == submittedText) draft = ""
-            awaitingSend = false
-        } else if (sendStatus == ChatSendStatus.Failed) {
-            awaitingSend = false
+        if (onSendConfirmed == null && legacyAttempt != null) {
+            if (sendStatus == ChatSendStatus.Sending) legacyWasSending = true
+            if (sendStatus == ChatSendStatus.Failed || (legacyWasSending && sendStatus == ChatSendStatus.Idle)) {
+                val attempt = legacyAttempt!!
+                if (sendStatus == ChatSendStatus.Failed && attempt.originalDraft != null &&
+                    draftRevision == attempt.revision && draft.isEmpty()) draft = attempt.originalDraft
+                if (sendStatus == ChatSendStatus.Idle) draftAttempt.acknowledge(attempt.id)
+                legacyAttempt = null
+                submitting = false
+            }
         }
     }
 
@@ -206,7 +271,7 @@ fun EventChatScreen(
                 return@Column
             }
 
-            when (state) {
+            when (if (localRows.isNotEmpty()) ChatMessagesState.Loaded(displayMessages) else state) {
                 ChatMessagesState.Loading ->
                     Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
@@ -221,7 +286,7 @@ fun EventChatScreen(
                     )
 
                 is ChatMessagesState.Loaded ->
-                    if (state.messages.isEmpty()) {
+                    if (displayMessages.isEmpty()) {
                         Text(
                             text = stringResource(R.string.chat_empty),
                             style = MaterialTheme.typography.bodyMedium,
@@ -236,11 +301,12 @@ fun EventChatScreen(
                         // up. Shared with the DM thread and group channels so the
                         // three surfaces cannot drift; see [KeepPinnedToNewest] for
                         // the open-jump vs new-message-follow split.
-                        val newest = state.messages.lastOrNull()
+                        val newest = displayMessages.lastOrNull()
                         KeepPinnedToNewest(
                             listState = listState,
                             newestMessageId = newest?.id,
                             isOwnNewestMessage = newest?.authorUserId == currentUid,
+                            newestItemKey = newest?.let { "${it.authorUserId}:${it.id}" },
                         )
                         // Keyboard just came up: the screen's ime padding shrank
                         // this list's viewport from the bottom and a LazyColumn
@@ -256,7 +322,7 @@ fun EventChatScreen(
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            items(state.messages, key = { it.id }) { message ->
+                            items(displayMessages, key = { "${it.authorUserId}:${it.id}" }) { message ->
                                 val isOwn = message.authorUserId == currentUid
                                 MessageRow(
                                     message = message,
@@ -292,6 +358,23 @@ fun EventChatScreen(
                                             null
                                         },
                                 )
+                                localRows.firstOrNull { isOwn && it.id == message.id && !it.accepted }?.let { local ->
+                                    Text(
+                                        text = stringResource(if (local.failed) R.string.channel_statusFailedRetry else R.string.channel_statusSending),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (local.failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.testTag("event-send-status-${local.id}").then(
+                                            if (local.failed) Modifier.clickable(
+                                                enabled = !submitting && cooldownSeconds == 0 && sendStatus != ChatSendStatus.Sending,
+                                                role = Role.Button,
+                                            ) {
+                                                submit(local.text,
+                                                    clearDraft = local.originalDraft != null && draft == local.originalDraft && draftRevision == local.revision,
+                                                    retryId = local.id)
+                                            } else Modifier,
+                                        ),
+                                    )
+                                }
                             }
                         }
                     }
@@ -333,36 +416,7 @@ fun EventChatScreen(
                 )
             }
 
-            // One-tap emoji reactions, pinned directly above the input. Tapping one
-            // posts it as a whole message via the SAME send path as the button; the
-            // typed draft is left untouched (unlike the button, this doesn't set
-            // awaitingSend, so a successful emoji send never clears the draft).
-            // Disabled while a send is already in flight, mirroring the Send button.
-            fun submit(text: String, clearDraft: Boolean) {
-                if (submitting || cooldownSeconds > 0 || sendStatus == ChatSendStatus.Sending) return
-                val snapshot = draft
-                val revision = draftRevision
-                val confirm = onSendConfirmed
-                if (confirm == null) {
-                    awaitingSend = clearDraft
-                    submittedText = if (clearDraft) snapshot else null
-                    submittedRevision = revision
-                    onSend(text)
-                } else {
-                    submitting = true
-                    sendScope.launch {
-                        try {
-                            val id = draftAttempt.idFor(text)
-                            acknowledgement.track(id) {
-                                draftAttempt.acknowledge(id)
-                                if (clearDraft && draftRevision == revision && draft == snapshot) draft = ""
-                            }
-                            if (confirm(text, id)) acknowledgement.acknowledge(id)
-                        }
-                        finally { submitting = false }
-                    }
-                }
-            }
+            // Quick emoji is a separate message; it never consumes the typed draft.
             ChatCooldownNotice(cooldownSeconds)
             ChatQuickEmojiRow(
                 onEmojiSelected = { submit(it, clearDraft = false) },
@@ -383,7 +437,7 @@ fun EventChatScreen(
                         }
                     },
                     placeholder = { Text(text = stringResource(R.string.chat_inputPlaceholder)) },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testTag("event-chat-input"),
                     keyboardOptions = ChatComposerKeyboardOptions,
                     singleLine = false,
                     maxLines = 5,
@@ -660,3 +714,37 @@ private fun InfoCard(title: String, body: String) {
         }
     }
 }
+
+/** Local-only row. Only a successful callable or an own server echo confirms acceptance. */
+internal data class EventPendingSend(
+    val id: String,
+    val text: String,
+    val failed: Boolean = false,
+    val originalDraft: String? = null,
+    val revision: Long = -1L,
+    val accepted: Boolean = false,
+    val submittedAtMillis: Long = System.currentTimeMillis(),
+)
+
+/** Match Channel/DM ordering: oldest first, unknown legacy times last, then stable ID. */
+internal fun eventMessagesWithPending(
+    delivered: List<ChatMessage>,
+    pending: List<EventPendingSend>,
+    currentUid: String,
+): List<ChatMessage> {
+    val ownDeliveredIds = delivered.filter { it.authorUserId == currentUid }.mapTo(mutableSetOf()) { it.id }
+    val local = pending.filterNot { it.id in ownDeliveredIds }.map {
+        ChatMessage(it.id, currentUid, null, it.text.trim(), false, createdAtMillis = it.submittedAtMillis)
+    }
+    return (delivered + local).sortedWith(compareBy<ChatMessage> { it.createdAtMillis ?: Long.MAX_VALUE }.thenBy { it.id })
+}
+
+internal val eventPendingSendSaver = listSaver<List<EventPendingSend>, String>(
+    save = { rows -> rows.flatMap { listOf(it.id, it.text, it.originalDraft.orEmpty(), it.revision.toString(), it.accepted.toString(), it.submittedAtMillis.toString()) } },
+    // A restored composition cannot resume the old coroutine. Offer explicit retry,
+    // using the original ID, rather than silently sending or leaving a stuck spinner.
+    restore = { values -> values.chunked(6).map {
+        val accepted = it[4].toBoolean()
+        EventPendingSend(it[0], it[1], !accepted, it[2].ifEmpty { null }, it[3].toLong(), accepted, it[5].toLong())
+    } },
+)

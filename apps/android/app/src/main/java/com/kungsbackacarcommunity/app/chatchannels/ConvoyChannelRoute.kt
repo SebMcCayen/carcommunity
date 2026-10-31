@@ -2,6 +2,8 @@ package com.kungsbackacarcommunity.app.chatchannels
 
 import com.kungsbackacarcommunity.app.chat.ChatSendCooldowns
 import com.kungsbackacarcommunity.app.chat.rememberChatCooldownSeconds
+import com.kungsbackacarcommunity.app.chat.ChannelPendingMessageSaver
+import com.kungsbackacarcommunity.app.chat.rememberChatPendingOutbox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -70,9 +72,11 @@ fun ConvoyChannelRoute(
         (blockingCoordinator?.actionStatus ?: flowOf(BlockActionStatus.Idle))
             .collectAsState(initial = BlockActionStatus.Idle)
     val crashTelemetry = rememberCrashTelemetry()
+    val outbox = rememberChatPendingOutbox(ChannelPendingMessageSaver)
     val coordinator =
         remember(repository, convoyId, uid, crashTelemetry) {
             ChannelChatCoordinator(
+                initialPending = outbox.initialPending,
                 cooldown = ChatSendCooldowns.forUser(uid),
                 // convoyChat-post takes no mentions; the uid list is always empty
                 // here and is dropped rather than forwarded. The clientId makes the
@@ -93,6 +97,7 @@ fun ConvoyChannelRoute(
                 crashTelemetry = crashTelemetry ?: NoopCrashTelemetry,
             )
         }
+    outbox.bind(coordinator.pendingMessages)
 
     val messagesState by
         remember(repository, convoyId) { repository.observeMessages(convoyId) }

@@ -2,6 +2,8 @@ package com.kungsbackacarcommunity.app.dm
 
 import com.kungsbackacarcommunity.app.chat.ChatSendCooldowns
 import com.kungsbackacarcommunity.app.chat.rememberChatCooldownSeconds
+import com.kungsbackacarcommunity.app.chat.DmPendingMessageSaver
+import com.kungsbackacarcommunity.app.chat.rememberChatPendingOutbox
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -199,9 +201,11 @@ fun ChatRoute(
         (blockingCoordinator?.actionStatus ?: flowOf(BlockActionStatus.Idle))
             .collectAsState(initial = BlockActionStatus.Idle)
     val crashTelemetry = rememberCrashTelemetry()
+    val outbox = rememberChatPendingOutbox(DmPendingMessageSaver)
     val coordinator =
         remember(repository, uid, otherUid, conversationId, crashTelemetry) {
             DmThreadCoordinator(
+                initialPending = outbox.initialPending,
                 cooldown = ChatSendCooldowns.forUser(uid),
                 repository = repository,
                 selfUid = uid,
@@ -210,6 +214,8 @@ fun ChatRoute(
                 crashTelemetry = crashTelemetry ?: NoopCrashTelemetry,
             )
         }
+
+    outbox.bind(coordinator.pendingMessages)
 
     var threadKey by remember(conversationId) { mutableStateOf(0) }
     val threadState by

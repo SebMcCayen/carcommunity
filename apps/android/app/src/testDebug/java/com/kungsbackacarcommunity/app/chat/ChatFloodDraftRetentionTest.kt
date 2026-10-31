@@ -57,7 +57,7 @@ class ChatFloodDraftRetentionTest {
         compose.onNodeWithText(str(R.string.channel_send)).performClick()
         compose.onNodeWithTag(CHANNEL_INPUT_TEST_TAG).performTextInput(" with a newer edit")
         compose.runOnIdle { ack.complete(true) }
-        compose.onNodeWithText("First draft with a newer edit").assertExists()
+        compose.onNodeWithText(" with a newer edit").assertExists()
     }
 
     @Test fun dmRejectKeepsDraftAndGatesQuickEmoji() {
@@ -84,7 +84,7 @@ class ChatFloodDraftRetentionTest {
         } }
         compose.onNodeWithText(str(R.string.chat_inputPlaceholder)).performTextInput("Event draft 🚗")
         compose.onNodeWithText(str(R.string.chat_sendButton)).performClick()
-        compose.onNodeWithText("Event draft 🚗").assertExists()
+        compose.onNodeWithTag("event-chat-input").assertTextEquals("Event draft 🚗")
         compose.onNodeWithTag(chatQuickEmojiTestTag("😊")).assertIsNotEnabled()
         compose.onNodeWithText(str(R.string.chat_sendButton)).assertIsNotEnabled()
     }

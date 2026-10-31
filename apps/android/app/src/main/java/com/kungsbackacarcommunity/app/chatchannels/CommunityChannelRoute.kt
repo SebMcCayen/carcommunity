@@ -2,6 +2,8 @@ package com.kungsbackacarcommunity.app.chatchannels
 
 import com.kungsbackacarcommunity.app.chat.ChatSendCooldowns
 import com.kungsbackacarcommunity.app.chat.rememberChatCooldownSeconds
+import com.kungsbackacarcommunity.app.chat.ChannelPendingMessageSaver
+import com.kungsbackacarcommunity.app.chat.rememberChatPendingOutbox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -85,9 +87,11 @@ fun CommunityChannelRoute(
         (blockingCoordinator?.actionStatus ?: flowOf(BlockActionStatus.Idle))
             .collectAsState(initial = BlockActionStatus.Idle)
     val crashTelemetry = rememberCrashTelemetry()
+    val outbox = rememberChatPendingOutbox(ChannelPendingMessageSaver)
     val coordinator =
         remember(repository, uid, crashTelemetry) {
             ChannelChatCoordinator(
+                initialPending = outbox.initialPending,
                 cooldown = ChatSendCooldowns.forUser(uid),
                 // The clientId makes the optimistic send idempotent + reconcilable
                 // (backend uses it as the message doc id); replyToMessageId is the
@@ -112,6 +116,7 @@ fun CommunityChannelRoute(
                 crashTelemetry = crashTelemetry ?: NoopCrashTelemetry,
             )
         }
+    outbox.bind(coordinator.pendingMessages)
     // Clear a stale report Done/Failed banner when re-entering the channel (mirrors
     // the block-status reset above).
     LaunchedEffect(coordinator) { coordinator.resetReport() }
