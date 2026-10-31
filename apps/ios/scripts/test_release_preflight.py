@@ -36,6 +36,30 @@ class ReleasePreflightTests(unittest.TestCase):
         with self.assertRaisesRegex(preflight.PreflightError, "AppIcon"):
             preflight.check_source(self.root)
 
+    def test_missing_orientations_are_rejected_before_upload(self):
+        path = self.root / "KCC/Info.plist"
+        data = plistlib.loads(path.read_bytes())
+        data.pop("UISupportedInterfaceOrientations", None)
+        data.pop("UISupportedInterfaceOrientations~ipad", None)
+        path.write_bytes(plistlib.dumps(data))
+        with self.assertRaisesRegex(preflight.PreflightError, "interface orientations"):
+            preflight.check_source(self.root)
+
+    def test_portrait_only_ipad_is_rejected_for_multitasking(self):
+        path = self.root / "KCC/Info.plist"
+        data = plistlib.loads(path.read_bytes())
+        data["UISupportedInterfaceOrientations~ipad"] = ["UIInterfaceOrientationPortrait"]
+        path.write_bytes(plistlib.dumps(data))
+        with self.assertRaisesRegex(preflight.PreflightError, "iPad multitasking"):
+            preflight.check_source(self.root)
+
+    def test_universal_orientations_without_ipad_override_are_valid(self):
+        path = self.root / "KCC/Info.plist"
+        data = plistlib.loads(path.read_bytes())
+        data["UISupportedInterfaceOrientations"] = data.pop("UISupportedInterfaceOrientations~ipad")
+        path.write_bytes(plistlib.dumps(data))
+        preflight.check_source(self.root)
+
     def test_wrong_size_or_alpha_icon_is_rejected(self):
         path = self.root / "KCC/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
         original = path.read_bytes()

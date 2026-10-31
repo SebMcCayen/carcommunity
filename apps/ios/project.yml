@@ -75,6 +75,13 @@ targets:
         CFBundleDisplayName: Kungsbacka Car Community
         CFBundleDevelopmentRegion: sv
         UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         ITSAppUsesNonExemptEncryption: false
         # Firebase Messaging 12.18's supported registration API is FID-based.
         # Without this opt-in register()/unregister() fail and only the now-

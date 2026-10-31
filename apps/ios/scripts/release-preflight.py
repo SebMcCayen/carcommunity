@@ -84,6 +84,18 @@ def check_source(root):
                     require(unit.get("state") == "translated" and bool(unit.get("value")),
                             f"Changelog key {key} needs a {language} translation")
     info = load_plist(root / "KCC/Info.plist")
+    supported_orientations = {
+        "UIInterfaceOrientationPortrait", "UIInterfaceOrientationPortraitUpsideDown",
+        "UIInterfaceOrientationLandscapeLeft", "UIInterfaceOrientationLandscapeRight",
+    }
+    orientations = info.get("UISupportedInterfaceOrientations")
+    require(isinstance(orientations, list) and bool(orientations) and
+            all(isinstance(value, str) and value in supported_orientations for value in orientations),
+            "Supported interface orientations are missing or invalid")
+    ipad_orientations = info.get("UISupportedInterfaceOrientations~ipad", orientations)
+    require(isinstance(ipad_orientations, list) and len(ipad_orientations) == 4 and
+            all(value in ipad_orientations for value in supported_orientations),
+            "iPad multitasking requires all four interface orientations")
     require(info.get("CFBundleShortVersionString") == "$(MARKETING_VERSION)" and
             info.get("CFBundleVersion") == "$(CURRENT_PROJECT_VERSION)",
             "Info.plist versions must reference the build settings")

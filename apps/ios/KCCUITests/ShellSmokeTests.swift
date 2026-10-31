@@ -441,7 +441,12 @@ final class ShellSmokeTests: XCTestCase {
             driver.tap()
             assertSelected(driver)
             attach(app, name: "\(prefix)-S37-driver-restricted-configless")
-            app.buttons["chatHub.source.chats"].tap()
+            let chats = app.buttons["chatHub.source.chats"]
+            chats.tap()
+            // The source switch publishes a new SwiftUI accessibility tree.
+            // Observe the completed transition before targeting the footer;
+            // keep the map selection assertion and never retry either tap.
+            assertSelected(chats)
             app.buttons["shell.tab.map"].tap()
             assertSelected(app.buttons["shell.tab.map"])
             XCTAssertEqual(map.value as? String, mapIdentity, "Tab changes must retain the map host")
