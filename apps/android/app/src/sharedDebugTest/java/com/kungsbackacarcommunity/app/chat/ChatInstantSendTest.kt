@@ -14,6 +14,7 @@ import com.kungsbackacarcommunity.app.chatchannels.*
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.design.chatQuickEmojiTestTag
 import com.kungsbackacarcommunity.app.dm.*
+import com.kungsbackacarcommunity.app.moderation.MESSAGE_ACTIONS_REPLY_TEST_TAG
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -73,6 +74,203 @@ class ChatInstantSendTest {
     @Test fun dmPendingEmojiRestorationPreservesTypedDraftAndRetryId() = restorePending(Surface.Dm, quickEmoji = true)
     @Test fun communityDeletedNextDraftStaysEmptyAfterPendingRestoration() = restorePending(Surface.Community, deleteNextDraft = true)
     @Test fun dmDeletedNextDraftStaysEmptyAfterPendingRestoration() = restorePending(Surface.Dm, deleteNextDraft = true)
+
+    @Test fun communityFailedEmojiLateEchoConsumesOnlyRecoveredQuote() = recoveredEmojiQuote(Surface.Community)
+    @Test fun dmFailedEmojiLateEchoConsumesOnlyRecoveredQuote() = recoveredEmojiQuote(Surface.Dm)
+    @Test fun communityFailedEmojiLateEchoKeepsEditedText() = recoveredEmojiQuote(Surface.Community, editText = true)
+    @Test fun dmFailedEmojiLateEchoKeepsEditedText() = recoveredEmojiQuote(Surface.Dm, editText = true)
+    @Test fun communityFailedEmojiQuoteRecoverySurvivesRestoration() = recoveredEmojiQuote(Surface.Community, recreate = true)
+    @Test fun dmFailedEmojiQuoteRecoverySurvivesRestoration() = recoveredEmojiQuote(Surface.Dm, recreate = true)
+
+    @Test fun communityFailedEmojiEchoKeepsNewReply() = newerEmojiReply(Surface.Community)
+    @Test fun dmFailedEmojiEchoKeepsNewReply() = newerEmojiReply(Surface.Dm)
+    @Test fun communityFailedEmojiEchoKeepsSameParentReselected() = newerEmojiReply(Surface.Community, sameParent = true)
+    @Test fun dmFailedEmojiEchoKeepsSameParentReselected() = newerEmojiReply(Surface.Dm, sameParent = true)
+    @Test fun communityPendingEmojiFailureKeepsCancelledReply() = newerEmojiReply(Surface.Community, cancelWhilePending = true)
+    @Test fun dmPendingEmojiFailureKeepsCancelledReply() = newerEmojiReply(Surface.Dm, cancelWhilePending = true)
+
+    @Test fun communityEmojiBubbleRetryConsumesRecoveredQuoteAndKeepsText() = retryEmojiQuote(Surface.Community)
+    @Test fun dmEmojiBubbleRetryConsumesRecoveredQuoteAndKeepsText() = retryEmojiQuote(Surface.Dm)
+    @Test fun communityEmojiRetryLateEchoConsumesReRecoveredQuote() = retryEmojiQuote(Surface.Community, failAgain = true)
+    @Test fun dmEmojiRetryLateEchoConsumesReRecoveredQuote() = retryEmojiQuote(Surface.Dm, failAgain = true)
+    @Test fun communityEmojiBubbleRetryKeepsSameParentReselected() = retryEmojiQuote(Surface.Community, newReply = true)
+    @Test fun dmEmojiBubbleRetryKeepsSameParentReselected() = retryEmojiQuote(Surface.Dm, newReply = true)
+
+    @Test fun communityPendingEmojiFailureDoesNotRestoreQuoteOntoNewDraft() = newDraftWhileEmojiPending(Surface.Community)
+    @Test fun dmPendingEmojiFailureDoesNotRestoreQuoteOntoNewDraft() = newDraftWhileEmojiPending(Surface.Dm)
+    @Test fun communityFailedEmojiLateEchoKeepsTypedMention() = recoveredEmojiMention()
+    @Test fun communityFailedEmojiBubbleRetryKeepsTypedMention() = recoveredEmojiMention(retryBubble = true)
+
+    private fun newDraftWhileEmojiPending(surface: Surface) {
+        val f = replyFixture(surface)
+        val first = emoji(f)
+        input().performTextReplacement(NEXT_DRAFT)
+        complete(first, false)
+        quoteChip().assertDoesNotExist()
+        compose.runOnIdle { f.publish(first) }
+        assertDraft(NEXT_DRAFT)
+        quoteChip().assertDoesNotExist()
+        val next = submit(f, 2)
+        assertEquals(NEXT_DRAFT, next.text)
+        assertNull(next.replyId)
+        complete(next, true)
+    }
+
+    private fun recoveredEmojiMention(retryBubble: Boolean = false) {
+        val f = replyFixture(Surface.Community)
+        input().performTextReplacement("@Lokal")
+        compose.onNodeWithTag(mentionCandidateTestTag(PEER)).performClick()
+        val expected = input().fetchSemanticsNode().config[SemanticsProperties.EditableText].text
+        assertTrue(expected.contains("@Lokal testmedlem"))
+        compose.onNodeWithTag(chatQuickEmojiTestTag(EMOJI)).performClick()
+        val first = attempt(f, 1)
+        assertEquals(f.parentId(), first.replyId)
+        assertTrue(first.mentionedUids.isEmpty()) // The typed mention belongs to the next draft.
+        complete(first, false)
+        quoteChip().assertExists()
+        if (retryBubble) {
+            retry(f).assertEventuallyDisplayed().performClick()
+            val second = attempt(f, 2)
+            assertSamePayload(first, second)
+            assertDraft(expected)
+            quoteChip().assertDoesNotExist()
+            complete(second, true)
+        }
+        compose.runOnIdle { f.publish(first) }
+        assertDraft(expected)
+        quoteChip().assertDoesNotExist()
+        val next = submit(f, if (retryBubble) 3 else 2)
+        assertEquals(expected.trim(), next.text)
+        assertEquals(listOf(PEER), next.mentionedUids)
+        assertNull(next.replyId)
+        complete(next, true)
+    }
+
+    private fun replyFixture(surface: Surface, restoration: StateRestorationTester? = null): Fixture {
+        val f = Fixture(surface, repliesEnabled = true)
+        f.seedReplyParents()
+        if (restoration == null) compose.setContent { KccTheme { f.Route() } }
+        else restoration.setContent { KccTheme { f.Route() } }
+        input().performTextInput(FIRST_DRAFT)
+        chooseReply(f)
+        return f
+    }
+
+    private fun chooseReply(f: Fixture, newParent: Boolean = false) {
+        // Browsing back to an older parent is an explicit user action. Its lazy
+        // row may no longer be composed after the outgoing message was pinned.
+        scrollToChatBody(f.parentId(newParent))
+        compose.onNodeWithTag("chat-body-${f.parentId(newParent)}", useUnmergedTree = true)
+            .assertIsDisplayed().performTouchInput { longClick() }
+        compose.onNodeWithTag(MESSAGE_ACTIONS_REPLY_TEST_TAG).performClick()
+        quoteChip().assertExists()
+    }
+
+    private fun scrollToChatBody(messageId: String) {
+        scrollToChatNode(hasTestTag("chat-body-$messageId"))
+    }
+
+    private fun scrollToChatNode(matcher: SemanticsMatcher) {
+        compose.onNode(
+            hasScrollToIndexAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange),
+            useUnmergedTree = true,
+        ).performScrollToNode(matcher)
+    }
+
+    private fun quoteChip() = compose.onNodeWithContentDescription(text(R.string.chat_replyCancel))
+
+    private fun emoji(f: Fixture, count: Int = 1): Attempt {
+        compose.onNodeWithTag(chatQuickEmojiTestTag(EMOJI)).performClick()
+        val attempt = attempt(f, count)
+        assertEquals(EMOJI, attempt.text)
+        assertEquals(f.parentId(), attempt.replyId)
+        assertDraft(FIRST_DRAFT)
+        quoteChip().assertDoesNotExist()
+        return attempt
+    }
+
+    private fun recoveredEmojiQuote(surface: Surface, editText: Boolean = false, recreate: Boolean = false) {
+        val restoration = if (recreate) StateRestorationTester(compose) else null
+        val f = replyFixture(surface, restoration)
+        val first = emoji(f)
+        complete(first, false)
+        quoteChip().assertExists()
+        var expected = FIRST_DRAFT
+        if (editText) {
+            input().performTextReplacement(NEXT_DRAFT)
+            expected = NEXT_DRAFT
+        }
+        if (restoration != null) {
+            restoration.emulateSavedInstanceStateRestore()
+            assertDraft(expected)
+            quoteChip().assertExists()
+            assertAttemptCount(f, 1) // Saving a recovery owner never resends.
+        }
+        compose.runOnIdle { f.publish(first) }
+        quoteChip().assertDoesNotExist()
+        assertDraft(expected)
+        val plain = submit(f, 2)
+        assertEquals(expected, plain.text)
+        assertNull("The consumed emoji quote must not leak into the next send", plain.replyId)
+        complete(plain, true)
+    }
+
+    private fun newerEmojiReply(surface: Surface, sameParent: Boolean = false, cancelWhilePending: Boolean = false) {
+        val f = replyFixture(surface)
+        val first = emoji(f)
+        if (cancelWhilePending) {
+            // Selection followed by cancel while the first callable is pending.
+            // A null target alone must not authorize automatic restoration.
+            chooseReply(f)
+            quoteChip().performClick()
+        } else {
+            complete(first, false)
+            quoteChip().assertExists()
+            chooseReply(f, newParent = !sameParent)
+        }
+        if (cancelWhilePending) complete(first, false)
+        compose.runOnIdle { f.publish(first) }
+        if (cancelWhilePending) quoteChip().assertDoesNotExist() else quoteChip().assertExists()
+        assertDraft(FIRST_DRAFT)
+        val next = submit(f, 2)
+        assertEquals(if (cancelWhilePending) null else f.parentId(!sameParent), next.replyId)
+        complete(next, true)
+    }
+
+    private fun retryEmojiQuote(surface: Surface, failAgain: Boolean = false, newReply: Boolean = false) {
+        val f = replyFixture(surface)
+        val first = emoji(f)
+        complete(first, false)
+        quoteChip().assertExists()
+        if (newReply) {
+            chooseReply(f) // Same parent, explicitly selected for a NEW reply.
+            // The user browsed history to select that parent, then returns to
+            // the failed bubble to explicitly retry it. This is not an assertion
+            // that new sends require test-driven scrolling to become visible.
+            scrollToChatNode(hasText(text(if (surface == Surface.Community) R.string.channel_statusFailedRetry else R.string.dm_statusFailedRetry)))
+        }
+        retry(f).assertEventuallyDisplayed().performClick()
+        val second = attempt(f, 2)
+        assertSamePayload(first, second)
+        assertDraft(FIRST_DRAFT)
+        if (newReply) quoteChip().assertExists() else quoteChip().assertDoesNotExist()
+        if (failAgain) {
+            complete(second, false)
+            quoteChip().assertExists()
+            input().performTextReplacement(NEXT_DRAFT)
+            compose.runOnIdle { f.publish(first) }
+            quoteChip().assertDoesNotExist()
+            assertDraft(NEXT_DRAFT)
+        } else {
+            complete(second, true)
+            compose.runOnIdle { f.publish(first) }
+            assertDraft(FIRST_DRAFT)
+            if (newReply) quoteChip().assertExists() else quoteChip().assertDoesNotExist()
+        }
+        val plain = submit(f, 3)
+        assertEquals(if (newReply) f.parentId() else null, plain.replyId)
+        complete(plain, true)
+    }
 
     private fun restorePending(
         surface: Surface,
@@ -434,20 +632,25 @@ class ChatInstantSendTest {
     private fun assertSamePayload(first: Attempt, retried: Attempt) = compose.runOnIdle {
         assertEquals(first.clientId, retried.clientId)
         assertEquals(first.text, retried.text)
+        assertEquals(first.replyId, retried.replyId)
+        assertEquals(first.mentionedUids, retried.mentionedUids)
     }
 
     private enum class Surface { Community, Dm }
     private data class Attempt(
         val text: String,
         val clientId: String,
+        val replyId: String? = null,
+        val mentionedUids: List<String> = emptyList(),
         val response: CompletableDeferred<Boolean> = CompletableDeferred(),
         var returned: Boolean = false,
         var cancelled: Boolean = false,
     )
     private class SendScript {
         val attempts = mutableListOf<Attempt>()
-        suspend fun send(text: String, clientId: String?): Boolean {
-            val attempt = Attempt(text, checkNotNull(clientId))
+        suspend fun send(text: String, clientId: String?, replyId: String? = null,
+            mentionedUids: List<String> = emptyList()): Boolean {
+            val attempt = Attempt(text, checkNotNull(clientId), replyId, mentionedUids)
             check(attempt.clientId.isNotBlank())
             attempts += attempt
             return try {
@@ -459,7 +662,7 @@ class ChatInstantSendTest {
         }
     }
 
-    private class Fixture(val surface: Surface) {
+    private class Fixture(val surface: Surface, val repliesEnabled: Boolean = false) {
         // ChatSendCooldowns is process-wide: each fixture owns an isolated account.
         val uid = "local-instant-send-${UUID.randomUUID()}"
         val script = SendScript()
@@ -469,7 +672,11 @@ class ChatInstantSendTest {
             override fun observeMessages() = communityMessages
             override fun observeUnread(uid: String) = flowOf(false)
             override suspend fun post(text: String, mentionedUids: List<String>, clientId: String?): ChannelSendResult =
-                if (script.send(text, clientId)) ChannelSendResult.Sent(checkNotNull(clientId))
+                if (script.send(text, clientId, mentionedUids = mentionedUids)) ChannelSendResult.Sent(checkNotNull(clientId))
+                else ChannelSendResult.Failed(ChannelSendError.Generic)
+            override suspend fun post(text: String, mentionedUids: List<String>, clientId: String?,
+                replyToMessageId: String?): ChannelSendResult =
+                if (script.send(text, clientId, replyToMessageId, mentionedUids)) ChannelSendResult.Sent(checkNotNull(clientId))
                 else ChannelSendResult.Failed(ChannelSendError.Generic)
             override suspend fun loadOlder(before: String) = ChannelOlderResult.Failed
             override suspend fun markRead() = Unit
@@ -480,15 +687,32 @@ class ChatInstantSendTest {
             override suspend fun sendMessage(toUid: String, text: String, clientId: String?): DmSendResult =
                 if (script.send(text, clientId)) DmSendResult.Sent(dmPairId(uid, PEER), checkNotNull(clientId))
                 else DmSendResult.Failed(DmSendError.Generic)
+            override suspend fun sendMessage(toUid: String, text: String, clientId: String?,
+                replyToMessageId: String?): DmSendResult =
+                if (script.send(text, clientId, replyToMessageId)) DmSendResult.Sent(dmPairId(uid, PEER), checkNotNull(clientId))
+                else DmSendResult.Failed(DmSendError.Generic)
             override suspend fun loadOlder(conversationId: String, before: String) = DmOlderResult.Failed
             override suspend fun markRead(conversationId: String) = Unit
         }
 
         @Composable fun Route() {
             when (surface) {
-                Surface.Community -> CommunityChannelRoute(community, uid)
-                Surface.Dm -> ChatRoute(dm, uid, PEER, "Lokal testmedlem")
+                Surface.Community -> CommunityChannelRoute(community, uid, chatRepliesEnabled = repliesEnabled)
+                Surface.Dm -> ChatRoute(dm, uid, PEER, "Lokal testmedlem", chatRepliesEnabled = repliesEnabled)
             }
+        }
+
+        fun parentId(newParent: Boolean = false) = "$uid-parent-${if (newParent) "new" else "first"}"
+
+        fun seedReplyParents() {
+            val parents = listOf(false, true).mapIndexed { index, newParent ->
+                ChannelMessage(parentId(newParent), PEER, "Citatförälder $index", "Lokal testmedlem", null,
+                    1_792_936_600_000L + index * 60_000L, null)
+            }
+            communityMessages.value = ChannelMessagesState.Loaded(parents)
+            dmMessages.value = DmThreadState.Loaded(parents.map {
+                DmMessage(it.id, it.senderUid, it.text, it.createdAtMillis, null)
+            })
         }
 
         fun seedHistory() {
@@ -511,16 +735,23 @@ class ChatInstantSendTest {
         }
 
         fun publish(attempt: Attempt) {
-            communityMessages.value = ChannelMessagesState.Loaded(listOf(ChannelMessage(
+            val channelParents = if (repliesEnabled) (communityMessages.value as? ChannelMessagesState.Loaded)
+                ?.messages.orEmpty().filter { it.id != attempt.clientId } else emptyList()
+            val dmParents = if (repliesEnabled) (dmMessages.value as? DmThreadState.Loaded)
+                ?.messages.orEmpty().filter { it.id != attempt.clientId } else emptyList()
+            communityMessages.value = ChannelMessagesState.Loaded(channelParents + listOf(ChannelMessage(
                 id = attempt.clientId, senderUid = uid, text = attempt.text,
                 senderDisplayName = "Lokal testmedlem", senderAvatarPath = null,
                 createdAtMillis = 1_792_936_800_000L, createdAtIso = null,
                 clientId = attempt.clientId, deliveryState = ChannelDeliveryState.Sent,
+                mentionedUids = attempt.mentionedUids,
+                replyTo = attempt.replyId?.let { ChannelReplyTo(it, PEER, "Lokal testmedlem", "Citatförälder") },
             )))
-            dmMessages.value = DmThreadState.Loaded(listOf(DmMessage(
+            dmMessages.value = DmThreadState.Loaded(dmParents + listOf(DmMessage(
                 id = attempt.clientId, senderUid = uid, text = attempt.text,
                 createdAtMillis = 1_792_936_800_000L, createdAtIso = null,
                 clientId = attempt.clientId, deliveryState = DmDeliveryState.Sent,
+                replyTo = attempt.replyId?.let { DmReplyTo(it, PEER, "Lokal testmedlem", "Citatförälder") },
             )))
         }
     }

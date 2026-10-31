@@ -579,7 +579,12 @@ class ClubChatRevocationTest {
         compose.onNodeWithText(str(R.string.clubs_create)).performScrollTo().performClick()
         compose.onNodeWithText(str(R.string.clubs_name)).performTextInput("Västkustklubben")
         compose.onNodeWithText(str(R.string.clubs_description)).performTextInput("En klubb för alla bilintresserade")
-        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        // The form is an AlertDialog: the Activity's BASE_APPLICATION root is
+        // correctly unfocused while it is open. Target the focused dialog rather
+        // than letting Espresso's default root picker wait on that background root.
+        androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.isRoot())
+            .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+            .perform(androidx.test.espresso.action.ViewActions.closeSoftKeyboard())
         compose.waitUntil(5_000) {
             compose.onAllNodesWithTag("club-county-field").fetchSemanticsNodes().isNotEmpty()
         }

@@ -71,3 +71,9 @@ Every verified entry detaches the previous room's callbacks, restores unresolved
 sends as explicit retries, and never dispatches automatically. Native coverage
 uses actual Activity recreation with a new repository, plus revocation, account
 switching and stop/resume; save/restore of the same fake object is insufficient.
+
+Automatically restored quote selection has its own send-attempt ownership. A
+confirmed quick emoji or an explicit retry consumes only its recovered quote,
+independently of the text/mentions still being edited. A new reply choice, even
+the same parent again, revokes that ownership; a late acknowledgement cannot
+clear the new selection or attach a consumed quote to the next ordinary send.

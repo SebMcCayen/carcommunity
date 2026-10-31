@@ -54,10 +54,11 @@ fun ClubChatRoute(
     }
     // Keep only submitted messages outside repo-identity/foreground keys. A new
     // Activity creates a new repository, but must not lose already-cleared text.
-    val outbox = key(uid) {
-        val saver = remember(uid) { clubChatOutboxSaver(uid) }
-        rememberSaveable(saver = saver) { ClubChatOutbox(uid) }
-    }
+    // Use one registry slot, reset by uid inputs. Per-uid key groups would leave
+    // an unconsumed restored payload for an old account that could reappear when
+    // switching back later in the same Activity.
+    val outboxSaver = remember(uid) { clubChatOutboxSaver(uid) }
+    val outbox = rememberSaveable(uid, saver = outboxSaver) { ClubChatOutbox(uid) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var foreground by remember(lifecycle) { mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) }
     var entryEpoch by remember(lifecycle) { mutableIntStateOf(0) }

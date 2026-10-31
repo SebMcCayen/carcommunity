@@ -163,6 +163,22 @@ fun ChatScreen(
     // The message being replied to (Saveable), resolved against the live list so
     // the composer quote chip clears itself if its target leaves the thread.
     var replyToId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Quote recovery belongs to a send attempt, independently of typed text.
+    // Explicit reply choices (even the same parent again) revoke that ownership.
+    var replyRevision by rememberSaveable { mutableLongStateOf(0L) }
+    var restoredReplyAttemptId by rememberSaveable { mutableStateOf<String?>(null) }
+    fun clearRecoveredReply(id: String?) {
+        if (id != null && restoredReplyAttemptId == id) {
+            replyToId = null
+            restoredReplyAttemptId = null
+        }
+    }
+    fun restoreReply(id: String, revision: Long, reply: String?) {
+        if (reply != null && replyRevision == revision && replyToId == null) {
+            replyToId = reply
+            restoredReplyAttemptId = id
+        }
+    }
     LaunchedEffect(messages) {
         val deliveredRecovery = messages.firstOrNull {
             it.senderUid == currentUid && it.deliveryState == DmDeliveryState.Sent &&
@@ -171,7 +187,14 @@ fun ChatScreen(
         }
         if (deliveredRecovery != null) {
             draftAttempt.acknowledge(deliveredRecovery.id)
-            draft = ""; replyToId = null
+            draft = ""
+        }
+        messages.firstOrNull {
+            it.senderUid == currentUid && it.deliveryState == DmDeliveryState.Sent &&
+                it.id == restoredReplyAttemptId
+        }?.let {
+            draftAttempt.acknowledge(it.id)
+            clearRecoveredReply(it.id)
         }
     }
 
@@ -220,9 +243,14 @@ fun ChatScreen(
                                 val revision = draftRevision
                                 val snapshot = draft
                                 val oldReply = replyToId
+                                val replyRevisionAtRetry = replyRevision
+                                val ownsReply = message.clientId != null &&
+                                    restoredReplyAttemptId == message.clientId &&
+                                    replyToId == message.replyTo?.messageId
                                 val ownsDraft = draftRevision == restoredRevision && draftAttempt.owns(message.clientId) &&
                                     draft.trim() == message.text && replyToId == message.replyTo?.messageId
-                                if (ownsDraft) { draft = ""; replyToId = null }
+                                if (ownsDraft) draft = ""
+                                if (ownsReply) clearRecoveredReply(message.clientId)
                                 sendScope.launch {
                                     try {
                                         val id = message.clientId
@@ -230,15 +258,18 @@ fun ChatScreen(
                                             acknowledgement.track(id) {
                                                 draftAttempt.acknowledge(id)
                                                 if (ownsDraft && draftRevision == revision && draft == snapshot && replyToId == oldReply) {
-                                                    draft = ""; replyToId = null
+                                                    draft = ""
                                                 }
+                                                clearRecoveredReply(id)
                                             }
                                         }
                                         if (confirm(message)) {
                                             if (id != null) acknowledgement.acknowledge(id)
-                                        } else if (ownsDraft && acknowledgement.pendingId == id &&
-                                            draftRevision == revision && draft.isEmpty()) {
-                                            draft = snapshot; replyToId = oldReply
+                                        } else if (id != null && acknowledgement.pendingId == id) {
+                                            if (ownsDraft && draftRevision == revision && draft.isEmpty()) {
+                                                draft = snapshot
+                                            }
+                                            if (ownsReply) restoreReply(id, replyRevisionAtRetry, oldReply)
                                         }
                                     } finally { submitting = false }
                                 }
@@ -294,8 +325,12 @@ fun ChatScreen(
         // the delivered document carries the server's authoritative snapshot.
         val replyTarget =
             if (chatRepliesEnabled) messages.firstOrNull { it.id == replyToId } else null
-        LaunchedEffect(replyToId, replyTarget == null) {
-            if (replyToId != null && replyTarget == null) replyToId = null
+        LaunchedEffect(replyToId, replyTarget == null, threadLoading) {
+            if (replyToId != null && replyTarget == null && !threadLoading) {
+                replyRevision++
+                replyToId = null
+                restoredReplyAttemptId = null
+            }
         }
         val replySnapshot =
             replyTarget?.let {
@@ -315,7 +350,10 @@ fun ChatScreen(
                     (replySnapshot?.senderDisplayName ?: otherName)
                         ?: stringResource(R.string.dm_unknownMember),
                 preview = replySnapshot?.textPreview.orEmpty(),
-                onCancel = { draftRevision++; replyToId = null },
+                onCancel = {
+                    draftRevision++; replyRevision++
+                    replyToId = null; restoredReplyAttemptId = null
+                },
             )
         }
 
@@ -326,6 +364,10 @@ fun ChatScreen(
             val snapshot = draft
             val revision = draftRevision
             val reply = replyToId
+            val submittedReplyRevision = ++replyRevision
+            restoredReplyAttemptId = null
+            // This submission does not own an earlier automatically restored text draft.
+            restoredRevision = -1L
             if (clearDraft) draft = ""
             replyToId = null
             val confirm = onSendConfirmed
@@ -336,17 +378,19 @@ fun ChatScreen(
                     draftAttempt.acknowledge(id)
                     if (clearDraft && draftRevision == revision && draft == snapshot) {
                         draft = ""
-                        if (replyToId == reply) replyToId = null
                     }
+                    clearRecoveredReply(id)
                 }
                 submitting = true
                 sendScope.launch {
                     try {
                         if (confirm(text, replySnapshot, id)) {
                             acknowledgement.acknowledge(id)
-                        } else if (acknowledgement.pendingId == id && draftRevision == revision) {
-                            if (clearDraft && draft.isEmpty()) { draft = snapshot; restoredRevision = revision }
-                            if (replyToId == null) replyToId = reply
+                        } else if (acknowledgement.pendingId == id) {
+                            if (clearDraft && draftRevision == revision && draft.isEmpty()) {
+                                draft = snapshot; restoredRevision = revision
+                            }
+                            if (draftRevision == revision) restoreReply(id, submittedReplyRevision, reply)
                         }
                     } finally { submitting = false }
                 }
@@ -409,7 +453,8 @@ fun ChatScreen(
             preview = MessageActionsPreview(actionsAuthorName, actionsMessage.text),
             canReply = chatRepliesEnabled,
             onReply = {
-                draftRevision++
+                draftRevision++; replyRevision++
+                restoredReplyAttemptId = null
                 replyToId = actionsMessage.id
                 actionsMessageId = null
             },
@@ -485,6 +530,7 @@ private fun MessageList(
         listState = listState,
         newestMessageId = newest?.id,
         isOwnNewestMessage = newest?.senderUid == currentUid,
+        newestItemKey = newest?.let { ChatTimelineItem.Message(it.id, it).key },
     )
 
     // Keyboard just came up: the viewport shrank from the bottom, so re-pin the

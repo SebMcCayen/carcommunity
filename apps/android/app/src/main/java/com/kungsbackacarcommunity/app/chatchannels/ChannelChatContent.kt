@@ -292,6 +292,22 @@ fun ChannelChatContent(
     // live list, so the composer quote chip clears itself if its target leaves the
     // stream. Only meaningful while [chatRepliesEnabled].
     var replyToId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Quote recovery belongs to a send attempt, independently of typed text.
+    // Explicit reply choices (even the same parent again) revoke that ownership.
+    var replyRevision by rememberSaveable { mutableLongStateOf(0L) }
+    var restoredReplyAttemptId by rememberSaveable { mutableStateOf<String?>(null) }
+    fun clearRecoveredReply(id: String?) {
+        if (id != null && restoredReplyAttemptId == id) {
+            replyToId = null
+            restoredReplyAttemptId = null
+        }
+    }
+    fun restoreReply(id: String, revision: Long, reply: String?) {
+        if (reply != null && replyRevision == revision && replyToId == null) {
+            replyToId = reply
+            restoredReplyAttemptId = id
+        }
+    }
     // A delivered row can arrive after a refusal restored the old composer, or
     // after recreation replaced its in-memory acknowledgement tracker.
     LaunchedEffect(messages) {
@@ -303,7 +319,14 @@ fun ChannelChatContent(
         }
         if (deliveredRecovery != null) {
             draftAttempt.acknowledge(deliveredRecovery.id)
-            draft = TextFieldValue(""); mentions = emptyList(); replyToId = null; atMentionCap = false
+            draft = TextFieldValue(""); mentions = emptyList(); atMentionCap = false
+        }
+        messages.firstOrNull {
+            it.senderUid == currentUid && it.deliveryState == ChannelDeliveryState.Sent &&
+                it.id == restoredReplyAttemptId
+        }?.let {
+            draftAttempt.acknowledge(it.id)
+            clearRecoveredReply(it.id)
         }
     }
 
@@ -366,14 +389,19 @@ fun ChannelChatContent(
                                 val snapshot = draft
                                 val oldMentions = mentions
                                 val oldReply = replyToId
+                                val replyRevisionAtRetry = replyRevision
+                                val ownsReply = message.clientId != null &&
+                                    restoredReplyAttemptId == message.clientId &&
+                                    replyToId == message.replyTo?.messageId
                                 val ownsDraft = draftRevision == restoredRevision && draftAttempt.owns(message.clientId) &&
                                     draft.text.trim() == message.text &&
                                     MentionDraft(draft.text, mentions).sendableUids == message.mentionedUids &&
                                     replyToId == message.replyTo?.messageId
                                 if (ownsDraft) {
-                                    draft = TextFieldValue(""); mentions = emptyList(); replyToId = null
+                                    draft = TextFieldValue(""); mentions = emptyList()
                                     atMentionCap = false
                                 }
+                                if (ownsReply) clearRecoveredReply(message.clientId)
                                 sendScope.launch {
                                     try {
                                         val id = message.clientId
@@ -382,15 +410,18 @@ fun ChannelChatContent(
                                                 draftAttempt.acknowledge(id)
                                                 if (ownsDraft && draftRevision == revision && draft == snapshot &&
                                                     mentions == oldMentions && replyToId == oldReply) {
-                                                    draft = TextFieldValue(""); mentions = emptyList(); replyToId = null
+                                                    draft = TextFieldValue(""); mentions = emptyList()
                                                 }
+                                                clearRecoveredReply(id)
                                             }
                                         }
                                         if (confirm(message)) {
                                             if (id != null) acknowledgement.acknowledge(id)
-                                        } else if (ownsDraft && acknowledgement.pendingId == id &&
-                                            draftRevision == revision && draft.text.isEmpty()) {
-                                            draft = snapshot; mentions = oldMentions; replyToId = oldReply
+                                        } else if (id != null && acknowledgement.pendingId == id) {
+                                            if (ownsDraft && draftRevision == revision && draft.text.isEmpty()) {
+                                                draft = snapshot; mentions = oldMentions
+                                            }
+                                            if (ownsReply) restoreReply(id, replyRevisionAtRetry, oldReply)
                                         }
                                     } finally { submitting = false }
                                 }
@@ -524,8 +555,12 @@ fun ChannelChatContent(
         // document carries the server's authoritative snapshot.
         val replyTarget =
             if (chatRepliesEnabled) messages.firstOrNull { it.id == replyToId } else null
-        LaunchedEffect(replyToId, replyTarget == null) {
-            if (replyToId != null && replyTarget == null) replyToId = null
+        LaunchedEffect(replyToId, replyTarget == null, loading) {
+            if (replyToId != null && replyTarget == null && !loading) {
+                replyRevision++
+                replyToId = null
+                restoredReplyAttemptId = null
+            }
         }
         val replySnapshot =
             replyTarget?.let {
@@ -542,7 +577,10 @@ fun ChannelChatContent(
                     replyTarget.senderDisplayName
                         ?: stringResource(R.string.channel_unknownSender),
                 preview = replySnapshot?.textPreview.orEmpty(),
-                onCancel = { draftRevision++; replyToId = null },
+                onCancel = {
+                    draftRevision++; replyRevision++
+                    replyToId = null; restoredReplyAttemptId = null
+                },
             )
         }
 
@@ -555,6 +593,10 @@ fun ChannelChatContent(
             val revision = draftRevision
             val submittedMentions = mentions
             val submittedReply = replyToId
+            val submittedReplyRevision = ++replyRevision
+            restoredReplyAttemptId = null
+            // This submission does not own an earlier automatically restored text draft.
+            restoredRevision = -1L
             val picked = if (clearDraft) MentionDraft(text, mentions).sendableUids else emptyList()
             if (clearDraft) {
                 draft = TextFieldValue("")
@@ -574,21 +616,21 @@ fun ChannelChatContent(
                     if (clearDraft && draftRevision == revision && draft.text == submittedDraft.text &&
                         mentions == submittedMentions) {
                         draft = TextFieldValue(""); mentions = emptyList(); atMentionCap = false
-                        if (replyToId == submittedReply) replyToId = null
                     }
+                    clearRecoveredReply(id)
                 }
                 submitting = true
                 sendScope.launch {
                     try {
                         if (confirm(text, picked, replySnapshot, id)) {
                             acknowledgement.acknowledge(id)
-                        } else if (acknowledgement.pendingId == id && draftRevision == revision) {
-                            if (clearDraft && draft.text.isEmpty()) {
+                        } else if (acknowledgement.pendingId == id) {
+                            if (clearDraft && draftRevision == revision && draft.text.isEmpty()) {
                                 draft = submittedDraft
                                 mentions = submittedMentions
                                 restoredRevision = revision
                             }
-                            if (replyToId == null) replyToId = submittedReply
+                            if (draftRevision == revision) restoreReply(id, submittedReplyRevision, submittedReply)
                         }
                     } finally { submitting = false }
                 }
@@ -640,7 +682,8 @@ fun ChannelChatContent(
             preview = MessageActionsPreview(actionsMessage.senderDisplayName, actionsMessage.text),
             canReply = chatRepliesEnabled,
             onReply = {
-                draftRevision++
+                draftRevision++; replyRevision++
+                restoredReplyAttemptId = null
                 replyToId = actionsMessage.id
                 actionsMessageId = null
             },
@@ -796,6 +839,7 @@ internal fun ChannelMessageList(
         listState = listState,
         newestMessageId = newest?.id,
         isOwnNewestMessage = newest?.senderUid == currentUid,
+        newestItemKey = newest?.let { ChatTimelineItem.Message(it.id, it).key },
     )
 
     // Keyboard just came up: the viewport shrank from the bottom, so re-pin the

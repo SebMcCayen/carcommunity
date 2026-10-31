@@ -306,6 +306,7 @@ fun EventChatScreen(
                             listState = listState,
                             newestMessageId = newest?.id,
                             isOwnNewestMessage = newest?.authorUserId == currentUid,
+                            newestItemKey = newest?.let { "${it.authorUserId}:${it.id}" },
                         )
                         // Keyboard just came up: the screen's ime padding shrank
                         // this list's viewport from the bottom and a LazyColumn
