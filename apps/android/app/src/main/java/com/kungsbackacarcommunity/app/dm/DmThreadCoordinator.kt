@@ -68,8 +68,15 @@ class DmThreadCoordinator(
      */
     private val crashTelemetry: CrashTelemetry = NoopCrashTelemetry,
     val cooldown: ChatSendCooldown = ChatSendCooldown(),
+    initialPending: List<DmMessage> = emptyList(),
 ) {
-    private val pending = MutableStateFlow<List<DmMessage>>(emptyList())
+    // Unknown transport outcome after recreation: expose an explicit same-ID
+    // retry, without automatically sending or touching the next composer draft.
+    private val pending = MutableStateFlow(initialPending.map { message ->
+        if (message.deliveryState == DmDeliveryState.Sending) {
+            message.copy(deliveryState = DmDeliveryState.Failed, sendError = DmSendError.Generic)
+        } else message
+    })
 
     /**
      * The caller's in-flight/failed optimistic bubbles, oldest-first. Each is a

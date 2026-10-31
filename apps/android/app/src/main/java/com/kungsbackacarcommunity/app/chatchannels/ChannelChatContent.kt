@@ -183,7 +183,7 @@ internal val MentionSpansSaver: Saver<List<MentionSpan>, Any> =
  * it fills whatever container the chat hub gives it (below the hub's tab row).
  *
  * Bubbles appear optimistically without waiting for the `*-post` round-trip;
- * the draft clears only on the matching delivery acknowledgement. A failed
+ * the draft clears immediately on submission. A failed
  * bubble shows a tappable "tap to retry"
  * affordance ([onRetry]); the user's text is never lost. The caller merges its own
  * pending bubbles into [messages] via [ChannelThread.mergeWithPending].
@@ -262,6 +262,7 @@ fun ChannelChatContent(
     val draftAttempt = rememberChatDraftSendAttempt()
     var submitting by remember { mutableStateOf(false) }
     var draftRevision by rememberSaveable { mutableLongStateOf(0L) }
+    var restoredRevision by rememberSaveable { mutableLongStateOf(-1L) }
     val acknowledgement = rememberChatSendAcknowledgement(
         messages.filter { it.senderUid == currentUid && it.deliveryState == ChannelDeliveryState.Sent }
             .mapTo(mutableSetOf()) { it.id },
@@ -291,6 +292,21 @@ fun ChannelChatContent(
     // live list, so the composer quote chip clears itself if its target leaves the
     // stream. Only meaningful while [chatRepliesEnabled].
     var replyToId by rememberSaveable { mutableStateOf<String?>(null) }
+    // A delivered row can arrive after a refusal restored the old composer, or
+    // after recreation replaced its in-memory acknowledgement tracker.
+    LaunchedEffect(messages) {
+        val deliveredRecovery = messages.firstOrNull {
+            it.senderUid == currentUid && it.deliveryState == ChannelDeliveryState.Sent &&
+                draftAttempt.owns(it.id) && draftRevision == restoredRevision &&
+                draft.text.trim() == it.text &&
+                MentionDraft(draft.text, mentions).sendableUids == it.mentionedUids && replyToId == it.replyTo?.messageId
+        }
+        if (deliveredRecovery != null) {
+            draftAttempt.acknowledge(deliveredRecovery.id)
+            draft = TextFieldValue(""); mentions = emptyList(); replyToId = null; atMentionCap = false
+        }
+    }
+
 
     val activeQuery =
         if (mentionCandidates.isEmpty()) {
@@ -347,21 +363,35 @@ fun ChannelChatContent(
                             if (confirm == null) onRetry(message) else {
                                 submitting = true
                                 val revision = draftRevision
-                                val ownsDraft = draftAttempt.owns(message.clientId)
+                                val snapshot = draft
+                                val oldMentions = mentions
+                                val oldReply = replyToId
+                                val ownsDraft = draftRevision == restoredRevision && draftAttempt.owns(message.clientId) &&
+                                    draft.text.trim() == message.text &&
+                                    MentionDraft(draft.text, mentions).sendableUids == message.mentionedUids &&
+                                    replyToId == message.replyTo?.messageId
+                                if (ownsDraft) {
+                                    draft = TextFieldValue(""); mentions = emptyList(); replyToId = null
+                                    atMentionCap = false
+                                }
                                 sendScope.launch {
                                     try {
                                         val id = message.clientId
-                                        if (id != null) acknowledgement.track(id) {
-                                            draftAttempt.acknowledge(id)
-                                            if (ownsDraft && draftRevision == revision &&
-                                                draft.text.trim() == message.text &&
-                                                MentionDraft(draft.text, mentions).sendableUids == message.mentionedUids &&
-                                                replyToId == message.replyTo?.messageId) {
-                                                draft = TextFieldValue(""); mentions = emptyList(); replyToId = null
-                                                atMentionCap = false
+                                        if (id != null) {
+                                            acknowledgement.track(id) {
+                                                draftAttempt.acknowledge(id)
+                                                if (ownsDraft && draftRevision == revision && draft == snapshot &&
+                                                    mentions == oldMentions && replyToId == oldReply) {
+                                                    draft = TextFieldValue(""); mentions = emptyList(); replyToId = null
+                                                }
                                             }
                                         }
-                                        if (confirm(message) && id != null) acknowledgement.acknowledge(id)
+                                        if (confirm(message)) {
+                                            if (id != null) acknowledgement.acknowledge(id)
+                                        } else if (ownsDraft && acknowledgement.pendingId == id &&
+                                            draftRevision == revision && draft.text.isEmpty()) {
+                                            draft = snapshot; mentions = oldMentions; replyToId = oldReply
+                                        }
                                     } finally { submitting = false }
                                 }
                             }
@@ -516,38 +546,51 @@ fun ChannelChatContent(
             )
         }
 
-        // One-tap emoji reactions, pinned directly above the input. Tapping one
-        // sends it straight down the SAME optimistic path as the Send button — the
-        // emoji is the whole message, so it carries no mentions and needs no draft.
-        // Emoji uses the same acknowledged send path and cooldown as typed text.
-        // Production keeps the draft until acknowledgement; previews may use the legacy callback.
+        // Move the submitted snapshot out of the composer before any network work.
+        // Delivery stays visible in the existing pending/failed bubble. Only restore
+        // a rejected snapshot when the user has not started another draft meanwhile.
         fun submit(text: String, clearDraft: Boolean) {
-            if (submitting || cooldownSeconds > 0) return
+            if (submitting || cooldownSeconds > 0 || !ChannelThread.isSendable(text)) return
             val submittedDraft = draft
             val revision = draftRevision
             val submittedMentions = mentions
             val submittedReply = replyToId
             val picked = if (clearDraft) MentionDraft(text, mentions).sendableUids else emptyList()
-            fun acknowledge() {
-                if (draftRevision != revision) return
-                if (clearDraft && draft.text == submittedDraft.text && mentions == submittedMentions) {
-                    draft = TextFieldValue(""); mentions = emptyList(); atMentionCap = false
-                }
-                if (replyToId == submittedReply) replyToId = null
+            if (clearDraft) {
+                draft = TextFieldValue("")
+                mentions = emptyList()
+                atMentionCap = false
             }
+            replyToId = null
             val confirm = onSendConfirmed
             if (confirm == null) {
                 onSend(text, picked, replySnapshot)
-                acknowledge()
             } else {
+                val id = draftAttempt.idFor(text, replySnapshot?.messageId, picked)
+                acknowledgement.track(id) {
+                    draftAttempt.acknowledge(id)
+                    // A listener may confirm delivery after a transport failure restored
+                    // this snapshot. Clear only that untouched recovery, never a new edit.
+                    if (clearDraft && draftRevision == revision && draft.text == submittedDraft.text &&
+                        mentions == submittedMentions) {
+                        draft = TextFieldValue(""); mentions = emptyList(); atMentionCap = false
+                        if (replyToId == submittedReply) replyToId = null
+                    }
+                }
                 submitting = true
                 sendScope.launch {
                     try {
-                        val id = draftAttempt.idFor(text, replySnapshot?.messageId, picked)
-                        acknowledgement.track(id) { draftAttempt.acknowledge(id); acknowledge() }
-                        if (confirm(text, picked, replySnapshot, id)) acknowledgement.acknowledge(id)
-                    }
-                    finally { submitting = false }
+                        if (confirm(text, picked, replySnapshot, id)) {
+                            acknowledgement.acknowledge(id)
+                        } else if (acknowledgement.pendingId == id && draftRevision == revision) {
+                            if (clearDraft && draft.text.isEmpty()) {
+                                draft = submittedDraft
+                                mentions = submittedMentions
+                                restoredRevision = revision
+                            }
+                            if (replyToId == null) replyToId = submittedReply
+                        }
+                    } finally { submitting = false }
                 }
             }
         }

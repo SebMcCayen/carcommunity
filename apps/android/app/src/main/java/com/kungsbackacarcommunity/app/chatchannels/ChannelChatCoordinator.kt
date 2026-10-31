@@ -92,8 +92,15 @@ class ChannelChatCoordinator(
      */
     private val crashTelemetry: CrashTelemetry = NoopCrashTelemetry,
     val cooldown: ChatSendCooldown = ChatSendCooldown(),
+    initialPending: List<ChannelMessage> = emptyList(),
 ) {
-    private val pending = MutableStateFlow<List<ChannelMessage>>(emptyList())
+    // A restored in-flight callable has an unknown outcome. Keep its ID/payload for
+    // explicit retry; construction never dispatches. A live echo still supersedes it.
+    private val pending = MutableStateFlow(initialPending.map { message ->
+        if (message.deliveryState == ChannelDeliveryState.Sending) {
+            message.copy(deliveryState = ChannelDeliveryState.Failed, sendError = ChannelSendError.Generic)
+        } else message
+    })
 
     /**
      * The caller's in-flight/failed optimistic bubbles, oldest-first. Each is a

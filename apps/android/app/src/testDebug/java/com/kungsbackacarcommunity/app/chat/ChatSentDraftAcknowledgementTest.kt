@@ -71,7 +71,7 @@ class ChatSentDraftAcknowledgementTest {
         val f = start(surface)
         send(f).performClick()
         awaitAttempts(f, 1)
-        draft(TEXT) // No optimistic clearing before acknowledgement.
+        draft("") // The network response is deliberately still suspended.
         compose.runOnIdle { f.attempts.single().ack.complete(true) }
         draft("")
         compose.runOnIdle { assertEquals(1, f.attempts.size) }
@@ -150,14 +150,17 @@ class ChatSentDraftAcknowledgementTest {
         send(f).performClick()
         awaitAttempts(f, 1)
         compose.runOnIdle { f.publish(f.attempts.single(), author = "other") }
-        draft(TEXT)
+        draft("")
         compose.runOnIdle { f.publish(f.attempts.single().copy(id = "unrelated-own-row")) }
-        draft(TEXT)
+        draft("")
         if (surface != Surface.Event) {
             compose.runOnIdle { f.publish(f.attempts.single(), delivered = false) }
-            draft(TEXT)
+            draft("")
         }
         compose.runOnIdle { f.publish(f.attempts.single()) }
+        draft("")
+        // The exact own delivered row beats a later failed callable response.
+        compose.runOnIdle { f.attempts.single().ack.complete(false) }
         draft("")
     }
 

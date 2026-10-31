@@ -151,6 +151,7 @@ fun ChatScreen(
     var submitting by remember { mutableStateOf(false) }
     var draft by rememberSaveable { mutableStateOf("") }
     var draftRevision by rememberSaveable { mutableLongStateOf(0L) }
+    var restoredRevision by rememberSaveable { mutableLongStateOf(-1L) }
     val acknowledgement = rememberChatSendAcknowledgement(
         messages.filter { it.senderUid == currentUid && it.deliveryState == DmDeliveryState.Sent }
             .mapTo(mutableSetOf()) { it.id },
@@ -162,6 +163,18 @@ fun ChatScreen(
     // The message being replied to (Saveable), resolved against the live list so
     // the composer quote chip clears itself if its target leaves the thread.
     var replyToId by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(messages) {
+        val deliveredRecovery = messages.firstOrNull {
+            it.senderUid == currentUid && it.deliveryState == DmDeliveryState.Sent &&
+                draftAttempt.owns(it.id) && draftRevision == restoredRevision &&
+                draft.trim() == it.text && replyToId == it.replyTo?.messageId
+        }
+        if (deliveredRecovery != null) {
+            draftAttempt.acknowledge(deliveredRecovery.id)
+            draft = ""; replyToId = null
+        }
+    }
+
 
     AeroPage(
         title = otherName ?: stringResource(R.string.dm_unknownMember),
@@ -205,18 +218,28 @@ fun ChatScreen(
                             if (confirm == null) onRetry(message) else {
                                 submitting = true
                                 val revision = draftRevision
-                                val ownsDraft = draftAttempt.owns(message.clientId)
+                                val snapshot = draft
+                                val oldReply = replyToId
+                                val ownsDraft = draftRevision == restoredRevision && draftAttempt.owns(message.clientId) &&
+                                    draft.trim() == message.text && replyToId == message.replyTo?.messageId
+                                if (ownsDraft) { draft = ""; replyToId = null }
                                 sendScope.launch {
                                     try {
                                         val id = message.clientId
-                                        if (id != null) acknowledgement.track(id) {
-                                            draftAttempt.acknowledge(id)
-                                            if (ownsDraft && draftRevision == revision &&
-                                                draft.trim() == message.text && replyToId == message.replyTo?.messageId) {
-                                                draft = ""; replyToId = null
+                                        if (id != null) {
+                                            acknowledgement.track(id) {
+                                                draftAttempt.acknowledge(id)
+                                                if (ownsDraft && draftRevision == revision && draft == snapshot && replyToId == oldReply) {
+                                                    draft = ""; replyToId = null
+                                                }
                                             }
                                         }
-                                        if (confirm(message) && id != null) acknowledgement.acknowledge(id)
+                                        if (confirm(message)) {
+                                            if (id != null) acknowledgement.acknowledge(id)
+                                        } else if (ownsDraft && acknowledgement.pendingId == id &&
+                                            draftRevision == revision && draft.isEmpty()) {
+                                            draft = snapshot; replyToId = oldReply
+                                        }
                                     } finally { submitting = false }
                                 }
                             }
@@ -296,32 +319,36 @@ fun ChatScreen(
             )
         }
 
-        // One-tap emoji reactions, pinned directly above the input. Tapping one
-        // sends it straight down the SAME optimistic path as the Send button — the
-        // emoji is the whole message and the typed draft (if any) is left untouched.
-        // Emoji uses the same acknowledged send path and cooldown as typed text.
-        // The typed draft is untouched; a reply target clears only on acknowledgement.
+        // Clear on the tap, not on the network acknowledgement. Pending and
+        // failed bubbles retain delivery/retry state independently of the next draft.
         fun submit(text: String, clearDraft: Boolean) {
-            if (submitting || cooldownSeconds > 0) return
+            if (submitting || cooldownSeconds > 0 || !DmThread.isSendable(text)) return
             val snapshot = draft
             val revision = draftRevision
             val reply = replyToId
-            fun acknowledge() {
-                if (draftRevision != revision) return
-                if (clearDraft && draft == snapshot) draft = ""
-                if (replyToId == reply) replyToId = null
-            }
+            if (clearDraft) draft = ""
+            replyToId = null
             val confirm = onSendConfirmed
-            if (confirm == null) { onSend(text, replySnapshot); acknowledge() }
+            if (confirm == null) { onSend(text, replySnapshot) }
             else {
+                val id = draftAttempt.idFor(text, replySnapshot?.messageId)
+                acknowledgement.track(id) {
+                    draftAttempt.acknowledge(id)
+                    if (clearDraft && draftRevision == revision && draft == snapshot) {
+                        draft = ""
+                        if (replyToId == reply) replyToId = null
+                    }
+                }
                 submitting = true
                 sendScope.launch {
                     try {
-                        val id = draftAttempt.idFor(text, replySnapshot?.messageId)
-                        acknowledgement.track(id) { draftAttempt.acknowledge(id); acknowledge() }
-                        if (confirm(text, replySnapshot, id)) acknowledgement.acknowledge(id)
-                    }
-                    finally { submitting = false }
+                        if (confirm(text, replySnapshot, id)) {
+                            acknowledgement.acknowledge(id)
+                        } else if (acknowledgement.pendingId == id && draftRevision == revision) {
+                            if (clearDraft && draft.isEmpty()) { draft = snapshot; restoredRevision = revision }
+                            if (replyToId == null) replyToId = reply
+                        }
+                    } finally { submitting = false }
                 }
             }
         }
