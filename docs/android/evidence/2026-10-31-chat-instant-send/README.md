@@ -62,3 +62,12 @@ status. The shared list retains an existing bottom anchor when its viewport shri
 or its last row grows without a new message ID. Resizing never interrupts a reader
 dragging/flinging or browsing older history; new-message/pagination behavior keeps
 its existing rules.
+
+Club submissions are saved outside repository-identity and foreground-room keys.
+Only submitted text belongs to this account-owned outbox; history and unsent
+drafts still disappear when the private room stops. A new room may recover rows
+only after fresh proof of the same club ID and membership joining timestamp.
+Every verified entry detaches the previous room's callbacks, restores unresolved
+sends as explicit retries, and never dispatches automatically. Native coverage
+uses actual Activity recreation with a new repository, plus revocation, account
+switching and stop/resume; save/restore of the same fake object is insufficient.

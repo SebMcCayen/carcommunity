@@ -1,8 +1,10 @@
 package com.kungsbackacarcommunity.app.clubs
 
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.Lifecycle
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -14,6 +16,8 @@ import com.kungsbackacarcommunity.app.design.chatQuickEmojiTestTag
 import com.kungsbackacarcommunity.app.profile.LiveProfile
 import com.kungsbackacarcommunity.app.profile.LiveProfileRepository
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
@@ -23,6 +27,7 @@ import kotlinx.coroutines.flow.flowOf
 import org.junit.Rule
 import org.junit.Test
 import org.junit.Before
+import org.junit.After
 import org.junit.Assert.*
 
 /** Security UX: membership loss must dispose history AND unsent drafts, not just disable send. */
@@ -243,6 +248,331 @@ class ClubChatRevocationTest {
         compose.onNodeWithText("Private unsent text").assertDoesNotExist()
         compose.runOnIdle { assertTrue(repo.chatCalls >= 2) }
     }
+    private val lifecycleGates = mutableListOf<CompletableDeferred<Unit>>()
+    private fun lifecycleGate() = CompletableDeferred<Unit>().also { lifecycleGates += it }
+    @After fun releaseLifecycleGates() {
+        // A failed assertion must not leave a deliberately non-cancellable fake callback hanging.
+        lifecycleGates.forEach { it.complete(Unit) }
+    }
+
+    // Use this same setContent callsite before and after real recreation. ComponentActivity
+    // does not reinstall test content itself; its restored registry must reach the new route.
+    private fun installLifecycleChat(
+        repo: FakeClubRepository,
+        uid: () -> String = { "me" },
+    ): ComponentActivity {
+        lateinit var installedActivity: ComponentActivity
+        compose.activityRule.scenario.onActivity { activity ->
+            installedActivity = activity
+            activity.enableEdgeToEdge()
+            activity.setContent { KccTheme { ClubChatRoute(uid(), repo) } }
+        }
+        compose.waitForIdle()
+        return installedActivity
+    }
+
+    private fun recreateLifecycleChat(
+        previousActivity: ComponentActivity,
+        previousRepo: FakeClubRepository,
+        freshRepo: FakeClubRepository,
+        uid: () -> String = { "me" },
+    ) {
+        assertNotSame("Recreation must use a genuinely new repository", previousRepo, freshRepo)
+        compose.activityRule.scenario.recreate()
+        val recreatedActivity = installLifecycleChat(freshRepo, uid)
+        assertNotSame("ActivityScenario must actually replace the Activity", previousActivity, recreatedActivity)
+        compose.runOnIdle {
+            assertEquals(Lifecycle.State.DESTROYED, previousActivity.lifecycle.currentState)
+            assertEquals(Lifecycle.State.RESUMED, recreatedActivity.lifecycle.currentState)
+            assertEquals(0, previousRepo.activeChatSubscriptions)
+            assertEquals(1, freshRepo.activeChatSubscriptions)
+            assertTrue(freshRepo.chatCalls > 0)
+        }
+    }
+
+    private fun sendLifecycleMessage(repo: FakeClubRepository, text: String): Pair<String, String> {
+        val expectedRequests = compose.runOnIdle { repo.sendRequests.size + 1 }
+        compose.onNodeWithTag("club-chat-input").performTextInput(text)
+        compose.onNodeWithText(str(R.string.clubs_send)).performClick()
+        compose.waitUntil { compose.runOnIdle { repo.sendRequests.size == expectedRequests } }
+        assertDraft("")
+        compose.onNodeWithText(text).assertIsDisplayed()
+        return compose.runOnIdle { repo.sendRequests.last() }
+    }
+
+    private fun assertPrivateRoomHidden(vararg texts: String) {
+        texts.forEach { compose.onNodeWithText(it).assertDoesNotExist() }
+        compose.onNodeWithTag("club-chat-input").assertDoesNotExist()
+        compose.onNodeWithTag("club-message-list").assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.channel_statusSending)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).assertDoesNotExist()
+    }
+
+    @Test fun recreationOfPendingSendRequiresFreshProofAndRetriesOnNewRepository() {
+        val oldGate = lifecycleGate()
+        val oldRepo = FakeClubRepository(ClubChatState.Ready(member,
+            listOf(ClubMessage("private", "friend", "Friend", "History before recreation", 1L))))
+        oldRepo.sendGate = oldGate
+        val activity = installLifecycleChat(oldRepo)
+        compose.onNodeWithText("History before recreation").assertIsDisplayed()
+        val request = sendLifecycleMessage(oldRepo, "Pending across recreation")
+        compose.onNodeWithText(str(R.string.channel_statusSending)).assertIsDisplayed()
+        compose.onNodeWithTag("club-chat-input").performTextInput("Unsent before recreation")
+        val freshProof = lifecycleGate()
+        val retryGate = lifecycleGate()
+        val newRepo = FakeClubRepository(ClubChatState.Ready(member, emptyList()))
+        newRepo.chatGate = freshProof
+        newRepo.sendGate = retryGate
+
+        recreateLifecycleChat(activity, oldRepo, newRepo)
+        assertPrivateRoomHidden("Pending across recreation", "History before recreation", "Unsent before recreation")
+        compose.runOnIdle {
+            assertFalse(freshProof.isCompleted)
+            assertFalse(oldGate.isCompleted)
+            assertEquals(listOf(request), oldRepo.sendRequests)
+            assertTrue(newRepo.sendRequests.isEmpty())
+            freshProof.complete(Unit)
+        }
+        compose.onNodeWithText("Pending across recreation").assertIsDisplayed()
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).assertIsDisplayed()
+        compose.onNodeWithText(str(R.string.channel_statusSending)).assertDoesNotExist()
+        compose.onNodeWithText("History before recreation").assertDoesNotExist()
+        compose.onNodeWithText("Unsent before recreation").assertDoesNotExist()
+        assertDraft("")
+        compose.runOnIdle { assertTrue("Fresh proof must never auto-dispatch", newRepo.sendRequests.isEmpty()) }
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).performClick()
+        compose.waitUntil { compose.runOnIdle { newRepo.sendRequests.size == 1 } }
+        compose.onNodeWithText(str(R.string.channel_statusSending)).assertIsDisplayed()
+        compose.runOnIdle {
+            assertEquals(listOf(request), newRepo.sendRequests)
+            assertEquals(listOf(member.clubId), newRepo.sendClubIds)
+            assertEquals(listOf(request), oldRepo.sendRequests)
+            retryGate.complete(Unit)
+            oldGate.complete(Unit)
+        }
+        compose.onAllNodesWithText("Pending across recreation").assertCountEquals(1)
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.channel_statusSending)).assertDoesNotExist()
+        compose.runOnIdle { assertEquals(request.second, newRepo.operation) }
+    }
+
+    @Test fun recreationOfFailedSendKeepsOutboxWhenOnlyMembershipRoleChanges() {
+        val oldRepo = FakeClubRepository(ClubChatState.Ready(member, emptyList()))
+        oldRepo.sendFailuresRemaining = 1
+        val activity = installLifecycleChat(oldRepo)
+        val request = sendLifecycleMessage(oldRepo, "Failed before recreation")
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).assertIsDisplayed()
+        val proof = lifecycleGate()
+        val retry = lifecycleGate()
+        val newRepo = FakeClubRepository(ClubChatState.Ready(member.copy(role = ClubRole.Moderator), emptyList()))
+        newRepo.chatGate = proof
+        newRepo.sendGate = retry
+
+        recreateLifecycleChat(activity, oldRepo, newRepo)
+        assertPrivateRoomHidden("Failed before recreation")
+        compose.runOnIdle { proof.complete(Unit) }
+        compose.onNodeWithText("Failed before recreation").assertIsDisplayed()
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).assertIsDisplayed()
+        assertDraft("")
+        // A role change within an already verified entry must not replace its outbox either.
+        compose.runOnIdle { newRepo.messages.value = ClubChatState.Ready(member, emptyList()) }
+        compose.onNodeWithText("Failed before recreation").assertIsDisplayed()
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).assertIsDisplayed()
+        compose.runOnIdle { assertTrue(newRepo.sendRequests.isEmpty()) }
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).performClick()
+        compose.waitUntil { compose.runOnIdle { newRepo.sendRequests.size == 1 } }
+        compose.runOnIdle {
+            assertEquals(listOf(request), oldRepo.sendRequests)
+            assertEquals(listOf(request), newRepo.sendRequests)
+            retry.complete(Unit)
+        }
+        compose.onAllNodesWithText("Failed before recreation").assertCountEquals(1)
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.channel_statusSending)).assertDoesNotExist()
+    }
+
+    @Test fun stopResumePreservesOutboxButDropsDraftAndHistoryAndIgnoresOldCallback() {
+        val cursor = ClubMessageCursor("recent", 100, 123)
+        val repo = FakeClubRepository(ClubChatState.Ready(member,
+            listOf(ClubMessage("recent", "friend", "Friend", "Recent private history", 100000L)),
+            oldestCursor = cursor, hasOlder = true))
+        repo.historical.value = listOf(ClubMessage("older", "friend", "Friend", "Loaded private history", 1000L))
+        repo.pageResults = listOf(ClubMessagePage(listOf("older"), null, false))
+        val oldGate = lifecycleGate()
+        repo.sendGate = oldGate
+        repo.sendFailure = ClubException("permission-denied")
+        repo.completeSendsAfterCancellation = true
+        val activity = installLifecycleChat(repo)
+        compose.onNodeWithText(str(R.string.channel_loadOlder)).performClick()
+        compose.onNodeWithText("Loaded private history").assertIsDisplayed()
+        compose.runOnIdle { assertTrue(repo.activeRowIds().containsAll(setOf("recent", "older"))) }
+        val request = sendLifecycleMessage(repo, "Pending across stop")
+        compose.onNodeWithTag("club-chat-input").performTextInput("Discard this unsent draft")
+        val proof = lifecycleGate()
+        compose.runOnIdle { repo.chatGate = proof }
+
+        compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        assertPrivateRoomHidden("Pending across stop", "Discard this unsent draft",
+            "Recent private history", "Loaded private history")
+        compose.activityRule.scenario.onActivity { assertSame("This is stop/resume, not recreation", activity, it) }
+        compose.runOnIdle {
+            assertTrue(repo.chatCalls >= 2)
+            assertEquals(1, repo.activeChatSubscriptions)
+            assertTrue(repo.activeRowIds().isEmpty())
+            assertEquals(listOf(request), repo.sendRequests)
+            assertFalse(oldGate.isCompleted)
+            repo.messages.value = ClubChatState.Ready(member, emptyList())
+            proof.complete(Unit)
+        }
+        compose.onNodeWithText("Pending across stop").assertIsDisplayed()
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).assertIsDisplayed()
+        compose.onNodeWithText(str(R.string.channel_statusSending)).assertDoesNotExist()
+        compose.onNodeWithText("Discard this unsent draft").assertDoesNotExist()
+        compose.onNodeWithText("Recent private history").assertDoesNotExist()
+        compose.onNodeWithText("Loaded private history").assertDoesNotExist()
+        assertDraft("")
+        val retry = lifecycleGate()
+        compose.runOnIdle {
+            assertEquals("No automatic retry on resume", listOf(request), repo.sendRequests)
+            assertTrue(repo.activeRowIds().isEmpty())
+            assertEquals(listOf(cursor), repo.cursorRequests)
+            repo.sendGate = retry
+            repo.sendFailure = null
+            repo.completeSendsAfterCancellation = false
+        }
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).performClick()
+        compose.waitUntil { compose.runOnIdle { repo.sendRequests.size == 2 } }
+        compose.onNodeWithTag("club-chat-input").performTextInput("New foreground draft")
+        // The cancelled room returns an explicit rejection while the NEW same-ID retry is busy.
+        compose.runOnIdle { oldGate.complete(Unit) }
+        compose.waitUntil { compose.runOnIdle { repo.sendCompletions.size == 1 } }
+        compose.onNodeWithText(str(R.string.channel_statusSending)).assertIsDisplayed()
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).assertDoesNotExist()
+        compose.onAllNodesWithText("Pending across stop").assertCountEquals(1)
+        assertDraft("New foreground draft")
+        compose.onNodeWithText(str(R.string.clubs_send)).assertIsNotEnabled()
+        compose.onNodeWithTag(chatQuickEmojiTestTag("😊")).assertIsNotEnabled()
+        compose.runOnIdle {
+            assertEquals(listOf(request, request), repo.sendRequests)
+            assertFalse(retry.isCompleted)
+            assertNull(repo.sent)
+            retry.complete(Unit)
+        }
+        compose.onNodeWithText(str(R.string.channel_statusSending)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).assertDoesNotExist()
+        assertDraft("New foreground draft")
+        compose.onNodeWithText(str(R.string.clubs_send)).assertIsEnabled()
+    }
+
+    @Test fun recreatedOutboxCannotCrossClubBoundaryOrReturnWithLateCallback() {
+        assertRecreatedOutboxBoundary(member.copy(clubId = "second"))
+    }
+
+    @Test fun recreatedOutboxCannotCrossJoinedAtBoundaryOrReturnWithLateCallback() {
+        assertRecreatedOutboxBoundary(member.copy(joinedAt = "2026-10-31T12:00:00Z"))
+    }
+
+    @Test fun recreatedOutboxCannotCrossAccountBoundaryOrReturnWithLateCallback() {
+        assertRecreatedOutboxBoundary(member, freshUid = "another-account")
+    }
+
+    private fun assertRecreatedOutboxBoundary(freshMembership: ClubMembership, freshUid: String = "me") {
+        val oldGate = lifecycleGate()
+        val oldRepo = FakeClubRepository(ClubChatState.Ready(member,
+            listOf(ClubMessage("old-history", "friend", "Friend", "Old owner's history", 1L))))
+        oldRepo.sendGate = oldGate
+        oldRepo.sendFailure = ClubException("permission-denied")
+        oldRepo.completeSendsAfterCancellation = true
+        val activity = installLifecycleChat(oldRepo)
+        compose.onNodeWithText("Old owner's history").assertIsDisplayed()
+        val oldRequest = sendLifecycleMessage(oldRepo, "Old owner's pending text")
+        compose.onNodeWithTag("club-chat-input").performTextInput("Old owner's unsent draft")
+        val proof = lifecycleGate()
+        val newGate = lifecycleGate()
+        val newRepo = FakeClubRepository(ClubChatState.Ready(freshMembership, emptyList()))
+        newRepo.chatGate = proof
+        newRepo.sendGate = newGate
+        val uid = mutableStateOf(freshUid)
+
+        recreateLifecycleChat(activity, oldRepo, newRepo) { uid.value }
+        assertPrivateRoomHidden("Old owner's pending text", "Old owner's unsent draft", "Old owner's history")
+        compose.runOnIdle {
+            assertTrue(newRepo.sendRequests.isEmpty())
+            proof.complete(Unit)
+        }
+        assertDraft("")
+        compose.onNodeWithText("Old owner's pending text").assertDoesNotExist()
+        compose.onNodeWithText("Old owner's unsent draft").assertDoesNotExist()
+        compose.onNodeWithText("Old owner's history").assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).assertDoesNotExist()
+        compose.runOnIdle { assertTrue(newRepo.sendRequests.isEmpty()) }
+        val newRequest = sendLifecycleMessage(newRepo, "New owner's pending text")
+        compose.onNodeWithTag("club-chat-input").performTextInput("New owner's unsent draft")
+        compose.runOnIdle { oldGate.complete(Unit) }
+        compose.waitUntil { compose.runOnIdle { oldRepo.sendCompletions.size == 1 } }
+        compose.onNodeWithText("Old owner's pending text").assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.channel_statusSending)).assertIsDisplayed()
+        assertDraft("New owner's unsent draft")
+        compose.onNodeWithText(str(R.string.clubs_send)).assertIsNotEnabled()
+        compose.runOnIdle {
+            assertEquals(listOf(oldRequest), oldRepo.sendRequests)
+            assertEquals(listOf(newRequest), newRepo.sendRequests)
+            assertEquals(listOf(freshMembership.clubId), newRepo.sendClubIds)
+            assertNotEquals(oldRequest.second, newRequest.second)
+            assertFalse(newGate.isCompleted)
+            newGate.complete(Unit)
+        }
+        compose.onNodeWithText(str(R.string.channel_statusSending)).assertDoesNotExist()
+        // Returning to the original identity cannot resurrect an outbox that crossed a boundary.
+        compose.runOnIdle {
+            uid.value = "me"
+            newRepo.messages.value = ClubChatState.Ready(member, emptyList())
+        }
+        assertDraft("")
+        compose.onNodeWithText("Old owner's pending text").assertDoesNotExist()
+        compose.onNodeWithText("Old owner's unsent draft").assertDoesNotExist()
+        compose.onNodeWithText("Old owner's history").assertDoesNotExist()
+        compose.onNodeWithText("New owner's pending text").assertDoesNotExist()
+        compose.onNodeWithText("New owner's unsent draft").assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).assertDoesNotExist()
+        compose.runOnIdle { assertEquals(listOf(newRequest), newRepo.sendRequests) }
+    }
+
+    @Test fun verifiedRevocationClearsOutboxBeforeRecreationWithIdenticalMembership() {
+        val gate = lifecycleGate()
+        val oldRepo = FakeClubRepository(ClubChatState.Ready(member, emptyList()))
+        oldRepo.sendGate = gate
+        oldRepo.completeSendsAfterCancellation = true
+        val activity = installLifecycleChat(oldRepo)
+        val request = sendLifecycleMessage(oldRepo, "Revoked pending text")
+        compose.onNodeWithTag("club-chat-input").performTextInput("Revoked unsent draft")
+        compose.runOnIdle { oldRepo.messages.value = ClubChatState.Unavailable }
+        assertPrivateRoomHidden("Revoked pending text", "Revoked unsent draft")
+        val proof = lifecycleGate()
+        val newRepo = FakeClubRepository(ClubChatState.Ready(member, emptyList()))
+        newRepo.chatGate = proof
+
+        recreateLifecycleChat(activity, oldRepo, newRepo)
+        assertPrivateRoomHidden("Revoked pending text", "Revoked unsent draft")
+        compose.runOnIdle { proof.complete(Unit) }
+        assertDraft("")
+        compose.onNodeWithText("Revoked pending text").assertDoesNotExist()
+        compose.onNodeWithText("Revoked unsent draft").assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).assertDoesNotExist()
+        compose.runOnIdle { gate.complete(Unit) }
+        compose.waitUntil { compose.runOnIdle { oldRepo.sendCompletions.size == 1 } }
+        compose.onNodeWithText("Revoked pending text").assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.channel_statusSending)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.channel_statusFailedRetry)).assertDoesNotExist()
+        assertDraft("")
+        compose.runOnIdle {
+            assertEquals(listOf(request), oldRepo.sendRequests)
+            assertTrue(newRepo.sendRequests.isEmpty())
+        }
+    }
+
     @Test fun createClubThenLeaveReturnsToDirectoryWithCooldown() {
         val repo = FakeClubRepository(ClubChatState.Unavailable)
         compose.setContent { KccTheme { SharedClubRoute("me", repository = repo) } }
@@ -632,13 +962,31 @@ private class FakeClubRepository(initial: ClubChatState) : ClubRepository {
     var sent: String? = null
     var operation: String? = null
     var chatCalls = 0
+    var activeChatSubscriptions = 0
+    var chatGate: CompletableDeferred<Unit>? = null
     var sendFailuresRemaining = 0
     var sendFailure: Exception? = null
     var sendGate: CompletableDeferred<Unit>? = null
+    var completeSendsAfterCancellation = false
+    val sendCompletions = mutableListOf<Pair<String, String>>()
+    val sendClubIds = mutableListOf<String>()
     val sendRequests = mutableListOf<Pair<String, String>>()
     val managementRequests = mutableListOf<Pair<String, Map<String, Any?>>>()
     val blockedAuthors = mutableListOf<String>()
-    override fun chat(): Flow<ClubChatState> { chatCalls++; return messages }
+    override fun chat(): Flow<ClubChatState> {
+        chatCalls++
+        val gate = chatGate
+        return flow {
+            activeChatSubscriptions++
+            try {
+                if (gate != null) {
+                    emit(ClubChatState.Unavailable)
+                    gate.await()
+                }
+                emitAll(messages)
+            } finally { activeChatSubscriptions-- }
+        }
+    }
     override fun observeEnabled() = flowOf(true)
     override fun observePublicAttendanceReady() = flowOf(true)
     override fun observeAccess(): Flow<ClubAccess> = access
@@ -679,11 +1027,21 @@ private class FakeClubRepository(initial: ClubChatState) : ClubRepository {
         } finally { activeRows.remove(messageIds) }
     }
     override suspend fun send(clubId: String, text: String, operationId: String) {
-        sendRequests += text to operationId
-        sendGate?.await()
-        sendFailure?.let { throw it }
-        if (sendFailuresRemaining > 0) { sendFailuresRemaining--; throw ClubException("unavailable") }
-        sent = text; operation = operationId
+        val request = text to operationId
+        val gate = sendGate
+        val failure = sendFailure
+        sendRequests += request
+        sendClubIds += clubId
+        suspend fun finish() {
+            gate?.await()
+            try {
+                failure?.let { throw it }
+                if (sendFailuresRemaining > 0) { sendFailuresRemaining--; throw ClubException("unavailable") }
+                sent = text; operation = operationId
+            } finally { sendCompletions += request }
+        }
+        // Model an already dispatched transport callback that returns after room cancellation.
+        if (completeSendsAfterCancellation) withContext(NonCancellable) { finish() } else finish()
     }
     override suspend fun events(clubId: String, cursor: String?): ClubPage<ClubEvent> = ClubPage(emptyList(), null)
     override fun eventParticipants(eventId: String): Flow<List<Club>> = flowOf(emptyList())

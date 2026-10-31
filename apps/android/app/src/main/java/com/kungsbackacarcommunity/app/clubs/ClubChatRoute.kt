@@ -32,6 +32,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import java.util.UUID
 import java.security.MessageDigest
@@ -51,6 +52,12 @@ fun ClubChatRoute(
         liveProfiles ?: if (repo is FirebaseClubRepository) FirebaseLiveProfileRepository.sharedOrEmpty(context)
         else LiveProfileRepository.EMPTY
     }
+    // Keep only submitted messages outside repo-identity/foreground keys. A new
+    // Activity creates a new repository, but must not lose already-cleared text.
+    val outbox = key(uid) {
+        val saver = remember(uid) { clubChatOutboxSaver(uid) }
+        rememberSaveable(saver = saver) { ClubChatOutbox(uid) }
+    }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var foreground by remember(lifecycle) { mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) }
     var entryEpoch by remember(lifecycle) { mutableIntStateOf(0) }
@@ -64,23 +71,38 @@ fun ClubChatRoute(
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
-    if (foreground) key(uid, repo, entryEpoch) { VerifiedClubChat(uid, repo, profiles, sendCooldown) }
+    if (foreground) key(uid, repo, entryEpoch) { VerifiedClubChat(uid, repo, profiles, sendCooldown, outbox) }
 }
 
 @Composable
-private fun VerifiedClubChat(uid: String, repo: ClubRepository?, profiles: LiveProfileRepository, sendCooldown: com.kungsbackacarcommunity.app.chat.ChatSendCooldown?) {
-    val source = remember(repo) { repo?.chat() ?: flowOf(ClubChatState.Unavailable) }
+private fun VerifiedClubChat(uid: String, repo: ClubRepository?, profiles: LiveProfileRepository, sendCooldown: com.kungsbackacarcommunity.app.chat.ChatSendCooldown?, outbox: ClubChatOutbox) {
+    val source = remember(repo, outbox) {
+        var verified = false
+        (repo?.chat() ?: flowOf(ClubChatState.Unavailable)).onEach { state ->
+            if (state is ClubChatState.Ready) verified = true
+            else if (verified) {
+                // A previously verified foreground room lost access. Initial
+                // loading after resume is different: keep its outbox hidden
+                // until fresh proof selects the exact same membership again.
+                outbox.clear()
+                verified = false
+            }
+        }
+    }
     val state by source.collectAsState(initial = ClubChatState.Unavailable)
     val ready = state as? ClubChatState.Ready
     if (ready == null || repo == null) {
         Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) { Text(stringResource(R.string.clubs_noClubChat)) }
     } else {
-        key(uid, repo, ready.membership) { ClubChatRoom(uid, repo, ready, profiles, sendCooldown) }
+        key(uid, repo, ready.membership, outbox.proofEpoch) {
+            val roomOutbox = remember(outbox) { outbox.open(ready.membership) }
+            ClubChatRoom(uid, repo, ready, profiles, sendCooldown, roomOutbox)
+        }
     }
 }
 
 @Composable
-private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubChatState.Ready, profiles: LiveProfileRepository, sendCooldown: com.kungsbackacarcommunity.app.chat.ChatSendCooldown?) {
+private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubChatState.Ready, profiles: LiveProfileRepository, sendCooldown: com.kungsbackacarcommunity.app.chat.ChatSendCooldown?, roomOutbox: ClubRoomOutbox) {
     val membership = ready.membership
     val cooldown = remember(uid, sendCooldown) { sendCooldown ?: ChatSendCooldowns.forUser(uid) }
     val cooldownSeconds = rememberChatCooldownSeconds(cooldown)
@@ -89,7 +111,7 @@ private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubCha
     var pageCursor by remember { mutableStateOf<ClubMessageCursor?>(null) }
     var draft by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
     var draftRevision by rememberSaveable { mutableLongStateOf(0L) }
-    var pending by rememberSaveable(stateSaver = clubPendingSendSaver) { mutableStateOf(emptyList<ClubPendingSend>()) }
+    var pending by roomOutbox.pending
     var operationId by rememberSaveable { mutableStateOf(UUID.randomUUID().toString()) }
     var busy by remember { mutableStateOf(false) }
     var paging by remember { mutableStateOf(false) }
@@ -342,8 +364,12 @@ internal fun clubPendingMessageId(uid: String, operationId: String): String {
     return sha256(uid + "_" + sha256(operationId))
 }
 
+internal fun clubPendingSendValues(rows: List<ClubPendingSend>): List<String> = rows.flatMap {
+    listOf(it.operationId, it.messageId, it.text, it.accepted.toString(), it.submittedAtMillis.toString())
+}
+
 internal val clubPendingSendSaver = listSaver<List<ClubPendingSend>, String>(
-    save = { rows -> rows.flatMap { listOf(it.operationId, it.messageId, it.text, it.accepted.toString(), it.submittedAtMillis.toString()) } },
+    save = { clubPendingSendValues(it) },
     restore = { values -> values.chunked(5).map {
         val accepted = it[3].toBoolean()
         ClubPendingSend(it[0], it[1], it[2], failed = !accepted, accepted = accepted, submittedAtMillis = it[4].toLong())
