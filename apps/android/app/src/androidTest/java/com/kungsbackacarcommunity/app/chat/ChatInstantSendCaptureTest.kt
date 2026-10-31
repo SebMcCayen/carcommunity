@@ -3,6 +3,9 @@ package com.kungsbackacarcommunity.app.chat
 import android.graphics.Bitmap
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
+import android.view.WindowManager
+import androidx.core.view.WindowCompat
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,6 +29,7 @@ import com.kungsbackacarcommunity.app.moderation.ChatSurface
 import java.io.File
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.*
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -37,6 +41,21 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class ChatInstantSendCaptureTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+
+    @Before fun matchProductionImeWindow() {
+        compose.activityRule.scenario.onActivity {
+            it.enableEdgeToEdge()
+            // This generic test Activity otherwise applies legacy resizing in
+            // addition to the composer's explicit IME insets. Production owns
+            // IME movement through insets; disable legacy movement in the host.
+            it.window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
+            val light = InstrumentationRegistry.getArguments().getString("redesignTheme") == "light"
+            WindowCompat.getInsetsController(it.window, it.window.decorView).apply {
+                isAppearanceLightStatusBars = light
+                isAppearanceLightNavigationBars = light
+            }
+        }
+    }
 
     @Test fun capturePendingEmptyComposerAndFailedBubbleWithNextDraft() {
         val theme = InstrumentationRegistry.getArguments().getString("redesignTheme") ?: "dark"
@@ -82,6 +101,7 @@ class ChatInstantSendCaptureTest {
         compose.waitUntil(5_000) { compose.runOnIdle { f.attempts.size == 1 } }
         val first = compose.runOnIdle { f.attempts.single() }
         assertDraft("")
+        screenshotUiAutomation("community-$theme-pending-diagnostic")
         compose.onNodeWithTag("chat-body-${first.clientId}", useUnmergedTree = true)
             .assertTextEquals(SENT_TEXT).assertIsDisplayed()
         status(R.string.channel_statusSending).assertIsDisplayed()

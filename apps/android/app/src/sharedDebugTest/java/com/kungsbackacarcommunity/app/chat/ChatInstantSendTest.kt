@@ -1,10 +1,13 @@
 package com.kungsbackacarcommunity.app.chat
 
+import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
+import android.view.WindowManager
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.StateRestorationTester
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
@@ -18,6 +21,10 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.*
+import org.junit.After
+import java.io.File
+import android.graphics.Bitmap
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -27,7 +34,27 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class ChatInstantSendTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+
+    @Before fun matchProductionImeWindow() {
+        compose.activityRule.scenario.onActivity {
+            it.enableEdgeToEdge()
+            // This generic test Activity otherwise applies legacy resizing in
+            // addition to the composer's explicit IME insets. Production owns
+            // IME movement through insets; disable legacy movement in the host.
+            it.window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
+        }
+    }
+
+    @After fun captureRequestedNativeWindow() {
+        val name = InstrumentationRegistry.getArguments().getString("chatInstantSnapshot") ?: return
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val output = File(instrumentation.targetContext.getExternalFilesDir(null), "chat-instant-send")
+        check(output.mkdirs() || output.isDirectory)
+        File(output, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        bitmap.recycle()
+    }
 
     @Test fun communityClearsComposerAndShowsSendingBeforeNetworkReturns() = pending(Surface.Community)
     @Test fun dmClearsComposerAndShowsSendingBeforeNetworkReturns() = pending(Surface.Dm)
@@ -79,7 +106,7 @@ class ChatInstantSendTest {
         } else submit(f)
         var expected = if (quickEmoji) FIRST_DRAFT else ""
         assertDraft(expected)
-        sending(f).assertIsDisplayed()
+        sending(f).assertEventuallyDisplayed()
         assertBody(first)
         if (nextDraft.isNotEmpty()) {
             input().performTextInput(nextDraft)
@@ -102,7 +129,7 @@ class ChatInstantSendTest {
         assertDraft(expected)
         assertBody(first)
         sending(f).assertDoesNotExist()
-        retry(f).assertIsDisplayed().assertIsEnabled()
+        retry(f).assertEventuallyDisplayed().assertIsEnabled()
         compose.onAllNodesWithText(text(
             if (surface == Surface.Community) R.string.channel_statusFailedRetry else R.string.dm_statusFailedRetry,
         )).assertCountEquals(1)
@@ -116,7 +143,7 @@ class ChatInstantSendTest {
         compose.waitForIdle()
         assertDraft(expected)
         assertBody(first)
-        retry(f).assertIsDisplayed().assertIsEnabled()
+        retry(f).assertEventuallyDisplayed().assertIsEnabled()
         assertAttemptCount(f, 1)
         // Retry the saved bubble explicitly, preserving its payload/key and the
         // independent composer (including an intentionally deleted next draft).
@@ -125,7 +152,7 @@ class ChatInstantSendTest {
         assertSamePayload(first, retried)
         assertDraft(expected)
         assertBody(retried)
-        sending(f).assertIsDisplayed()
+        sending(f).assertEventuallyDisplayed()
         retry(f).assertDoesNotExist()
         assertPending(f, retried, 2)
         complete(retried, true)
@@ -143,7 +170,7 @@ class ChatInstantSendTest {
         val attempt = submit(f)
         assertDraft("")
         assertBody(attempt)
-        sending(f).assertIsDisplayed()
+        sending(f).assertEventuallyDisplayed()
         retry(f).assertDoesNotExist()
         assertPending(f, attempt, 1)
         // Editing must work even though the callable has not returned.
@@ -183,12 +210,12 @@ class ChatInstantSendTest {
         assertDraft(NEXT_DRAFT)
         assertBody(first)
         sending(f).assertDoesNotExist()
-        retry(f).assertIsDisplayed().assertIsEnabled().performClick()
+        retry(f).assertEventuallyDisplayed().assertIsEnabled().performClick()
         val retried = attempt(f, 2)
         assertSamePayload(first, retried)
         assertDraft(NEXT_DRAFT)
         assertBody(first) // A retry transitions the existing bubble; it must not append another.
-        sending(f).assertIsDisplayed()
+        sending(f).assertEventuallyDisplayed()
         retry(f).assertDoesNotExist()
         assertPending(f, retried, 2)
         input().performTextReplacement("Edited during retry 🚙")
@@ -217,12 +244,12 @@ class ChatInstantSendTest {
         complete(first, false)
         assertDraft(FIRST_DRAFT)
         assertBody(first)
-        retry(f).assertIsDisplayed().assertIsEnabled()
+        retry(f).assertEventuallyDisplayed().assertIsEnabled()
         if (recreate) {
             restoration.emulateSavedInstanceStateRestore()
             assertDraft(FIRST_DRAFT)
             assertBody(first)
-            retry(f).assertIsDisplayed().assertIsEnabled()
+            retry(f).assertEventuallyDisplayed().assertIsEnabled()
         }
         assertAttemptCount(f, 1)
         retry(f).performClick()
@@ -230,7 +257,7 @@ class ChatInstantSendTest {
         assertSamePayload(first, retried)
         assertDraft(FIRST_DRAFT)
         assertBody(first)
-        sending(f).assertIsDisplayed()
+        sending(f).assertEventuallyDisplayed()
         retry(f).assertDoesNotExist()
         assertPending(f, retried, 2)
         // Leave the identical draft untouched through both ACK and live delivery;
@@ -252,12 +279,12 @@ class ChatInstantSendTest {
         complete(first, false)
         assertDraft(FIRST_DRAFT)
         assertBody(first) // Both the restored composer and retry bubble retain the content.
-        retry(f).assertIsDisplayed().performClick()
+        retry(f).assertEventuallyDisplayed().performClick()
         val retried = attempt(f, 2)
         assertSamePayload(first, retried)
         assertDraft("")
         assertBody(first)
-        sending(f).assertIsDisplayed()
+        sending(f).assertEventuallyDisplayed()
         assertPending(f, retried, 2)
         complete(retried, true)
         assertDraft("")
@@ -274,7 +301,7 @@ class ChatInstantSendTest {
         compose.runOnIdle { assertEquals(EMOJI, emoji.text) }
         assertDraft(FIRST_DRAFT)
         assertBody(emoji)
-        sending(f).assertIsDisplayed()
+        sending(f).assertEventuallyDisplayed()
         assertPending(f, emoji, 1)
         compose.runOnIdle { f.publish(emoji) }
         assertBody(emoji)
@@ -324,7 +351,15 @@ class ChatInstantSendTest {
             hasTestTag("chat-body-${attempt.clientId}"), useUnmergedTree = true,
         ).assertCountEquals(1)
         compose.onNodeWithTag("chat-body-${attempt.clientId}", useUnmergedTree = true)
-            .assertTextEquals(attempt.text).assertIsDisplayed()
+            .assertTextEquals(attempt.text).assertEventuallyDisplayed()
+    }
+
+    // Native window/IME layout can settle after the fake repository call is
+    // observed. Keep the immediate composer assertion, then require the bubble
+    // to become visibly laid out; never scroll it into view from the test.
+    private fun SemanticsNodeInteraction.assertEventuallyDisplayed(): SemanticsNodeInteraction {
+        compose.waitUntil(5_000) { isDisplayed() }
+        return assertIsDisplayed()
     }
 
     private fun text(id: Int) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
