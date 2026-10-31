@@ -1,11 +1,18 @@
 package com.kungsbackacarcommunity.app.chat
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ChatResizePinningTest {
     private val bottom = ChatListResizeSnapshot(400, 20, "msg-last", 80, atBottom = true, userScrolling = false)
+
+    @Test fun oversizedOutgoingRowPinsItsDeliveryFooterInsteadOfItsTop() {
+        assertEquals(40, ChatListPinning.resizeScrollOffset(newestHeight = 120, viewportHeight = 80))
+        assertEquals(0, ChatListPinning.resizeScrollOffset(newestHeight = 80, viewportHeight = 120))
+        assertEquals(0, ChatListPinning.resizeScrollOffset(newestHeight = 80, viewportHeight = 80))
+    }
 
     @Test fun multilineComposerKeepsPreviouslyPinnedMessageVisible() {
         assertTrue(ChatListPinning.shouldRepinAfterResize(bottom, bottom.copy(viewportHeight = 340, atBottom = false)))

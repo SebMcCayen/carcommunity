@@ -42,6 +42,9 @@ internal data class ChatListResizeSnapshot(
  * different scroll behaviours.
  */
 object ChatListPinning {
+    internal fun resizeScrollOffset(newestHeight: Int, viewportHeight: Int): Int =
+        (newestHeight - viewportHeight).coerceAtLeast(0)
+
     /** Preserve an existing bottom anchor when an input or delivery row grows. */
     internal fun shouldRepinAfterResize(
         previous: ChatListResizeSnapshot,
@@ -256,7 +259,14 @@ fun KeepPinnedToNewest(
             if (before != null && ChatListPinning.shouldRepinAfterResize(before, current)) {
                 // Schedule the next layout rather than competing with the IME's
                 // scroll coroutine in MutatorMutex (which could cancel it).
-                listState.requestScrollToItem(current.itemCount - 1)
+                // A row can itself be taller than the remaining viewport on a
+                // small screen. Offset its TOP so its delivery/retry footer stays
+                // at the bottom, rather than pinning the row's start above it.
+                val newestHeight = current.newestHeight.takeIf { it > 0 } ?: before.newestHeight
+                listState.requestScrollToItem(
+                    current.itemCount - 1,
+                    ChatListPinning.resizeScrollOffset(newestHeight, current.viewportHeight),
+                )
             }
         }
     }
