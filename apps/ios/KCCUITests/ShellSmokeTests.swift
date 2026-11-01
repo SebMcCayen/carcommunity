@@ -15,24 +15,31 @@ final class ShellSmokeTests: XCTestCase {
             let app = launch(language: "sv", largeText: largeText, theme: "Dark", chatFixture: true)
             app.buttons["shell.tab.chat"].tap()
             let latest = app.staticTexts["Fixture message 39"]
-            XCTAssertTrue(latest.waitForExistence(timeout: 15))
+            let latestExists = latest.waitForExistence(timeout: 15)
+            if !latestExists || !latest.isHittable { chatProof(app, name: "latest-message-failure", tree: true) }
+            XCTAssertTrue(latestExists)
             XCTAssertTrue(latest.isHittable, "Opening a channel must show its newest message")
-            let input = app.textFields["chat.composer.input"].exists
-                ? app.textFields["chat.composer.input"] : app.textViews["chat.composer.input"]
+            // SwiftUI's vertical TextField may expose a measuring TextField
+            // as well as the real TextView. Require a tappable editable widget.
+            let candidates = app.textFields.matching(identifier: "chat.composer.input").allElementsBoundByIndex
+                + app.textViews.matching(identifier: "chat.composer.input").allElementsBoundByIndex
+            let input = candidates.first(where: { $0.isHittable })
+                ?? app.descendants(matching: .any).matching(identifier: "chat.composer.input").firstMatch
             XCTAssertTrue(input.waitForExistence(timeout: 5))
             if !input.isHittable {
-                attach(app, name: "chat-composer-not-hittable")
+                chatProof(app, name: "composer-not-hittable", tree: true)
                 print("CHAT_COMPOSER_GEOMETRY input=\(input.frame) footer=\(app.buttons["shell.tab.chat"].frame) screen=\(app.frame)")
             }
             XCTAssertTrue(input.isHittable)
             XCTAssertLessThanOrEqual(input.frame.maxY, app.buttons["shell.tab.chat"].frame.minY)
             input.tap()
             XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+            print("CHAT_KEYBOARD_GEOMETRY keyboard=\(app.keyboards.firstMatch.frame) input=\(input.frame) footer=\(app.buttons["shell.tab.chat"].frame)")
             input.typeText("Fixture reply")
             let send = app.buttons["chat.composer.send"]
             XCTAssertTrue(send.isHittable)
             XCTAssertLessThanOrEqual(send.frame.maxY, app.keyboards.firstMatch.frame.minY + 1)
-            attach(app, name: largeText ? "chat-composer-sv-keyboard-accessibility" : "chat-composer-sv-keyboard")
+            chatProof(app, name: largeText ? "chat-composer-sv-keyboard-accessibility" : "chat-composer-sv-keyboard")
             send.tap()
             XCTAssertTrue(app.staticTexts["Fixture reply"].waitForExistence(timeout: 5))
             XCTAssertFalse((input.value as? String)?.contains("Fixture reply") == true)
@@ -508,6 +515,20 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertEqual(map.value as? String, mapIdentity)
         openSettings(app, language: language)
         attach(app, name: "\(prefix)-S69-settings")
+    }
+
+    /// Only the config-less synthetic chat fixture calls this. Inline image
+    /// evidence remains available when optional artifact uploads are disabled.
+    private func chatProof(_ app: XCUIApplication, name: String, tree: Bool = false) {
+        attach(app, name: name)
+        if tree { print("CHAT_FIXTURE_TREE \(app.debugDescription)") }
+        guard let data = app.screenshot().image.jpegData(compressionQuality: 0.55) else { return }
+        let encoded = Array(data.base64EncodedString())
+        print("KCC_CHAT_PROOF_BEGIN \(name).jpg")
+        for start in stride(from: 0, to: encoded.count, by: 4096) {
+            print("KCC_CHAT_PROOF_DATA \(String(encoded[start..<min(start + 4096, encoded.count)]))")
+        }
+        print("KCC_CHAT_PROOF_END \(name).jpg")
     }
 
     private func attach(_ app: XCUIApplication, name: String) {

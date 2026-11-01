@@ -263,42 +263,6 @@ struct ShellView: View {
     // Each boundary wraps one stable layout/lifecycle segment, retaining the
     // shell's single map and coordinator identities through tab/route changes.
     private var shellBase: AnyView {
-        VStack(spacing: 0) {
-            // A native NavigationStack can ignore a safeAreaInset applied to
-            // its containing ZStack. Give the retained tabs real, finite bounds
-            // above the footer so chat's composer cannot sit behind navigation.
-            GeometryReader { geometry in
-                shellTabContent
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-            }
-            primaryNavigation
-        }
-        // Route host: sub-routes render full-screen OVER the tab shell (the
-        // Android shell's route-host pattern), each carrying its own back
-        // affordance that pops one level via the pure stack.
-        .overlay {
-            if let route = routes.current {
-                routeHost(for: route)
-            }
-        }
-        .overlay {
-            if addressSearchPresented, let savedPlacesCoordinator {
-                AddressSearchOverlay(
-                    coordinator: savedPlacesCoordinator,
-                    proximity: savedPlacesProximity,
-                    onSelect: showPlaceOnMap,
-                    onManage: {
-                        navSearchOpen = false
-                        routes = routes.opening(.savedPlaces)
-                    },
-                    onClose: { navSearchOpen = false }
-                )
-            }
-        }
-        .eraseToAnyView()
-    }
-
-    private var shellTabContent: AnyView {
         ZStack {
             // Exactly one native Mapbox view for the signed-in shell. Tabs and
             // routes cover it instead of recreating its Metal render surface.
@@ -334,6 +298,31 @@ struct ShellView: View {
         }
         .overlay(alignment: .bottom) {
             if mapHomeChromeVisible && mapBottomDockVisible { mapBottomDock }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            primaryNavigation
+        }
+        // Route host: sub-routes render full-screen OVER the tab shell (the
+        // Android shell's route-host pattern), each carrying its own back
+        // affordance that pops one level via the pure stack.
+        .overlay {
+            if let route = routes.current {
+                routeHost(for: route)
+            }
+        }
+        .overlay {
+            if addressSearchPresented, let savedPlacesCoordinator {
+                AddressSearchOverlay(
+                    coordinator: savedPlacesCoordinator,
+                    proximity: savedPlacesProximity,
+                    onSelect: showPlaceOnMap,
+                    onManage: {
+                        navSearchOpen = false
+                        routes = routes.opening(.savedPlaces)
+                    },
+                    onClose: { navSearchOpen = false }
+                )
+            }
         }
         .eraseToAnyView()
     }

@@ -217,7 +217,10 @@ struct ChannelComposer: View {
                 .padding(.vertical, KccSpacing.s1)
                 .frame(minHeight: 48)
                 .background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.lg))
-                .overlay { RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.border) }
+                .overlay {
+                    RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.border)
+                        .allowsHitTesting(false)
+                }
                 .accessibilityIdentifier("chat.composer.input")
             Button(action: onSend) {
                 if dynamicTypeSize.isAccessibilitySize {
