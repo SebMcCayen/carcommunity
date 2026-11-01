@@ -20,6 +20,10 @@ final class ShellSmokeTests: XCTestCase {
             let input = app.textFields["chat.composer.input"].exists
                 ? app.textFields["chat.composer.input"] : app.textViews["chat.composer.input"]
             XCTAssertTrue(input.waitForExistence(timeout: 5))
+            if !input.isHittable {
+                attach(app, name: "chat-composer-not-hittable")
+                print("CHAT_COMPOSER_GEOMETRY input=\(input.frame) footer=\(app.buttons["shell.tab.chat"].frame) screen=\(app.frame)")
+            }
             XCTAssertTrue(input.isHittable)
             XCTAssertLessThanOrEqual(input.frame.maxY, app.buttons["shell.tab.chat"].frame.minY)
             input.tap()
@@ -77,6 +81,7 @@ final class ShellSmokeTests: XCTestCase {
     func testSavedPlacesDockKeepsCloseToolsAndPrimaryNavigationReachable() {
         let app = launch(language: "en", largeText: true, theme: "Dark")
         let mapIdentity = app.staticTexts["shell.mapPlaceholder"].value as? String
+        let mapFrame = app.staticTexts["shell.mapPlaceholder"].frame
         XCTAssertNotNil(mapIdentity)
         let saved = app.buttons["shell.savedPlaces"]
         XCTAssertFalse(saved.exists, "Saved places belongs in the avatar menu")
@@ -86,6 +91,8 @@ final class ShellSmokeTests: XCTestCase {
         let panel = element("map.reading.panel", in: app)
         let close = app.buttons["map.reading.close"]
         XCTAssertTrue(panel.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["shell.mapPlaceholder"].frame, mapFrame,
+            "Reading a marker must keep the map's full viewport behind its panel")
         XCTAssertTrue(close.isHittable)
         // CGRect conversion can report 48 as 47.99999999999994.
         XCTAssertGreaterThanOrEqual(close.frame.height + 0.001, 48)
