@@ -198,6 +198,7 @@ struct NewDialogueSheet: View {
                 .task { await coordinator.load() }
         }
         .presentationDetents([.medium, .large])
+        .kccDismissibleSheet()
     }
 
     @ViewBuilder

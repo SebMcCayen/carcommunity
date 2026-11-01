@@ -106,16 +106,10 @@ struct CrownPerkDeploySheet: View {
             }
             .kccReadingSurface(pageBackground: true)
             .navigationTitle("crownHunt.deployTitle")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("crownHunt.spawnClose") {
-                        coordinator.menuPresented = false
-                        dismiss()
-                    }
-                }
-            }
+
         }
         .presentationDetents([.medium, .large])
+        .kccDismissibleSheet()
     }
 
     private func perkRow(perkId: String, kind: PerkKind, title: String, symbol: String) -> some View {

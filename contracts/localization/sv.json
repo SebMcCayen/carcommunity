@@ -2135,6 +2135,11 @@
     "clearedMarkerHint": "Någon har rapporterat att den är borta, men den kan finnas kvar. Kör försiktigt."
   },
   "whatsNew": {
+    "release010Build4Highlight": "Förbättrad karta, chatt och menyer efter de första iPhone-testerna.",
+    "release010Build4Map": "Kartmarkörer följer zoomning. Kartan ligger kvar bakom informationsrutorna och kartknapparna följer Androids placering.",
+    "release010Build4Chat": "Chatten öppnas vid det senaste meddelandet och skrivrutan hålls synlig även med tangentbordet öppet.",
+    "release010Build4Profile": "Profilen visar bara aktiva administratörsvarningar. Platsåtkomst erbjuds när kartan används första gången.",
+    "release010Build4Clubs": "Klubben finns under Socialt med klubbkatalog, presentation, statistik och grundläggande medlemskap.",
     "title": "Vad är nytt",
     "dialogTitle": "Nyheter i version %1$s",
     "dialogMoreVersions": "…och mer från tidigare uppdateringar.",

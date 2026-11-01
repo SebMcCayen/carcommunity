@@ -40,6 +40,7 @@ enum ShellRoute: Sendable {
     case map
     case events
     case crownHunt
+    case clubs
     /// The social leaderboard (all-time / this-month podiums per category).
     case leaderboard
     case partners

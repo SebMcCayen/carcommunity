@@ -1,4 +1,5 @@
 import XCTest
+import Observation
 
 @testable import KCC
 
@@ -8,6 +9,43 @@ import XCTest
 /// and the stub's recorded-wiring hooks.
 @MainActor
 final class MapSurfaceTests: XCTestCase {
+
+    func testProjectionObservationTracksEveryCameraFrameEvenWithinRoundedSnapshot() {
+        let surface = StubMapSurface(autoLoad: false)
+        var x = 100.0
+        surface.setProjectionForTest { _, _ in MapScreenPoint(x: x, y: 10, trustworthy: true) }
+        let snapshot = MapCameraSnapshot.of(latitude: 57, longitude: 12, zoom: 12, bearing: 0, pitch: 0)
+        surface.updateCameraSnapshot(snapshot)
+        let changed = expectation(description: "marker projection invalidated")
+        let first = withObservationTracking {
+            surface.screenPositionFor(latitude: 57, longitude: 12)
+        } onChange: { changed.fulfill() }
+        XCTAssertEqual(first?.x, 100)
+        x = 240
+        surface.updateCameraSnapshot(snapshot)
+        wait(for: [changed], timeout: 1)
+        XCTAssertEqual(surface.cameraSnapshot, snapshot, "Query throttling remains independent of pixels")
+        XCTAssertEqual(surface.screenPositionFor(latitude: 57, longitude: 12)?.x, 240)
+    }
+
+    func testProjectionObserversRefreshAfterRendererAttachmentResizeAndRemoval() {
+        let surface = StubMapSurface(autoLoad: false)
+        for action in 0..<3 {
+            let changed = expectation(description: "projection lifetime/size")
+            withObservationTracking {
+                _ = surface.screenPositionFor(latitude: 57, longitude: 12)
+            } onChange: { changed.fulfill() }
+            switch action {
+            case 0:
+                surface.installRenderer(projection: { _, _ in MapScreenPoint(x: 120, y: 80, trustworthy: true) },
+                    convoyFit: { _, _, _, _, _, _ in }, center: { _ in })
+            case 1: surface.invalidateProjection()
+            default: surface.removeRenderer()
+            }
+            wait(for: [changed], timeout: 1)
+        }
+        XCTAssertNil(surface.screenPositionFor(latitude: 57, longitude: 12))
+    }
 
     // MARK: - layer toggles (ported from Android's ShellNavTest)
 

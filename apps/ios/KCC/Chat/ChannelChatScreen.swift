@@ -45,14 +45,20 @@ struct ChannelChatScreen: View {
     @ViewBuilder
     private var content: some View {
         if let coordinator {
-            VStack(spacing: 0) {
-                messageArea(coordinator)
-                Divider()
-                if coordinator.chatRepliesEnabled, let target = coordinator.replyTarget {
-                    replyBanner(target, coordinator: coordinator)
+            messageArea(coordinator)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    VStack(spacing: 0) {
+                        Divider()
+                        if coordinator.chatRepliesEnabled, let target = coordinator.replyTarget {
+                            replyBanner(target, coordinator: coordinator)
+                        }
+                        composer(coordinator)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    .background(KccTheme.surface)
                 }
-                composer(coordinator)
-            }
+
         } else {
             placeholder
         }
@@ -72,7 +78,8 @@ struct ChannelChatScreen: View {
     }
 
     private func messageList(_ coordinator: ChannelChatCoordinator) -> some View {
-        ScrollView {
+        ChatThreadScrollView(latestMessageID: coordinator.messages.last?.id,
+                             latestIsOwn: coordinator.messages.last?.senderUid == coordinator.currentUserId) {
             LazyVStack(alignment: .leading, spacing: KccSpacing.s2) {
                 olderControl(coordinator)
                 ForEach(coordinator.messages) { message in

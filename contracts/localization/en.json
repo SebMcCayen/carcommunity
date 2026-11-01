@@ -2135,6 +2135,11 @@
     "clearedMarkerHint": "Someone has reported this as gone, but it may still be there. Take care."
   },
   "whatsNew": {
+    "release010Build4Highlight": "Map, chat and menu improvements following the first iPhone tests.",
+    "release010Build4Map": "Map markers follow zoom changes. The map stays behind detail panels and map controls match Android placement.",
+    "release010Build4Chat": "Chat opens at the latest message and keeps the composer visible with the keyboard open.",
+    "release010Build4Profile": "Profiles only show active administrator warnings. Location access is offered on first map use.",
+    "release010Build4Clubs": "Clubs is available under Social with the directory, presentation, statistics and basic membership.",
     "title": "What’s new",
     "dialogTitle": "What’s new in version %1$s",
     "dialogMoreVersions": "…and more from earlier updates.",

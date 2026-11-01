@@ -99,14 +99,9 @@ struct MapLayersSheet: View {
             .kccReadingSurface()
             .navigationTitle("shell.layersTitle")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("shell.layersClose") { dismiss() }
-                }
-            }
         }
         .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
+        .kccDismissibleSheet()
     }
 
     private var trafficBinding: Binding<Bool> {

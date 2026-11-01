@@ -350,6 +350,7 @@ struct MapHomeView: View {
     let surface: StubMapSurface
     let locationProvider: any LocationProvider
     private let accessToken: String?
+    let bottomClearance: CGFloat
     private let featureHealthReporter: FeatureHealthReporter?
     @State private var renderWatchdog: MapRenderWatchdog
 
@@ -357,11 +358,13 @@ struct MapHomeView: View {
         surface: StubMapSurface,
         locationProvider: any LocationProvider,
         accessToken: String? = MapboxConfiguration.accessToken(),
+        bottomClearance: CGFloat = 0,
         featureHealthReporter: FeatureHealthReporter? = nil
     ) {
         self.surface = surface
         self.locationProvider = locationProvider
         self.accessToken = accessToken
+        self.bottomClearance = bottomClearance
         self.featureHealthReporter = featureHealthReporter
         _renderWatchdog = State(initialValue: MapRenderWatchdog())
     }
@@ -373,6 +376,7 @@ struct MapHomeView: View {
                     accessToken: accessToken,
                     surface: surface,
                     locationProvider: locationProvider,
+                    bottomClearance: bottomClearance,
                     onLoadingError: { kind in
                         featureHealthReporter?.report(
                             kind,
@@ -487,6 +491,7 @@ private struct MapboxStandardMap: View {
     let onLoadingError: @MainActor (FeatureHealthKind) -> Void
     let surface: StubMapSurface
     let locationProvider: any LocationProvider
+    let bottomClearance: CGFloat
     @State private var viewport: Viewport
     @State private var cameraBeforeConvoy: MapCameraSnapshot?
     @State private var interactionObserver: ConvoyViewportInteractionObserver
@@ -507,6 +512,7 @@ private struct MapboxStandardMap: View {
         accessToken: String,
         surface: StubMapSurface,
         locationProvider: any LocationProvider,
+        bottomClearance: CGFloat,
         onLoadingError: @escaping @MainActor (FeatureHealthKind) -> Void,
         onFullFrameRendered: @escaping @MainActor () -> Void,
         onLoaded: @escaping @MainActor () -> Void
@@ -515,6 +521,7 @@ private struct MapboxStandardMap: View {
         self.surface = surface
         self.locationProvider = locationProvider
         self.onLoaded = onLoaded
+        self.bottomClearance = bottomClearance
         self.onFullFrameRendered = onFullFrameRendered
         self.onLoadingError = onLoadingError
         _viewport = State(initialValue: .camera(
@@ -562,8 +569,15 @@ private struct MapboxStandardMap: View {
             // and the redundant SDK compass in favour of our accessible rail.
             .ornamentOptions(OrnamentOptions(
                 scaleBar: ScaleBarViewOptions(visibility: .hidden),
-                compass: CompassViewOptions(visibility: .hidden)
+                compass: CompassViewOptions(visibility: .hidden),
+                logo: LogoViewOptions(position: .bottomRight,
+                    margins: CGPoint(x: 44, y: bottomClearance + 8)),
+                attributionButton: AttributionButtonOptions(position: .bottomRight,
+                    margins: CGPoint(x: 8, y: bottomClearance + 8))
             ))
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { _ in
+                surface.invalidateProjection()
+            }
             .onMapLoaded { _ in
                 onLoaded()
                 if !rendererAttached, let viewportController = proxy.viewport {

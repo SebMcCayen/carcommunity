@@ -394,11 +394,12 @@ struct AccountWarningsSection: View {
     var body: some View {
         Group {
             if KccFunctionsClient.createIfAvailable() != nil {
-                VStack(alignment: .leading, spacing: KccSpacing.s2) {
+                VStack(spacing: 0) {
+                  if !warnings.isEmpty {
+                   VStack(alignment: .leading, spacing: KccSpacing.s2) {
                     Text("accountWarnings.title").font(.headline).accessibilityAddTraits(.isHeader)
                     if loading { Text("accountWarnings.loading") }
                     if failed { Text("accountWarnings.error").foregroundStyle(KccTheme.error) }
-                    if !loading && !failed && warnings.isEmpty { Text("accountWarnings.empty") }
                     ForEach(warnings) { warning in
                         Text(verbatim: warning.reason).font(.body).fixedSize(horizontal: false, vertical: true)
                         if let expiry = warning.expiresAt, let date = Self.expiryDate(expiry) {
@@ -408,7 +409,11 @@ struct AccountWarningsSection: View {
                     if failed { Button { refreshID = UUID() } label: { Text("accountWarnings.retry").frame(minHeight: 48) }.disabled(loading) }
                     if cursor != nil && !failed { Button { retryAppend = true; refreshID = UUID() } label: { Text("accountWarnings.more").frame(minHeight: 48) }.disabled(loading) }
                 }
-                .kccContentCard()
+                   .kccContentCard()
+                  }
+                }
+                // Keep the listeners mounted while the card is absent: a new
+                // warning must still appear, and revocation/expiry must hide it.
                 .task(id: refreshID) { await load(append: retryAppend) }
                 .task(id: uid) {
                     // Refresh while visible even if a signal was missed offline.
@@ -450,23 +455,32 @@ struct AccountWarningsSection: View {
         loading = true
         let started = ContinuousClock().now
         do {
-            // Keep actor-owned state in a Sendable value before the callable's
-            // untyped JSON conversion. An absent cursor requests the first page.
-            let requestCursor = append ? cursor : nil
-            let payload: [String: String] = requestCursor.map { ["cursor": $0] } ?? [:]
-            let response = try await client.call("account-listWarnings", payload: payload)
-            try Task.checkCancellation()
-            guard let page = response as? [String: Any], page["userId"] as? String == uid,
-                let rows = page["warnings"] as? [[String: Any]], let meta = page["meta"] as? [String: Any]
-            else { throw CancellationError() }
-            var seen = Set<String>()
-            warnings = ((append ? warnings : []) + rows.compactMap { AccountWarning.decode($0, requestStarted: started) })
-                .filter { $0.active(at: ContinuousClock().now) && seen.insert($0.id).inserted }
-            cursor = meta["nextCursor"] as? String
+            var requestCursor = append ? cursor : nil
+            var visitedCursors = Set<String>()
+            var results = append ? warnings : []
+            var nextCursor: String?
+            repeat {
+                let payload: [String: String] = requestCursor.map { ["cursor": $0] } ?? [:]
+                let response = try await client.call("account-listWarnings", payload: payload)
+                try Task.checkCancellation()
+                guard let page = response as? [String: Any], page["userId"] as? String == uid,
+                    let rows = page["warnings"] as? [[String: Any]], let meta = page["meta"] as? [String: Any]
+                else { throw CancellationError() }
+                var seen = Set<String>()
+                results = (results + rows.compactMap { AccountWarning.decode($0, requestStarted: started) })
+                    .filter { $0.active(at: ContinuousClock().now) && seen.insert($0.id).inserted }
+                nextCursor = meta["nextCursor"] as? String
+                // An expired first page must not hide an active later warning.
+                // Reject repeated cursors rather than spin on a malformed page.
+                if let nextCursor, !visitedCursors.insert(nextCursor).inserted { throw CancellationError() }
+                requestCursor = nextCursor
+            } while results.isEmpty && nextCursor != nil
+            warnings = results
+            cursor = nextCursor
             failed = false; retryAppend = false
         } catch {
             if Task.isCancelled { return }
-            if !append { warnings = [] }
+            // Preserve known active warnings during a transient refresh error.
             failed = true; retryAppend = append
         }
         loading = false

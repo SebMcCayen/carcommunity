@@ -345,12 +345,9 @@ struct VehicleDetailSheet: View {
             .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .navigationTitle(Text("garage.detailTitle"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: { Text("garage.cancelButton").frame(minHeight: 48) }
-                }
-            }
+
         }
+        .kccDismissibleSheet()
         .sheet(isPresented: $isEditing) {
             VehicleFormSheet(coordinator: coordinator, vehicle: vehicle)
         }
@@ -736,14 +733,8 @@ struct CataloguePickerSheet: View {
             .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(action: { dismiss() }) {
-                        Text("garage.pickerClose").frame(minHeight: 48)
-                    }
-                }
-            }
-        }
+
+        }.kccDismissibleSheet()
     }
 
     private func rows(_ options: [CatalogueOption]) -> some View {
@@ -774,14 +765,8 @@ struct YearPickerSheet: View {
             .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .navigationTitle(Text("garage.selectModelYear"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(action: { dismiss() }) {
-                        Text("garage.pickerClose").frame(minHeight: 48)
-                    }
-                }
-            }
-        }
+
+        }.kccDismissibleSheet()
     }
 }
 

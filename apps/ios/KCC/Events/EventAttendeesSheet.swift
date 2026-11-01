@@ -43,12 +43,9 @@ struct EventAttendeesSheet: View {
             }
             .navigationTitle(Text("events.attendeesTitle"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("events.attendeesClose") { dismiss() }
-                }
-            }
+
         }
+        .kccDismissibleSheet()
     }
 
     private func message(_ key: LocalizedStringKey) -> some View {

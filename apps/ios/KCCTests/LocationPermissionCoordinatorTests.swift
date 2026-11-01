@@ -47,6 +47,29 @@ final class LocationPermissionCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.state, expected, file: file, line: line)
     }
 
+    @MainActor
+    func testInitialMapEntryExplainsLocationWithoutStartingSystemPrompt() {
+        let provider = StubLocationProvider(authorization: .notDetermined)
+        let coordinator = LocationPermissionCoordinator(provider: provider)
+        XCTAssertTrue(coordinator.requestInitialMapAccess())
+        XCTAssertEqual(coordinator.state, .rationale)
+        XCTAssertEqual(provider.whenInUseRequestCount, 0)
+        coordinator.proceedFromRationale()
+        XCTAssertEqual(provider.whenInUseRequestCount, 1)
+        XCTAssertFalse(coordinator.requestInitialMapAccess())
+    }
+
+    @MainActor
+    func testInitialMapEntryNeverNagsDeniedOrAlreadyAuthorizedUsers() {
+        for authorization in [LocationAuthorization.denied, .whileInUse, .always] {
+            let provider = StubLocationProvider(authorization: authorization)
+            let coordinator = LocationPermissionCoordinator(provider: provider)
+            XCTAssertFalse(coordinator.requestInitialMapAccess())
+            XCTAssertEqual(coordinator.state, .idle)
+            XCTAssertEqual(provider.whenInUseRequestCount, 0)
+        }
+    }
+
     // MARK: - starting is not asking
 
     @MainActor

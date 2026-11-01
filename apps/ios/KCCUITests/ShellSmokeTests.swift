@@ -10,6 +10,32 @@ final class ShellSmokeTests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testCommunityOpensAtLatestAndComposerStaysVisibleWithKeyboard() {
+        for largeText in [false, true] {
+            let app = launch(language: "sv", largeText: largeText, theme: "Dark", chatFixture: true)
+            app.buttons["shell.tab.chat"].tap()
+            let latest = app.staticTexts["Fixture message 39"]
+            XCTAssertTrue(latest.waitForExistence(timeout: 15))
+            XCTAssertTrue(latest.isHittable, "Opening a channel must show its newest message")
+            let input = app.textFields["chat.composer.input"].exists
+                ? app.textFields["chat.composer.input"] : app.textViews["chat.composer.input"]
+            XCTAssertTrue(input.waitForExistence(timeout: 5))
+            XCTAssertTrue(input.isHittable)
+            XCTAssertLessThanOrEqual(input.frame.maxY, app.buttons["shell.tab.chat"].frame.minY)
+            input.tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+            input.typeText("Fixture reply")
+            let send = app.buttons["chat.composer.send"]
+            XCTAssertTrue(send.isHittable)
+            XCTAssertLessThanOrEqual(send.frame.maxY, app.keyboards.firstMatch.frame.minY + 1)
+            attach(app, name: largeText ? "chat-composer-sv-keyboard-accessibility" : "chat-composer-sv-keyboard")
+            send.tap()
+            XCTAssertTrue(app.staticTexts["Fixture reply"].waitForExistence(timeout: 5))
+            XCTAssertFalse((input.value as? String)?.contains("Fixture reply") == true)
+            app.terminate()
+        }
+    }
+
     func testMapBackdropRemainsVisibleAfterTabAndSettingsRoundTrip() {
         let app = launch(language: "en")
         let placeholder = app.staticTexts["shell.mapPlaceholder"]
@@ -53,6 +79,8 @@ final class ShellSmokeTests: XCTestCase {
         let mapIdentity = app.staticTexts["shell.mapPlaceholder"].value as? String
         XCTAssertNotNil(mapIdentity)
         let saved = app.buttons["shell.savedPlaces"]
+        XCTAssertFalse(saved.exists, "Saved places belongs in the avatar menu")
+        app.buttons["shell.menu"].tap()
         XCTAssertTrue(saved.waitForExistence(timeout: 15))
         saved.tap()
         let panel = element("map.reading.panel", in: app)
@@ -78,6 +106,7 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertFalse(panel.exists, "A reading panel must not reopen after a tab round trip")
         XCTAssertEqual(app.staticTexts["shell.mapPlaceholder"].value as? String, mapIdentity,
             "Opening/closing a dock must retain the same map host")
+        app.buttons["shell.menu"].tap()
         saved.tap()
         XCTAssertTrue(close.waitForExistence(timeout: 5))
         close.tap()
@@ -152,7 +181,7 @@ final class ShellSmokeTests: XCTestCase {
         reveal(zoom, in: scroll, minimumHeight: 0)
         XCTAssertTrue(zoom.waitForExistence(timeout: 5), "Expanded slider tree: \(app.sliders.debugDescription)")
         XCTAssertTrue(zoom.isHittable)
-        app.buttons["Close map layers"].tap()
+        dismissSheet(app, title: "Map layers")
         app.buttons["shell.mapLayers"].tap()
         let system = app.buttons["shell.layersAppearance.system"]
         reveal(system, in: app.scrollViews["shell.layers.content"], minimumHeight: 48)
@@ -178,8 +207,8 @@ final class ShellSmokeTests: XCTestCase {
         screenshot.name = "map-layers-sv-dark-accessibility"
         screenshot.lifetime = .keepAlways
         add(screenshot)
-        XCTAssertTrue(app.buttons["Stäng kartlager"].isHittable)
-        app.buttons["Stäng kartlager"].tap()
+        XCTAssertFalse(app.buttons["Stäng kartlager"].exists)
+        dismissSheet(app, title: "Kartlager")
         XCTAssertTrue(app.buttons["shell.mapLayers"].waitForExistence(timeout: 5))
     }
 
@@ -460,10 +489,8 @@ final class ShellSmokeTests: XCTestCase {
         attach(app, name: "\(prefix)-S53-my-drives-unavailable")
         app.buttons["myDrives.stats"].tap()
         XCTAssertTrue(element("myDrives.stats.unavailable", in: app).waitForExistence(timeout: 5))
-        let statsClose = app.buttons["myDrives.stats.close"]
-        XCTAssertTrue(statsClose.waitForExistence(timeout: 5))
-        XCTAssertTrue(statsClose.isHittable)
-        statsClose.tap()
+        XCTAssertFalse(app.buttons["myDrives.stats.close"].exists)
+        dismissSheet(app, title: nil)
         XCTAssertTrue(app.buttons["myDrives.stats"].waitForExistence(timeout: 5))
         app.buttons[language == "sv" ? "Tillbaka" : "Back"].firstMatch.tap()
         XCTAssertTrue(app.buttons["profile.myDrives"].waitForExistence(timeout: 5))
@@ -483,13 +510,22 @@ final class ShellSmokeTests: XCTestCase {
         add(attachment)
     }
 
-    private func launch(language: String, largeText: Bool = false, theme: String = "Light") -> XCUIApplication {
+    private func dismissSheet(_ app: XCUIApplication, title: String?) {
+        let bar = title.map { app.navigationBars[$0] } ?? app.navigationBars.firstMatch
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+        let start = bar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95))
+        start.press(forDuration: 0.1, thenDragTo: end)
+    }
+
+    private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
         app.launchArguments += ["-KCCUITestTheme", theme]
         // Resolve the SwiftUI fixture before the first frame. UIKit's launch
         // default can retain/transition the preceding test's category.
         app.launchArguments += ["-KCCUITestTextSize", largeText ? "AccessibilityXXXL" : "Large"]
+        if chatFixture { app.launchArguments += ["-KCCUITestChatThread"] }
         app.launch()
         XCTAssertTrue(
             app.buttons["shell.menu"].waitForExistence(timeout: 15),

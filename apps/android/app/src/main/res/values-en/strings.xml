@@ -1988,6 +1988,11 @@
     <string name="incidents_clearedNoLocation">Your location isn\'t available. Turn on location to report.</string>
     <string name="incidents_clearedImportedExplanation">This comes from Trafikverket and can\'t be reported as gone.</string>
     <string name="incidents_clearedMarkerHint">Someone has reported this as gone, but it may still be there. Take care.</string>
+    <string name="whatsNew_release010Build4Highlight">Map, chat and menu improvements following the first iPhone tests.</string>
+    <string name="whatsNew_release010Build4Map">Map markers follow zoom changes. The map stays behind detail panels and map controls match Android placement.</string>
+    <string name="whatsNew_release010Build4Chat">Chat opens at the latest message and keeps the composer visible with the keyboard open.</string>
+    <string name="whatsNew_release010Build4Profile">Profiles only show active administrator warnings. Location access is offered on first map use.</string>
+    <string name="whatsNew_release010Build4Clubs">Clubs is available under Social with the directory, presentation, statistics and basic membership.</string>
     <string name="whatsNew_title">What’s new</string>
     <string name="whatsNew_dialogTitle">What’s new in version %1$s</string>
     <string name="whatsNew_dialogMoreVersions">…and more from earlier updates.</string>

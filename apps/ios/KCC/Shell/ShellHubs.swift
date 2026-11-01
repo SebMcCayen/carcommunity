@@ -12,6 +12,8 @@ import SwiftUI
 struct SocialHubPanel: View {
     @Environment(\.locale) private var locale
 
+    var clubsEnabled: Bool = false
+    var onOpenClubs: () -> Void = {}
     let crownHuntEnabled: Bool
     let partnersEnabled: Bool
     let onOpenEvents: () -> Void
@@ -75,6 +77,11 @@ struct SocialHubPanel: View {
                 )
             )
         }
+        if clubsEnabled {
+            entries.append(SocialHubEntry(id: .clubs, label: "clubs.title",
+                localizedLabel: String(localized: "clubs.title", locale: locale),
+                icon: "person.3", action: onOpenClubs))
+        }
         return entries.sorted {
             $0.localizedLabel.localizedStandardCompare($1.localizedLabel) == .orderedAscending
         }
@@ -108,6 +115,7 @@ struct SocialHubPanel: View {
 private struct SocialHubEntry: Identifiable {
     enum ID: Hashable {
         case events
+        case clubs
         case crownHunt
         case leaderboard
         case partners

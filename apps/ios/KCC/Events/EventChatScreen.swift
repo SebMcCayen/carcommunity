@@ -21,13 +21,18 @@ struct EventChatScreen: View {
     var body: some View {
         Group {
             if accessCoordinator.canOpenEventChat {
-                VStack(spacing: 0) {
-                    messageArea
-                    Divider()
-                    statusArea
-                    quickEmojiRow
-                    composer
-                }
+                messageArea
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        VStack(spacing: 0) {
+                            Divider()
+                            statusArea
+                            quickEmojiRow
+                            composer
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                        .background(KccTheme.surface)
+                    }
             } else {
                 Text("chat.accessLost")
                     .foregroundStyle(KccTheme.secondary)
@@ -89,8 +94,8 @@ struct EventChatScreen: View {
     }
 
     private func messageList(_ messages: [EventChatMessage]) -> some View {
-        ScrollViewReader { proxy in
-            ScrollView {
+        ChatThreadScrollView(latestMessageID: messages.last?.id,
+                             latestIsOwn: messages.last?.authorUserId == coordinator.currentUserId) {
                 LazyVStack(alignment: .leading, spacing: KccSpacing.s2) {
                     ForEach(messages) { message in
                         EventChatMessageRow(
@@ -113,24 +118,6 @@ struct EventChatScreen: View {
                     }
                 }
                 .padding(KccSpacing.s3)
-            }
-            .onAppear { scrollToNewest(messages, proxy: proxy, animated: false) }
-            .onChange(of: messages.last?.id) { _, _ in
-                scrollToNewest(messages, proxy: proxy, animated: true)
-            }
-        }
-    }
-
-    private func scrollToNewest(
-        _ messages: [EventChatMessage],
-        proxy: ScrollViewProxy,
-        animated: Bool
-    ) {
-        guard let id = messages.last?.id else { return }
-        if animated {
-            withAnimation { proxy.scrollTo(id, anchor: .bottom) }
-        } else {
-            proxy.scrollTo(id, anchor: .bottom)
         }
     }
 
