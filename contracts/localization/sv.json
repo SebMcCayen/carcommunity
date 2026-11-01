@@ -2147,7 +2147,9 @@
     "release010Change": "En inbyggd kartbaserad upplevelse med community-, kör- och profilfunktioner.",
     "release010Build2Highlight": "Förbättringar efter de första iPhone-testerna.",
     "release010Build2Icon": "Appikonen visar nu samma krona som på Android, utan text.",
-    "release010Build2SignIn": "Apple-inloggningen begär inte längre för- och efternamn. Du väljer ditt visningsnamn/nickname i appen."
+    "release010Build2SignIn": "Apple-inloggningen begär inte längre för- och efternamn. Du väljer ditt visningsnamn/nickname i appen.",
+    "release010Build3Highlight": "Stabilitetsförbättring för iPhone.",
+    "release010Build3Map": "Åtgärdar en krasch när kartvyn öppnas efter introduktionen."
   },
   "driver": {
     "feed": {

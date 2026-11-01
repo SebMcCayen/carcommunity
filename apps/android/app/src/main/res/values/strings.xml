@@ -2001,6 +2001,8 @@
     <string name="whatsNew_release010Build2Highlight">Förbättringar efter de första iPhone-testerna.</string>
     <string name="whatsNew_release010Build2Icon">Appikonen visar nu samma krona som på Android, utan text.</string>
     <string name="whatsNew_release010Build2SignIn">Apple-inloggningen begär inte längre för- och efternamn. Du väljer ditt visningsnamn/nickname i appen.</string>
+    <string name="whatsNew_release010Build3Highlight">Stabilitetsförbättring för iPhone.</string>
+    <string name="whatsNew_release010Build3Map">Åtgärdar en krasch när kartvyn öppnas efter introduktionen.</string>
     <string name="driver_feed_title">Driver-inlägg</string>
     <string name="driver_feed_source">Från Driver</string>
     <string name="driver_feed_loading">Hämtar inlägg…</string>

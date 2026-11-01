@@ -118,6 +118,30 @@ jobs:
           python3 apps/ios/scripts/simulator-package.py \
             "${RUNNER_TEMP}/ios-tests/Build/Products/Debug-iphonesimulator/KCC.app"
 
+      # Debug's implicit view type erasure can hide a SwiftUI metadata/stack
+      # overflow that occurs in TestFlight. Execute the actual shell with -O
+      # and explicit erasure disabled, then exercise retained map/route identity.
+      # Testability only lets the test bundles import KCC; shipping settings
+      # and the device archive below are unchanged.
+      - name: Release shell smoke tests (optimized, config-less)
+        run: |
+          DEST=$(xcrun simctl list devices booted --json | python3 -c '
+          import json, sys
+          print(next(device["udid"] for runtime in json.load(sys.stdin)["devices"].values()
+                     for device in runtime if device["name"].startswith("iPhone ")))
+          ')
+          xcodebuild -project apps/ios/KCC.xcodeproj -scheme KCC \
+            -configuration Release \
+            -destination "platform=iOS Simulator,id=${DEST}" \
+            -derivedDataPath "${RUNNER_TEMP}/ios-tests" \
+            ENTITLEMENTS_REQUIRED=YES ENABLE_TESTABILITY=YES \
+            SWIFT_ENABLE_OPAQUE_TYPE_ERASURE=NO \
+            -parallel-testing-enabled NO \
+            -only-testing:KCCUITests/ShellSmokeTests/testMapBackdropRemainsVisibleAfterTabAndSettingsRoundTrip \
+            -only-testing:KCCUITests/ShellSmokeTests/testMapToolsAppearOnRightAndWorkWithoutBackend \
+            -resultBundlePath "${RUNNER_TEMP}/ios-release-smoke.xcresult" \
+            test
+
       - name: Setup JDK for native member emulators
         uses: actions/setup-java@v6
         with:
@@ -184,7 +208,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ios-test-results
-          path: ${{ runner.temp }}/ios-tests.xcresult
+          path: |
+            ${{ runner.temp }}/ios-tests.xcresult
+            ${{ runner.temp }}/ios-release-smoke.xcresult
           if-no-files-found: ignore
           retention-days: 7
 
