@@ -52,8 +52,7 @@ final class SignInCoordinatorTests: XCTestCase {
 
     private static let payload = AppleIDTokenPayload(
         identityToken: "header.claims.",
-        rawNonce: "nonce",
-        fullName: nil
+        rawNonce: "nonce"
     )
 
     private func makeCoordinator(

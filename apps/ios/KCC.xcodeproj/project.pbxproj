@@ -76,6 +76,7 @@
 		24E8ADF188DBD83A1446DF15 /* EventFormScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4383BC0C5C249A195B5E166 /* EventFormScreen.swift */; };
 		251360189DF225C0BAB7D6E1 /* GroupDriveRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69A8716D891C79AFC29C37D9 /* GroupDriveRepository.swift */; };
 		2640B3865E738E9D99F1D178 /* DriveEditorDesignTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C656904E8283D93015D20C7 /* DriveEditorDesignTests.swift */; };
+		27C773DE76CFA7FE02160990 /* AppleSignInProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A96B2F50FBACFA6329286FC2 /* AppleSignInProviderTests.swift */; };
 		281529946F7B9975D8B2981F /* ConvoyReactionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F54A7FC1C9C3562639DE9AD8 /* ConvoyReactionModels.swift */; };
 		292854460109584A07D618C1 /* AuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 343B6E8AA56D06395AD48108 /* AuthSession.swift */; };
 		299A925690D1B4FF0759B17D /* FirebaseConversationsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E8F58FC4AC949B4CF76BF2D /* FirebaseConversationsRepository.swift */; };
@@ -720,6 +721,7 @@
 		A717827AADCF5D6F269BEEC0 /* FirebaseNotificationsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseNotificationsRepository.swift; sourceTree = "<group>"; };
 		A7315551383B456AF6D1C808 /* PartnerApplicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartnerApplicationTests.swift; sourceTree = "<group>"; };
 		A7C8CF75F4B1CA5403CC09B3 /* PrivacySettingsCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacySettingsCoordinatorTests.swift; sourceTree = "<group>"; };
+		A96B2F50FBACFA6329286FC2 /* AppleSignInProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignInProviderTests.swift; sourceTree = "<group>"; };
 		A974073221EF611F67E2134F /* NearbyLiveOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyLiveOverlay.swift; sourceTree = "<group>"; };
 		A99E785B8FC0348C59CBAFCD /* ConversationsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationsScreen.swift; sourceTree = "<group>"; };
 		AA62E8B4731D8E53A6453DC3 /* AppUpdateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateTests.swift; sourceTree = "<group>"; };
@@ -1543,6 +1545,7 @@
 			children = (
 				C28CE13BEF75D9EF55AF614C /* AccountAccessTests.swift */,
 				D763F1BD23666E2332D73FB3 /* AccountDeletionTests.swift */,
+				A96B2F50FBACFA6329286FC2 /* AppleSignInProviderTests.swift */,
 				C74337FF89D1F20ED590396E /* AppStoreCatalogTests.swift */,
 				AA62E8B4731D8E53A6453DC3 /* AppUpdateTests.swift */,
 				9DEF4ED7893F96EB87EF107D /* AuthorizedAccountDeletionTests.swift */,
@@ -2156,6 +2159,7 @@
 				1FF6ACAA1D6E4A22FC0044C5 /* AccountDeletionTests.swift in Sources */,
 				5FA58398E128DF16EFBBCEBF /* AppStoreCatalogTests.swift in Sources */,
 				59BD19FC2AD93A2432DAA82F /* AppUpdateTests.swift in Sources */,
+				27C773DE76CFA7FE02160990 /* AppleSignInProviderTests.swift in Sources */,
 				9BAE902442EADAC63D31A99C /* AuthorizedAccountDeletionTests.swift in Sources */,
 				081E588B1977CBBAE9AEAFD9 /* BadgesCoordinatorTests.swift in Sources */,
 				F79AAA35390591F13791A82C /* BadgesModelTests.swift in Sources */,

@@ -7,8 +7,6 @@ struct AppleIDTokenPayload: Sendable {
     let identityToken: String
     /// The un-hashed nonce whose SHA-256 was sent in the authorization request.
     let rawNonce: String
-    /// The user's name, only ever provided by Apple on FIRST sign-in.
-    let fullName: PersonNameComponents?
     /// Ephemeral; never persisted or included in diagnostics.
     var authorizationCode: String? = nil
     var providerUserID: String? = nil
