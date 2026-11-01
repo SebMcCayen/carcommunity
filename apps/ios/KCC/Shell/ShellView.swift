@@ -102,6 +102,7 @@ struct ShellView: View {
     @State private var locationPermissionCoordinator: LocationPermissionCoordinator?
     @AppStorage("kcc.location.initialMapExplanationShown") private var initialMapExplanationShown = false
     @State private var initialMapPermissionPrompt = false
+    @State private var primaryNavigationHeight: CGFloat = 0
     @State private var startDrivingGarage: GarageCoordinator?
     @State private var convoyManagementCoordinator: ConvoyManagementCoordinator?
     @State private var convoyAwareness = ConvoyAwarenessCoordinator()
@@ -301,6 +302,9 @@ struct ShellView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             primaryNavigation
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                    primaryNavigationHeight = $0
+                }
         }
         // Route host: sub-routes render full-screen OVER the tab shell (the
         // Android shell's route-host pattern), each carrying its own back
@@ -1236,7 +1240,18 @@ struct ShellView: View {
     }
 
     private var chatTab: some View {
-        NavigationStack { chatHubContent }
+        NavigationStack {
+            chatHubContent
+                // The retained NavigationStack establishes its own safe area
+                // and does not inherit the footer inset on the map's ZStack.
+                // Reserve the measured footer INSIDE that navigation host so
+                // channel composers stay above both navigation and keyboard.
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    Color.clear.frame(height: primaryNavigationHeight)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+        }
             .kccReadingSurface()
             .accessibilityAction(.escape) { selectedTab = .map }
     }
