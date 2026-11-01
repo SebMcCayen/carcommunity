@@ -22,7 +22,7 @@ Keep the required native Mapbox wordmark, move it to the lower right, and keep b
 - Unit regressions: observed marker projection after camera movement (including identical rounded snapshots), renderer lifetime and resize; first-map permission flow; club decoding/cooldown/gate revocation/idempotency.
 - Native UI regression: config-less Debug fixture renders the actual shell/community coordinator/thread with synthetic messages. Test initial latest message, visible composer, real OS keyboard and send at normal/largest accessibility text size. The fixture cannot be selected in Release or in a Firebase-configured app.
 - Update existing native sheet/menu tests to use the avatar saved-place picker and actual drag-to-dismiss gestures.
-- Existing CI retains Debug unit/UI tests, optimized Release shell UI smoke, real SDK emulator acceptance and a generic device Release build. Do not weaken checks or merge on a failed/pending check.
+- CI first runs composer keyboard/send and map dock acceptance, then retains the complete Debug unit/UI suite, optimized Release shell UI smoke, real SDK emulator acceptance and a generic device Release build. Do not weaken checks or merge on a failed/pending check.
 
 ## Device acceptance after upload
 
