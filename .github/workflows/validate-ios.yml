@@ -120,7 +120,7 @@ jobs:
 
       # Debug's implicit view type erasure can hide a SwiftUI metadata/stack
       # overflow that occurs in TestFlight. Execute the actual shell with -O
-      # and explicit erasure disabled, then exercise retained map/route identity.
+      # and implicit erasure disabled, then exercise retained map/route identity.
       # Testability only lets the test bundles import KCC; shipping settings
       # and the device archive below are unchanged.
       - name: Release shell smoke tests (optimized, config-less)
