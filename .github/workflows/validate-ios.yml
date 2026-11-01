@@ -121,8 +121,9 @@ jobs:
       # Debug's implicit view type erasure can hide a SwiftUI metadata/stack
       # overflow that occurs in TestFlight. Execute the actual shell with -O
       # and implicit erasure disabled, then exercise retained map/route identity.
-      # Testability only lets the test bundles import KCC; shipping settings
-      # and the device archive below are unchanged.
+      # This UI-only scheme excludes unit-test helpers that exist only in
+      # Debug. Test the active simulator architecture; the device build below
+      # independently compiles arm64 without test-only settings.
       - name: Release shell smoke tests (optimized, config-less)
         run: |
           DEST=$(xcrun simctl list devices booted --json | python3 -c '
@@ -130,11 +131,11 @@ jobs:
           print(next(device["udid"] for runtime in json.load(sys.stdin)["devices"].values()
                      for device in runtime if device["name"].startswith("iPhone ")))
           ')
-          xcodebuild -project apps/ios/KCC.xcodeproj -scheme KCC \
+          xcodebuild -project apps/ios/KCC.xcodeproj -scheme KCCReleaseSmoke \
             -configuration Release \
             -destination "platform=iOS Simulator,id=${DEST}" \
             -derivedDataPath "${RUNNER_TEMP}/ios-tests" \
-            ENTITLEMENTS_REQUIRED=YES ENABLE_TESTABILITY=YES \
+            ENTITLEMENTS_REQUIRED=YES ONLY_ACTIVE_ARCH=YES \
             SWIFT_ENABLE_OPAQUE_TYPE_ERASURE=NO \
             -parallel-testing-enabled NO \
             -only-testing:KCCUITests/ShellSmokeTests/testMapBackdropRemainsVisibleAfterTabAndSettingsRoundTrip \

@@ -214,3 +214,15 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: KCC
+
+# Release UI validation must not compile Debug-only unit-test instrumentation.
+# The normal KCC scheme keeps its full Debug unit + UI suite.
+schemes:
+  KCCReleaseSmoke:
+    build:
+      targets:
+        KCC: all
+    test:
+      config: Release
+      targets:
+        - KCCUITests
