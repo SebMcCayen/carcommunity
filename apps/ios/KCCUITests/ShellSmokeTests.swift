@@ -10,7 +10,7 @@ final class ShellSmokeTests: XCTestCase {
         continueAfterFailure = false
     }
 
-    func testCommunityOpensAtLatestAndComposerStaysVisibleWithKeyboard() {
+    func testCommunityOpensAtLatestWithAccessibleText() {
         for largeText in [false, true] {
             let app = launch(language: "sv", largeText: largeText, theme: "Dark", chatFixture: true)
             app.buttons["shell.tab.chat"].tap()
@@ -19,6 +19,16 @@ final class ShellSmokeTests: XCTestCase {
             if !latestExists || !latest.isHittable { chatProof(app, name: "latest-message-failure", tree: true) }
             XCTAssertTrue(latestExists)
             XCTAssertTrue(latest.isHittable, "Opening a channel must show its newest message")
+            app.terminate()
+        }
+    }
+
+    func testCommunityComposerStaysVisibleWithKeyboard() {
+        for largeText in [false, true] {
+            let app = launch(language: "sv", largeText: largeText, theme: "Dark", chatFixture: true)
+            app.buttons["shell.tab.chat"].tap()
+            let composer = app.descendants(matching: .any).matching(identifier: "chat.composer.input").firstMatch
+            XCTAssertTrue(composer.waitForExistence(timeout: 15))
             // SwiftUI's vertical TextField may expose a measuring TextField
             // as well as the real TextView. Require a tappable editable widget.
             let candidates = app.textFields.matching(identifier: "chat.composer.input").allElementsBoundByIndex

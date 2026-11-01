@@ -96,28 +96,25 @@ struct EventChatScreen: View {
     private func messageList(_ messages: [EventChatMessage]) -> some View {
         ChatThreadScrollView(latestMessageID: messages.last?.id,
                              latestIsOwn: messages.last?.authorUserId == coordinator.currentUserId) {
-                LazyVStack(alignment: .leading, spacing: KccSpacing.s2) {
-                    ForEach(messages) { message in
-                        EventChatMessageRow(
-                            message: message,
-                            isOwn: message.authorUserId == coordinator.currentUserId
-                        )
-                        .id(message.id)
-                        .contextMenu {
-                            if message.authorUserId != coordinator.currentUserId,
-                                !message.isRemoved,
-                                !message.isAutoHidden
-                            {
-                                Button {
-                                    reportMessage = message
-                                } label: {
-                                    Label("chat.reportMessage", systemImage: "flag")
-                                }
-                            }
+            ForEach(messages) { message in
+                EventChatMessageRow(
+                    message: message,
+                    isOwn: message.authorUserId == coordinator.currentUserId
+                )
+                .id(message.id)
+                .contextMenu {
+                    if message.authorUserId != coordinator.currentUserId,
+                        !message.isRemoved,
+                        !message.isAutoHidden
+                    {
+                        Button {
+                            reportMessage = message
+                        } label: {
+                            Label("chat.reportMessage", systemImage: "flag")
                         }
                     }
                 }
-                .padding(KccSpacing.s3)
+            }
         }
     }
 

@@ -82,22 +82,19 @@ struct ChatScreen: View {
     private func thread(_ coordinator: ChatCoordinator) -> some View {
         ChatThreadScrollView(latestMessageID: coordinator.messages.last?.id,
                              latestIsOwn: coordinator.messages.last?.senderUid == currentUid) {
-            LazyVStack(spacing: KccSpacing.s2) {
-                if coordinator.canLoadOlder { loadOlderControl(coordinator) }
-                if coordinator.threadLoading && coordinator.messages.isEmpty {
-                    ProgressView().padding(KccSpacing.s4)
-                } else if coordinator.messages.isEmpty {
-                    Text("dm.emptyThread").foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center).padding(KccSpacing.s6)
-                } else {
-                    ForEach(coordinator.messages) { message in
-                        MessageBubble(message: message, isOwn: message.senderUid == currentUid,
-                            onRetry: { clientId in Task { await coordinator.retry(clientId: clientId) } })
-                            .id(message.id)
-                    }
+            if coordinator.canLoadOlder { loadOlderControl(coordinator) }
+            if coordinator.threadLoading && coordinator.messages.isEmpty {
+                ProgressView().padding(KccSpacing.s4)
+            } else if coordinator.messages.isEmpty {
+                Text("dm.emptyThread").foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center).padding(KccSpacing.s6)
+            } else {
+                ForEach(coordinator.messages) { message in
+                    MessageBubble(message: message, isOwn: message.senderUid == currentUid,
+                        onRetry: { clientId in Task { await coordinator.retry(clientId: clientId) } })
+                        .id(message.id)
                 }
             }
-            .padding(KccSpacing.s3)
         }
     }
 

@@ -80,17 +80,15 @@ struct ChannelChatScreen: View {
     private func messageList(_ coordinator: ChannelChatCoordinator) -> some View {
         ChatThreadScrollView(latestMessageID: coordinator.messages.last?.id,
                              latestIsOwn: coordinator.messages.last?.senderUid == coordinator.currentUserId) {
-            LazyVStack(alignment: .leading, spacing: KccSpacing.s2) {
-                olderControl(coordinator)
-                ForEach(coordinator.messages) { message in
-                    MessageRow(
-                        message: message,
-                        isOwn: message.senderUid == coordinator.currentUserId
-                    )
-                    .contextMenu { messageActions(message, coordinator: coordinator) }
-                }
+            olderControl(coordinator)
+            ForEach(coordinator.messages) { message in
+                MessageRow(
+                    message: message,
+                    isOwn: message.senderUid == coordinator.currentUserId
+                )
+                .id(message.id)
+                .contextMenu { messageActions(message, coordinator: coordinator) }
             }
-            .padding(KccSpacing.s3)
         }
     }
 
