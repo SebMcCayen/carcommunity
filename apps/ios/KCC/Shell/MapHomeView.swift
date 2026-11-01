@@ -588,9 +588,6 @@ private struct MapboxStandardMap: View {
                 attributionButton: AttributionButtonOptions(position: .bottomRight,
                     margins: CGPoint(x: 8, y: bottomClearance + 8))
             ))
-            .onGeometryChange(for: CGSize.self) { $0.size } action: { _ in
-                surface.invalidateProjection()
-            }
             .onMapLoaded { _ in
                 onLoaded()
                 if !rendererAttached, let viewportController = proxy.viewport {
@@ -634,6 +631,9 @@ private struct MapboxStandardMap: View {
                    pendingProgrammaticViewportTokens.isEmpty {
                     armMeFollowIdleReturn(viewport: $viewport)
                 }
+            }
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { _ in
+                surface.invalidateProjection()
             }
             .onDisappear {
                 isVisible = false
