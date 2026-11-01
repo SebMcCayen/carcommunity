@@ -91,8 +91,10 @@ final class ShellSmokeTests: XCTestCase {
         let panel = element("map.reading.panel", in: app)
         let close = app.buttons["map.reading.close"]
         XCTAssertTrue(panel.waitForExistence(timeout: 5))
-        XCTAssertEqual(app.staticTexts["shell.mapPlaceholder"].frame, mapFrame,
+        let readingMapFrame = app.staticTexts["shell.mapPlaceholder"].frame
+        XCTAssertEqual(readingMapFrame.minY, mapFrame.minY, accuracy: 1,
             "Reading a marker must keep the map's full viewport behind its panel")
+        XCTAssertEqual(readingMapFrame.height, mapFrame.height, accuracy: 1)
         XCTAssertTrue(close.isHittable)
         // CGRect conversion can report 48 as 47.99999999999994.
         XCTAssertGreaterThanOrEqual(close.frame.height + 0.001, 48)

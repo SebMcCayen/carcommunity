@@ -260,8 +260,8 @@ struct ShellView: View {
     // Build 2 exhausted the device main-thread stack while decoding this
     // composition's type. Explicit AnyView results bound both generic metadata
     // depth and the value sizes carried through these nested getters in Release.
-    // Each boundary always wraps the same concrete type; shell/map ownership,
-    // modifier order and the existing conditional identities stay unchanged.
+    // Each boundary wraps one stable layout/lifecycle segment, retaining the
+    // shell's single map and coordinator identities through tab/route changes.
     private var shellBase: AnyView {
         VStack(spacing: 0) {
             // A native NavigationStack can ignore a safeAreaInset applied to

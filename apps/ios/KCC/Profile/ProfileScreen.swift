@@ -453,13 +453,15 @@ struct AccountWarningsSection: View {
     @MainActor private func load(append: Bool) async {
         guard let client = KccFunctionsClient.createIfAvailable() else { return }
         loading = true
-        let started = ContinuousClock().now
         do {
             var requestCursor = append ? cursor : nil
             var visitedCursors = Set<String>()
             var results = append ? warnings : []
             var nextCursor: String?
             repeat {
+                // Remaining lifetime belongs to this page's request; time
+                // spent scanning expired earlier pages must not age it twice.
+                let started = ContinuousClock().now
                 let payload: [String: String] = requestCursor.map { ["cursor": $0] } ?? [:]
                 let response = try await client.call("account-listWarnings", payload: payload)
                 try Task.checkCancellation()
