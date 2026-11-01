@@ -44,9 +44,7 @@ final class AppleSignInProvider: NSObject, AppleIDTokenProvider, @unchecked Send
                     return
                 }
 
-                let request = ASAuthorizationAppleIDProvider().createRequest()
-                request.requestedScopes = [.fullName]
-                request.nonce = Self.sha256(nonce)
+                let request = Self.makeAuthorizationRequest(nonce: nonce)
 
                 let controller = ASAuthorizationController(authorizationRequests: [request])
                 controller.delegate = self
@@ -69,6 +67,15 @@ final class AppleSignInProvider: NSObject, AppleIDTokenProvider, @unchecked Send
         } onCancel: {
             cancelWaiting()
         }
+    }
+
+    /// Apple authenticates the account; onboarding collects the public nickname.
+    /// Request no contact information, including during deletion reauthentication.
+    static func makeAuthorizationRequest(nonce: String) -> ASAuthorizationAppleIDRequest {
+        let request = ASAuthorizationAppleIDProvider().createRequest()
+        request.requestedScopes = []
+        request.nonce = sha256(nonce)
+        return request
     }
 
     /// Resolves a pending flow with `CancellationError` when the calling
@@ -146,7 +153,6 @@ extension AppleSignInProvider: ASAuthorizationControllerDelegate {
         resume(with: .success(AppleIDTokenPayload(
             identityToken: identityToken,
             rawNonce: rawNonce,
-            fullName: credential.fullName,
             authorizationCode: credential.authorizationCode.flatMap { String(data: $0, encoding: .utf8) },
             providerUserID: credential.user
         )))
@@ -199,7 +205,7 @@ struct EmulatorAppleIDTokenProvider: AppleIDTokenProvider {
         ]
         let token = [try Self.base64URL(header), try Self.base64URL(claims), ""]
             .joined(separator: ".")
-        return AppleIDTokenPayload(identityToken: token, rawNonce: rawNonce, fullName: nil)
+        return AppleIDTokenPayload(identityToken: token, rawNonce: rawNonce)
     }
 
     private static func base64URL(_ object: [String: Any]) throws -> String {

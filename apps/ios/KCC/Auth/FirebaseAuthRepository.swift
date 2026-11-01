@@ -66,7 +66,7 @@ final class FirebaseAuthRepository: AuthRepository, @unchecked Sendable {
         let credential = OAuthProvider.appleCredential(
             withIDToken: payload.identityToken,
             rawNonce: payload.rawNonce,
-            fullName: payload.fullName
+            fullName: nil
         )
         do {
             try await auth.signIn(with: credential)

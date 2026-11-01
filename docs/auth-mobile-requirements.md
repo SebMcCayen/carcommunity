@@ -53,12 +53,15 @@ Account linking between providers is **not** included in the MVP.
 
 1. Use `ASAuthorizationAppleIDProvider` to initiate the sign-in flow.
 2. Generate a random nonce (SHA-256 hash) and pass it to the authorization request.
+   Set `requestedScopes = []`: the app needs authentication, not the user's real
+   name or email. The user chooses a public display name/nickname in onboarding.
+   Do not forward a name from an earlier Apple authorization to Firebase.
 3. On success, exchange the Apple identity token and nonce for a Firebase credential:
    ```swift
    let credential = OAuthProvider.appleCredential(
        withIDToken: identityToken,
        rawNonce: rawNonce,
-       fullName: fullName
+       fullName: nil
    )
    Auth.auth().signIn(with: credential) { result, error in ... }
    ```

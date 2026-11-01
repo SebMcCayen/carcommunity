@@ -26,7 +26,7 @@ final class FirebaseAppleDeletionAuthorization: AccountDeletionAuthorizing, @unc
             throw KccFunctionsError(code: .permissionDenied)
         }
         let credential = OAuthProvider.appleCredential(withIDToken: payload.identityToken,
-            rawNonce: payload.rawNonce, fullName: payload.fullName)
+            rawNonce: payload.rawNonce, fullName: nil)
         _ = try await user.reauthenticate(with: credential)
         try await assertCurrentSession()
         try await auth.revokeToken(withAuthorizationCode: code)
