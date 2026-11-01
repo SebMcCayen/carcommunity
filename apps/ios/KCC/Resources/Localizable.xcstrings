@@ -36177,6 +36177,40 @@
         }
       }
     },
+    "whatsNew.release010Build3Highlight": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stabilitetsförbättring för iPhone."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stability improvement for iPhone."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build3Map": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åtgärdar en krasch när kartvyn öppnas efter introduktionen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fixes a crash when opening the map after the introduction."
+          }
+        }
+      }
+    },
     "whatsNew.release010Change": {
       "extractionState": "manual",
       "localizations": {

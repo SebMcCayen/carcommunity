@@ -246,7 +246,12 @@ struct ShellView: View {
             }
     }
 
-    private var shellBase: some View {
+    // Build 2 exhausted the device main-thread stack while decoding this
+    // composition's type. Explicit AnyView results bound both generic metadata
+    // depth and the value sizes carried through these nested getters in Release.
+    // Each boundary always wraps the same concrete type; shell/map ownership,
+    // modifier order and the existing conditional identities stay unchanged.
+    private var shellBase: AnyView {
         ZStack {
             // Exactly one native Mapbox view for the signed-in shell. Tabs and
             // routes cover it instead of recreating its Metal render surface.
@@ -308,9 +313,10 @@ struct ShellView: View {
                 )
             }
         }
+        .eraseToAnyView()
     }
 
-    private var shellBaseInteractions: some View {
+    private var shellBaseInteractions: AnyView {
         shellBase
         // Drive the surface's liveness from the SAME pure cover value the
         // pages derive from — the iOS counterpart of Android's
@@ -334,9 +340,10 @@ struct ShellView: View {
                 routes = routes.poppingOne()
             }
         }
+        .eraseToAnyView()
     }
 
-    private var shellReadingInteractions: some View {
+    private var shellReadingInteractions: AnyView {
         shellBaseInteractions
         .onChange(of: mapReadingSelection) { _, selection in centerMapReading(selection) }
         .onChange(of: incidentMapCoordinator?.selectedIncident?.id) { _, id in
@@ -355,9 +362,10 @@ struct ShellView: View {
             }
             else if case .police = mapReadingSelection { mapReadingSelection = nil }
         }
+        .eraseToAnyView()
     }
 
-    private var shellCrownReadingInteractions: some View {
+    private var shellCrownReadingInteractions: AnyView {
         shellReadingInteractions
         .onChange(of: crownHuntComposition?.mapCoordinator?.selectedTarget) { _, target in
             if let target {
@@ -372,6 +380,7 @@ struct ShellView: View {
         .onChange(of: crownHuntComposition?.mapCoordinator?.isAvailable) { _, _ in
             closeUnavailableCrownReading()
         }
+        .eraseToAnyView()
     }
 
     private func closeUnavailableCrownReading() {
@@ -382,7 +391,7 @@ struct ShellView: View {
         else { dismissMapReading(); return }
     }
 
-    private var shellReadingDismissals: some View {
+    private var shellReadingDismissals: AnyView {
         shellCrownReadingInteractions
         .onChange(of: billboardsCoordinator?.selectedBillboardId) { _, id in
             if id != nil { dismissMapReading() }
@@ -399,9 +408,10 @@ struct ShellView: View {
         .onChange(of: incidentMapCoordinator?.reportSheetPresented) { _, open in
             if open == true { dismissMapReading() }
         }
+        .eraseToAnyView()
     }
 
-    private var shellInteractions: some View {
+    private var shellInteractions: AnyView {
         shellReadingDismissals
         .onChange(of: navSearchOpen) { _, open in
             if open { dismissMapReading() }
@@ -423,6 +433,7 @@ struct ShellView: View {
         .onChange(of: liveLocationCoordinator?.sessionSnapshotRevision, initial: true) { _, _ in
             reconcileDriveRecording()
         }
+        .eraseToAnyView()
     }
 
     private func centerMapReading(_ selection: MapReadingSelection?) {
@@ -449,7 +460,7 @@ struct ShellView: View {
         }
     }
 
-    private var shellSheets: some View {
+    private var shellSheets: AnyView {
         shellInteractions
         .sheet(isPresented: $showStartDriving, onDismiss: releaseStartDrivingGarage) {
             if let startDrivingGarage {
@@ -505,9 +516,10 @@ struct ShellView: View {
                 )
             }
         }
+        .eraseToAnyView()
     }
 
-    private var shellPresentation: some View {
+    private var shellPresentation: AnyView {
         shellSheets
         .foregroundStyle(KccTheme.text)
         .tint(KccTheme.driver)
@@ -576,6 +588,7 @@ struct ShellView: View {
         .alert("appUpdate.iosStoreUnavailable", isPresented: $appStoreUnavailable) {
             Button("notifications.errorDismiss", role: .cancel) {}
         }
+        .eraseToAnyView()
     }
 
     /// Per-tab foreground content. The persistent map is owned by `body`, so
@@ -584,242 +597,7 @@ struct ShellView: View {
     private func content(for tab: ShellTab) -> some View {
         switch tab {
         case .map:
-            Color.clear
-                .ignoresSafeArea()
-                // Account entries require a real session. Public Settings
-                // (including legal links) also remain usable without config.
-                .overlay(alignment: .topTrailing) {
-                    if selectedTab == .map, routes.current == nil { shellMenuButton }
-                }
-                .overlay(alignment: .topLeading) {
-                    if mapHomeChromeVisible {
-                        mapSearchButton.padding(KccSpacing.s4)
-                    }
-                }
-                .overlay(alignment: .top) {
-                    if !groupDriveMapUids.isEmpty, mapHomeChromeVisible {
-                        HStack(spacing: KccSpacing.s2) {
-                            Label("groupDrive.mapTitle", systemImage: "car.2")
-                            Button {
-                                closeGroupDriveMap()
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                            }
-                            .accessibilityLabel(Text("events.attendeesClose"))
-                        }
-                        .font(.system(size: KccTypeScale.bodySm, weight: KccTypeScale.semibold))
-                        .padding(.horizontal, KccSpacing.s3)
-                        .padding(.vertical, KccSpacing.s2)
-                        .background(.regularMaterial, in: Capsule())
-                        .padding(.top, KccSpacing.s4)
-                    }
-                }
-                .overlay {
-                    ZStack {
-                        if let crownMapCoordinator = crownHuntComposition?.mapCoordinator {
-                            CrownHuntMapOverlay(
-                                coordinator: crownMapCoordinator,
-                                projection: mapSurface
-                            )
-                        }
-                        if let perkMapCoordinator = crownHuntComposition?.perkMapCoordinator {
-                            CrownPerkMapOverlay(
-                                coordinator: perkMapCoordinator,
-                                projection: mapSurface,
-                                ownFix: crownHuntComposition?.mapCoordinator?.latestFix
-                            )
-                        }
-                        if let incidentMapCoordinator {
-                            IncidentMapOverlay(
-                                coordinator: incidentMapCoordinator,
-                                projection: mapSurface,
-                                onSelect: { id in selectMapReading(.incident(id)) }
-                            )
-                        }
-                        if let billboardsCoordinator {
-                            BillboardMapOverlay(
-                                coordinator: billboardsCoordinator,
-                                projection: mapSurface
-                            )
-                        }
-                        if liveLocationFeatureEnabled {
-                            ConvoyMapAwarenessOverlay(
-                                members: convoyAwareness.visibleMembers,
-                                imageURLs: convoyAwareness.imageURLs,
-                                projection: mapSurface
-                            )
-                            NearbyLiveOverlay(
-                                coordinator: nearbyLive,
-                                projection: mapSurface,
-                                onSelect: { uid in selectMapReading(.nearby(uid)) }
-                            )
-                        }
-                    }
-                    .padding(.bottom, mapHomeChromeVisible ? mapDockHeight : 0)
-                }
-                .overlay {
-                    if mapHomeChromeVisible,
-                       convoyReactionTargetId != nil,
-                       let convoyReactionCoordinator {
-                        ConvoyReactionControls(
-                            coordinator: convoyReactionCoordinator,
-                            followMeCoordinator: convoyFollowMeCoordinator,
-                            bottomClearance: mapDockHeight
-                        )
-                    }
-                }
-                .overlay(alignment: .topTrailing) {
-                    if mapHomeChromeVisible { mapTopTools }
-                }
-                .overlay {
-                    if mapHomeChromeVisible,
-                       incidentMapCoordinator?.pendingMapReportType != nil {
-                        IncidentLocationPickerControls(
-                            canConfirm: currentMapCenter != nil,
-                            confirm: submitMapCenterIncident,
-                            cancel: { incidentMapCoordinator?.cancelMapSelection() }
-                        )
-                    }
-                }
-                .overlay(alignment: .top) {
-                    if mapHomeChromeVisible,
-                       incidentMapCoordinator?.proximityAlert != nil {
-                        PoliceProximityBanner {
-                            incidentMapCoordinator?.dismissProximityAlert()
-                        }
-                        .padding(.horizontal, KccSpacing.s4)
-                        .padding(.top, KccSpacing.s12 + KccSpacing.s12)
-                    }
-                }
-                .task(id: incidentMapLifecycleKey) {
-                    guard foregroundMapWorkActive, let incidentMapCoordinator else { return }
-                    incidentMapCoordinator.start(
-                        surface: mapSurface,
-                        provider: locationProvider
-                    )
-                    do { try await Task.sleep(for: .seconds(86_400)) } catch {}
-                    incidentMapCoordinator.stop()
-                }
-                .task(id: crownMapLifecycleKey) {
-                    guard foregroundMapWorkActive,
-                          let coordinator = crownHuntComposition?.mapCoordinator else { return }
-                    let perkCoordinator = crownHuntComposition?.perkMapCoordinator
-                    coordinator.start()
-                    perkCoordinator?.start()
-                    await coordinator.refresh(
-                        camera: mapSurface.cameraSnapshot,
-                        visibleRadiusMeters: mapSurface.visibleRadiusMeters()
-                    )
-                    do { try await Task.sleep(for: .seconds(86_400)) } catch {}
-                    coordinator.stop()
-                    perkCoordinator?.stop()
-                }
-                .task(id: incidentMapRefreshKey) {
-                    guard foregroundMapWorkActive, let incidentMapCoordinator else { return }
-                    // Camera snapshots update while panning. Cancellation turns
-                    // this into a trailing-edge debounce, avoiding callable spam.
-                    do { try await Task.sleep(for: .milliseconds(700)) } catch { return }
-                    await incidentMapCoordinator.refresh(surface: mapSurface)
-                }
-                .task(id: crownMapRefreshKey) {
-                    guard foregroundMapWorkActive,
-                          let coordinator = crownHuntComposition?.mapCoordinator else { return }
-                    do { try await Task.sleep(for: .milliseconds(700)) } catch { return }
-                    await coordinator.refresh(
-                        camera: mapSurface.cameraSnapshot,
-                        visibleRadiusMeters: mapSurface.visibleRadiusMeters()
-                    )
-                }
-                .task(id: convoyAwarenessSubscriptionKey) {
-                    convoyAwareness.sync(
-                        convoy: convoyAwarenessTargetConvoy,
-                        repository: liveLocationRepository,
-                        currentUid: signedInUid
-                    )
-                    applyConvoyFocus()
-                }
-                .task(id: nearbyLiveTaskKey) {
-                    guard nearbyLiveShouldRun,
-                          let repository = liveLocationRepository,
-                          let uid = signedInUid
-                    else {
-                        nearbyLive.deactivate()
-                        return
-                    }
-                    nearbyLive.activate(
-                        repository: repository, currentUid: uid,
-                        excludedUids: nearbyLiveExcludedUids)
-                    if !groupDriveMapUids.isEmpty {
-                        nearbyLive.activateRoster(
-                            repository: repository,
-                            currentUid: uid,
-                            participantUids: groupDriveMapUids,
-                            excludedUids: nearbyLiveExcludedUids
-                        )
-                        do { try await Task.sleep(for: .seconds(86_400)) } catch {}
-                        return
-                    }
-                    // This lifecycle task deliberately does not depend on the
-                    // camera. Each cadence tick reads the latest settled view,
-                    // so rapid pans cannot restart discovery or compress its
-                    // monotonic 20-second request interval.
-                    do { try await Task.sleep(for: .milliseconds(700)) } catch { return }
-                    while !Task.isCancelled {
-                        if let camera = mapSurface.cameraSnapshot {
-                            await nearbyLive.poll(
-                                center: MapPoint(
-                                    longitude: camera.longitude,
-                                    latitude: camera.latitude
-                                ),
-                                radiusMeters: mapSurface.visibleRadiusMeters()
-                                    ?? defaultNearbyLiveRadiusMeters
-                            )
-                            do {
-                                try await Task.sleep(for: NearbyLiveCoordinator.discoveryInterval)
-                            } catch { return }
-                        } else {
-                            do { try await Task.sleep(for: .seconds(1)) } catch { return }
-                        }
-                    }
-                }
-                .onChange(of: nearbyLiveExcludedUids) { _, excludedUids in
-                    guard nearbyLiveShouldRun else { return }
-                    if groupDriveMapUids.isEmpty {
-                        nearbyLive.activate(
-                            repository: liveLocationRepository,
-                            currentUid: signedInUid,
-                            excludedUids: excludedUids
-                        )
-                    } else {
-                        nearbyLive.activateRoster(
-                            repository: liveLocationRepository,
-                            currentUid: signedInUid,
-                            participantUids: groupDriveMapUids,
-                            excludedUids: excludedUids
-                        )
-                    }
-                }
-                .onChange(of: billboardsCoordinator?.markers, initial: true) { _, markers in
-                    mapSurface.setBillboardMarkers(markers ?? [])
-                }
-                .onChange(of: convoyAwareness.focusMode) { _, _ in applyConvoyFocus() }
-                .onChange(of: convoyAwareness.positions) { _, _ in
-                    applyConvoyFocus()
-                    syncFollowMe()
-                }
-                .task(id: convoyAwareness.focusMode) {
-                    guard convoyAwareness.focusMode == .convoy else { return }
-                    while !Task.isCancelled {
-                        do {
-                            try await Task.sleep(
-                                for: .seconds(ConvoyArrowPlanner.staleAfter / 4)
-                            )
-                        } catch {
-                            return
-                        }
-                        applyConvoyFocus()
-                    }
-                }
+            mapContent
         case .chat:
             chatTab
         case .history:
@@ -843,6 +621,254 @@ struct ShellView: View {
             // Map selected and presents Start driving (or Stop) instead.
             Color.clear.ignoresSafeArea()
         }
+    }
+
+    // Keep layout and lifecycle modifiers in separate, type-erased segments.
+    // A computed `some View` property alone does not bound the concrete type:
+    // Release must still decode every nested generic modifier at first render.
+    private var mapOverlayContent: AnyView {
+        Color.clear
+            .ignoresSafeArea()
+            // Account entries require a real session. Public Settings
+            // (including legal links) also remain usable without config.
+            .overlay(alignment: .topTrailing) {
+                if selectedTab == .map, routes.current == nil { shellMenuButton }
+            }
+            .overlay(alignment: .topLeading) {
+                if mapHomeChromeVisible {
+                    mapSearchButton.padding(KccSpacing.s4)
+                }
+            }
+            .overlay(alignment: .top) {
+                if !groupDriveMapUids.isEmpty, mapHomeChromeVisible {
+                    HStack(spacing: KccSpacing.s2) {
+                        Label("groupDrive.mapTitle", systemImage: "car.2")
+                        Button {
+                            closeGroupDriveMap()
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                        }
+                        .accessibilityLabel(Text("events.attendeesClose"))
+                    }
+                    .font(.system(size: KccTypeScale.bodySm, weight: KccTypeScale.semibold))
+                    .padding(.horizontal, KccSpacing.s3)
+                    .padding(.vertical, KccSpacing.s2)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.top, KccSpacing.s4)
+                }
+            }
+            .overlay {
+                ZStack {
+                    if let crownMapCoordinator = crownHuntComposition?.mapCoordinator {
+                        CrownHuntMapOverlay(
+                            coordinator: crownMapCoordinator,
+                            projection: mapSurface
+                        )
+                    }
+                    if let perkMapCoordinator = crownHuntComposition?.perkMapCoordinator {
+                        CrownPerkMapOverlay(
+                            coordinator: perkMapCoordinator,
+                            projection: mapSurface,
+                            ownFix: crownHuntComposition?.mapCoordinator?.latestFix
+                        )
+                    }
+                    if let incidentMapCoordinator {
+                        IncidentMapOverlay(
+                            coordinator: incidentMapCoordinator,
+                            projection: mapSurface,
+                            onSelect: { id in selectMapReading(.incident(id)) }
+                        )
+                    }
+                    if let billboardsCoordinator {
+                        BillboardMapOverlay(
+                            coordinator: billboardsCoordinator,
+                            projection: mapSurface
+                        )
+                    }
+                    if liveLocationFeatureEnabled {
+                        ConvoyMapAwarenessOverlay(
+                            members: convoyAwareness.visibleMembers,
+                            imageURLs: convoyAwareness.imageURLs,
+                            projection: mapSurface
+                        )
+                        NearbyLiveOverlay(
+                            coordinator: nearbyLive,
+                            projection: mapSurface,
+                            onSelect: { uid in selectMapReading(.nearby(uid)) }
+                        )
+                    }
+                }
+                .padding(.bottom, mapHomeChromeVisible ? mapDockHeight : 0)
+            }
+            .overlay {
+                if mapHomeChromeVisible,
+                   convoyReactionTargetId != nil,
+                   let convoyReactionCoordinator {
+                    ConvoyReactionControls(
+                        coordinator: convoyReactionCoordinator,
+                        followMeCoordinator: convoyFollowMeCoordinator,
+                        bottomClearance: mapDockHeight
+                    )
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                if mapHomeChromeVisible { mapTopTools }
+            }
+            .overlay {
+                if mapHomeChromeVisible,
+                   incidentMapCoordinator?.pendingMapReportType != nil {
+                    IncidentLocationPickerControls(
+                        canConfirm: currentMapCenter != nil,
+                        confirm: submitMapCenterIncident,
+                        cancel: { incidentMapCoordinator?.cancelMapSelection() }
+                    )
+                }
+            }
+            .overlay(alignment: .top) {
+                if mapHomeChromeVisible,
+                   incidentMapCoordinator?.proximityAlert != nil {
+                    PoliceProximityBanner {
+                        incidentMapCoordinator?.dismissProximityAlert()
+                    }
+                    .padding(.horizontal, KccSpacing.s4)
+                    .padding(.top, KccSpacing.s12 + KccSpacing.s12)
+                }
+            }
+            .eraseToAnyView()
+    }
+
+    private var mapContent: AnyView {
+        mapOverlayContent
+            .task(id: incidentMapLifecycleKey) {
+                guard foregroundMapWorkActive, let incidentMapCoordinator else { return }
+                incidentMapCoordinator.start(
+                    surface: mapSurface,
+                    provider: locationProvider
+                )
+                do { try await Task.sleep(for: .seconds(86_400)) } catch {}
+                incidentMapCoordinator.stop()
+            }
+            .task(id: crownMapLifecycleKey) {
+                guard foregroundMapWorkActive,
+                      let coordinator = crownHuntComposition?.mapCoordinator else { return }
+                let perkCoordinator = crownHuntComposition?.perkMapCoordinator
+                coordinator.start()
+                perkCoordinator?.start()
+                await coordinator.refresh(
+                    camera: mapSurface.cameraSnapshot,
+                    visibleRadiusMeters: mapSurface.visibleRadiusMeters()
+                )
+                do { try await Task.sleep(for: .seconds(86_400)) } catch {}
+                coordinator.stop()
+                perkCoordinator?.stop()
+            }
+            .task(id: incidentMapRefreshKey) {
+                guard foregroundMapWorkActive, let incidentMapCoordinator else { return }
+                // Camera snapshots update while panning. Cancellation turns
+                // this into a trailing-edge debounce, avoiding callable spam.
+                do { try await Task.sleep(for: .milliseconds(700)) } catch { return }
+                await incidentMapCoordinator.refresh(surface: mapSurface)
+            }
+            .task(id: crownMapRefreshKey) {
+                guard foregroundMapWorkActive,
+                      let coordinator = crownHuntComposition?.mapCoordinator else { return }
+                do { try await Task.sleep(for: .milliseconds(700)) } catch { return }
+                await coordinator.refresh(
+                    camera: mapSurface.cameraSnapshot,
+                    visibleRadiusMeters: mapSurface.visibleRadiusMeters()
+                )
+            }
+            .task(id: convoyAwarenessSubscriptionKey) {
+                convoyAwareness.sync(
+                    convoy: convoyAwarenessTargetConvoy,
+                    repository: liveLocationRepository,
+                    currentUid: signedInUid
+                )
+                applyConvoyFocus()
+            }
+            .task(id: nearbyLiveTaskKey) {
+                guard nearbyLiveShouldRun,
+                      let repository = liveLocationRepository,
+                      let uid = signedInUid
+                else {
+                    nearbyLive.deactivate()
+                    return
+                }
+                nearbyLive.activate(
+                    repository: repository, currentUid: uid,
+                    excludedUids: nearbyLiveExcludedUids)
+                if !groupDriveMapUids.isEmpty {
+                    nearbyLive.activateRoster(
+                        repository: repository,
+                        currentUid: uid,
+                        participantUids: groupDriveMapUids,
+                        excludedUids: nearbyLiveExcludedUids
+                    )
+                    do { try await Task.sleep(for: .seconds(86_400)) } catch {}
+                    return
+                }
+                // This lifecycle task deliberately does not depend on the
+                // camera. Each cadence tick reads the latest settled view,
+                // so rapid pans cannot restart discovery or compress its
+                // monotonic 20-second request interval.
+                do { try await Task.sleep(for: .milliseconds(700)) } catch { return }
+                while !Task.isCancelled {
+                    if let camera = mapSurface.cameraSnapshot {
+                        await nearbyLive.poll(
+                            center: MapPoint(
+                                longitude: camera.longitude,
+                                latitude: camera.latitude
+                            ),
+                            radiusMeters: mapSurface.visibleRadiusMeters()
+                                ?? defaultNearbyLiveRadiusMeters
+                        )
+                        do {
+                            try await Task.sleep(for: NearbyLiveCoordinator.discoveryInterval)
+                        } catch { return }
+                    } else {
+                        do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                    }
+                }
+            }
+            .onChange(of: nearbyLiveExcludedUids) { _, excludedUids in
+                guard nearbyLiveShouldRun else { return }
+                if groupDriveMapUids.isEmpty {
+                    nearbyLive.activate(
+                        repository: liveLocationRepository,
+                        currentUid: signedInUid,
+                        excludedUids: excludedUids
+                    )
+                } else {
+                    nearbyLive.activateRoster(
+                        repository: liveLocationRepository,
+                        currentUid: signedInUid,
+                        participantUids: groupDriveMapUids,
+                        excludedUids: excludedUids
+                    )
+                }
+            }
+            .onChange(of: billboardsCoordinator?.markers, initial: true) { _, markers in
+                mapSurface.setBillboardMarkers(markers ?? [])
+            }
+            .onChange(of: convoyAwareness.focusMode) { _, _ in applyConvoyFocus() }
+            .onChange(of: convoyAwareness.positions) { _, _ in
+                applyConvoyFocus()
+                syncFollowMe()
+            }
+            .task(id: convoyAwareness.focusMode) {
+                guard convoyAwareness.focusMode == .convoy else { return }
+                while !Task.isCancelled {
+                    do {
+                        try await Task.sleep(
+                            for: .seconds(ConvoyArrowPlanner.staleAfter / 4)
+                        )
+                    } catch {
+                        return
+                    }
+                    applyConvoyFocus()
+                }
+            }
+            .eraseToAnyView()
     }
 
     /// A translucent panel tab: the persistent map remains visible above the
@@ -2670,6 +2696,10 @@ struct ShellView: View {
             followSelfEnabled: hasConvoyContext
         )
     }
+}
+
+private extension View {
+    func eraseToAnyView() -> AnyView { AnyView(self) }
 }
 
 private struct DmRouteTarget: Equatable, Sendable {
