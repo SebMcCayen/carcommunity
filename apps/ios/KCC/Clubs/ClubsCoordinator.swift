@@ -80,6 +80,7 @@ final class ClubsCoordinator {
             selectedClub = fresh
         } catch {
             guard generation == self.generation, !Task.isCancelled else { return }
+            guard selectedClub?.id == club.id else { return }
             selectedClub = nil; failed = true
         }
     }

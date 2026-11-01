@@ -433,6 +433,12 @@ struct ShellView: View {
                 initialMapPermissionPrompt = false
                 startSingleSessionAfterPermissionGrant()
                 openConvoyCreateAfterPermissionGrant()
+            } else if state == .deniedNeedsSettings && initialMapPermissionPrompt
+                        && !pendingSingleSessionStart && !pendingConvoyCreate {
+                // A first-use refusal leaves the browsing map usable. Settings
+                // is offered later only for an explicit location action.
+                initialMapPermissionPrompt = false
+                locationPermissionCoordinator?.dismissSettingsHint()
             }
         }
         .onChange(of: liveLocationCoordinator?.isSharing) { _, sharing in
@@ -1146,8 +1152,6 @@ struct ShellView: View {
             if let coordinator = crownHuntComposition?.perkMapCoordinator, coordinator.isAvailable {
                 CrownPerkMapControl(coordinator: coordinator)
             }
-
-
         }
         .font(.system(size: 20, weight: .semibold))
         .padding(.horizontal, KccSpacing.s4)

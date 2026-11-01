@@ -511,7 +511,9 @@ final class ShellSmokeTests: XCTestCase {
     }
 
     private func dismissSheet(_ app: XCUIApplication, title: String?) {
-        let bar = title.map { app.navigationBars[$0] } ?? app.navigationBars.firstMatch
+        let bar = title.map { app.navigationBars[$0] }
+            ?? app.navigationBars.allElementsBoundByIndex.first(where: { $0.isHittable })
+            ?? app.navigationBars.firstMatch
         XCTAssertTrue(bar.waitForExistence(timeout: 5))
         let start = bar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
         let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95))

@@ -3,6 +3,16 @@ import MapboxMaps
 import CoreLocation
 import UIKit
 
+/// Camera padding changes framing, never the native map's size. Apply it at
+/// the renderer binding so every center/follow command (including callbacks
+/// installed before the dock was measured) sees the current dock clearance.
+enum MapHomeReadingViewportPolicy {
+    static func applying(clearance: CGFloat, to viewport: Viewport) -> Viewport {
+        viewport.padding(.bottom, clearance.isFinite ? max(0, clearance) : 0)
+    }
+    static func unpadded(_ viewport: Viewport) -> Viewport { viewport.padding(.bottom, 0) }
+}
+
 /// A puck is foreground UI demand, never permission to keep GPS alive for
 /// a hidden map or a background scene. Explicit drive/live sessions own their
 /// separate providers and are unaffected by this gate.
@@ -537,7 +547,10 @@ private struct MapboxStandardMap: View {
 
     var body: some View {
         MapReader { proxy in
-            MapboxMaps.Map(viewport: $viewport) {
+            MapboxMaps.Map(viewport: Binding(
+                get: { MapHomeReadingViewportPolicy.applying(clearance: bottomClearance, to: viewport) },
+                set: { viewport = MapHomeReadingViewportPolicy.unpadded($0) }
+            )) {
                 if MapHomePuckPolicy.isVisible(
                     authorization: locationAuthorization,
                     surfaceActive: surfaceActive,

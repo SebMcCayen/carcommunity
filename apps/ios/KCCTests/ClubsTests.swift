@@ -99,7 +99,8 @@ private final class ClubTestRepository: ClubsRepository {
     var failNextMutation = false
     init(club: CommunityClub) {
         self.club = club
-        (stream, continuation) = AsyncStream.makeStream(of: Bool.self)
+        let pair = AsyncStream.makeStream(of: Bool.self)
+        stream = pair.stream; continuation = pair.continuation
     }
     func enabledUpdates() -> AsyncStream<Bool> { stream }
     func state() async throws -> CommunityClubState { reads += 1; return .decode([:]) }

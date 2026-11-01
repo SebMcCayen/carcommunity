@@ -60,7 +60,7 @@ struct ClubsScreen: View {
                     ClubPresentation(club: club)
                     clubStatistics(club)
                     Button("clubs.leave", role: .destructive) { confirmsLeave = true }
-                        .disabled(coordinator.working).frame(minHeight: 48)
+                        .disabled(coordinator.working || (state.role == "owner" && club.memberCount > 1)).frame(minHeight: 48)
                     if state.role == "owner" && club.memberCount > 1 {
                         Text("clubs.ownershipError").font(.footnote).foregroundStyle(KccTheme.secondary)
                     }

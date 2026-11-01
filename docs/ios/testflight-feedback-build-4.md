@@ -3,7 +3,7 @@
 ## Scope
 
 - Projected markers now observe a per-camera-frame projection revision, independently of the rounded camera snapshot that throttles backend queries. Renderer attachment/removal and viewport resizing invalidate the same projection. No map recreation or marker identity resets.
-- Keep the native map and all overlays at the same full size while reading a crown, incident or saved-place panel. Clear the reading selection on tab/route changes as before.
+- Keep the native map and all overlays at the same full size while reading a crown, incident or saved-place panel. Apply the measured dock clearance as camera padding at the viewport binding, so a selected marker is centered above the panel even on a short viewport. Clear the reading selection on tab/route changes as before.
 - Android map rail order: incident reporting, layers, compass, available perks. Saved places opens the existing picker from the avatar menu, directly after My drives; management remains reachable from the picker and Settings. Live session start/manage/stop/hide remain available through Create and active-session controls.
 - Shared community/convoy, direct-message and event-chat viewports open at the latest message, follow arrivals near the bottom and preserve history reading. Composers use a bottom safe-area inset and a bounded editor instead of competing with message content for height.
 - Offer the existing While Using the App permission rationale once on the first authenticated foreground map entry, after the What's New announcement. No broadcasting/session starts as a side effect. Previously denied users are not nagged at startup.
