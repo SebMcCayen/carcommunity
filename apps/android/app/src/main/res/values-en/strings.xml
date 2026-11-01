@@ -1998,6 +1998,9 @@
     <string name="whatsNew_empty">No release notes yet.</string>
     <string name="whatsNew_release010Highlight">The first native iOS MVP is taking shape.</string>
     <string name="whatsNew_release010Change">A native map-first experience with community, drive and profile features.</string>
+    <string name="whatsNew_release010Build2Highlight">Improvements following the first iPhone tests.</string>
+    <string name="whatsNew_release010Build2Icon">The app icon now uses the same crown as Android, without text.</string>
+    <string name="whatsNew_release010Build2SignIn">Sign in with Apple no longer requests your first and last name. You choose your display name/nickname in the app.</string>
     <string name="driver_feed_title">Driver posts</string>
     <string name="driver_feed_source">From Driver</string>
     <string name="driver_feed_loading">Loading posts…</string>

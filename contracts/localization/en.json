@@ -2144,7 +2144,10 @@
     "versionTitle": "Version %1$s",
     "empty": "No release notes yet.",
     "release010Highlight": "The first native iOS MVP is taking shape.",
-    "release010Change": "A native map-first experience with community, drive and profile features."
+    "release010Change": "A native map-first experience with community, drive and profile features.",
+    "release010Build2Highlight": "Improvements following the first iPhone tests.",
+    "release010Build2Icon": "The app icon now uses the same crown as Android, without text.",
+    "release010Build2SignIn": "Sign in with Apple no longer requests your first and last name. You choose your display name/nickname in the app."
   },
   "driver": {
     "feed": {

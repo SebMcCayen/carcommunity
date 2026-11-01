@@ -36126,6 +36126,57 @@
         }
       }
     },
+    "whatsNew.release010Build2Highlight": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Förbättringar efter de första iPhone-testerna."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Improvements following the first iPhone tests."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build2Icon": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appikonen visar nu samma krona som på Android, utan text."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app icon now uses the same crown as Android, without text."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build2SignIn": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple-inloggningen begär inte längre för- och efternamn. Du väljer ditt visningsnamn/nickname i appen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in with Apple no longer requests your first and last name. You choose your display name/nickname in the app."
+          }
+        }
+      }
+    },
     "whatsNew.release010Change": {
       "extractionState": "manual",
       "localizations": {

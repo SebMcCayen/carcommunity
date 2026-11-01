@@ -2144,7 +2144,10 @@
     "versionTitle": "Version %1$s",
     "empty": "Inga uppdateringsanteckningar ännu.",
     "release010Highlight": "Den första inbyggda iOS-MVP:n tar form.",
-    "release010Change": "En inbyggd kartbaserad upplevelse med community-, kör- och profilfunktioner."
+    "release010Change": "En inbyggd kartbaserad upplevelse med community-, kör- och profilfunktioner.",
+    "release010Build2Highlight": "Förbättringar efter de första iPhone-testerna.",
+    "release010Build2Icon": "Appikonen visar nu samma krona som på Android, utan text.",
+    "release010Build2SignIn": "Apple-inloggningen begär inte längre för- och efternamn. Du väljer ditt visningsnamn/nickname i appen."
   },
   "driver": {
     "feed": {
