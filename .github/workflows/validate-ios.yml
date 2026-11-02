@@ -105,6 +105,7 @@ jobs:
             -derivedDataPath "${RUNNER_TEMP}/ios-tests" \
             ENTITLEMENTS_REQUIRED=YES ONLY_ACTIVE_ARCH=YES \
             -parallel-testing-enabled NO \
+            -only-testing:KCCUITests/ShellSmokeTests/testClubsMenuRemainsDiscoverableWithoutBackendActivation \
             -only-testing:KCCUITests/ShellSmokeTests/testCommunityOpensAtLatestWithAccessibleText \
             -only-testing:KCCUITests/ShellSmokeTests/testCommunityComposerStaysVisibleWithKeyboard \
             -only-testing:KCCUITests/ShellSmokeTests/testSavedPlacesDockKeepsCloseToolsAndPrimaryNavigationReachable \

@@ -629,7 +629,6 @@ struct ShellView: View {
         case .social:
             panelTab {
                 SocialHubPanel(
-                    clubsEnabled: clubsCoordinator?.enabled == true,
                     onOpenClubs: { routes = routes.opening(.clubs) },
                     crownHuntEnabled: featureFlags.isEnabled(.crownHunt),
                     partnersEnabled: featureFlags.isEnabled(.partners)

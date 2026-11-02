@@ -10,6 +10,34 @@ final class ShellSmokeTests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testClubsMenuRemainsDiscoverableWithoutBackendActivation() {
+        for largeText in [false, true] {
+            let app = launch(language: "en", largeText: largeText, theme: "Dark")
+            app.buttons["shell.tab.social"].tap()
+            let social = element("shell.socialHub", in: app)
+            XCTAssertTrue(social.waitForExistence(timeout: 5))
+            let clubs = app.buttons["shell.social.clubs"]
+            XCTAssertTrue(clubs.waitForExistence(timeout: 5))
+            for _ in 0..<4 {
+                if clubs.isHittable { break }
+                social.swipeUp()
+            }
+            XCTAssertTrue(clubs.isHittable)
+            XCTAssertGreaterThanOrEqual(clubs.frame.height + 0.001, 48)
+            clubs.tap()
+            XCTAssertTrue(element("clubs.screen", in: app).waitForExistence(timeout: 5))
+            XCTAssertTrue(app.staticTexts["Clubs are unavailable right now."].exists)
+            XCTAssertFalse(app.buttons["Create club"].exists)
+            XCTAssertFalse(app.buttons["Join"].exists)
+            attach(app, name: largeText ? "clubs-unavailable-en-accessibility" : "clubs-unavailable-en")
+            app.buttons["Back"].firstMatch.tap()
+            XCTAssertTrue(social.waitForExistence(timeout: 5))
+            app.buttons["shell.tab.map"].tap()
+            XCTAssertTrue(app.buttons["shell.mapLayers"].isHittable)
+            app.terminate()
+        }
+    }
+
     func testCommunityOpensAtLatestWithAccessibleText() {
         for largeText in [false, true] {
             let app = launch(language: "sv", largeText: largeText, theme: "Dark", chatFixture: true)
