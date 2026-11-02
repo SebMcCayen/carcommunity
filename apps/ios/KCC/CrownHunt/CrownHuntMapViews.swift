@@ -4,6 +4,7 @@ struct CrownHuntMapOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Bindable var coordinator: CrownHuntMapCoordinator
     let projection: any MapProjection
+    let mapMode: MapMode
 
     var body: some View {
         GeometryReader { geometry in
@@ -18,7 +19,8 @@ struct CrownHuntMapOverlay: View {
                            point.trustworthy, point.x >= -32, point.y >= -32,
                            point.x <= Double(geometry.size.width + 32), point.y <= Double(geometry.size.height + 32) {
                             Button { coordinator.select(markerId: marker.id) } label: {
-                                CrownMarkerTile(rank: marker.visualRank, inRange: marker.isInRange)
+                                CrownMarkerTile(rank: marker.visualRank, inRange: marker.isInRange,
+                                    mapMode: mapMode, isCuratedPoint: marker.id.hasPrefix("point:"))
                                     .frame(width: 48, height: 48).contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
@@ -51,6 +53,8 @@ struct CrownHuntMapOverlay: View {
 struct CrownMarkerTile: View {
     let rank: Int
     let inRange: Bool
+    let mapMode: MapMode
+    var isCuratedPoint = false
     private var band: Int { min(max(rank, 0), 3) }
     private var side: CGFloat { CGFloat(26 + 2 * band) }
     private var accent: Color {
@@ -62,13 +66,27 @@ struct CrownMarkerTile: View {
         }
     }
     private var ink: Color { KccDarkColors.overlayBackground }
-    private var foreground: Color { inRange ? ink : accent }
+    private var dayPair: CrownMapTileLightPalette.Colors? {
+        CrownMapTileLightPalette.colors(rank: band, mapMode: mapMode, inRange: inRange)
+    }
+    private var foreground: Color {
+        inRange ? ink : dayPair.map { color($0.foreground) } ?? accent
+    }
+    private var surface: Color { inRange ? accent : dayPair.map { color($0.surface) } ?? ink }
+    private var glyphAsset: String {
+        if isCuratedPoint { return "crown-royal" }
+        return ["crown-band", "crown-jewelled_band", "crown-five_point", "crown-royal"][band]
+    }
+    private func color(_ argb: UInt32) -> Color {
+        Color(red: Double((argb >> 16) & 255) / 255,
+              green: Double((argb >> 8) & 255) / 255, blue: Double(argb & 255) / 255)
+    }
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            RoundedRectangle(cornerRadius: KccRadius.sm).fill(inRange ? accent : ink)
-            Image(systemName: "crown.fill")
-                .font(.system(size: CGFloat(17 + band), weight: .semibold))
+            RoundedRectangle(cornerRadius: KccRadius.sm).fill(surface)
+            Image(glyphAsset).renderingMode(.template).resizable().scaledToFit()
+                .frame(width: CGFloat(17 + band), height: CGFloat(17 + band))
                 .foregroundStyle(foreground)
                 .frame(maxHeight: .infinity).offset(y: -2)
             HStack(spacing: 2) {
@@ -79,7 +97,7 @@ struct CrownMarkerTile: View {
         }
         .frame(width: side, height: side)
         .overlay { RoundedRectangle(cornerRadius: KccRadius.sm)
-            .strokeBorder(inRange ? KccPalette.warmIvory : accent, lineWidth: 1).allowsHitTesting(false) }
+            .strokeBorder(inRange ? KccPalette.warmIvory : foreground, lineWidth: inRange ? 1.5 : 1).allowsHitTesting(false) }
         .accessibilityHidden(true)
     }
 }

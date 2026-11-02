@@ -3,6 +3,20 @@ import XCTest
 @testable import KCC
 
 final class CrownHuntMapModelTests: XCTestCase {
+    func testDistantDayCrownsUseAndroidLightPairsWithoutChangingReadyOrNightColors() {
+        let expectedSurfaces: [UInt32] = [0xFFECE9E3, 0xFFE6F3EB, 0xFFEEE7FA, 0xFFFFF0CC]
+        let expectedInks: [UInt32] = [0xFF5B6168, 0xFF1B6E4B, 0xFF6640A0, 0xFF946000]
+        for rank in 0..<4 {
+            let day = CrownMapTileLightPalette.colors(rank: rank, mapMode: .day, inRange: false)
+            XCTAssertEqual(day?.surface, expectedSurfaces[rank])
+            XCTAssertEqual(day?.foreground, expectedInks[rank])
+            if let day { XCTAssertGreaterThanOrEqual(IncidentMarkerStyle.contrast(day.surface, day.foreground), 4.5) }
+            XCTAssertNil(CrownMapTileLightPalette.colors(rank: rank, mapMode: .night, inRange: false))
+            XCTAssertNil(CrownMapTileLightPalette.colors(rank: rank, mapMode: .day, inRange: true))
+            XCTAssertNil(CrownMapTileLightPalette.colors(rank: rank, mapMode: .night, inRange: true))
+        }
+    }
+
     private actor EffectsGate {
         private var continuation: CheckedContinuation<CrownPerkEffects, Never>?
         private var requestWaiters: [CheckedContinuation<Void, Never>] = []

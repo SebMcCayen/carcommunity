@@ -336,3 +336,23 @@ enum CrownCollectGate {
         return .ready
     }
 }
+
+/// Android CrownMarkerBitmaps' map-only day pairs. The basemap appearance
+/// owns this choice; the app theme and collection gates remain independent.
+enum CrownMapTileLightPalette {
+    struct Colors: Equatable, Sendable {
+        let surface: UInt32
+        let foreground: UInt32
+    }
+
+    static func colors(rank: Int, mapMode: MapMode, inRange: Bool) -> Colors? {
+        guard mapMode == .day, !inRange else { return nil }
+        let pairs = [
+            Colors(surface: 0xFFECE9E3, foreground: 0xFF5B6168),
+            Colors(surface: 0xFFE6F3EB, foreground: 0xFF1B6E4B),
+            Colors(surface: 0xFFEEE7FA, foreground: 0xFF6640A0),
+            Colors(surface: 0xFFFFF0CC, foreground: 0xFF946000)
+        ]
+        return pairs[min(max(rank, 0), 3)]
+    }
+}

@@ -2013,7 +2013,7 @@
     <string name="whatsNew_release010Build3Map">Åtgärdar en krasch när kartvyn öppnas efter introduktionen.</string>
     <string name="whatsNew_release010Build6Highlight">Mer plats för chatten och tydligare kartikoner.</string>
     <string name="whatsNew_release010Build6Chat">Chattens menyer fälls undan när du skriver. Dölj tangentbordet med knappen bredvid Skicka utan att förlora utkastet.</string>
-    <string name="whatsNew_release010Build6Map">Kartknappar ligger ovanför markörerna. Trafikikoner och kartknappar följer Android-appens utseende.</string>
+    <string name="whatsNew_release010Build6Map">Kartknappar ligger ovanför markörerna. Trafikikoner och kartknappar följer Android-appens utseende. Kronjakten har ljusa markörer på dagskartan.</string>
     <string name="driver_feed_title">Driver-inlägg</string>
     <string name="driver_feed_source">Från Driver</string>
     <string name="driver_feed_loading">Hämtar inlägg…</string>

@@ -36387,13 +36387,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kartknappar ligger ovanför markörerna. Trafikikoner och kartknappar följer Android-appens utseende."
+            "value": "Kartknappar ligger ovanför markörerna. Trafikikoner och kartknappar följer Android-appens utseende. Kronjakten har ljusa markörer på dagskartan."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Map controls stay above markers. Traffic icons and map controls follow the Android design."
+            "value": "Map controls stay above markers. Traffic icons and map controls follow the Android design. Crown Hunt uses light marker tiles on the day map."
           }
         }
       }

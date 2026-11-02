@@ -2160,7 +2160,7 @@
     "release010Build3Map": "Fixes a crash when opening the map after the introduction.",
     "release010Build6Highlight": "More room for conversations and clearer map icons.",
     "release010Build6Chat": "Chat navigation folds away while writing. Hide the keyboard using the button next to Send without losing your draft.",
-    "release010Build6Map": "Map controls stay above markers. Traffic icons and map controls follow the Android design."
+    "release010Build6Map": "Map controls stay above markers. Traffic icons and map controls follow the Android design. Crown Hunt uses light marker tiles on the day map."
   },
   "driver": {
     "feed": {

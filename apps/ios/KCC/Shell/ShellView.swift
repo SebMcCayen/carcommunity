@@ -671,13 +671,14 @@ struct ShellView: View {
         ZStack {
             #if DEBUG
             if ConfiglessMapMarkerFixture.isEnabled {
-                ConfiglessMapMarkerFixture()
+                ConfiglessMapMarkerFixture(mapMode: mapSurface.mapMode)
             }
             #endif
             if let crownMapCoordinator = crownHuntComposition?.mapCoordinator {
                 CrownHuntMapOverlay(
                     coordinator: crownMapCoordinator,
-                    projection: mapSurface
+                    projection: mapSurface,
+                    mapMode: mapSurface.mapMode
                 )
             }
             if let perkMapCoordinator = crownHuntComposition?.perkMapCoordinator {

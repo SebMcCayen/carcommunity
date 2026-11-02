@@ -105,6 +105,32 @@ final class ShellSmokeTests: XCTestCase {
         }
     }
 
+    func testCrownTilePaletteFollowsMapAppearanceOverride() {
+        for theme in ["Light", "Dark"] {
+            let app = launch(language: "sv", theme: theme, markerPoints: [CGPoint(x: -100, y: -100)])
+            for (choice, expected) in [("day", "Day"), ("night", "Night")] {
+                app.buttons["shell.mapLayers"].tap()
+                let button = app.buttons["shell.layersAppearance.\(choice)"]
+                reveal(button, in: app.scrollViews["shell.layers.content"], minimumHeight: 48)
+                button.tap()
+                assertSelected(button)
+                dismissSheet(app, title: "Kartlager")
+                let mode = app.staticTexts["map.fixture.crown-mode"]
+                let changed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", expected), object: mode)
+                XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 5), .completed)
+                chatProof(app, name: "map-crowns-app-\(theme.lowercased())-map-\(choice)")
+            }
+            // Do not leak a manual map-mode override to subsequent smoke tests.
+            app.buttons["shell.mapLayers"].tap()
+            let system = app.buttons["shell.layersAppearance.system"]
+            reveal(system, in: app.scrollViews["shell.layers.content"], minimumHeight: 48)
+            system.tap()
+            assertSelected(system)
+            dismissSheet(app, title: "Kartlager")
+            app.terminate()
+        }
+    }
+
     func testTrafficMarkersStayBelowMapControlsInBothThemes() {
         for theme in ["Light", "Dark"] {
             let baseline = launch(language: "sv", theme: theme)
