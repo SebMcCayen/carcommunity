@@ -533,6 +533,7 @@
     <string name="chat_replyComposerReplyingTo">Replying to %1$s</string>
     <string name="chat_replyComposerBanner">Replying to a message from %1$s</string>
     <string name="chat_replyQuoteHeaderAction">Reply to %1$s: %2$s. Tap to view the original.</string>
+    <string name="chat_hideKeyboard">Hide keyboard</string>
     <string name="common_placeholder">Coming soon</string>
     <string name="auth_loginTitle">Sign in</string>
     <string name="auth_loginSubtitle">Sign in to use the app.</string>
@@ -2010,6 +2011,9 @@
     <string name="whatsNew_release010Build2SignIn">Sign in with Apple no longer requests your first and last name. You choose your display name/nickname in the app.</string>
     <string name="whatsNew_release010Build3Highlight">Stability improvement for iPhone.</string>
     <string name="whatsNew_release010Build3Map">Fixes a crash when opening the map after the introduction.</string>
+    <string name="whatsNew_release010Build6Highlight">More room for conversations and clearer map icons.</string>
+    <string name="whatsNew_release010Build6Chat">Chat navigation folds away while writing. Hide the keyboard using the button next to Send without losing your draft.</string>
+    <string name="whatsNew_release010Build6Map">Map controls stay above markers. Traffic icons and map controls follow the Android design.</string>
     <string name="driver_feed_title">Driver posts</string>
     <string name="driver_feed_source">From Driver</string>
     <string name="driver_feed_loading">Loading posts…</string>

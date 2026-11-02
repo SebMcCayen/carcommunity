@@ -5,6 +5,7 @@ import SwiftUI
 /// configured Mapbox renderer applies those commands immediately.
 struct MapLayersButton: View {
     @Binding var isPresented: Bool
+    var isActive = false
 
     var body: some View {
         Button {
@@ -12,7 +13,7 @@ struct MapLayersButton: View {
         } label: {
             Image(systemName: "square.3.layers.3d")
                 .frame(width: 48, height: 48)
-                .kccMapControl()
+                .kccMapControl(isActive: isActive)
         }
         .font(.system(size: 20, weight: .semibold))
         .accessibilityLabel(Text("shell.layersButton"))

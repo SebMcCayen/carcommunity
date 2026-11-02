@@ -33,11 +33,12 @@ enum IncidentType: String, CaseIterable, Sendable {
         case .roadwork: 0xFFF57C00
         case .hazard: 0xFFFBC02D
         case .police: 0xFF1565C0
-        case .roadClosed: 0xFF6A1B9A
+        case .roadClosed: 0xFF7B1FA2
         }
     }
 
-    var glyphColorArgb: UInt32 { self == .hazard ? 0xFF111111 : 0xFFFFFFFF }
+    var glyphColorArgb: UInt32 { IncidentMarkerStyle.glyphColor(on: markerColorArgb) }
+    var markerAssetName: String { "incident-" + rawValue }
 }
 
 struct RoadIncident: Equatable, Identifiable, Sendable {
@@ -70,7 +71,8 @@ struct RoadIncident: Equatable, Identifiable, Sendable {
             colorArgb: type.markerColorArgb,
             iconName: type.symbolName,
             glyphColorArgb: type.glyphColorArgb,
-            reportedCleared: reportedCleared
+            reportedCleared: reportedCleared,
+            assetName: type.markerAssetName
         )
     }
 }
@@ -117,7 +119,8 @@ struct PoliceReport: Equatable, Identifiable, Sendable {
             latitude: latitude,
             colorArgb: 0xFF1565C0,
             iconName: "shield.fill",
-            glyphColorArgb: 0xFFFFFFFF
+            glyphColorArgb: 0xFFFFFFFF,
+            assetName: IncidentType.police.markerAssetName
         )
     }
 }

@@ -42,10 +42,8 @@ extension View {
             }
     }
 
-    func kccMapControl() -> some View {
-        foregroundStyle(KccTheme.text)
-            .background(KccTheme.overlay, in: Circle())
-            .overlay { Circle().strokeBorder(KccTheme.border, lineWidth: 1) }
+    func kccMapControl(isActive: Bool = false) -> some View {
+        modifier(KccMapControlAppearance(isActive: isActive))
     }
 
     func kccReadingSurface(pageBackground: Bool = false) -> some View {
@@ -55,6 +53,29 @@ extension View {
             .buttonBorderShape(.roundedRectangle(radius: KccRadius.md))
             .toolbarBackground(pageBackground ? KccTheme.page : KccTheme.surface, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
+    }
+}
+
+/// Android CircleControl: opaque semantic surface, onSurface glyph, 1pt
+/// border and 3pt elevation. Resolve against the SwiftUI app appearance,
+/// including explicit app theme overrides, rather than a UIKit trait cache.
+private struct KccMapControlAppearance: ViewModifier {
+    @Environment(\.colorScheme) private var scheme
+    let isActive: Bool
+
+    func body(content: Content) -> some View {
+        let dark = scheme == .dark
+        let surface = isActive
+            ? (dark ? KccDarkColors.subtleBackground : KccPalette.softSand)
+            : (dark ? KccDarkColors.overlayBackground : KccLightColors.overlayBackground)
+        content
+            .foregroundStyle(dark ? KccDarkColors.textPrimary : KccLightColors.textPrimary)
+            .background(surface, in: Circle())
+            .overlay {
+                Circle().strokeBorder(dark ? KccDarkColors.overlayBorder : KccLightColors.overlayBorder, lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+            .shadow(color: .black.opacity(dark ? 0.3 : 0.18), radius: 3, y: 2)
     }
 }
 

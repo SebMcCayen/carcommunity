@@ -234,6 +234,7 @@ struct ChannelComposer: View {
             .accessibilityLabel(Text("chat.sendButton"))
             .accessibilityIdentifier("chat.composer.send")
             .disabled(!canSend)
+            ChatKeyboardDismissButton()
         }
         .padding(KccSpacing.s2)
     }

@@ -3,6 +3,23 @@ import XCTest
 @testable import KCC
 
 final class IncidentMapTests: XCTestCase {
+    func testAndroidMarkerGlyphsAndClearedSlashStayLegibleOnEveryCategory() {
+        for type in IncidentType.allCases {
+            for cleared in [false, true] {
+                let disc = IncidentMarkerStyle.discColor(type.markerColorArgb, reportedCleared: cleared)
+                XCTAssertGreaterThanOrEqual(IncidentMarkerStyle.contrast(IncidentMarkerStyle.glyphColor(on: disc), disc), 4.5, "\(type) cleared=\(cleared)")
+                if cleared {
+                    XCTAssertGreaterThanOrEqual(IncidentMarkerStyle.contrast(IncidentMarkerStyle.dark, disc), 3)
+                }
+            }
+        }
+        // Opaque complementary rings preserve the same edge on day/night tiles.
+        for basemap: UInt32 in [0xFFE8E6E1, 0xFF1B1D22] {
+            XCTAssertGreaterThanOrEqual(max(IncidentMarkerStyle.contrast(IncidentMarkerStyle.light, basemap),
+                IncidentMarkerStyle.contrast(IncidentMarkerStyle.dark, basemap)), 3)
+        }
+    }
+
     func testWireDropsMalformedRowsAndDefaultsOptionalFields() {
         XCTAssertNil(IncidentWire.incident(["id": "bad", "type": "unknown"]))
         let parsed = IncidentWire.incident([

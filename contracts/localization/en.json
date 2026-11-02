@@ -575,7 +575,8 @@
     "replyCancel": "Cancel reply",
     "replyComposerReplyingTo": "Replying to %1$s",
     "replyComposerBanner": "Replying to a message from %1$s",
-    "replyQuoteHeaderAction": "Reply to %1$s: %2$s. Tap to view the original."
+    "replyQuoteHeaderAction": "Reply to %1$s: %2$s. Tap to view the original.",
+    "hideKeyboard": "Hide keyboard"
   },
   "common": {
     "placeholder": "Coming soon"
@@ -2156,7 +2157,10 @@
     "release010Build2Icon": "The app icon now uses the same crown as Android, without text.",
     "release010Build2SignIn": "Sign in with Apple no longer requests your first and last name. You choose your display name/nickname in the app.",
     "release010Build3Highlight": "Stability improvement for iPhone.",
-    "release010Build3Map": "Fixes a crash when opening the map after the introduction."
+    "release010Build3Map": "Fixes a crash when opening the map after the introduction.",
+    "release010Build6Highlight": "More room for conversations and clearer map icons.",
+    "release010Build6Chat": "Chat navigation folds away while writing. Hide the keyboard using the button next to Send without losing your draft.",
+    "release010Build6Map": "Map controls stay above markers. Traffic icons and map controls follow the Android design."
   },
   "driver": {
     "feed": {

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// One bounded, keyboard-aware viewport for every message thread. Start at
 /// the latest message, follow arrivals while near the bottom, and preserve
@@ -10,6 +11,8 @@ struct ChatThreadScrollView<Content: View>: View {
     @Environment(\.chatReadingActive) private var readingActive
     @Namespace private var coordinateSpace
     @State private var followsLatest = true
+    @State private var pinnedBeforeKeyboardResize: Bool?
+    @GestureState private var dragging = false
     private let endID = "chat.thread.end"
 
     var body: some View {
@@ -32,6 +35,23 @@ struct ChatThreadScrollView<Content: View>: View {
                 .coordinateSpace(name: coordinateSpace)
                 .defaultScrollAnchor(.bottom)
                 .scrollDismissesKeyboard(.interactively)
+                .simultaneousGesture(DragGesture().updating($dragging) { _, state, _ in state = true })
+                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { _ in
+                    pinnedBeforeKeyboardResize = followsLatest && !dragging
+                }
+                .onChange(of: viewport.size) { _, _ in
+                    if readingActive, !dragging, pinnedBeforeKeyboardResize ?? followsLatest,
+                       let newest = latestMessageID {
+                        proxy.scrollTo(newest, anchor: .bottom)
+                    }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidChangeFrameNotification)) { _ in
+                    if readingActive, !dragging, pinnedBeforeKeyboardResize == true,
+                       let newest = latestMessageID {
+                        proxy.scrollTo(newest, anchor: .bottom)
+                    }
+                    pinnedBeforeKeyboardResize = nil
+                }
                 .onPreferenceChange(ChatThreadBottomKey.self) { bottom in
                     guard let bottom else { followsLatest = false; return }
                     let visibleBottom = max(0, viewport.size.height - viewport.safeAreaInsets.bottom)
