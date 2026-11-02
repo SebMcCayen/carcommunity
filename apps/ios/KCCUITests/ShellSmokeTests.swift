@@ -126,7 +126,7 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertFalse(app.staticTexts["map.fixture.wrongTarget"].exists)
             settings.tap()
             XCTAssertTrue(app.navigationBars["Inställningar"].waitForExistence(timeout: 5))
-            app.buttons["Back"].firstMatch.tap()
+            app.buttons["Tillbaka"].firstMatch.tap()
             app.buttons["shell.mapLayers"].tap()
             XCTAssertTrue(app.navigationBars["Kartlager"].waitForExistence(timeout: 5))
             XCTAssertFalse(app.staticTexts["map.fixture.wrongTarget"].exists)
