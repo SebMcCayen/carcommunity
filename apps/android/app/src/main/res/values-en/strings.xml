@@ -1988,6 +1988,8 @@
     <string name="incidents_clearedNoLocation">Your location isn\'t available. Turn on location to report.</string>
     <string name="incidents_clearedImportedExplanation">This comes from Trafikverket and can\'t be reported as gone.</string>
     <string name="incidents_clearedMarkerHint">Someone has reported this as gone, but it may still be there. Take care.</string>
+    <string name="whatsNew_release010Build5Highlight">Club is easier to find in Social.</string>
+    <string name="whatsNew_release010Build5Clubs">The Club menu entry is always visible, matching Android. If the club service is unavailable, the screen explains that without enabling its features.</string>
     <string name="whatsNew_release010Build4Highlight">Map, chat and menu improvements following the first iPhone tests.</string>
     <string name="whatsNew_release010Build4Map">Map markers follow zoom changes. The map stays behind detail panels and map controls match Android placement.</string>
     <string name="whatsNew_release010Build4Chat">Chat opens at the latest message and keeps the composer visible with the keyboard open.</string>

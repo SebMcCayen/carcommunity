@@ -2135,6 +2135,8 @@
     "clearedMarkerHint": "Someone has reported this as gone, but it may still be there. Take care."
   },
   "whatsNew": {
+    "release010Build5Highlight": "Club is easier to find in Social.",
+    "release010Build5Clubs": "The Club menu entry is always visible, matching Android. If the club service is unavailable, the screen explains that without enabling its features.",
     "release010Build4Highlight": "Map, chat and menu improvements following the first iPhone tests.",
     "release010Build4Map": "Map markers follow zoom changes. The map stays behind detail panels and map controls match Android placement.",
     "release010Build4Chat": "Chat opens at the latest message and keeps the composer visible with the keyboard open.",

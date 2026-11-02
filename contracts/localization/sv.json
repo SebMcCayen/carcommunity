@@ -2135,6 +2135,8 @@
     "clearedMarkerHint": "Någon har rapporterat att den är borta, men den kan finnas kvar. Kör försiktigt."
   },
   "whatsNew": {
+    "release010Build5Highlight": "Klubben är enklare att hitta i Socialt.",
+    "release010Build5Clubs": "Menyvalet Klubben visas alltid, precis som i Android. Om klubbtjänsten inte är tillgänglig visas information om det utan att funktionerna aktiveras.",
     "release010Build4Highlight": "Förbättrad karta, chatt och menyer efter de första iPhone-testerna.",
     "release010Build4Map": "Kartmarkörer följer zoomning. Kartan ligger kvar bakom informationsrutorna och kartknapparna följer Androids placering.",
     "release010Build4Chat": "Chatten öppnas vid det senaste meddelandet och skrivrutan hålls synlig även med tangentbordet öppet.",

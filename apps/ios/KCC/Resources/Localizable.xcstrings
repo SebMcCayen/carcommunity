@@ -36296,6 +36296,40 @@
         }
       }
     },
+    "whatsNew.release010Build5Clubs": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Menyvalet Klubben visas alltid, precis som i Android. Om klubbtjänsten inte är tillgänglig visas information om det utan att funktionerna aktiveras."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Club menu entry is always visible, matching Android. If the club service is unavailable, the screen explains that without enabling its features."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build5Highlight": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klubben är enklare att hitta i Socialt."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Club is easier to find in Social."
+          }
+        }
+      }
+    },
     "whatsNew.release010Change": {
       "extractionState": "manual",
       "localizations": {

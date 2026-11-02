@@ -6,13 +6,12 @@ import SwiftUI
 /// feature yet says so honestly instead of dead-ending.
 
 /// The Social hub panel. Android's Social hub lists Events / Crown Hunt /
-/// Leaderboard / Partners (label-sorted, unavailable entries omitted). Convoys
-/// belong in the Create chooser and chat hub, not in this menu. Entries whose
-/// live feature flag is off are omitted, matching Android.
+/// Leaderboard / Partners / Clubs, sorted by their localized labels. Clubs is
+/// always discoverable, as on Android; its screen enforces server activation.
+/// Convoys belong in the Create chooser and chat hub, not in this menu.
 struct SocialHubPanel: View {
     @Environment(\.locale) private var locale
 
-    var clubsEnabled: Bool = false
     var onOpenClubs: () -> Void = {}
     let crownHuntEnabled: Bool
     let partnersEnabled: Bool
@@ -29,6 +28,7 @@ struct SocialHubPanel: View {
 
             ForEach(entries) { entry in
                 hubRow(label: entry.label, icon: entry.icon, action: entry.action)
+                    .accessibilityIdentifier("shell.social.\(entry.id.rawValue)")
             }
 
         }
@@ -77,11 +77,9 @@ struct SocialHubPanel: View {
                 )
             )
         }
-        if clubsEnabled {
-            entries.append(SocialHubEntry(id: .clubs, label: "clubs.title",
-                localizedLabel: String(localized: "clubs.title", locale: locale),
-                icon: "person.3", action: onOpenClubs))
-        }
+        entries.append(SocialHubEntry(id: .clubs, label: "clubs.title",
+            localizedLabel: String(localized: "clubs.title", locale: locale),
+            icon: "person.3", action: onOpenClubs))
         return entries.sorted {
             $0.localizedLabel.localizedStandardCompare($1.localizedLabel) == .orderedAscending
         }
@@ -113,7 +111,7 @@ struct SocialHubPanel: View {
 }
 
 private struct SocialHubEntry: Identifiable {
-    enum ID: Hashable {
+    enum ID: String, Hashable {
         case events
         case clubs
         case crownHunt
