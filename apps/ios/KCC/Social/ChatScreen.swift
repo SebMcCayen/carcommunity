@@ -65,10 +65,12 @@ struct ChatScreen: View {
     @ViewBuilder
     private var content: some View {
         if let coordinator {
-            VStack(spacing: 0) {
-                thread(coordinator)
-                composer(coordinator)
-            }
+            thread(coordinator)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    composer(coordinator)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .background(KccTheme.surface)
+                }
         } else {
             SocialReadingState(title: "dm.title", message: "common.placeholder", symbol: "bubble.left.and.bubble.right")
         }
@@ -78,43 +80,19 @@ struct ChatScreen: View {
 
     @ViewBuilder
     private func thread(_ coordinator: ChatCoordinator) -> some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: KccSpacing.s2) {
-                    if coordinator.canLoadOlder {
-                        loadOlderControl(coordinator)
-                    }
-                    if coordinator.threadLoading && coordinator.messages.isEmpty {
-                        ProgressView()
-                            .padding(KccSpacing.s4)
-                    } else if coordinator.messages.isEmpty {
-                        Text("dm.emptyThread")
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(KccSpacing.s6)
-                    } else {
-                        ForEach(coordinator.messages) { message in
-                            MessageBubble(
-                                message: message,
-                                isOwn: message.senderUid == currentUid,
-                                onRetry: { clientId in
-                                    Task { await coordinator.retry(clientId: clientId) }
-                                }
-                            )
-                            .id(message.id)
-                        }
-                    }
-                }
-                .padding(KccSpacing.s3)
-            }
-            .defaultScrollAnchor(.bottom)
-            .onChange(of: coordinator.messages.last?.id) { _, newest in
-                // Keep the view pinned to the newest message as sends land
-                // and live updates arrive.
-                if let newest {
-                    withAnimation {
-                        proxy.scrollTo(newest, anchor: .bottom)
-                    }
+        ChatThreadScrollView(latestMessageID: coordinator.messages.last?.id,
+                             latestIsOwn: coordinator.messages.last?.senderUid == currentUid) {
+            if coordinator.canLoadOlder { loadOlderControl(coordinator) }
+            if coordinator.threadLoading && coordinator.messages.isEmpty {
+                ProgressView().padding(KccSpacing.s4)
+            } else if coordinator.messages.isEmpty {
+                Text("dm.emptyThread").foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center).padding(KccSpacing.s6)
+            } else {
+                ForEach(coordinator.messages) { message in
+                    MessageBubble(message: message, isOwn: message.senderUid == currentUid,
+                        onRetry: { clientId in Task { await coordinator.retry(clientId: clientId) } })
+                        .id(message.id)
                 }
             }
         }

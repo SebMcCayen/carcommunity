@@ -36211,6 +36211,91 @@
         }
       }
     },
+    "whatsNew.release010Build4Chat": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chatten öppnas vid det senaste meddelandet och skrivrutan hålls synlig även med tangentbordet öppet."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat opens at the latest message and keeps the composer visible with the keyboard open."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build4Clubs": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klubben finns under Socialt med klubbkatalog, presentation, statistik och grundläggande medlemskap."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clubs is available under Social with the directory, presentation, statistics and basic membership."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build4Highlight": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Förbättrad karta, chatt och menyer efter de första iPhone-testerna."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Map, chat and menu improvements following the first iPhone tests."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build4Map": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kartmarkörer följer zoomning. Kartan ligger kvar bakom informationsrutorna och kartknapparna följer Androids placering."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Map markers follow zoom changes. The map stays behind detail panels and map controls match Android placement."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build4Profile": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profilen visar bara aktiva administratörsvarningar. Platsåtkomst erbjuds när kartan används första gången."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profiles only show active administrator warnings. Location access is offered on first map use."
+          }
+        }
+      }
+    },
     "whatsNew.release010Change": {
       "extractionState": "manual",
       "localizations": {

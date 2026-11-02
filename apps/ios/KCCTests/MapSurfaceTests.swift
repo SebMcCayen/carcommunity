@@ -1,4 +1,7 @@
 import XCTest
+import Observation
+import MapboxMaps
+import CoreLocation
 
 @testable import KCC
 
@@ -8,6 +11,65 @@ import XCTest
 /// and the stub's recorded-wiring hooks.
 @MainActor
 final class MapSurfaceTests: XCTestCase {
+
+    func testReadingDockPadsCameraWithoutChangingSelectedTargetOrMapBounds() {
+        let target = CLLocationCoordinate2D(latitude: 57.4872, longitude: 12.0761)
+        let camera = Viewport.camera(center: target, zoom: 14, bearing: 25, pitch: 45)
+        // A 360pt viewport can have a 240pt dock: its camera center must use
+        // the remaining 120pt, rather than disappear at y=180 behind the dock.
+        let padded = MapHomeReadingViewportPolicy.applying(clearance: 240, to: camera)
+        XCTAssertEqual(padded.padding.bottom, 240)
+        XCTAssertEqual(padded.camera?.center?.latitude, target.latitude)
+        XCTAssertEqual(padded.camera?.center?.longitude, target.longitude)
+        XCTAssertEqual(padded.camera?.zoom, 14)
+        XCTAssertEqual(padded.camera?.pitch, 45)
+        let closed = MapHomeReadingViewportPolicy.applying(clearance: 0, to: padded)
+        XCTAssertEqual(closed.padding.bottom, 0)
+        XCTAssertEqual(closed.camera?.center?.latitude, target.latitude)
+        // The binding strips renderer padding on write-back. Reopening or
+        // switching to a session dock cannot accumulate previous insets.
+        let stored = MapHomeReadingViewportPolicy.unpadded(padded)
+        XCTAssertEqual(stored.padding.bottom, 0)
+        XCTAssertEqual(MapHomeReadingViewportPolicy.applying(clearance: 88, to: stored).padding.bottom, 88)
+        XCTAssertTrue(MapHomeReadingViewportPolicy.applying(clearance: 80, to: .idle).isIdle)
+    }
+
+    func testProjectionObservationTracksEveryCameraFrameEvenWithinRoundedSnapshot() {
+        let surface = StubMapSurface(autoLoad: false)
+        var x = 100.0
+        surface.setProjectionForTest { _, _ in MapScreenPoint(x: x, y: 10, trustworthy: true) }
+        let snapshot = MapCameraSnapshot.of(latitude: 57, longitude: 12, zoom: 12, bearing: 0, pitch: 0)
+        surface.updateCameraSnapshot(snapshot)
+        let changed = expectation(description: "marker projection invalidated")
+        let first = withObservationTracking {
+            surface.screenPositionFor(latitude: 57, longitude: 12)
+        } onChange: { changed.fulfill() }
+        XCTAssertEqual(first?.x, 100)
+        x = 240
+        surface.updateCameraSnapshot(snapshot)
+        wait(for: [changed], timeout: 1)
+        XCTAssertEqual(surface.cameraSnapshot, snapshot, "Query throttling remains independent of pixels")
+        XCTAssertEqual(surface.screenPositionFor(latitude: 57, longitude: 12)?.x, 240)
+    }
+
+    func testProjectionObserversRefreshAfterRendererAttachmentResizeAndRemoval() {
+        let surface = StubMapSurface(autoLoad: false)
+        for action in 0..<3 {
+            let changed = expectation(description: "projection lifetime/size")
+            withObservationTracking {
+                _ = surface.screenPositionFor(latitude: 57, longitude: 12)
+            } onChange: { changed.fulfill() }
+            switch action {
+            case 0:
+                surface.installRenderer(projection: { _, _ in MapScreenPoint(x: 120, y: 80, trustworthy: true) },
+                    convoyFit: { _, _, _, _, _, _ in }, center: { _ in })
+            case 1: surface.invalidateProjection()
+            default: surface.removeRenderer()
+            }
+            wait(for: [changed], timeout: 1)
+        }
+        XCTAssertNil(surface.screenPositionFor(latitude: 57, longitude: 12))
+    }
 
     // MARK: - layer toggles (ported from Android's ShellNavTest)
 

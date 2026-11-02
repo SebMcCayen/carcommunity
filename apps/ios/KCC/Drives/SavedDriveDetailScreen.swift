@@ -36,10 +36,9 @@ struct SavedDriveDetailScreen: View {
             .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .navigationTitle("savedDrives.detailTitle")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarTrailing) {
-                Button { dismiss() } label: { Text("savedDrives.closeButton").frame(minHeight: 48) }
-            }}
+
         }
+        .kccDismissibleSheet()
         .task(id: drive.id) { await coordinator.loadRoute(for: drive) }
         .onDisappear { coordinator.clearRoute() }
     }
@@ -153,10 +152,8 @@ struct DriveStatsScreen: View {
             .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .navigationTitle("savedDrives.statsTitle")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarTrailing) {
-                Button { dismiss() } label: { Text("savedDrives.closeButton").frame(minHeight: 48) }.accessibilityIdentifier("myDrives.stats.close")
-            }}
-        }.task { await coordinator.loadStats() }
+
+        }.kccDismissibleSheet().task { await coordinator.loadStats() }
     }
 
     private func statsContent(_ stats: DriveStatsSnapshot) -> some View {

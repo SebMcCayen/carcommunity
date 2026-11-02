@@ -88,6 +88,29 @@ jobs:
       # Builds WITHOUT GoogleService-Info.plist (it is gitignored and no
       # secret is injected here) — this is deliberate: it continuously proves
       # the config-less-build seam that FirebaseBootstrap provides.
+      # Run the reported iPhone regression first; fail with geometry and
+      # synthetic screenshot evidence before spending time on the full suite.
+      # The complete unit/UI, optimized Release and native SDK gates remain below.
+      - name: Composer keyboard and map dock acceptance (config-less)
+        run: |
+          DEST=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          print(next(device["udid"] for runtime in json.load(sys.stdin)["devices"].values()
+                     for device in runtime if device.get("isAvailable") and device["name"].startswith("iPhone ")))
+          ')
+          xcrun simctl bootstatus "$DEST" -b
+          xcodebuild -project apps/ios/KCC.xcodeproj -scheme KCCReleaseSmoke \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=${DEST}" \
+            -derivedDataPath "${RUNNER_TEMP}/ios-tests" \
+            ENTITLEMENTS_REQUIRED=YES ONLY_ACTIVE_ARCH=YES \
+            -parallel-testing-enabled NO \
+            -only-testing:KCCUITests/ShellSmokeTests/testCommunityOpensAtLatestWithAccessibleText \
+            -only-testing:KCCUITests/ShellSmokeTests/testCommunityComposerStaysVisibleWithKeyboard \
+            -only-testing:KCCUITests/ShellSmokeTests/testSavedPlacesDockKeepsCloseToolsAndPrimaryNavigationReachable \
+            -resultBundlePath "${RUNNER_TEMP}/ios-chat-smoke.xcresult" \
+            test
+
       - name: Build and test (unit + UI smoke tests, simulator, config-less)
         run: |
           cd apps/ios
@@ -197,6 +220,9 @@ jobs:
         run: |
           RESULTS="${RUNNER_TEMP}/ios-tests.xcresult"
           SCREENSHOTS="${RUNNER_TEMP}/ios-configless-screenshots"
+          if [ ! -d "${RESULTS}" ]; then
+            RESULTS="${RUNNER_TEMP}/ios-chat-smoke.xcresult"
+          fi
           if [ -d "${RESULTS}" ]; then
             mkdir -p "${SCREENSHOTS}"
             xcrun xcresulttool export attachments \
@@ -212,6 +238,7 @@ jobs:
           path: |
             ${{ runner.temp }}/ios-tests.xcresult
             ${{ runner.temp }}/ios-release-smoke.xcresult
+            ${{ runner.temp }}/ios-chat-smoke.xcresult
           if-no-files-found: ignore
           retention-days: 7
 

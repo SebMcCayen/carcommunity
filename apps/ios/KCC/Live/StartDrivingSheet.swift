@@ -84,13 +84,10 @@ struct StartDrivingSheet: View {
             }
             .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .navigationTitle("shell.createChooserTitle")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("shell.liveSharePromptCancel") { dismiss() }
-                }
-            }
+
         }
         .presentationDetents([.medium, .large])
+        .kccDismissibleSheet()
         .presentationBackground(.regularMaterial)
         .task { garage.start() }
         .onChange(of: garage.state, initial: true) { _, _ in

@@ -72,6 +72,7 @@ struct ShellView: View {
     @State private var mapReadingSelection: MapReadingSelection?
     @State private var mapDockHeight: CGFloat = 0
     @State private var mapSessionHeight: CGFloat = 0
+    @State private var clubsCoordinator: ClubsCoordinator?
     @State private var savedPlacesCoordinator: SavedPlacesCoordinator?
     @State private var savedPlacesProximity: MapPoint?
 
@@ -99,6 +100,9 @@ struct ShellView: View {
     @State private var liveLocationCoordinator: LiveLocationCoordinator?
     @State private var driveRecordingCoordinator: DriveRecordingCoordinator?
     @State private var locationPermissionCoordinator: LocationPermissionCoordinator?
+    @AppStorage("kcc.location.initialMapExplanationShown") private var initialMapExplanationShown = false
+    @State private var initialMapPermissionPrompt = false
+    @State private var primaryNavigationHeight: CGFloat = 0
     @State private var startDrivingGarage: GarageCoordinator?
     @State private var convoyManagementCoordinator: ConvoyManagementCoordinator?
     @State private var convoyAwareness = ConvoyAwarenessCoordinator()
@@ -185,6 +189,13 @@ struct ShellView: View {
                 guard signedInUid != nil else { return }
                 await appUpdateCoordinator.checkOnce()
             }
+            .task(id: initialMapPermissionEligible) {
+                guard initialMapPermissionEligible else { return }
+                if locationPermissionCoordinator?.requestInitialMapAccess() == true {
+                    initialMapExplanationShown = true
+                    initialMapPermissionPrompt = true
+                }
+            }
             .task(id: savedPlacesLocationSubscriptionKey) {
                 await observeSavedPlacesLocation()
             }
@@ -242,6 +253,7 @@ struct ShellView: View {
                 liveLocationCoordinator?.standDownForRestrictedAccess()
                 driveRecordingCoordinator?.reset()
                 billboardsCoordinator?.stop()
+                clubsCoordinator?.stop()
                 mapSurface.setBillboardMarkers([])
             }
     }
@@ -249,8 +261,8 @@ struct ShellView: View {
     // Build 2 exhausted the device main-thread stack while decoding this
     // composition's type. Explicit AnyView results bound both generic metadata
     // depth and the value sizes carried through these nested getters in Release.
-    // Each boundary always wraps the same concrete type; shell/map ownership,
-    // modifier order and the existing conditional identities stay unchanged.
+    // Each boundary wraps one stable layout/lifecycle segment, retaining the
+    // shell's single map and coordinator identities through tab/route changes.
     private var shellBase: AnyView {
         ZStack {
             // Exactly one native Mapbox view for the signed-in shell. Tabs and
@@ -258,12 +270,12 @@ struct ShellView: View {
             MapHomeView(
                 surface: mapSurface,
                 locationProvider: locationProvider,
+                bottomClearance: mapHomeChromeVisible ? mapDockHeight : 0,
                 featureHealthReporter: FeatureHealthReporter.whenAuthenticated(
                     diagnostics.featureHealthReporter,
                     uid: signedInUid
                 )
             )
-            .padding(.bottom, mapHomeChromeVisible ? mapDockHeight : 0)
             .accessibilityHidden(mapCover == .opaque)
 
             // PR #1165 (codex/ios-map-visibility): remove the opaque TabView
@@ -290,6 +302,9 @@ struct ShellView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             primaryNavigation
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                    primaryNavigationHeight = $0
+                }
         }
         // Route host: sub-routes render full-screen OVER the tab shell (the
         // Android shell's route-host pattern), each carrying its own back
@@ -419,8 +434,15 @@ struct ShellView: View {
         }
         .onChange(of: locationPermissionCoordinator?.state) { _, state in
             if state == .granted {
+                initialMapPermissionPrompt = false
                 startSingleSessionAfterPermissionGrant()
                 openConvoyCreateAfterPermissionGrant()
+            } else if state == .deniedNeedsSettings && initialMapPermissionPrompt
+                        && !pendingSingleSessionStart && !pendingConvoyCreate {
+                // A first-use refusal leaves the browsing map usable. Settings
+                // is offered later only for an explicit location action.
+                initialMapPermissionPrompt = false
+                locationPermissionCoordinator?.dismissSettingsHint()
             }
         }
         .onChange(of: liveLocationCoordinator?.isSharing) { _, sharing in
@@ -437,8 +459,8 @@ struct ShellView: View {
     }
 
     private func centerMapReading(_ selection: MapReadingSelection?) {
-        // Reuse the existing user-requested center command. Resizing the same
-        // map viewport above the measured dock leaves its center unobscured.
+        // Reuse the existing user-requested center command without replacing
+        // or resizing the native map behind the reading panel.
         switch selection {
         case .crown(let id):
             if let target = crownHuntComposition?.mapCoordinator?.selectedTarget, target.id == id {
@@ -538,6 +560,7 @@ struct ShellView: View {
             if locationPermissionCoordinator?.state == .rationale {
                 Button("map.locationDismiss", role: .cancel) {
                     cancelPendingCreateAction()
+                    initialMapPermissionPrompt = false
                     locationPermissionCoordinator?.dismissRationale()
                 }
                 Button("map.locationAllow") {
@@ -546,6 +569,7 @@ struct ShellView: View {
             } else {
                 Button("map.locationDismiss", role: .cancel) {
                     cancelPendingCreateAction()
+                    initialMapPermissionPrompt = false
                     locationPermissionCoordinator?.dismissSettingsHint()
                 }
                 Button("map.locationOpenSettings") {
@@ -605,6 +629,8 @@ struct ShellView: View {
         case .social:
             panelTab {
                 SocialHubPanel(
+                    clubsEnabled: clubsCoordinator?.enabled == true,
+                    onOpenClubs: { routes = routes.opening(.clubs) },
                     crownHuntEnabled: featureFlags.isEnabled(.crownHunt),
                     partnersEnabled: featureFlags.isEnabled(.partners)
                         && partnersCoordinator != nil,
@@ -698,7 +724,6 @@ struct ShellView: View {
                         )
                     }
                 }
-                .padding(.bottom, mapHomeChromeVisible ? mapDockHeight : 0)
             }
             .overlay {
                 if mapHomeChromeVisible,
@@ -895,6 +920,12 @@ struct ShellView: View {
                 Label("shell.moreDrives", systemImage: "chart.bar.xaxis")
             }
             .accessibilityIdentifier("shell.myDrives")
+            if savedPlacesCoordinator != nil {
+                Button { selectMapReading(.savedPlaces) } label: {
+                    Label("settingsMenu.savedPlaces", systemImage: "bookmark")
+                }
+                .accessibilityIdentifier("shell.savedPlaces")
+            }
             if friendsCoordinator != nil {
                 Button {
                     routes = routes.opening(.friends)
@@ -908,13 +939,6 @@ struct ShellView: View {
                 Label("settingsMenu.title", systemImage: "gearshape")
             }
             .accessibilityIdentifier("shell.settings")
-            if savedPlacesCoordinator != nil {
-                Button {
-                    routes = routes.opening(.savedPlaces)
-                } label: {
-                    Label("settingsMenu.savedPlaces", systemImage: "bookmark")
-                }
-            }
             if feedbackCoordinator != nil {
                 Button {
                     routes = routes.opening(.feedback)
@@ -1129,31 +1153,8 @@ struct ShellView: View {
             .accessibilityIdentifier("shell.compass")
             .accessibilityValue(mapSurface.compassMode.rawValue)
 
-            if savedPlacesCoordinator != nil {
-                Button {
-                    selectMapReading(.savedPlaces)
-                } label: {
-                    Image(systemName: "bookmark.fill")
-                        .frame(width: 48, height: 48)
-                        .kccMapControl()
-                }
-                .accessibilityLabel(Text("shell.savedPlacesButton"))
-                .accessibilityIdentifier("shell.savedPlaces")
-            }
-
             if let coordinator = crownHuntComposition?.perkMapCoordinator, coordinator.isAvailable {
                 CrownPerkMapControl(coordinator: coordinator)
-            }
-
-            if let liveLocationCoordinator, liveLocationCoordinator.canPresentScreen {
-                Button {
-                    routes = routes.opening(.liveLocation)
-                } label: {
-                    Image(systemName: "location.fill")
-                        .frame(width: 48, height: 48)
-                        .kccMapControl()
-                }
-                .accessibilityLabel(Text("liveLocation.screenTitle"))
             }
         }
         .font(.system(size: 20, weight: .semibold))
@@ -1239,7 +1240,18 @@ struct ShellView: View {
     }
 
     private var chatTab: some View {
-        NavigationStack { chatHubContent }
+        NavigationStack {
+            chatHubContent
+                // The retained NavigationStack establishes its own safe area
+                // and does not inherit the footer inset on the map's ZStack.
+                // Reserve the measured footer INSIDE that navigation host so
+                // channel composers stay above both navigation and keyboard.
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    Color.clear.frame(height: primaryNavigationHeight)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+        }
             .kccReadingSurface()
             .accessibilityAction(.escape) { selectedTab = .map }
     }
@@ -1268,6 +1280,8 @@ struct ShellView: View {
                 onOpenWhatsNew: { routes = routes.opening(.whatsNew) },
                 onOpenAccountDeletion: { routes = routes.opening(.accountDeletion) }
             )
+        case .clubs:
+            routeNavigation { ClubsScreen(coordinator: clubsCoordinator) }
         case .myDrives:
             routeNavigation { myDrives }
         case .points:
@@ -2092,10 +2106,16 @@ struct ShellView: View {
         startDrivingGarage = nil
     }
 
+    private var initialMapPermissionEligible: Bool {
+        signedInUid != nil && mapHomeChromeVisible && scenePhase == .active
+            && locationPermissionCoordinator != nil && !initialMapExplanationShown
+            && whatsNewCoordinator.announcement == nil && !showStartDriving
+    }
+
     private var permissionPromptIsPresented: Binding<Bool> {
         Binding(
             get: {
-                (pendingSingleSessionStart || pendingConvoyCreate)
+                (initialMapPermissionPrompt || pendingSingleSessionStart || pendingConvoyCreate)
                     && (locationPermissionCoordinator?.state == .rationale
                         || locationPermissionCoordinator?.state == .deniedNeedsSettings)
             },
@@ -2163,6 +2183,8 @@ struct ShellView: View {
         crownHuntComposition = nil
         partnersCoordinator?.clearSensitiveOfferState()
         partnersCoordinator = nil
+        clubsCoordinator?.stop()
+        clubsCoordinator = nil
         savedPlacesCoordinator = nil
         navSearchOpen = false
         dismissMapReading()
@@ -2178,6 +2200,11 @@ struct ShellView: View {
             let permissionCoordinator = LocationPermissionCoordinator(provider: locationProvider)
             permissionCoordinator.start()
             locationPermissionCoordinator = permissionCoordinator
+        }
+        if let uid {
+            let clubs = ClubsCoordinator(repository: FirebaseClubsRepository.createIfAvailable(uid: uid))
+            clubs.start()
+            clubsCoordinator = clubs
         }
         friendsRepository = friends
         conversationsRepository = conversations
@@ -2272,7 +2299,7 @@ struct ShellView: View {
         }
         chatHubCoordinator = ChatHubCoordinator(
             communityRepository: channelAndDirectChatEnabled
-                ? FirebaseCommunityChatRepository.createIfAvailable() : nil,
+                ? CommunityChatRepositoryFactory.make() : nil,
             convoyRepository: channelAndDirectChatEnabled
                 ? FirebaseConvoyChatRepository.createIfAvailable() : nil,
             chatRepliesEnabled: featureFlags.isEnabled(.chatReplies)
@@ -2382,7 +2409,7 @@ struct ShellView: View {
         let channelChatEnabled = ChatFeatureGate.channelAndDirectChatEnabled(access: access)
         chatHubCoordinator = ChatHubCoordinator(
             communityRepository: channelChatEnabled
-                ? FirebaseCommunityChatRepository.createIfAvailable() : nil,
+                ? CommunityChatRepositoryFactory.make() : nil,
             convoyRepository: channelChatEnabled
                 ? FirebaseConvoyChatRepository.createIfAvailable() : nil,
             chatRepliesEnabled: featureFlags.isEnabled(.chatReplies)

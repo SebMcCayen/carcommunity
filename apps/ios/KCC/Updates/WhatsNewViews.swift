@@ -80,11 +80,9 @@ struct WhatsNewAnnouncementSheet: View {
             .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .navigationTitle(Text("whatsNew.title"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) {
-                Button(action: onClose) { Text("whatsNew.dialogClose").frame(minHeight: 48) }
-            }}
+            .accessibilityAction(.escape, onClose)
             .presentationDetents([.medium, .large])
-            .interactiveDismissDisabled()
+            .presentationDragIndicator(.visible)
         }
     }
 

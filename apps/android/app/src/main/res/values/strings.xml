@@ -1988,6 +1988,11 @@
     <string name="incidents_clearedNoLocation">Din position är inte tillgänglig. Slå på platstjänster för att rapportera.</string>
     <string name="incidents_clearedImportedExplanation">Uppgiften kommer från Trafikverket och kan inte rapporteras som borta.</string>
     <string name="incidents_clearedMarkerHint">Någon har rapporterat att den är borta, men den kan finnas kvar. Kör försiktigt.</string>
+    <string name="whatsNew_release010Build4Highlight">Förbättrad karta, chatt och menyer efter de första iPhone-testerna.</string>
+    <string name="whatsNew_release010Build4Map">Kartmarkörer följer zoomning. Kartan ligger kvar bakom informationsrutorna och kartknapparna följer Androids placering.</string>
+    <string name="whatsNew_release010Build4Chat">Chatten öppnas vid det senaste meddelandet och skrivrutan hålls synlig även med tangentbordet öppet.</string>
+    <string name="whatsNew_release010Build4Profile">Profilen visar bara aktiva administratörsvarningar. Platsåtkomst erbjuds när kartan används första gången.</string>
+    <string name="whatsNew_release010Build4Clubs">Klubben finns under Socialt med klubbkatalog, presentation, statistik och grundläggande medlemskap.</string>
     <string name="whatsNew_title">Vad är nytt</string>
     <string name="whatsNew_dialogTitle">Nyheter i version %1$s</string>
     <string name="whatsNew_dialogMoreVersions">…och mer från tidigare uppdateringar.</string>

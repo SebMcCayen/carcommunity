@@ -13,19 +13,6 @@ struct IncidentMapOverlay: View {
                 incidents: coordinator.incidents,
                 policeReports: coordinator.policeReports
             )
-            let importedMarkerVisible = IncidentLayerPresentation.importedIncidents(
-                enabled: coordinator.trafficAlertsEnabled,
-                incidents: coordinator.incidents
-            ).contains { incident in
-                let point = projection.screenPositionFor(
-                        latitude: incident.latitude, longitude: incident.longitude
-                      )
-                return IncidentAttribution.markerIsVisible(
-                    point,
-                    width: Double(geometry.size.width),
-                    height: Double(geometry.size.height)
-                )
-            }
             ZStack(alignment: .bottomLeading) {
                 ForEach(markers, id: \.id) { marker in
                     if let point = projection.screenPositionFor(
@@ -64,17 +51,7 @@ struct IncidentMapOverlay: View {
                         .position(x: CGFloat(point.x), y: CGFloat(point.y))
                     }
                 }
-                if importedMarkerVisible {
-                    Text("incidents.sourceTrafikverket")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .padding(.horizontal, KccSpacing.s3)
-                        .padding(.vertical, KccSpacing.s2)
-                        .background(KccTheme.surface, in: RoundedRectangle(cornerRadius: KccRadius.md))
-                        .padding(KccSpacing.s4)
-                        .accessibilityIdentifier("incident-trafikverket-attribution")
-                        .allowsHitTesting(false)
-                }
+
             }
             .frame(
                 width: geometry.size.width,
@@ -132,13 +109,10 @@ struct IncidentReportSheet: View {
             .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .navigationTitle("incidents.reportTitle")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: { Text("incidents.cancel").frame(minHeight: 48) }
-                }
-            }
+
         }
         .presentationDetents([.medium, .large])
+        .kccDismissibleSheet()
     }
 }
 

@@ -968,6 +968,11 @@ final class StubMapSurface: MapSurface {
     // is exactly right for CI and the config-less build. Pinnable via
     // `setCameraSnapshotForTest`.
     private(set) var cameraSnapshot: MapCameraSnapshot?
+    // Pixel projection must track every rendered camera frame, independently
+    // of the rounded snapshot used to throttle network/map queries.
+    private var projectionRevision: UInt64 = 0
+
+    func invalidateProjection() { projectionRevision &+= 1 }
 
     /// Last value passed to ``setConvoyFit(points:focusEnabled:userPoint:followSelfEnabled:)`` —
     /// observable so tests can assert the wiring.
@@ -1128,6 +1133,7 @@ final class StubMapSurface: MapSurface {
         cameraPreferences: @escaping (Bool, Double) -> Void = { _, _ in }
     ) {
         rendererProjection = projection
+        invalidateProjection()
         rendererConvoyFit = convoyFit
         rendererCenter = center
         rendererTraffic = traffic
@@ -1151,6 +1157,7 @@ final class StubMapSurface: MapSurface {
 
     func removeRenderer() {
         rendererProjection = nil
+        invalidateProjection()
         rendererConvoyFit = nil
         rendererCenter = nil
         rendererTraffic = nil
@@ -1161,6 +1168,7 @@ final class StubMapSurface: MapSurface {
     }
 
     func updateCameraSnapshot(_ snapshot: MapCameraSnapshot) {
+        invalidateProjection()
         guard cameraSnapshot != snapshot else { return }
         cameraSnapshot = snapshot
         bearing = snapshot.bearing
@@ -1171,12 +1179,16 @@ final class StubMapSurface: MapSurface {
     /// default) keeps the stub's "there is no map" behaviour.
     func setProjectionForTest(_ projection: ((Double, Double) -> MapScreenPoint?)?) {
         projectionForTest = projection
+        invalidateProjection()
     }
 
     /// No camera on the stub, so nothing can be projected — unless a test has
     /// installed a projection via ``setProjectionForTest(_:)``. A non-finite
     /// projection returns nil, per the ``MapProjection`` contract.
     func screenPositionFor(latitude: Double, longitude: Double) -> MapScreenPoint? {
+        // Register this dependency inside the SwiftUI overlay's observation
+        // scope, including when no renderer/visible point exists yet.
+        _ = projectionRevision
         guard let point = (projectionForTest ?? rendererProjection)?(latitude, longitude),
               point.x.isFinite, point.y.isFinite
         else { return nil }

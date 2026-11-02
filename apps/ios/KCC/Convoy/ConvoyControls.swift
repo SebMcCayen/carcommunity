@@ -237,12 +237,9 @@ struct ConvoyMembersSheet: View {
             }
             .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .navigationTitle("convoy.barMemberListTitle")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button { dismiss() } label: { Text("convoy.close").frame(minHeight: 48) }
-                }
-            }
+
         }
+        .kccDismissibleSheet()
     }
 
     private func memberRow(_ member: ConvoyMember, waiting: Bool, now: Date) -> some View {

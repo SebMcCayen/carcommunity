@@ -3,6 +3,16 @@ import MapboxMaps
 import CoreLocation
 import UIKit
 
+/// Camera padding changes framing, never the native map's size. Apply it at
+/// the renderer binding so every center/follow command (including callbacks
+/// installed before the dock was measured) sees the current dock clearance.
+enum MapHomeReadingViewportPolicy {
+    static func applying(clearance: CGFloat, to viewport: Viewport) -> Viewport {
+        viewport.padding(.bottom, clearance.isFinite ? max(0, clearance) : 0)
+    }
+    static func unpadded(_ viewport: Viewport) -> Viewport { viewport.padding(.bottom, 0) }
+}
+
 /// A puck is foreground UI demand, never permission to keep GPS alive for
 /// a hidden map or a background scene. Explicit drive/live sessions own their
 /// separate providers and are unaffected by this gate.
@@ -350,6 +360,7 @@ struct MapHomeView: View {
     let surface: StubMapSurface
     let locationProvider: any LocationProvider
     private let accessToken: String?
+    let bottomClearance: CGFloat
     private let featureHealthReporter: FeatureHealthReporter?
     @State private var renderWatchdog: MapRenderWatchdog
 
@@ -357,11 +368,13 @@ struct MapHomeView: View {
         surface: StubMapSurface,
         locationProvider: any LocationProvider,
         accessToken: String? = MapboxConfiguration.accessToken(),
+        bottomClearance: CGFloat = 0,
         featureHealthReporter: FeatureHealthReporter? = nil
     ) {
         self.surface = surface
         self.locationProvider = locationProvider
         self.accessToken = accessToken
+        self.bottomClearance = bottomClearance
         self.featureHealthReporter = featureHealthReporter
         _renderWatchdog = State(initialValue: MapRenderWatchdog())
     }
@@ -373,6 +386,7 @@ struct MapHomeView: View {
                     accessToken: accessToken,
                     surface: surface,
                     locationProvider: locationProvider,
+                    bottomClearance: bottomClearance,
                     onLoadingError: { kind in
                         featureHealthReporter?.report(
                             kind,
@@ -487,6 +501,7 @@ private struct MapboxStandardMap: View {
     let onLoadingError: @MainActor (FeatureHealthKind) -> Void
     let surface: StubMapSurface
     let locationProvider: any LocationProvider
+    let bottomClearance: CGFloat
     @State private var viewport: Viewport
     @State private var cameraBeforeConvoy: MapCameraSnapshot?
     @State private var interactionObserver: ConvoyViewportInteractionObserver
@@ -507,6 +522,7 @@ private struct MapboxStandardMap: View {
         accessToken: String,
         surface: StubMapSurface,
         locationProvider: any LocationProvider,
+        bottomClearance: CGFloat,
         onLoadingError: @escaping @MainActor (FeatureHealthKind) -> Void,
         onFullFrameRendered: @escaping @MainActor () -> Void,
         onLoaded: @escaping @MainActor () -> Void
@@ -515,6 +531,7 @@ private struct MapboxStandardMap: View {
         self.surface = surface
         self.locationProvider = locationProvider
         self.onLoaded = onLoaded
+        self.bottomClearance = bottomClearance
         self.onFullFrameRendered = onFullFrameRendered
         self.onLoadingError = onLoadingError
         _viewport = State(initialValue: .camera(
@@ -530,7 +547,10 @@ private struct MapboxStandardMap: View {
 
     var body: some View {
         MapReader { proxy in
-            MapboxMaps.Map(viewport: $viewport) {
+            MapboxMaps.Map(viewport: Binding(
+                get: { MapHomeReadingViewportPolicy.applying(clearance: bottomClearance, to: viewport) },
+                set: { viewport = MapHomeReadingViewportPolicy.unpadded($0) }
+            )) {
                 if MapHomePuckPolicy.isVisible(
                     authorization: locationAuthorization,
                     surfaceActive: surfaceActive,
@@ -562,7 +582,11 @@ private struct MapboxStandardMap: View {
             // and the redundant SDK compass in favour of our accessible rail.
             .ornamentOptions(OrnamentOptions(
                 scaleBar: ScaleBarViewOptions(visibility: .hidden),
-                compass: CompassViewOptions(visibility: .hidden)
+                compass: CompassViewOptions(visibility: .hidden),
+                logo: LogoViewOptions(position: .bottomRight,
+                    margins: CGPoint(x: 44, y: bottomClearance + 8)),
+                attributionButton: AttributionButtonOptions(position: .bottomRight,
+                    margins: CGPoint(x: 8, y: bottomClearance + 8))
             ))
             .onMapLoaded { _ in
                 onLoaded()
@@ -607,6 +631,9 @@ private struct MapboxStandardMap: View {
                    pendingProgrammaticViewportTokens.isEmpty {
                     armMeFollowIdleReturn(viewport: $viewport)
                 }
+            }
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { _ in
+                surface.invalidateProjection()
             }
             .onDisappear {
                 isVisible = false

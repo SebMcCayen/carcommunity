@@ -3,18 +3,11 @@
 // ``LocationProvider`` seam so the whole machine unit-tests against
 // ``StubLocationProvider``.
 //
-// This is where two parity rules live (mobile-platform-parity, "Security and
-// privacy"):
-// - "Request permissions only when the related feature is used": nothing
-//   happens until a feature calls ``requestAccess()`` from an explicit user
-//   action. Constructing or starting the coordinator never prompts.
-// - "Explain why location ... permission is required": from not-determined,
-//   ``requestAccess()`` lands in ``LocationPermissionFlowState/rationale``
-//   FIRST — the UI shows the why (the `map.locationNeededTitle` /
-//   `map.locationPermissionBody` strings Android's `LocationAccessPrompt`
-//   uses) — and only ``proceedFromRationale()`` raises the system dialog.
-//   The one-shot system prompt is never spent on a user who has not read
-//   what it is for.
+// First authenticated map entry is itself location feature use. The shell
+// offers the explanation once there; constructing/starting this observer does
+// not prompt. Previously denied users are only sent to Settings after an
+// explicit location-dependent action. All requests remain While Using the App.
+// The rationale always precedes the system permission dialog.
 //
 // The iOS counterpart of Android's `LocationAccess` +
 // `locationPermissionRemedy` decision layer. Deliberate deviation, documented
@@ -96,6 +89,15 @@ final class LocationPermissionCoordinator {
                 self.apply(authorization)
             }
         }
+    }
+
+    /// The first foreground map entry may offer location without starting a
+    /// drive or broadcasting anything. Do not nag a previously denied user.
+    @discardableResult
+    func requestInitialMapAccess() -> Bool {
+        guard provider.authorization == .notDetermined, state == .idle else { return false }
+        requestAccess()
+        return state == .rationale
     }
 
     /// A feature that needs location was just used (the user tapped

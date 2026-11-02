@@ -45,14 +45,20 @@ struct ChannelChatScreen: View {
     @ViewBuilder
     private var content: some View {
         if let coordinator {
-            VStack(spacing: 0) {
-                messageArea(coordinator)
-                Divider()
-                if coordinator.chatRepliesEnabled, let target = coordinator.replyTarget {
-                    replyBanner(target, coordinator: coordinator)
+            messageArea(coordinator)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    VStack(spacing: 0) {
+                        Divider()
+                        if coordinator.chatRepliesEnabled, let target = coordinator.replyTarget {
+                            replyBanner(target, coordinator: coordinator)
+                        }
+                        composer(coordinator)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    .background(KccTheme.surface)
                 }
-                composer(coordinator)
-            }
+
         } else {
             placeholder
         }
@@ -72,18 +78,17 @@ struct ChannelChatScreen: View {
     }
 
     private func messageList(_ coordinator: ChannelChatCoordinator) -> some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: KccSpacing.s2) {
-                olderControl(coordinator)
-                ForEach(coordinator.messages) { message in
-                    MessageRow(
-                        message: message,
-                        isOwn: message.senderUid == coordinator.currentUserId
-                    )
-                    .contextMenu { messageActions(message, coordinator: coordinator) }
-                }
+        ChatThreadScrollView(latestMessageID: coordinator.messages.last?.id,
+                             latestIsOwn: coordinator.messages.last?.senderUid == coordinator.currentUserId) {
+            olderControl(coordinator)
+            ForEach(coordinator.messages) { message in
+                MessageRow(
+                    message: message,
+                    isOwn: message.senderUid == coordinator.currentUserId
+                )
+                .id(message.id)
+                .contextMenu { messageActions(message, coordinator: coordinator) }
             }
-            .padding(KccSpacing.s3)
         }
     }
 
@@ -210,7 +215,10 @@ struct ChannelComposer: View {
                 .padding(.vertical, KccSpacing.s1)
                 .frame(minHeight: 48)
                 .background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.lg))
-                .overlay { RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.border) }
+                .overlay {
+                    RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.border)
+                        .allowsHitTesting(false)
+                }
                 .accessibilityIdentifier("chat.composer.input")
             Button(action: onSend) {
                 if dynamicTypeSize.isAccessibilitySize {

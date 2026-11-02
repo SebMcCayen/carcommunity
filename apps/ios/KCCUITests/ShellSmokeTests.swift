@@ -10,6 +10,53 @@ final class ShellSmokeTests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testCommunityOpensAtLatestWithAccessibleText() {
+        for largeText in [false, true] {
+            let app = launch(language: "sv", largeText: largeText, theme: "Dark", chatFixture: true)
+            app.buttons["shell.tab.chat"].tap()
+            let latest = app.staticTexts["Fixture message 39"]
+            let latestExists = latest.waitForExistence(timeout: 15)
+            if !latestExists || !latest.isHittable { chatProof(app, name: "latest-message-failure", tree: true) }
+            XCTAssertTrue(latestExists)
+            XCTAssertTrue(latest.isHittable, "Opening a channel must show its newest message")
+            app.terminate()
+        }
+    }
+
+    func testCommunityComposerStaysVisibleWithKeyboard() {
+        for largeText in [false, true] {
+            let app = launch(language: "sv", largeText: largeText, theme: "Dark", chatFixture: true)
+            app.buttons["shell.tab.chat"].tap()
+            let composer = app.descendants(matching: .any).matching(identifier: "chat.composer.input").firstMatch
+            XCTAssertTrue(composer.waitForExistence(timeout: 15))
+            // SwiftUI's vertical TextField may expose a measuring TextField
+            // as well as the real TextView. Require a tappable editable widget.
+            let candidates = app.textFields.matching(identifier: "chat.composer.input").allElementsBoundByIndex
+                + app.textViews.matching(identifier: "chat.composer.input").allElementsBoundByIndex
+            let input = candidates.first(where: { $0.isHittable })
+                ?? app.descendants(matching: .any).matching(identifier: "chat.composer.input").firstMatch
+            XCTAssertTrue(input.waitForExistence(timeout: 5))
+            if !input.isHittable {
+                chatProof(app, name: "composer-not-hittable", tree: true)
+                print("CHAT_COMPOSER_GEOMETRY input=\(input.frame) footer=\(app.buttons["shell.tab.chat"].frame) screen=\(app.frame)")
+            }
+            XCTAssertTrue(input.isHittable)
+            XCTAssertLessThanOrEqual(input.frame.maxY, app.buttons["shell.tab.chat"].frame.minY)
+            input.tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+            print("CHAT_KEYBOARD_GEOMETRY keyboard=\(app.keyboards.firstMatch.frame) input=\(input.frame) footer=\(app.buttons["shell.tab.chat"].frame)")
+            input.typeText("Fixture reply")
+            let send = app.buttons["chat.composer.send"]
+            XCTAssertTrue(send.isHittable)
+            XCTAssertLessThanOrEqual(send.frame.maxY, app.keyboards.firstMatch.frame.minY + 1)
+            chatProof(app, name: largeText ? "chat-composer-sv-keyboard-accessibility" : "chat-composer-sv-keyboard")
+            send.tap()
+            XCTAssertTrue(app.staticTexts["Fixture reply"].waitForExistence(timeout: 5))
+            XCTAssertFalse((input.value as? String)?.contains("Fixture reply") == true)
+            app.terminate()
+        }
+    }
+
     func testMapBackdropRemainsVisibleAfterTabAndSettingsRoundTrip() {
         let app = launch(language: "en")
         let placeholder = app.staticTexts["shell.mapPlaceholder"]
@@ -51,13 +98,20 @@ final class ShellSmokeTests: XCTestCase {
     func testSavedPlacesDockKeepsCloseToolsAndPrimaryNavigationReachable() {
         let app = launch(language: "en", largeText: true, theme: "Dark")
         let mapIdentity = app.staticTexts["shell.mapPlaceholder"].value as? String
+        let mapFrame = app.staticTexts["shell.mapPlaceholder"].frame
         XCTAssertNotNil(mapIdentity)
         let saved = app.buttons["shell.savedPlaces"]
+        XCTAssertFalse(saved.exists, "Saved places belongs in the avatar menu")
+        app.buttons["shell.menu"].tap()
         XCTAssertTrue(saved.waitForExistence(timeout: 15))
         saved.tap()
         let panel = element("map.reading.panel", in: app)
         let close = app.buttons["map.reading.close"]
         XCTAssertTrue(panel.waitForExistence(timeout: 5))
+        let readingMapFrame = app.staticTexts["shell.mapPlaceholder"].frame
+        XCTAssertEqual(readingMapFrame.minY, mapFrame.minY, accuracy: 1,
+            "Reading a marker must keep the map's full viewport behind its panel")
+        XCTAssertEqual(readingMapFrame.height, mapFrame.height, accuracy: 1)
         XCTAssertTrue(close.isHittable)
         // CGRect conversion can report 48 as 47.99999999999994.
         XCTAssertGreaterThanOrEqual(close.frame.height + 0.001, 48)
@@ -78,6 +132,7 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertFalse(panel.exists, "A reading panel must not reopen after a tab round trip")
         XCTAssertEqual(app.staticTexts["shell.mapPlaceholder"].value as? String, mapIdentity,
             "Opening/closing a dock must retain the same map host")
+        app.buttons["shell.menu"].tap()
         saved.tap()
         XCTAssertTrue(close.waitForExistence(timeout: 5))
         close.tap()
@@ -152,7 +207,7 @@ final class ShellSmokeTests: XCTestCase {
         reveal(zoom, in: scroll, minimumHeight: 0)
         XCTAssertTrue(zoom.waitForExistence(timeout: 5), "Expanded slider tree: \(app.sliders.debugDescription)")
         XCTAssertTrue(zoom.isHittable)
-        app.buttons["Close map layers"].tap()
+        dismissSheet(app, title: "Map layers")
         app.buttons["shell.mapLayers"].tap()
         let system = app.buttons["shell.layersAppearance.system"]
         reveal(system, in: app.scrollViews["shell.layers.content"], minimumHeight: 48)
@@ -178,8 +233,8 @@ final class ShellSmokeTests: XCTestCase {
         screenshot.name = "map-layers-sv-dark-accessibility"
         screenshot.lifetime = .keepAlways
         add(screenshot)
-        XCTAssertTrue(app.buttons["Stäng kartlager"].isHittable)
-        app.buttons["Stäng kartlager"].tap()
+        XCTAssertFalse(app.buttons["Stäng kartlager"].exists)
+        dismissSheet(app, title: "Kartlager")
         XCTAssertTrue(app.buttons["shell.mapLayers"].waitForExistence(timeout: 5))
     }
 
@@ -460,10 +515,8 @@ final class ShellSmokeTests: XCTestCase {
         attach(app, name: "\(prefix)-S53-my-drives-unavailable")
         app.buttons["myDrives.stats"].tap()
         XCTAssertTrue(element("myDrives.stats.unavailable", in: app).waitForExistence(timeout: 5))
-        let statsClose = app.buttons["myDrives.stats.close"]
-        XCTAssertTrue(statsClose.waitForExistence(timeout: 5))
-        XCTAssertTrue(statsClose.isHittable)
-        statsClose.tap()
+        XCTAssertFalse(app.buttons["myDrives.stats.close"].exists)
+        dismissSheet(app, title: nil)
         XCTAssertTrue(app.buttons["myDrives.stats"].waitForExistence(timeout: 5))
         app.buttons[language == "sv" ? "Tillbaka" : "Back"].firstMatch.tap()
         XCTAssertTrue(app.buttons["profile.myDrives"].waitForExistence(timeout: 5))
@@ -472,6 +525,20 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertEqual(map.value as? String, mapIdentity)
         openSettings(app, language: language)
         attach(app, name: "\(prefix)-S69-settings")
+    }
+
+    /// Only the config-less synthetic chat fixture calls this. Inline image
+    /// evidence remains available when optional artifact uploads are disabled.
+    private func chatProof(_ app: XCUIApplication, name: String, tree: Bool = false) {
+        attach(app, name: name)
+        if tree { print("CHAT_FIXTURE_TREE \(app.debugDescription)") }
+        guard let data = app.screenshot().image.jpegData(compressionQuality: 0.55) else { return }
+        let encoded = Array(data.base64EncodedString())
+        print("KCC_CHAT_PROOF_BEGIN \(name).jpg")
+        for start in stride(from: 0, to: encoded.count, by: 4096) {
+            print("KCC_CHAT_PROOF_DATA \(String(encoded[start..<min(start + 4096, encoded.count)]))")
+        }
+        print("KCC_CHAT_PROOF_END \(name).jpg")
     }
 
     private func attach(_ app: XCUIApplication, name: String) {
@@ -483,13 +550,24 @@ final class ShellSmokeTests: XCTestCase {
         add(attachment)
     }
 
-    private func launch(language: String, largeText: Bool = false, theme: String = "Light") -> XCUIApplication {
+    private func dismissSheet(_ app: XCUIApplication, title: String?) {
+        let bar = title.map { app.navigationBars[$0] }
+            ?? app.navigationBars.allElementsBoundByIndex.first(where: { $0.isHittable })
+            ?? app.navigationBars.firstMatch
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+        let start = bar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95))
+        start.press(forDuration: 0.1, thenDragTo: end)
+    }
+
+    private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
         app.launchArguments += ["-KCCUITestTheme", theme]
         // Resolve the SwiftUI fixture before the first frame. UIKit's launch
         // default can retain/transition the preceding test's category.
         app.launchArguments += ["-KCCUITestTextSize", largeText ? "AccessibilityXXXL" : "Large"]
+        if chatFixture { app.launchArguments += ["-KCCUITestChatThread"] }
         app.launch()
         XCTAssertTrue(
             app.buttons["shell.menu"].waitForExistence(timeout: 15),
