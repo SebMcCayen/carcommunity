@@ -103,6 +103,7 @@ struct ShellView: View {
     @AppStorage("kcc.location.initialMapExplanationShown") private var initialMapExplanationShown = false
     @State private var initialMapPermissionPrompt = false
     @State private var primaryNavigationHeight: CGFloat = 0
+    @State private var chatKeyboardPresented = false
     @State private var startDrivingGarage: GarageCoordinator?
     @State private var convoyManagementCoordinator: ConvoyManagementCoordinator?
     @State private var convoyAwareness = ConvoyAwarenessCoordinator()
@@ -176,6 +177,8 @@ struct ShellView: View {
 
     var body: some View {
         shellPresentation
+            .modifier(ChatKeyboardObserver(isPresented: $chatKeyboardPresented))
+            .environment(\.chatKeyboardPresented, chatKeyboardPresented)
             .task(id: signedInUid) { await wireFeatures() }
             .task(id: signedInUid) {
                 openPendingPushDeepLink()
@@ -301,10 +304,12 @@ struct ShellView: View {
             if mapHomeChromeVisible && mapBottomDockVisible { mapBottomDock }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            primaryNavigation
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
-                    primaryNavigationHeight = $0
-                }
+            if !(selectedTab == .chat && chatKeyboardPresented) {
+                primaryNavigation
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                        primaryNavigationHeight = $0
+                    }
+            }
         }
         // Route host: sub-routes render full-screen OVER the tab shell (the
         // Android shell's route-host pattern), each carrying its own back
@@ -652,8 +657,69 @@ struct ShellView: View {
     // A computed `some View` property alone does not bound the concrete type:
     // Release must still decode every nested generic modifier at first render.
     private var mapOverlayContent: AnyView {
+        Color.clear.ignoresSafeArea()
+            .overlay {
+                ZStack {
+                    mapMarkerContent.zIndex(0)
+                    mapChromeContent.zIndex(1)
+                }
+            }
+            .eraseToAnyView()
+    }
+
+    private var mapMarkerContent: AnyView {
+        ZStack {
+            #if DEBUG
+            if ConfiglessMapMarkerFixture.isEnabled {
+                ConfiglessMapMarkerFixture()
+            }
+            #endif
+            if let crownMapCoordinator = crownHuntComposition?.mapCoordinator {
+                CrownHuntMapOverlay(
+                    coordinator: crownMapCoordinator,
+                    projection: mapSurface
+                )
+            }
+            if let perkMapCoordinator = crownHuntComposition?.perkMapCoordinator {
+                CrownPerkMapOverlay(
+                    coordinator: perkMapCoordinator,
+                    projection: mapSurface,
+                    ownFix: crownHuntComposition?.mapCoordinator?.latestFix
+                )
+            }
+            if let incidentMapCoordinator {
+                IncidentMapOverlay(
+                    coordinator: incidentMapCoordinator,
+                    projection: mapSurface,
+                    onSelect: { id in selectMapReading(.incident(id)) }
+                )
+            }
+            if let billboardsCoordinator {
+                BillboardMapOverlay(
+                    coordinator: billboardsCoordinator,
+                    projection: mapSurface
+                )
+            }
+            if liveLocationFeatureEnabled {
+                ConvoyMapAwarenessOverlay(
+                    members: convoyAwareness.visibleMembers,
+                    imageURLs: convoyAwareness.imageURLs,
+                    projection: mapSurface
+                )
+                NearbyLiveOverlay(
+                    coordinator: nearbyLive,
+                    projection: mapSurface,
+                    onSelect: { uid in selectMapReading(.nearby(uid)) }
+                )
+            }
+        }
+
+        .eraseToAnyView()
+    }
+
+
+    private var mapChromeContent: AnyView {
         Color.clear
-            .ignoresSafeArea()
             // Account entries require a real session. Public Settings
             // (including legal links) also remain usable without config.
             .overlay(alignment: .topTrailing) {
@@ -680,48 +746,6 @@ struct ShellView: View {
                     .padding(.vertical, KccSpacing.s2)
                     .background(.regularMaterial, in: Capsule())
                     .padding(.top, KccSpacing.s4)
-                }
-            }
-            .overlay {
-                ZStack {
-                    if let crownMapCoordinator = crownHuntComposition?.mapCoordinator {
-                        CrownHuntMapOverlay(
-                            coordinator: crownMapCoordinator,
-                            projection: mapSurface
-                        )
-                    }
-                    if let perkMapCoordinator = crownHuntComposition?.perkMapCoordinator {
-                        CrownPerkMapOverlay(
-                            coordinator: perkMapCoordinator,
-                            projection: mapSurface,
-                            ownFix: crownHuntComposition?.mapCoordinator?.latestFix
-                        )
-                    }
-                    if let incidentMapCoordinator {
-                        IncidentMapOverlay(
-                            coordinator: incidentMapCoordinator,
-                            projection: mapSurface,
-                            onSelect: { id in selectMapReading(.incident(id)) }
-                        )
-                    }
-                    if let billboardsCoordinator {
-                        BillboardMapOverlay(
-                            coordinator: billboardsCoordinator,
-                            projection: mapSurface
-                        )
-                    }
-                    if liveLocationFeatureEnabled {
-                        ConvoyMapAwarenessOverlay(
-                            members: convoyAwareness.visibleMembers,
-                            imageURLs: convoyAwareness.imageURLs,
-                            projection: mapSurface
-                        )
-                        NearbyLiveOverlay(
-                            coordinator: nearbyLive,
-                            projection: mapSurface,
-                            onSelect: { uid in selectMapReading(.nearby(uid)) }
-                        )
-                    }
                 }
             }
             .overlay {
@@ -1136,7 +1160,10 @@ struct ShellView: View {
                 .accessibilityLabel(Text("incidents.reportButton"))
             }
 
-            MapLayersButton(isPresented: $showMapLayers)
+            MapLayersButton(isPresented: $showMapLayers, isActive:
+                mapLayerPreferences.trafficEnabled || !mapLayerPreferences.is3D ||
+                (mapLayerPreferences.mapModeOverride != nil &&
+                 mapLayerPreferences.mapModeOverride != (colorScheme == .dark ? .night : .day)))
                 .accessibilityIdentifier("shell.mapLayers")
             Button {
                 let next = mapSurface.compassMode.toggled()
@@ -1246,7 +1273,7 @@ struct ShellView: View {
                 // Reserve the measured footer INSIDE that navigation host so
                 // channel composers stay above both navigation and keyboard.
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    Color.clear.frame(height: primaryNavigationHeight)
+                    Color.clear.frame(height: chatKeyboardPresented ? 0 : primaryNavigationHeight)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
                 }

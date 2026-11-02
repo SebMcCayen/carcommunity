@@ -24,6 +24,7 @@ extension EnvironmentValues {
 /// feature coordinators may also be nil in config-less builds.
 struct ChatHubScreen: View {
     @Environment(\.chatReadingActive) private var readingActive
+    @Environment(\.chatKeyboardPresented) private var keyboardPresented
     let coordinator: ChatHubCoordinator?
     let conversationsCoordinator: ConversationsCoordinator?
     let makeNewDialogueCoordinator: (() -> NewDialogueCoordinator)?
@@ -57,7 +58,7 @@ struct ChatHubScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if driverContent != nil {
+            if driverContent != nil && !keyboardPresented {
                 sourcePicker
             }
             ZStack {
@@ -77,7 +78,7 @@ struct ChatHubScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .kccReadingSurface(pageBackground: true)
-        .navigationTitle(Text("chatHub.title"))
+        .navigationTitle(Text(keyboardPresented ? (showsDriver ? "chatHub.tabDriver" : Self.label(for: coordinator?.selectedTab ?? .community)) : "chatHub.title"))
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("chatHub.opaqueScreen")
@@ -87,8 +88,10 @@ struct ChatHubScreen: View {
     private var chatsContent: some View {
         if let coordinator {
             VStack(spacing: 0) {
-                tabStrip(coordinator)
-                if let onOpenEvents {
+                if !keyboardPresented {
+                    tabStrip(coordinator)
+                }
+                if !keyboardPresented, let onOpenEvents {
                     Button(action: onOpenEvents) {
                         Label("shell.socialEvents", systemImage: "calendar")
                             .frame(maxWidth: .infinity, minHeight: 44)

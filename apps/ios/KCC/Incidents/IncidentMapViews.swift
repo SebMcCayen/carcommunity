@@ -25,24 +25,12 @@ struct IncidentMapOverlay: View {
                             coordinator.selectMarker(id: marker.id)
                             onSelect?(marker.id)
                         } label: {
-                            ZStack {
-                                Circle()
-                                    .fill(Color(argb: marker.colorArgb))
-                                    .frame(width: 38, height: 38)
-                                    .shadow(radius: 2, y: 1)
-                                Image(systemName: marker.iconName)
-                                    .font(.system(size: 17, weight: .bold))
-                                    .foregroundStyle(Color(argb: marker.glyphColorArgb))
-                                if marker.reportedCleared {
-                                    Capsule().fill(Color.white.opacity(0.9))
-                                        .frame(width: 34, height: 3)
-                                        .rotationEffect(.degrees(-38))
-                                }
-                            }
+                            IncidentMarkerBadge(marker: marker)
                         }
                         .buttonStyle(.plain)
                         .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
+                        .accessibilityIdentifier("map.incident." + marker.id)
                         .accessibilityLabel(Text(IncidentAccessibility.markerLabel(
                             id: marker.id,
                             incidents: coordinator.incidents,
@@ -60,6 +48,42 @@ struct IncidentMapOverlay: View {
             )
         }
         .allowsHitTesting(true)
+    }
+}
+
+/// Same vector glyphs, 26pt disc, 2.5pt light ring and 1pt dark edge as
+/// Android. The marker's surrounding button retains a 44pt hit target.
+struct IncidentMarkerBadge: View {
+    let marker: MapIncidentMarker
+
+    var body: some View {
+        let disc = IncidentMarkerStyle.discColor(marker.colorArgb, reportedCleared: marker.reportedCleared)
+        let diameter = IncidentMarkerStyle.discDiameter
+        ZStack {
+            Circle().fill(Color(argb: IncidentMarkerStyle.dark))
+                .frame(width: diameter + 7, height: diameter + 7)
+            Circle().fill(Color(argb: IncidentMarkerStyle.light))
+                .frame(width: diameter + 5, height: diameter + 5)
+            Circle().fill(Color(argb: disc)).frame(width: diameter, height: diameter)
+            Group {
+                if let asset = marker.assetName {
+                    Image(asset).renderingMode(.template).resizable().scaledToFit()
+                } else {
+                    Image(systemName: marker.iconName).resizable().scaledToFit()
+                }
+            }
+            .frame(width: diameter * IncidentMarkerStyle.glyphScale, height: diameter * IncidentMarkerStyle.glyphScale)
+            .foregroundStyle(Color(argb: IncidentMarkerStyle.glyphColor(on: disc)))
+            if marker.reportedCleared {
+                Capsule().fill(Color(argb: IncidentMarkerStyle.dark))
+                    .frame(width: diameter * 1.05, height: diameter * 0.14)
+                    .rotationEffect(.degrees(-45))
+                    .frame(width: diameter, height: diameter)
+                    .clipShape(Circle())
+            }
+        }
+        .frame(width: diameter + 7, height: diameter + 7)
+        .accessibilityHidden(true)
     }
 }
 

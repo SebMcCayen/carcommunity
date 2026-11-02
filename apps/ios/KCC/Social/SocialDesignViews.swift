@@ -157,6 +157,7 @@ struct DmComposer: View {
             .accessibilityLabel(Text("dm.send"))
             .accessibilityIdentifier("dm.composer.send")
             .disabled(!DmThreadLogic.isSendable(draft))
+            ChatKeyboardDismissButton()
         }
         .padding(KccSpacing.s3)
         .background(KccTheme.surface)

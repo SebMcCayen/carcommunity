@@ -236,6 +236,7 @@ struct MapIncidentMarker: Equatable, Sendable {
     let colorArgb: UInt32
     let iconName: String
     let glyphColorArgb: UInt32
+    let assetName: String?
     let reportedCleared: Bool
 
     init(
@@ -245,7 +246,8 @@ struct MapIncidentMarker: Equatable, Sendable {
         colorArgb: UInt32,
         iconName: String,
         glyphColorArgb: UInt32,
-        reportedCleared: Bool = false
+        reportedCleared: Bool = false,
+        assetName: String? = nil
     ) {
         self.id = id
         self.longitude = longitude
@@ -253,6 +255,7 @@ struct MapIncidentMarker: Equatable, Sendable {
         self.colorArgb = colorArgb
         self.iconName = iconName
         self.glyphColorArgb = glyphColorArgb
+        self.assetName = assetName
         self.reportedCleared = reportedCleared
     }
 }

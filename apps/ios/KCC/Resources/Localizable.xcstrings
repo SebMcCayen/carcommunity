@@ -4506,6 +4506,23 @@
         }
       }
     },
+    "chat.hideKeyboard": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dölj tangentbord"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide keyboard"
+          }
+        }
+      }
+    },
     "chat.inputPlaceholder": {
       "extractionState": "manual",
       "localizations": {
@@ -36326,6 +36343,57 @@
           "stringUnit": {
             "state": "translated",
             "value": "Club is easier to find in Social."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build6Chat": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chattens menyer fälls undan när du skriver. Dölj tangentbordet med knappen bredvid Skicka utan att förlora utkastet."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat navigation folds away while writing. Hide the keyboard using the button next to Send without losing your draft."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build6Highlight": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mer plats för chatten och tydligare kartikoner."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More room for conversations and clearer map icons."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build6Map": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kartknappar ligger ovanför markörerna. Trafikikoner och kartknappar följer Android-appens utseende."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Map controls stay above markers. Traffic icons and map controls follow the Android design."
           }
         }
       }

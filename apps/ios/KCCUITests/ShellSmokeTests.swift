@@ -72,15 +72,64 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertLessThanOrEqual(input.frame.maxY, app.buttons["shell.tab.chat"].frame.minY)
             input.tap()
             XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
-            print("CHAT_KEYBOARD_GEOMETRY keyboard=\(app.keyboards.firstMatch.frame) input=\(input.frame) footer=\(app.buttons["shell.tab.chat"].frame)")
+            let latest = app.staticTexts["Fixture message 39"]
+            let dismiss = app.buttons["chat.keyboard.dismiss"]
+            XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
+            XCTAssertTrue(latest.isHittable, "Resizing for the keyboard must keep the latest message visible")
+            XCTAssertFalse(app.buttons["shell.tab.chat"].exists, "Hide the primary navigation while writing")
+            XCTAssertFalse(app.buttons["chatHub.source.chats"].exists)
+            XCTAssertFalse(app.buttons["chatHub.channel.0"].exists)
+            XCTAssertFalse(app.buttons["chatHub.events"].exists)
+            // Require usable conversation space, not merely a visible composer.
+            let titleBottom = app.navigationBars.firstMatch.frame.maxY
+            XCTAssertGreaterThan(input.frame.minY - titleBottom, 200)
             input.typeText("Fixture reply")
             let send = app.buttons["chat.composer.send"]
             XCTAssertTrue(send.isHittable)
             XCTAssertLessThanOrEqual(send.frame.maxY, app.keyboards.firstMatch.frame.minY + 1)
-            chatProof(app, name: largeText ? "chat-composer-sv-keyboard-accessibility" : "chat-composer-sv-keyboard")
+            XCTAssertLessThanOrEqual(latest.frame.maxY, input.frame.minY + 1)
+            chatProof(app, name: largeText ? "chat-writing-sv-accessibility" : "chat-writing-sv")
+            dismiss.tap()
+            XCTAssertTrue(app.buttons["shell.tab.chat"].waitForExistence(timeout: 5))
+            XCTAssertFalse(app.keyboards.firstMatch.exists)
+            XCTAssertTrue((input.value as? String)?.contains("Fixture reply") == true, "Hiding the keyboard must preserve the draft")
+            XCTAssertTrue(app.buttons["chatHub.source.chats"].exists)
+            input.tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
             send.tap()
-            XCTAssertTrue(app.staticTexts["Fixture reply"].waitForExistence(timeout: 5))
+            let reply = app.staticTexts["Fixture reply"]
+            XCTAssertTrue(reply.waitForExistence(timeout: 5))
+            XCTAssertTrue(reply.isHittable)
             XCTAssertFalse((input.value as? String)?.contains("Fixture reply") == true)
+            app.terminate()
+        }
+    }
+
+    func testTrafficMarkersStayBelowMapControlsInBothThemes() {
+        for theme in ["Light", "Dark"] {
+            let baseline = launch(language: "sv", theme: theme)
+            let controlIDs = ["shell.menu", "shell.mapLayers"]
+            let points = controlIDs.map { id in
+                let frame = baseline.buttons[id].frame
+                return CGPoint(x: frame.midX, y: frame.midY)
+            }
+            baseline.terminate()
+            let app = launch(language: "sv", theme: theme, markerPoints: points)
+            XCTAssertTrue(app.buttons["map.fixture.covered.0"].exists)
+            XCTAssertTrue(app.buttons["map.fixture.covered.1"].exists)
+            chatProof(app, name: "map-controls-markers-\(theme.lowercased())")
+            // These exact centres also contain tappable incident markers.
+            // The controls must draw and receive touches above those markers.
+            app.buttons["shell.menu"].tap()
+            let settings = app.buttons["shell.settings"]
+            XCTAssertTrue(settings.waitForExistence(timeout: 5))
+            XCTAssertFalse(app.staticTexts["map.fixture.wrongTarget"].exists)
+            settings.tap()
+            XCTAssertTrue(app.navigationBars["Inställningar"].waitForExistence(timeout: 5))
+            app.buttons["Tillbaka"].firstMatch.tap()
+            app.buttons["shell.mapLayers"].tap()
+            XCTAssertTrue(app.navigationBars["Kartlager"].waitForExistence(timeout: 5))
+            XCTAssertFalse(app.staticTexts["map.fixture.wrongTarget"].exists)
             app.terminate()
         }
     }
@@ -588,7 +637,7 @@ final class ShellSmokeTests: XCTestCase {
         start.press(forDuration: 0.1, thenDragTo: end)
     }
 
-    private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false) -> XCUIApplication {
+    private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false, markerPoints: [CGPoint] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
         app.launchArguments += ["-KCCUITestTheme", theme]
@@ -596,6 +645,9 @@ final class ShellSmokeTests: XCTestCase {
         // default can retain/transition the preceding test's category.
         app.launchArguments += ["-KCCUITestTextSize", largeText ? "AccessibilityXXXL" : "Large"]
         if chatFixture { app.launchArguments += ["-KCCUITestChatThread"] }
+        if !markerPoints.isEmpty {
+            app.launchArguments += ["-KCCUITestMapMarkers", markerPoints.map { "\($0.x),\($0.y)" }.joined(separator: ";")]
+        }
         app.launch()
         XCTAssertTrue(
             app.buttons["shell.menu"].waitForExistence(timeout: 15),

@@ -575,7 +575,8 @@
     "replyCancel": "Avbryt svar",
     "replyComposerReplyingTo": "Svarar %1$s",
     "replyComposerBanner": "Svarar på ett meddelande från %1$s",
-    "replyQuoteHeaderAction": "Svar till %1$s: %2$s. Tryck för att visa originalet."
+    "replyQuoteHeaderAction": "Svar till %1$s: %2$s. Tryck för att visa originalet.",
+    "hideKeyboard": "Dölj tangentbord"
   },
   "common": {
     "placeholder": "Kommer snart"
@@ -2156,7 +2157,10 @@
     "release010Build2Icon": "Appikonen visar nu samma krona som på Android, utan text.",
     "release010Build2SignIn": "Apple-inloggningen begär inte längre för- och efternamn. Du väljer ditt visningsnamn/nickname i appen.",
     "release010Build3Highlight": "Stabilitetsförbättring för iPhone.",
-    "release010Build3Map": "Åtgärdar en krasch när kartvyn öppnas efter introduktionen."
+    "release010Build3Map": "Åtgärdar en krasch när kartvyn öppnas efter introduktionen.",
+    "release010Build6Highlight": "Mer plats för chatten och tydligare kartikoner.",
+    "release010Build6Chat": "Chattens menyer fälls undan när du skriver. Dölj tangentbordet med knappen bredvid Skicka utan att förlora utkastet.",
+    "release010Build6Map": "Kartknappar ligger ovanför markörerna. Trafikikoner och kartknappar följer Android-appens utseende."
   },
   "driver": {
     "feed": {

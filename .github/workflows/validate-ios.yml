@@ -108,6 +108,7 @@ jobs:
             -only-testing:KCCUITests/ShellSmokeTests/testClubsMenuRemainsDiscoverableWithoutBackendActivation \
             -only-testing:KCCUITests/ShellSmokeTests/testCommunityOpensAtLatestWithAccessibleText \
             -only-testing:KCCUITests/ShellSmokeTests/testCommunityComposerStaysVisibleWithKeyboard \
+            -only-testing:KCCUITests/ShellSmokeTests/testTrafficMarkersStayBelowMapControlsInBothThemes \
             -only-testing:KCCUITests/ShellSmokeTests/testSavedPlacesDockKeepsCloseToolsAndPrimaryNavigationReachable \
             -resultBundlePath "${RUNNER_TEMP}/ios-chat-smoke.xcresult" \
             test
