@@ -8,6 +8,7 @@ struct ConfiglessMapMarkerFixture: View {
     static var isEnabled: Bool {
         FirebaseApp.app() == nil && ProcessInfo.processInfo.arguments.contains("-KCCUITestMapMarkers")
     }
+    let mapMode: MapMode
     @State private var selected = false
 
     private var points: [CGPoint] {
@@ -41,6 +42,16 @@ struct ConfiglessMapMarkerFixture: View {
                     }
                     .position(x: 35 + CGFloat(index) * 48, y: geometry.size.height * 0.45)
                 }
+                ForEach(0..<5, id: \.self) { index in
+                    VStack(spacing: 12) {
+                        CrownMarkerTile(rank: index == 4 ? 2 : index, inRange: false, mapMode: mapMode, isCuratedPoint: index == 4)
+                        CrownMarkerTile(rank: index == 4 ? 2 : index, inRange: true, mapMode: mapMode, isCuratedPoint: index == 4)
+                    }
+                    .position(x: 35 + CGFloat(index) * 48, y: geometry.size.height * 0.30)
+                }
+                Text(mapMode.rawValue).font(.caption)
+                    .accessibilityIdentifier("map.fixture.crown-mode")
+                    .position(x: geometry.size.width * 0.5, y: geometry.size.height * 0.36)
                 if selected {
                     Text("Covered marker selected").accessibilityIdentifier("map.fixture.wrongTarget")
                 }
