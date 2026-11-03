@@ -73,12 +73,23 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertLessThanOrEqual(input.frame.maxY, app.buttons["shell.tab.chat"].frame.minY)
             input.tap()
             XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
-            let latest = app.staticTexts["Fixture message 39"]
+            let latest = app.staticTexts["chat.message.text.fixture-39"]
             let dismiss = app.buttons["chat.keyboard.dismiss"]
             XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
+            // Hiding the hub chrome rebuilds SwiftUI's AX containers. Resolve
+            // the stable message ID on each snapshot, instead of retaining a
+            // label lookup through the keyboard transition. Require the whole
+            // text to remain inside the usable conversation viewport as well.
             let latestVisible = XCTNSPredicateExpectation(
-                predicate: NSPredicate { _, _ in latest.exists && latest.isHittable }, object: latest)
-            let latestReady = XCTWaiter.wait(for: [latestVisible], timeout: 5) == .completed
+                predicate: NSPredicate { _, _ in
+                    let current = app.staticTexts["chat.message.text.fixture-39"]
+                    let messages = self.element("chat.thread.messages", in: app)
+                    let emoji = self.element("chat.quickEmojiRow", in: app)
+                    guard current.exists, messages.exists, emoji.exists else { return false }
+                    return current.isHittable && current.frame.minY >= messages.frame.minY
+                        && current.frame.maxY <= emoji.frame.minY + 1
+                }, object: app)
+            let latestReady = XCTWaiter.wait(for: [latestVisible], timeout: 10) == .completed
             if !latestReady { chatProof(app, name: "chat-keyboard-latest-failure", tree: true) }
             XCTAssertTrue(latestReady, "Resizing for the keyboard must keep the latest message visible")
             XCTAssertFalse(app.buttons["shell.tab.chat"].exists, "Hide the primary navigation while writing")
