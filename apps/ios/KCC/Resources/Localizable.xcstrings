@@ -579,6 +579,23 @@
         }
       }
     },
+    "addressSearch.opensInAppleMaps": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öppnas i Apple Kartor."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opens in Apple Maps."
+          }
+        }
+      }
+    },
     "addressSearch.recentTitle": {
       "extractionState": "manual",
       "localizations": {
@@ -36462,6 +36479,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Drag the handle on Social and Garage down to return to the map."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build8Highlight": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Navigera vidare från sökresultat."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Navigate from search results."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build8Search": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "När du väljer en sökt eller sparad plats visas ett platskort med Navigera hit. Navigeringen öppnas i Apple Kartor när du trycker på knappen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selecting a searched or saved place now shows a destination card with Navigate here. Navigation opens in Apple Maps when you tap the button."
           }
         }
       }

@@ -1867,6 +1867,7 @@
     <string name="addressSearch_unitKilometers">km</string>
     <string name="addressSearch_unitMinutes">min</string>
     <string name="addressSearch_unitHours">tim</string>
+    <string name="addressSearch_opensInAppleMaps">Öppnas i Apple Kartor.</string>
     <string name="savedPlaces_clearName">Rensa namn</string>
     <string name="savedPlaces_filterAll">Alla</string>
     <string name="savedPlaces_filterFavourites">Favoriter</string>
@@ -2018,6 +2019,8 @@
     <string name="whatsNew_release010Build7Map">Kartan följer din position vid start när du tillåter platsåtkomst, tills du själv flyttar kartan.</string>
     <string name="whatsNew_release010Build7Panels">Dra handtaget på Social och Garage nedåt för att återgå till kartan.</string>
     <string name="whatsNew_release010Build7Chat">Samma snabbemojis som Android finns nu ovanför skrivrutan i alla chattar. De skickas direkt utan att ändra ditt utkast.</string>
+    <string name="whatsNew_release010Build8Highlight">Navigera vidare från sökresultat.</string>
+    <string name="whatsNew_release010Build8Search">När du väljer en sökt eller sparad plats visas ett platskort med Navigera hit. Navigeringen öppnas i Apple Kartor när du trycker på knappen.</string>
     <string name="driver_feed_title">Driver-inlägg</string>
     <string name="driver_feed_source">Från Driver</string>
     <string name="driver_feed_loading">Hämtar inlägg…</string>

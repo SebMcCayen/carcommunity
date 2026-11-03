@@ -79,6 +79,7 @@
 		24E8ADF188DBD83A1446DF15 /* EventFormScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4383BC0C5C249A195B5E166 /* EventFormScreen.swift */; };
 		251360189DF225C0BAB7D6E1 /* GroupDriveRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69A8716D891C79AFC29C37D9 /* GroupDriveRepository.swift */; };
 		2640B3865E738E9D99F1D178 /* DriveEditorDesignTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C656904E8283D93015D20C7 /* DriveEditorDesignTests.swift */; };
+		26F66116E55E9BFCEFD9AD6F /* PlaceNavigationContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C9E8E9FD570651B1633FE2B /* PlaceNavigationContent.swift */; };
 		27C773DE76CFA7FE02160990 /* AppleSignInProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A96B2F50FBACFA6329286FC2 /* AppleSignInProviderTests.swift */; };
 		281529946F7B9975D8B2981F /* ConvoyReactionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F54A7FC1C9C3562639DE9AD8 /* ConvoyReactionModels.swift */; };
 		292854460109584A07D618C1 /* AuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 343B6E8AA56D06395AD48108 /* AuthSession.swift */; };
@@ -127,6 +128,7 @@
 		3C205F3408B57B377A4BF68E /* FirebaseCrownHuntFeatureFlagsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = C793162FE093DA11AA4F879A /* FirebaseCrownHuntFeatureFlagsRepository.swift */; };
 		3C51DBE096C361EA21E9B7E4 /* NearbyLiveOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A974073221EF611F67E2134F /* NearbyLiveOverlay.swift */; };
 		3CB0CA2E730F5886F6D77260 /* LocationModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DA8EE9123DC7661B941CC80 /* LocationModelsTests.swift */; };
+		3CE931578B373B3A1EDB22B3 /* ConfiglessPlaceSearchFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFA53ACD4320F64E097B6526 /* ConfiglessPlaceSearchFixture.swift */; };
 		3D73106FB85DB9F307F3E6CE /* ClubsCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DD0DB5C9D39111AF73F98A9 /* ClubsCoordinator.swift */; };
 		3DE57E2DD0146830170434B7 /* LeaderboardCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED029E7CD662CC6E83F3DED5 /* LeaderboardCoordinatorTests.swift */; };
 		3E13DCE333377C95E42969C4 /* PartnerDesignViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5622739540628F9824DCA10 /* PartnerDesignViews.swift */; };
@@ -191,6 +193,7 @@
 		65984384B971FD9C9145E83A /* BillboardsFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F5071AB8BF4C8701FB4332B /* BillboardsFeatureTests.swift */; };
 		66EB6EF4C235924BE3147D88 /* MapReadingPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF97AFE9E6EE7D02B1CC6563 /* MapReadingPanel.swift */; };
 		670A07E96AE50E55214F6384 /* FirebasePrivacySettingsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC27ACF9E3321114E1ED8017 /* FirebasePrivacySettingsRepository.swift */; };
+		68BA32785EF459E0DD3210F3 /* PlaceNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B83160ECAB7BB767630708A /* PlaceNavigationTests.swift */; };
 		697C89CA4640597CB1B11586 /* ShellNav.swift in Sources */ = {isa = PBXBuildFile; fileRef = F30DAC5CEBAD558BADEB5F13 /* ShellNav.swift */; };
 		6A8D3137D65E505411737B67 /* CrownHuntModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0227EC32DDAB2E0526F5604A /* CrownHuntModelTests.swift */; };
 		6B3602A76E4AD4DF0E84F027 /* FirebaseAppleSubscriptionVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBE4A059282D791332AD1F7F /* FirebaseAppleSubscriptionVerifier.swift */; };
@@ -520,6 +523,7 @@
 		2A566961D5CF0930D60F9A0E /* FirebaseCommunityChatRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseCommunityChatRepository.swift; sourceTree = "<group>"; };
 		2AEBC2338F37CAF85AB970B6 /* FeatureHealth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureHealth.swift; sourceTree = "<group>"; };
 		2B4784B2923232A4F35A31D8 /* NotificationSettingsCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSettingsCoordinator.swift; sourceTree = "<group>"; };
+		2B83160ECAB7BB767630708A /* PlaceNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceNavigationTests.swift; sourceTree = "<group>"; };
 		2CF7861A9787E0693C62C544 /* FeedbackScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackScreens.swift; sourceTree = "<group>"; };
 		2D2BF1BAD556A8C3D22925AB /* EventsCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsCoordinator.swift; sourceTree = "<group>"; };
 		2D3F538846AA195D43958263 /* FeedbackRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackRepository.swift; sourceTree = "<group>"; };
@@ -603,6 +607,7 @@
 		5A73A3FAE1F3AB448A71CE85 /* StartDrivingSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartDrivingSheet.swift; sourceTree = "<group>"; };
 		5B2C74B22F35AD7903DD3B8F /* ChatKeyboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatKeyboard.swift; sourceTree = "<group>"; };
 		5C214A57C432C8F346B4DADD /* ConvoyListScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyListScreen.swift; sourceTree = "<group>"; };
+		5C9E8E9FD570651B1633FE2B /* PlaceNavigationContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceNavigationContent.swift; sourceTree = "<group>"; };
 		5D524D57EA2B43023BC49CE4 /* SignInScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInScreen.swift; sourceTree = "<group>"; };
 		5E55C149A3621F4B3F37F701 /* DiagnosticsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsTests.swift; sourceTree = "<group>"; };
 		5EE77CDC57411F491C270EBF /* Changelog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Changelog.swift; sourceTree = "<group>"; };
@@ -779,6 +784,7 @@
 		BC9DE0933201A46D20EE2ED8 /* ProfileScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileScreen.swift; sourceTree = "<group>"; };
 		BF18AC13F907A6E509CBFF8A /* DrivesCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrivesCoordinatorTests.swift; sourceTree = "<group>"; };
 		BF33E52A64ECBDCE46A94683 /* PushNotificationsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushNotificationsTests.swift; sourceTree = "<group>"; };
+		BFA53ACD4320F64E097B6526 /* ConfiglessPlaceSearchFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfiglessPlaceSearchFixture.swift; sourceTree = "<group>"; };
 		C17EBBBC67C8A0774DC392C7 /* SettingsScreenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreenTests.swift; sourceTree = "<group>"; };
 		C28CE13BEF75D9EF55AF614C /* AccountAccessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountAccessTests.swift; sourceTree = "<group>"; };
 		C310CC90173A772AE9997E6D /* StubLocationProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StubLocationProviderTests.swift; sourceTree = "<group>"; };
@@ -1363,6 +1369,8 @@
 			isa = PBXGroup;
 			children = (
 				B890FC40E398A576774C111F /* AddressSearchClient.swift */,
+				BFA53ACD4320F64E097B6526 /* ConfiglessPlaceSearchFixture.swift */,
+				5C9E8E9FD570651B1633FE2B /* PlaceNavigationContent.swift */,
 				BA4683AF6BA073A749E93339 /* SavedPlaceModels.swift */,
 				E75CC909887C9060C3C58F62 /* SavedPlacesCoordinator.swift */,
 				DC1B03B152F0EF9C1349297A /* SavedPlacesStore.swift */,
@@ -1675,6 +1683,7 @@
 				9791A5716F88255A07D026EB /* PartnersModelTests.swift */,
 				D123BF9682E0A7A2684BA376 /* PerkShopCoordinatorTests.swift */,
 				766FD0B723163B3B95BBB96A /* PerkShopModelTests.swift */,
+				2B83160ECAB7BB767630708A /* PlaceNavigationTests.swift */,
 				4803245DB2D7A4552263F3ED /* PointsCoordinatorTests.swift */,
 				7E43B6F8EA786E2EBA2D634B /* PointsModelsTests.swift */,
 				A7C8CF75F4B1CA5403CC09B3 /* PrivacySettingsCoordinatorTests.swift */,
@@ -1954,6 +1963,7 @@
 				38AAD93EB3B34A46078662B5 /* CommunityChatRepositoryFactory.swift in Sources */,
 				45AB885F82AFAB95AB358469 /* CommunityChatScreen.swift in Sources */,
 				359EF4506E71E7C5C317B495 /* ConfiglessMapMarkerFixture.swift in Sources */,
+				3CE931578B373B3A1EDB22B3 /* ConfiglessPlaceSearchFixture.swift in Sources */,
 				F7EED2B134B04AFBD7C8C6DD /* ConversationsCoordinator.swift in Sources */,
 				201903E2A7F0ECD5B05CBB55 /* ConversationsRepository.swift in Sources */,
 				426194ED964C645421C20298 /* ConversationsScreen.swift in Sources */,
@@ -2160,6 +2170,7 @@
 				D659C88AFC97CAF9AB1DCB5A /* PerkShopModels.swift in Sources */,
 				B2351CA1105F5B7117604053 /* PerkShopRepository.swift in Sources */,
 				0EF031979D5AB6596E205E90 /* PerkShopScreen.swift in Sources */,
+				26F66116E55E9BFCEFD9AD6F /* PlaceNavigationContent.swift in Sources */,
 				BE038C92E98B4D070C66BD0B /* PointsCoordinator.swift in Sources */,
 				24DDD8F4BD4BEA89317B2FD5 /* PointsModels.swift in Sources */,
 				08E7F4ACCA032A83417AA5B3 /* PointsRepository.swift in Sources */,
@@ -2302,6 +2313,7 @@
 				A97B00551DC3EE20B429DACA /* PartnersModelTests.swift in Sources */,
 				17E534749AC4E00E377A3E6B /* PerkShopCoordinatorTests.swift in Sources */,
 				4F15CD3C9F64E61A8F285EBC /* PerkShopModelTests.swift in Sources */,
+				68BA32785EF459E0DD3210F3 /* PlaceNavigationTests.swift in Sources */,
 				239B42F7B910AFF89D2F77D4 /* PointsCoordinatorTests.swift in Sources */,
 				8461BCCF34E3E3EE3E374003 /* PointsModelsTests.swift in Sources */,
 				4F6401742950C4DC5F4FFF76 /* PrivacySettingsCoordinatorTests.swift in Sources */,
@@ -2445,7 +2457,7 @@
 				CODE_SIGN_ENTITLEMENTS = KCC/KCC.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CRASHLYTICS_COLLECTION_ENABLED = NO;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = KCC/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -2501,7 +2513,7 @@
 				CODE_SIGN_ENTITLEMENTS = KCC/KCC.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CRASHLYTICS_COLLECTION_ENABLED = YES;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = KCC/Info.plist;

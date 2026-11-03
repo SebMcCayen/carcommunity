@@ -75,6 +75,7 @@ struct ShellView: View {
     @State private var clubsCoordinator: ClubsCoordinator?
     @State private var savedPlacesCoordinator: SavedPlacesCoordinator?
     @State private var savedPlacesProximity: MapPoint?
+    @State private var placeNavigationFailed = false
 
     /// Feature coordinators are composed once for the signed-in shell. Every
     /// factory is config-safe, so a build without GoogleService-Info.plist
@@ -435,7 +436,7 @@ struct ShellView: View {
         shellReadingDismissals
         .onChange(of: navSearchOpen) { _, open in
             if open { dismissMapReading() }
-            if !open { searchLauncherFocused = true }
+            if !open, mapReadingSelection == nil { searchLauncherFocused = true }
         }
         .onChange(of: locationPermissionCoordinator?.state) { _, state in
             if state == .granted {
@@ -593,6 +594,9 @@ struct ShellView: View {
             Button("notifications.errorDismiss", role: .cancel) {}
         } message: {
             Text("liveLocation.error")
+        }
+        .alert("addressSearch.navAppMissing", isPresented: $placeNavigationFailed) {
+            Button("notifications.errorDismiss", role: .cancel) {}
         }
         .alert(incidentFeedbackTitle, isPresented: incidentFeedbackIsPresented) {
             Button("notifications.errorDismiss", role: .cancel) {
@@ -1086,6 +1090,10 @@ struct ShellView: View {
 
     @ViewBuilder private func mapReadingPanel(_ selection: MapReadingSelection) -> some View {
         switch selection {
+        case .place(let place):
+            MapReadingPanel(title: "shell.placeMenuTitle", onClose: dismissMapReading) {
+                PlaceNavigationContent(place: place) { navigateToPlace(place) }
+            }
         case .crown(let id):
             if let coordinator = crownHuntComposition?.mapCoordinator, coordinator.isAvailable,
                coordinator.selectedTarget?.id == id || CrownCollectPresentation.isAwarded(coordinator.claimStatus) {
@@ -2301,9 +2309,19 @@ struct ShellView: View {
                 searchClient: searchClient
             )
         } else {
+            let store = TransientSavedPlacesStore()
+            let searchClient: AddressSearchClient
+            #if DEBUG
+            if ConfiglessPlaceSearchFixture.isEnabled {
+                store.save(ConfiglessPlaceSearchFixture.savedPlaces)
+                searchClient = ConfiglessPlaceSearchClient()
+            } else { searchClient = UnavailableAddressSearchClient() }
+            #else
+            searchClient = UnavailableAddressSearchClient()
+            #endif
             savedPlacesCoordinator = SavedPlacesCoordinator(
-                store: TransientSavedPlacesStore(),
-                searchClient: UnavailableAddressSearchClient()
+                store: store,
+                searchClient: searchClient
             )
         }
         privacySettingsCoordinator = PrivacySettingsCoordinator(
@@ -2542,10 +2560,21 @@ struct ShellView: View {
 
     private func showPlaceOnMap(_ place: PlaceSuggestion) {
         guard SavedPlacesPolicy.isValid(point: place.point) else { return }
+        dismissMapReading()
+        billboardsCoordinator?.dismiss()
         savedPlacesCoordinator?.clearSearch()
         navSearchOpen = false
         selectedTab = .map
         mapSurface.centerOn(place.point)
+        placeNavigationFailed = false
+        mapReadingSelection = .place(place)
+    }
+
+    private func navigateToPlace(_ place: PlaceSuggestion) {
+        guard let url = PlaceNavigationDestination.drivingURL(to: place.point) else { return }
+        openURL(url) { accepted in
+            if !accepted { placeNavigationFailed = true }
+        }
     }
 
     private func closeAddressSearch() {

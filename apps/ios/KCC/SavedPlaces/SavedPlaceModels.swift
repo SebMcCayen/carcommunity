@@ -22,7 +22,7 @@ enum SavedPlaceKind: String, Codable, CaseIterable, Sendable {
     }
 }
 
-struct PlaceSuggestion: Codable, Equatable, Identifiable, Sendable {
+struct PlaceSuggestion: Codable, Hashable, Identifiable, Sendable {
     let id: String
     let name: String
     let address: String?

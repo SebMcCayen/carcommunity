@@ -41,8 +41,9 @@ jobs:
     # startup margins under the combined simulator/emulator workload.
     # https://docs.github.com/en/actions/reference/runners/github-hosted-runners
     runs-on: macos-26
-    # Keep room for the full simulator, SDK-emulator and device-build sequence.
-    timeout-minutes: 90
+    # The full sequence already takes ~88 minutes. Keep room for the added
+    # search/navigation acceptance without dropping any existing gates.
+    timeout-minutes: 120
 
     steps:
       - name: Checkout
@@ -106,6 +107,8 @@ jobs:
             ENTITLEMENTS_REQUIRED=YES ONLY_ACTIVE_ARCH=YES \
             -parallel-testing-enabled NO \
             -only-testing:KCCUITests/ShellSmokeTests/testClubsMenuRemainsDiscoverableWithoutBackendActivation \
+            -only-testing:KCCUITests/ShellSmokeTests/testSearchSelectionOffersExplicitNavigationAndKeepsTheMap \
+            -only-testing:KCCUITests/ShellSmokeTests/testNavigationHandoffFailureKeepsTheDestinationAvailable \
             -only-testing:KCCUITests/ShellSmokeTests/testCommunityOpensAtLatestWithAccessibleText \
             -only-testing:KCCUITests/ShellSmokeTests/testCommunityComposerStaysVisibleWithKeyboard \
             -only-testing:KCCUITests/ShellSmokeTests/testSocialAndGarageDragHandlesReturnToTheRetainedMap \

@@ -67,6 +67,7 @@ struct KCCApp: App {
             )
             .preferredColorScheme(configlessUITestColorScheme)
             .modifier(ConfiglessUITestDynamicType())
+            .modifier(ConfiglessPlaceNavigationHandoff())
         }
     }
 
