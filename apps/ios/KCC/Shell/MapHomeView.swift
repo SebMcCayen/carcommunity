@@ -660,6 +660,9 @@ private struct MapboxStandardMap: View {
             .onDisappear {
                 isVisible = false
                 mapReady = false
+                if compassFollowRequested {
+                    performProgrammaticViewportChange { viewport = .idle }
+                }
                 meFollowIdleTask?.cancel()
                 meFollowIdleTask = nil
                 meFollowIdleTaskToken = nil
@@ -675,6 +678,7 @@ private struct MapboxStandardMap: View {
                     // A gesture can interrupt an in-flight programmatic animation.
                     // Always suspend now; idle return waits for its token to clear.
                     startupCamera.cancel()
+                    if !meFollowEnabled { compassFollowRequested = false }
                     canonicalCameraTarget = nil
                     guard meFollowEnabled else { return }
                     meFollowSuspended = true
@@ -699,15 +703,15 @@ private struct MapboxStandardMap: View {
                     )
                 }
                 mapReady = proxy.map != nil
-                startOwnLocationIfNeeded()
+                updateOwnLocationForVisibility()
                 armMeFollowIdleReturn(viewport: $viewport)
             }
             .onChange(of: surface.isActive, initial: true) { _, active in
                 surfaceActive = active
-                startOwnLocationIfNeeded()
+                updateOwnLocationForVisibility()
             }
             .onChange(of: scenePhase) { _, _ in
-                startOwnLocationIfNeeded()
+                updateOwnLocationForVisibility()
             }
             .onChange(of: surface.compassMode) { _, _ in
                 guard surfaceActive else { return }
@@ -967,6 +971,20 @@ private struct MapboxStandardMap: View {
             bearing: state.bearing,
             pitch: state.pitch
         )
+    }
+
+    private func updateOwnLocationForVisibility() {
+        guard surfaceActive, scenePhase == .active, isVisible, mapReady else {
+            if compassFollowRequested {
+                performProgrammaticViewportChange { viewport = .idle }
+            }
+            return
+        }
+        if compassFollowRequested, locationAuthorization.isAuthorized, !surface.convoyFocusEnabled {
+            applyCompassViewport(viewport: $viewport, snapshot: surface.cameraSnapshot)
+        } else {
+            startOwnLocationIfNeeded()
+        }
     }
 
     private func startOwnLocationIfNeeded() {
