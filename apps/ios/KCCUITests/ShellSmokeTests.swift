@@ -276,6 +276,27 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertLessThan(chats.frame.minY, 140, "The source selector belongs at the top without a Chat title")
             XCTAssertFalse(app.navigationBars["Chat"].exists)
             chatProof(app, name: largeText ? "chat-header-en-accessibility" : "chat-header-en")
+
+            // Removing the hub bar must not strand actions supplied by its
+            // embedded tabs. Settings stays inline and opens its own bar.
+            let notifications = app.buttons["chatHub.channel.3"]
+            let channels = app.scrollViews["chatHub.channels"]
+            for _ in 0..<4 {
+                if notifications.exists && notifications.isHittable { break }
+                channels.swipeLeft()
+            }
+            XCTAssertTrue(notifications.isHittable)
+            notifications.tap()
+            let settings = app.buttons["notifications.settings"]
+            XCTAssertTrue(settings.waitForExistence(timeout: 10))
+            XCTAssertTrue(settings.isHittable)
+            XCTAssertFalse(app.navigationBars["Chat"].exists)
+            chatProof(app, name: largeText ? "chat-notification-actions-en-accessibility" : "chat-notification-actions-en")
+            settings.tap()
+            XCTAssertTrue(app.navigationBars["Notification settings"].waitForExistence(timeout: 10))
+            app.buttons["Back"].firstMatch.tap()
+            XCTAssertTrue(settings.waitForExistence(timeout: 10))
+            XCTAssertTrue(back.isHittable)
             back.tap()
             assertSelected(app.buttons["shell.tab.map"])
             XCTAssertEqual(map.value as? String, identity)

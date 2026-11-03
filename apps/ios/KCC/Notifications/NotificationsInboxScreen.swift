@@ -21,14 +21,14 @@ struct NotificationsInboxScreen: View {
     /// (config-less build) is modelled inside the coordinator.
     let coordinator: NotificationsInboxCoordinator?
     var onOpenSettings: (() -> Void)? = nil
-    /// False when embedded in Chat Hub, whose title owns the navigation bar.
+    /// Embedded chat keeps its actions inline without a navigation bar.
     var showsNavigationTitle = true
 
     var body: some View {
         titledContent
             .kccReadingSurface(pageBackground: true)
             .task { coordinator?.start() }
-            .toolbar { toolbarContent }
+            .toolbar { if showsNavigationTitle { toolbarContent } }
             .alert(
                 Text("notifications.markReadError"),
                 isPresented: markReadFailurePresented
@@ -59,7 +59,22 @@ struct NotificationsInboxScreen: View {
         if showsNavigationTitle {
             content.navigationTitle(Text("notifications.title"))
         } else {
-            content
+            VStack(spacing: 0) {
+                if (coordinator?.unreadCount ?? 0) > 0 || onOpenSettings != nil {
+                    HStack(spacing: KccSpacing.s2) {
+                        if let coordinator, coordinator.unreadCount > 0 {
+                            markAllReadButton(coordinator).buttonStyle(.bordered)
+                        }
+                        Spacer(minLength: 0)
+                        settingsButton
+                    }
+                    .frame(minHeight: 48)
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                    .padding(.horizontal, KccSpacing.s4)
+                    .padding(.top, KccSpacing.s2)
+                }
+                content
+            }
         }
     }
 
@@ -69,21 +84,32 @@ struct NotificationsInboxScreen: View {
         // the aggregate gate Android puts on the same affordance.
         if let coordinator, coordinator.unreadCount > 0 {
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    Task { await coordinator.markAllRead() }
-                } label: {
-                    Text("notifications.markAllRead")
-                }
-                .disabled(coordinator.markReadStatus == .working)
+                markAllReadButton(coordinator)
             }
         }
+        if onOpenSettings != nil {
+            ToolbarItem(placement: .secondaryAction) { settingsButton }
+        }
+    }
+
+    private func markAllReadButton(_ coordinator: NotificationsInboxCoordinator) -> some View {
+        Button {
+            Task { await coordinator.markAllRead() }
+        } label: {
+            Text("notifications.markAllRead").frame(minHeight: 48)
+        }
+        .disabled(coordinator.markReadStatus == .working)
+        .accessibilityIdentifier("notifications.markAllRead")
+    }
+
+    @ViewBuilder
+    private var settingsButton: some View {
         if let onOpenSettings {
-            ToolbarItem(placement: .secondaryAction) {
-                Button(action: onOpenSettings) {
-                    Image(systemName: "gearshape")
-                }
-                .accessibilityLabel(Text("notifications.settingsTitle"))
+            Button(action: onOpenSettings) {
+                Image(systemName: "gearshape").frame(width: 48, height: 48)
             }
+            .accessibilityLabel(Text("notifications.settingsTitle"))
+            .accessibilityIdentifier("notifications.settings")
         }
     }
 

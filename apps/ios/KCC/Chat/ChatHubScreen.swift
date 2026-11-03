@@ -199,8 +199,8 @@ struct ChatHubScreen: View {
     // NavigationStack), rather than nesting a NavigationStack per tab. Nesting
     // stacks under the out-of-stack tab strip mis-renders the nav bar and would
     // double up once the hub is presented inside the shell's own stack. The
-    // hub's own `chatHub.title` therefore governs the bar; tab content sets no
-    // navigation title of its own.
+    // hub hides the root navigation bar; embedded tabs keep their actions
+    // inline, and pushed convoy threads explicitly restore their own bar.
     @ViewBuilder
     private func tabContent(_ coordinator: ChatHubCoordinator) -> some View {
         switch coordinator.selectedTab {
