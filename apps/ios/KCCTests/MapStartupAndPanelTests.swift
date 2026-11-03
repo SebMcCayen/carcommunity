@@ -8,8 +8,12 @@ final class MapStartupAndPanelTests: XCTestCase {
         XCTAssertFalse(startup.takeFollow(authorized: true, active: false, rendererReady: true))
         XCTAssertFalse(startup.takeFollow(authorized: true, active: true, rendererReady: false))
         XCTAssertTrue(startup.pending)
+        XCTAssertFalse(startup.following)
         XCTAssertTrue(startup.takeFollow(authorized: true, active: true, rendererReady: true))
+        XCTAssertTrue(startup.following, "Style reloads must preserve the native location-follow owner")
         XCTAssertFalse(startup.takeFollow(authorized: true, active: true, rendererReady: true))
+        startup.cancel()
+        XCTAssertFalse(startup.following, "Manual intent/revocation releases the camera owner")
     }
 
     func testManualCameraIntentCancelsDelayedStartupFollowing() {

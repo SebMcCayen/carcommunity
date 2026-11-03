@@ -350,12 +350,17 @@ private final class ConvoyViewportInteractionObserver: @preconcurrency ViewportS
 /// grants must not pull a manually positioned camera back to the member.
 struct MapHomeStartupCameraPolicy {
     private(set) var pending = true
+    private(set) var following = false
 
-    mutating func cancel() { pending = false }
+    mutating func cancel() {
+        pending = false
+        following = false
+    }
 
     mutating func takeFollow(authorized: Bool, active: Bool, rendererReady: Bool) -> Bool {
         guard pending, authorized, active, rendererReady else { return false }
         pending = false
+        following = true
         return true
     }
 }
@@ -756,6 +761,7 @@ private struct MapboxStandardMap: View {
                 locationAuthorization = authorization
                 startOwnLocationIfNeeded()
                 if !authorization.isAuthorized, compassFollowRequested {
+                    startupCamera.cancel()
                     compassFollowRequested = false
                     // Stop the explicit follow viewport when consent is lost.
                     performProgrammaticViewportChange { viewport = .idle }
@@ -919,6 +925,7 @@ private struct MapboxStandardMap: View {
                 )
             },
             center: { point in
+                let wasWaitingForInitialLocation = startupCamera.pending
                 startupCamera.cancel()
                 compassFollowRequested = false
                 if meFollowEnabled.wrappedValue {
@@ -930,9 +937,9 @@ private struct MapboxStandardMap: View {
                     MapHomeCameraTarget(
                         latitude: point.latitude,
                         longitude: point.longitude,
-                        zoom: baseTarget.zoom,
+                        zoom: wasWaitingForInitialLocation ? surface.browsingZoom : baseTarget.zoom,
                         bearing: baseTarget.bearing,
-                        pitch: baseTarget.pitch
+                        pitch: wasWaitingForInitialLocation ? (surface.is3D ? 45 : 0) : baseTarget.pitch
                     ),
                     duration: 0.9,
                     viewport: viewport
@@ -946,6 +953,18 @@ private struct MapboxStandardMap: View {
             },
             cameraPreferences: { enabled, zoom in
                 MapHomeStyleLayers.apply3D(enabled, to: map)
+                // Renderer attachment replays preferences before the first fix.
+                // Keep the neutral overview pending consent, and keep native
+                // puck ownership after style reloads instead of replacing it
+                // with a fixed camera at the renderer's preceding coordinate.
+                if startupCamera.pending { return }
+                if startupCamera.following {
+                    if isVisible, surfaceActive, scenePhase == .active,
+                       locationAuthorization.isAuthorized, !surface.convoyFocusEnabled {
+                        applyCompassViewport(viewport: viewport, snapshot: surface.cameraSnapshot)
+                    }
+                    return
+                }
                 let state = map.cameraState
                 let target = (canonicalCameraTarget ?? cameraTarget(from: state))
                     .applyingPreferences(
