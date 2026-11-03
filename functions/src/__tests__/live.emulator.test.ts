@@ -30,16 +30,20 @@ import {
 } from 'firebase/functions';
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getDatabase as getAdminDatabase } from 'firebase-admin/database';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { db as liveDb } from '../firebase';
 import { runLiveCleanup } from '../live/scheduled';
 import {
   activateDiscoveryGeneration,
   commitLatestForActiveSession,
+  stampDiscoveryForActiveSession,
   stopAndClear,
+  updatePosition,
   writeDiscoveryForGeneration,
 } from '../live/session';
+import { buildSession } from '../live/live-core';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -48,7 +52,10 @@ const REGION = 'europe-west1';
 const adminApp =
   getAdminApps()[0] ??
   initializeAdminApp(
-    { projectId: PROJECT_ID, databaseURL: `http://${EMULATOR_HOST}:9000?ns=${PROJECT_ID}-default-rtdb` },
+    {
+      projectId: PROJECT_ID,
+      databaseURL: `http://${EMULATOR_HOST}:9000?ns=${PROJECT_ID}-default-rtdb`,
+    },
     'live-emulator-tests',
   );
 const adminAuth = getAdminAuth(adminApp);
@@ -143,6 +150,244 @@ afterAll(async () => {
   await deleteApp(app);
 });
 
+/** Hold an update after its successful Firestore write, before its RTDB stamp. */
+async function discoveryStampFixture(legacy = false) {
+  const uid = `stamp-race-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const now = new Date();
+  const session = {
+    ...buildSession(`session-${uid}`, '1h', now, 'Stamp race'),
+    ...(legacy ? {} : { generation: 17 }),
+  };
+  const root = adminRtdb.ref(`liveLocation/${uid}`);
+  await root.set({ session });
+  await activateDiscoveryGeneration(uid, session);
+  const heldSession = await commitLatestForActiveSession(uid, coordinate(now.toISOString()), now);
+  expect(heldSession?.id).toBe(session.id);
+  expect(
+    await writeDiscoveryForGeneration(uid, heldSession!, { uid, geoCell: 'held-cell' }, now),
+  ).toBe(true);
+  return { uid, now, session: heldSession!, root };
+}
+
+describe('liveDiscoveryFence readiness stamps', () => {
+  it.each([
+    ['same-cell', 'Firestore'],
+    ['cross-cell', 'Firestore'],
+    ['same-cell', 'RTDB'],
+    ['cross-cell', 'RTDB'],
+  ])(
+    'keeps both stores on the newer request after an older %s %s completion',
+    async (cell, store) => {
+      const { uid, now, session, root } = await discoveryStampFixture();
+      const older = new Date(now.getTime() + 1_000);
+      const newer = new Date(now.getTime() + 2_000);
+      const oldCell = cell === 'same-cell' ? 'cell-b' : 'cell-a';
+      const fields = (geoCell: string, latitude: number, at: Date) => ({
+        uid,
+        geoCell,
+        latitude,
+        longitude: 18.063,
+        updatedAt: FieldValue.serverTimestamp(),
+        expiresAt: Timestamp.fromDate(new Date(at.getTime() + 15 * 60_000)),
+      });
+      const oldFields = fields(oldCell, 59.334, older);
+      const newFields = fields('cell-b', 59.335, newer);
+      if (store === 'RTDB') {
+        // A's discovery write succeeded, but its RTDB completion is still held.
+        expect(await writeDiscoveryForGeneration(uid, session, oldFields, older)).toBe(true);
+      }
+      expect(await writeDiscoveryForGeneration(uid, session, newFields, newer)).toBe(true);
+      await stampDiscoveryForActiveSession(uid, session, 'cell-b', newer);
+      const expectedDiscovery = (await adminDb.collection('liveSessions').doc(uid).get()).data();
+      const expectedRoot = (await root.get()).val();
+      expect(expectedDiscovery).toMatchObject({
+        geoCell: 'cell-b',
+        latitude: 59.335,
+        refreshRequestedAtMs: newer.getTime(),
+        expiresAt: newFields.expiresAt,
+      });
+      expect(expectedDiscovery?.updatedAt).toBeInstanceOf(Timestamp);
+      expect(expectedRoot.session).toMatchObject({
+        discoveryGeoCell: 'cell-b',
+        discoveryRefreshedAt: newer.toISOString(),
+      });
+
+      // Complete A only after B has fully published. The Firestore case used to
+      // overwrite B's index while B's throttle suppressed its repair for 60s.
+      if (store === 'Firestore') {
+        expect(await writeDiscoveryForGeneration(uid, session, oldFields, older)).toBe(false);
+      } else {
+        await stampDiscoveryForActiveSession(uid, session, oldCell, older);
+      }
+      expect((await adminDb.collection('liveSessions').doc(uid).get()).data()).toEqual(
+        expectedDiscovery,
+      );
+      expect((await root.get()).val()).toEqual(expectedRoot);
+    },
+  );
+
+  it('rejects equal-millisecond duplicate refreshes without changing either store', async () => {
+    const { uid, now, session, root } = await discoveryStampFixture();
+    await stampDiscoveryForActiveSession(uid, session, 'held-cell', now);
+    const beforeDiscovery = (await adminDb.collection('liveSessions').doc(uid).get()).data();
+    const beforeRoot = (await root.get()).val();
+    expect(
+      await writeDiscoveryForGeneration(uid, session, { uid, geoCell: 'duplicate-cell' }, now),
+    ).toBe(false);
+    await stampDiscoveryForActiveSession(uid, session, 'duplicate-cell', now);
+    expect((await adminDb.collection('liveSessions').doc(uid).get()).data()).toEqual(
+      beforeDiscovery,
+    );
+    expect((await root.get()).val()).toEqual(beforeRoot);
+  });
+
+  it('accepts a legacy discovery doc without ordering state, then enforces request order', async () => {
+    const { uid, now, session } = await discoveryStampFixture(true);
+    const ref = adminDb.collection('liveSessions').doc(uid);
+    await ref.update({ refreshRequestedAtMs: FieldValue.delete() });
+    expect((await ref.get()).get('refreshRequestedAtMs')).toBeUndefined();
+    expect(await writeDiscoveryForGeneration(uid, session, { uid, geoCell: 'ordered' }, now)).toBe(
+      true,
+    );
+    expect((await ref.get()).data()).toMatchObject({
+      sessionId: session.id,
+      sessionGeneration: 0,
+      refreshRequestedAtMs: now.getTime(),
+      geoCell: 'ordered',
+    });
+    expect(
+      await writeDiscoveryForGeneration(
+        uid,
+        session,
+        { uid, geoCell: 'older' },
+        new Date(now.getTime() - 1),
+      ),
+    ).toBe(false);
+    expect((await ref.get()).get('geoCell')).toBe('ordered');
+  });
+
+  it('does not access either discovery document for throttled same-cell position samples', async () => {
+    await signInAs(member);
+    await call('live-startSession', { duration: '1h' });
+    // Run the real handler against the emulators, observing its own Firestore
+    // instance. HTTP runs in another process and cannot expose read counts.
+    const collectionSpy = vi.spyOn(liveDb, 'collection');
+    const update = (latitude: number) =>
+      updatePosition.run({
+        auth: { uid: member.uid, token: {} },
+        data: { coordinate: { ...coordinate(new Date().toISOString()), latitude } },
+      } as never);
+    try {
+      await update(59.334);
+      expect(collectionSpy.mock.calls.filter(([path]) => path === 'liveSessions')).toHaveLength(2);
+      expect(
+        collectionSpy.mock.calls.filter(([path]) => path === '_liveSessionFences'),
+      ).toHaveLength(1);
+      collectionSpy.mockClear();
+      for (const latitude of [59.33401, 59.33402, 59.33403]) await update(latitude);
+      expect(
+        collectionSpy.mock.calls.filter(
+          ([path]) => path === 'liveSessions' || path === '_liveSessionFences',
+        ),
+      ).toEqual([]);
+      expect((await adminRtdb.ref(`liveLocation/${member.uid}/latest`).get()).val().latitude).toBe(
+        59.33403,
+      );
+    } finally {
+      collectionSpy.mockRestore();
+      await call('live-stopSession', {});
+    }
+  });
+
+  it.each(['id', 'generation', 'both'] as const)(
+    'does not stamp a replacement session with a different %s after discovery was cleared',
+    async (changed) => {
+      const { uid, now, session, root } = await discoveryStampFixture();
+      const replacement = {
+        ...session,
+        id: changed === 'generation' ? session.id : `replacement-${uid}`,
+        generation: changed === 'id' ? session.generation : session.generation! + 1,
+      };
+      // Deterministically complete restart/cleanup in the gap after A's
+      // Firestore success, using the same stores and activation as startSession.
+      await root.set({ session: replacement });
+      await activateDiscoveryGeneration(uid, replacement);
+      expect((await adminDb.collection('liveSessions').doc(uid).get()).exists).toBe(false);
+
+      await stampDiscoveryForActiveSession(uid, session, 'held-cell', now);
+      expect((await root.get()).val()).toEqual({ session: replacement });
+      expect((await adminDb.collection('liveSessions').doc(uid).get()).exists).toBe(false);
+
+      // B still needs its own successful refresh to become ready.
+      expect(
+        await writeDiscoveryForGeneration(uid, replacement, { uid, geoCell: 'new-cell' }, now),
+      ).toBe(true);
+      await stampDiscoveryForActiveSession(uid, replacement, 'new-cell', now);
+      expect((await root.child('session').get()).val()).toEqual({
+        ...replacement,
+        discoveryRefreshedAt: now.toISOString(),
+        discoveryGeoCell: 'new-cell',
+      });
+    },
+  );
+
+  it.each(['stop', 'hide', 'purge', 'expiry'] as const)(
+    'does not stamp or recreate a session when %s completes after Firestore success',
+    async (transition) => {
+      const { uid, now, session, root } = await discoveryStampFixture();
+      if (transition === 'stop' || transition === 'hide') {
+        await stopAndClear(uid, transition === 'stop' ? 'user_stop' : 'hide_me_now');
+      } else if (transition === 'purge') {
+        await root.remove();
+        await stopAndClear(uid, 'hide_me_now');
+      } else {
+        await root.child('session/expiresAt').set(new Date(Date.now() - 1_000).toISOString());
+      }
+      const beforeStamp = (await root.get()).val();
+      await stampDiscoveryForActiveSession(uid, session, 'held-cell', now);
+      expect((await root.get()).val()).toEqual(beforeStamp);
+      if (transition === 'purge') expect((await root.get()).exists()).toBe(false);
+      if (transition !== 'expiry') {
+        expect((await adminDb.collection('liveSessions').doc(uid).get()).exists).toBe(false);
+      }
+    },
+  );
+
+  it.each([false, true])(
+    'preserves intervening fields and rejects out-of-order stamps (legacy session: %s)',
+    async (legacy) => {
+      const { uid, now, session, root } = await discoveryStampFixture(legacy);
+      // Extend/counters/other bookkeeping changed while this refresh was held.
+      await root.child('session').update({
+        expiresAt: new Date(now.getTime() + 2 * 60 * 60_000).toISOString(),
+        pointsDistanceMeters: 1234,
+        crownActivityAt: now.toISOString(),
+        crownActivityCell: 'activity-cell',
+        extraField: { preserved: true },
+      });
+      const beforeStamp = (await root.get()).val();
+      const newer = new Date(now.getTime() + 1_000);
+      await stampDiscoveryForActiveSession(uid, session, 'newer-cell', newer);
+      const expected = {
+        ...beforeStamp,
+        session: {
+          ...beforeStamp.session,
+          discoveryRefreshedAt: newer.toISOString(),
+          discoveryGeoCell: 'newer-cell',
+        },
+      };
+      expect((await root.get()).val()).toEqual(expected);
+
+      // Neither an older completion nor a same-millisecond completion may
+      // replace the already recorded time/cell pair.
+      await stampDiscoveryForActiveSession(uid, session, 'held-cell', now);
+      expect((await root.get()).val()).toEqual(expected);
+      await stampDiscoveryForActiveSession(uid, session, 'equal-time-cell', newer);
+      expect((await root.get()).val()).toEqual(expected);
+    },
+  );
+});
+
 describe('live session lifecycle', () => {
   it.each([
     ['stop', 'user_stop' as const],
@@ -183,15 +428,20 @@ describe('live session lifecycle', () => {
 
       // Resume the old update. The equal-generation inactive fence must win,
       // and the root transaction must prevent any later RTDB resurrection.
-      const discoveryWritten = await writeDiscoveryForGeneration(uid, heldSession!, {
+      const discoveryWritten = await writeDiscoveryForGeneration(
         uid,
-        latitude: 59.334,
-        longitude: 18.063,
-        geoCell: 'race-cell',
-        displayName: 'Race test',
-        updatedAt: Timestamp.fromDate(now),
-        expiresAt: Timestamp.fromDate(new Date(now.getTime() + 15 * 60_000)),
-      });
+        heldSession!,
+        {
+          uid,
+          latitude: 59.334,
+          longitude: 18.063,
+          geoCell: 'race-cell',
+          displayName: 'Race test',
+          updatedAt: Timestamp.fromDate(now),
+          expiresAt: Timestamp.fromDate(new Date(now.getTime() + 15 * 60_000)),
+        },
+        now,
+      );
       expect(discoveryWritten).toBe(false);
       expect((await adminRtdb.ref(`liveLocation/${uid}/latest`).get()).exists()).toBe(false);
       expect((await adminDb.collection('liveSessions').doc(uid).get()).exists).toBe(false);
@@ -236,20 +486,23 @@ describe('live session lifecycle', () => {
     };
 
     // Missing lifecycle authorization must never be minted by a position write.
-    expect(await writeDiscoveryForGeneration(uid, session, fields)).toBe(false);
+    expect(await writeDiscoveryForGeneration(uid, session, fields, now)).toBe(false);
     expect((await adminDb.collection('_liveSessionFences').doc(uid).get()).exists).toBe(false);
     expect((await adminDb.collection('liveSessions').doc(uid).get()).exists).toBe(false);
 
     // A newer RTDB session may publish only after its start path activates the
     // matching Firestore generation; an older active fence is not sufficient.
-    await adminDb.collection('_liveSessionFences').doc(uid).set({
-      generation: session.generation - 1,
-      sessionId: 'older-session',
-      active: true,
-    });
-    expect(await writeDiscoveryForGeneration(uid, session, fields)).toBe(false);
+    await adminDb
+      .collection('_liveSessionFences')
+      .doc(uid)
+      .set({
+        generation: session.generation - 1,
+        sessionId: 'older-session',
+        active: true,
+      });
+    expect(await writeDiscoveryForGeneration(uid, session, fields, now)).toBe(false);
     await activateDiscoveryGeneration(uid, session);
-    expect(await writeDiscoveryForGeneration(uid, session, fields)).toBe(true);
+    expect(await writeDiscoveryForGeneration(uid, session, fields, now)).toBe(true);
     expect((await adminDb.collection('liveSessions').doc(uid).get()).data()).toMatchObject({
       sessionId: session.id,
       sessionGeneration: session.generation,
@@ -291,15 +544,20 @@ describe('live session lifecycle', () => {
     expect((await adminDb.collection('_liveSessionFences').doc(uid).get()).exists).toBe(false);
     expect((await adminDb.collection('liveSessions').doc(uid).get()).exists).toBe(false);
 
-    const resumed = await writeDiscoveryForGeneration(uid, heldSession, {
+    const resumed = await writeDiscoveryForGeneration(
       uid,
-      latitude: 59.335,
-      longitude: 18.064,
-      geoCell: 'purge-cell',
-      displayName: 'Purge race',
-      updatedAt: Timestamp.fromDate(now),
-      expiresAt: Timestamp.fromDate(new Date(now.getTime() + 15 * 60_000)),
-    });
+      heldSession,
+      {
+        uid,
+        latitude: 59.335,
+        longitude: 18.064,
+        geoCell: 'purge-cell',
+        displayName: 'Purge race',
+        updatedAt: Timestamp.fromDate(now),
+        expiresAt: Timestamp.fromDate(new Date(now.getTime() + 15 * 60_000)),
+      },
+      now,
+    );
     expect(resumed).toBe(false);
     expect((await adminDb.collection('_liveSessionFences').doc(uid).get()).exists).toBe(false);
     expect((await adminDb.collection('liveSessions').doc(uid).get()).exists).toBe(false);
@@ -312,15 +570,18 @@ describe('live session lifecycle', () => {
       .doc(member.uid)
       .set({ displayName: 'Sebbe' }, { merge: true });
     // Seed the member's main car so the session denormalizes it onto the marker.
-    await adminDb.collection('vehicles').doc('veh-main').set({
-      userId: member.uid,
-      make: 'Volvo',
-      model: '242',
-      modelYear: 1980,
-      powertrain: 'petrol',
-      imagePath: `vehicleImages/${member.uid}/veh-main/photo.jpg`,
-      isMainCar: true,
-    });
+    await adminDb
+      .collection('vehicles')
+      .doc('veh-main')
+      .set({
+        userId: member.uid,
+        make: 'Volvo',
+        model: '242',
+        modelYear: 1980,
+        powertrain: 'petrol',
+        imagePath: `vehicleImages/${member.uid}/veh-main/photo.jpg`,
+        isMainCar: true,
+      });
 
     const started = (await call('live-startSession', { duration: '1h' })).data as {
       sessionId: string;
@@ -328,7 +589,18 @@ describe('live session lifecycle', () => {
     };
     expect(started.sessionId).toBeTruthy();
 
-    await call('live-updatePosition', { coordinate: coordinate(new Date().toISOString()) });
+    const recordedAt = new Date().toISOString();
+    expect(
+      (await call('live-updatePosition', { coordinate: coordinate(recordedAt) })).data,
+    ).toEqual({
+      recordedAt,
+    });
+    const refreshedSession = (
+      await adminRtdb.ref(`liveLocation/${member.uid}/session`).get()
+    ).val();
+    const discovery = (await adminDb.collection('liveSessions').doc(member.uid).get()).data();
+    expect(Number.isFinite(Date.parse(refreshedSession.discoveryRefreshedAt))).toBe(true);
+    expect(refreshedSession.discoveryGeoCell).toBe(discovery?.geoCell);
 
     const latest = (await adminRtdb.ref(`liveLocation/${member.uid}/latest`).get()).val();
     expect(latest).toMatchObject({
@@ -354,26 +626,35 @@ describe('live session lifecycle', () => {
 
   it('denormalizes the CHOSEN car when the Start-driving picker sends a vehicleId', async () => {
     await signInAs(member);
-    await adminDb.collection('users').doc(member.uid).set({ displayName: 'Sebbe' }, { merge: true });
+    await adminDb
+      .collection('users')
+      .doc(member.uid)
+      .set({ displayName: 'Sebbe' }, { merge: true });
     // Two cars: one is main, the other is the one the user picks in the popup.
-    await adminDb.collection('vehicles').doc('veh-main-2').set({
-      userId: member.uid,
-      make: 'Volvo',
-      model: '242',
-      modelYear: 1980,
-      powertrain: 'petrol',
-      imagePath: `vehicleImages/${member.uid}/veh-main-2/photo.jpg`,
-      isMainCar: true,
-    });
-    await adminDb.collection('vehicles').doc('veh-picked').set({
-      userId: member.uid,
-      make: 'Saab',
-      model: '900',
-      modelYear: 1993,
-      powertrain: 'petrol',
-      imagePath: `vehicleImages/${member.uid}/veh-picked/photo.jpg`,
-      isMainCar: false,
-    });
+    await adminDb
+      .collection('vehicles')
+      .doc('veh-main-2')
+      .set({
+        userId: member.uid,
+        make: 'Volvo',
+        model: '242',
+        modelYear: 1980,
+        powertrain: 'petrol',
+        imagePath: `vehicleImages/${member.uid}/veh-main-2/photo.jpg`,
+        isMainCar: true,
+      });
+    await adminDb
+      .collection('vehicles')
+      .doc('veh-picked')
+      .set({
+        userId: member.uid,
+        make: 'Saab',
+        model: '900',
+        modelYear: 1993,
+        powertrain: 'petrol',
+        imagePath: `vehicleImages/${member.uid}/veh-picked/photo.jpg`,
+        isMainCar: false,
+      });
 
     // Picking the non-main car denormalizes IT, not the main car.
     await call('live-startSession', { duration: '1h', vehicleId: 'veh-picked' });
@@ -644,13 +925,13 @@ describe('live TTL sweep', () => {
     await runLiveCleanup(now);
 
     // The session is untouched — still active — so the convoy it backs stays live.
-    expect(
-      (await adminRtdb.ref('liveLocation/ttl-convoy-parked/session/status').get()).val(),
-    ).toBe('active');
+    expect((await adminRtdb.ref('liveLocation/ttl-convoy-parked/session/status').get()).val()).toBe(
+      'active',
+    );
     // And the marker is kept, so the member stays visible to the convoy.
-    expect(
-      (await adminRtdb.ref('liveLocation/ttl-convoy-parked/latest').get()).exists(),
-    ).toBe(true);
+    expect((await adminRtdb.ref('liveLocation/ttl-convoy-parked/latest').get()).exists()).toBe(
+      true,
+    );
   });
 });
 
@@ -769,9 +1050,7 @@ describe('live-location block mirror (blocking-onBlockWrite)', () => {
     // mirrors it to RTDB so the liveLocation read rule can enforce it.
     await call('blocking-block', { targetUserId: target.uid });
     const mirrored = await pollUntil(async () => {
-      const snap = await adminRtdb
-        .ref(`liveLocationBlocks/${member.uid}/${target.uid}`)
-        .get();
+      const snap = await adminRtdb.ref(`liveLocationBlocks/${member.uid}/${target.uid}`).get();
       return snap.val() === true ? true : undefined;
     });
     expect(mirrored).toBe(true);
@@ -779,9 +1058,7 @@ describe('live-location block mirror (blocking-onBlockWrite)', () => {
     // Unblock removes the mirror node.
     await call('blocking-unblock', { targetUserId: target.uid });
     const removed = await pollUntil(async () => {
-      const snap = await adminRtdb
-        .ref(`liveLocationBlocks/${member.uid}/${target.uid}`)
-        .get();
+      const snap = await adminRtdb.ref(`liveLocationBlocks/${member.uid}/${target.uid}`).get();
       return snap.exists() ? undefined : true;
     });
     expect(removed).toBe(true);
