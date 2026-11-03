@@ -172,6 +172,33 @@ export async function writeDiscoveryForGeneration(
   });
 }
 
+/** A completed Firestore refresh may stamp only its still-active RTDB session. */
+export async function stampDiscoveryForActiveSession(
+  uid: string,
+  session: LiveSession,
+  geoCell: string,
+  refreshedAt: Date,
+): Promise<void> {
+  await sessionRef(uid).transaction((current: LiveSession | null) => {
+    // A cold SDK cache also starts at null: let the server compare/retry, but
+    // never offer a captured session as a candidate that could recreate it.
+    if (current === null) return null;
+    if (
+      current.id !== session.id ||
+      sessionGeneration(current) !== sessionGeneration(session) ||
+      !isSessionActive(current, new Date()) ||
+      Date.parse(current.discoveryRefreshedAt ?? '') >= refreshedAt.getTime()
+    ) {
+      return;
+    }
+    return {
+      ...current,
+      discoveryRefreshedAt: refreshedAt.toISOString(),
+      discoveryGeoCell: geoCell,
+    };
+  });
+}
+
 /**
  * Atomically validates the current session and publishes its RTDB marker at the
  * same path. Stop/hide/start transact on this same root, eliminating the old
@@ -395,14 +422,10 @@ export const updatePosition = onCall(
         updatedAt: FieldValue.serverTimestamp(),
         expiresAt: Timestamp.fromDate(discoveryExpiresAt(session!.expiresAt, now)),
       });
-      // Record the throttle state on the session node (cheap RTDB update) so the
-      // next samples can skip the Firestore write until the interval elapses or
-      // the cell changes.
+      // Start/stop/purge may have won after the Firestore write. Stamp only the
+      // exact active session, preserving any intervening session-field updates.
       if (discoveryWritten) {
-        await sessionRef(actor.uid).update({
-          discoveryRefreshedAt: now.toISOString(),
-          discoveryGeoCell: discoveryFields.geoCell,
-        });
+        await stampDiscoveryForActiveSession(actor.uid, session, discoveryFields.geoCell, now);
       }
     }
 

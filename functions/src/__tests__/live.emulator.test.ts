@@ -37,9 +37,11 @@ import { runLiveCleanup } from '../live/scheduled';
 import {
   activateDiscoveryGeneration,
   commitLatestForActiveSession,
+  stampDiscoveryForActiveSession,
   stopAndClear,
   writeDiscoveryForGeneration,
 } from '../live/session';
+import { buildSession } from '../live/live-core';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -141,6 +143,115 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await deleteApp(app);
+});
+
+/** Hold an update after its successful Firestore write, before its RTDB stamp. */
+async function discoveryStampFixture(legacy = false) {
+  const uid = `stamp-race-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const now = new Date();
+  const session = {
+    ...buildSession(`session-${uid}`, '1h', now, 'Stamp race'),
+    ...(legacy ? {} : { generation: 17 }),
+  };
+  const root = adminRtdb.ref(`liveLocation/${uid}`);
+  await root.set({ session });
+  await activateDiscoveryGeneration(uid, session);
+  const heldSession = await commitLatestForActiveSession(uid, coordinate(now.toISOString()), now);
+  expect(heldSession?.id).toBe(session.id);
+  expect(await writeDiscoveryForGeneration(uid, heldSession!, { uid, geoCell: 'held-cell' })).toBe(
+    true,
+  );
+  return { uid, now, session: heldSession!, root };
+}
+
+describe('liveDiscoveryFence readiness stamps', () => {
+  it.each(['id', 'generation', 'both'] as const)(
+    'does not stamp a replacement session with a different %s after discovery was cleared',
+    async (changed) => {
+      const { uid, now, session, root } = await discoveryStampFixture();
+      const replacement = {
+        ...session,
+        id: changed === 'generation' ? session.id : `replacement-${uid}`,
+        generation: changed === 'id' ? session.generation : session.generation! + 1,
+      };
+      // Deterministically complete restart/cleanup in the gap after A's
+      // Firestore success, using the same stores and activation as startSession.
+      await root.set({ session: replacement });
+      await activateDiscoveryGeneration(uid, replacement);
+      expect((await adminDb.collection('liveSessions').doc(uid).get()).exists).toBe(false);
+
+      await stampDiscoveryForActiveSession(uid, session, 'held-cell', now);
+      expect((await root.get()).val()).toEqual({ session: replacement });
+      expect((await adminDb.collection('liveSessions').doc(uid).get()).exists).toBe(false);
+
+      // B still needs its own successful refresh to become ready.
+      expect(await writeDiscoveryForGeneration(uid, replacement, { uid, geoCell: 'new-cell' })).toBe(
+        true,
+      );
+      await stampDiscoveryForActiveSession(uid, replacement, 'new-cell', now);
+      expect((await root.child('session').get()).val()).toEqual({
+        ...replacement,
+        discoveryRefreshedAt: now.toISOString(),
+        discoveryGeoCell: 'new-cell',
+      });
+    },
+  );
+
+  it.each(['stop', 'hide', 'purge', 'expiry'] as const)(
+    'does not stamp or recreate a session when %s completes after Firestore success',
+    async (transition) => {
+      const { uid, now, session, root } = await discoveryStampFixture();
+      if (transition === 'stop' || transition === 'hide') {
+        await stopAndClear(uid, transition === 'stop' ? 'user_stop' : 'hide_me_now');
+      } else if (transition === 'purge') {
+        await root.remove();
+        await stopAndClear(uid, 'hide_me_now');
+      } else {
+        await root.child('session/expiresAt').set(new Date(Date.now() - 1_000).toISOString());
+      }
+      const beforeStamp = (await root.get()).val();
+      await stampDiscoveryForActiveSession(uid, session, 'held-cell', now);
+      expect((await root.get()).val()).toEqual(beforeStamp);
+      if (transition === 'purge') expect((await root.get()).exists()).toBe(false);
+      if (transition !== 'expiry') {
+        expect((await adminDb.collection('liveSessions').doc(uid).get()).exists).toBe(false);
+      }
+    },
+  );
+
+  it.each([false, true])(
+    'preserves intervening fields and rejects out-of-order stamps (legacy session: %s)',
+    async (legacy) => {
+      const { uid, now, session, root } = await discoveryStampFixture(legacy);
+      // Extend/counters/other bookkeeping changed while this refresh was held.
+      await root.child('session').update({
+        expiresAt: new Date(now.getTime() + 2 * 60 * 60_000).toISOString(),
+        pointsDistanceMeters: 1234,
+        crownActivityAt: now.toISOString(),
+        crownActivityCell: 'activity-cell',
+        extraField: { preserved: true },
+      });
+      const beforeStamp = (await root.get()).val();
+      const newer = new Date(now.getTime() + 1_000);
+      await stampDiscoveryForActiveSession(uid, session, 'newer-cell', newer);
+      const expected = {
+        ...beforeStamp,
+        session: {
+          ...beforeStamp.session,
+          discoveryRefreshedAt: newer.toISOString(),
+          discoveryGeoCell: 'newer-cell',
+        },
+      };
+      expect((await root.get()).val()).toEqual(expected);
+
+      // Neither an older completion nor a same-millisecond completion may
+      // replace the already recorded time/cell pair.
+      await stampDiscoveryForActiveSession(uid, session, 'held-cell', now);
+      expect((await root.get()).val()).toEqual(expected);
+      await stampDiscoveryForActiveSession(uid, session, 'equal-time-cell', newer);
+      expect((await root.get()).val()).toEqual(expected);
+    },
+  );
 });
 
 describe('live session lifecycle', () => {
@@ -328,7 +439,14 @@ describe('live session lifecycle', () => {
     };
     expect(started.sessionId).toBeTruthy();
 
-    await call('live-updatePosition', { coordinate: coordinate(new Date().toISOString()) });
+    const recordedAt = new Date().toISOString();
+    expect((await call('live-updatePosition', { coordinate: coordinate(recordedAt) })).data).toEqual({
+      recordedAt,
+    });
+    const refreshedSession = (await adminRtdb.ref(`liveLocation/${member.uid}/session`).get()).val();
+    const discovery = (await adminDb.collection('liveSessions').doc(member.uid).get()).data();
+    expect(Number.isFinite(Date.parse(refreshedSession.discoveryRefreshedAt))).toBe(true);
+    expect(refreshedSession.discoveryGeoCell).toBe(discovery?.geoCell);
 
     const latest = (await adminRtdb.ref(`liveLocation/${member.uid}/latest`).get()).val();
     expect(latest).toMatchObject({
