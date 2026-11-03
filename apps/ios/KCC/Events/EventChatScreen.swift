@@ -7,17 +7,6 @@ struct EventChatScreen: View {
     @State private var draft = ""
     @State private var reportMessage: EventChatMessage?
 
-    private let quickEmoji = ["🙂", "😂", "😢", "👍", "❤️", "👀", "👑"]
-    private let quickEmojiKeys = [
-        "chat.quickEmoji.happy",
-        "chat.quickEmoji.laughing",
-        "chat.quickEmoji.sad",
-        "chat.quickEmoji.thumbsUp",
-        "chat.quickEmoji.heart",
-        "chat.quickEmoji.eyes",
-        "chat.quickEmoji.crown",
-    ]
-
     var body: some View {
         Group {
             if accessCoordinator.canOpenEventChat {
@@ -27,7 +16,6 @@ struct EventChatScreen: View {
                         VStack(spacing: 0) {
                             Divider()
                             statusArea
-                            quickEmojiRow
                             composer
                         }
                         .fixedSize(horizontal: false, vertical: true)
@@ -142,29 +130,11 @@ struct EventChatScreen: View {
         }
     }
 
-    private var quickEmojiRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: KccSpacing.s2) {
-                ForEach(Array(quickEmoji.enumerated()), id: \.offset) { index, emoji in
-                    Button {
-                        Task { _ = await coordinator.send(emoji) }
-                    } label: {
-                        Text(emoji)
-                            .font(.title2)
-                            .frame(minWidth: 48, minHeight: 48)
-                    }
-                    .disabled(coordinator.sendState == .sending)
-                    .accessibilityLabel(Text(LocalizedStringKey(quickEmojiKeys[index])))
-                }
-            }
-            .padding(.horizontal, KccSpacing.s3)
-        }
-        .accessibilityLabel(Text("chat.quickEmojiRow"))
-    }
-
     private var composer: some View {
         ChannelComposer(draft: $draft,
-            canSend: coordinator.sendState != .sending && EventChat.isSendable(draft)) {
+            canSend: coordinator.sendState != .sending && EventChat.isSendable(draft),
+            onQuickEmoji: { emoji in Task { _ = await coordinator.send(emoji) } },
+            quickEmojiEnabled: coordinator.sendState != .sending) {
                 let message = draft
                 Task { if await coordinator.send(message), draft == message { draft = "" } }
             }

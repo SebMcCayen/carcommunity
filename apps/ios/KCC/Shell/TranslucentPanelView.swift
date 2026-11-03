@@ -89,6 +89,16 @@ private struct KccPrimaryActionAppearance: ViewModifier {
     }
 }
 
+enum ShellPanelDragPolicy {
+    static func shouldDismiss(offset: CGFloat, predictedOffset: CGFloat, panelHeight: CGFloat) -> Bool {
+        guard panelHeight > 0, offset > 0 else { return false }
+        let momentum = predictedOffset - offset
+        if momentum < -100 { return false }
+        return momentum > 100 || offset >= panelHeight * 0.35
+    }
+}
+
+
 /// A translucent shell panel: the bottom-anchored card the History / Social /
 /// Garage tabs render OVER the live map (``MapCover/transparent``), leaving a
 /// genuinely uncovered strip of visible map above it whose one tap gesture is
@@ -99,13 +109,14 @@ private struct KccPrimaryActionAppearance: ViewModifier {
 /// Ported now: the height fraction (so the strip of live map above the card is
 /// real, which is what makes the ``ShellNavigation/mapCover(tab:route:navigating:navSearchOpen:)``
 /// transparent rule honest), the outside-tap dismiss, and the translucent card
-/// material. Not ported yet (arrives with the map-UI slice): the drag-down
-/// dismiss gesture and its nested-scroll arithmetic.
+/// material and a dedicated drag handle. Scrolling the content remains a
+/// separate gesture, so long lists cannot accidentally dismiss their panel.
 struct TranslucentShellPanel<Content: View>: View {
     /// Dismissing a panel returns to the Map tab (the tab hubs have no
     /// back-stack of their own) — the caller supplies that tab switch.
     let onDismiss: () -> Void
     @ViewBuilder let content: () -> Content
+    @State private var dragOffset: CGFloat = 0
 
     /// Fraction of the height the card occupies, anchored to the bottom.
     /// Deliberately below 1 — the remaining strip is live, visible map, the
@@ -128,7 +139,11 @@ struct TranslucentShellPanel<Content: View>: View {
                 .frame(height: proxy.size.height * (1 - Self.cardHeightFraction))
                 .accessibilityHidden(true)
 
-                content()
+                VStack(spacing: 0) {
+                    dragHandle(panelHeight: proxy.size.height * Self.cardHeightFraction)
+                    content()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     .background(KccTheme.overlay)
                     .clipShape(
@@ -137,12 +152,41 @@ struct TranslucentShellPanel<Content: View>: View {
                             topTrailingRadius: KccRadius.lg
                         )
                     )
+                    .offset(y: dragOffset)
+                    .accessibilityElement(children: .contain)
                     // The standard VoiceOver dismiss (two-finger scrub) —
                     // the accessible counterpart of the outside tap.
                     .accessibilityAction(.escape, onDismiss)
             }
         }
     }
+
+    private func dragHandle(panelHeight: CGFloat) -> some View {
+        Capsule().fill(KccTheme.secondary.opacity(0.55))
+            .frame(width: 32, height: 4)
+            .frame(maxWidth: .infinity)
+            .frame(height: 44)
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 10, coordinateSpace: .global)
+                .onChanged { dragOffset = max(0, $0.translation.height) }
+                .onEnded { value in
+                    if ShellPanelDragPolicy.shouldDismiss(
+                        offset: value.translation.height,
+                        predictedOffset: value.predictedEndTranslation.height,
+                        panelHeight: panelHeight
+                    ) {
+                        onDismiss()
+                    } else {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { dragOffset = 0 }
+                    }
+                })
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text("shell.panelDragHandle"))
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { onDismiss() }
+            .accessibilityIdentifier("shell.panel.dragHandle")
+    }
+
 }
 
 #Preview {

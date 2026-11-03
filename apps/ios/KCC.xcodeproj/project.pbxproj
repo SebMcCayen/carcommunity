@@ -53,6 +53,7 @@
 		17E534749AC4E00E377A3E6B /* PerkShopCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D123BF9682E0A7A2684BA376 /* PerkShopCoordinatorTests.swift */; };
 		18C9F40C2A35E8C26C9EA32F /* BadgesRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58003A940AECB933074E31FF /* BadgesRepository.swift */; };
 		18F392488ADE5F64038B4509 /* PartnersRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E9868905C82763C67898D28 /* PartnersRepository.swift */; };
+		1990A3085655600F0440683B /* MapStartupAndPanelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 033BA3587A48100A3DFC8AAF /* MapStartupAndPanelTests.swift */; };
 		1AD29F8359E23574E4DCE81E /* FirebaseLeaderboardRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C8A37E9DA0F827C47850C81 /* FirebaseLeaderboardRepository.swift */; };
 		1B334A74240817A336A68505 /* FeatureHealthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F004ABACC2F3A7136A3F081 /* FeatureHealthTests.swift */; };
 		1B71DDC607964EB11B2A150C /* FirebaseFeatureFlagsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB5309941BAAE99EB9ACF79F /* FirebaseFeatureFlagsRepository.swift */; };
@@ -413,6 +414,7 @@
 		F41CFF988FC68611B339B05C /* MemberProfileCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B3EA5604A8812B876C7F09F /* MemberProfileCoordinator.swift */; };
 		F47A7CC7C10F03015EA9D2DF /* GarageDesignViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300FDCA1213F5B5A4334DAF2 /* GarageDesignViews.swift */; };
 		F47E0904430636FCE851BF7A /* FirebasePartnerApplicationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 846F570710B4634050890322 /* FirebasePartnerApplicationRepository.swift */; };
+		F49F82868B0E98AFD4ABF9ED /* ChatQuickEmojiRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 450E1FF7B378EBA54C831B72 /* ChatQuickEmojiRow.swift */; };
 		F4BF63CE5C300410BCF083C9 /* NotificationsInboxScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 712EFE4AB97878EBB434C49C /* NotificationsInboxScreen.swift */; };
 		F4E1F5B47FE7D5EFAB3F4282 /* DriverFeedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2EEEA338960785397EF24B3 /* DriverFeedModels.swift */; };
 		F50C51C9DA613385B365F014 /* AppStoreLegalLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76F4A24D08CF097711E5FA5B /* AppStoreLegalLinks.swift */; };
@@ -463,6 +465,7 @@
 		02D47DC5F4210E2337814CE4 /* SavedPlacesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedPlacesTests.swift; sourceTree = "<group>"; };
 		03086898EF9A4C5C8962F4EA /* GroupDriveCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupDriveCoordinator.swift; sourceTree = "<group>"; };
 		0323E8145E9403B744C5203A /* ConvoyManagementModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyManagementModelsTests.swift; sourceTree = "<group>"; };
+		033BA3587A48100A3DFC8AAF /* MapStartupAndPanelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapStartupAndPanelTests.swift; sourceTree = "<group>"; };
 		0590402E58114B7EE11368AC /* UITestAppearanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestAppearanceTests.swift; sourceTree = "<group>"; };
 		067E2BB76B6CF76133B32D0E /* FirebaseBlockingRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseBlockingRepository.swift; sourceTree = "<group>"; };
 		069781D3E332EF902D6FD90D /* SavedDriveDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedDriveDetailScreen.swift; sourceTree = "<group>"; };
@@ -565,6 +568,7 @@
 		44885EC0E783DC6F01B6A2FE /* PerkShopModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerkShopModels.swift; sourceTree = "<group>"; };
 		449EA1182C62EADB39F6D943 /* CrownHuntUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrownHuntUI.swift; sourceTree = "<group>"; };
 		44A7962A316651E6D91C1FA7 /* EventDetailCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailCoordinatorTests.swift; sourceTree = "<group>"; };
+		450E1FF7B378EBA54C831B72 /* ChatQuickEmojiRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatQuickEmojiRow.swift; sourceTree = "<group>"; };
 		45D702136883AEC86ED3811C /* StartDrivingSelectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartDrivingSelectionTests.swift; sourceTree = "<group>"; };
 		465A3971FEE522A7D43D6AE6 /* PrivacySettingsCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacySettingsCoordinator.swift; sourceTree = "<group>"; };
 		46FAF37A9FD3D1525B551ABC /* FirebaseConvoyCreateRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseConvoyCreateRepository.swift; sourceTree = "<group>"; };
@@ -979,6 +983,7 @@
 				5B2C74B22F35AD7903DD3B8F /* ChatKeyboard.swift */,
 				3C7744768F4983F116A875D8 /* ChatLogic.swift */,
 				709E866B46685ECDF7ED2631 /* ChatModels.swift */,
+				450E1FF7B378EBA54C831B72 /* ChatQuickEmojiRow.swift */,
 				1A1C562799C54D62B6DCBFE6 /* ChatThreadScrollView.swift */,
 				7C31C4A7D439021F265B453B /* CommunityChatRepository.swift */,
 				F39A307C70649A7DC3645958 /* CommunityChatRepositoryFactory.swift */,
@@ -1655,6 +1660,7 @@
 				B35A236A6E9190DE9D6FCBD3 /* MapboxConfigurationTests.swift */,
 				1ADA4273944D1E94AC6D82A4 /* MapLayerPreferencesTests.swift */,
 				8F97D0269D6C67FF023642FF /* MapReadingDesignTests.swift */,
+				033BA3587A48100A3DFC8AAF /* MapStartupAndPanelTests.swift */,
 				4C0408D9A1BEFD4479399D14 /* MapSurfaceTests.swift */,
 				339AC2225A858A0A63925EAA /* MemberProfileTests.swift */,
 				40690ABCD24B3901D9E12733 /* MemberStatsDesignTests.swift */,
@@ -1936,6 +1942,7 @@
 				EE416609ABCA04D2BC01571F /* ChatKeyboard.swift in Sources */,
 				5EC79B2D0DA19E6286386B48 /* ChatLogic.swift in Sources */,
 				D23D8844AC2715EA7CBA7821 /* ChatModels.swift in Sources */,
+				F49F82868B0E98AFD4ABF9ED /* ChatQuickEmojiRow.swift in Sources */,
 				0BBA06618E16454B0877E106 /* ChatScreen.swift in Sources */,
 				C6F7E8D5529122A5F7DD00E9 /* ChatThreadScrollView.swift in Sources */,
 				F3D2F6DA7F0B2C5017254D4F /* ClaimHistoryScreen.swift in Sources */,
@@ -2279,6 +2286,7 @@
 				2DC0460E003F97750680CC4D /* LocationPermissionCoordinatorTests.swift in Sources */,
 				A1839396C02384C8278FFC9F /* MapLayerPreferencesTests.swift in Sources */,
 				8E544C3FF04489B9660A4CC5 /* MapReadingDesignTests.swift in Sources */,
+				1990A3085655600F0440683B /* MapStartupAndPanelTests.swift in Sources */,
 				FE582215755EF34BD19A7EE7 /* MapSurfaceTests.swift in Sources */,
 				76269373C8A0BC47A9F4506C /* MapboxConfigurationTests.swift in Sources */,
 				ADC0CD75C1DAF1B20D09D325 /* MemberProfileTests.swift in Sources */,
@@ -2437,7 +2445,7 @@
 				CODE_SIGN_ENTITLEMENTS = KCC/KCC.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CRASHLYTICS_COLLECTION_ENABLED = NO;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = KCC/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -2493,7 +2501,7 @@
 				CODE_SIGN_ENTITLEMENTS = KCC/KCC.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CRASHLYTICS_COLLECTION_ENABLED = YES;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = KCC/Info.plist;

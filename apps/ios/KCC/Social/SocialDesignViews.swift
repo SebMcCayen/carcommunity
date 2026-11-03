@@ -133,6 +133,14 @@ struct DmComposer: View {
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
+        VStack(spacing: 0) {
+            ChatQuickEmojiRow(enabled: true, onSelect: onSend)
+            editor
+        }
+        .background(KccTheme.surface)
+    }
+
+    private var editor: some View {
         HStack(alignment: .bottom, spacing: KccSpacing.s2) {
             TextField(text: $draft, axis: .vertical) { Text("dm.inputPlaceholder") }
                 .font(.body)

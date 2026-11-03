@@ -15,7 +15,9 @@ final class ShellSmokeTests: XCTestCase {
             let app = launch(language: "en", largeText: largeText, theme: "Dark")
             app.buttons["shell.tab.social"].tap()
             let social = element("shell.socialHub", in: app)
-            XCTAssertTrue(social.waitForExistence(timeout: 5))
+            let socialReady = social.waitForExistence(timeout: 5)
+            if !socialReady { chatProof(app, name: "social-hub-missing", tree: true) }
+            XCTAssertTrue(socialReady)
             let clubs = app.buttons["shell.social.clubs"]
             XCTAssertTrue(clubs.waitForExistence(timeout: 5))
             for _ in 0..<4 {
@@ -57,6 +59,8 @@ final class ShellSmokeTests: XCTestCase {
             app.buttons["shell.tab.chat"].tap()
             let composer = app.descendants(matching: .any).matching(identifier: "chat.composer.input").firstMatch
             XCTAssertTrue(composer.waitForExistence(timeout: 15))
+            XCTAssertTrue(app.buttons["chat.quickEmoji.happy"].isEnabled,
+                "Quick reactions must work with an empty draft")
             // SwiftUI's vertical TextField may expose a measuring TextField
             // as well as the real TextView. Require a tappable editable widget.
             let candidates = app.textFields.matching(identifier: "chat.composer.input").allElementsBoundByIndex
@@ -75,19 +79,40 @@ final class ShellSmokeTests: XCTestCase {
             let latest = app.staticTexts["Fixture message 39"]
             let dismiss = app.buttons["chat.keyboard.dismiss"]
             XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
-            XCTAssertTrue(latest.isHittable, "Resizing for the keyboard must keep the latest message visible")
+            let latestVisible = XCTNSPredicateExpectation(
+                predicate: NSPredicate { _, _ in latest.exists && latest.isHittable }, object: latest)
+            let latestReady = XCTWaiter.wait(for: [latestVisible], timeout: 5) == .completed
+            if !latestReady { chatProof(app, name: "chat-keyboard-latest-failure", tree: true) }
+            XCTAssertTrue(latestReady, "Resizing for the keyboard must keep the latest message visible")
             XCTAssertFalse(app.buttons["shell.tab.chat"].exists, "Hide the primary navigation while writing")
             XCTAssertFalse(app.buttons["chatHub.source.chats"].exists)
             XCTAssertFalse(app.buttons["chatHub.channel.0"].exists)
             XCTAssertFalse(app.buttons["chatHub.events"].exists)
             // Require usable conversation space, not merely a visible composer.
             let titleBottom = app.navigationBars.firstMatch.frame.maxY
-            XCTAssertGreaterThan(input.frame.minY - titleBottom, 200)
+            let emojiRow = element("chat.quickEmojiRow", in: app)
+            XCTAssertGreaterThan(emojiRow.frame.minY - titleBottom, 200)
             input.typeText("Fixture reply")
             let send = app.buttons["chat.composer.send"]
             XCTAssertTrue(send.isHittable)
             XCTAssertLessThanOrEqual(send.frame.maxY, app.keyboards.firstMatch.frame.minY + 1)
-            XCTAssertLessThanOrEqual(latest.frame.maxY, input.frame.minY + 1)
+            XCTAssertLessThanOrEqual(latest.frame.maxY, emojiRow.frame.minY + 1)
+            app.buttons["chat.quickEmoji.happy"].tap()
+            let happy = app.staticTexts.matching(NSPredicate(
+                format: "identifier BEGINSWITH %@ AND label == %@", "chat.message.text.", "😊")).firstMatch
+            XCTAssertTrue(happy.waitForExistence(timeout: 5))
+            XCTAssertTrue(happy.isHittable)
+            XCTAssertTrue((input.value as? String)?.contains("Fixture reply") == true)
+            emojiRow.swipeLeft()
+            XCTAssertTrue(app.keyboards.firstMatch.exists, "Browsing quick reactions must keep the keyboard open")
+            let crownButton = app.buttons["chat.quickEmoji.crown"]
+            XCTAssertTrue(crownButton.isHittable, "The horizontal row must expose Android's final crown reaction")
+            crownButton.tap()
+            let crown = app.staticTexts.matching(NSPredicate(
+                format: "identifier BEGINSWITH %@ AND label == %@", "chat.message.text.", "👑")).firstMatch
+            XCTAssertTrue(crown.waitForExistence(timeout: 5))
+            XCTAssertTrue(crown.isHittable)
+            XCTAssertTrue((input.value as? String)?.contains("Fixture reply") == true)
             chatProof(app, name: largeText ? "chat-writing-sv-accessibility" : "chat-writing-sv")
             dismiss.tap()
             XCTAssertTrue(app.buttons["shell.tab.chat"].waitForExistence(timeout: 5))
@@ -101,6 +126,43 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertTrue(reply.waitForExistence(timeout: 5))
             XCTAssertTrue(reply.isHittable)
             XCTAssertFalse((input.value as? String)?.contains("Fixture reply") == true)
+            // Keyboard resizing must also respect a deliberate history read.
+            app.buttons["chat.keyboard.dismiss"].tap()
+            XCTAssertTrue(app.buttons["shell.tab.chat"].waitForExistence(timeout: 5))
+            let messages = element("chat.thread.messages", in: app)
+            messages.swipeDown()
+            messages.swipeDown()
+            XCTAssertFalse(reply.exists && reply.isHittable)
+            input.tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+            XCTAssertFalse(reply.exists && reply.isHittable, "Opening the keyboard must not jump away from older history")
+            app.terminate()
+        }
+    }
+
+    func testSocialAndGarageDragHandlesReturnToTheRetainedMap() {
+        for largeText in [false, true] {
+            let app = launch(language: "sv", largeText: largeText, theme: largeText ? "Dark" : "Light")
+            let identity = app.staticTexts["shell.mapPlaceholder"].value as? String
+            XCTAssertNotNil(identity)
+            for tab in ["social", "garage"] {
+                app.buttons["shell.tab.\(tab)"].tap()
+                let handle = element("shell.panel.dragHandle", in: app)
+                let handleReady = handle.waitForExistence(timeout: 5)
+                if !handleReady { chatProof(app, name: "panel-handle-missing-\(tab)", tree: true) }
+                XCTAssertTrue(handleReady)
+                XCTAssertTrue(handle.isHittable)
+                XCTAssertGreaterThanOrEqual(handle.frame.height + 0.001, 44)
+                chatProof(app, name: "panel-\(tab)-\(largeText ? "accessibility" : "regular")")
+                let start = handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
+                start.press(forDuration: 0.1, thenDragTo: end)
+                let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: handle)
+                XCTAssertEqual(XCTWaiter.wait(for: [gone], timeout: 5), .completed)
+                assertSelected(app.buttons["shell.tab.map"])
+                XCTAssertEqual(app.staticTexts["shell.mapPlaceholder"].value as? String, identity)
+                XCTAssertTrue(app.buttons["shell.mapLayers"].isHittable)
+            }
             app.terminate()
         }
     }

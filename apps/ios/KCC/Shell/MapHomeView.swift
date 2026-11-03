@@ -345,6 +345,26 @@ private final class ConvoyViewportInteractionObserver: @preconcurrency ViewportS
     }
 }
 
+/// Initial camera ownership lasts until a location-follow viewport is armed
+/// or the member deliberately browses/selects another target. Late permission
+/// grants must not pull a manually positioned camera back to the member.
+struct MapHomeStartupCameraPolicy {
+    private(set) var pending = true
+    private(set) var following = false
+
+    mutating func cancel() {
+        pending = false
+        following = false
+    }
+
+    mutating func takeFollow(authorized: Bool, active: Bool, rendererReady: Bool) -> Bool {
+        guard pending, authorized, active, rendererReady else { return false }
+        pending = false
+        following = true
+        return true
+    }
+}
+
 /// Hosts the shell's single Mapbox Standard map. Config-less builds keep the
 /// deterministic placeholder, while a valid public token swaps in the native
 /// renderer without changing the shell-facing ``MapSurface`` seam.
@@ -492,7 +512,8 @@ struct MapHomeView: View {
 }
 
 /// Mapbox-specific rendering stays confined to this file. The initial camera
-/// opens over Kungsbacka and the Standard style matches Android's default.
+/// waits for location consent, then follows the member until they browse.
+/// The Standard style matches Android's default.
 @MainActor
 private struct MapboxStandardMap: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -506,6 +527,8 @@ private struct MapboxStandardMap: View {
     @State private var cameraBeforeConvoy: MapCameraSnapshot?
     @State private var interactionObserver: ConvoyViewportInteractionObserver
     @State private var latestOwnPoint: MapPoint?
+    @State private var startupCamera = MapHomeStartupCameraPolicy()
+    @State private var mapReady = false
     @State private var compassFollowRequested = false
     @State private var meFollowEnabled = false
     @State private var meFollowSuspended = false
@@ -535,10 +558,12 @@ private struct MapboxStandardMap: View {
         self.onFullFrameRendered = onFullFrameRendered
         self.onLoadingError = onLoadingError
         _viewport = State(initialValue: .camera(
-            center: .init(latitude: 57.4872, longitude: 12.0761),
-            zoom: surface.browsingZoom,
+            // A neutral overview while consent/the first fix is pending,
+            // never a city presented as the member's position.
+            center: .init(latitude: 0, longitude: 0),
+            zoom: 1,
             bearing: 0,
-            pitch: surface.is3D ? 45 : 0
+            pitch: 0
         ))
         _interactionObserver = State(initialValue: ConvoyViewportInteractionObserver(surface: surface))
         _locationAuthorization = State(initialValue: locationProvider.authorization)
@@ -602,6 +627,8 @@ private struct MapboxStandardMap: View {
                     meFollowEnabled: $meFollowEnabled,
                     meFollowSuspended: $meFollowSuspended
                 )
+                mapReady = proxy.map != nil
+                startOwnLocationIfNeeded()
             }
             .onMapLoadingError { event in
                 switch event.type {
@@ -637,6 +664,10 @@ private struct MapboxStandardMap: View {
             }
             .onDisappear {
                 isVisible = false
+                mapReady = false
+                if compassFollowRequested {
+                    performProgrammaticViewportChange { viewport = .idle }
+                }
                 meFollowIdleTask?.cancel()
                 meFollowIdleTask = nil
                 meFollowIdleTaskToken = nil
@@ -651,6 +682,8 @@ private struct MapboxStandardMap: View {
                 interactionObserver.onUserInteraction = {
                     // A gesture can interrupt an in-flight programmatic animation.
                     // Always suspend now; idle return waits for its token to clear.
+                    startupCamera.cancel()
+                    if !meFollowEnabled { compassFollowRequested = false }
                     canonicalCameraTarget = nil
                     guard meFollowEnabled else { return }
                     meFollowSuspended = true
@@ -674,13 +707,20 @@ private struct MapboxStandardMap: View {
                         meFollowSuspended: $meFollowSuspended
                     )
                 }
+                mapReady = proxy.map != nil
+                updateOwnLocationForVisibility()
                 armMeFollowIdleReturn(viewport: $viewport)
             }
             .onChange(of: surface.isActive, initial: true) { _, active in
                 surfaceActive = active
+                updateOwnLocationForVisibility()
+            }
+            .onChange(of: scenePhase) { _, _ in
+                updateOwnLocationForVisibility()
             }
             .onChange(of: surface.compassMode) { _, _ in
                 guard surfaceActive else { return }
+                startupCamera.cancel()
                 compassFollowRequested = true
                 canonicalCameraTarget = nil
                 surface.suspendConvoyFitForInteraction()
@@ -719,7 +759,9 @@ private struct MapboxStandardMap: View {
             ) {
                 if Task.isCancelled { return }
                 locationAuthorization = authorization
+                startOwnLocationIfNeeded()
                 if !authorization.isAuthorized, compassFollowRequested {
+                    startupCamera.cancel()
                     compassFollowRequested = false
                     // Stop the explicit follow viewport when consent is lost.
                     performProgrammaticViewportChange { viewport = .idle }
@@ -809,7 +851,10 @@ private struct MapboxStandardMap: View {
                     meFollowIdleTask = nil
                     meFollowIdleTaskToken = nil
                 }
-                if enabled { compassFollowRequested = false }
+                if enabled {
+                    startupCamera.cancel()
+                    compassFollowRequested = false
+                }
                 switch MapHomeConvoyViewportPolicy.plan(points: points, focusEnabled: enabled) {
                 case .keepCurrentViewport:
                     return
@@ -880,6 +925,9 @@ private struct MapboxStandardMap: View {
                 )
             },
             center: { point in
+                let wasWaitingForInitialLocation = startupCamera.pending
+                startupCamera.cancel()
+                compassFollowRequested = false
                 if meFollowEnabled.wrappedValue {
                     meFollowSuspended.wrappedValue = true
                 }
@@ -889,9 +937,9 @@ private struct MapboxStandardMap: View {
                     MapHomeCameraTarget(
                         latitude: point.latitude,
                         longitude: point.longitude,
-                        zoom: baseTarget.zoom,
+                        zoom: wasWaitingForInitialLocation ? surface.browsingZoom : baseTarget.zoom,
                         bearing: baseTarget.bearing,
-                        pitch: baseTarget.pitch
+                        pitch: wasWaitingForInitialLocation ? (surface.is3D ? 45 : 0) : baseTarget.pitch
                     ),
                     duration: 0.9,
                     viewport: viewport
@@ -905,6 +953,18 @@ private struct MapboxStandardMap: View {
             },
             cameraPreferences: { enabled, zoom in
                 MapHomeStyleLayers.apply3D(enabled, to: map)
+                // Renderer attachment replays preferences before the first fix.
+                // Keep the neutral overview pending consent, and keep native
+                // puck ownership after style reloads instead of replacing it
+                // with a fixed camera at the renderer's preceding coordinate.
+                if startupCamera.pending { return }
+                if startupCamera.following {
+                    if isVisible, surfaceActive, scenePhase == .active,
+                       locationAuthorization.isAuthorized, !surface.convoyFocusEnabled {
+                        applyCompassViewport(viewport: viewport, snapshot: surface.cameraSnapshot)
+                    }
+                    return
+                }
                 let state = map.cameraState
                 let target = (canonicalCameraTarget ?? cameraTarget(from: state))
                     .applyingPreferences(
@@ -930,6 +990,33 @@ private struct MapboxStandardMap: View {
             bearing: state.bearing,
             pitch: state.pitch
         )
+    }
+
+    private func updateOwnLocationForVisibility() {
+        guard surfaceActive, scenePhase == .active, isVisible, mapReady else {
+            if compassFollowRequested {
+                performProgrammaticViewportChange { viewport = .idle }
+            }
+            return
+        }
+        if compassFollowRequested, locationAuthorization.isAuthorized, !surface.convoyFocusEnabled {
+            applyCompassViewport(viewport: $viewport, snapshot: surface.cameraSnapshot)
+        } else {
+            startOwnLocationIfNeeded()
+        }
+    }
+
+    private func startOwnLocationIfNeeded() {
+        guard !surface.convoyFocusEnabled,
+              startupCamera.takeFollow(
+                authorized: locationAuthorization.isAuthorized,
+                active: isVisible && surfaceActive && scenePhase == .active,
+                rendererReady: mapReady
+              ) else { return }
+        // Use the SDK's existing local puck-follow path. This neither starts
+        // live sharing nor adds another app location stream/permission prompt.
+        compassFollowRequested = true
+        applyCompassViewport(viewport: $viewport, snapshot: surface.cameraSnapshot)
     }
 
     private func applyCameraTarget(

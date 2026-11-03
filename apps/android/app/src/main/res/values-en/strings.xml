@@ -2014,6 +2014,10 @@
     <string name="whatsNew_release010Build6Highlight">More room for conversations and clearer map icons.</string>
     <string name="whatsNew_release010Build6Chat">Chat navigation folds away while writing. Hide the keyboard using the button next to Send without losing your draft.</string>
     <string name="whatsNew_release010Build6Map">Map controls stay above markers. Traffic icons and map controls follow the Android design. Crown Hunt uses light marker tiles on the day map.</string>
+    <string name="whatsNew_release010Build7Highlight">Start at your location, with more Android features on iOS.</string>
+    <string name="whatsNew_release010Build7Map">The map follows your position on startup when location access is allowed, until you move the map yourself.</string>
+    <string name="whatsNew_release010Build7Panels">Drag the handle on Social and Garage down to return to the map.</string>
+    <string name="whatsNew_release010Build7Chat">Android’s quick emojis now appear above the input in every chat. They send immediately without changing your draft.</string>
     <string name="driver_feed_title">Driver posts</string>
     <string name="driver_feed_source">From Driver</string>
     <string name="driver_feed_loading">Loading posts…</string>

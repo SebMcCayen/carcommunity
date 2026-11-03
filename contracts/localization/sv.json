@@ -2160,7 +2160,11 @@
     "release010Build3Map": "Åtgärdar en krasch när kartvyn öppnas efter introduktionen.",
     "release010Build6Highlight": "Mer plats för chatten och tydligare kartikoner.",
     "release010Build6Chat": "Chattens menyer fälls undan när du skriver. Dölj tangentbordet med knappen bredvid Skicka utan att förlora utkastet.",
-    "release010Build6Map": "Kartknappar ligger ovanför markörerna. Trafikikoner och kartknappar följer Android-appens utseende. Kronjakten har ljusa markörer på dagskartan."
+    "release010Build6Map": "Kartknappar ligger ovanför markörerna. Trafikikoner och kartknappar följer Android-appens utseende. Kronjakten har ljusa markörer på dagskartan.",
+    "release010Build7Highlight": "Din position vid kartstart och fler Android-funktioner i iOS.",
+    "release010Build7Map": "Kartan följer din position vid start när du tillåter platsåtkomst, tills du själv flyttar kartan.",
+    "release010Build7Panels": "Dra handtaget på Social och Garage nedåt för att återgå till kartan.",
+    "release010Build7Chat": "Samma snabbemojis som Android finns nu ovanför skrivrutan i alla chattar. De skickas direkt utan att ändra ditt utkast."
   },
   "driver": {
     "feed": {
