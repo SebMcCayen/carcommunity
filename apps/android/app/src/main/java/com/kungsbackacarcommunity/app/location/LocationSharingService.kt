@@ -42,6 +42,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * Foreground service that keeps a live-location session publishing while the app
@@ -91,7 +92,9 @@ import kotlinx.coroutines.sync.withLock
  */
 class LocationSharingService : Service() {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // Provider callbacks, session transitions and upload state share one thread.
+    // Firebase suspend calls do not block it; teardown cancels pending uploads.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private var repository: LiveLocationRepository? = null
     private var fusedClient: FusedLocationProviderClient? = null
@@ -110,18 +113,7 @@ class LocationSharingService : Service() {
         LiveSharingLifecycle(anchorStore = PersistedSharingAnchorStore(applicationContext))
     }
 
-    /**
-     * Last sample SUBMITTED for publication, for the movement/heartbeat throttle.
-     *
-     * Recorded when the publish is dispatched, not when it succeeds — `false`
-     * here would mean a failing backend retried at the full fix cadence
-     * (every 5 s) for as long as the failure lasted, which is the opposite of
-     * what a throttle is for. A lost publish costs at most one heartbeat before
-     * the next sample goes out anyway.
-     */
-    private var lastSubmittedAtMillis: Long? = null
-    private var lastSubmittedLatitude: Double? = null
-    private var lastSubmittedLongitude: Double? = null
+    private var positionPublisher: LiveSessionPositionPublisher? = null
 
     /**
      * Last fix the quality gate BELIEVED, as opposed to the last one published.
@@ -159,8 +151,8 @@ class LocationSharingService : Service() {
     /**
      * Detects "parked for a while" from the raw fix stream to drive the
      * stationary prompt / auto-stop. Pure state machine; guarded by
-     * [stationaryLock] because [onFix] runs on the main looper (the fused-location
-     * callback) while [decide] runs on the IO ticker.
+     * [stationaryLock] to keep each monitor operation atomic. Provider callbacks
+     * and the ticker now share the main dispatcher.
      */
     private val stationaryMonitor = StationarySharingMonitor()
     private val stationaryLock = Any()
@@ -188,9 +180,11 @@ class LocationSharingService : Service() {
     private val locationCallback =
         object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
-                val repo = repository ?: return
+                val publisher = positionPublisher ?: return
+                if (publisher.sessionId == null) return
                 val fix = result.lastLocation ?: return
                 val now = System.currentTimeMillis()
+                if (!LiveSessionPositionPublisher.isFreshFixTime(fix.time, now)) return
                 val accuracy = if (fix.hasAccuracy()) fix.accuracy.toDouble() else null
 
                 // QUALITY GATE — first, before anything else looks at this fix.
@@ -245,25 +239,6 @@ class LocationSharingService : Service() {
                 synchronized(stationaryLock) {
                     stationaryMonitor.onFix(fix.latitude, fix.longitude, now)
                 }
-                if (!BackgroundLocation.shouldPublish(
-                        lastSubmittedAtMillis = lastSubmittedAtMillis,
-                        lastSubmittedLatitude = lastSubmittedLatitude,
-                        lastSubmittedLongitude = lastSubmittedLongitude,
-                        latitude = fix.latitude,
-                        longitude = fix.longitude,
-                        nowMillis = now,
-                    )
-                ) {
-                    // Parked at a meet: GPS jitter is not worth a callable round
-                    // trip. The heartbeat still publishes every
-                    // BackgroundLocation.STATIONARY_HEARTBEAT_MS (3 min while
-                    // parked — the main data saver).
-                    return
-                }
-                lastSubmittedAtMillis = now
-                lastSubmittedLatitude = fix.latitude
-                lastSubmittedLongitude = fix.longitude
-
                 val coordinate =
                     BackgroundLocation.buildCoordinate(
                         latitude = fix.latitude,
@@ -273,18 +248,7 @@ class LocationSharingService : Service() {
                         bearingDegrees = if (fix.hasBearing()) fix.bearing.toDouble() else null,
                         speedMps = if (fix.hasSpeed()) fix.speed.toDouble() else null,
                     )
-                scope.launch {
-                    try {
-                        repo.updatePosition(coordinate)
-                    } catch (c: CancellationException) {
-                        // Preserve cooperative cancellation — never swallow.
-                        throw c
-                    } catch (_: Exception) {
-                        // A single failed publish must not tear down sharing; the
-                        // next fix retries. Details may reference the payload —
-                        // never logged.
-                    }
-                }
+                publisher.accept(coordinate)
             }
         }
 
@@ -455,17 +419,14 @@ class LocationSharingService : Service() {
         }
         repository = repo
         ownerUid = uid
+        positionPublisher?.stop()
+        positionPublisher = LiveSessionPositionPublisher(scope, System::currentTimeMillis) { coordinate ->
+            if (!isStillSignedIn(uid)) throw CancellationException("Live publisher owner changed")
+            repo.updatePosition(coordinate)
+        }
 
-        // Reset the per-run throttle and notification state. stopSelf() is
-        // asynchronous, so a fresh start can land on this SAME instance before
-        // onDestroy() has run. Carrying the previous run's last-published sample
-        // over would let shouldPublish() throttle the new session's first fix —
-        // breaking its documented "the first fix of a session always publishes"
-        // contract and leaving the user invisible to viewers for up to a
-        // heartbeat while they believe they are sharing.
-        lastSubmittedAtMillis = null
-        lastSubmittedLatitude = null
-        lastSubmittedLongitude = null
+        // Reset notification state. Publication throttle/retries live in the
+        // session-scoped publisher, including same-uid session replacements.
         // The quality gate's anchor and its rejection log are per-RUN, for the
         // same reason: a new session must not be judged against, or report on,
         // the previous one's fixes.
@@ -492,6 +453,8 @@ class LocationSharingService : Service() {
     }
 
     override fun onDestroy() {
+        positionPublisher?.stop()
+        positionPublisher = null
         sessionJob?.cancel()
         sessionJob = null
         fusedClient?.removeLocationUpdates(locationCallback)
@@ -527,6 +490,12 @@ class LocationSharingService : Service() {
                 .build()
         return try {
             client.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
+                .addOnFailureListener {
+                    // Registration can fail asynchronously as well as throw.
+                    // A late failure from an older registration cannot stop a
+                    // newer service run. Never log provider/request details.
+                    if (fusedClient === client) stopSharingLocally()
+                }
             true
         } catch (_: SecurityException) {
             // Location permission not granted at runtime. Cannot share — stop
@@ -567,6 +536,13 @@ class LocationSharingService : Service() {
                 }
                 try {
                     repo.observeOwnSession(uid).collectLatest { session ->
+                        if (positionPublisher?.observeSession(session) == true) {
+                            lastObservedLatitude = null
+                            lastObservedLongitude = null
+                            lastObservedAtMillis = null
+                            rejectionLog.reset()
+                            synchronized(stationaryLock) { stationaryMonitor.reset() }
+                        }
                         // Track whether the live session is convoy-tied so the
                         // stationary auto-stop can be suppressed for it (session↔
                         // convoy coupling). Only updated on a REAL observation — a
@@ -610,20 +586,17 @@ class LocationSharingService : Service() {
     /**
      * Computes a decision and applies it under [lifecycleMutex].
      *
-     * The ticker and the session observer are separate coroutines on
-     * `Dispatchers.IO`, which is multi-threaded, so without this they run
-     * genuinely concurrently against the same mutable [LiveSharingLifecycle]
-     * (`lastSession`, `firstAbsentAtMillis`, the anchor) and the same
-     * notification state (`shownPromptMode`). Neither is thread-safe, and
-     * the fields are not volatile, so a tick could evaluate expiry against a
-     * session the observer had already replaced — deciding stop-or-continue for
-     * background location sharing on a stale read.
-     *
-     * The lock spans the decision AND its application, so a decision cannot be
-     * computed from one state and applied against another.
+     * Keep the decision and its application together for the ticker and the
+     * session observer, including across any future suspending lifecycle work.
      */
     private suspend fun decideAndApply(decide: () -> LiveSharingDecision) {
-        lifecycleMutex.withLock { apply(decide()) }
+        lifecycleMutex.withLock {
+            // The safety anchor uses a synchronous disk commit to survive a
+            // process kill. Keep that existing durability work off the main
+            // thread while applying service/publisher transitions on main.
+            val decision = withContext(Dispatchers.IO) { decide() }
+            apply(decision)
+        }
     }
 
     private fun apply(decision: LiveSharingDecision) {
@@ -697,6 +670,7 @@ class LocationSharingService : Service() {
      * end, sign-out) — calling stopSession again would be redundant traffic.
      */
     private fun stopSharingLocally() {
+        positionPublisher?.stop()
         // Same reasoning as stopSharingAndSelf(): stopSelf() is NOT synchronous,
         // so between here and onDestroy() the observer could emit once more. A
         // Continue landing after stopForeground(STOP_FOREGROUND_REMOVE) would
@@ -764,6 +738,7 @@ class LocationSharingService : Service() {
 
         // Stop publishing and drop the notification immediately: the user's tap
         // gets instant feedback while the callable finishes behind it.
+        positionPublisher?.stop()
         fusedClient?.removeLocationUpdates(locationCallback)
         fusedClient = null
         stopForeground(STOP_FOREGROUND_REMOVE)

@@ -336,6 +336,8 @@ import com.kungsbackacarcommunity.app.location.LocationPermissionRemedy
 import com.kungsbackacarcommunity.app.location.ObserveLocationProviderChanges
 import com.kungsbackacarcommunity.app.location.foregroundLocationPermissions
 import com.kungsbackacarcommunity.app.live.BindLivePositionPublisher
+import com.kungsbackacarcommunity.app.live.observeLiveMarkerRoster
+import com.kungsbackacarcommunity.app.live.nearbyLivePollSnapshots
 import com.kungsbackacarcommunity.app.location.currentLocationAccess
 import com.kungsbackacarcommunity.app.location.locationPermissionRemedy
 import com.kungsbackacarcommunity.app.location.openAppLocationSettings
@@ -5084,9 +5086,7 @@ fun AuthenticatedApp(
                         if (liveLocationRepository == null || convoyLiveUids.isEmpty()) {
                             flowOf(emptyList())
                         } else {
-                            combine(convoyLiveUids.map { liveLocationRepository.observeLatest(it) }) {
-                                it.toList()
-                            }
+                            observeLiveMarkerRoster(convoyLiveUids, liveLocationRepository::observeLatest)
                         }
                     }
                 val convoyMarkers by convoyMarkersFlow.collectAsState(initial = emptyList())
@@ -5223,13 +5223,10 @@ fun AuthenticatedApp(
                         controller.clear()
                         return@LaunchedEffect
                     }
-                    while (true) {
-                        mapSurface.cameraSnapshot.value?.let { camera ->
-                            controller.refresh(
-                                LatLng(longitude = camera.longitude, latitude = camera.latitude),
-                            )
-                        }
-                        delay(NEARBY_LIVE_POLL_MS)
+                    nearbyLivePollSnapshots(mapSurface.cameraSnapshot, NEARBY_LIVE_POLL_MS).collect { camera ->
+                        controller.refresh(
+                            LatLng(longitude = camera.longitude, latitude = camera.latitude),
+                        )
                     }
                 }
 
@@ -5278,9 +5275,7 @@ fun AuthenticatedApp(
                         if (liveLocationRepository == null || nearbyUids.isEmpty()) {
                             flowOf(emptyList())
                         } else {
-                            combine(nearbyUids.map { liveLocationRepository.observeLatest(it) }) {
-                                it.toList()
-                            }
+                            observeLiveMarkerRoster(nearbyUids, liveLocationRepository::observeLatest)
                         }
                     }
                 val nearbyMarkers by nearbyMarkersFlow.collectAsState(initial = emptyList())

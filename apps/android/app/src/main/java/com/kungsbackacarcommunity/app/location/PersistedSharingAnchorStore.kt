@@ -29,7 +29,7 @@ class PersistedSharingAnchorStore(context: Context) : SharingAnchorStore {
         // SIGKILL — which is exactly the scenario this anchor defends against.
         // Losing the write there would reset the ceiling on restart. The cost is
         // acceptable: this writes once per session, and every caller reaches it
-        // from the service's Dispatchers.IO scope, never the main thread.
+        // from the service's Dispatchers.IO lifecycle decision, never main.
         prefs.edit()
             .putString(KEY_SESSION_ID, sessionId)
             .putLong(KEY_ANCHOR_MILLIS, nowMillis)
