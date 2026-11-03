@@ -2,6 +2,22 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 66,
+      "versionName": "1.1.11",
+      "releaseDate": "2026-11-03",
+      "highlights": [
+        "Mer plats för chatten när tangentbordet är öppet",
+        "Förbättrad start och synlighet för live-sessioner"
+      ],
+      "changes": [
+        "Chattens översta menyval döljs när tangentbordet öppnas och visas igen när det stängs",
+        "Chatt, utkast och vald kanal finns kvar när tangentbordet öppnas eller stängs",
+        "Live-sessioner försöker på nytt om den första positionsöverföringen misslyckas",
+        "Kartans sökning efter förare startar tidigare och en långsam positionshämtning blockerar inte övriga förare",
+        "Förbättrad hantering av positionsuppdateringar när en live-session stoppas eller ersätts"
+      ]
+    },
+    {
       "versionCode": 65,
       "versionName": "1.1.10",
       "releaseDate": "2026-10-31",
