@@ -492,6 +492,26 @@ final class LiveLocationCoordinatorTests: XCTestCase {
 
         await waitUntil { provider.activeFixStreamCount == 0 }
         XCTAssertTrue(repository.publishedCoordinates.isEmpty)
+        XCTAssertNil(coordinator.readout.startedAt)
+    }
+
+    @MainActor
+    func testReadoutReusesPublisherStreamAndClearsSpeedOnPrivacyStop() async {
+        let repository = FakeLiveLocationRepository()
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = makeCoordinator(repository: repository, provider: provider)
+        coordinator.start()
+        repository.emitSession(activeSession())
+        await waitUntil { provider.activeFixStreamCount == 1 }
+        provider.emitFix(LocationFix.of(latitude: 57, longitude: 12, timestamp: clock.now, speedMetersPerSecond: 10)!)
+        await waitUntil { coordinator.readout.speed != nil }
+        XCTAssertEqual(provider.activeFixStreamCount, 1, "The readout must not acquire another GPS stream")
+        XCTAssertEqual(coordinator.readout.speed?.metersPerSecond, 10)
+        _ = await coordinator.hideMeNow()
+        await waitUntil { provider.activeFixStreamCount == 0 }
+        XCTAssertNil(coordinator.readout.speed)
+        coordinator.shutdown()
+        XCTAssertNil(coordinator.readout.startedAt)
     }
 
     // MARK: - cadence gating

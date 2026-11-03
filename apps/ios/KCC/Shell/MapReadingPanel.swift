@@ -11,6 +11,7 @@ struct MapReadingPanel<Content: View>: View {
         VStack(spacing: 0) {
             HStack(alignment: .center, spacing: KccSpacing.s2) {
                 Text(title).font(.headline).accessibilityAddTraits(.isHeader)
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Button(action: onClose) {
                     Image(systemName: "xmark").font(.system(size: 18, weight: .semibold))
@@ -46,6 +47,7 @@ enum MapReadingSelection: Hashable {
     case incident(String)
     case police(String)
     case nearby(String)
+    case convoyMember(String)
 }
 
 /// Compact map chrome; commands are supplied by the existing shell/coordinator.

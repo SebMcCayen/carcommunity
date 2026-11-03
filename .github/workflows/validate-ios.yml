@@ -107,6 +107,7 @@ jobs:
             ENTITLEMENTS_REQUIRED=YES ONLY_ACTIVE_ARCH=YES \
             -parallel-testing-enabled NO \
             -only-testing:KCCUITests/ShellSmokeTests/testClubsMenuRemainsDiscoverableWithoutBackendActivation \
+            -only-testing:KCCUITests/ShellSmokeTests/testChatBackLiveMetricsProfileAndStopMatchAndroid \
             -only-testing:KCCUITests/ShellSmokeTests/testSearchSelectionOffersExplicitNavigationAndKeepsTheMap \
             -only-testing:KCCUITests/ShellSmokeTests/testNavigationHandoffFailureKeepsTheDestinationAvailable \
             -only-testing:KCCUITests/ShellSmokeTests/testCommunityOpensAtLatestWithAccessibleText \

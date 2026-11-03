@@ -147,7 +147,8 @@
     "shareUnavailable": "Live location sharing isn't available right now.",
     "sessionBar": "Live session: %1$s, %2$s, %3$s driven",
     "sessionBarSpeed": "current speed %1$d km/h",
-    "sessionBarSpeedUnknown": "current speed unavailable"
+    "sessionBarSpeedUnknown": "current speed unavailable",
+    "sessionBarManageHint": "Open session controls, including Hide me now."
   },
   "onboarding": {
     "title": "Welcome",
@@ -1961,7 +1962,8 @@
     "locationSharedFriendFallback": "your friend",
     "locationShareFailed": "Couldn't share the location. Try again.",
     "perksButton": "Use a perk",
-    "perksButtonActive": "Use a perk · active perks"
+    "perksButtonActive": "Use a perk · active perks",
+    "backToMap": "Back to map"
   },
   "addressSearch": {
     "searchPlaceholder": "Search address or place",
@@ -2167,7 +2169,12 @@
     "release010Build7Panels": "Drag the handle on Social and Garage down to return to the map.",
     "release010Build7Chat": "Android’s quick emojis now appear above the input in every chat. They send immediately without changing your draft.",
     "release010Build8Highlight": "Navigate from search results.",
-    "release010Build8Search": "Selecting a searched or saved place now shows a destination card with Navigate here. Navigation opens in Apple Maps when you tap the button."
+    "release010Build8Search": "Selecting a searched or saved place now shows a destination card with Navigate here. Navigation opens in Apple Maps when you tap the button.",
+    "release010Build9Highlight": "Smoother chat and live driving.",
+    "release010Build9Chat": "The extra Chat title is removed. The back arrow beside Community returns to the map.",
+    "release010Build9Live": "The live bar shows elapsed time, current speed and distance. Tap it for more controls. Stop now uses an icon without a visible label.",
+    "release010Build9Profiles": "Open a member’s profile with Visit profile when selecting a live driver on the map.",
+    "release010Build9Map": "The required Mapbox logo and information control now sit on the left, clear of the live bar."
   },
   "driver": {
     "feed": {

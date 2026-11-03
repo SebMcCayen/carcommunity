@@ -64,10 +64,11 @@ final class LiveLocationCoordinator {
     /// The observed own-session node; nil before the first emission and when
     /// no session exists.
     private(set) var session: LiveSessionInfo?
+    private(set) var readout = LiveSessionReadout()
 
     /// Distinguishes the pre-listener cold-start nil from an authoritative
     /// backend emission that says no session exists. The revision increments
-    /// for every emission, including nil→nil, so shell integrations can
+    /// for every emission (including nil→nil) and local expiry, so integrations can
     /// reconcile crash journals after the first snapshot without guessing.
     private(set) var sessionSnapshotRevision = 0
     var hasReceivedSessionSnapshot: Bool { sessionSnapshotRevision > 0 }
@@ -216,6 +217,7 @@ final class LiveLocationCoordinator {
         sessionSubscription = nil
         locallyStoppedSessionId = session?.sessionId
         endPublishing()
+        readout = LiveSessionReadout()
     }
 
     // MARK: - Commands
@@ -235,12 +237,18 @@ final class LiveLocationCoordinator {
     func startSharing(vehicleId: String? = nil) async -> LiveCommandResult {
         guard actionStatus != .working else { return .busy }
         guard canShare, wired, provider.authorization.isAuthorized else { return .failed }
-        return await execute { repository in
+        readout.requestedStart(at: now())
+        let result = await execute { repository in
             try await repository.startSession(
                 duration: LiveLocation.defaultSessionDuration,
                 vehicleId: vehicleId
             )
         }
+        switch result {
+        case .success: break
+        case .failed, .busy: readout.cancelPendingStart()
+        }
+        return result
     }
 
     /// Stops the session (`user_stop`) and removes the marker. The fixes
@@ -279,6 +287,7 @@ final class LiveLocationCoordinator {
     func standDownForRestrictedAccess() {
         canShare = false
         endPublishing()
+        readout = LiveSessionReadout()
         sessionSubscription?.cancel()
         sessionSubscription = nil
     }
@@ -287,6 +296,7 @@ final class LiveLocationCoordinator {
 
     private func apply(_ session: LiveSessionInfo?) {
         self.session = session
+        readout.observe(session, at: now())
         sessionSnapshotRevision += 1
         reconcilePublishing()
     }
@@ -323,6 +333,7 @@ final class LiveLocationCoordinator {
                 if Task.isCancelled { break }
                 guard let self else { break }
                 self.receivedFixCount += 1
+                if self.isSharing { self.readout.acceptSpeed(from: fix) }
                 relayContinuation.yield(fix)
             }
             relayContinuation.finish()
@@ -393,6 +404,11 @@ final class LiveLocationCoordinator {
     }
 
     private func endPublishing() {
+        if readout.sessionId != nil, !isSharing {
+            readout.observe(session, at: now())
+            sessionSnapshotRevision += 1
+        }
+        readout.clearSpeed()
         // The drain task's cancellation is what terminates the provider
         // stream (and with it the GPS demand) — immediately, even while the
         // publish loop is awaiting a slow network call.

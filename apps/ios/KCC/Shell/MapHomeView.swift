@@ -608,10 +608,10 @@ private struct MapboxStandardMap: View {
             .ornamentOptions(OrnamentOptions(
                 scaleBar: ScaleBarViewOptions(visibility: .hidden),
                 compass: CompassViewOptions(visibility: .hidden),
-                logo: LogoViewOptions(position: .bottomRight,
-                    margins: CGPoint(x: 44, y: bottomClearance + 8)),
-                attributionButton: AttributionButtonOptions(position: .bottomRight,
-                    margins: CGPoint(x: 8, y: bottomClearance + 8))
+                logo: LogoViewOptions(position: .bottomLeft,
+                    margins: CGPoint(x: 8, y: bottomClearance + 8)),
+                attributionButton: AttributionButtonOptions(position: .bottomLeft,
+                    margins: CGPoint(x: 112, y: bottomClearance + 8))
             ))
             .onMapLoaded { _ in
                 onLoaded()

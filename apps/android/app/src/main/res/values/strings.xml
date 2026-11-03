@@ -133,6 +133,7 @@
     <string name="liveLocation_sessionBar">Live-session: %1$s, %2$s, %3$s kört</string>
     <string name="liveLocation_sessionBarSpeed">aktuell hastighet %1$d km/h</string>
     <string name="liveLocation_sessionBarSpeedUnknown">aktuell hastighet är okänd</string>
+    <string name="liveLocation_sessionBarManageHint">Öppna sessionens kontroller, inklusive Dölj mig nu.</string>
     <string name="onboarding_title">Välkommen</string>
     <string name="onboarding_subtitle">Bekräfta innan du fortsätter.</string>
     <string name="onboarding_licenceConfirm">Jag bekräftar att jag har giltigt körkort för det fordon jag kör.</string>
@@ -1833,6 +1834,7 @@
     <string name="shell_locationShareFailed">Det gick inte att dela platsen. Försök igen.</string>
     <string name="shell_perksButton">Använd perk</string>
     <string name="shell_perksButtonActive">Använd perk · aktiva perkar</string>
+    <string name="shell_backToMap">Tillbaka till kartan</string>
     <string name="addressSearch_searchPlaceholder">Sök adress eller plats</string>
     <string name="addressSearch_back">Tillbaka</string>
     <string name="addressSearch_clearQuery">Rensa sökning</string>
@@ -2021,6 +2023,11 @@
     <string name="whatsNew_release010Build7Chat">Samma snabbemojis som Android finns nu ovanför skrivrutan i alla chattar. De skickas direkt utan att ändra ditt utkast.</string>
     <string name="whatsNew_release010Build8Highlight">Navigera vidare från sökresultat.</string>
     <string name="whatsNew_release010Build8Search">När du väljer en sökt eller sparad plats visas ett platskort med Navigera hit. Navigeringen öppnas i Apple Kartor när du trycker på knappen.</string>
+    <string name="whatsNew_release010Build9Highlight">Smidigare chatt och livekörning.</string>
+    <string name="whatsNew_release010Build9Chat">Chattens extra rubrik är borttagen. Bakåtpilen vid Gemenskap tar dig till kartan.</string>
+    <string name="whatsNew_release010Build9Live">Livefältet visar tid, aktuell hastighet och körd sträcka. Tryck på fältet för fler kontroller. Stoppknappen visar bara en ikon.</string>
+    <string name="whatsNew_release010Build9Profiles">Öppna medlemsprofilen med Besök profil när du väljer en liveförare på kartan.</string>
+    <string name="whatsNew_release010Build9Map">Mapboxs logga och informationsknapp ligger nu till vänster och flyttas undan från livefältet.</string>
     <string name="driver_feed_title">Driver-inlägg</string>
     <string name="driver_feed_source">Från Driver</string>
     <string name="driver_feed_loading">Hämtar inlägg…</string>

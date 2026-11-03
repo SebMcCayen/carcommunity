@@ -111,6 +111,8 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
         provider.emitFix(fix(start, offset: 0))
         provider.emitFix(fix(start, offset: 3, latitude: 57.0001))
         await waitUntil { coordinator.state.summary?.pointCount == 2 }
+        XCTAssertNotNil(coordinator.distanceMeters(for: context().sourceSessionId))
+        XCTAssertNil(coordinator.distanceMeters(for: "replacement-session"))
 
         clock.value = start.addingTimeInterval(10)
         coordinator.endSession(context: context())
@@ -120,6 +122,7 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
             return false
         }
         XCTAssertFalse(coordinator.state.presentsSummary)
+        XCTAssertNil(coordinator.distanceMeters(for: context().sourceSessionId))
         XCTAssertEqual(repository.requests.count, 1)
         await waitUntil { repository.uploads.count == 1 }
         XCTAssertEqual(repository.uploads.first?.1, repository.requests.first?.points)

@@ -62,6 +62,21 @@ final class NearbyLivePresentationTests: XCTestCase {
 
 @MainActor
 final class NearbyLiveCoordinatorTests: XCTestCase {
+    func testProfileTargetRequiresTheCurrentFreshAuthorizedRoster() async {
+        let repository = FakeRepository()
+        repository.events["other"] = [.value(marker("other"))]
+        let coordinator = NearbyLiveCoordinator()
+        coordinator.activateRoster(repository: repository, currentUid: "me", participantUids: ["other"], excludedUids: [])
+        for _ in 0..<100 where coordinator.positions["other"] == nil { await Task.yield() }
+        XCTAssertEqual(coordinator.profileTarget(uid: "other")?.uid, "other")
+        XCTAssertNil(coordinator.profileTarget(uid: "me"))
+        XCTAssertNil(coordinator.profileTarget(uid: "other", at: Date().addingTimeInterval(1_000)))
+        coordinator.activateRoster(repository: repository, currentUid: "me", participantUids: ["other"], excludedUids: ["other"])
+        XCTAssertNil(coordinator.profileTarget(uid: "other"))
+        coordinator.deactivate()
+        XCTAssertNil(coordinator.profileTarget(uid: "other"))
+    }
+
     func testRefreshFiltersSelfAndConvoyAndCapsPerUidListeners() async {
         let repository = FakeRepository()
         repository.nearby = (0..<55).map {

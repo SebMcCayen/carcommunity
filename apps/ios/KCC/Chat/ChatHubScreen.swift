@@ -32,6 +32,7 @@ struct ChatHubScreen: View {
     let notificationsCoordinator: NotificationsInboxCoordinator?
     let onOpenNotificationSettings: (() -> Void)?
     let onOpenEvents: (() -> Void)?
+    let onBackToMap: (() -> Void)?
     /// The host supplies real native Driver content when its adapter is linked.
     let driverContent: AnyView?
     @State private var showsDriver = false
@@ -44,7 +45,8 @@ struct ChatHubScreen: View {
         notificationsCoordinator: NotificationsInboxCoordinator? = nil,
         onOpenNotificationSettings: (() -> Void)? = nil,
         onOpenEvents: (() -> Void)? = nil,
-        driverContent: AnyView? = nil
+        driverContent: AnyView? = nil,
+        onBackToMap: (() -> Void)? = nil
     ) {
         self.coordinator = coordinator
         self.conversationsCoordinator = conversationsCoordinator
@@ -54,6 +56,7 @@ struct ChatHubScreen: View {
         self.onOpenNotificationSettings = onOpenNotificationSettings
         self.onOpenEvents = onOpenEvents
         self.driverContent = driverContent
+        self.onBackToMap = onBackToMap
     }
 
     var body: some View {
@@ -78,9 +81,9 @@ struct ChatHubScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .kccReadingSurface(pageBackground: true)
-        .navigationTitle(Text(keyboardPresented ? (showsDriver ? "chatHub.tabDriver" : Self.label(for: coordinator?.selectedTab ?? .community)) : "chatHub.title"))
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
         .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text("chatHub.title"))
         .accessibilityIdentifier("chatHub.opaqueScreen")
     }
 
@@ -143,6 +146,18 @@ struct ChatHubScreen: View {
     // MARK: - Tab strip
 
     private func tabStrip(_ coordinator: ChatHubCoordinator) -> some View {
+      HStack(spacing: 0) {
+        if let onBackToMap {
+            Button(action: onBackToMap) {
+                Image(systemName: "chevron.backward")
+                    .font(.system(size: 20, weight: .semibold))
+                    .frame(width: 48, height: 48).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("shell.backToMap"))
+            .accessibilityIdentifier("chatHub.backToMap")
+            .padding(.leading, KccSpacing.s2)
+        }
         ScrollView(.horizontal, showsIndicators: false) {
           HStack(spacing: KccSpacing.s2) {
             ForEach(ChatTab.allCases, id: \.rawValue) { tab in
@@ -174,6 +189,7 @@ struct ChatHubScreen: View {
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("chatHub.channels")
+      }
     }
 
     // MARK: - Tab content

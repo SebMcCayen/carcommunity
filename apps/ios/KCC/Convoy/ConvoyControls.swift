@@ -290,6 +290,7 @@ struct ConvoyMapAwarenessOverlay: View {
     let members: [ConvoyMemberPosition]
     let imageURLs: [String: URL]
     let projection: MapProjection
+    var onSelect: ((String) -> Void)? = nil
 
     var body: some View {
         GeometryReader { geometry in
@@ -297,17 +298,22 @@ struct ConvoyMapAwarenessOverlay: View {
                 let placements = placements(size: geometry.size, now: context.date)
                 ZStack {
                     ForEach(placements.onScreen) { placement in
-                        memberChip(placement.member)
-                            .position(x: placement.point.x, y: placement.point.y)
+                        Button { onSelect?(placement.member.uid) } label: {
+                            memberChip(placement.member)
+                                .frame(minWidth: 48, minHeight: 48).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .position(x: placement.point.x, y: placement.point.y)
                     }
                     ForEach(placements.offScreen) { placement in
                         edgeChip(placement)
+                            .allowsHitTesting(false)
                             .position(x: placement.point.x, y: placement.point.y)
                     }
                 }
             }
         }
-        .allowsHitTesting(false)
+        .allowsHitTesting(onSelect != nil)
         .accessibilityElement(children: .contain)
     }
 
@@ -707,5 +713,39 @@ struct ConvoyDetailScreen: View {
             action: action,
             exitChoice: exitChoice
         )
+    }
+}
+
+/// Convoy members are deliberately excluded from the public nearby roster.
+/// Resolve this card from its own authorized subscription, including on tap.
+struct ConvoySharerDetail: View {
+    let coordinator: ConvoyAwarenessCoordinator
+    let uid: String
+    let onUnavailable: () -> Void
+    let onViewProfile: (String, String?) -> Void
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let member = coordinator.visibleMembers.first { $0.uid == uid && $0.isFresh(at: context.date) }
+            Group {
+                if let member {
+                    NearbySharerIdentity(
+                        marker: LiveMarker(uid: member.uid, latitude: member.latitude, longitude: member.longitude,
+                            displayName: member.displayName, imagePath: member.imagePath,
+                            recordedAt: member.updatedAt, accuracyMeters: member.accuracyMeters),
+                        imageURL: member.imagePath.flatMap { coordinator.imageURLs[$0] },
+                        onVisitProfile: {
+                            guard let current = coordinator.profileTarget(uid: uid) else {
+                                onUnavailable(); return
+                            }
+                            onViewProfile(current.uid, current.displayName)
+                        }
+                    )
+                }
+            }
+            .onChange(of: member == nil, initial: true) { _, unavailable in
+                if unavailable { onUnavailable() }
+            }
+        }
     }
 }

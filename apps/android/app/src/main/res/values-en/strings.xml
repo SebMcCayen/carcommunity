@@ -133,6 +133,7 @@
     <string name="liveLocation_sessionBar">Live session: %1$s, %2$s, %3$s driven</string>
     <string name="liveLocation_sessionBarSpeed">current speed %1$d km/h</string>
     <string name="liveLocation_sessionBarSpeedUnknown">current speed unavailable</string>
+    <string name="liveLocation_sessionBarManageHint">Open session controls, including Hide me now.</string>
     <string name="onboarding_title">Welcome</string>
     <string name="onboarding_subtitle">Please confirm before continuing.</string>
     <string name="onboarding_licenceConfirm">I confirm that I hold a valid driving licence for the vehicle I drive.</string>
@@ -1833,6 +1834,7 @@
     <string name="shell_locationShareFailed">Couldn\'t share the location. Try again.</string>
     <string name="shell_perksButton">Use a perk</string>
     <string name="shell_perksButtonActive">Use a perk · active perks</string>
+    <string name="shell_backToMap">Back to map</string>
     <string name="addressSearch_searchPlaceholder">Search address or place</string>
     <string name="addressSearch_back">Back</string>
     <string name="addressSearch_clearQuery">Clear search</string>
@@ -2021,6 +2023,11 @@
     <string name="whatsNew_release010Build7Chat">Android’s quick emojis now appear above the input in every chat. They send immediately without changing your draft.</string>
     <string name="whatsNew_release010Build8Highlight">Navigate from search results.</string>
     <string name="whatsNew_release010Build8Search">Selecting a searched or saved place now shows a destination card with Navigate here. Navigation opens in Apple Maps when you tap the button.</string>
+    <string name="whatsNew_release010Build9Highlight">Smoother chat and live driving.</string>
+    <string name="whatsNew_release010Build9Chat">The extra Chat title is removed. The back arrow beside Community returns to the map.</string>
+    <string name="whatsNew_release010Build9Live">The live bar shows elapsed time, current speed and distance. Tap it for more controls. Stop now uses an icon without a visible label.</string>
+    <string name="whatsNew_release010Build9Profiles">Open a member’s profile with Visit profile when selecting a live driver on the map.</string>
+    <string name="whatsNew_release010Build9Map">The required Mapbox logo and information control now sit on the left, clear of the live bar.</string>
     <string name="driver_feed_title">Driver posts</string>
     <string name="driver_feed_source">From Driver</string>
     <string name="driver_feed_loading">Loading posts…</string>

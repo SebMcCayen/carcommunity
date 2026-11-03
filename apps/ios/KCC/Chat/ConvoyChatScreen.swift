@@ -11,6 +11,7 @@ struct ConvoyChatScreen: View {
 
     var body: some View {
         ChannelChatScreen(coordinator: coordinator, title: titleText)
+            .toolbar(.visible, for: .navigationBar)
     }
 
     private var titleText: Text {

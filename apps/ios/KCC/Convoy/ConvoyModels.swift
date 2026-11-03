@@ -571,6 +571,11 @@ final class ConvoyAwarenessCoordinator {
         positions.values.filter { $0.uid != ownUid }
     }
 
+    func profileTarget(uid: String, at now: Date = Date()) -> MemberProfileRouteTarget? {
+        guard let member = visibleMembers.first(where: { $0.uid == uid && $0.isFresh(at: now) }) else { return nil }
+        return MemberProfileRouteTarget(uid: member.uid, displayName: member.displayName)
+    }
+
     func fitPoints(now: Date = Date()) -> [MapPoint]? {
         guard focusMode == .convoy else { return nil }
         let fresh = positions.values.filter { $0.isFresh(at: now) }
