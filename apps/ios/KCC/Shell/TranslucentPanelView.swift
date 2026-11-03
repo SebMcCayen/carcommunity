@@ -153,7 +153,7 @@ struct TranslucentShellPanel<Content: View>: View {
                         )
                     )
                     .offset(y: dragOffset)
-                    .accessibilityIdentifier("shell.panel")
+                    .accessibilityElement(children: .contain)
                     // The standard VoiceOver dismiss (two-finger scrub) —
                     // the accessible counterpart of the outside tap.
                     .accessibilityAction(.escape, onDismiss)

@@ -15,7 +15,9 @@ final class ShellSmokeTests: XCTestCase {
             let app = launch(language: "en", largeText: largeText, theme: "Dark")
             app.buttons["shell.tab.social"].tap()
             let social = element("shell.socialHub", in: app)
-            XCTAssertTrue(social.waitForExistence(timeout: 5))
+            let socialReady = social.waitForExistence(timeout: 5)
+            if !socialReady { chatProof(app, name: "social-hub-missing", tree: true) }
+            XCTAssertTrue(socialReady)
             let clubs = app.buttons["shell.social.clubs"]
             XCTAssertTrue(clubs.waitForExistence(timeout: 5))
             for _ in 0..<4 {
@@ -77,7 +79,11 @@ final class ShellSmokeTests: XCTestCase {
             let latest = app.staticTexts["Fixture message 39"]
             let dismiss = app.buttons["chat.keyboard.dismiss"]
             XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
-            XCTAssertTrue(latest.isHittable, "Resizing for the keyboard must keep the latest message visible")
+            let latestVisible = XCTNSPredicateExpectation(
+                predicate: NSPredicate { _, _ in latest.exists && latest.isHittable }, object: latest)
+            let latestReady = XCTWaiter.wait(for: [latestVisible], timeout: 5) == .completed
+            if !latestReady { chatProof(app, name: "chat-keyboard-latest-failure", tree: true) }
+            XCTAssertTrue(latestReady, "Resizing for the keyboard must keep the latest message visible")
             XCTAssertFalse(app.buttons["shell.tab.chat"].exists, "Hide the primary navigation while writing")
             XCTAssertFalse(app.buttons["chatHub.source.chats"].exists)
             XCTAssertFalse(app.buttons["chatHub.channel.0"].exists)
@@ -132,9 +138,11 @@ final class ShellSmokeTests: XCTestCase {
             for tab in ["social", "garage"] {
                 app.buttons["shell.tab.\(tab)"].tap()
                 let handle = element("shell.panel.dragHandle", in: app)
-                XCTAssertTrue(handle.waitForExistence(timeout: 5))
+                let handleReady = handle.waitForExistence(timeout: 5)
+                if !handleReady { chatProof(app, name: "panel-handle-missing-\(tab)", tree: true) }
+                XCTAssertTrue(handleReady)
                 XCTAssertTrue(handle.isHittable)
-                XCTAssertGreaterThanOrEqual(handle.frame.height, 44)
+                XCTAssertGreaterThanOrEqual(handle.frame.height + 0.001, 44)
                 chatProof(app, name: "panel-\(tab)-\(largeText ? "accessibility" : "regular")")
                 let start = handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
                 let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))

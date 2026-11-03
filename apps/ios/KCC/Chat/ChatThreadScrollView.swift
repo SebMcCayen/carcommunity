@@ -37,9 +37,17 @@ struct ChatThreadScrollView<Content: View>: View {
                 .scrollDismissesKeyboard(.interactively)
                 .simultaneousGesture(DragGesture().updating($dragging) { _, state, _ in state = true })
                 .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { _ in
-                    pinnedBeforeKeyboardResize = followsLatest && !dragging
+                    pinnedBeforeKeyboardResize = (latestMessageID == nil || followsLatest) && !dragging
                 }
                 .onChange(of: viewport.size) { _, _ in
+                    if readingActive, !dragging, pinnedBeforeKeyboardResize ?? followsLatest,
+                       let newest = latestMessageID {
+                        proxy.scrollTo(newest, anchor: .bottom)
+                    }
+                }
+                .onChange(of: viewport.safeAreaInsets.bottom) { _, _ in
+                    // A composer inset can settle after the keyboard frame.
+                    // Keep the same bottom owner through both layout changes.
                     if readingActive, !dragging, pinnedBeforeKeyboardResize ?? followsLatest,
                        let newest = latestMessageID {
                         proxy.scrollTo(newest, anchor: .bottom)
@@ -48,18 +56,31 @@ struct ChatThreadScrollView<Content: View>: View {
                 .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidChangeFrameNotification)) { _ in
                     if readingActive, !dragging, pinnedBeforeKeyboardResize == true,
                        let newest = latestMessageID {
+                        followsLatest = true
                         proxy.scrollTo(newest, anchor: .bottom)
                     }
                     pinnedBeforeKeyboardResize = nil
                 }
                 .onPreferenceChange(ChatThreadBottomKey.self) { bottom in
-                    guard let bottom else { followsLatest = false; return }
+                    // Missing geometry during first loading/keyboard layout
+                    // is not a reader choosing to scroll into older history.
+                    guard let bottom else {
+                        if latestMessageID != nil, pinnedBeforeKeyboardResize != true { followsLatest = false }
+                        return
+                    }
+                    if pinnedBeforeKeyboardResize == true && !dragging { return }
                     let visibleBottom = max(0, viewport.size.height - viewport.safeAreaInsets.bottom)
                     followsLatest = bottom >= 0 && bottom <= visibleBottom + 64
                 }
                 .onChange(of: latestMessageID, initial: true) { old, newest in
                     guard let newest, readingActive,
                           old == newest || old == nil || followsLatest || latestIsOwn else { return }
+                    if old == nil {
+                        followsLatest = true
+                        if pinnedBeforeKeyboardResize != nil && !dragging {
+                            pinnedBeforeKeyboardResize = true
+                        }
+                    }
                     // No animation across long histories on initial load.
                     // Target a real row in the SAME lazy stack as the end
                     // marker. An external sentinel can scroll past the rows
