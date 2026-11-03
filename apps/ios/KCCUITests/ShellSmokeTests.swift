@@ -177,15 +177,16 @@ final class ShellSmokeTests: XCTestCase {
                 XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed)
             }
             let result = app.buttons["addressSearch.result.fixture-varberg"]
-            let resultExists = result.waitForExistence(timeout: 10)
-            if !resultExists { chatProof(app, name: "search-result-missing", tree: true) }
-            XCTAssertTrue(resultExists)
             let results = element("addressSearch.results", in: app)
+            XCTAssertTrue(results.waitForExistence(timeout: 10))
+            // List virtualizes large offscreen rows. Scroll the actual list
+            // before requiring the second row's accessibility node to exist.
             for _ in 0..<8 {
                 if result.exists && result.isHittable && !result.frame.isInfinite { break }
                 results.swipeUp()
             }
             if !result.exists || !result.isHittable { chatProof(app, name: "search-result-unreachable", tree: true) }
+            XCTAssertTrue(result.exists)
             XCTAssertTrue(result.isHittable)
             result.tap()
             XCTAssertTrue(name.waitForExistence(timeout: 5))
@@ -816,8 +817,8 @@ final class ShellSmokeTests: XCTestCase {
         let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             let candidates = app.textViews.matching(identifier: "chat.composer.input").allElementsBoundByIndex
                 + app.textFields.matching(identifier: "chat.composer.input").allElementsBoundByIndex
-            guard let editor = candidates.first(where: { $0.isHittable }),
-                  let value = editor.value as? String else { return false }
+            guard let editor = candidates.first(where: { $0.isHittable }) else { return false }
+            let value = editor.value as? String ?? ""
             return value.contains(text) == present
         }, object: app)
         let result = XCTWaiter.wait(for: [expectation], timeout: 5)
