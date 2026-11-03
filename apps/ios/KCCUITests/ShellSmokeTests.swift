@@ -280,11 +280,19 @@ final class ShellSmokeTests: XCTestCase {
             // Removing the hub bar must not strand actions supplied by its
             // embedded tabs. Settings stays inline and opens its own bar.
             let notifications = app.buttons["chatHub.channel.3"]
-            let channels = app.scrollViews["chatHub.channels"]
+            let channels = element("chatHub.channels", in: app)
             for _ in 0..<4 {
-                if notifications.exists && notifications.isHittable { break }
+                // XCTest can throw while resolving a wholly off-screen
+                // SwiftUI button's activation point. Scroll by geometry first.
+                let bounds = channels.frame.intersection(app.frame)
+                if notifications.exists {
+                    let frame = notifications.frame
+                    if !frame.isEmpty && bounds.contains(frame) { break }
+                }
                 channels.swipeLeft()
             }
+            XCTAssertTrue(notifications.exists)
+            XCTAssertTrue(channels.frame.intersection(app.frame).contains(notifications.frame))
             XCTAssertTrue(notifications.isHittable)
             notifications.tap()
             let settings = app.buttons["notifications.settings"]
