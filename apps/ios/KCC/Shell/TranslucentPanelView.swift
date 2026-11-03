@@ -183,7 +183,7 @@ struct TranslucentShellPanel<Content: View>: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text("shell.panelDragHandle"))
             .accessibilityAddTraits(.isButton)
-            .accessibilityAction(onDismiss)
+            .accessibilityAction { onDismiss() }
             .accessibilityIdentifier("shell.panel.dragHandle")
     }
 

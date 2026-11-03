@@ -98,6 +98,7 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertTrue(happy.isHittable)
             XCTAssertTrue((input.value as? String)?.contains("Fixture reply") == true)
             emojiRow.swipeLeft()
+            XCTAssertTrue(app.keyboards.firstMatch.exists, "Browsing quick reactions must keep the keyboard open")
             let crownButton = app.buttons["chat.quickEmoji.crown"]
             XCTAssertTrue(crownButton.isHittable, "The horizontal row must expose Android's final crown reaction")
             crownButton.tap()

@@ -30,6 +30,7 @@ struct ChatQuickEmojiRow: View {
             .padding(.horizontal, KccSpacing.s2)
         }
         .frame(height: 48)
+        .scrollDismissesKeyboard(.never)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("chat.quickEmojiRow"))
         .accessibilityIdentifier("chat.quickEmojiRow")
