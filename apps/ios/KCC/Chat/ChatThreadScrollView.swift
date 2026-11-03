@@ -11,6 +11,7 @@ struct ChatThreadScrollView<Content: View>: View {
     @Environment(\.chatReadingActive) private var readingActive
     @Namespace private var coordinateSpace
     @State private var followsLatest = true
+    @State private var readerHasScrolled = false
     @State private var pinnedBeforeKeyboardResize: Bool?
     @GestureState private var dragging = false
     private let endID = "chat.thread.end"
@@ -32,10 +33,13 @@ struct ChatThreadScrollView<Content: View>: View {
                     }
                     .padding(KccSpacing.s3)
                 }
+                .accessibilityIdentifier("chat.thread.messages")
                 .coordinateSpace(name: coordinateSpace)
                 .defaultScrollAnchor(.bottom)
                 .scrollDismissesKeyboard(.interactively)
-                .simultaneousGesture(DragGesture().updating($dragging) { _, state, _ in state = true })
+                .simultaneousGesture(DragGesture()
+                    .updating($dragging) { _, state, _ in state = true }
+                    .onChanged { _ in readerHasScrolled = true })
                 .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { _ in
                     pinnedBeforeKeyboardResize = (latestMessageID == nil || followsLatest) && !dragging
                 }
@@ -62,12 +66,11 @@ struct ChatThreadScrollView<Content: View>: View {
                     pinnedBeforeKeyboardResize = nil
                 }
                 .onPreferenceChange(ChatThreadBottomKey.self) { bottom in
-                    // Missing geometry during first loading/keyboard layout
-                    // is not a reader choosing to scroll into older history.
-                    guard let bottom else {
-                        if latestMessageID != nil, pinnedBeforeKeyboardResize != true { followsLatest = false }
-                        return
-                    }
+                    // Only an actual scroll can release automatic following.
+                    // Lazy rows/insets can temporarily have no end geometry
+                    // during initial loading or keyboard/composer resizing.
+                    guard readerHasScrolled else { followsLatest = true; return }
+                    guard let bottom else { followsLatest = false; return }
                     if pinnedBeforeKeyboardResize == true && !dragging { return }
                     let visibleBottom = max(0, viewport.size.height - viewport.safeAreaInsets.bottom)
                     followsLatest = bottom >= 0 && bottom <= visibleBottom + 64
@@ -75,11 +78,10 @@ struct ChatThreadScrollView<Content: View>: View {
                 .onChange(of: latestMessageID, initial: true) { old, newest in
                     guard let newest, readingActive,
                           old == newest || old == nil || followsLatest || latestIsOwn else { return }
-                    if old == nil {
-                        followsLatest = true
-                        if pinnedBeforeKeyboardResize != nil && !dragging {
-                            pinnedBeforeKeyboardResize = true
-                        }
+                    followsLatest = true
+                    readerHasScrolled = false
+                    if pinnedBeforeKeyboardResize != nil && !dragging {
+                        pinnedBeforeKeyboardResize = true
                     }
                     // No animation across long histories on initial load.
                     // Target a real row in the SAME lazy stack as the end

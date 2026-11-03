@@ -126,6 +126,16 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertTrue(reply.waitForExistence(timeout: 5))
             XCTAssertTrue(reply.isHittable)
             XCTAssertFalse((input.value as? String)?.contains("Fixture reply") == true)
+            // Keyboard resizing must also respect a deliberate history read.
+            app.buttons["chat.keyboard.dismiss"].tap()
+            XCTAssertTrue(app.buttons["shell.tab.chat"].waitForExistence(timeout: 5))
+            let messages = element("chat.thread.messages", in: app)
+            messages.swipeDown()
+            messages.swipeDown()
+            XCTAssertFalse(reply.exists && reply.isHittable)
+            input.tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+            XCTAssertFalse(reply.exists && reply.isHittable, "Opening the keyboard must not jump away from older history")
             app.terminate()
         }
     }
