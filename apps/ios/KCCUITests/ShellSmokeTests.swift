@@ -76,20 +76,16 @@ final class ShellSmokeTests: XCTestCase {
             let latest = app.staticTexts["chat.message.text.fixture-39"]
             let dismiss = app.buttons["chat.keyboard.dismiss"]
             XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
-            // Hiding the hub chrome rebuilds SwiftUI's AX containers. Resolve
-            // the stable message ID on each snapshot, instead of retaining a
-            // label lookup through the keyboard transition. Require the whole
-            // text to remain inside the usable conversation viewport as well.
+            // Resolve the stable ID through the keyboard's AX-tree transition.
+            // Keep the poll cheap: querying several frames can exhaust its
+            // entire deadline on a loaded hosted simulator. Measure geometry
+            // after visibility is established, outside the polling deadline.
             let latestVisible = XCTNSPredicateExpectation(
                 predicate: NSPredicate { _, _ in
                     let current = app.staticTexts["chat.message.text.fixture-39"]
-                    let messages = self.element("chat.thread.messages", in: app)
-                    let emoji = self.element("chat.quickEmojiRow", in: app)
-                    guard current.exists, messages.exists, emoji.exists else { return false }
-                    return current.isHittable && current.frame.minY >= messages.frame.minY
-                        && current.frame.maxY <= emoji.frame.minY + 1
+                    return current.exists && current.isHittable
                 }, object: app)
-            let latestReady = XCTWaiter.wait(for: [latestVisible], timeout: 10) == .completed
+            let latestReady = XCTWaiter.wait(for: [latestVisible], timeout: 15) == .completed
             if !latestReady { chatProof(app, name: "chat-keyboard-latest-failure", tree: true) }
             XCTAssertTrue(latestReady, "Resizing for the keyboard must keep the latest message visible")
             XCTAssertFalse(app.buttons["shell.tab.chat"].exists, "Hide the primary navigation while writing")
@@ -97,8 +93,11 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertFalse(app.buttons["chatHub.channel.0"].exists)
             XCTAssertFalse(app.buttons["chatHub.events"].exists)
             // Require usable conversation space, not merely a visible composer.
-            let titleBottom = element("chat.thread.messages", in: app).frame.minY
-            let emojiRow = element("chat.quickEmojiRow", in: app)
+            let titleBottom = app.scrollViews["chat.thread.messages"].frame.minY
+            let emojiRow = app.scrollViews["chat.quickEmojiRow"]
+            let latestFrame = app.staticTexts["chat.message.text.fixture-39"].frame
+            XCTAssertGreaterThanOrEqual(latestFrame.minY, titleBottom)
+            XCTAssertLessThanOrEqual(latestFrame.maxY, emojiRow.frame.minY + 1)
             XCTAssertGreaterThan(emojiRow.frame.minY - titleBottom, 200)
             composerInput(in: app).typeText("Fixture reply")
             assertComposerDraft("Fixture reply", present: true, in: app)
