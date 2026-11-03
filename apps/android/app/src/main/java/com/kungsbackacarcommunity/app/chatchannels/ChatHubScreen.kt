@@ -6,9 +6,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -47,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
@@ -453,6 +456,9 @@ fun ChatHubRoute(
     driverContent: (@Composable () -> Unit)? = null,
 ) {
     key(uid) {
+        // Match iOS: software keyboard visibility owns the reading space, not
+        // focus (which can remain after dismissal or with a hardware keyboard).
+        val keyboardPresented = WindowInsets.ime.getBottom(LocalDensity.current) > 0
         var driverSelected by rememberSaveable(uid) { mutableStateOf(false) }
         val chatState = rememberSaveableStateHolder()
         val hostScope = rememberCoroutineScope()
@@ -467,8 +473,14 @@ fun ChatHubRoute(
             // Opaque reading surface: the shell pauses the single map behind it.
             color = MaterialTheme.colorScheme.background,
         ) {
-            Column(Modifier.fillMaxSize()) {
-                if (driverContent != null) {
+            Column(
+                Modifier.fillMaxSize().then(
+                    // The source header normally owns this inset. Keep it when
+                    // the header folds away, including on the Driver surface.
+                    if (driverContent != null && keyboardPresented) Modifier.statusBarsPadding() else Modifier,
+                ),
+            ) {
+                if (driverContent != null && !keyboardPresented) {
                     ChatFeedHeader(driverSelected = driverSelected, onSelect = { driverSelected = it })
                 }
                 Box(Modifier.weight(1f)) {
@@ -688,6 +700,7 @@ private fun ChatHubContent(
     pushDeepLink: PushDeepLink? = null,
 
 ) {
+    val keyboardPresented = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     // Normalized once so this body — and therefore the full chat route — reads a
     // blank-id convoy link exactly as the peek does: as no destination (Community),
     // never as a convoy channel opened on an empty id. See [normalizeChatLandingLink].
@@ -874,7 +887,7 @@ private fun ChatHubContent(
                 }
             }
 
-            if (!inSubScreen) {
+            if (!inSubScreen && !keyboardPresented) {
                 ChatChannelStrip(
                     selected = selectedTab,
                     unread = listOf(communityUnread, convoysUnread, friendsUnread, false),
@@ -920,7 +933,9 @@ private fun ChatHubContent(
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
-                userScrollEnabled = !inSubScreen,
+                // Hidden destination controls must not allow an accidental
+                // sideways gesture to change the room while composing.
+                userScrollEnabled = !inSubScreen && !keyboardPresented,
                 key = { ChatTab.visibleEntries[it] },
             ) { page ->
                 when (ChatTab.visibleEntries[page]) {
