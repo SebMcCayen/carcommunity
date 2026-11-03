@@ -30,15 +30,17 @@ import {
 } from 'firebase/functions';
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getDatabase as getAdminDatabase } from 'firebase-admin/database';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { db as liveDb } from '../firebase';
 import { runLiveCleanup } from '../live/scheduled';
 import {
   activateDiscoveryGeneration,
   commitLatestForActiveSession,
   stampDiscoveryForActiveSession,
   stopAndClear,
+  updatePosition,
   writeDiscoveryForGeneration,
 } from '../live/session';
 import { buildSession } from '../live/live-core';
@@ -161,13 +163,142 @@ async function discoveryStampFixture(legacy = false) {
   await activateDiscoveryGeneration(uid, session);
   const heldSession = await commitLatestForActiveSession(uid, coordinate(now.toISOString()), now);
   expect(heldSession?.id).toBe(session.id);
-  expect(await writeDiscoveryForGeneration(uid, heldSession!, { uid, geoCell: 'held-cell' })).toBe(
-    true,
-  );
+  expect(
+    await writeDiscoveryForGeneration(uid, heldSession!, { uid, geoCell: 'held-cell' }, now),
+  ).toBe(true);
   return { uid, now, session: heldSession!, root };
 }
 
 describe('liveDiscoveryFence readiness stamps', () => {
+  it.each([
+    ['same-cell', 'Firestore'],
+    ['cross-cell', 'Firestore'],
+    ['same-cell', 'RTDB'],
+    ['cross-cell', 'RTDB'],
+  ])(
+    'keeps both stores on the newer request after an older %s %s completion',
+    async (cell, store) => {
+      const { uid, now, session, root } = await discoveryStampFixture();
+      const older = new Date(now.getTime() + 1_000);
+      const newer = new Date(now.getTime() + 2_000);
+      const oldCell = cell === 'same-cell' ? 'cell-b' : 'cell-a';
+      const fields = (geoCell: string, latitude: number, at: Date) => ({
+        uid,
+        geoCell,
+        latitude,
+        longitude: 18.063,
+        updatedAt: FieldValue.serverTimestamp(),
+        expiresAt: Timestamp.fromDate(new Date(at.getTime() + 15 * 60_000)),
+      });
+      const oldFields = fields(oldCell, 59.334, older);
+      const newFields = fields('cell-b', 59.335, newer);
+      if (store === 'RTDB') {
+        // A's discovery write succeeded, but its RTDB completion is still held.
+        expect(await writeDiscoveryForGeneration(uid, session, oldFields, older)).toBe(true);
+      }
+      expect(await writeDiscoveryForGeneration(uid, session, newFields, newer)).toBe(true);
+      await stampDiscoveryForActiveSession(uid, session, 'cell-b', newer);
+      const expectedDiscovery = (await adminDb.collection('liveSessions').doc(uid).get()).data();
+      const expectedRoot = (await root.get()).val();
+      expect(expectedDiscovery).toMatchObject({
+        geoCell: 'cell-b',
+        latitude: 59.335,
+        refreshRequestedAtMs: newer.getTime(),
+        expiresAt: newFields.expiresAt,
+      });
+      expect(expectedDiscovery?.updatedAt).toBeInstanceOf(Timestamp);
+      expect(expectedRoot.session).toMatchObject({
+        discoveryGeoCell: 'cell-b',
+        discoveryRefreshedAt: newer.toISOString(),
+      });
+
+      // Complete A only after B has fully published. The Firestore case used to
+      // overwrite B's index while B's throttle suppressed its repair for 60s.
+      if (store === 'Firestore') {
+        expect(await writeDiscoveryForGeneration(uid, session, oldFields, older)).toBe(false);
+      } else {
+        await stampDiscoveryForActiveSession(uid, session, oldCell, older);
+      }
+      expect((await adminDb.collection('liveSessions').doc(uid).get()).data()).toEqual(
+        expectedDiscovery,
+      );
+      expect((await root.get()).val()).toEqual(expectedRoot);
+    },
+  );
+
+  it('rejects equal-millisecond duplicate refreshes without changing either store', async () => {
+    const { uid, now, session, root } = await discoveryStampFixture();
+    await stampDiscoveryForActiveSession(uid, session, 'held-cell', now);
+    const beforeDiscovery = (await adminDb.collection('liveSessions').doc(uid).get()).data();
+    const beforeRoot = (await root.get()).val();
+    expect(
+      await writeDiscoveryForGeneration(uid, session, { uid, geoCell: 'duplicate-cell' }, now),
+    ).toBe(false);
+    await stampDiscoveryForActiveSession(uid, session, 'duplicate-cell', now);
+    expect((await adminDb.collection('liveSessions').doc(uid).get()).data()).toEqual(
+      beforeDiscovery,
+    );
+    expect((await root.get()).val()).toEqual(beforeRoot);
+  });
+
+  it('accepts a legacy discovery doc without ordering state, then enforces request order', async () => {
+    const { uid, now, session } = await discoveryStampFixture(true);
+    const ref = adminDb.collection('liveSessions').doc(uid);
+    await ref.update({ refreshRequestedAtMs: FieldValue.delete() });
+    expect((await ref.get()).get('refreshRequestedAtMs')).toBeUndefined();
+    expect(await writeDiscoveryForGeneration(uid, session, { uid, geoCell: 'ordered' }, now)).toBe(
+      true,
+    );
+    expect((await ref.get()).data()).toMatchObject({
+      sessionId: session.id,
+      sessionGeneration: 0,
+      refreshRequestedAtMs: now.getTime(),
+      geoCell: 'ordered',
+    });
+    expect(
+      await writeDiscoveryForGeneration(
+        uid,
+        session,
+        { uid, geoCell: 'older' },
+        new Date(now.getTime() - 1),
+      ),
+    ).toBe(false);
+    expect((await ref.get()).get('geoCell')).toBe('ordered');
+  });
+
+  it('does not access either discovery document for throttled same-cell position samples', async () => {
+    await signInAs(member);
+    await call('live-startSession', { duration: '1h' });
+    // Run the real handler against the emulators, observing its own Firestore
+    // instance. HTTP runs in another process and cannot expose read counts.
+    const collectionSpy = vi.spyOn(liveDb, 'collection');
+    const update = (latitude: number) =>
+      updatePosition.run({
+        auth: { uid: member.uid, token: {} },
+        data: { coordinate: { ...coordinate(new Date().toISOString()), latitude } },
+      } as never);
+    try {
+      await update(59.334);
+      expect(collectionSpy.mock.calls.filter(([path]) => path === 'liveSessions')).toHaveLength(2);
+      expect(
+        collectionSpy.mock.calls.filter(([path]) => path === '_liveSessionFences'),
+      ).toHaveLength(1);
+      collectionSpy.mockClear();
+      for (const latitude of [59.33401, 59.33402, 59.33403]) await update(latitude);
+      expect(
+        collectionSpy.mock.calls.filter(
+          ([path]) => path === 'liveSessions' || path === '_liveSessionFences',
+        ),
+      ).toEqual([]);
+      expect((await adminRtdb.ref(`liveLocation/${member.uid}/latest`).get()).val().latitude).toBe(
+        59.33403,
+      );
+    } finally {
+      collectionSpy.mockRestore();
+      await call('live-stopSession', {});
+    }
+  });
+
   it.each(['id', 'generation', 'both'] as const)(
     'does not stamp a replacement session with a different %s after discovery was cleared',
     async (changed) => {
@@ -189,7 +320,7 @@ describe('liveDiscoveryFence readiness stamps', () => {
 
       // B still needs its own successful refresh to become ready.
       expect(
-        await writeDiscoveryForGeneration(uid, replacement, { uid, geoCell: 'new-cell' }),
+        await writeDiscoveryForGeneration(uid, replacement, { uid, geoCell: 'new-cell' }, now),
       ).toBe(true);
       await stampDiscoveryForActiveSession(uid, replacement, 'new-cell', now);
       expect((await root.child('session').get()).val()).toEqual({
@@ -297,15 +428,20 @@ describe('live session lifecycle', () => {
 
       // Resume the old update. The equal-generation inactive fence must win,
       // and the root transaction must prevent any later RTDB resurrection.
-      const discoveryWritten = await writeDiscoveryForGeneration(uid, heldSession!, {
+      const discoveryWritten = await writeDiscoveryForGeneration(
         uid,
-        latitude: 59.334,
-        longitude: 18.063,
-        geoCell: 'race-cell',
-        displayName: 'Race test',
-        updatedAt: Timestamp.fromDate(now),
-        expiresAt: Timestamp.fromDate(new Date(now.getTime() + 15 * 60_000)),
-      });
+        heldSession!,
+        {
+          uid,
+          latitude: 59.334,
+          longitude: 18.063,
+          geoCell: 'race-cell',
+          displayName: 'Race test',
+          updatedAt: Timestamp.fromDate(now),
+          expiresAt: Timestamp.fromDate(new Date(now.getTime() + 15 * 60_000)),
+        },
+        now,
+      );
       expect(discoveryWritten).toBe(false);
       expect((await adminRtdb.ref(`liveLocation/${uid}/latest`).get()).exists()).toBe(false);
       expect((await adminDb.collection('liveSessions').doc(uid).get()).exists).toBe(false);
@@ -350,7 +486,7 @@ describe('live session lifecycle', () => {
     };
 
     // Missing lifecycle authorization must never be minted by a position write.
-    expect(await writeDiscoveryForGeneration(uid, session, fields)).toBe(false);
+    expect(await writeDiscoveryForGeneration(uid, session, fields, now)).toBe(false);
     expect((await adminDb.collection('_liveSessionFences').doc(uid).get()).exists).toBe(false);
     expect((await adminDb.collection('liveSessions').doc(uid).get()).exists).toBe(false);
 
@@ -364,9 +500,9 @@ describe('live session lifecycle', () => {
         sessionId: 'older-session',
         active: true,
       });
-    expect(await writeDiscoveryForGeneration(uid, session, fields)).toBe(false);
+    expect(await writeDiscoveryForGeneration(uid, session, fields, now)).toBe(false);
     await activateDiscoveryGeneration(uid, session);
-    expect(await writeDiscoveryForGeneration(uid, session, fields)).toBe(true);
+    expect(await writeDiscoveryForGeneration(uid, session, fields, now)).toBe(true);
     expect((await adminDb.collection('liveSessions').doc(uid).get()).data()).toMatchObject({
       sessionId: session.id,
       sessionGeneration: session.generation,
@@ -408,15 +544,20 @@ describe('live session lifecycle', () => {
     expect((await adminDb.collection('_liveSessionFences').doc(uid).get()).exists).toBe(false);
     expect((await adminDb.collection('liveSessions').doc(uid).get()).exists).toBe(false);
 
-    const resumed = await writeDiscoveryForGeneration(uid, heldSession, {
+    const resumed = await writeDiscoveryForGeneration(
       uid,
-      latitude: 59.335,
-      longitude: 18.064,
-      geoCell: 'purge-cell',
-      displayName: 'Purge race',
-      updatedAt: Timestamp.fromDate(now),
-      expiresAt: Timestamp.fromDate(new Date(now.getTime() + 15 * 60_000)),
-    });
+      heldSession,
+      {
+        uid,
+        latitude: 59.335,
+        longitude: 18.064,
+        geoCell: 'purge-cell',
+        displayName: 'Purge race',
+        updatedAt: Timestamp.fromDate(now),
+        expiresAt: Timestamp.fromDate(new Date(now.getTime() + 15 * 60_000)),
+      },
+      now,
+    );
     expect(resumed).toBe(false);
     expect((await adminDb.collection('_liveSessionFences').doc(uid).get()).exists).toBe(false);
     expect((await adminDb.collection('liveSessions').doc(uid).get()).exists).toBe(false);

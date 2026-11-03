@@ -150,8 +150,10 @@ export async function writeDiscoveryForGeneration(
   uid: string,
   session: LiveSession,
   fields: Record<string, unknown>,
+  refreshedAt: Date,
 ): Promise<boolean> {
   const generation = sessionGeneration(session);
+  const refreshRequestedAtMs = refreshedAt.getTime();
   return db.runTransaction(async (tx) => {
     const fenceSnapshot = await tx.get(discoveryFenceRef(uid));
     const fence = fenceSnapshot.data() as DiscoveryFence | undefined;
@@ -163,10 +165,25 @@ export async function writeDiscoveryForGeneration(
     ) {
       return false;
     }
+    // One extra document read per attempted refresh (plus transaction retries),
+    // never per throttled position sample. Compare trusted server request time,
+    // not completion time, so a delayed refresh cannot move the index backward
+    // while RTDB retains the newer throttle time/cell. Legacy docs lack this field.
+    const discoverySnapshot = await tx.get(discoveryRef(uid));
+    const discovery = discoverySnapshot.data();
+    if (
+      discovery?.sessionId === session.id &&
+      discovery.sessionGeneration === generation &&
+      typeof discovery.refreshRequestedAtMs === 'number' &&
+      discovery.refreshRequestedAtMs >= refreshRequestedAtMs
+    ) {
+      return false;
+    }
     tx.set(discoveryRef(uid), {
       ...fields,
       sessionId: session.id,
       sessionGeneration: generation,
+      refreshRequestedAtMs,
     });
     return true;
   });
@@ -417,11 +434,16 @@ export const updatePosition = onCall(
       now,
     );
     if (refreshDiscovery) {
-      const discoveryWritten = await writeDiscoveryForGeneration(actor.uid, session!, {
-        ...discoveryFields,
-        updatedAt: FieldValue.serverTimestamp(),
-        expiresAt: Timestamp.fromDate(discoveryExpiresAt(session!.expiresAt, now)),
-      });
+      const discoveryWritten = await writeDiscoveryForGeneration(
+        actor.uid,
+        session!,
+        {
+          ...discoveryFields,
+          updatedAt: FieldValue.serverTimestamp(),
+          expiresAt: Timestamp.fromDate(discoveryExpiresAt(session!.expiresAt, now)),
+        },
+        now,
+      );
       // Start/stop/purge may have won after the Firestore write. Stamp only the
       // exact active session, preserving any intervening session-field updates.
       if (discoveryWritten) {

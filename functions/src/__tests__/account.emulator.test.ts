@@ -275,15 +275,20 @@ describe('account purge (hard delete after retention)', () => {
 
     // Resume the held update after purge completion. The batch-deleted fence is
     // authoritative, so the transaction fails closed and recreates nothing.
-    const resumed = await writeDiscoveryForGeneration(uid, heldSession!, {
+    const resumed = await writeDiscoveryForGeneration(
       uid,
-      geoCell: '57.70,11.97',
-      latitude: 57.7,
-      longitude: 11.97,
-      displayName: 'Purge race',
-      updatedAt: Timestamp.fromDate(now),
-      expiresAt: Timestamp.fromDate(new Date(now.getTime() + 15 * 60_000)),
-    });
+      heldSession!,
+      {
+        uid,
+        geoCell: '57.70,11.97',
+        latitude: 57.7,
+        longitude: 11.97,
+        displayName: 'Purge race',
+        updatedAt: Timestamp.fromDate(now),
+        expiresAt: Timestamp.fromDate(new Date(now.getTime() + 15 * 60_000)),
+      },
+      now,
+    );
     expect(resumed).toBe(false);
     expect((await adminDb.collection('_liveSessionFences').doc(uid).get()).exists).toBe(false);
     expect((await adminDb.collection('liveSessions').doc(uid).get()).exists).toBe(false);
