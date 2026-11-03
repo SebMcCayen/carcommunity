@@ -41,9 +41,10 @@ jobs:
     # startup margins under the combined simulator/emulator workload.
     # https://docs.github.com/en/actions/reference/runners/github-hosted-runners
     runs-on: macos-26
-    # The full sequence already takes ~88 minutes. Keep room for the added
-    # search/navigation acceptance without dropping any existing gates.
-    timeout-minutes: 120
+    # The usual full sequence takes ~88 minutes. A loaded hosted worker took
+    # twice as long for the UI gate; retain every gate with enough time for
+    # that slower worker rather than cancelling during the remaining suites.
+    timeout-minutes: 180
 
     steps:
       - name: Checkout
@@ -107,6 +108,7 @@ jobs:
             ENTITLEMENTS_REQUIRED=YES ONLY_ACTIVE_ARCH=YES \
             -parallel-testing-enabled NO \
             -only-testing:KCCUITests/ShellSmokeTests/testClubsMenuRemainsDiscoverableWithoutBackendActivation \
+            -only-testing:KCCUITests/ShellSmokeTests/testChatBackLiveMetricsProfileAndStopMatchAndroid \
             -only-testing:KCCUITests/ShellSmokeTests/testSearchSelectionOffersExplicitNavigationAndKeepsTheMap \
             -only-testing:KCCUITests/ShellSmokeTests/testNavigationHandoffFailureKeepsTheDestinationAvailable \
             -only-testing:KCCUITests/ShellSmokeTests/testCommunityOpensAtLatestWithAccessibleText \

@@ -283,6 +283,7 @@
 		9F90B8054689D63638117E16 /* CrownHuntFirestoreSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41CE2F8F631ED4927075CCE9 /* CrownHuntFirestoreSupport.swift */; };
 		A044AEBBA2C5723FA02F095B /* FirebasePerkBalanceRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD5D2E8A297501B4193695C2 /* FirebasePerkBalanceRepository.swift */; };
 		A1839396C02384C8278FFC9F /* MapLayerPreferencesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ADA4273944D1E94AC6D82A4 /* MapLayerPreferencesTests.swift */; };
+		A338EDD44E0F569801232217 /* LiveSessionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B5AF2B1AB131008E6E8FD5E /* LiveSessionBar.swift */; };
 		A5219FCCDAEE57D0C931719D /* GarageCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5B9C0DCCDA464441F249D46 /* GarageCoordinator.swift */; };
 		A5C59311A4AC26F6C7D465BA /* FirebaseNotificationSettingsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27E84AD4B95E57EDC67F3C61 /* FirebaseNotificationSettingsRepository.swift */; };
 		A7029D7DACD6EC919A1F5593 /* FirebaseDriverFeedRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07BAB6840921E92433C06361 /* FirebaseDriverFeedRepository.swift */; };
@@ -314,6 +315,7 @@
 		B65D3D7C670D81D62344F694 /* EventDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E9C5C7C20739CCEDF496488 /* EventDetailScreen.swift */; };
 		B65E5027BA2EFEBBC7DD3220 /* ProfileCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C4A684F2E228EDA44F3221F /* ProfileCoordinator.swift */; };
 		B69A0CDD776D80287AF1B05D /* FirebasePointsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C10910BBB51E9522B11F784 /* FirebasePointsRepository.swift */; };
+		B8C6EE0052082D31E258C487 /* ConfiglessLiveSessionFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D2EA220E81D983DA995C9AE /* ConfiglessLiveSessionFixture.swift */; };
 		B9C98510232A08BDA7CA4DEC /* IncidentMapCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 387F13C825FDF70BA38790DC /* IncidentMapCoordinator.swift */; };
 		BA690782F30A4133A0E717E7 /* BlockedUsersScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBED40AFB6617C5CBB6EAC86 /* BlockedUsersScreen.swift */; };
 		BA946E8E3AB562159EB5606E /* PartnersScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36D759A181634BFF38211135 /* PartnersScreen.swift */; };
@@ -352,6 +354,7 @@
 		CB74AD40DF3D54FF1EEFDBC4 /* ConvoyManagementModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0323E8145E9403B744C5203A /* ConvoyManagementModelsTests.swift */; };
 		CC3F7A0DCC442D24A79759AE /* SubscriptionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AC51C2AE7902A7EFCF015E4 /* SubscriptionCoordinator.swift */; };
 		CC7614CE72EA5A6B00F14FF4 /* AccountAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77E3150819F0BFB45C914129 /* AccountAccess.swift */; };
+		CCCB5D51A7D6498DE9B07828 /* LiveSessionReadout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5026C637F0A0B82526882126 /* LiveSessionReadout.swift */; };
 		CCF50366F85FE12F5C88CB5F /* NotificationsInboxCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99777699003E0D1F8B9FCD63 /* NotificationsInboxCoordinator.swift */; };
 		CD14BC3E85FE19A3B2B9A7E4 /* FeedbackFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D93D195913ADF60FB8F6EDD4 /* FeedbackFeatureTests.swift */; };
 		CD2027F9BB2FF98CDB28BA22 /* WelcomeGateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F3925B8DAE8AC1278377794 /* WelcomeGateView.swift */; };
@@ -364,6 +367,7 @@
 		D0794A7BDDC1BAD685733BE0 /* OnboardingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07AB0F95F655E836F1DD7719 /* OnboardingTests.swift */; };
 		D0AC1EC9AC5DF1892CE397F5 /* CrownHuntMapRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 521D540F62266B46D5999388 /* CrownHuntMapRepository.swift */; };
 		D0E7BE92EB90FEB0616558EB /* IncidentRepositories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7774A44523D01A40506D3F0A /* IncidentRepositories.swift */; };
+		D1624FCA1ABA8B859B82B9E3 /* LiveSessionReadoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80796E69DDC0161013A427BF /* LiveSessionReadoutTests.swift */; };
 		D1B7BD57517D10D95E1B826E /* AccountDeletionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E30203B7BB62158B230D9BC /* AccountDeletionCoordinator.swift */; };
 		D1D2A3825A8872966C4FB3F2 /* ClubsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65F55D48F0A695F0C1D09834 /* ClubsScreen.swift */; };
 		D1DF0937FFBF7262778F54A8 /* PointsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28B9BA1898943372EB438EBE /* PointsScreen.swift */; };
@@ -503,6 +507,7 @@
 		1A45B80623D588BB3DC63A44 /* FirebaseBillboardsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseBillboardsRepository.swift; sourceTree = "<group>"; };
 		1ADA4273944D1E94AC6D82A4 /* MapLayerPreferencesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapLayerPreferencesTests.swift; sourceTree = "<group>"; };
 		1B4532D3799C9910574152D2 /* KCC.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = KCC.entitlements; sourceTree = "<group>"; };
+		1B5AF2B1AB131008E6E8FD5E /* LiveSessionBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSessionBar.swift; sourceTree = "<group>"; };
 		1D6838666A82B7A2863EFC02 /* IncidentModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncidentModels.swift; sourceTree = "<group>"; };
 		1F9050ED8A8D96ACE23EADCF /* CrashTelemetryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashTelemetryTests.swift; sourceTree = "<group>"; };
 		1FDCD5467CC28087B5AAECB1 /* EventDetailCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailCoordinator.swift; sourceTree = "<group>"; };
@@ -588,6 +593,7 @@
 		4EF51B87F1C88EDC0119C55E /* DriveRecordingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveRecordingCoordinator.swift; sourceTree = "<group>"; };
 		4F45BE07A84CADAD825221C0 /* FirebaseCrownHuntMapRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseCrownHuntMapRepository.swift; sourceTree = "<group>"; };
 		4F779A1367C735D28FE88719 /* AccountDeletionScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDeletionScreen.swift; sourceTree = "<group>"; };
+		5026C637F0A0B82526882126 /* LiveSessionReadout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSessionReadout.swift; sourceTree = "<group>"; };
 		5067A6E44861FDA5AB19A8EC /* LocationPermissionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPermissionCoordinator.swift; sourceTree = "<group>"; };
 		50D5F8349418CFC684C68B94 /* FirebaseOnboardingRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseOnboardingRepository.swift; sourceTree = "<group>"; };
 		510F5153D904493D729FC62E /* GroupDriveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupDriveTests.swift; sourceTree = "<group>"; };
@@ -671,6 +677,7 @@
 		7E59EE0BC8A65F54254FC281 /* AppUpdate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdate.swift; sourceTree = "<group>"; };
 		7E8F58FC4AC949B4CF76BF2D /* FirebaseConversationsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseConversationsRepository.swift; sourceTree = "<group>"; };
 		7F7188138F4EE7E96F48A73E /* FriendsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsModels.swift; sourceTree = "<group>"; };
+		80796E69DDC0161013A427BF /* LiveSessionReadoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSessionReadoutTests.swift; sourceTree = "<group>"; };
 		8161D168D30934989C0AE78C /* ConvoyFollowMeRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyFollowMeRepository.swift; sourceTree = "<group>"; };
 		823B72DF567DBE7BF840589A /* LeaderboardScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardScreen.swift; sourceTree = "<group>"; };
 		838365AF9A026F751D6E80C2 /* MapHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapHomeView.swift; sourceTree = "<group>"; };
@@ -728,6 +735,7 @@
 		9BDF86D32CA8120C5012EDD1 /* LiveLocationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveLocationRepository.swift; sourceTree = "<group>"; };
 		9C656904E8283D93015D20C7 /* DriveEditorDesignTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveEditorDesignTests.swift; sourceTree = "<group>"; };
 		9C88730F65A1C33A53F8172B /* FirebaseEmulatorIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseEmulatorIntegrationTests.swift; sourceTree = "<group>"; };
+		9D2EA220E81D983DA995C9AE /* ConfiglessLiveSessionFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfiglessLiveSessionFixture.swift; sourceTree = "<group>"; };
 		9DBBB1856DCE04D9FD4E51DA /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
 		9DEF4ED7893F96EB87EF107D /* AuthorizedAccountDeletionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthorizedAccountDeletionTests.swift; sourceTree = "<group>"; };
 		9E00DF3B5AA069BE90D841A5 /* NotificationsInboxCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsInboxCoordinatorTests.swift; sourceTree = "<group>"; };
@@ -1222,11 +1230,14 @@
 		4554980288C2C9BE3F0D598E /* Live */ = {
 			isa = PBXGroup;
 			children = (
+				9D2EA220E81D983DA995C9AE /* ConfiglessLiveSessionFixture.swift */,
 				7DA50C019E713C28BED57AD0 /* FirebaseLiveLocationRepository.swift */,
 				EC89EA11EF153690B64A279F /* LiveLocationCoordinator.swift */,
 				E9FA025EB2C5F3449909E116 /* LiveLocationModels.swift */,
 				9BDF86D32CA8120C5012EDD1 /* LiveLocationRepository.swift */,
 				36B73725FF334E4EAEA7D54B /* LiveLocationScreen.swift */,
+				1B5AF2B1AB131008E6E8FD5E /* LiveSessionBar.swift */,
+				5026C637F0A0B82526882126 /* LiveSessionReadout.swift */,
 				9435A5A10072BF22FE5DC583 /* NearbyLiveCoordinator.swift */,
 				CC4F12F49825BF49BD345CDA /* NearbyLiveModels.swift */,
 				A974073221EF611F67E2134F /* NearbyLiveOverlay.swift */,
@@ -1663,6 +1674,7 @@
 				9236972423C25F83DED119B1 /* LeaderboardModelTests.swift */,
 				4B7C7EEAB4A601B3797DD71B /* LiveLocationCoordinatorTests.swift */,
 				C723CECAC346226F99FA9C76 /* LiveLocationModelsTests.swift */,
+				80796E69DDC0161013A427BF /* LiveSessionReadoutTests.swift */,
 				6DA8EE9123DC7661B941CC80 /* LocationModelsTests.swift */,
 				D564C07DEB7807D86E0DBE40 /* LocationPermissionCoordinatorTests.swift */,
 				B35A236A6E9190DE9D6FCBD3 /* MapboxConfigurationTests.swift */,
@@ -1962,6 +1974,7 @@
 				43B1F3CB3F4CA182F8140E45 /* CommunityChatRepository.swift in Sources */,
 				38AAD93EB3B34A46078662B5 /* CommunityChatRepositoryFactory.swift in Sources */,
 				45AB885F82AFAB95AB358469 /* CommunityChatScreen.swift in Sources */,
+				B8C6EE0052082D31E258C487 /* ConfiglessLiveSessionFixture.swift in Sources */,
 				359EF4506E71E7C5C317B495 /* ConfiglessMapMarkerFixture.swift in Sources */,
 				3CE931578B373B3A1EDB22B3 /* ConfiglessPlaceSearchFixture.swift in Sources */,
 				F7EED2B134B04AFBD7C8C6DD /* ConversationsCoordinator.swift in Sources */,
@@ -2129,6 +2142,8 @@
 				8A1CC2875C7C6BEF0B395170 /* LiveLocationModels.swift in Sources */,
 				A7C2042AD7CCB16A796E71EA /* LiveLocationRepository.swift in Sources */,
 				15F365792E4CEB78754C9312 /* LiveLocationScreen.swift in Sources */,
+				A338EDD44E0F569801232217 /* LiveSessionBar.swift in Sources */,
+				CCCB5D51A7D6498DE9B07828 /* LiveSessionReadout.swift in Sources */,
 				860E4B5F3723504A01168D9E /* LocationModels.swift in Sources */,
 				710301199E72A8F7A0890592 /* LocationPermissionCoordinator.swift in Sources */,
 				0C467685036A28194159E76A /* LocationProvider.swift in Sources */,
@@ -2293,6 +2308,7 @@
 				3AC7E3C4AF4B283BFE89B041 /* LeaderboardModelTests.swift in Sources */,
 				CEFFD52D7D1EDBECC77BB66D /* LiveLocationCoordinatorTests.swift in Sources */,
 				E131FC550A1A702035CD3433 /* LiveLocationModelsTests.swift in Sources */,
+				D1624FCA1ABA8B859B82B9E3 /* LiveSessionReadoutTests.swift in Sources */,
 				3CB0CA2E730F5886F6D77260 /* LocationModelsTests.swift in Sources */,
 				2DC0460E003F97750680CC4D /* LocationPermissionCoordinatorTests.swift in Sources */,
 				A1839396C02384C8278FFC9F /* MapLayerPreferencesTests.swift in Sources */,
@@ -2457,7 +2473,7 @@
 				CODE_SIGN_ENTITLEMENTS = KCC/KCC.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CRASHLYTICS_COLLECTION_ENABLED = NO;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = KCC/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -2513,7 +2529,7 @@
 				CODE_SIGN_ENTITLEMENTS = KCC/KCC.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CRASHLYTICS_COLLECTION_ENABLED = YES;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = KCC/Info.plist;

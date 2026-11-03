@@ -32,6 +32,8 @@ struct MemberProfileScreen: View {
 
     var body: some View {
         content
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("memberProfile.screen")
             .kccReadingSurface(pageBackground: true)
             .tint(KccTheme.driver)
             .navigationTitle("memberProfile.title")

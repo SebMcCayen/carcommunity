@@ -18,7 +18,7 @@ struct ConversationsScreen: View {
     var makeNewDialogueCoordinator: (() -> NewDialogueCoordinator)?
     /// Opens (or re-opens) the 1:1 thread with the given member.
     var onOpenConversation: ((_ uid: String, _ displayName: String?) -> Void)?
-    /// False when embedded in Chat Hub, whose title owns the navigation bar.
+    /// Embedded chat uses an inline compose action instead of a navigation bar.
     var showsNavigationTitle = true
 
     @State private var showPicker = false
@@ -30,14 +30,9 @@ struct ConversationsScreen: View {
             .toolbar {
                 // Compose-new-message affordance (Android renders a FAB; the
                 // iOS convention is a toolbar compose button).
-                if canStartNew {
+                if showsNavigationTitle && canStartNew {
                     ToolbarItem(placement: .primaryAction) {
-                        Button {
-                            showPicker = true
-                        } label: {
-                            Image(systemName: "square.and.pencil")
-                        }
-                        .accessibilityLabel(Text("dm.newDialogue.action"))
+                        newDialogueButton.labelStyle(.iconOnly)
                     }
                 }
             }
@@ -68,8 +63,27 @@ struct ConversationsScreen: View {
         if showsNavigationTitle {
             content.navigationTitle(Text("dm.title"))
         } else {
-            content
+            VStack(spacing: 0) {
+                if canStartNew {
+                    HStack {
+                        Spacer(minLength: 0)
+                        newDialogueButton.buttonStyle(.bordered)
+                            .frame(minHeight: 48)
+                            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                    }
+                    .padding(.horizontal, KccSpacing.s4)
+                    .padding(.top, KccSpacing.s2)
+                }
+                content
+            }
         }
+    }
+
+    private var newDialogueButton: some View {
+        Button { showPicker = true } label: {
+            Label("dm.newDialogue.action", systemImage: "square.and.pencil")
+        }
+        .accessibilityIdentifier("conversations.newDialogue")
     }
 
     private var canStartNew: Bool {

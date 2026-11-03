@@ -95,6 +95,14 @@ final class DriveRecordingCoordinator {
 
     var isAvailable: Bool { repository != nil }
 
+    /// Never show a prior drive's total while a replacement session waits
+    /// behind the recorder's save/retry gate.
+    func distanceMeters(for sessionId: String) -> Double? {
+        guard case .recording(let summary) = state,
+              recorder?.context.sourceSessionId == sessionId else { return nil }
+        return summary.distanceMeters
+    }
+
     func updateContext(_ context: DriveRecordingContext) {
         guard desiredContext?.sourceSessionId == context.sourceSessionId
                 || recorder?.context.sourceSessionId == context.sourceSessionId else { return }

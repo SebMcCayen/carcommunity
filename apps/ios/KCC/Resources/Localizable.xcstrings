@@ -22169,6 +22169,23 @@
         }
       }
     },
+    "liveLocation.sessionBarManageHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öppna sessionens kontroller, inklusive Dölj mig nu."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open session controls, including Hide me now."
+          }
+        }
+      }
+    },
     "liveLocation.sessionBarSpeed": {
       "extractionState": "manual",
       "localizations": {
@@ -32301,6 +32318,23 @@
         }
       }
     },
+    "shell.backToMap": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tillbaka till kartan"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back to map"
+          }
+        }
+      }
+    },
     "shell.chat": {
       "extractionState": "manual",
       "localizations": {
@@ -36513,6 +36547,91 @@
           "stringUnit": {
             "state": "translated",
             "value": "Selecting a searched or saved place now shows a destination card with Navigate here. Navigation opens in Apple Maps when you tap the button."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build9Chat": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chattens extra rubrik är borttagen. Bakåtpilen vid Gemenskap tar dig till kartan."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The extra Chat title is removed. The back arrow beside Community returns to the map."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build9Highlight": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smidigare chatt och livekörning."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smoother chat and live driving."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build9Live": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Livefältet visar tid, aktuell hastighet och körd sträcka. Tryck på fältet för fler kontroller. Stoppknappen visar bara en ikon."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The live bar shows elapsed time, current speed and distance. Tap it for more controls. Stop now uses an icon without a visible label."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build9Map": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mapboxs logga och informationsknapp ligger nu till vänster och flyttas undan från livefältet."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The required Mapbox logo and information control now sit on the left, clear of the live bar."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build9Profiles": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öppna medlemsprofilen med Besök profil när du väljer en liveförare på kartan."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open a member’s profile with Visit profile when selecting a live driver on the map."
           }
         }
       }

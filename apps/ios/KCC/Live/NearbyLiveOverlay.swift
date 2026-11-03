@@ -93,6 +93,7 @@ struct NearbySharerDetail: View {
     @Bindable var coordinator: NearbyLiveCoordinator
     let uid: String
     let onUnavailable: () -> Void
+    var onViewProfile: ((String, String?) -> Void)? = nil
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -101,7 +102,15 @@ struct NearbySharerDetail: View {
                 if let marker {
                     NearbySharerIdentity(
                         marker: marker,
-                        imageURL: marker.imagePath.flatMap { coordinator.imageURLs[$0] }
+                        imageURL: marker.imagePath.flatMap { coordinator.imageURLs[$0] },
+                        onVisitProfile: onViewProfile.map { action in {
+                            // Re-check the authorized, fresh roster at the tap,
+                            // not only when this card was rendered.
+                            guard let current = coordinator.profileTarget(uid: uid) else {
+                                onUnavailable(); return
+                            }
+                            action(current.uid, current.displayName)
+                        } }
                     )
                 }
             }
@@ -115,6 +124,7 @@ struct NearbySharerDetail: View {
 struct NearbySharerIdentity: View {
     let marker: LiveMarker
     let imageURL: URL?
+    var onVisitProfile: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s3) {
@@ -138,6 +148,14 @@ struct NearbySharerIdentity: View {
             if let recordedAt = marker.recordedAt {
                 Text("\(String(localized: "liveLocation.lastUpdated")): \(recordedAt.formatted(.relative(presentation: .named)))")
                     .font(.subheadline).foregroundStyle(KccTheme.secondary)
+            }
+            if let onVisitProfile {
+                Button(action: onVisitProfile) {
+                    Text("nearby.visitProfile").frame(maxWidth: .infinity, minHeight: 48)
+                }
+                .kccPrimaryAction()
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                .accessibilityIdentifier("nearby.visitProfile")
             }
         }
         .accessibilityElement(children: .contain)

@@ -498,6 +498,10 @@ final class ConvoyManagementModelsTests: XCTestCase {
             )
         ], ownUid: "me")
 
+        XCTAssertEqual(coordinator.profileTarget(uid: "friend", at: now)?.uid, "friend")
+        XCTAssertNil(coordinator.profileTarget(uid: "me", at: now))
+        XCTAssertNil(coordinator.profileTarget(uid: "missing", at: now))
+        XCTAssertNil(coordinator.profileTarget(uid: "friend", at: now.addingTimeInterval(ConvoyArrowPlanner.staleAfter + 1)))
         XCTAssertNotNil(coordinator.fitPoints(now: now))
         XCTAssertEqual(
             coordinator.ownPoint(now: now),

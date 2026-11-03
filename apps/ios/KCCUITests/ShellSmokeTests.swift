@@ -73,12 +73,19 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertLessThanOrEqual(input.frame.maxY, app.buttons["shell.tab.chat"].frame.minY)
             input.tap()
             XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
-            let latest = app.staticTexts["Fixture message 39"]
+            let latest = app.staticTexts["chat.message.text.fixture-39"]
             let dismiss = app.buttons["chat.keyboard.dismiss"]
             XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
+            // Resolve the stable ID through the keyboard's AX-tree transition.
+            // Keep the poll cheap: querying several frames can exhaust its
+            // entire deadline on a loaded hosted simulator. Measure geometry
+            // after visibility is established, outside the polling deadline.
             let latestVisible = XCTNSPredicateExpectation(
-                predicate: NSPredicate { _, _ in latest.exists && latest.isHittable }, object: latest)
-            let latestReady = XCTWaiter.wait(for: [latestVisible], timeout: 5) == .completed
+                predicate: NSPredicate { _, _ in
+                    let current = app.staticTexts["chat.message.text.fixture-39"]
+                    return current.exists && current.isHittable
+                }, object: app)
+            let latestReady = XCTWaiter.wait(for: [latestVisible], timeout: 15) == .completed
             if !latestReady { chatProof(app, name: "chat-keyboard-latest-failure", tree: true) }
             XCTAssertTrue(latestReady, "Resizing for the keyboard must keep the latest message visible")
             XCTAssertFalse(app.buttons["shell.tab.chat"].exists, "Hide the primary navigation while writing")
@@ -86,8 +93,11 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertFalse(app.buttons["chatHub.channel.0"].exists)
             XCTAssertFalse(app.buttons["chatHub.events"].exists)
             // Require usable conversation space, not merely a visible composer.
-            let titleBottom = app.navigationBars.firstMatch.frame.maxY
-            let emojiRow = element("chat.quickEmojiRow", in: app)
+            let titleBottom = app.scrollViews["chat.thread.messages"].frame.minY
+            let emojiRow = app.scrollViews["chat.quickEmojiRow"]
+            let latestFrame = app.staticTexts["chat.message.text.fixture-39"].frame
+            XCTAssertGreaterThanOrEqual(latestFrame.minY, titleBottom)
+            XCTAssertLessThanOrEqual(latestFrame.maxY, emojiRow.frame.minY + 1)
             XCTAssertGreaterThan(emojiRow.frame.minY - titleBottom, 200)
             composerInput(in: app).typeText("Fixture reply")
             assertComposerDraft("Fixture reply", present: true, in: app)
@@ -234,6 +244,96 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertFalse(start.exists)
         XCTAssertTrue(app.buttons["shell.search"].isHittable)
         app.terminate()
+    }
+
+    func testChatBackLiveMetricsProfileAndStopMatchAndroid() {
+        for largeText in [false, true] {
+            let app = launch(language: "en", largeText: largeText,
+                theme: largeText ? "Dark" : "Light", liveFixture: true)
+            let map = app.staticTexts["shell.mapPlaceholder"]
+            let identity = map.value as? String
+            let bar = app.buttons["map.session.bar"]
+            XCTAssertTrue(bar.waitForExistence(timeout: 15))
+            let speedReady = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "36 km/h"), object: bar)
+            XCTAssertEqual(XCTWaiter.wait(for: [speedReady], timeout: 10), .completed)
+            let stop = app.buttons["shell.tab.create"]
+            XCTAssertEqual(stop.label, "Stop sharing")
+            XCTAssertEqual(stop.staticTexts.count, 0, "The Stop disc must contain only its icon")
+            XCTAssertLessThanOrEqual(bar.frame.maxY, stop.frame.minY)
+            XCTAssertFalse(app.staticTexts["Live location active"].exists)
+            XCTAssertFalse(app.buttons["map.session.hide"].exists)
+            chatProof(app, name: largeText ? "live-session-bar-en-accessibility" : "live-session-bar-en")
+
+            app.buttons["shell.tab.chat"].tap()
+            let chats = app.buttons["chatHub.source.chats"]
+            let back = app.buttons["chatHub.backToMap"]
+            let community = app.buttons["chatHub.channel.0"]
+            XCTAssertTrue(chats.waitForExistence(timeout: 10))
+            XCTAssertTrue(back.waitForExistence(timeout: 5))
+            XCTAssertTrue(back.isHittable)
+            XCTAssertLessThanOrEqual(back.frame.maxX, community.frame.minX)
+            XCTAssertLessThan(chats.frame.minY, 140, "The source selector belongs at the top without a Chat title")
+            XCTAssertFalse(app.navigationBars["Chat"].exists)
+            chatProof(app, name: largeText ? "chat-header-en-accessibility" : "chat-header-en")
+
+            // Removing the hub bar must not strand actions supplied by its
+            // embedded tabs. Settings stays inline and opens its own bar.
+            let notifications = app.buttons["chatHub.channel.3"]
+            let channels = element("chatHub.channels", in: app)
+            for _ in 0..<4 {
+                // XCTest can throw while resolving a wholly off-screen
+                // SwiftUI button's activation point. Scroll by geometry first.
+                let bounds = channels.frame.intersection(app.frame)
+                if notifications.exists {
+                    let frame = notifications.frame
+                    if !frame.isEmpty && bounds.contains(frame) { break }
+                }
+                channels.swipeLeft()
+            }
+            XCTAssertTrue(notifications.exists)
+            XCTAssertTrue(channels.frame.intersection(app.frame).contains(notifications.frame))
+            XCTAssertTrue(notifications.isHittable)
+            notifications.tap()
+            let settings = app.buttons["notifications.settings"]
+            XCTAssertTrue(settings.waitForExistence(timeout: 10))
+            XCTAssertTrue(settings.isHittable)
+            XCTAssertFalse(app.navigationBars["Chat"].exists)
+            chatProof(app, name: largeText ? "chat-notification-actions-en-accessibility" : "chat-notification-actions-en")
+            settings.tap()
+            XCTAssertTrue(app.navigationBars["Notification settings"].waitForExistence(timeout: 10))
+            app.buttons["Back"].firstMatch.tap()
+            XCTAssertTrue(settings.waitForExistence(timeout: 10))
+            XCTAssertTrue(back.isHittable)
+            back.tap()
+            assertSelected(app.buttons["shell.tab.map"])
+            XCTAssertEqual(map.value as? String, identity)
+            XCTAssertTrue(bar.isHittable, "Back must not stop the session")
+
+            let marker = app.buttons["map.fixture.liveSharer"]
+            XCTAssertTrue(marker.waitForExistence(timeout: 10))
+            marker.tap()
+            let visit = app.buttons["nearby.visitProfile"]
+            XCTAssertTrue(visit.waitForExistence(timeout: 10))
+            reveal(visit, in: app.scrollViews["map.reading.content"], minimumHeight: 48)
+            XCTAssertTrue(visit.isHittable)
+            XCTAssertLessThanOrEqual(visit.frame.maxY, app.buttons["shell.tab.map"].frame.minY)
+            chatProof(app, name: largeText ? "live-profile-card-en-accessibility" : "live-profile-card-en")
+            visit.tap()
+            XCTAssertTrue(element("memberProfile.screen", in: app).waitForExistence(timeout: 10))
+            app.buttons["Back"].firstMatch.tap()
+            XCTAssertTrue(bar.waitForExistence(timeout: 10))
+            stop.tap()
+            let confirmation = app.sheets.firstMatch
+            let ready = confirmation.waitForExistence(timeout: 5)
+            if !ready { chatProof(app, name: "live-stop-confirmation-missing", tree: true) }
+            XCTAssertTrue(ready)
+            confirmation.buttons["Stop sharing"].tap()
+            let stopped = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: bar)
+            XCTAssertEqual(XCTWaiter.wait(for: [stopped], timeout: 10), .completed)
+            XCTAssertEqual(stop.label, "Create")
+            XCTAssertEqual(map.value as? String, identity)
+            app.terminate()
+        }
     }
 
     func testSocialAndGarageDragHandlesReturnToTheRetainedMap() {
@@ -748,7 +848,8 @@ final class ShellSmokeTests: XCTestCase {
             app.buttons["shell.tab.chat"].tap()
             assertSelected(app.buttons["shell.tab.chat"])
             XCTAssertTrue(element("chatHub.opaqueScreen", in: app).waitForExistence(timeout: 5))
-            XCTAssertTrue(app.navigationBars[language == "sv" ? "Chatt" : "Chat"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.buttons["chatHub.source.chats"].waitForExistence(timeout: 5))
+            XCTAssertFalse(app.navigationBars[language == "sv" ? "Chatt" : "Chat"].exists)
             XCTAssertFalse(app.buttons["shell.search"].exists)
             attach(app, name: "\(prefix)-S29-chat-opaque")
             let driver = app.buttons["chatHub.source.driver"]
@@ -845,7 +946,7 @@ final class ShellSmokeTests: XCTestCase {
         start.press(forDuration: 0.1, thenDragTo: end)
     }
 
-    private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false, markerPoints: [CGPoint] = [], placeSearchFixture: Bool = false, rejectMaps: Bool = false) -> XCUIApplication {
+    private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false, markerPoints: [CGPoint] = [], placeSearchFixture: Bool = false, rejectMaps: Bool = false, liveFixture: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
         app.launchArguments += ["-KCCUITestTheme", theme]
@@ -855,6 +956,7 @@ final class ShellSmokeTests: XCTestCase {
         if chatFixture { app.launchArguments += ["-KCCUITestChatThread"] }
         if placeSearchFixture { app.launchArguments += ["-KCCUITestPlaceSearch"] }
         if rejectMaps { app.launchArguments += ["-KCCUITestRejectMaps"] }
+        if liveFixture { app.launchArguments += ["-KCCUITestLiveSession"] }
         if !markerPoints.isEmpty {
             app.launchArguments += ["-KCCUITestMapMarkers", markerPoints.map { "\($0.x),\($0.y)" }.joined(separator: ";")]
         }

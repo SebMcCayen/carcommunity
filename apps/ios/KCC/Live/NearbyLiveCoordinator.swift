@@ -164,6 +164,10 @@ final class NearbyLiveCoordinator {
         )
     }
 
+    func profileTarget(uid: String, at now: Date = Date()) -> LiveMarker? {
+        visibleMarkers(at: now).first { $0.uid == uid }
+    }
+
     private func apply(_ sessions: [NearbyLiveSession]) {
         var seen = Set<String>()
         let allowed = sessions.compactMap { session -> NearbyLiveSession? in

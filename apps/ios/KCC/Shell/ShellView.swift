@@ -210,7 +210,12 @@ struct ShellView: View {
             }
             .onChange(of: featureFlags.isEnabled(.liveLocation)) { _, enabled in
                 liveLocationCoordinator?.canShare = enabled && !access.isRestricted
-                if !enabled, case .nearby = mapReadingSelection { dismissMapReading() }
+                if !enabled {
+                    switch mapReadingSelection {
+                    case .nearby, .convoyMember: dismissMapReading()
+                    default: break
+                    }
+                }
             }
             .onChange(of: chatFeatureWiringKey) { _, _ in
                 applyChatFeatureGate()
@@ -480,6 +485,10 @@ struct ShellView: View {
             if let item = incidentMapCoordinator?.selectedPolice, item.id == id {
                 mapSurface.centerOn(MapPoint(longitude: item.longitude, latitude: item.latitude))
             }
+        case .convoyMember(let uid):
+            if let item = convoyAwareness.visibleMembers.first(where: { $0.uid == uid && $0.isFresh() }) {
+                mapSurface.centerOn(MapPoint(longitude: item.longitude, latitude: item.latitude))
+            }
         case .nearby(let uid):
             if let item = nearbyLive.visibleMarkers().first(where: { $0.uid == uid }) {
                 mapSurface.centerOn(MapPoint(longitude: item.longitude, latitude: item.latitude))
@@ -677,6 +686,11 @@ struct ShellView: View {
             if ConfiglessMapMarkerFixture.isEnabled {
                 ConfiglessMapMarkerFixture(mapMode: mapSurface.mapMode)
             }
+            if ConfiglessLiveSessionFixture.isEnabled {
+                ConfiglessNearbyLiveMarker(coordinator: nearbyLive) {
+                    selectMapReading(.nearby(ConfiglessLiveSessionFixture.otherUid))
+                }
+            }
             #endif
             if let crownMapCoordinator = crownHuntComposition?.mapCoordinator {
                 CrownHuntMapOverlay(
@@ -709,7 +723,8 @@ struct ShellView: View {
                 ConvoyMapAwarenessOverlay(
                     members: convoyAwareness.visibleMembers,
                     imageURLs: convoyAwareness.imageURLs,
-                    projection: mapSurface
+                    projection: mapSurface,
+                    onSelect: { uid in selectMapReading(.convoyMember(uid)) }
                 )
                 NearbyLiveOverlay(
                     coordinator: nearbyLive,
@@ -840,6 +855,18 @@ struct ShellView: View {
                 applyConvoyFocus()
             }
             .task(id: nearbyLiveTaskKey) {
+                #if DEBUG
+                if ConfiglessLiveSessionFixture.isEnabled {
+                    guard selectedTab == .map, routes.current == nil, scenePhase == .active else {
+                        nearbyLive.deactivate(); return
+                    }
+                    nearbyLive.activateRoster(repository: ConfiglessLiveSessionFixture.repository,
+                        currentUid: ConfiglessLiveSessionFixture.selfUid,
+                        participantUids: [ConfiglessLiveSessionFixture.otherUid], excludedUids: [])
+                    do { try await Task.sleep(for: .seconds(86_400)) } catch {}
+                    return
+                }
+                #endif
                 guard nearbyLiveShouldRun,
                       let repository = liveLocationRepository,
                       let uid = signedInUid
@@ -1036,7 +1063,9 @@ struct ShellView: View {
                     if let selection = mapReadingSelection {
                         mapReadingPanel(selection)
                             .id(selection)
-                            .frame(height: max(96, min(320, geometry.size.height * 0.55 - mapSessionHeight)))
+                            .frame(height: min(
+                                max(96, geometry.size.height - mapSessionHeight - KccSpacing.s4),
+                                max(180, min(320, geometry.size.height * 0.55 - mapSessionHeight))))
                     }
                     VStack(spacing: KccSpacing.s2) { mapSessionControls }
                         .background { GeometryReader { proxy in
@@ -1070,13 +1099,8 @@ struct ShellView: View {
             )
         }
         if let coordinator = liveLocationCoordinator, coordinator.isSharing {
-            MapLiveSessionControls(
-                busy: coordinator.actionStatus == .working || pendingSessionCommand != nil,
-                failed: coordinator.actionStatus == .failed,
-                onManage: { routes = routes.opening(.liveLocation) },
-                onStop: convoyManagementCoordinator?.activeConvoy == nil ? { showStopConfirmation = true } : nil,
-                onHide: { Task { await coordinator.hideMeNow() } }
-            )
+            LiveSessionBar(live: coordinator, recording: driveRecordingCoordinator,
+                onManage: { routes = routes.opening(.liveLocation) })
         }
         if let state = driveRecordingCoordinator?.state, case .kept = state {
             Button { routes = routes.opening(.myDrives) } label: {
@@ -1125,10 +1149,18 @@ struct ShellView: View {
                     PoliceDetailsContent(coordinator: coordinator)
                 }
             }
+        case .convoyMember(let uid):
+            if liveLocationFeatureEnabled {
+                MapReadingPanel(title: "liveLocation.screenTitle", onClose: dismissMapReading) {
+                    ConvoySharerDetail(coordinator: convoyAwareness, uid: uid,
+                        onUnavailable: dismissMapReading, onViewProfile: openMemberProfile)
+                }
+            }
         case .nearby(let uid):
             if liveLocationFeatureEnabled {
                 MapReadingPanel(title: "liveLocation.screenTitle", onClose: dismissMapReading) {
-                    NearbySharerDetail(coordinator: nearbyLive, uid: uid, onUnavailable: dismissMapReading)
+                    NearbySharerDetail(coordinator: nearbyLive, uid: uid,
+                        onUnavailable: dismissMapReading, onViewProfile: openMemberProfile)
                 }
             }
         }
@@ -1143,6 +1175,7 @@ struct ShellView: View {
         } else { mapReadingSelection = selection }
         if case .savedPlaces = selection { clearIncidentSelection() }
         if case .nearby = selection { clearIncidentSelection() }
+        if case .convoyMember = selection { clearIncidentSelection() }
     }
 
     private func clearIncidentSelection() {
@@ -1222,12 +1255,14 @@ struct ShellView: View {
                             .font(.system(size: 20, weight: .semibold))
                             .frame(height: 28)
                             .accessibilityHidden(true)
-                        Text(LocalizedStringKey(tabTitle(tab))).font(.caption2)
+                        if !(tab == .create && (liveLocationCoordinator?.isSharing == true || pendingSessionCommand == .starting)) {
+                          Text(LocalizedStringKey(tabTitle(tab))).font(.caption2)
                             // Only navigation chrome is bounded. Reading content
                             // keeps the user's full accessibility text size.
                             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
+                        }
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 56)
@@ -1518,7 +1553,7 @@ struct ShellView: View {
                 )
             }
         case .memberProfile:
-            if let target = memberProfileTarget, let viewerUid = signedInUid {
+            if let target = memberProfileTarget, let viewerUid = memberProfileViewerUid {
                 routeNavigation {
                     MemberProfileScreen(
                         targetUid: target.uid,
@@ -1677,7 +1712,8 @@ struct ShellView: View {
                 },
                 driverContent: AnyView(
                     ShellDriverFeed(uid: signedInUid)
-                )
+                ),
+                onBackToMap: closeChatToMap
             )
             .kccReadingSurface()
     }
@@ -1685,18 +1721,15 @@ struct ShellView: View {
     private var chatHubOverlay: some View {
         NavigationStack {
             chatHubContent
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        routes = routes.poppingOne()
-                    } label: {
-                        Label("shell.back", systemImage: "chevron.backward")
-                    }
-                }
-            }
         }
         .kccReadingSurface()
         .accessibilityAction(.escape) { routes = routes.poppingOne() }
+    }
+
+    private func closeChatToMap() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        routes = .empty
+        selectedTab = .map
     }
 
     private var unavailableRoute: some View {
@@ -2007,7 +2040,7 @@ struct ShellView: View {
     private func tabSystemImage(_ tab: ShellTab) -> String {
         if tab == .create,
            (liveLocationCoordinator?.isSharing == true || pendingSessionCommand == .starting) {
-            return "stop.circle.fill"
+            return "stop.fill"
         }
         return tab.systemImage
     }
@@ -2372,11 +2405,32 @@ struct ShellView: View {
             ConvoyFollowMeCoordinator(repository: $0)
         }
 
-        let liveRepository = FirebaseLiveLocationRepository.createIfAvailable()
+        let liveRepository: LiveLocationRepository?
+        let liveProvider: any LocationProvider
+        let recordingProvider: any LocationProvider
+        let recordingRepository: DriveRecordingRepository?
+        #if DEBUG
+        if ConfiglessLiveSessionFixture.isEnabled {
+            liveRepository = ConfiglessLiveSessionFixture.repository
+            liveProvider = ConfiglessLiveLocationProvider()
+            recordingProvider = ConfiglessLiveLocationProvider()
+            recordingRepository = ConfiglessDriveRecordingRepository()
+        } else {
+            liveRepository = FirebaseLiveLocationRepository.createIfAvailable()
+            liveProvider = liveLocationProvider
+            recordingProvider = driveLocationProvider
+            recordingRepository = FirebaseDriveRecordingRepository.createIfAvailable()
+        }
+        #else
+        liveRepository = FirebaseLiveLocationRepository.createIfAvailable()
+        liveProvider = liveLocationProvider
+        recordingProvider = driveLocationProvider
+        recordingRepository = FirebaseDriveRecordingRepository.createIfAvailable()
+        #endif
         liveLocationRepository = liveRepository
         let liveLocation = LiveLocationCoordinator(
             repository: liveRepository,
-            provider: liveLocationProvider,
+            provider: liveProvider,
             canShare: FeatureGate.isAvailable(
                 flags: featureFlags,
                 flag: .liveLocation,
@@ -2391,8 +2445,8 @@ struct ShellView: View {
         liveLocationCoordinator = liveLocation
         let driveJournal = uid.flatMap { FileDriveRecordingJournal(ownerId: $0) }
         driveRecordingCoordinator = DriveRecordingCoordinator(
-            repository: FirebaseDriveRecordingRepository.createIfAvailable(),
-            provider: driveLocationProvider,
+            repository: recordingRepository,
+            provider: recordingProvider,
             journal: driveJournal,
             uploadSpool: driveJournal?.routeUploadSpool
         )
@@ -2686,7 +2740,17 @@ struct ShellView: View {
     }
 
     private var liveLocationFeatureEnabled: Bool {
-        crownHuntComposition?.flags.liveLocationEnabled == true
+        #if DEBUG
+        if ConfiglessLiveSessionFixture.isEnabled { return true }
+        #endif
+        return crownHuntComposition?.flags.liveLocationEnabled == true
+    }
+
+    private var memberProfileViewerUid: String? {
+        #if DEBUG
+        if ConfiglessLiveSessionFixture.isEnabled { return ConfiglessLiveSessionFixture.selfUid }
+        #endif
+        return signedInUid
     }
 
     private var partnerStatsEntryAvailable: Bool {
@@ -2723,7 +2787,12 @@ struct ShellView: View {
     }
 
     private var nearbyLiveTaskKey: String {
-        "\(nearbyLiveShouldRun)|\(signedInUid ?? "")|\(groupDriveMapUids.joined(separator: ","))"
+        #if DEBUG
+        if ConfiglessLiveSessionFixture.isEnabled {
+            return "fixture|\(selectedTab)|\(String(describing: routes.current))|\(scenePhase)"
+        }
+        #endif
+        return "\(nearbyLiveShouldRun)|\(signedInUid ?? "")|\(groupDriveMapUids.joined(separator: ","))"
     }
 
     private func showGroupDriveOnMap(_ participantUids: [String]) {
