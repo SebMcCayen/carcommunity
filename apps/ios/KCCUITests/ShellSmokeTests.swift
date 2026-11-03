@@ -63,10 +63,7 @@ final class ShellSmokeTests: XCTestCase {
                 "Quick reactions must work with an empty draft")
             // SwiftUI's vertical TextField may expose a measuring TextField
             // as well as the real TextView. Require a tappable editable widget.
-            let candidates = app.textFields.matching(identifier: "chat.composer.input").allElementsBoundByIndex
-                + app.textViews.matching(identifier: "chat.composer.input").allElementsBoundByIndex
-            let input = candidates.first(where: { $0.isHittable })
-                ?? app.descendants(matching: .any).matching(identifier: "chat.composer.input").firstMatch
+            let input = composerInput(in: app)
             XCTAssertTrue(input.waitForExistence(timeout: 5))
             if !input.isHittable {
                 chatProof(app, name: "composer-not-hittable", tree: true)
@@ -92,7 +89,8 @@ final class ShellSmokeTests: XCTestCase {
             let titleBottom = app.navigationBars.firstMatch.frame.maxY
             let emojiRow = element("chat.quickEmojiRow", in: app)
             XCTAssertGreaterThan(emojiRow.frame.minY - titleBottom, 200)
-            input.typeText("Fixture reply")
+            composerInput(in: app).typeText("Fixture reply")
+            assertComposerDraft("Fixture reply", present: true, in: app)
             let send = app.buttons["chat.composer.send"]
             XCTAssertTrue(send.isHittable)
             XCTAssertLessThanOrEqual(send.frame.maxY, app.keyboards.firstMatch.frame.minY + 1)
@@ -102,7 +100,7 @@ final class ShellSmokeTests: XCTestCase {
                 format: "identifier BEGINSWITH %@ AND label == %@", "chat.message.text.", "😊")).firstMatch
             XCTAssertTrue(happy.waitForExistence(timeout: 5))
             XCTAssertTrue(happy.isHittable)
-            XCTAssertTrue((input.value as? String)?.contains("Fixture reply") == true)
+            assertComposerDraft("Fixture reply", present: true, in: app)
             emojiRow.swipeLeft()
             XCTAssertTrue(app.keyboards.firstMatch.exists, "Browsing quick reactions must keep the keyboard open")
             let crownButton = app.buttons["chat.quickEmoji.crown"]
@@ -112,20 +110,20 @@ final class ShellSmokeTests: XCTestCase {
                 format: "identifier BEGINSWITH %@ AND label == %@", "chat.message.text.", "👑")).firstMatch
             XCTAssertTrue(crown.waitForExistence(timeout: 5))
             XCTAssertTrue(crown.isHittable)
-            XCTAssertTrue((input.value as? String)?.contains("Fixture reply") == true)
+            assertComposerDraft("Fixture reply", present: true, in: app)
             chatProof(app, name: largeText ? "chat-writing-sv-accessibility" : "chat-writing-sv")
             dismiss.tap()
             XCTAssertTrue(app.buttons["shell.tab.chat"].waitForExistence(timeout: 5))
             XCTAssertFalse(app.keyboards.firstMatch.exists)
-            XCTAssertTrue((input.value as? String)?.contains("Fixture reply") == true, "Hiding the keyboard must preserve the draft")
+            assertComposerDraft("Fixture reply", present: true, in: app)
             XCTAssertTrue(app.buttons["chatHub.source.chats"].exists)
-            input.tap()
+            composerInput(in: app).tap()
             XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
             send.tap()
             let reply = app.staticTexts["Fixture reply"]
             XCTAssertTrue(reply.waitForExistence(timeout: 5))
             XCTAssertTrue(reply.isHittable)
-            XCTAssertFalse((input.value as? String)?.contains("Fixture reply") == true)
+            assertComposerDraft("Fixture reply", present: false, in: app)
             // Keyboard resizing must also respect a deliberate history read.
             app.buttons["chat.keyboard.dismiss"].tap()
             XCTAssertTrue(app.buttons["shell.tab.chat"].waitForExistence(timeout: 5))
@@ -133,7 +131,7 @@ final class ShellSmokeTests: XCTestCase {
             messages.swipeDown()
             messages.swipeDown()
             XCTAssertFalse(reply.exists && reply.isHittable)
-            input.tap()
+            composerInput(in: app).tap()
             XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
             XCTAssertFalse(reply.exists && reply.isHittable, "Opening the keyboard must not jump away from older history")
             app.terminate()
@@ -148,6 +146,14 @@ final class ShellSmokeTests: XCTestCase {
             let identity = map.value as? String
             let mapFrame = map.frame
             app.buttons["shell.search"].tap()
+            if largeText {
+                let hide = app.buttons["addressSearch.keyboard.dismiss"]
+                XCTAssertTrue(hide.waitForExistence(timeout: 5))
+                hide.tap()
+                let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"),
+                    object: app.keyboards.firstMatch)
+                XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed)
+            }
             let saved = app.buttons["addressSearch.saved.home"]
             XCTAssertTrue(saved.waitForExistence(timeout: 5))
             saved.tap()
@@ -164,9 +170,23 @@ final class ShellSmokeTests: XCTestCase {
             let query = app.textFields["addressSearch.query"]
             XCTAssertTrue(query.waitForExistence(timeout: 5))
             query.tap()
-            query.typeText("station")
+            query.typeText(largeText ? "station\n" : "station")
+            if largeText {
+                let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"),
+                    object: app.keyboards.firstMatch)
+                XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed)
+            }
             let result = app.buttons["addressSearch.result.fixture-varberg"]
-            XCTAssertTrue(result.waitForExistence(timeout: 10))
+            let resultExists = result.waitForExistence(timeout: 10)
+            if !resultExists { chatProof(app, name: "search-result-missing", tree: true) }
+            XCTAssertTrue(resultExists)
+            let results = element("addressSearch.results", in: app)
+            for _ in 0..<8 {
+                if result.exists && result.isHittable && !result.frame.isInfinite { break }
+                results.swipeUp()
+            }
+            if !result.exists || !result.isHittable { chatProof(app, name: "search-result-unreachable", tree: true) }
+            XCTAssertTrue(result.isHittable)
             result.tap()
             XCTAssertTrue(name.waitForExistence(timeout: 5))
             XCTAssertEqual(name.label, "Varberg station")
@@ -779,6 +799,30 @@ final class ShellSmokeTests: XCTestCase {
             print("KCC_CHAT_PROOF_DATA \(String(encoded[start..<min(start + 4096, encoded.count)]))")
         }
         print("KCC_CHAT_PROOF_END \(name).jpg")
+    }
+
+    /// SwiftUI's vertical field can replace its measuring UITextField with a
+    /// UITextView after input/layout changes. Re-query the visible editor;
+    /// retaining the original element can read a retired measuring widget.
+    private func composerInput(in app: XCUIApplication) -> XCUIElement {
+        let candidates = app.textViews.matching(identifier: "chat.composer.input").allElementsBoundByIndex
+            + app.textFields.matching(identifier: "chat.composer.input").allElementsBoundByIndex
+        return candidates.first(where: { $0.isHittable })
+            ?? app.descendants(matching: .any).matching(identifier: "chat.composer.input").firstMatch
+    }
+
+    private func assertComposerDraft(_ text: String, present: Bool, in app: XCUIApplication,
+                                     file: StaticString = #filePath, line: UInt = #line) {
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let candidates = app.textViews.matching(identifier: "chat.composer.input").allElementsBoundByIndex
+                + app.textFields.matching(identifier: "chat.composer.input").allElementsBoundByIndex
+            guard let editor = candidates.first(where: { $0.isHittable }),
+                  let value = editor.value as? String else { return false }
+            return value.contains(text) == present
+        }, object: app)
+        let result = XCTWaiter.wait(for: [expectation], timeout: 5)
+        if result != .completed { chatProof(app, name: "chat-draft-value-failure", tree: true) }
+        XCTAssertEqual(result, .completed, "Visible editor must preserve the expected draft until Send", file: file, line: line)
     }
 
     private func attach(_ app: XCUIApplication, name: String) {

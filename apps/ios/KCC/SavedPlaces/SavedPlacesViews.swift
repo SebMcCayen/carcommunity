@@ -28,6 +28,7 @@ struct AddressSearchOverlay: View {
                 .textInputAutocapitalization(.words)
                 .autocorrectionDisabled()
                 .submitLabel(.search)
+                .onSubmit { searchFocused = false }
                 .accessibilityIdentifier("addressSearch.query")
                 .focused($searchFocused)
                 if !coordinator.query.isEmpty {
@@ -39,7 +40,18 @@ struct AddressSearchOverlay: View {
                             .frame(width: 48, height: 48)
                     }
                 }
+                if searchFocused {
+                    Button { searchFocused = false } label: {
+                        Image(systemName: "keyboard.chevron.compact.down")
+                            .font(.system(size: 20))
+                            .frame(width: 44, height: 48)
+                            .contentShape(Rectangle())
+                    }
+                    .accessibilityLabel(Text("chat.hideKeyboard"))
+                    .accessibilityIdentifier("addressSearch.keyboard.dismiss")
+                }
             }
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .padding(KccSpacing.s3)
 
             Divider()
@@ -97,6 +109,8 @@ struct AddressSearchOverlay: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            .scrollDismissesKeyboard(.interactively)
+            .accessibilityIdentifier("addressSearch.results")
         } else if coordinator.isSearching {
             ProgressView("addressSearch.loading")
                 .frame(maxWidth: .infinity, minHeight: 150)
@@ -145,6 +159,8 @@ struct AddressSearchOverlay: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            .scrollDismissesKeyboard(.interactively)
+            .accessibilityIdentifier("addressSearch.results")
         }
     }
 
