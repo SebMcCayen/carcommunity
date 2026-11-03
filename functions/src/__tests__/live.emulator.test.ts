@@ -50,7 +50,10 @@ const REGION = 'europe-west1';
 const adminApp =
   getAdminApps()[0] ??
   initializeAdminApp(
-    { projectId: PROJECT_ID, databaseURL: `http://${EMULATOR_HOST}:9000?ns=${PROJECT_ID}-default-rtdb` },
+    {
+      projectId: PROJECT_ID,
+      databaseURL: `http://${EMULATOR_HOST}:9000?ns=${PROJECT_ID}-default-rtdb`,
+    },
     'live-emulator-tests',
   );
 const adminAuth = getAdminAuth(adminApp);
@@ -185,9 +188,9 @@ describe('liveDiscoveryFence readiness stamps', () => {
       expect((await adminDb.collection('liveSessions').doc(uid).get()).exists).toBe(false);
 
       // B still needs its own successful refresh to become ready.
-      expect(await writeDiscoveryForGeneration(uid, replacement, { uid, geoCell: 'new-cell' })).toBe(
-        true,
-      );
+      expect(
+        await writeDiscoveryForGeneration(uid, replacement, { uid, geoCell: 'new-cell' }),
+      ).toBe(true);
       await stampDiscoveryForActiveSession(uid, replacement, 'new-cell', now);
       expect((await root.child('session').get()).val()).toEqual({
         ...replacement,
@@ -353,11 +356,14 @@ describe('live session lifecycle', () => {
 
     // A newer RTDB session may publish only after its start path activates the
     // matching Firestore generation; an older active fence is not sufficient.
-    await adminDb.collection('_liveSessionFences').doc(uid).set({
-      generation: session.generation - 1,
-      sessionId: 'older-session',
-      active: true,
-    });
+    await adminDb
+      .collection('_liveSessionFences')
+      .doc(uid)
+      .set({
+        generation: session.generation - 1,
+        sessionId: 'older-session',
+        active: true,
+      });
     expect(await writeDiscoveryForGeneration(uid, session, fields)).toBe(false);
     await activateDiscoveryGeneration(uid, session);
     expect(await writeDiscoveryForGeneration(uid, session, fields)).toBe(true);
@@ -423,15 +429,18 @@ describe('live session lifecycle', () => {
       .doc(member.uid)
       .set({ displayName: 'Sebbe' }, { merge: true });
     // Seed the member's main car so the session denormalizes it onto the marker.
-    await adminDb.collection('vehicles').doc('veh-main').set({
-      userId: member.uid,
-      make: 'Volvo',
-      model: '242',
-      modelYear: 1980,
-      powertrain: 'petrol',
-      imagePath: `vehicleImages/${member.uid}/veh-main/photo.jpg`,
-      isMainCar: true,
-    });
+    await adminDb
+      .collection('vehicles')
+      .doc('veh-main')
+      .set({
+        userId: member.uid,
+        make: 'Volvo',
+        model: '242',
+        modelYear: 1980,
+        powertrain: 'petrol',
+        imagePath: `vehicleImages/${member.uid}/veh-main/photo.jpg`,
+        isMainCar: true,
+      });
 
     const started = (await call('live-startSession', { duration: '1h' })).data as {
       sessionId: string;
@@ -440,10 +449,14 @@ describe('live session lifecycle', () => {
     expect(started.sessionId).toBeTruthy();
 
     const recordedAt = new Date().toISOString();
-    expect((await call('live-updatePosition', { coordinate: coordinate(recordedAt) })).data).toEqual({
+    expect(
+      (await call('live-updatePosition', { coordinate: coordinate(recordedAt) })).data,
+    ).toEqual({
       recordedAt,
     });
-    const refreshedSession = (await adminRtdb.ref(`liveLocation/${member.uid}/session`).get()).val();
+    const refreshedSession = (
+      await adminRtdb.ref(`liveLocation/${member.uid}/session`).get()
+    ).val();
     const discovery = (await adminDb.collection('liveSessions').doc(member.uid).get()).data();
     expect(Number.isFinite(Date.parse(refreshedSession.discoveryRefreshedAt))).toBe(true);
     expect(refreshedSession.discoveryGeoCell).toBe(discovery?.geoCell);
@@ -472,26 +485,35 @@ describe('live session lifecycle', () => {
 
   it('denormalizes the CHOSEN car when the Start-driving picker sends a vehicleId', async () => {
     await signInAs(member);
-    await adminDb.collection('users').doc(member.uid).set({ displayName: 'Sebbe' }, { merge: true });
+    await adminDb
+      .collection('users')
+      .doc(member.uid)
+      .set({ displayName: 'Sebbe' }, { merge: true });
     // Two cars: one is main, the other is the one the user picks in the popup.
-    await adminDb.collection('vehicles').doc('veh-main-2').set({
-      userId: member.uid,
-      make: 'Volvo',
-      model: '242',
-      modelYear: 1980,
-      powertrain: 'petrol',
-      imagePath: `vehicleImages/${member.uid}/veh-main-2/photo.jpg`,
-      isMainCar: true,
-    });
-    await adminDb.collection('vehicles').doc('veh-picked').set({
-      userId: member.uid,
-      make: 'Saab',
-      model: '900',
-      modelYear: 1993,
-      powertrain: 'petrol',
-      imagePath: `vehicleImages/${member.uid}/veh-picked/photo.jpg`,
-      isMainCar: false,
-    });
+    await adminDb
+      .collection('vehicles')
+      .doc('veh-main-2')
+      .set({
+        userId: member.uid,
+        make: 'Volvo',
+        model: '242',
+        modelYear: 1980,
+        powertrain: 'petrol',
+        imagePath: `vehicleImages/${member.uid}/veh-main-2/photo.jpg`,
+        isMainCar: true,
+      });
+    await adminDb
+      .collection('vehicles')
+      .doc('veh-picked')
+      .set({
+        userId: member.uid,
+        make: 'Saab',
+        model: '900',
+        modelYear: 1993,
+        powertrain: 'petrol',
+        imagePath: `vehicleImages/${member.uid}/veh-picked/photo.jpg`,
+        isMainCar: false,
+      });
 
     // Picking the non-main car denormalizes IT, not the main car.
     await call('live-startSession', { duration: '1h', vehicleId: 'veh-picked' });
@@ -762,13 +784,13 @@ describe('live TTL sweep', () => {
     await runLiveCleanup(now);
 
     // The session is untouched — still active — so the convoy it backs stays live.
-    expect(
-      (await adminRtdb.ref('liveLocation/ttl-convoy-parked/session/status').get()).val(),
-    ).toBe('active');
+    expect((await adminRtdb.ref('liveLocation/ttl-convoy-parked/session/status').get()).val()).toBe(
+      'active',
+    );
     // And the marker is kept, so the member stays visible to the convoy.
-    expect(
-      (await adminRtdb.ref('liveLocation/ttl-convoy-parked/latest').get()).exists(),
-    ).toBe(true);
+    expect((await adminRtdb.ref('liveLocation/ttl-convoy-parked/latest').get()).exists()).toBe(
+      true,
+    );
   });
 });
 
@@ -887,9 +909,7 @@ describe('live-location block mirror (blocking-onBlockWrite)', () => {
     // mirrors it to RTDB so the liveLocation read rule can enforce it.
     await call('blocking-block', { targetUserId: target.uid });
     const mirrored = await pollUntil(async () => {
-      const snap = await adminRtdb
-        .ref(`liveLocationBlocks/${member.uid}/${target.uid}`)
-        .get();
+      const snap = await adminRtdb.ref(`liveLocationBlocks/${member.uid}/${target.uid}`).get();
       return snap.val() === true ? true : undefined;
     });
     expect(mirrored).toBe(true);
@@ -897,9 +917,7 @@ describe('live-location block mirror (blocking-onBlockWrite)', () => {
     // Unblock removes the mirror node.
     await call('blocking-unblock', { targetUserId: target.uid });
     const removed = await pollUntil(async () => {
-      const snap = await adminRtdb
-        .ref(`liveLocationBlocks/${member.uid}/${target.uid}`)
-        .get();
+      const snap = await adminRtdb.ref(`liveLocationBlocks/${member.uid}/${target.uid}`).get();
       return snap.exists() ? undefined : true;
     });
     expect(removed).toBe(true);
