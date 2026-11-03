@@ -1997,7 +1997,8 @@
     "unitMeters": "m",
     "unitKilometers": "km",
     "unitMinutes": "min",
-    "unitHours": "tim"
+    "unitHours": "tim",
+    "opensInAppleMaps": "Öppnas i Apple Kartor."
   },
   "savedPlaces": {
     "clearName": "Rensa namn",
@@ -2164,7 +2165,9 @@
     "release010Build7Highlight": "Din position vid kartstart och fler Android-funktioner i iOS.",
     "release010Build7Map": "Kartan följer din position vid start när du tillåter platsåtkomst, tills du själv flyttar kartan.",
     "release010Build7Panels": "Dra handtaget på Social och Garage nedåt för att återgå till kartan.",
-    "release010Build7Chat": "Samma snabbemojis som Android finns nu ovanför skrivrutan i alla chattar. De skickas direkt utan att ändra ditt utkast."
+    "release010Build7Chat": "Samma snabbemojis som Android finns nu ovanför skrivrutan i alla chattar. De skickas direkt utan att ändra ditt utkast.",
+    "release010Build8Highlight": "Navigera vidare från sökresultat.",
+    "release010Build8Search": "När du väljer en sökt eller sparad plats visas ett platskort med Navigera hit. Navigeringen öppnas i Apple Kartor när du trycker på knappen."
   },
   "driver": {
     "feed": {

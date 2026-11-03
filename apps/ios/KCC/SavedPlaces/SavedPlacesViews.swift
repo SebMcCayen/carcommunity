@@ -85,6 +85,7 @@ struct AddressSearchOverlay: View {
                                     systemImage: saved.kind.systemImage
                                 )
                             }
+                            .accessibilityIdentifier("addressSearch.saved.\(saved.id)")
                         }
                     }
                 }
@@ -119,6 +120,7 @@ struct AddressSearchOverlay: View {
                         )
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("addressSearch.result.\(suggestion.id)")
                     Spacer(minLength: KccSpacing.s2)
                     Button {
                         let existing = SavedPlacesPolicy.editorSeed(

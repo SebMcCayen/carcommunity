@@ -1867,6 +1867,7 @@
     <string name="addressSearch_unitKilometers">km</string>
     <string name="addressSearch_unitMinutes">min</string>
     <string name="addressSearch_unitHours">h</string>
+    <string name="addressSearch_opensInAppleMaps">Opens in Apple Maps.</string>
     <string name="savedPlaces_clearName">Clear name</string>
     <string name="savedPlaces_filterAll">All</string>
     <string name="savedPlaces_filterFavourites">Favourites</string>
@@ -2018,6 +2019,8 @@
     <string name="whatsNew_release010Build7Map">The map follows your position on startup when location access is allowed, until you move the map yourself.</string>
     <string name="whatsNew_release010Build7Panels">Drag the handle on Social and Garage down to return to the map.</string>
     <string name="whatsNew_release010Build7Chat">Android’s quick emojis now appear above the input in every chat. They send immediately without changing your draft.</string>
+    <string name="whatsNew_release010Build8Highlight">Navigate from search results.</string>
+    <string name="whatsNew_release010Build8Search">Selecting a searched or saved place now shows a destination card with Navigate here. Navigation opens in Apple Maps when you tap the button.</string>
     <string name="driver_feed_title">Driver posts</string>
     <string name="driver_feed_source">From Driver</string>
     <string name="driver_feed_loading">Loading posts…</string>

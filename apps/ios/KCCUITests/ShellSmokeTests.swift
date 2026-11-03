@@ -140,6 +140,81 @@ final class ShellSmokeTests: XCTestCase {
         }
     }
 
+    func testSearchSelectionOffersExplicitNavigationAndKeepsTheMap() {
+        for largeText in [false, true] {
+            let app = launch(language: "sv", largeText: largeText,
+                theme: largeText ? "Dark" : "Light", placeSearchFixture: true)
+            let map = app.staticTexts["shell.mapPlaceholder"]
+            let identity = map.value as? String
+            let mapFrame = map.frame
+            app.buttons["shell.search"].tap()
+            let saved = app.buttons["addressSearch.saved.home"]
+            XCTAssertTrue(saved.waitForExistence(timeout: 5))
+            saved.tap()
+            let name = app.staticTexts["place.navigation.name"]
+            XCTAssertTrue(name.waitForExistence(timeout: 5))
+            XCTAssertEqual(name.label, "Göteborg Centralstation")
+            XCTAssertFalse(app.staticTexts["place.fixture.openedURL"].exists,
+                "Selecting a result must not start navigation automatically")
+            XCTAssertEqual(map.frame.height, mapFrame.height, accuracy: 1)
+            XCTAssertEqual(map.value as? String, identity)
+            app.buttons["map.reading.close"].tap()
+
+            app.buttons["shell.search"].tap()
+            let query = app.textFields["addressSearch.query"]
+            XCTAssertTrue(query.waitForExistence(timeout: 5))
+            query.tap()
+            query.typeText("station")
+            let result = app.buttons["addressSearch.result.fixture-varberg"]
+            XCTAssertTrue(result.waitForExistence(timeout: 10))
+            result.tap()
+            XCTAssertTrue(name.waitForExistence(timeout: 5))
+            XCTAssertEqual(name.label, "Varberg station")
+            XCTAssertFalse(query.exists)
+            let keyboardGone = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
+            XCTAssertEqual(XCTWaiter.wait(for: [keyboardGone], timeout: 5), .completed)
+            let start = app.buttons["place.navigation.start"]
+            reveal(start, in: app.scrollViews["map.reading.content"], minimumHeight: 48)
+            XCTAssertTrue(app.buttons["map.reading.close"].isHittable)
+            XCTAssertLessThanOrEqual(start.frame.maxY, app.buttons["shell.tab.map"].frame.minY)
+            chatProof(app, name: largeText ? "search-navigation-sv-accessibility" : "search-navigation-sv")
+            start.tap()
+            let opened = app.staticTexts["place.fixture.openedURL"]
+            XCTAssertTrue(opened.waitForExistence(timeout: 5))
+            let url = URLComponents(string: opened.label)
+            XCTAssertEqual(url?.host, "maps.apple.com")
+            XCTAssertEqual(url?.queryItems?.first(where: { $0.name == "daddr" })?.value, "57.109,12.249")
+            XCTAssertEqual(url?.queryItems?.first(where: { $0.name == "dirflg" })?.value, "d")
+            app.buttons["shell.tab.chat"].tap()
+            assertSelected(app.buttons["shell.tab.chat"])
+            app.buttons["shell.tab.map"].tap()
+            assertSelected(app.buttons["shell.tab.map"])
+            XCTAssertFalse(name.exists, "Returning to the map must not reopen the old destination")
+            XCTAssertEqual(map.value as? String, identity)
+            app.terminate()
+        }
+    }
+
+    func testNavigationHandoffFailureKeepsTheDestinationAvailable() {
+        let app = launch(language: "en", placeSearchFixture: true, rejectMaps: true)
+        app.buttons["shell.search"].tap()
+        let saved = app.buttons["addressSearch.saved.home"]
+        XCTAssertTrue(saved.waitForExistence(timeout: 5))
+        saved.tap()
+        let start = app.buttons["place.navigation.start"]
+        XCTAssertTrue(start.waitForExistence(timeout: 5))
+        start.tap()
+        XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 5))
+        app.alerts.firstMatch.buttons.firstMatch.tap()
+        XCTAssertTrue(start.isHittable)
+        XCTAssertEqual(app.staticTexts["place.navigation.name"].label, "Göteborg Centralstation")
+        app.buttons["map.reading.close"].tap()
+        XCTAssertFalse(start.exists)
+        XCTAssertTrue(app.buttons["shell.search"].isHittable)
+        app.terminate()
+    }
+
     func testSocialAndGarageDragHandlesReturnToTheRetainedMap() {
         for largeText in [false, true] {
             let app = launch(language: "sv", largeText: largeText, theme: largeText ? "Dark" : "Light")
@@ -725,7 +800,7 @@ final class ShellSmokeTests: XCTestCase {
         start.press(forDuration: 0.1, thenDragTo: end)
     }
 
-    private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false, markerPoints: [CGPoint] = []) -> XCUIApplication {
+    private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false, markerPoints: [CGPoint] = [], placeSearchFixture: Bool = false, rejectMaps: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
         app.launchArguments += ["-KCCUITestTheme", theme]
@@ -733,6 +808,8 @@ final class ShellSmokeTests: XCTestCase {
         // default can retain/transition the preceding test's category.
         app.launchArguments += ["-KCCUITestTextSize", largeText ? "AccessibilityXXXL" : "Large"]
         if chatFixture { app.launchArguments += ["-KCCUITestChatThread"] }
+        if placeSearchFixture { app.launchArguments += ["-KCCUITestPlaceSearch"] }
+        if rejectMaps { app.launchArguments += ["-KCCUITestRejectMaps"] }
         if !markerPoints.isEmpty {
             app.launchArguments += ["-KCCUITestMapMarkers", markerPoints.map { "\($0.x),\($0.y)" }.joined(separator: ";")]
         }
