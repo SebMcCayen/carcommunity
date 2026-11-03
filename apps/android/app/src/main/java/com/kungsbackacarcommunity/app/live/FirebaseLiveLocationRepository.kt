@@ -297,5 +297,12 @@ internal fun DataSnapshot.toSessionInfo(): LiveSessionInfo? {
         mainCar,
         vehicleId,
         convoyId = child("convoyId").getValue(String::class.java)?.takeIf { it.isNotBlank() },
+        discoveryRefreshedAtMillis = child("discoveryRefreshedAt").getValue(String::class.java)?.let {
+            try {
+                Instant.parse(it).toEpochMilli()
+            } catch (_: Exception) {
+                null
+            }
+        },
     )
 }

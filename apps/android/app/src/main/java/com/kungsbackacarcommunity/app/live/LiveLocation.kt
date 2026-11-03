@@ -82,6 +82,8 @@ data class LiveSessionInfo(
     val vehicleId: String? = null,
     /** Backend-stamped owner of a convoy-auto session; absent on manual sessions. */
     val convoyId: String? = null,
+    /** Owner-only server bookkeeping, stamped only after discovery was written. */
+    val discoveryRefreshedAtMillis: Long? = null,
 )
 
 object LiveLocation {

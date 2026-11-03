@@ -12,6 +12,7 @@ import org.junit.After
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.time.Instant
 
 /** Real RTDB snapshot parsing; no listener, network read or write. */
 @RunWith(AndroidJUnit4::class)
@@ -41,5 +42,15 @@ class LiveSessionConvoyParsingTest {
         assertNull(parse(emptyMap())!!.convoyId)
         assertNull(parse(mapOf("convoyAutoStarted" to true))!!.convoyId)
         assertNull(parse(mapOf("convoyId" to " "))!!.convoyId)
+    }
+
+    @Test fun retainsDiscoveryWriteProofOnlyForAValidTimestamp() {
+        val timestamp = "2026-01-01T00:00:00Z"
+        assertEquals(
+            Instant.parse(timestamp).toEpochMilli(),
+            parse(mapOf("discoveryRefreshedAt" to timestamp))!!.discoveryRefreshedAtMillis,
+        )
+        assertNull(parse(emptyMap())!!.discoveryRefreshedAtMillis)
+        assertNull(parse(mapOf("discoveryRefreshedAt" to "invalid"))!!.discoveryRefreshedAtMillis)
     }
 }
