@@ -170,7 +170,9 @@ struct ChannelChatScreen: View {
     private func composer(_ coordinator: ChannelChatCoordinator) -> some View {
         ChannelComposer(
             draft: Binding(get: { coordinator.draft }, set: { coordinator.draft = $0 }),
-            canSend: ChannelThread.isSendable(coordinator.draft) && coordinator.currentUserId != nil
+            canSend: ChannelThread.isSendable(coordinator.draft) && coordinator.currentUserId != nil,
+            onQuickEmoji: { _ = coordinator.send($0) },
+            quickEmojiEnabled: coordinator.currentUserId != nil
         ) {
             // Keep the original guarded send/draft policy; UI never clears a
             // signed-out or rejected message merely because Send was tapped.
@@ -203,9 +205,20 @@ struct ChannelComposer: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var draft: String
     let canSend: Bool
+    var onQuickEmoji: ((String) -> Void)? = nil
+    var quickEmojiEnabled = true
     let onSend: () -> Void
 
     var body: some View {
+        VStack(spacing: 0) {
+            if let onQuickEmoji {
+                ChatQuickEmojiRow(enabled: quickEmojiEnabled, onSelect: onQuickEmoji)
+            }
+            editor
+        }
+    }
+
+    private var editor: some View {
         HStack(spacing: KccSpacing.s2) {
             TextField("chat.inputPlaceholder", text: $draft, axis: .vertical)
                 .textFieldStyle(.plain)
@@ -273,6 +286,7 @@ struct MessageRow: View {
                         .clipShape(RoundedRectangle(cornerRadius: KccRadius.sm))
                 }
                 Text(message.text)
+                    .accessibilityIdentifier("chat.message.text." + message.id)
                     .font(.body)
                     .padding(.horizontal, KccSpacing.s3)
                     .padding(.vertical, KccSpacing.s2)

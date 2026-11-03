@@ -2014,6 +2014,10 @@
     <string name="whatsNew_release010Build6Highlight">Mer plats för chatten och tydligare kartikoner.</string>
     <string name="whatsNew_release010Build6Chat">Chattens menyer fälls undan när du skriver. Dölj tangentbordet med knappen bredvid Skicka utan att förlora utkastet.</string>
     <string name="whatsNew_release010Build6Map">Kartknappar ligger ovanför markörerna. Trafikikoner och kartknappar följer Android-appens utseende. Kronjakten har ljusa markörer på dagskartan.</string>
+    <string name="whatsNew_release010Build7Highlight">Din position vid kartstart och fler Android-funktioner i iOS.</string>
+    <string name="whatsNew_release010Build7Map">Kartan följer din position vid start när du tillåter platsåtkomst, tills du själv flyttar kartan.</string>
+    <string name="whatsNew_release010Build7Panels">Dra handtaget på Social och Garage nedåt för att återgå till kartan.</string>
+    <string name="whatsNew_release010Build7Chat">Samma snabbemojis som Android finns nu ovanför skrivrutan i alla chattar. De skickas direkt utan att ändra ditt utkast.</string>
     <string name="driver_feed_title">Driver-inlägg</string>
     <string name="driver_feed_source">Från Driver</string>
     <string name="driver_feed_loading">Hämtar inlägg…</string>

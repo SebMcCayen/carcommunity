@@ -36398,6 +36398,74 @@
         }
       }
     },
+    "whatsNew.release010Build7Chat": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Samma snabbemojis som Android finns nu ovanför skrivrutan i alla chattar. De skickas direkt utan att ändra ditt utkast."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Android’s quick emojis now appear above the input in every chat. They send immediately without changing your draft."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build7Highlight": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Din position vid kartstart och fler Android-funktioner i iOS."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start at your location, with more Android features on iOS."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build7Map": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kartan följer din position vid start när du tillåter platsåtkomst, tills du själv flyttar kartan."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The map follows your position on startup when location access is allowed, until you move the map yourself."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build7Panels": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dra handtaget på Social och Garage nedåt för att återgå till kartan."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag the handle on Social and Garage down to return to the map."
+          }
+        }
+      }
+    },
     "whatsNew.release010Change": {
       "extractionState": "manual",
       "localizations": {

@@ -119,7 +119,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kungsbackacarcommunity.app
         MARKETING_VERSION: 0.1.0
-        CURRENT_PROJECT_VERSION: 6
+        CURRENT_PROJECT_VERSION: 7
         CODE_SIGN_ENTITLEMENTS: KCC/KCC.entitlements
         OTHER_LDFLAGS: $(inherited) -ObjC
         # Keep script phases sandboxed; the GoogleService-Info.plist embedding
