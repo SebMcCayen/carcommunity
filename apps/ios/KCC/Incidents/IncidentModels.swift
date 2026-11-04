@@ -1,5 +1,43 @@
 import Foundation
 
+/// Same persisted names, limits and legacy fallback as Android.
+enum IncidentAgeOption: String, CaseIterable, Sendable {
+    case days3 = "DAYS_3"
+    case week1 = "WEEK_1"
+    case days30 = "DAYS_30"
+    case all = "ALL"
+
+    var titleKey: String {
+        switch self {
+        case .days3: "shell.layersAlertAge3d"
+        case .week1: "shell.layersAlertAge1w"
+        case .days30: "shell.layersAlertAge30d"
+        case .all: "shell.layersAlertAgeAll"
+        }
+    }
+
+    var maxAge: TimeInterval? {
+        switch self {
+        case .days3: 3 * 86_400
+        case .week1: 7 * 86_400
+        case .days30: 30 * 86_400
+        case .all: nil
+        }
+    }
+
+    static func fromStoredName(_ name: String?) -> Self {
+        switch name {
+        case "HOURS_6", "HOURS_12", "DAY_1": .days3
+        default: name.flatMap(Self.init(rawValue:)) ?? .all
+        }
+    }
+
+    func isVisible(_ incident: RoadIncident, now: Date) -> Bool {
+        guard let maxAge, incident.isImported, let postedAt = incident.postedAt else { return true }
+        return now.timeIntervalSince(postedAt) <= maxAge
+    }
+}
+
 enum IncidentType: String, CaseIterable, Sendable {
     case accident
     case roadwork

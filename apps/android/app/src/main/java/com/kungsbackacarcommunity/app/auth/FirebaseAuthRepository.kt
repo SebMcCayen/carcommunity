@@ -6,6 +6,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
+import com.kungsbackacarcommunity.app.incidents.IncidentAgeFilterPreferenceStore
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +30,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  */
 class FirebaseAuthRepository private constructor(
     private val firebaseAuth: FirebaseAuth,
+    private val incidentAgePreferences: IncidentAgeFilterPreferenceStore,
 ) : AuthRepository {
 
     private val state = MutableStateFlow(firebaseAuth.currentUser.toAuthState())
@@ -45,6 +47,11 @@ class FirebaseAuthRepository private constructor(
         val credential = GoogleAuthProvider.getCredential(idToken, null)
         suspendCancellableCoroutine { continuation ->
             firebaseAuth.signInWithCredential(credential).addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    // Firebase confirms account creation, not merely a first login
+                    // on this device. Preserve every existing local selection.
+                    incidentAgePreferences.initializeForSignIn(task.result.additionalUserInfo?.isNewUser == true)
+                }
                 // The task may complete after the caller was cancelled (e.g. the
                 // user left the screen) — resuming a cancelled continuation throws,
                 // so guard with isActive.
@@ -88,7 +95,10 @@ class FirebaseAuthRepository private constructor(
         fun createIfAvailable(context: Context): AuthRepository? {
             if (FirebaseApp.getApps(context).isEmpty()) return null
             return cached ?: synchronized(this) {
-                cached ?: FirebaseAuthRepository(FirebaseAuth.getInstance()).also { cached = it }
+                cached ?: FirebaseAuthRepository(
+                    FirebaseAuth.getInstance(),
+                    IncidentAgeFilterPreferenceStore.getInstance(context),
+                ).also { cached = it }
             }
         }
     }

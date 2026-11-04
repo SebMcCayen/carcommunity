@@ -28,6 +28,7 @@ final class MapLayerPreferencesTests: XCTestCase {
         XCTAssertNil(preferences.mapModeOverride)
         XCTAssertTrue(preferences.is3D)
         XCTAssertEqual(preferences.browsingZoom, 16, accuracy: 1e-9)
+        XCTAssertEqual(preferences.incidentMaxAge, .all)
         XCTAssertEqual(preferences.effectiveMapMode(systemIsDark: false), .day)
         XCTAssertEqual(preferences.effectiveMapMode(systemIsDark: true), .night)
     }
@@ -46,6 +47,42 @@ final class MapLayerPreferencesTests: XCTestCase {
         XCTAssertEqual(restored.mapModeOverride, .night)
         XCTAssertFalse(restored.is3D)
         XCTAssertEqual(restored.browsingZoom, 13.5, accuracy: 1e-9)
+    }
+
+    func testConfirmedNewAccountGetsOneWeekPersistedAcrossRestart() {
+        let preferences = MapLayerPreferences(defaults: defaults)
+        preferences.initializeIncidentAgeForSignIn(isNewUser: true)
+        XCTAssertEqual(preferences.incidentMaxAge, .week1)
+        XCTAssertEqual(defaults.string(forKey: "map.layers.incidentMaxAge"), "WEEK_1")
+        XCTAssertEqual(MapLayerPreferences(defaults: defaults).incidentMaxAge, .week1)
+    }
+
+    func testExistingAccountWithoutPreferenceKeepsAllEvenOnFreshInstall() {
+        let preferences = MapLayerPreferences(defaults: defaults)
+        preferences.initializeIncidentAgeForSignIn(isNewUser: false)
+        XCTAssertEqual(preferences.incidentMaxAge, .all)
+        XCTAssertNil(defaults.object(forKey: "map.layers.incidentMaxAge"))
+    }
+
+    func testInitializationPreservesEverySavedChoiceIncludingAll() {
+        for option in IncidentAgeOption.allCases {
+            let preferences = MapLayerPreferences(defaults: defaults)
+            preferences.setIncidentMaxAge(option)
+            preferences.initializeIncidentAgeForSignIn(isNewUser: true)
+            preferences.initializeIncidentAgeForSignIn(isNewUser: false)
+            XCTAssertEqual(preferences.incidentMaxAge, option)
+            XCTAssertEqual(defaults.string(forKey: "map.layers.incidentMaxAge"), option.rawValue)
+            XCTAssertEqual(MapLayerPreferences(defaults: defaults).incidentMaxAge, option)
+        }
+    }
+
+    func testUserCanChangeNewDefaultAndRepeatedInitializationDoesNotResetIt() {
+        let preferences = MapLayerPreferences(defaults: defaults)
+        preferences.initializeIncidentAgeForSignIn(isNewUser: true)
+        preferences.setIncidentMaxAge(.all)
+        let restored = MapLayerPreferences(defaults: defaults)
+        restored.initializeIncidentAgeForSignIn(isNewUser: true)
+        XCTAssertEqual(restored.incidentMaxAge, .all)
     }
 
     func testClearingModeOverrideReturnsToSystemAppearance() {
