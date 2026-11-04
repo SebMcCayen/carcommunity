@@ -1,4 +1,6 @@
 import Foundation
+import Observation
+import CoreFoundation
 
 /// Pure chat-channel logic: draft validation, live/older/pending merges, unread
 /// derivation, callable-payload parsing, block filtering, and the reply flag —
@@ -298,5 +300,90 @@ enum ChannelResponseParser {
             senderDisplayName: map["senderDisplayName"] as? String,
             textPreview: map["textPreview"] as? String ?? ""
         )
+    }
+}
+
+
+/// Presentation groups never reorder messages or conceal delivery failures.
+struct CommunityMessageGroup: Identifiable {
+    let messages: [ChannelMessage]
+    var id: String { messages[0].id }
+}
+
+enum CommunityMessageGroups {
+    static func build(_ messages: [ChannelMessage], calendar: Calendar = .current) -> [CommunityMessageGroup] {
+        var groups: [[ChannelMessage]] = []
+        for message in messages {
+            if let first = groups.last?.first, first.senderUid == message.senderUid,
+               first.deliveryState == .sent, message.deliveryState == .sent,
+               let start = first.createdAt, let time = message.createdAt,
+               time >= start, time.timeIntervalSince(start) <= 30,
+               calendar.isDate(start, inSameDayAs: time) {
+                groups[groups.count - 1].append(message)
+            } else {
+                groups.append([message])
+            }
+        }
+        return groups.map { CommunityMessageGroup(messages: $0) }
+    }
+}
+
+/// Accept only bounded public metadata. SDK messages and chat content never enter this model.
+struct ChatRateLimit: Equatable, Sendable {
+    let retryAfterMs: Int64
+    let blockedUntilMillis: Int64?
+    let serverNowMillis: Int64?
+
+    static func parse(_ details: Any?) -> ChatRateLimit? {
+        guard let fields = details as? [String: Any], fields["reason"] as? String == "chat-rate-limited",
+              let retry = integer(fields["retryAfterMs"]) else { return nil }
+        let until = integer(fields["blockedUntilMillis"])
+        let now = integer(fields["serverNowMillis"])
+        let trusted = until != nil && now != nil && until! >= now! && until! - now! == retry && retry <= 600_000
+        return ChatRateLimit(retryAfterMs: min(retry, 600_000),
+                             blockedUntilMillis: trusted ? until : nil, serverNowMillis: trusted ? now : nil)
+    }
+
+    private static func integer(_ value: Any?) -> Int64? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let n = number.doubleValue
+        guard n.isFinite, n >= 0, n <= 9_007_199_254_740_991, n.rounded(.towardZero) == n else { return nil }
+        return Int64(n)
+    }
+}
+
+/// Account-owned monotonic timer. Expiry only enables a manual send.
+@MainActor @Observable
+final class ChatSendCooldown {
+    private var deadline: TimeInterval = 0
+    private var highestServerDeadline: Int64?
+    @ObservationIgnored private let elapsed: () -> TimeInterval
+
+    init(elapsed: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
+        self.elapsed = elapsed
+    }
+    var remainingSeconds: Int { Int(ceil(max(0, min(600, deadline - elapsed())))) }
+    var isBlocked: Bool { remainingSeconds > 0 }
+
+    func apply(_ limit: ChatRateLimit) {
+        if let until = limit.blockedUntilMillis, let now = limit.serverNowMillis,
+           until >= now, until - now == limit.retryAfterMs, (0...600_000).contains(limit.retryAfterMs) {
+            if let known = highestServerDeadline, until <= known { return }
+            highestServerDeadline = until
+        }
+        let seconds = Double(max(0, min(600_000, limit.retryAfterMs))) / 1000
+        if seconds > 0 { deadline = max(deadline, elapsed() + seconds) }
+    }
+}
+
+@MainActor
+enum ChatSendCooldowns {
+    private static var gates: [String: ChatSendCooldown] = [:]
+    static func forUser(_ uid: String?) -> ChatSendCooldown {
+        guard let uid, !uid.isEmpty else { return ChatSendCooldown() }
+        if let gate = gates[uid] { return gate }
+        let gate = ChatSendCooldown()
+        gates[uid] = gate
+        return gate
     }
 }

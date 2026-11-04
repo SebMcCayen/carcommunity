@@ -397,4 +397,25 @@ class ChannelChatTest {
         assertTrue(ConvoyChatMapper.chatEligibleConvoys(null).isEmpty())
         assertTrue(ConvoyChatMapper.chatEligibleConvoys(mapOf("convoys" to "nope")).isEmpty())
     }
+
+    @Test
+    fun `community groups only adjacent delivered messages inside thirty seconds`() {
+        val messages = listOf(msg("a", 1000), msg("b", 2000), msg("c", 3000),
+            msg("other", 4000, "other"), msg("d", 5000), msg("late", 36000))
+        val groups = CommunityMessageGroups.build(messages, java.time.ZoneId.of("UTC"))
+        assertEquals(listOf(listOf("a", "b", "c"), listOf("other"), listOf("d"), listOf("late")),
+            groups.map { it.messages.map(ChannelMessage::id) })
+        assertEquals(messages, groups.flatMap { it.messages })
+    }
+
+    @Test
+    fun `community groups never conceal pending failed unknown-time or cross-day rows`() {
+        val messages = listOf(msg("a", 1000), msg("b", 2000).copy(deliveryState = ChannelDeliveryState.Failed),
+            msg("c", 3000), msg("pending", 4000).copy(deliveryState = ChannelDeliveryState.Sending),
+            msg("unknown", null))
+        assertTrue(CommunityMessageGroups.build(messages, java.time.ZoneId.of("UTC")).all { it.messages.size == 1 })
+        val midnight = java.time.Instant.parse("2026-11-04T23:59:59Z").toEpochMilli()
+        assertEquals(2, CommunityMessageGroups.build(listOf(msg("before", midnight), msg("after", midnight + 1000)),
+            java.time.ZoneId.of("UTC")).size)
+    }
 }

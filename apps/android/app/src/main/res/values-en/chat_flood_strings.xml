@@ -10,4 +10,5 @@
     <string name="chat_flood_show_less">Show less</string>
     <string name="chat_flood_collapsed">Collapsed message</string>
     <string name="chat_flood_expanded">Full message shown</string>
+    <string name="chat_flood_more_from">Show more from %1$s (%2$d)</string>
 </resources>

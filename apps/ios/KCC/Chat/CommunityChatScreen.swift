@@ -11,7 +11,8 @@ struct CommunityChatScreen: View {
         ChannelChatScreen(
             coordinator: coordinator,
             title: Text("chatHub.tabCommunity"),
-            showsNavigationTitle: false
+            showsNavigationTitle: false,
+            protectCommunity: true
         )
     }
 }

@@ -358,3 +358,58 @@ final class ChatModelTests: XCTestCase {
             createdAt: Date(timeIntervalSince1970: 500), clientId: clientId, deliveryState: .sending)
     }
 }
+
+
+extension ChatModelTests {
+    func testCommunityGroupingPreservesOrderAndBreaksAtSenderWindowAndFailure() {
+        func message(_ id: String, _ sender: String = "a", _ seconds: Double = 0,
+                     _ state: ChannelDeliveryState = .sent) -> ChannelMessage {
+            ChannelMessage(id: id, senderUid: sender, text: id,
+                           createdAt: Date(timeIntervalSince1970: 1_700_000_000 + seconds), deliveryState: state)
+        }
+        let messages = [message("a"), message("b", "a", 5), message("c", "a", 10),
+                        message("other", "b", 11), message("d", "a", 12),
+                        message("late", "a", 43), message("failed", "a", 44, .failed)]
+        let groups = CommunityMessageGroups.build(messages)
+        XCTAssertEqual(groups.map { $0.messages.map(\.id) }, [["a", "b", "c"], ["other"], ["d"], ["late"], ["failed"]])
+        XCTAssertEqual(groups.flatMap(\.messages), messages)
+    }
+
+    func testCommunityGroupingBreaksAtLocalMidnightAndUnknownTimestamp() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let midnight = ChannelTime.parseIso("2026-11-04T23:59:59Z")!
+        let messages = [ChannelMessage(id: "a", senderUid: "a", text: "a", createdAt: midnight),
+                        ChannelMessage(id: "b", senderUid: "a", text: "b", createdAt: midnight.addingTimeInterval(1)),
+                        ChannelMessage(id: "c", senderUid: "a", text: "c")]
+        XCTAssertEqual(CommunityMessageGroups.build(messages, calendar: calendar).count, 3)
+    }
+
+    func testChatRateLimitValidatesPublicMetadataAndBoundsDurations() {
+        let limit = ChatRateLimit.parse(["reason": "chat-rate-limited", "retryAfterMs": 5000,
+                                        "blockedUntilMillis": 15000, "serverNowMillis": 10000])
+        XCTAssertEqual(limit?.retryAfterMs, 5000)
+        XCTAssertEqual(limit?.blockedUntilMillis, 15000)
+        for invalid in [true, -1, 1.5, Double.infinity, "5000"] as [Any] {
+            XCTAssertNil(ChatRateLimit.parse(["reason": "chat-rate-limited", "retryAfterMs": invalid]))
+        }
+        XCTAssertNil(ChatRateLimit.parse(["reason": "other", "retryAfterMs": 5000]))
+        XCTAssertEqual(ChatRateLimit.parse(["reason": "chat-rate-limited", "retryAfterMs": 900000])?.retryAfterMs, 600000)
+    }
+
+    @MainActor
+    func testSharedPauseCannotBeExtendedOrRearmedByTheSameServerDeadline() {
+        var now: TimeInterval = 10
+        let gate = ChatSendCooldown(elapsed: { now })
+        let limit = ChatRateLimit(retryAfterMs: 5000, blockedUntilMillis: 15000, serverNowMillis: 10000)
+        gate.apply(limit)
+        now = 12
+        gate.apply(limit)
+        XCTAssertEqual(gate.remainingSeconds, 3)
+        now = 16
+        gate.apply(limit)
+        XCTAssertFalse(gate.isBlocked)
+        XCTAssertTrue(ChatSendCooldowns.forUser("account-a") === ChatSendCooldowns.forUser("account-a"))
+        XCTAssertFalse(ChatSendCooldowns.forUser("account-a") === ChatSendCooldowns.forUser("account-b"))
+    }
+}

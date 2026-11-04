@@ -4523,6 +4523,91 @@
         }
       }
     },
+    "chat.flood.moreFrom": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa fler från %1$@ (%2$lld)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show more from %1$@ (%2$lld)"
+          }
+        }
+      }
+    },
+    "chat.flood.paused": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meddelanden är tillfälligt pausade"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Messages are temporarily paused"
+          }
+        }
+      }
+    },
+    "chat.flood.showLess": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa mindre"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show less"
+          }
+        }
+      }
+    },
+    "chat.flood.showMore": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa mer"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show more"
+          }
+        }
+      }
+    },
+    "chat.flood.wait": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du kan skicka igen om %1$lld sekunder. Ditt utkast finns kvar."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can send again in %1$lld seconds. Your draft is kept."
+          }
+        }
+      }
+    },
     "chat.hideKeyboard": {
       "extractionState": "manual",
       "localizations": {

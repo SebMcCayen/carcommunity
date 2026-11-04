@@ -98,6 +98,9 @@ describe('canonical post-Auth shared guard erasure', () => {
     );
     expect(steps.indexOf('guard-delete')).toBeLessThan(steps.indexOf('processed'));
     expect(fake.state.guard).toBe(false);
+    expect(steps.indexOf('auth-delete')).toBeLessThan(
+      steps.indexOf(`delete:communityChatSendGuards/${fake.uid}`),
+    );
   });
   it('preserves guard and pending request when Auth fails; retry completes', async () => {
     fake.state.authError = 'auth/internal-error';

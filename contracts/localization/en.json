@@ -577,7 +577,14 @@
     "replyComposerReplyingTo": "Replying to %1$s",
     "replyComposerBanner": "Replying to a message from %1$s",
     "replyQuoteHeaderAction": "Reply to %1$s: %2$s. Tap to view the original.",
-    "hideKeyboard": "Hide keyboard"
+    "hideKeyboard": "Hide keyboard",
+    "flood": {
+      "paused": "Messages are temporarily paused",
+      "wait": "You can send again in %1$d seconds. Your draft is kept.",
+      "showMore": "Show more",
+      "showLess": "Show less",
+      "moreFrom": "Show more from %1$s (%2$d)"
+    }
   },
   "common": {
     "placeholder": "Coming soon"

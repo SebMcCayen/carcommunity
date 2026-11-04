@@ -10,6 +10,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -54,10 +55,12 @@ class ChannelChatContentTest {
         onBlock: ((String) -> Unit)? = null,
         surface: ChatSurface = ChatSurface.CommunityChannel,
         onReport: ((String, com.kungsbackacarcommunity.app.chat.ChatReportReason) -> Unit)? = null,
+        protectCommunity: Boolean = false,
     ) {
         composeTestRule.setContent {
             KccTheme {
                 ChannelChatContent(
+                    protectCommunity = protectCommunity,
                     messages = messages,
                     currentUid = "me",
                     loading = false,
@@ -298,5 +301,35 @@ class ChannelChatContentTest {
         longPress("Body of m1")
 
         composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_SHEET_TEST_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun communitySeriesKeepsNewestVisibleAndRevealsOriginalMessages() {
+        val messages = (1..4).map { message("group-$it", "other", "Sam") }
+        setContent(messages, onViewProfile = null, protectCommunity = true)
+        composeTestRule.onNodeWithText("Body of group-1").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Body of group-4").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Sam").assertExists()
+        composeTestRule.onNodeWithTag("community-group-toggle-group-1").performClick()
+        composeTestRule.onNodeWithText("Body of group-1").assertExists()
+        composeTestRule.onNodeWithText("Body of group-2").assertExists()
+        composeTestRule.onNodeWithTag("community-group-toggle-group-1").performClick()
+        composeTestRule.onNodeWithText("Body of group-1").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Body of group-4").assertExists()
+    }
+
+    @Test
+    fun communityBodyCollapsesAtFourRenderedLines() {
+        val wall = message("four-lines", "other", "Sam").copy(text = (1..10).joinToString("\n") { "line $it" })
+        setContent(listOf(wall), onViewProfile = null, protectCommunity = true)
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        composeTestRule.onNodeWithTag("chat-body-four-lines")
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertEquals(4, layouts.single().lineCount)
+        composeTestRule.onNodeWithTag("chat-body-toggle-four-lines").performClick()
+        layouts.clear()
+        composeTestRule.onNodeWithTag("chat-body-four-lines")
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertEquals(10, layouts.single().lineCount)
     }
 }

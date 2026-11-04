@@ -18,11 +18,14 @@ struct ChannelChatScreen: View {
     /// key — for a convoy).
     let title: Text
     let showsNavigationTitle: Bool
+    let protectCommunity: Bool
+    @State private var expandedGroups: Set<String> = []
 
-    init(coordinator: ChannelChatCoordinator?, title: Text, showsNavigationTitle: Bool = true) {
+    init(coordinator: ChannelChatCoordinator?, title: Text, showsNavigationTitle: Bool = true, protectCommunity: Bool = false) {
         self.coordinator = coordinator
         self.title = title
         self.showsNavigationTitle = showsNavigationTitle
+        self.protectCommunity = protectCommunity
     }
 
     var body: some View {
@@ -78,16 +81,42 @@ struct ChannelChatScreen: View {
     }
 
     private func messageList(_ coordinator: ChannelChatCoordinator) -> some View {
-        ChatThreadScrollView(latestMessageID: coordinator.messages.last?.id,
-                             latestIsOwn: coordinator.messages.last?.senderUid == coordinator.currentUserId) {
+        let groups = protectCommunity ? CommunityMessageGroups.build(coordinator.messages) :
+            coordinator.messages.map { CommunityMessageGroup(messages: [$0]) }
+        return ChatThreadScrollView(latestMessageID: coordinator.messages.last?.id,
+                                   latestIsOwn: coordinator.messages.last?.senderUid == coordinator.currentUserId,
+                                   latestScrollTargetID: groups.last.map { "community-group-\($0.id)" }) {
             olderControl(coordinator)
-            ForEach(coordinator.messages) { message in
-                MessageRow(
-                    message: message,
-                    isOwn: message.senderUid == coordinator.currentUserId
-                )
-                .id(message.id)
-                .contextMenu { messageActions(message, coordinator: coordinator) }
+            ForEach(groups) { group in
+                let expanded = expandedGroups.contains(group.id)
+                VStack(alignment: .leading, spacing: KccSpacing.s1) {
+                    if group.messages.count > 2 {
+                        Button {
+                            if expanded { expandedGroups.remove(group.id) } else { expandedGroups.insert(group.id) }
+                        } label: {
+                            if expanded { Text("chat.flood.showLess") }
+                            else {
+                                Text(String.localizedStringWithFormat(NSLocalizedString("chat.flood.moreFrom", comment: ""),
+                                    group.messages[0].senderDisplayName ?? String(localized: "chat.unknownAuthor"),
+                                    Int64(group.messages.count - 2)))
+                            }
+                        }
+                        .accessibilityIdentifier("community-group-toggle-" + group.id)
+                        .frame(minHeight: 44)
+                    }
+                    ForEach(Array((expanded ? group.messages : Array(group.messages.suffix(2))).enumerated()),
+                            id: \.element.id) { index, message in
+                        MessageRow(message: message,
+                                   isOwn: message.senderUid == coordinator.currentUserId,
+                                   showSender: index == 0,
+                                   collapsedLines: protectCommunity ? 4 : nil)
+                            .id(message.id)
+                            .contextMenu { messageActions(message, coordinator: coordinator) }
+                    }
+
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .id("community-group-" + group.id)
             }
         }
     }
@@ -124,6 +153,7 @@ struct ChannelChatScreen: View {
         // offer report; reply is gated behind chatReplies.
         if message.deliveryState == .failed, message.sendError?.isRetryable == true {
             Button { coordinator.retry(message) } label: { Text("dm.retry") }
+                .disabled(coordinator.cooldown.isBlocked)
         }
         if coordinator.chatRepliesEnabled, message.deliveryState == .sent {
             Button { coordinator.setReplyTarget(message) } label: {
@@ -168,15 +198,26 @@ struct ChannelChatScreen: View {
     // MARK: - Composer
 
     private func composer(_ coordinator: ChannelChatCoordinator) -> some View {
-        ChannelComposer(
-            draft: Binding(get: { coordinator.draft }, set: { coordinator.draft = $0 }),
-            canSend: ChannelThread.isSendable(coordinator.draft) && coordinator.currentUserId != nil,
-            onQuickEmoji: { _ = coordinator.send($0) },
-            quickEmojiEnabled: coordinator.currentUserId != nil
-        ) {
-            // Keep the original guarded send/draft policy; UI never clears a
-            // signed-out or rejected message merely because Send was tapped.
-            if coordinator.send(coordinator.draft) != nil { coordinator.draft = "" }
+        TimelineView(.periodic(from: .now, by: 1)) { _ in
+            let remaining = coordinator.cooldown.remainingSeconds
+            VStack(alignment: .leading, spacing: KccSpacing.s1) {
+                if remaining > 0 {
+                    Text("chat.flood.paused")
+                        .font(.footnote)
+                        .accessibilityAddTraits(.updatesFrequently)
+                    Text(String.localizedStringWithFormat(NSLocalizedString("chat.flood.wait", comment: ""), Int64(remaining)))
+                        .font(.footnote)
+                        .accessibilityIdentifier("chat-flood-countdown")
+                }
+                ChannelComposer(
+                    draft: Binding(get: { coordinator.draft }, set: { coordinator.draft = $0 }),
+                    canSend: remaining == 0 && ChannelThread.isSendable(coordinator.draft) && coordinator.currentUserId != nil,
+                    onQuickEmoji: { _ = coordinator.send($0) },
+                    quickEmojiEnabled: remaining == 0 && coordinator.currentUserId != nil
+                ) {
+                    coordinator.sendDraft()
+                }
+            }
         }
     }
 
@@ -259,10 +300,12 @@ struct ChannelComposer: View {
 struct MessageRow: View {
     let message: ChannelMessage
     let isOwn: Bool
+    var showSender: Bool = true
+    var collapsedLines: Int? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: KccSpacing.s3) {
-            if !isOwn {
+            if !isOwn && showSender {
                 // No per-message Storage lookup: use the native fallback until
                 // an authorized, resolved avatar is supplied by the data layer.
                 Image(systemName: "person.fill")
@@ -271,8 +314,9 @@ struct MessageRow: View {
                     .background(KccTheme.subtle, in: Circle())
                     .accessibilityHidden(true)
             }
+            if !isOwn && !showSender { Color.clear.frame(width: 32, height: 1).accessibilityHidden(true) }
             VStack(alignment: isOwn ? .trailing : .leading, spacing: KccSpacing.s1) {
-                if !isOwn {
+                if !isOwn && showSender {
                     Text(message.senderDisplayName ?? String(localized: "chat.unknownAuthor"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(KccTheme.driver)
@@ -285,9 +329,7 @@ struct MessageRow: View {
                         .background(KccTheme.surface)
                         .clipShape(RoundedRectangle(cornerRadius: KccRadius.sm))
                 }
-                Text(message.text)
-                    .accessibilityIdentifier("chat.message.text." + message.id)
-                    .font(.body)
+                ExpandableChannelText(text: message.text, messageID: message.id, collapsedLines: collapsedLines)
                     .padding(.horizontal, KccSpacing.s3)
                     .padding(.vertical, KccSpacing.s2)
                     .background(isOwn ? KccTheme.driver : KccTheme.surface)
@@ -327,6 +369,7 @@ struct MessageRow: View {
         case .notMember: return "dm.sendErrorNotMember"
         case .invalid: return "dm.sendErrorInvalid"
         case .cannotDeliver: return "dm.sendErrorCannotDeliver"
+        case .rateLimited: return "chat.flood.paused"
         case .generic, .none: return "dm.statusFailedRetry"
         }
     }
@@ -366,4 +409,64 @@ private struct ReportMenu: View {
         case .other: return "chat.reportReason.other"
         }
     }
+}
+
+
+/// Measure rendered lines rather than counting characters: emoji, wrapping and
+/// Dynamic Type can truncate even a short string. The measuring copy is hidden
+/// from accessibility and never changes the visible layout.
+private struct ExpandableChannelText: View {
+    let text: String
+    let messageID: String
+    let collapsedLines: Int?
+    @State private var expanded = false
+    @State private var fullHeight: CGFloat = 0
+    @State private var visibleHeight: CGFloat = 0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: KccSpacing.s1) {
+            Text(text)
+                .font(.body)
+                .lineLimit(expanded ? nil : collapsedLines)
+                .accessibilityIdentifier("chat.message.text." + messageID)
+                .background {
+                    GeometryReader { geometry in
+                        Color.clear.preference(key: ChannelVisibleTextHeight.self, value: geometry.size.height)
+                    }
+                }
+                .background {
+                    if collapsedLines != nil {
+                        Text(text).font(.body)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .hidden()
+                            .background {
+                                GeometryReader { geometry in
+                                    Color.clear.preference(key: ChannelFullTextHeight.self, value: geometry.size.height)
+                                }
+                            }
+                            .accessibilityHidden(true)
+                    }
+                }
+            if collapsedLines != nil && (expanded || fullHeight > visibleHeight + 1) {
+                Button { expanded.toggle() } label: {
+                    Text(expanded ? "chat.flood.showLess" : "chat.flood.showMore")
+                }
+                .font(.footnote)
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("chat-body-toggle-" + messageID)
+            }
+        }
+        .onPreferenceChange(ChannelVisibleTextHeight.self) { visibleHeight = $0 }
+        .onPreferenceChange(ChannelFullTextHeight.self) { fullHeight = $0 }
+        .onChange(of: text) { _, _ in expanded = false }
+    }
+}
+
+private struct ChannelVisibleTextHeight: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+private struct ChannelFullTextHeight: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }

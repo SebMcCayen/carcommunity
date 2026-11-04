@@ -30,6 +30,7 @@ fun ChatMessageBody(
     style: TextStyle,
     color: Color,
     textAlign: TextAlign = TextAlign.Start,
+    collapsedMaxLines: Int = CHAT_COLLAPSED_BODY_LINES,
 ) {
     var expanded by rememberSaveable(messageId, text.text) { mutableStateOf(false) }
     var overflowing by remember(messageId, text.text) { mutableStateOf(false) }
@@ -37,7 +38,7 @@ fun ChatMessageBody(
     Column {
         Text(
             text = text, style = style, color = color, textAlign = textAlign,
-            maxLines = if (expanded) Int.MAX_VALUE else CHAT_COLLAPSED_BODY_LINES,
+            maxLines = if (expanded) Int.MAX_VALUE else collapsedMaxLines,
             overflow = TextOverflow.Ellipsis,
             onTextLayout = { if (!expanded) overflowing = it.hasVisualOverflow },
             modifier = Modifier.testTag("chat-body-$messageId").then(

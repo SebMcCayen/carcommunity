@@ -466,4 +466,50 @@ final class ChannelChatCoordinatorTests: XCTestCase {
         coordinator.start()
         await waitUntil { coordinator.messages.map(\.id) == ["visible"] }
     }
+
+    @MainActor
+    func testRateLimitedDraftIsRestoredAndPauseRequiresManualRetry() async {
+        let source = FakeChatSource()
+        var now: TimeInterval = 100
+        let gate = ChatSendCooldown(elapsed: { now })
+        let limit = ChatRateLimit(retryAfterMs: 5000, blockedUntilMillis: 105000, serverNowMillis: 100000)
+        source.scriptPost([.failed(.rateLimited(limit)), .sent(messageId: "accepted", mentionedUids: [])])
+        let coordinator = ChannelChatCoordinator(source: source, cooldown: gate)
+        coordinator.draft = "mitt utkast"
+        let id = coordinator.sendDraft()
+        XCTAssertNotNil(id)
+        XCTAssertEqual(coordinator.draft, "")
+        await waitUntil { gate.isBlocked }
+        XCTAssertEqual(coordinator.draft, "mitt utkast")
+        XCTAssertNil(coordinator.sendDraft())
+        coordinator.retry(coordinator.messages[0])
+        XCTAssertEqual(source.postedTexts.count, 1)
+        now += 6
+        await Task.yield()
+        XCTAssertEqual(source.postedTexts.count, 1, "Timer expiry must not send automatically")
+        coordinator.retry(coordinator.messages[0])
+        await waitUntil { source.postedTexts.count == 2 && coordinator.draft.isEmpty }
+        XCTAssertEqual(coordinator.messages.count, 1, "Retry must reuse the same optimistic message")
+        XCTAssertEqual(coordinator.messages[0].id, id)
+    }
+
+    @MainActor
+    func testFailureCannotOverwriteNewTypingAndReplyDraftCanRecover() async {
+        let source = FakeChatSource()
+        source.scriptPost([.failed(.generic)])
+        let coordinator = ChannelChatCoordinator(source: source, chatRepliesEnabled: true, cooldown: ChatSendCooldown())
+        let parent = serverMessage("parent")
+        coordinator.setReplyTarget(parent)
+        coordinator.draft = "svar"
+        coordinator.sendDraft()
+        await waitUntil { coordinator.messages.first?.deliveryState == .failed }
+        XCTAssertEqual(coordinator.draft, "svar")
+        XCTAssertEqual(coordinator.replyTarget?.id, parent.id)
+        coordinator.clearReply()
+        coordinator.draft = "första"
+        coordinator.sendDraft()
+        coordinator.draft = "ny text"
+        await waitUntil { coordinator.messages.last?.deliveryState == .failed }
+        XCTAssertEqual(coordinator.draft, "ny text")
+    }
 }
