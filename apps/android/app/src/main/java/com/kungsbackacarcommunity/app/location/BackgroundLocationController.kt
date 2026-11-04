@@ -42,14 +42,8 @@ import androidx.lifecycle.ProcessLifecycleOwner
  */
 object BackgroundLocationController {
 
-    /**
-     * uid of a start that was refused because the app was backgrounded, awaiting
-     * a retry on the next foreground. `null` means nothing is pending. Written and
-     * read on the main thread (start paths + the lifecycle observer); volatile is
-     * defensive against any off-main caller of [start].
-     */
-    @Volatile
-    private var pendingStartUid: String? = null
+    /** Keeps a late service refusal from reviving a cancelled or replaced owner. */
+    private val deferredStart = DeferredLocationStart()
 
     /**
      * Application context captured on first start, so the foreground retry has a
@@ -71,7 +65,7 @@ object BackgroundLocationController {
     private val foregroundObserver =
         object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
-                val uid = pendingStartUid ?: return
+                val uid = deferredStart.pendingUid ?: return
                 val context = appContext ?: return
                 // Now in the foreground: this start is allowed and, on success,
                 // clears the pending flag. If it still fails it stays pending and
@@ -82,6 +76,7 @@ object BackgroundLocationController {
 
     fun start(context: Context, uid: String) {
         if (uid.isBlank()) return
+        deferredStart.requested(uid)
         appContext = context.applicationContext
         val intent =
             Intent(context, LocationSharingService::class.java).apply {
@@ -93,7 +88,7 @@ object BackgroundLocationController {
             // foreground retry) clears any pending retry. Starting an already-
             // running service just re-delivers onStartCommand, which the service
             // handles idempotently, so this is safe if it was already up.
-            pendingStartUid = null
+            deferredStart.started(uid)
         } catch (e: IllegalStateException) {
             // The `is` type check is the only framework-specific bit; the SDK
             // gating that turns it into the swallow-vs-rethrow decision lives in
@@ -108,7 +103,7 @@ object BackgroundLocationController {
             ) {
                 // Backgrounded-start refusal: record the uid and arm the
                 // foreground retry instead of silently giving up.
-                pendingStartUid = uid
+                deferredStart.defer(uid)
                 ensureForegroundObserver()
             } else {
                 // Modern device, and NOT the background-start refusal — a real
@@ -126,7 +121,7 @@ object BackgroundLocationController {
                     finePermissionGranted = hasFineLocationPermission(context),
                 )
             ) {
-                pendingStartUid = uid
+                deferredStart.defer(uid)
                 ensureForegroundObserver()
             } else {
                 throw e
@@ -137,8 +132,15 @@ object BackgroundLocationController {
     fun stop(context: Context) {
         // Cancel any pending retry FIRST so a session that is stopped before it
         // ever got to foreground can never re-start the service.
-        pendingStartUid = null
+        deferredStart.stop()
         context.stopService(Intent(context, LocationSharingService::class.java))
+    }
+
+    /** A late service callback must not re-arm a start cancelled by Stop or an account change. */
+    internal fun deferPromotion(context: Context, uid: String) {
+        if (!deferredStart.defer(uid)) return
+        appContext = context.applicationContext
+        ensureForegroundObserver()
     }
 
     /**

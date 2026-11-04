@@ -448,7 +448,17 @@ class LocationSharingService : Service() {
 
         // Post the notification and enter the foreground FIRST: the platform
         // requires startForeground within a few seconds of the start request.
-        postNotification(foreground = true)
+        if (!ForegroundPromotion.attempt(
+                onRefused = {
+                    // Refusal here is asynchronous to the controller's start
+                    // call, so its catch cannot protect this callback (#1103).
+                    // Do not request GPS or observe/publish after failed promotion.
+                    stopSharingLocally()
+                    BackgroundLocationController.deferPromotion(applicationContext, uid)
+                },
+                promote = { postNotification(foreground = true) },
+            )
+        ) return START_NOT_STICKY
 
         if (!startLocationUpdates()) return START_NOT_STICKY
 
