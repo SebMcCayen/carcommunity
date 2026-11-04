@@ -646,6 +646,103 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertEqual(cameraPreferenceUpdates[2].zoom, 12)
     }
 
+    func testCameraRuntimePreservesDestinationAcrossOverlappingAnimationsAndFrames() {
+        let runtime = MapHomeCameraRuntime()
+        let first = MapHomeCameraTarget(latitude: 57, longitude: 12, zoom: 16, bearing: 10, pitch: 45)
+        let second = first.applyingPreferences(is3D: false, browsingZoom: 13, browsingOwnsZoom: true)
+        let inFlight = MapHomeCameraTarget(latitude: 56, longitude: 11, zoom: 14, bearing: 5, pitch: 20)
+        runtime.recordCameraFrame(first)
+        XCTAssertEqual(runtime.canonicalTarget, first)
+        let oldToken = runtime.beginProgrammaticChange()
+        runtime.setTarget(second)
+        let newToken = runtime.beginProgrammaticChange()
+        runtime.recordCameraFrame(inFlight)
+        XCTAssertEqual(runtime.canonicalTarget, second, "Intermediate frames must not resurrect old zoom/pitch")
+        XCTAssertFalse(runtime.finishProgrammaticChange(oldToken))
+        XCTAssertTrue(runtime.programmaticChangeActive)
+        XCTAssertEqual(runtime.canonicalTarget, second)
+        XCTAssertTrue(runtime.finishProgrammaticChange(newToken))
+        XCTAssertNil(runtime.canonicalTarget)
+        runtime.recordCameraFrame(inFlight)
+        XCTAssertFalse(runtime.finishProgrammaticChange(oldToken), "A stale completion must not erase manual browsing")
+        XCTAssertEqual(runtime.canonicalTarget, inFlight)
+    }
+
+    func testCameraRuntimeExtendsOneIdleTimerAcrossGestureFrames() async throws {
+        let runtime = MapHomeCameraRuntime()
+        var calls = 0
+        runtime.scheduleIdleReturn(after: .seconds(10)) { calls += 1 }
+        let task = try XCTUnwrap(runtime.idleReturnTask)
+        let token = try XCTUnwrap(runtime.idleReturnToken)
+        let originalDeadline = try XCTUnwrap(runtime.idleReturnDeadline)
+        for _ in 0..<120 {
+            runtime.scheduleIdleReturn(after: .seconds(20)) { calls += 1 }
+            XCTAssertEqual(runtime.idleReturnToken, token, "Do not allocate one Task per camera frame")
+        }
+        XCTAssertGreaterThan(try XCTUnwrap(runtime.idleReturnDeadline), originalDeadline)
+        runtime.cancelIdleReturn()
+        await task.value
+        XCTAssertEqual(calls, 0)
+        XCTAssertNil(runtime.idleReturnToken)
+        XCTAssertNil(runtime.idleReturnDeadline)
+    }
+
+    func testCameraRuntimeIdleReturnFiresOnceAndReadsCurrentState() async throws {
+        let runtime = MapHomeCameraRuntime()
+        var latestZoom = 12.0
+        var appliedZoom: Double?
+        runtime.scheduleIdleReturn(after: .zero) { appliedZoom = latestZoom }
+        let task = try XCTUnwrap(runtime.idleReturnTask)
+        latestZoom = 17
+        await task.value
+        XCTAssertEqual(appliedZoom, 17)
+        XCTAssertNil(runtime.idleReturnTask)
+        XCTAssertNil(runtime.idleReturnDeadline)
+    }
+
+    func testCameraRuntimeRearmsAfterInactivityWithoutAnotherCameraFrame() async throws {
+        let runtime = MapHomeCameraRuntime()
+        var currentPoint = MapPoint(longitude: 12, latitude: 57)
+        var returnedTo: MapPoint?
+        runtime.scheduleIdleReturn(after: .seconds(10)) { returnedTo = currentPoint }
+        let inactiveTimer = try XCTUnwrap(runtime.idleReturnTask)
+        let inactiveToken = runtime.idleReturnToken
+        runtime.cancelIdleReturn()
+        // Visibility/renderer reentry must rearm the suspended follow even
+        // though startup has been cancelled and the map has not moved.
+        currentPoint = MapPoint(longitude: 13, latitude: 58)
+        runtime.scheduleIdleReturn(after: .zero) { returnedTo = currentPoint }
+        let activeTimer = try XCTUnwrap(runtime.idleReturnTask)
+        XCTAssertNotEqual(runtime.idleReturnToken, inactiveToken)
+        await inactiveTimer.value
+        await activeTimer.value
+        XCTAssertEqual(returnedTo, currentPoint)
+        XCTAssertNil(runtime.idleReturnTask)
+    }
+
+    func testCameraRuntimeDetachCancelsTasksAndIgnoresPreviousRendererCompletion() async throws {
+        let runtime = MapHomeCameraRuntime()
+        var calls = 0
+        runtime.scheduleIdleReturn(after: .zero) { calls += 1 }
+        let idleTask = try XCTUnwrap(runtime.idleReturnTask)
+        let oldToken = runtime.beginProgrammaticChange()
+        let timeoutTask = Task { @MainActor in
+            guard !Task.isCancelled else { return }
+            calls += 10
+        }
+        runtime.retainProgrammaticTask(timeoutTask, for: oldToken)
+        runtime.cancelAll()
+        XCTAssertTrue(timeoutTask.isCancelled)
+        await idleTask.value
+        await timeoutTask.value
+        XCTAssertEqual(calls, 0)
+        XCTAssertFalse(runtime.programmaticChangeActive)
+        let newToken = runtime.beginProgrammaticChange()
+        XCTAssertFalse(runtime.finishProgrammaticChange(oldToken))
+        XCTAssertTrue(runtime.programmaticChangeActive)
+        XCTAssertTrue(runtime.finishProgrammaticChange(newToken))
+    }
+
     func testCameraPreferenceReplayCombines2DAndNondefaultZoom() {
         let target = MapHomeCameraTarget(
             latitude: 57.48, longitude: 12.07, zoom: 16, bearing: 20, pitch: 45
