@@ -468,7 +468,7 @@ class LiveMarkerSmoother(
                 ),
             )
         if (!burst) return
-        val summary = rejectionLog.summary()
+        val summary = rejectionLog.reportSummary()
         onRejectionBurst?.invoke(
             LivePositionRejectionReport.message(LiveFixSource.RENDER, summary),
             LivePositionRejectionReport.code(summary),
