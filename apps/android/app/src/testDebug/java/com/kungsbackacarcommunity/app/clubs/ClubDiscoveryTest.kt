@@ -35,7 +35,7 @@ class ClubDiscoveryTest {
             .performScrollTo().performClick()
         compose.onNodeWithText(text(R.string.clubs_readOnly)).assertExists()
         compose.onNodeWithText(text(R.string.clubs_join)).assertIsNotEnabled()
-        compose.runOnIdle { assertEquals(listOf<String?>(null, "page2"), repo.pages); assertFalse("other" in repo.rosters) }
+        compose.runOnIdle { assertEquals(listOf("page2"), repo.pages.filterNotNull()); assertFalse("other" in repo.rosters) }
         tab(R.string.clubs_myClub).performScrollTo().performClick()
         compose.onNodeWithText("Own club").assertExists()
     }

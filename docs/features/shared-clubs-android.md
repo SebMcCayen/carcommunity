@@ -76,8 +76,8 @@ This Android integration is one part of a coordinated feature. Before activation
    create/list, invitation acceptance, one-club race, moderator cap, removal/chat
    revocation, cooldown, logo projection, membership-period drive aggregation,
    and event registration/calendar visibility.
-6. Publish Android builds separately after runtime acceptance. This work does not
-   change versions, publish an app, or modify iOS implementation.
+6. Publish Android and iOS builds separately after runtime acceptance. These
+   navigation changes do not change versions, publish an app or deploy a backend.
 
 ## Evidence status
 
