@@ -40,7 +40,8 @@ fixtures with no Firebase account or production writes.
 
 The normal native suite provides the Android 14 compatibility gate. The focused
 `Android system bars` workflow adds Android 15 (API 35) and Android 16 (API 36),
-each with gesture and three-button navigation and an emulated display cutout.
+each in portrait and landscape, with gesture and three-button navigation and an
+emulated display cutout.
 The tests assert that the requested navigation mode and cutout are actually active.
 Screenshots and test reports are retained as `system-bars-api-35/36` artifacts.
 Record actual run IDs and results below after execution; source inspection alone

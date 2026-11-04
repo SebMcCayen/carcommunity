@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.design
 
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.os.Build
 import android.view.View
@@ -112,11 +113,15 @@ class SystemBarsNativeTest {
             compose.waitForIdle()
             assertStyle(mode)
             val rootHeight = compose.onRoot().fetchSemanticsNode().boundsInRoot.height
-            val bottom = insets().getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            val bars = insets().getInsets(WindowInsetsCompat.Type.navigationBars() or WindowInsetsCompat.Type.displayCutout())
+            val rootWidth = compose.onRoot().fetchSemanticsNode().boundsInRoot.width
             for (label in listOf(R.string.shell_tabMap, R.string.shell_tabCreate)) {
                 val button = compose.onNodeWithContentDescription(context.getString(label))
                 button.assertIsDisplayed()
-                assertTrue("Footer action overlaps navigation bar", button.fetchSemanticsNode().boundsInRoot.bottom <= rootHeight - bottom + 2f)
+                val bounds = button.fetchSemanticsNode().boundsInRoot
+                assertTrue("Footer action overlaps bottom navigation", bounds.bottom <= rootHeight - bars.bottom + 2f)
+                assertTrue("Footer action overlaps left cutout/navigation", bounds.left >= bars.left)
+                assertTrue("Footer action overlaps right cutout/navigation", bounds.right <= rootWidth - bars.right + 2f)
             }
             capture("map-layers-${if (mode) "dark" else "light"}")
         }
@@ -134,6 +139,10 @@ class SystemBarsNativeTest {
     private fun assertStyle(dark: Boolean) = compose.runOnIdle {
         val window = compose.activity.window
         val arguments = InstrumentationRegistry.getArguments()
+        when (arguments.getString("orientation")) {
+            "portrait" -> assertEquals(Configuration.ORIENTATION_PORTRAIT, compose.activity.resources.configuration.orientation)
+            "landscape" -> assertEquals(Configuration.ORIENTATION_LANDSCAPE, compose.activity.resources.configuration.orientation)
+        }
         val tappable = insets().getInsets(WindowInsetsCompat.Type.tappableElement()).bottom
         when (arguments.getString("navigationMode")) {
             "gesture" -> assertEquals("Gesture navigation must be active", 0, tappable)

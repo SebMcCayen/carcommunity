@@ -54,16 +54,22 @@ jobs:
           script: |
             bash -euo pipefail -c '
               adb shell cmd overlay enable --user 0 com.android.internal.display.cutout.emulation.corner
-              for mode in gesture threebutton; do
-                if [ "$mode" = gesture ]; then overlay=com.android.internal.systemui.navbar.gestural; else overlay=com.android.internal.systemui.navbar.threebutton; fi
-                adb shell cmd overlay enable-exclusive --user 0 --category "$overlay"
-                test_status=0
-                ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.kungsbackacarcommunity.app.design.SystemBarsNativeTest -Pandroid.testInstrumentationRunnerArguments.navigationMode="$mode" -Pandroid.testInstrumentationRunnerArguments.requireCutout=true || test_status=$?
-                mkdir -p "../../system-bars-evidence/$mode"
-                adb pull /sdcard/Android/data/com.kungsbackacarcommunity.app/files/system-bars "../../system-bars-evidence/$mode/" || true
-                cp -R app/build/outputs/androidTest-results "../../system-bars-evidence/$mode/" || true
-                cp -R app/build/reports/androidTests "../../system-bars-evidence/$mode/" || true
-                test "$test_status" -eq 0
+              adb shell settings put system accelerometer_rotation 0
+              for orientation in portrait landscape; do
+                if [ "$orientation" = portrait ]; then rotation=0; else rotation=1; fi
+                adb shell settings put system user_rotation "$rotation"
+                for mode in gesture threebutton; do
+                  if [ "$mode" = gesture ]; then overlay=com.android.internal.systemui.navbar.gestural; else overlay=com.android.internal.systemui.navbar.threebutton; fi
+                  adb shell cmd overlay enable-exclusive --user 0 --category "$overlay"
+                  test_status=0
+                  ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.kungsbackacarcommunity.app.design.SystemBarsNativeTest -Pandroid.testInstrumentationRunnerArguments.navigationMode="$mode" -Pandroid.testInstrumentationRunnerArguments.orientation="$orientation" -Pandroid.testInstrumentationRunnerArguments.requireCutout=true || test_status=$?
+                  evidence="../../system-bars-evidence/$orientation/$mode"
+                  mkdir -p "$evidence"
+                  adb pull /sdcard/Android/data/com.kungsbackacarcommunity.app/files/system-bars "$evidence/" || true
+                  cp -R app/build/outputs/androidTest-results "$evidence/" || true
+                  cp -R app/build/reports/androidTests "$evidence/" || true
+                  test "$test_status" -eq 0
+                done
               done
             '
       - name: Retain screenshots and test reports
