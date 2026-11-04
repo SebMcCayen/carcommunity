@@ -96,3 +96,12 @@ A compiled/minified package is not device or production certification. A future
 approved release must still test the minified, Firebase-configured, real-navigation
 build on devices and upload through the usual release process to verify Play's
 warning clears. No release workflow is dispatched for this migration.
+
+## Nav-enabled optimization gate
+
+The existing trusted-repository navigation CI job now also runs `assembleRelease`
+with the existing Mapbox download token. This verifies R8/resource shrinking for
+the real `src/nav` implementation, not only the token-free stub. It keeps the
+existing fork/Dependabot guards and environment boundary. It materializes no
+keystore or production Firebase configuration and uploads no package. Await
+the current-head job result before claiming the nav-enabled R8 gate passed.
