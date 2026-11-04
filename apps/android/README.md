@@ -4,8 +4,9 @@ Native Android app (Kotlin, Jetpack Compose). Created in migration plan Phase 5;
 
 ## Requirements
 
-- JDK 17+
-- Android SDK (compileSdk 35) — install via Android Studio or `sdkmanager`
+- JDK 17 (CI baseline)
+- Android SDK platform 36 and Build Tools 36.0.0 — install via Android Studio or `sdkmanager`
+- Use the checked-in Gradle 9.3.1 wrapper; AGP 9.1.1 uses built-in Kotlin with Kotlin/Compose compiler 2.4.0. See [migration and validation](../../docs/android-agp9-r8-validation.md).
 - Node.js 24+ (the repo baseline) — only for the localization generator script (`scripts/generate-strings.mjs`); the app build itself is Gradle-only and this workspace is intentionally not part of the JS monorepo workspaces
 
 ## Firebase setup (`google-services.json`)
