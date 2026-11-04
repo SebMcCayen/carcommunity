@@ -53,7 +53,7 @@ struct MapLayersSheet: View {
                     if preferences.trafficAlertsEnabled {
                         Picker("shell.layersAlertAgeTitle", selection: Binding(
                             get: { preferences.incidentMaxAge },
-                            set: preferences.setIncidentMaxAge
+                            set: { preferences.setIncidentMaxAge($0) }
                         )) {
                             ForEach(IncidentAgeOption.allCases, id: \.self) { option in
                                 Text(LocalizedStringKey(option.titleKey)).tag(option)
