@@ -994,6 +994,19 @@ final class ShellSmokeTests: XCTestCase {
             "Build without GoogleService-Info.plist to test the config-less shell"
         )
         XCTAssertEqual(app.buttons["shell.menu"].label, language == "sv" ? "Inställningar" : "Settings")
+        if liveFixture {
+            // The fixture publishes its active session asynchronously. Let the
+            // session dock settle before querying footer activation points;
+            // otherwise its first insertion can retire the sampled AX frame.
+            let bar = app.buttons["map.session.bar"]
+            let dockReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                guard bar.exists else { return false }
+                let frame = bar.frame
+                return !frame.isEmpty && !frame.isNull && !frame.isInfinite && app.frame.intersects(frame)
+            }, object: bar)
+            XCTAssertEqual(XCTWaiter.wait(for: [dockReady], timeout: 15), .completed,
+                "The active-session dock must be laid out before footer interaction")
+        }
         // The top menu can be exposed before the safe-area footer finishes its
         // first layout (especially after changing language/text size). Readiness
         // means actual interactive controls, not just an existing title/menu.
