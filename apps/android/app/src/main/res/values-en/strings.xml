@@ -2152,6 +2152,12 @@
     <string name="clubs_myClub">My club</string>
     <string name="clubs_allClubs">All clubs</string>
     <string name="clubs_noMembership">You are not a member of a club yet.</string>
+    <string name="clubs_pendingInvitations">Pending invitations</string>
+    <string name="clubs_noPendingInvitations">No pending invitations.</string>
+    <string name="clubs_invitedAt">Invited %1$s</string>
+    <string name="clubs_revokeInvitation">Withdraw invitation</string>
+    <string name="clubs_revokeInvitationConfirm">Withdraw the invitation to %1$s?</string>
+    <string name="clubs_refreshInvitations">Refresh</string>
     <string name="accountWarnings_title">Warnings from an administrator</string>
     <string name="accountWarnings_loading">Loading warnings…</string>
     <string name="accountWarnings_error">Warnings could not be loaded. Please retry.</string>

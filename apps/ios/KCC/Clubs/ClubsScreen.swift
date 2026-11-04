@@ -8,6 +8,8 @@ struct ClubsScreen: View {
     var onInitialClubConsumed: () -> Void = {}
     @State private var showsCreate = false
     @State private var confirmsLeave = false
+    @State private var showsSentInvitations = false
+    @State private var showsInvite = false
 
     var body: some View {
         ScrollView {
@@ -35,6 +37,12 @@ struct ClubsScreen: View {
         .refreshable { await coordinator?.reload() }
         .sheet(isPresented: $showsCreate) {
             if let coordinator { ClubCreateSheet(coordinator: coordinator) }
+        }
+        .sheet(isPresented: $showsSentInvitations, onDismiss: { coordinator?.clearSentInvitations() }) {
+            if let coordinator { ClubSentInvitationsSheet(coordinator: coordinator) }
+        }
+        .sheet(isPresented: $showsInvite) {
+            if let coordinator { ClubInviteFriendsSheet(coordinator: coordinator) }
         }
         .confirmationDialog("clubs.leaveConfirm", isPresented: $confirmsLeave, titleVisibility: .visible) {
             if let club = coordinator?.state?.club {
@@ -65,6 +73,13 @@ struct ClubsScreen: View {
                 if let club = state.club {
                     ClubPresentation(club: club)
                     clubStatistics(club)
+                    if coordinator.canManageInvitations {
+                        Text("clubs.members").font(.headline).accessibilityAddTraits(.isHeader)
+                        ViewThatFits(in: .horizontal) {
+                            HStack { invitationButtons(coordinator, club: club) }
+                            VStack(alignment: .leading) { invitationButtons(coordinator, club: club) }
+                        }
+                    }
                     Button("clubs.leave", role: .destructive) { confirmsLeave = true }
                         .disabled(coordinator.working || (state.role == "owner" && club.memberCount > 1)).frame(minHeight: 48)
                     if state.role == "owner" && club.memberCount > 1 {
@@ -122,6 +137,14 @@ struct ClubsScreen: View {
                     .disabled(coordinator.loading).frame(minHeight: 48)
             }
         }
+    }
+    @ViewBuilder private func invitationButtons(_ coordinator: ClubsCoordinator, club: CommunityClub) -> some View {
+        if club.visibility == "closed" {
+            Button("clubs.invite") { showsInvite = true }.frame(minHeight: 48).disabled(coordinator.working)
+        }
+        Button("clubs.pendingInvitations") { showsSentInvitations = true }
+            .frame(minHeight: 48).disabled(coordinator.working)
+            .accessibilityIdentifier("clubs.pendingInvitations")
     }
     private func clubStatistics(_ club: CommunityClub) -> some View {
         VStack(alignment: .leading, spacing: KccSpacing.s3) {
@@ -195,4 +218,118 @@ private struct ClubCreateSheet: View {
 private extension String {
     func localizedFormat(_ value: String) -> String { String(format: NSLocalizedString(self, comment: ""), value) }
     func localizedFormat(_ value: Int) -> String { String(format: NSLocalizedString(self, comment: ""), value) }
+}
+
+
+struct ClubSentInvitationsSheet: View {
+    let coordinator: ClubsCoordinator
+    @Environment(\.dismiss) private var dismiss
+    @State private var confirmation: SentClubInvitation?
+
+    var body: some View {
+        NavigationStack {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                List {
+                    if !coordinator.canManageInvitations {
+                        Text("clubs.readOnly")
+                    } else {
+                        if coordinator.loadingInvitations || coordinator.working { ProgressView("clubs.loading") }
+                        if coordinator.invitationsFailed {
+                            Text("clubs.error").foregroundStyle(KccTheme.error)
+                            Button("clubs.retry") { Task { await coordinator.loadSentInvitations() } }
+                                .frame(minHeight: 48).disabled(coordinator.working || coordinator.loadingInvitations)
+                        }
+                        let pending = coordinator.sentInvitations.filter { $0.expiresAt > context.date }
+                        if pending.isEmpty && !coordinator.loadingInvitations && !coordinator.invitationsFailed {
+                            Text("clubs.noPendingInvitations")
+                        }
+                        ForEach(pending) { invitation in
+                            VStack(alignment: .leading, spacing: KccSpacing.s2) {
+                                Text(verbatim: invitation.displayName.isEmpty ? NSLocalizedString("clubs.member", comment: "") : invitation.displayName).font(.headline)
+                                Text(String(format: NSLocalizedString("clubs.invitedAt", comment: ""),
+                                            invitation.sentAt.formatted(date: .abbreviated, time: .shortened)))
+                                Button("clubs.revokeInvitation", role: .destructive) { confirmation = invitation }
+                                    .frame(minHeight: 48).disabled(coordinator.working || coordinator.loadingInvitations)
+                            }
+                        }
+                        if coordinator.invitationsCursor != nil {
+                            Button("clubs.more") { Task { await coordinator.loadSentInvitations(append: true) } }
+                                .frame(minHeight: 48).disabled(coordinator.loadingInvitations || coordinator.working)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("clubs.pendingInvitations")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("clubs.close") { dismiss() }.disabled(coordinator.working)
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button("clubs.refreshInvitations") { Task { await refresh() } }
+                        .disabled(coordinator.working || coordinator.loadingInvitations)
+                }
+            }
+            .refreshable { await refresh() }
+            .task { await refresh() }
+            .confirmationDialog("clubs.revokeInvitation", isPresented: Binding(
+                get: { confirmation != nil }, set: { if !$0 { confirmation = nil } }), titleVisibility: .visible) {
+                if let invitation = confirmation {
+                    Button("clubs.revokeInvitation", role: .destructive) {
+                        Task { await coordinator.revoke(invitation); confirmation = nil }
+                    }.disabled(coordinator.working || !coordinator.canManageInvitations)
+                }
+                Button("clubs.cancel", role: .cancel) { confirmation = nil }
+            } message: {
+                if let invitation = confirmation {
+                    Text(String(format: NSLocalizedString("clubs.revokeInvitationConfirm", comment: ""),
+                                invitation.displayName.isEmpty ? NSLocalizedString("clubs.member", comment: "") : invitation.displayName))
+                }
+            }
+        }
+        .interactiveDismissDisabled(coordinator.working)
+    }
+    private func refresh() async {
+        await coordinator.reload()
+        await coordinator.loadSentInvitations()
+    }
+}
+
+/// Uses the same existing friend picker and canonical invite action as Android.
+struct ClubInviteFriendsSheet: View {
+    let coordinator: ClubsCoordinator
+    @Environment(\.dismiss) private var dismiss
+    @State private var friends: [FriendSummary] = []
+    @State private var search = ""
+    @State private var loading = true
+    @State private var failed = false
+    var body: some View {
+        NavigationStack {
+            List {
+                if loading { ProgressView("clubs.loading") }
+                if failed || coordinator.failed {
+                    Text("clubs.error").foregroundStyle(KccTheme.error)
+                    Button("clubs.retry") { Task { await load() } }.frame(minHeight: 48)
+                }
+                if !loading && !failed && friends.isEmpty { Text("clubs.noFriends") }
+                ForEach(friends.filter { search.isEmpty || ($0.displayName ?? "").localizedCaseInsensitiveContains(search) }) { friend in
+                    Button {
+                        guard coordinator.canManageInvitations, let club = coordinator.state?.club, club.visibility == "closed" else { return }
+                        Task { if await coordinator.manage("invite", fields: ["clubId": club.id, "targetUid": friend.uid]) { dismiss() } }
+                    } label: { Text(verbatim: friend.displayName ?? NSLocalizedString("clubs.member", comment: "")) }
+                        .frame(minHeight: 48).disabled(coordinator.working || !coordinator.canManageInvitations)
+                }
+            }
+            .searchable(text: $search, prompt: "clubs.search")
+            .navigationTitle("clubs.inviteFriends")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("clubs.close") { dismiss() }.disabled(coordinator.working) } }
+            .task { await load() }
+        }.interactiveDismissDisabled(coordinator.working)
+    }
+    private func load() async {
+        loading = true; failed = false; friends = []
+        if let result = await coordinator.friendsRepository?.list(), case .loaded(let data) = result, !Task.isCancelled {
+            friends = data.friends.sorted { ($0.displayName ?? "").localizedCompare($1.displayName ?? "") == .orderedAscending }
+        } else { failed = true }
+        loading = false
+    }
 }

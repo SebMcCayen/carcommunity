@@ -2306,7 +2306,13 @@
     "noAttending": "Inga klubbar anmälda ännu.",
     "myClub": "Min klubb",
     "allClubs": "Alla klubbar",
-    "noMembership": "Du är inte medlem i någon klubb ännu."
+    "noMembership": "Du är inte medlem i någon klubb ännu.",
+    "pendingInvitations": "Väntande inbjudningar",
+    "noPendingInvitations": "Inga väntande inbjudningar.",
+    "invitedAt": "Inbjuden %1$s",
+    "revokeInvitation": "Dra tillbaka inbjudan",
+    "revokeInvitationConfirm": "Vill du dra tillbaka inbjudan till %1$s?",
+    "refreshInvitations": "Uppdatera"
   },
   "accountWarnings": {
     "title": "Varningar från administratör",

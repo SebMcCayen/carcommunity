@@ -6,6 +6,13 @@ enum ClubTab: String { case myClub, allClubs }
 @MainActor @Observable
 final class ClubsCoordinator {
     private let repository: (any ClubsRepository)?
+    let friendsRepository: (any FriendsRepository)?
+    private(set) var sentInvitations: [SentClubInvitation] = []
+    private(set) var invitationsCursor: String?
+    private(set) var loadingInvitations = false
+    private(set) var invitationsFailed = false
+    private var invitationsGeneration = 0
+    var canManageInvitations: Bool { enabled && state?.club != nil && ["owner", "moderator"].contains(state?.role ?? "") }
     private(set) var enabled = false
     private(set) var state: CommunityClubState?
     private(set) var clubs: [CommunityClub] = []
@@ -24,7 +31,9 @@ final class ClubsCoordinator {
     private var pendingFields: [String: String] = [:]
     private var pendingOperationID = UUID().uuidString
 
-    init(repository: (any ClubsRepository)?) { self.repository = repository }
+    init(repository: (any ClubsRepository)?, friendsRepository: (any FriendsRepository)? = nil) {
+        self.repository = repository; self.friendsRepository = friendsRepository
+    }
     deinit { subscription?.cancel(); reloadTask?.cancel() }
     func start() {
         guard subscription == nil, let repository else { return }
@@ -37,6 +46,7 @@ final class ClubsCoordinator {
                 self.loading = false; self.working = false
                 self.state = nil; self.clubs = []; self.selectedClub = nil; self.nextCursor = nil
                 self.requestedClubID = nil; self.openingClub = false; self.selectedTab = .myClub
+                self.clearSentInvitations()
                 self.reloadTask?.cancel()
                 if enabled { self.reloadTask = Task { [weak self] in await self?.reload() } }
             }
@@ -48,6 +58,7 @@ final class ClubsCoordinator {
         generation += 1; enabled = false; state = nil; clubs = []; selectedClub = nil
         loading = false; working = false; nextCursor = nil
         requestedClubID = nil; openingClub = false; selectedTab = .myClub
+        clearSentInvitations()
     }
     func reload(append: Bool = false) async {
         guard enabled, let repository, !loading else { return }
@@ -64,6 +75,7 @@ final class ClubsCoordinator {
             let page = try await repository.directory(after: cursor)
             try Task.checkCancellation()
             guard enabled, generation == self.generation else { return }
+            if self.state?.club?.id != state.club?.id || self.state?.role != state.role { clearSentInvitations() }
             self.state = state
             var seen = Set<String>()
             clubs = ((append ? clubs : []) + page.clubs).filter { seen.insert($0.id).inserted }
@@ -73,6 +85,7 @@ final class ClubsCoordinator {
         } catch {
             guard generation == self.generation, !Task.isCancelled else { return }
             state = nil // Disable membership-changing actions until a fresh read succeeds.
+            clearSentInvitations()
             failed = true
         }
     }
@@ -110,6 +123,39 @@ final class ClubsCoordinator {
         if let requestedClubID { await open(id: requestedClubID) }
     }
     func closeDetail() { selectedClub = nil; requestedClubID = nil; openingClub = false }
+    func clearSentInvitations() {
+        invitationsGeneration += 1; sentInvitations = []; invitationsCursor = nil
+        loadingInvitations = false; invitationsFailed = false
+    }
+    func loadSentInvitations(append: Bool = false) async {
+        guard canManageInvitations, let repository, let clubID = state?.club?.id, !loadingInvitations else { return }
+        let generation = generation, invitationGeneration = invitationsGeneration
+        let cursor = append ? invitationsCursor : nil
+        guard !append || cursor != nil else { return }
+        loadingInvitations = true; invitationsFailed = false
+        if !append { sentInvitations = []; invitationsCursor = nil }
+        defer { if invitationGeneration == invitationsGeneration { loadingInvitations = false } }
+        do {
+            let page = try await repository.sentInvitations(clubID: clubID, after: cursor)
+            guard generation == self.generation, invitationGeneration == invitationsGeneration,
+                  canManageInvitations, state?.club?.id == clubID, !Task.isCancelled else { return }
+            var seen = Set<String>()
+            sentInvitations = ((append ? sentInvitations : []) + page.items).filter { seen.insert($0.id).inserted }
+            invitationsCursor = page.nextCursor == cursor ? nil : page.nextCursor
+        } catch {
+            guard generation == self.generation, invitationGeneration == invitationsGeneration, !Task.isCancelled else { return }
+            sentInvitations = []; invitationsCursor = nil; invitationsFailed = true
+        }
+    }
+    @discardableResult func revoke(_ invitation: SentClubInvitation) async -> Bool {
+        guard canManageInvitations, let clubID = state?.club?.id, invitation.expiresAt > Date() else { return false }
+        let generation = generation
+        let result = await manage("revokeInvitation", fields: ["clubId": clubID, "targetUid": invitation.recipientUid, "createdAt": invitation.createdAt])
+        guard generation == self.generation, canManageInvitations, state?.club?.id == clubID else { return result }
+        if result { await loadSentInvitations() }
+        else { sentInvitations = []; invitationsCursor = nil; invitationsFailed = true }
+        return result
+    }
     @discardableResult func manage(_ action: String, fields: [String: String]) async -> Bool {
         guard enabled, let repository, !working, !loading, state != nil else { return false }
         let generation = generation

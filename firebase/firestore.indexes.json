@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "invitations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "status", "order": "ASCENDING"},
+        {"fieldPath": "expiresAt", "order": "ASCENDING"}
+      ]
+    },
+    {
       "collectionGroup": "crownHuntLeaderboardEntries",
       "queryScope": "COLLECTION",
       "fields": [

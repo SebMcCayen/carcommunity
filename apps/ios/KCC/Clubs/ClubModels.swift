@@ -38,6 +38,24 @@ struct ClubInvitation: Identifiable, Equatable, Sendable {
     let clubName: String
     let expiresAt: Date
 }
+struct SentClubInvitation: Identifiable, Equatable, Sendable {
+    var id: String { recipientUid }
+    let recipientUid: String
+    let displayName: String
+    let createdAt: String
+    let sentAt: Date
+    let expiresAt: Date
+
+    static func decode(_ raw: [String: Any]) -> Self? {
+        guard let uid = raw["recipientUid"] as? String, !uid.isEmpty,
+              let createdAt = raw["createdAt"] as? String,
+              let sentAt = CommunityClubState.date(createdAt),
+              let expiresAt = CommunityClubState.date(raw["expiresAt"]), expiresAt > sentAt else { return nil }
+        return Self(recipientUid: uid, displayName: raw["displayName"] as? String ?? "",
+                    createdAt: createdAt, sentAt: sentAt, expiresAt: expiresAt)
+    }
+}
+struct SentClubInvitationsPage: Sendable { let items: [SentClubInvitation]; let nextCursor: String? }
 struct CommunityClubState: Equatable, Sendable {
     let club: CommunityClub?
     let role: String?
@@ -64,7 +82,7 @@ struct CommunityClubState: Equatable, Sendable {
     func canJoin(at now: Date) -> Bool {
         club == nil && !legacyConflict && (joinAllowedAt.map { $0 <= now } ?? true)
     }
-    private static func date(_ value: Any?) -> Date? {
+    static func date(_ value: Any?) -> Date? {
         guard let string = value as? String else { return nil }
         let format = ISO8601DateFormatter()
         format.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

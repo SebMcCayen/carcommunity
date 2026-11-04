@@ -2306,7 +2306,13 @@
     "noAttending": "No clubs registered yet.",
     "myClub": "My club",
     "allClubs": "All clubs",
-    "noMembership": "You are not a member of a club yet."
+    "noMembership": "You are not a member of a club yet.",
+    "pendingInvitations": "Pending invitations",
+    "noPendingInvitations": "No pending invitations.",
+    "invitedAt": "Invited %1$s",
+    "revokeInvitation": "Withdraw invitation",
+    "revokeInvitationConfirm": "Withdraw the invitation to %1$s?",
+    "refreshInvitations": "Refresh"
   },
   "accountWarnings": {
     "title": "Warnings from an administrator",

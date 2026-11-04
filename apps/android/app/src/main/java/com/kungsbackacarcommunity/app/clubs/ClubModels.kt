@@ -16,6 +16,15 @@ data class Club(
 )
 data class ClubMembership(val clubId: String, val role: ClubRole, val joinedAt: String)
 data class ClubInvitation(val clubId: String, val clubName: String, val expiresAt: String)
+data class SentClubInvitation(val recipientUid: String, val displayName: String, val createdAt: String, val expiresAt: String)
+internal fun parseSentClubInvitation(raw: Map<String, Any?>): SentClubInvitation? {
+    val uid = raw.text("recipientUid")
+    val created = raw.text("createdAt"); val expiry = raw.text("expiresAt")
+    val createdMillis = clubInstant(created) ?: return null
+    val expiryMillis = clubInstant(expiry) ?: return null
+    if (uid.isBlank() || expiryMillis <= createdMillis) return null
+    return SentClubInvitation(uid, raw.text("displayName"), created, expiry)
+}
 data class ClubState(
     val club: Club? = null, val membership: ClubMembership? = null,
     val joinAllowedAt: String? = null, val invitations: List<ClubInvitation> = emptyList(),
