@@ -49,4 +49,20 @@ class LiveMarkerFailureDiagnosticsTest {
         for (now in 60_000L..115_000L step 5_000L) smoother.onPositions(listOf(member("a", now)), now)
         assertEquals(0, reports)
     }
+
+    @Test fun repeatedBadSeedCannotTurnRosterRefreshesIntoAFailureEpisode() {
+        var reports = 0
+        val smoother = LiveMarkerSmoother(onRejectionBurst = { _, _ -> reports++ })
+        for (now in 0L..90_000L step 5_000L) {
+            smoother.onPositions(listOf(member("a", 0L)), now)
+        }
+        assertEquals(0, reports)
+        // Fresh bad measurements can still establish a new, sustained episode.
+        for (now in 95_000L..150_000L step 5_000L) {
+            smoother.onPositions(listOf(member("a", now)), now)
+        }
+        assertEquals(0, reports)
+        smoother.onPositions(listOf(member("a", 155_000L)), 155_000L)
+        assertEquals(1, reports)
+    }
 }

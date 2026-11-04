@@ -317,7 +317,7 @@ class LocationSharingService : Service() {
                         ),
                     mockProvider = isMockFix(fix),
                 ),
-                escalationAllowed = rejectionWindow.onRejected(verdict, nowMillis),
+                escalationAllowed = rejectionWindow.onRejected(verdict, nowMillis, fix.time),
             )
         if (!burst) return
         val summary = rejectionLog.reportSummary()

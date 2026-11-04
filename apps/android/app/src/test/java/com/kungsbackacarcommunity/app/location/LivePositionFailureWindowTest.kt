@@ -43,6 +43,24 @@ class LivePositionFailureWindowTest {
         assertFalse(window.onRejected(bad, 70_000L))
     }
 
+    @Test fun repeatedOrOlderBadMeasurementsCannotSustainAnEpisode() {
+        val window = LivePositionFailureWindow()
+        repeat(5) { window.onRejected(bad, it * 5_000L, it * 5_000L) }
+        for (now in 25_000L..90_000L step 5_000L) {
+            assertFalse(window.onRejected(bad, now, 20_000L))
+            assertFalse(window.onRejected(bad, now, 15_000L))
+        }
+        assertFalse(window.onRejected(bad, 95_000L, 95_000L))
+    }
+
+    @Test fun missingTimestampsCannotEstablishFreshFailureEvidence() {
+        val window = LivePositionFailureWindow()
+        for (now in 0L..120_000L step 5_000L) {
+            assertFalse(window.onRejected(bad, now, null))
+        }
+        assertFalse(window.onRejected(bad, 125_000L, 125_000L))
+    }
+
     @Test fun suppressedEarlyThresholdDoesNotConsumeTheRunReport() {
         val window = LivePositionFailureWindow()
         val log = LivePositionRejectionLog()
