@@ -2,7 +2,7 @@
 # See docs/migration/native-firebase-migration-plan.md Phase 5.
 
 [versions]
-agp = "8.13.2"
+agp = "9.1.1"
 kotlin = "2.4.0"
 coreKtx = "1.18.0"
 # AndroidX AppCompat — pulled in ONLY for the per-app language API
@@ -128,7 +128,6 @@ robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
 firebase-crashlytics = { id = "com.google.firebase.crashlytics", version.ref = "firebaseCrashlyticsPlugin" }
