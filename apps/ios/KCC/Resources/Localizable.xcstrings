@@ -6393,6 +6393,23 @@
         }
       }
     },
+    "clubs.invitedAt": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inbjuden %1$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invited %1$@"
+          }
+        }
+      }
+    },
     "clubs.join": {
       "extractionState": "manual",
       "localizations": {
@@ -6903,6 +6920,23 @@
         }
       }
     },
+    "clubs.noPendingInvitations": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inga väntande inbjudningar."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No pending invitations."
+          }
+        }
+      }
+    },
     "clubs.older": {
       "extractionState": "manual",
       "localizations": {
@@ -6971,6 +7005,23 @@
         }
       }
     },
+    "clubs.pendingInvitations": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Väntande inbjudningar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pending invitations"
+          }
+        }
+      }
+    },
     "clubs.permissionError": {
       "extractionState": "manual",
       "localizations": {
@@ -7035,6 +7086,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "You can read the club presentation. The member list and calendar are members only."
+          }
+        }
+      }
+    },
+    "clubs.refreshInvitations": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uppdatera"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refresh"
           }
         }
       }
@@ -7154,6 +7222,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Retry"
+          }
+        }
+      }
+    },
+    "clubs.revokeInvitation": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dra tillbaka inbjudan"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Withdraw invitation"
+          }
+        }
+      }
+    },
+    "clubs.revokeInvitationConfirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vill du dra tillbaka inbjudan till %1$@?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Withdraw the invitation to %1$@?"
           }
         }
       }

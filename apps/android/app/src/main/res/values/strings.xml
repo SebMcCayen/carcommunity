@@ -2148,6 +2148,12 @@
     <string name="clubs_logoError">Bilden kunde inte förberedas. Välj en annan bild.</string>
     <string name="clubs_reportConfirm">Skicka en rapport om detta meddelande till administratörerna?</string>
     <string name="clubs_noAttending">Inga klubbar anmälda ännu.</string>
+    <string name="clubs_pendingInvitations">Väntande inbjudningar</string>
+    <string name="clubs_noPendingInvitations">Inga väntande inbjudningar.</string>
+    <string name="clubs_invitedAt">Inbjuden %1$s</string>
+    <string name="clubs_revokeInvitation">Dra tillbaka inbjudan</string>
+    <string name="clubs_revokeInvitationConfirm">Vill du dra tillbaka inbjudan till %1$s?</string>
+    <string name="clubs_refreshInvitations">Uppdatera</string>
     <string name="accountWarnings_title">Varningar från administratör</string>
     <string name="accountWarnings_loading">Hämtar varningar…</string>
     <string name="accountWarnings_error">Varningar kunde inte hämtas. Försök igen.</string>
