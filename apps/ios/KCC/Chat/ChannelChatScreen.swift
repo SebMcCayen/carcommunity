@@ -20,6 +20,7 @@ struct ChannelChatScreen: View {
     let showsNavigationTitle: Bool
     let protectCommunity: Bool
     @State private var expandedGroups: Set<String> = []
+    @State private var cooldownSeconds = 0
 
     init(coordinator: ChannelChatCoordinator?, title: Text, showsNavigationTitle: Bool = true, protectCommunity: Bool = false) {
         self.coordinator = coordinator
@@ -60,6 +61,18 @@ struct ChannelChatScreen: View {
                     }
                     .fixedSize(horizontal: false, vertical: true)
                     .background(KccTheme.surface)
+                }
+                .task(id: coordinator.cooldown.deadlineToken) {
+                    // Keep the native editor outside a periodically rebuilt
+                    // TimelineView. Idle conversations need no timer at all.
+                    var remaining = coordinator.cooldown.remainingSeconds
+                    cooldownSeconds = remaining
+                    while remaining > 0 {
+                        do { try await Task.sleep(for: .milliseconds(250)) }
+                        catch { return }
+                        remaining = coordinator.cooldown.remainingSeconds
+                        if cooldownSeconds != remaining { cooldownSeconds = remaining }
+                    }
                 }
 
         } else {
@@ -199,9 +212,8 @@ struct ChannelChatScreen: View {
     // MARK: - Composer
 
     private func composer(_ coordinator: ChannelChatCoordinator) -> some View {
-        TimelineView(.periodic(from: .now, by: 1)) { _ in
-            let remaining = coordinator.cooldown.remainingSeconds
-            VStack(alignment: .leading, spacing: KccSpacing.s1) {
+        let remaining = max(cooldownSeconds, coordinator.cooldown.remainingSeconds)
+        return VStack(alignment: .leading, spacing: KccSpacing.s1) {
                 if remaining > 0 {
                     Text("chat.flood.paused")
                         .font(.footnote)
@@ -218,7 +230,6 @@ struct ChannelChatScreen: View {
                 ) {
                     coordinator.sendDraft()
                 }
-            }
         }
     }
 

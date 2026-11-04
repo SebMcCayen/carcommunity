@@ -362,6 +362,7 @@ final class ChatSendCooldown {
     init(elapsed: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         self.elapsed = elapsed
     }
+    var deadlineToken: TimeInterval { deadline }
     var remainingSeconds: Int { Int(ceil(max(0, min(600, deadline - elapsed())))) }
     var isBlocked: Bool { remainingSeconds > 0 }
 
