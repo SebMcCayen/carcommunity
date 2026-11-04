@@ -68,7 +68,7 @@ protocol SignInDiagnosticInfo {
     var diagnosticCode: String? { get }
 }
 
-/// Thrown by the repository when the Firebase credential exchange fails,
+/// Thrown when Apple authorization or the Firebase credential exchange fails,
 /// preserving the underlying error and lifting its stable error-code name
 /// into ``diagnosticCode`` so the pure coordinator can report it without
 /// importing Firebase types.

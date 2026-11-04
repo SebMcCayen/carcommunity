@@ -84,6 +84,28 @@ Account linking between providers is **not** included in the MVP.
 
 ### Error handling
 
+Apple authorization failures are normalized by their documented authorization
+error domain and a fixed set of codes before entering sign-in diagnostics.
+Cancellation returns to idle without a diagnostic report. Other failures use the
+existing server-allowlisted `SignInFailedError` category and `credential_fetch`
+step, with a fixed `apple*` status in private diagnostic metadata. Unknown future
+Apple codes and errors from other domains use bounded fallback statuses; raw
+domains, numeric codes, messages and `userInfo` never enter the diagnostic payload.
+This iOS-only normalization follows the approved provider difference above;
+Android's Google sign-in path and shared backend deduplication are unchanged.
+
+For historical [issue #1287](https://github.com/SebMcCayen/carcommunity/issues/1287),
+inspect the private `diagnosticsReports` original by platform, build and time.
+The public `Unknown` fingerprint groups multiple unrecognized error types and
+is not the original diagnostic fingerprint. This classification fix does not
+establish that the historical Apple/Firebase login failure is resolved. Verify
+successful Apple authorization and Firebase exchange on a physical iPhone in a
+subsequent TestFlight build, and inspect private `signInStep`/`errorStatus` if it
+fails. Check cancellation separately; it must remain unreported.
+
+Apple references: [authorization error domain](https://developer.apple.com/documentation/authenticationservices/asauthorizationerrordomain)
+and [authorization error codes](https://developer.apple.com/documentation/authenticationservices/asauthorizationerror-swift.struct/code).
+
 | Firebase error code        | User-facing action                        |
 | -------------------------- | ----------------------------------------- |
 | `ERROR_USER_DISABLED`      | Show account suspended message, sign out  |
