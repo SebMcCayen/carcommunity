@@ -158,8 +158,8 @@ jobs:
     # compile error there could only be discovered while cutting a release.
     #
     # This job closes that gap: it supplies the token so the real `src/nav`
-    # source set is selected, and compiles it. It is a COMPILE-ONLY gate — no
-    # emulator, no signing, no release artifacts.
+    # source set is selected, compiles it, and runs R8/resource shrinking on
+    # the nav-enabled release variant. No emulator, signing or artifact upload.
     #
     # SECRET SCOPE
     # ------------
@@ -232,6 +232,14 @@ jobs:
         env:
           ORG_GRADLE_PROJECT_MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
         run: ./gradlew --no-daemon :app:compileDebugKotlin
+
+      - name: Optimize the nav-enabled release (R8 and resources)
+        working-directory: apps/android
+        env:
+          ORG_GRADLE_PROJECT_MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
+        # The real shipping source set must survive optimized shrinking too.
+        # No keystore or production Firebase configuration is materialized.
+        run: ./gradlew --no-daemon :app:assembleRelease
 
       - name: Verify nav SDK 16 KB native-library alignment
         working-directory: apps/android
