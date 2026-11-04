@@ -4,17 +4,26 @@ package com.kungsbackacarcommunity.app.location
 internal class LivePositionFailureWindow {
     private var firstRejectedAt: Long? = null
     private var lastRejectedAt: Long? = null
+    private var lastRejectedFixAt: Long? = null
     private var count = 0
 
-    fun onRejected(verdict: LiveFixVerdict, nowMillis: Long): Boolean {
+    fun onRejected(verdict: LiveFixVerdict, nowMillis: Long, recordedAtMillis: Long? = nowMillis): Boolean {
         // Replayed snapshots do not show a new failure or keep a failure alive.
         if (verdict == LiveFixVerdict.REJECT_NOT_NEWER) return false
         if (verdict == LiveFixVerdict.ACCEPT) {
             reset()
             return false
         }
+        if (lastRejectedAt?.let { nowMillis < it } == true) reset()
+        // A bad seed has no accepted anchor, so quality can reject it before
+        // checking its timestamp. Roster refreshes are not fresh measurements.
+        // Legacy timestamp-less records remain local evidence only.
+        val fixAt = recordedAtMillis ?: return false
+        val previousFixAt = lastRejectedFixAt
+        if (previousFixAt != null && fixAt <= previousFixAt) return false
+        lastRejectedFixAt = fixAt
         val previous = lastRejectedAt
-        if (previous == null || nowMillis < previous || nowMillis - previous > MAX_GAP_MS) {
+        if (previous == null || nowMillis - previous > MAX_GAP_MS) {
             firstRejectedAt = nowMillis
             count = 0
         }
@@ -26,6 +35,7 @@ internal class LivePositionFailureWindow {
     fun reset() {
         firstRejectedAt = null
         lastRejectedAt = null
+        lastRejectedFixAt = null
         count = 0
     }
 

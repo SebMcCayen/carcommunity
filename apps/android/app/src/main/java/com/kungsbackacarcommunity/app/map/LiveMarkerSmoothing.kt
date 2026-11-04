@@ -473,7 +473,7 @@ class LiveMarkerSmoother(
                 ),
                 escalationAllowed = rejectionWindows.getOrPut(member.uid) {
                     LivePositionFailureWindow()
-                }.onRejected(verdict, nowMillis),
+                }.onRejected(verdict, nowMillis, member.updatedAtMillis),
             )
         if (!burst) return
         val summary = rejectionLog.summary()
