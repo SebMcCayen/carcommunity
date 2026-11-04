@@ -323,12 +323,12 @@ class ChannelChatContentTest {
         val wall = message("four-lines", "other", "Sam").copy(text = (1..10).joinToString("\n") { "line $it" })
         setContent(listOf(wall), onViewProfile = null, protectCommunity = true)
         val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
-        composeTestRule.onNodeWithTag("chat-body-four-lines")
+        composeTestRule.onNodeWithTag("chat-body-four-lines", useUnmergedTree = true)
             .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertEquals(4, layouts.single().lineCount)
         composeTestRule.onNodeWithTag("chat-body-toggle-four-lines").performClick()
         layouts.clear()
-        composeTestRule.onNodeWithTag("chat-body-four-lines")
+        composeTestRule.onNodeWithTag("chat-body-four-lines", useUnmergedTree = true)
             .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertEquals(10, layouts.single().lineCount)
     }
