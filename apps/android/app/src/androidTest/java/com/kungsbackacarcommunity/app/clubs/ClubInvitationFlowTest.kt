@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.clubs
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.notifications.*
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.test.platform.app.InstrumentationRegistry
@@ -73,7 +74,13 @@ class ClubInvitationFlowTest {
     @Test fun selectingPublicClubDoesNotHidePendingInvitations() {
         val repo = InvitationRepository().apply { invitations = listOf(invite) }
         compose.setContent { KccTheme { SharedClubRoute("me", repository = repo) } }
-        compose.onNodeWithText("Öppen klubb").performScrollTo().performClick()
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        compose.onNode(hasText(context.getString(R.string.clubs_allClubs)) and isSelectable())
+            .performScrollTo().performClick()
+        compose.onNodeWithText("Öppen klubb").assertExists()
+        compose.onNode(hasText(context.getString(R.string.clubs_title)) and hasClickAction())
+            .performScrollTo().performClick()
+        compose.onNodeWithText(context.getString(R.string.clubs_readOnly)).assertExists()
         compose.onNodeWithTag("club-invitation-west").performScrollTo().assertExists()
         compose.onNodeWithTag("club-invitation-accept-west").assertIsEnabled().performClick()
         compose.waitUntil { repo.actions.isNotEmpty() }
