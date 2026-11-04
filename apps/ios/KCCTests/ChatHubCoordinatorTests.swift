@@ -36,6 +36,7 @@ final class ChatHubCoordinatorTests: XCTestCase {
         func report(convoyId: String, messageId: String, reason: ChatReportReason) async -> ChannelReportResult {
             .reported
         }
+        func avatarDownloadURL(for avatarPath: String) async -> URL? { nil }
         func currentUserId() -> String? { "me" }
     }
 
@@ -47,6 +48,7 @@ final class ChatHubCoordinatorTests: XCTestCase {
         }
         func markRead() async {}
         func report(messageId: String, reason: ChatReportReason) async -> ChannelReportResult { .reported }
+        func avatarDownloadURL(for avatarPath: String) async -> URL? { nil }
         func currentUserId() -> String? { "me" }
     }
 

@@ -14,6 +14,7 @@ protocol ChannelChatSource: Sendable {
     func post(text: String, clientId: String?, replyToMessageId: String?) async -> ChannelSendResult
     func markRead() async
     func report(messageId: String, reason: ChatReportReason) async -> ChannelReportResult
+    func avatarDownloadURL(for avatarPath: String) async -> URL?
     func currentUserId() -> String?
 }
 
@@ -33,6 +34,9 @@ struct CommunityChatSource: ChannelChatSource {
     func report(messageId: String, reason: ChatReportReason) async -> ChannelReportResult {
         await repository.report(messageId: messageId, reason: reason)
     }
+    func avatarDownloadURL(for avatarPath: String) async -> URL? {
+        await repository.avatarDownloadURL(for: avatarPath)
+    }
     func currentUserId() -> String? { repository.currentUserId() }
 }
 
@@ -51,6 +55,9 @@ struct ConvoyChatSource: ChannelChatSource {
     func markRead() async { await repository.markRead(convoyId: convoyId) }
     func report(messageId: String, reason: ChatReportReason) async -> ChannelReportResult {
         await repository.report(convoyId: convoyId, messageId: messageId, reason: reason)
+    }
+    func avatarDownloadURL(for avatarPath: String) async -> URL? {
+        await repository.avatarDownloadURL(for: avatarPath)
     }
     func currentUserId() -> String? { repository.currentUserId() }
 }
@@ -89,6 +96,10 @@ final class ChannelChatCoordinator {
             Task { [source] in await source.markRead() }
         }
     }
+    @ObservationIgnored private var avatarURLs: [String: URL] = [:]
+    @ObservationIgnored private var avatarResolutions: [String: Task<URL?, Never>] = [:]
+    @ObservationIgnored private var attemptedAvatarPaths: Set<String> = []
+
     private let source: ChannelChatSource
     /// The caller's uid, captured once at init (the Firebase seam owns identity).
     /// Used to mark own vs other bubbles and to author optimistic bubbles.
@@ -135,6 +146,24 @@ final class ChannelChatCoordinator {
         subscription?.cancel()
     }
 
+    /// Repeated messages and concurrent rows share one Storage resolution per path.
+    /// A reload permits failed paths to be tried again; a new avatar path is
+    /// independent of any cached result for an older photo.
+    func avatarURL(for avatarPath: String?) async -> URL? {
+        guard let avatarPath, !avatarPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        if let cached = avatarURLs[avatarPath] { return cached }
+        if let inFlight = avatarResolutions[avatarPath] { return await inFlight.value }
+        guard attemptedAvatarPaths.insert(avatarPath).inserted else { return nil }
+        let task = Task { [source] in await source.avatarDownloadURL(for: avatarPath) }
+        avatarResolutions[avatarPath] = task
+        let url = await task.value
+        avatarResolutions[avatarPath] = nil
+        avatarURLs[avatarPath] = url
+        return url
+    }
+
     /// Begins observing on first appearance. Idempotent — a second call keeps the
     /// live subscription and current state instead of flashing back to loading
     /// (matches ``EventsCoordinator/start()``). Also stamps the read marker for a
@@ -153,6 +182,7 @@ final class ChannelChatCoordinator {
     /// active reply target: without this a stale reply banner could survive a
     /// reload and quote it onto the next send.
     func reload() {
+        attemptedAvatarPaths = Set(avatarURLs.keys).union(avatarResolutions.keys)
         older = []
         pending = []
         olderPaging = .idle
