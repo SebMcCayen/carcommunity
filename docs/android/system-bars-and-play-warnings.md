@@ -63,3 +63,12 @@ wrong selector for the merged selected-tab semantics; the corrected test uses
 the actual labelled clickable tab and checks the open sheet above the footer.
 Landscape navigation-mode detection checks side insets as well as the bottom.
 Android 15/16 results remain pending in CI.
+
+The debug-only `SystemBarsTestActivity` mirrors MainActivity by enabling
+edge-to-edge in `onCreate`, before the window attaches. The test then requests
+the actual orientation before composing content. This avoids confusing a
+post-attachment test-window default or an instrumentation rotation reset with
+production behavior. The emulator runner invokes a checked-in Bash script as
+one command; it must not split a multi-line quoted shell block line by line.
+The combined app/test APK compilation, including the explicit provider
+permission handling required by AGP 9 lint, passed locally on 2026-11-04.

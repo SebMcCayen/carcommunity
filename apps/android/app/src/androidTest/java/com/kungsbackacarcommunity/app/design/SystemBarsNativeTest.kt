@@ -1,12 +1,12 @@
 package com.kungsbackacarcommunity.app.design
 
+import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.os.Build
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -37,6 +37,7 @@ import com.kungsbackacarcommunity.app.shell.MAP_HOME_LAYERS_POPUP_TAG
 import java.io.File
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.*
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -44,8 +45,27 @@ import org.junit.runner.RunWith
 /** Real system bars/IME, production styling and screens, disposable local content only. */
 @RunWith(AndroidJUnit4::class)
 class SystemBarsNativeTest {
-    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+    @get:Rule val compose = createAndroidComposeRule<SystemBarsTestActivity>()
     private var dark by mutableStateOf(true)
+
+    @Before fun configureRequestedOrientationBeforeContent() {
+        val orientation = InstrumentationRegistry.getArguments().getString("orientation")
+        val expected = when (orientation) {
+            "portrait" -> Configuration.ORIENTATION_PORTRAIT
+            "landscape" -> Configuration.ORIENTATION_LANDSCAPE
+            else -> return
+        }
+        // Set this on the actual test host, after ActivityScenario has launched.
+        // A shell rotation set before instrumentation can be reset by the host.
+        compose.activityRule.scenario.onActivity {
+            it.requestedOrientation = if (orientation == "landscape") {
+                ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            } else {
+                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            }
+        }
+        compose.waitUntil(10_000) { compose.activity.resources.configuration.orientation == expected }
+    }
 
     @Test fun themeSwitchKeepsIconContrastInsetsAndOneProtectionLayer() {
         compose.setContent {
