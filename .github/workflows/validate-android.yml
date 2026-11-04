@@ -323,7 +323,7 @@ jobs:
       # The runner is PINNED (ubuntu-24.04, above) so the image can't drift across
       # OS versions — that is what protects the cached snapshot from restoring onto
       # a different environment (runner.os alone would stay "Linux" across a bump).
-      # The `-v3` suffix lets us hand-bust the cache if the pinned image is ever
+      # The `-v4-data4g` suffix lets us hand-bust the cache if the pinned image is ever
       # rev'd. Cache ONLY the AVD dir (the snapshot lives here) — deliberately NOT
       # ~/.android/adb* which matches the private `adbkey`; the emulator gets its
       # adb pubkey injected at boot (androidboot.qemu.adb.pubkey), so the key does
@@ -335,7 +335,7 @@ jobs:
         with:
           path: |
             ~/.android/avd/*
-          key: avd-${{ runner.os }}-google_apis-34-x86_64-v3
+          key: avd-${{ runner.os }}-google_apis-34-x86_64-v4-data4g
 
       # On a cache miss, create the AVD once and boot it to generate the snapshot
       # the cache stores. Skipped entirely on a cache hit.
@@ -350,6 +350,8 @@ jobs:
           api-level: 34
           target: google_apis
           arch: x86_64
+          # Keep test userdata within hosted-runner disk capacity.
+          disk-size: 4096M
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
           disable-animations: false
@@ -368,6 +370,8 @@ jobs:
           api-level: 34
           target: google_apis
           arch: x86_64
+          # Keep test userdata within hosted-runner disk capacity.
+          disk-size: 4096M
           force-avd-creation: false
           disable-animations: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
@@ -389,6 +393,8 @@ jobs:
           api-level: 34
           target: google_apis
           arch: x86_64
+          # Keep test userdata within hosted-runner disk capacity.
+          disk-size: 4096M
           force-avd-creation: false
           disable-animations: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
@@ -454,6 +460,8 @@ jobs:
           api-level: 34
           target: google_apis
           arch: x86_64
+          # Keep test userdata within hosted-runner disk capacity.
+          disk-size: 4096M
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
           script: >-
