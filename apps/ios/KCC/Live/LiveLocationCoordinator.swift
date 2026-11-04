@@ -66,6 +66,11 @@ final class LiveLocationCoordinator {
     private(set) var session: LiveSessionInfo?
     private(set) var readout = LiveSessionReadout()
 
+    /// Local session demand for the screen to stay awake. Unlike the backend
+    /// snapshot, this clears immediately on Stop/Hide, even if the call fails.
+    /// The shell applies it only while the app's scene is active.
+    private(set) var keepsScreenAwake = false
+
     /// Distinguishes the pre-listener cold-start nil from an authoritative
     /// backend emission that says no session exists. The revision increments
     /// for every emission (including nil→nil) and local expiry, so integrations can
@@ -313,6 +318,7 @@ final class LiveLocationCoordinator {
 
     private func beginPublishingIfNeeded() {
         guard publishTask == nil, let repository else { return }
+        keepsScreenAwake = true
         beginExpiryWatchdog()
         // Bounded relay between the provider stream and the publish loop.
         // `updatePosition` awaits the network, and the provider's stream
@@ -404,6 +410,7 @@ final class LiveLocationCoordinator {
     }
 
     private func endPublishing() {
+        keepsScreenAwake = false
         if readout.sessionId != nil, !isSharing {
             readout.observe(session, at: now())
             sessionSnapshotRevision += 1

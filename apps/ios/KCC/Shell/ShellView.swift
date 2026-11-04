@@ -208,6 +208,12 @@ struct ShellView: View {
                 appUpdateCoordinator.scheduleRequiredUpdateRecheck()
                 driveRecordingCoordinator?.retryPendingRouteUploads()
             }
+            // Own the idle timer at shell scope so tabs, routes and sheets
+            // do not interrupt an active live session's screen-awake demand.
+            .onChange(of: liveLocationCoordinator?.keepsScreenAwake == true && scenePhase == .active,
+                      initial: true) { _, keepAwake in
+                UIApplication.shared.isIdleTimerDisabled = keepAwake
+            }
             .onChange(of: featureFlags.isEnabled(.liveLocation)) { _, enabled in
                 liveLocationCoordinator?.canShare = enabled && !access.isRestricted
                 if !enabled {
@@ -256,6 +262,7 @@ struct ShellView: View {
                 syncFollowMe()
             }
             .onDisappear {
+                UIApplication.shared.isIdleTimerDisabled = false
                 // RootView removes the entire shell on sign-out or when a live
                 // account update becomes restricted. Stop exact-location and
                 // background drive collection synchronously during that swap.
