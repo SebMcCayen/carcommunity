@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="chat_flood_paused">Sending is temporarily paused</string>
     <plurals name="chat_flood_wait">
         <item quantity="one">You can send again in %1$d second. Your draft is kept.</item>
         <item quantity="other">You can send again in %1$d seconds. Your draft is kept.</item>

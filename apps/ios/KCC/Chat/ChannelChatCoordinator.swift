@@ -168,6 +168,7 @@ final class ChannelChatCoordinator {
     func reload() {
         older = []
         pending = []
+        draftRecovery.removeAll()
         olderPaging = .idle
         clearReply()
         subscribe()
