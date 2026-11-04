@@ -700,6 +700,26 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertNil(runtime.idleReturnDeadline)
     }
 
+    func testCameraRuntimeRearmsAfterInactivityWithoutAnotherCameraFrame() async throws {
+        let runtime = MapHomeCameraRuntime()
+        var currentPoint = MapPoint(longitude: 12, latitude: 57)
+        var returnedTo: MapPoint?
+        runtime.scheduleIdleReturn(after: .seconds(10)) { returnedTo = currentPoint }
+        let inactiveTimer = try XCTUnwrap(runtime.idleReturnTask)
+        let inactiveToken = runtime.idleReturnToken
+        runtime.cancelIdleReturn()
+        // Visibility/renderer reentry must rearm the suspended follow even
+        // though startup has been cancelled and the map has not moved.
+        currentPoint = MapPoint(longitude: 13, latitude: 58)
+        runtime.scheduleIdleReturn(after: .zero) { returnedTo = currentPoint }
+        let activeTimer = try XCTUnwrap(runtime.idleReturnTask)
+        XCTAssertNotEqual(runtime.idleReturnToken, inactiveToken)
+        await inactiveTimer.value
+        await activeTimer.value
+        XCTAssertEqual(returnedTo, currentPoint)
+        XCTAssertNil(runtime.idleReturnTask)
+    }
+
     func testCameraRuntimeDetachCancelsTasksAndIgnoresPreviousRendererCompletion() async throws {
         let runtime = MapHomeCameraRuntime()
         var calls = 0

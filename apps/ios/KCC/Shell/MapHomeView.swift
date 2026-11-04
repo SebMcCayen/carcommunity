@@ -711,7 +711,7 @@ private struct MapboxStandardMap: View {
                     meFollowSuspended: $meFollowSuspended
                 )
                 mapReady = proxy.map != nil
-                startOwnLocationIfNeeded()
+                updateOwnLocationForVisibility()
             }
             .onMapLoadingError { event in
                 switch event.type {
@@ -788,7 +788,6 @@ private struct MapboxStandardMap: View {
                 }
                 mapReady = proxy.map != nil
                 updateOwnLocationForVisibility()
-                armMeFollowIdleReturn(viewport: $viewport)
             }
             .onChange(of: surface.isActive, initial: true) { _, active in
                 surfaceActive = active
@@ -1080,6 +1079,10 @@ private struct MapboxStandardMap: View {
         } else {
             startOwnLocationIfNeeded()
         }
+        // A covered/inactive scene cancels its timer. A selected destination
+        // has already released startup/compass ownership, so it needs a new
+        // idle return here even when no camera frame or GPS fix arrives.
+        armMeFollowIdleReturn(viewport: $viewport)
     }
 
     private func startOwnLocationIfNeeded() {
@@ -1133,6 +1136,8 @@ private struct MapboxStandardMap: View {
     private func armMeFollowIdleReturn(viewport: Binding<Viewport>) {
         guard isVisible,
               surfaceActive,
+              scenePhase == .active,
+              mapReady,
               meFollowEnabled,
               meFollowSuspended,
               !surface.convoyFocusEnabled,
@@ -1144,6 +1149,8 @@ private struct MapboxStandardMap: View {
         cameraRuntime.scheduleIdleReturn(after: MapHomeMeFollowPolicy.idleReturnDelay) {
             guard isVisible,
                   surfaceActive,
+                  scenePhase == .active,
+                  mapReady,
                   meFollowEnabled,
                   meFollowSuspended,
                   !surface.convoyFocusEnabled,
