@@ -46,8 +46,9 @@ import { buildNewIssueLink } from '../shared/issueLinks-core';
 /** Server-only Crashlytics-issue-id → GitHub issue dedup index + tally. */
 export const CRASHLYTICS_ISSUE_LINKS_COLLECTION = 'crashlyticsIssueLinks';
 
-/** Shared label so every auto-filed crash issue is separable from manual reports. */
+/** Existing Android crash label, retained for Android alerts. */
 export const CRASH_ISSUE_LABEL = 'android-crash';
+export const IOS_CRASH_ISSUE_LABEL = 'ios-crash';
 /** Distinct label for ANR (Application Not Responding) issues. */
 export const ANR_ISSUE_LABEL = 'anr';
 /** Extra label flagging a re-emerged (previously-resolved) crash. */
@@ -55,6 +56,7 @@ export const REGRESSION_ISSUE_LABEL = 'regression';
 
 /** The three alert kinds this bridge subscribes to. */
 export type CrashAlertKind = 'fatal' | 'anr' | 'regression';
+export type CrashPlatform = 'android' | 'ios' | 'unknown';
 
 /** Bounds (defence in depth; alert fields are Google-controlled but bounded anyway). */
 export const MAX_ISSUE_ID_LENGTH = 200;
@@ -87,6 +89,8 @@ export interface CrashAlertPayloadLike {
 /** Normalized, bounded view of one Crashlytics alert used by every builder. */
 export interface NormalizedCrashAlert {
   kind: CrashAlertKind;
+  /** Derived only from the Firebase Alerts event's app id, never issue text. */
+  platform: CrashPlatform;
   /** The Crashlytics issue id — ALSO the dedup fingerprint / link doc id. */
   issueId: string;
   /** Exception class + top frame (Crashlytics issue title); may be unknown. */
@@ -194,12 +198,15 @@ export function normalizeCrashAlert(
 
   return {
     kind,
+    platform: crashPlatform(safeAppId),
     issueId: rawId,
     title: boundedField(issue?.title, MAX_TITLE_LENGTH),
     subtitle: boundedField(issue?.subtitle, MAX_SUBTITLE_LENGTH),
     appVersion: boundedField(issue?.appVersion, MAX_APP_VERSION_LENGTH),
-    regressionType: kind === 'regression' ? boundedField(payload?.type, MAX_REGRESSION_TYPE_LENGTH) : null,
-    resolveTime: kind === 'regression' ? boundedField(payload?.resolveTime, MAX_APP_VERSION_LENGTH) : null,
+    regressionType:
+      kind === 'regression' ? boundedField(payload?.type, MAX_REGRESSION_TYPE_LENGTH) : null,
+    resolveTime:
+      kind === 'regression' ? boundedField(payload?.resolveTime, MAX_APP_VERSION_LENGTH) : null,
     deepLink: crashlyticsIssueDeepLink(safeAppId, rawId, projectId),
   };
 }
@@ -269,19 +276,35 @@ export function buildCrashIssueTitle(alert: NormalizedCrashAlert): string {
 }
 
 /**
- * Labels per kind. Fatal → `android-crash`; ANR → `anr`; regression →
- * `android-crash` + `regression`. All carry `auto-generated` (shared with the
- * other auto-filers) so the whole auto-issue stream is filterable at once.
+ * Firebase app ids have the form `1:<project number>:<platform>:<app hash>`.
+ * Require the entire shape so missing, unsupported or malformed ids never
+ * silently become Android crashes. Only fixed platform tokens leave this gate.
  */
-export function crashIssueLabels(kind: CrashAlertKind): string[] {
+function crashPlatform(appId: string): CrashPlatform {
+  const platform = /^1:\d+:(android|ios):[a-zA-Z0-9]+$/.exec(appId)?.[1];
+  return platform === 'android' || platform === 'ios' ? platform : 'unknown';
+}
+
+/**
+ * Fatal/regression labels follow the event's platform. Unknown platforms keep
+ * the shared labels without inventing an Android attribution. ANRs retain the
+ * existing `anr` category. No alert text can supply a label name.
+ */
+export function crashIssueLabels(kind: CrashAlertKind, platform: CrashPlatform): string[] {
+  const platformLabels =
+    platform === 'ios'
+      ? [IOS_CRASH_ISSUE_LABEL]
+      : platform === 'android'
+        ? [CRASH_ISSUE_LABEL]
+        : [];
   switch (kind) {
     case 'anr':
       return [ANR_ISSUE_LABEL, AUTO_GENERATED_LABEL];
     case 'regression':
-      return [CRASH_ISSUE_LABEL, REGRESSION_ISSUE_LABEL, AUTO_GENERATED_LABEL];
+      return [...platformLabels, REGRESSION_ISSUE_LABEL, AUTO_GENERATED_LABEL];
     case 'fatal':
     default:
-      return [CRASH_ISSUE_LABEL, AUTO_GENERATED_LABEL];
+      return [...platformLabels, AUTO_GENERATED_LABEL];
   }
 }
 
@@ -298,6 +321,7 @@ export function buildCrashIssueBody(alert: NormalizedCrashAlert, meta: CrashIssu
     'Automatically filed from a new Firebase Crashlytics issue. Repeat occurrences (and re-emergences of the same Crashlytics issue id) update the occurrence counter in crashlyticsIssueLinks instead of filing new issues.',
     '',
     `- Type: ${crashKindLabel(alert.kind)}`,
+    `- Platform: ${alert.platform}`,
     `- Title (exception + top frame): ${field(alert.title)}`,
     `- Subtitle: ${field(alert.subtitle)}`,
     `- App version: ${field(alert.appVersion)}`,
@@ -327,6 +351,6 @@ export function buildCrashIssuePayload(
   return {
     title: buildCrashIssueTitle(alert),
     body: buildCrashIssueBody(alert, meta),
-    labels: crashIssueLabels(alert.kind),
+    labels: crashIssueLabels(alert.kind, alert.platform),
   };
 }

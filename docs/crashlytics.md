@@ -242,6 +242,23 @@ submitting". What has to be weighed there:
   entries. Cross-reference by exception class + app version when a member reports
   a crash that Crashlytics has not surfaced yet.
 
+## GitHub crash issue platform labels
+
+The `crashReporting-*` backend bridge derives the platform from the Firebase
+Alerts event's app id, not from the crash title or exception name. New fatal
+issues and regressions use `ios-crash` for iOS and the existing `android-crash`
+for Android. Missing, malformed or unsupported app ids remain `unknown`, with
+no platform crash label. ANRs retain `anr`; all alerts retain `auto-generated`,
+and regressions also retain `regression`. The public body includes the bounded
+platform value. Issue ids, deduplication and occurrence counters are unchanged.
+
+Ensure the repository's `ios-crash` label exists before deploying this backend
+change. Existing GitHub issues are not relabelled by the bridge, and a repeated
+alert only increments its private occurrence counter. Triage historical iOS
+crashes carrying `android-crash` separately. The pure mapping tests run without
+Firebase access; merge and local tests do not establish production deployment
+or physical-device acceptance.
+
 ## iOS implementation
 
 The iOS target links `FirebaseCrashlytics` through the existing Firebase Swift
