@@ -11,7 +11,8 @@ configuration change.
   JDK **17**. Platform 36 remains supported. This avoids a broader upgrade to
   newer AGP minor lines.
 - [Kotlin 2.4 compatibility](https://kotlinlang.org/docs/gradle-configure-project.html):
-  Kotlin 2.4.0 supports Gradle 7.6.3–9.5.0 and the AGP 9.1 line. Kotlin and the
+  The table lists Gradle 7.6.3–9.5.0 and AGP through 9.1.0 for Kotlin 2.4.0.
+  We use the stable 9.1.1 patch on that AGP line and validate it locally. Kotlin and the
   [Compose compiler plugin](https://developer.android.com/develop/ui/compose/compiler)
   stay at **2.4.0**; the Compose BoM and runtime libraries do not change.
 - [Kotlin / D8 / R8 requirements](https://developer.android.com/build/kotlin-support):
@@ -50,12 +51,46 @@ Mapbox 11.26.0 / Navigation 3.26.0 `-ndk27` dependency pair are preserved.
 ## Validation
 
 All local Gradle work is serial (`--no-daemon --max-workers=1`) on JDK 17 with
-no local emulator. Generated Android strings/design tokens and `git diff --check`
-pass. Initial `help` configuration passes with AGP 9.1.1 / Gradle 9.3.1.
-Compiler, unit-test, lint and release shrink results will be recorded here after
-completion. Existing PR CI retains the debug/release JVM tests, lint, debug APK,
-unsigned release R8 gate, 16 KB alignment and authenticated real-navigation
-compilation; the validation workflow needs no compatibility change.
+no local emulator. Generated Android strings/design tokens and a CRLF-aware
+whitespace check (`git -c core.whitespace=cr-at-eol diff --check`) pass; the generated
+Windows wrapper retains Gradle's CRLF line endings.
+
+Completed locally:
+
+- AGP 9.1.1 / Gradle 9.3.1 `help` configuration.
+- `compileDebugKotlin`, Java compilation, debug resource linking and the compiled
+  noNav entry point with built-in Kotlin 2.4.0.
+- A temporary configuration probe asserts both JVM-test tasks exist, shared-test
+  and noNav source roots are registered, resValues and release shrinking stay
+  enabled, Compose is applied, and `org.jetbrains.kotlin.android` is absent.
+  It resolves KGP **2.4.0** and R8 **9.1.31** from the build's actual classpath.
+- The same probe applies Google Services **4.5.0** and Crashlytics **3.0.7** using
+  disposable `demo-kcc-agp9` local JSON. `processReleaseGoogleServices` and
+  `injectCrashlyticsMappingFileIdRelease` pass, and the mapping-upload task is
+  registered. No upload task runs; the fixture is removed afterwards.
+- Gradle `wrapper` refreshes the JAR and both launch scripts. The generated JAR's
+  SHA-256 matches the [official wrapper checksum](https://services.gradle.org/distributions/gradle-9.3.1-wrapper.jar.sha256).
+
+- The complete debug JVM-test source set compiles. Focused
+  `testDebugUnitTest --tests ...CrashTelemetryTest --tests
+  ...ChangelogReleaseCoverageTest --tests ...OnboardingScreenTest` passes:
+  **21 tests, 0 failures/errors/skips** (16 telemetry, 3 changelog, 2
+  Robolectric/Compose onboarding). This runs through the refreshed wrapper and
+  covers Android resources and Compose as well as pure JVM behavior.
+
+The local Gradle slot was released after this run; no Gradle or Kotlin compiler
+process remained. No local emulator was started.
+
+The initial broad `assembleDebug testDebugUnitTest compileDebugAndroidTestKotlin
+lintDebug assembleRelease` invocation was deliberately stopped during DEX
+processing after successful source compilation, to honor the requested bounded
+local checks and free the shared 16 GB machine for the parallel emulator work.
+It is **not** a completed debug assembly, full test suite, lint, R8 or device run.
+No local Mapbox downloads credential was available. Existing PR CI retains
+`test` (debug + release), lintDebug, debug packaging, unsigned release R8,
+16 KB alignment and authenticated real-navigation compilation; the validation
+workflow needs no compatibility change. Record CI status separately from the
+local results.
 
 A compiled/minified package is not device or production certification. A future
 approved release must still test the minified, Firebase-configured, real-navigation
