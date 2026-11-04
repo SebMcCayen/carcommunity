@@ -7,7 +7,8 @@ enum CommunityChatRepositoryFactory {
     static func make() -> (any CommunityChatRepository)? {
         #if DEBUG
         if FirebaseApp.app() == nil, ProcessInfo.processInfo.arguments.contains("-KCCUITestChatThread") {
-            return ConfiglessChatThreadRepository()
+            return ConfiglessChatThreadRepository(
+                compactSeries: ProcessInfo.processInfo.arguments.contains("-KCCUITestChatFlood"))
         }
         #endif
         return FirebaseCommunityChatRepository.createIfAvailable()
@@ -16,11 +17,18 @@ enum CommunityChatRepositoryFactory {
 
 #if DEBUG
 private actor ConfiglessChatThreadRepository: CommunityChatRepository {
-    private var messages = (0..<40).map { index in
-        ChannelMessage(id: "fixture-\(index)", senderUid: "fixture-other",
-            text: "Fixture message \(index)", senderDisplayName: "Testmedlem",
-            createdAt: Date(timeIntervalSince1970: Double(1_760_000_000 + index)),
-            createdAtIso: "2026-01-01T00:00:00Z")
+    private var messages: [ChannelMessage]
+
+    init(compactSeries: Bool) {
+        // History/keyboard tests need genuinely scrollable normal conversation.
+        // Only the flood fixture puts all forty messages in rapid sender runs.
+        let spacing = compactSeries ? 1 : 60
+        messages = (0..<40).map { index in
+            let date = Date(timeIntervalSince1970: Double(1_760_000_000 + index * spacing))
+            return ChannelMessage(id: "fixture-\(index)", senderUid: "fixture-other",
+                text: "Fixture message \(index)", senderDisplayName: "Testmedlem",
+                createdAt: date, createdAtIso: ChannelTime.isoString(date))
+        }
     }
     private var streams: [UUID: AsyncStream<ChannelMessagesState>.Continuation] = [:]
     func avatarDownloadURL(for avatarPath: String) async -> URL? { nil }

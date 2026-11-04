@@ -55,7 +55,7 @@ final class ShellSmokeTests: XCTestCase {
 
     func testCommunitySpamSeriesExpandsWithoutHidingTheNewestMessage() {
         for largeText in [false, true] {
-            let app = launch(language: "sv", largeText: largeText, theme: "Dark", chatFixture: true)
+            let app = launch(language: "sv", largeText: largeText, theme: "Dark", chatFixture: true, chatFloodFixture: true)
             app.buttons["shell.tab.chat"].tap()
             XCTAssertTrue(app.staticTexts["chat.message.text.fixture-39"].waitForExistence(timeout: 15))
             XCTAssertFalse(app.staticTexts["chat.message.text.fixture-37"].exists)
@@ -974,7 +974,7 @@ final class ShellSmokeTests: XCTestCase {
         start.press(forDuration: 0.1, thenDragTo: end)
     }
 
-    private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false, markerPoints: [CGPoint] = [], placeSearchFixture: Bool = false, rejectMaps: Bool = false, liveFixture: Bool = false) -> XCUIApplication {
+    private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false, chatFloodFixture: Bool = false, markerPoints: [CGPoint] = [], placeSearchFixture: Bool = false, rejectMaps: Bool = false, liveFixture: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
         app.launchArguments += ["-KCCUITestTheme", theme]
@@ -982,6 +982,7 @@ final class ShellSmokeTests: XCTestCase {
         // default can retain/transition the preceding test's category.
         app.launchArguments += ["-KCCUITestTextSize", largeText ? "AccessibilityXXXL" : "Large"]
         if chatFixture { app.launchArguments += ["-KCCUITestChatThread"] }
+        if chatFloodFixture { app.launchArguments += ["-KCCUITestChatFlood"] }
         if placeSearchFixture { app.launchArguments += ["-KCCUITestPlaceSearch"] }
         if rejectMaps { app.launchArguments += ["-KCCUITestRejectMaps"] }
         if liveFixture { app.launchArguments += ["-KCCUITestLiveSession"] }
