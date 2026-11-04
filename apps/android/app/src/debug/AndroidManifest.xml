@@ -6,5 +6,10 @@
         <activity
             android:name="androidx.activity.ComponentActivity"
             android:windowSoftInputMode="adjustResize" />
+        <!-- System-bar acceptance needs the same pre-attachment setup as MainActivity. -->
+        <activity
+            android:name="com.kungsbackacarcommunity.app.design.SystemBarsTestActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
     </application>
 </manifest>
